@@ -27,9 +27,11 @@ function getConfig (name, config = {}) {
 module.exports = class PluginManager {
   constructor (tracer) {
     this._pluginsByName = {}
+    this._configsByName = {}
     for (const PluginClass of Object.values(plugins)) {
       if (typeof PluginClass !== 'function') continue
       this._pluginsByName[PluginClass.name] = new PluginClass(tracer)
+      this._configsByName[PluginClass.name] = {}
     }
   }
 
@@ -40,24 +42,28 @@ module.exports = class PluginManager {
       pluginConfig = { enabled: pluginConfig }
     }
 
-    this._pluginsByName[name].configure(getConfig(name, pluginConfig))
+    const config = {
+      ...this._configsByName[name],
+      ...pluginConfig
+    }
+
+    this._pluginsByName[name].configure(getConfig(name, config))
   }
 
   // like instrumenter.enable()
   configure (config) {
-    const serviceMapping = config.serviceMapping
+    const { logInjection, serviceMapping } = config
 
     if (config.plugins !== false) {
       for (const name in this._pluginsByName) {
-        const pluginConfig = {}
+        const pluginConfig = {
+          ...this._configsByName[name],
+          logInjection
+        }
         if (serviceMapping && serviceMapping[name]) {
           pluginConfig.service = serviceMapping[name]
         }
         this.configurePlugin(name, pluginConfig)
-      }
-    } else {
-      for (const name in this._pluginsByName) {
-        this.configurePlugin(name, false)
       }
     }
   }

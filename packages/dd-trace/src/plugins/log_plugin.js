@@ -31,11 +31,8 @@ function messageProxy (message, holder) {
 module.exports = class LogPlugin extends Plugin {
   constructor (...args) {
     super(...args)
-    this.addSub(`apm:${this.constructor.name}:log`, (arg) => {
-      // TODO rather than checking this every time, setting it ought to enable/disable any plugin
-      // extending from this one
-      if (!this.tracer._logInjection) return
 
+    this.addSub(`apm:${this.constructor.name}:log`, (arg) => {
       const store = storage.getStore()
       const span = store && store.span
 
@@ -44,6 +41,13 @@ module.exports = class LogPlugin extends Plugin {
       const holder = {}
       this.tracer.inject(span, LOG, holder)
       arg.message = messageProxy(arg.message, holder)
+    })
+  }
+
+  configure (config) {
+    return super.configure({
+      ...config,
+      enabled: config.enabled && config.logInjection
     })
   }
 }
