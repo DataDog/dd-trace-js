@@ -2,14 +2,13 @@
 'use strict'
 
 const Kinesis = require('../src/services/kinesis')
-const plugin = require('../src')
 const tracer = require('../../dd-trace')
 const { randomBytes } = require('crypto')
 const { expect } = require('chai')
 
 describe('Kinesis', () => {
   let span
-  withVersions(plugin, 'aws-sdk', version => {
+  withVersions('aws-sdk', 'aws-sdk', version => {
     let traceId
     let parentId
     let spanId
@@ -49,7 +48,7 @@ describe('Kinesis', () => {
     })
 
     it('injects trace context to Kinesis putRecord', () => {
-      const kinesis = new Kinesis()
+      const kinesis = new Kinesis(tracer)
       const request = {
         params: {
           Data: JSON.stringify({
@@ -64,7 +63,7 @@ describe('Kinesis', () => {
       traceId = '456853219676779160'
       spanId = '456853219676779160'
       parentId = '0000000000000000'
-      kinesis.requestInject(span.context(), request, tracer)
+      kinesis.requestInject(span.context(), request)
 
       expect(request.params).to.deep.equal({
         Data: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}'
@@ -72,7 +71,7 @@ describe('Kinesis', () => {
     })
 
     it('handles already b64 encoded data', () => {
-      const kinesis = new Kinesis()
+      const kinesis = new Kinesis(tracer)
       const request = {
         params: {
           Data: Buffer.from(JSON.stringify({
@@ -87,7 +86,7 @@ describe('Kinesis', () => {
       traceId = '456853219676779160'
       spanId = '456853219676779160'
       parentId = '0000000000000000'
-      kinesis.requestInject(span.context(), request, tracer)
+      kinesis.requestInject(span.context(), request)
 
       expect(request.params).to.deep.equal({
         Data: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}'
@@ -95,7 +94,7 @@ describe('Kinesis', () => {
     })
 
     it('injects trace context to Kinesis putRecords', () => {
-      const kinesis = new Kinesis()
+      const kinesis = new Kinesis(tracer)
       const request = {
         params: {
           Records: [
@@ -114,7 +113,7 @@ describe('Kinesis', () => {
       traceId = '456853219676779160'
       spanId = '456853219676779160'
       parentId = '0000000000000000'
-      kinesis.requestInject(span.context(), request, tracer)
+      kinesis.requestInject(span.context(), request)
 
       expect(request.params).to.deep.equal({
         Records: [
@@ -125,7 +124,7 @@ describe('Kinesis', () => {
       })
     })
     it('skips injecting trace context to Kinesis if message is full', () => {
-      const kinesis = new Kinesis()
+      const kinesis = new Kinesis(tracer)
       const request = {
         params: {
           Records: [
@@ -142,12 +141,12 @@ describe('Kinesis', () => {
       traceId = '456853219676779160'
       spanId = '456853219676779160'
       parentId = '0000000000000000'
-      kinesis.requestInject(span.context(), request, tracer)
+      kinesis.requestInject(span.context(), request)
       expect(request.params).to.deep.equal(request.params)
     })
 
     it('won\t crash with raw strings', () => {
-      const kinesis = new Kinesis()
+      const kinesis = new Kinesis(tracer)
       const request = {
         params: {
           Data: Buffer.from('asldkfjasdljasdlfkj').toString('base64')
@@ -158,13 +157,13 @@ describe('Kinesis', () => {
       traceId = '456853219676779160'
       spanId = '456853219676779160'
       parentId = '0000000000000000'
-      kinesis.requestInject(span.context(), request, tracer)
+      kinesis.requestInject(span.context(), request)
 
       expect(request.params).to.deep.equal(request.params)
     })
 
     it('won\t crash with an empty request', () => {
-      const kinesis = new Kinesis()
+      const kinesis = new Kinesis(tracer)
       const request = {
         params: {},
         operation: 'putRecord'
@@ -173,13 +172,13 @@ describe('Kinesis', () => {
       traceId = '456853219676779160'
       spanId = '456853219676779160'
       parentId = '0000000000000000'
-      kinesis.requestInject(span.context(), request, tracer)
+      kinesis.requestInject(span.context(), request)
 
       expect(request.params).to.deep.equal(request.params)
     })
 
     it('generates tags for proper input', () => {
-      const kinesis = new Kinesis()
+      const kinesis = new Kinesis(tracer)
       const params = {
         StreamName: 'my-great-stream'
       }

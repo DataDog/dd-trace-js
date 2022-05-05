@@ -1,7 +1,9 @@
 'use strict'
 
-class CloudwatchLogs {
-  generateTags (params, operation, response) {
+const BaseAwsSdkPlugin = require('../base')
+
+class CloudwatchLogs extends BaseAwsSdkPlugin {
+  generateTags (params, operation) {
     const tags = {}
 
     if (!params || !params.logGroupName) return tags

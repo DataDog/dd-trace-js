@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const { setup } = require('./spec_helpers')
 
 const queueOptions = {
@@ -15,7 +14,7 @@ describe('Plugin', () => {
   describe('aws-sdk (sqs)', function () {
     setup()
 
-    withVersions(plugin, 'aws-sdk', version => {
+    withVersions('aws-sdk', 'aws-sdk', version => {
       let AWS
       let sqs
       let QueueUrl
@@ -48,7 +47,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         it('should propagate the tracing context from the producer to the consumer', (done) => {
@@ -111,6 +110,32 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it('should run the consumer in the context of its span, for async functions', (done) => {
+          sqs.sendMessage({
+            MessageBody: 'test body',
+            QueueUrl
+          }, (err) => {
+            if (err) return done(err)
+
+            const beforeSpan = tracer.scope().active()
+
+            sqs.receiveMessage({
+              QueueUrl,
+              MessageAttributeNames: ['.*']
+            }, (err) => {
+              if (err) return done(err)
+
+              const span = tracer.scope().active()
+
+              expect(span).to.not.equal(beforeSpan)
+              return Promise.resolve().then(() => {
+                expect(tracer.scope().active()).to.equal(span)
+                done()
+              })
+            })
+          })
+        })
       })
 
       describe('with configuration', () => {
@@ -144,7 +169,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         it('should allow disabling a specific span kind of a service', (done) => {
