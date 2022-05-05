@@ -111,6 +111,7 @@ function wrapMiddleware (fn, layer) {
           )
         } else {
           exit(ctx, layer)
+          return result
         }
       } catch (e) {
         exit(ctx, layer, e)
