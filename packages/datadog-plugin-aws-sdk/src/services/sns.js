@@ -1,7 +1,8 @@
 'use strict'
 const log = require('../../../dd-trace/src/log')
+const BaseAwsSdkPlugin = require('../base')
 
-class Sns {
+class Sns extends BaseAwsSdkPlugin {
   generateTags (params, operation, response) {
     if (!params) return {}
 
@@ -16,7 +17,7 @@ class Sns {
     // for example if it contains a phone number?
   }
 
-  requestInject (span, request, tracer) {
+  requestInject (span, request) {
     const operation = request.operation
     if (operation === 'publish' || operation === 'publishBatch') {
       if (!request.params) {
@@ -36,7 +37,7 @@ class Sns {
         return
       }
       const ddInfo = {}
-      tracer.inject(span, 'text_map', ddInfo)
+      this.tracer.inject(span, 'text_map', ddInfo)
       injectPath.MessageAttributes._datadog = {
         DataType: 'Binary',
         BinaryValue: JSON.stringify(ddInfo) // BINARY types are automatically base64 encoded

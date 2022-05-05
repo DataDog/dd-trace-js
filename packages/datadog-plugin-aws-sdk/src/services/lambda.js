@@ -1,8 +1,9 @@
 'use strict'
 
 const log = require('../../../dd-trace/src/log')
+const BaseAwsSdkPlugin = require('../base')
 
-class Lambda {
+class Lambda extends BaseAwsSdkPlugin {
   generateTags (params, operation, response) {
     const tags = {}
 
@@ -14,7 +15,7 @@ class Lambda {
     })
   }
 
-  requestInject (span, request, tracer) {
+  requestInject (span, request) {
     const operation = request.operation
     if (operation === 'invoke') {
       if (!request.params) {
@@ -35,7 +36,7 @@ class Lambda {
           if (!clientContext.custom) {
             clientContext.custom = {}
           }
-          tracer.inject(span, 'text_map', clientContext.custom)
+          this.tracer.inject(span, 'text_map', clientContext.custom)
           const newContextBase64 = Buffer.from(JSON.stringify(clientContext)).toString('base64')
           request.params.ClientContext = newContextBase64
         } catch (err) {

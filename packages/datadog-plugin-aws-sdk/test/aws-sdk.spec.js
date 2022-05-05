@@ -1,7 +1,6 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const { setup, sort } = require('./spec_helpers')
 const semver = require('semver')
 
@@ -11,7 +10,7 @@ describe('Plugin', () => {
   describe('aws-sdk', function () {
     setup()
 
-    withVersions(plugin, 'aws-sdk', version => {
+    withVersions('aws-sdk', 'aws-sdk', version => {
       let AWS
       let s3
       let sqs
@@ -30,7 +29,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         it('should instrument service methods with a callback', (done) => {
@@ -152,7 +151,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         it('should be configured', (done) => {
@@ -188,7 +187,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         it('should allow disabling a specific service', (done) => {

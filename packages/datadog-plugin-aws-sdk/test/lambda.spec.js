@@ -2,7 +2,6 @@
 
 const JSZip = require('jszip')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const { setup } = require('./spec_helpers')
 
 const zip = new JSZip()
@@ -13,7 +12,7 @@ describe('Plugin', () => {
   describe('aws-sdk (lambda)', function () {
     setup()
 
-    withVersions(plugin, 'aws-sdk', version => {
+    withVersions('aws-sdk', 'aws-sdk', version => {
       let AWS
       let lambda
       let tracer
@@ -50,7 +49,7 @@ describe('Plugin', () => {
 
         after(done => {
           lambda.deleteFunction({ FunctionName: 'ironmaiden' }, err => {
-            agent.close().then(() => done(err), done)
+            agent.close({ ritmReset: false }).then(() => done(err), done)
           })
         })
 
