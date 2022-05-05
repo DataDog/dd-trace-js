@@ -4,7 +4,6 @@ const Tags = require('opentracing').Tags
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')
-const { AsyncResource } = require('../../../datadog-instrumentations/src/helpers/instrument')
 
 class Sqs extends BaseAwsSdkPlugin {
   constructor (...args) {
@@ -12,12 +11,13 @@ class Sqs extends BaseAwsSdkPlugin {
 
     this.requestTags = new WeakMap()
 
-    this.addSub('apm:aws:response:sqs', obj => {
+    this.addSub('apm:aws:response:start:sqs', obj => {
       const { request, response } = obj
       const store = storage.getStore()
       const plugin = this
       const maybeChildOf = this.responseExtract(request.params, request.operation, response)
       if (maybeChildOf) {
+        obj.needsFinish = true
         const options = {
           childOf: maybeChildOf,
           tags: Object.assign(
@@ -26,34 +26,14 @@ class Sqs extends BaseAwsSdkPlugin {
             { [Tags.SPAN_KIND]: 'server' }
           )
         }
-        obj.ar = {
-          real: new AsyncResource('apm:aws:response'),
-          runInAsyncScope (fn) {
-            return this.real.runInAsyncScope(() => {
-              const span = plugin.tracer.startSpan('aws.response', options)
-              plugin.enter(span, store)
-              try {
-                let result = fn()
-                if (result && result.then) {
-                  result = result.then(x => {
-                    plugin.finish(span)
-                    return x
-                  }, e => {
-                    plugin.finish(span, e)
-                    throw e
-                  })
-                } else {
-                  plugin.finish(span)
-                }
-                return result
-              } catch (e) {
-                plugin.finish(span, null, e)
-                throw e
-              }
-            })
-          }
-        }
+        const span = plugin.tracer.startSpan('aws.response', options)
+        this.enter(span, store)
       }
+    })
+
+    this.addSub('apm:aws:response:finish:sqs', err => {
+      const { span } = storage.getStore()
+      this.finish(span, null, err)
     })
   }
 

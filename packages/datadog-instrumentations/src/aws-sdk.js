@@ -41,8 +41,31 @@ function wrapRequest (send) {
 function wrapCb (cb, serviceName, request, ar) {
   return function wrappedCb (err, response) {
     const obj = { request, response }
-    channel(`apm:aws:response:${serviceName}`).publish(obj)
-    return (obj.ar || ar).runInAsyncScope(() => cb.apply(this, arguments))
+    return ar.runInAsyncScope(() => {
+      channel(`apm:aws:response:start:${serviceName}`).publish(obj)
+      if (!obj.needsFinish) {
+        return cb.apply(this, arguments)
+      }
+      const finishChannel = channel(`apm:aws:response:finish:${serviceName}`)
+      try {
+        let result = cb.apply(this, arguments)
+        if (result && result.then) {
+          result = result.then(x => {
+            finishChannel.publish()
+            return x
+          }, e => {
+            finishChannel.publish(e)
+            throw e
+          })
+        } else {
+          finishChannel.publish()
+        }
+        return result
+      } catch (e) {
+        finishChannel.publish(e)
+        throw e
+      }
+    })
   }
 }
 
