@@ -4,7 +4,6 @@ const axios = require('axios')
 const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let tracer
@@ -12,7 +11,7 @@ describe('Plugin', () => {
   let appListener
 
   describe('restify', () => {
-    withVersions(plugin, 'restify', version => {
+    withVersions('restify', 'restify', version => {
       const pkgVersion = require(`../../../versions/restify@${version}`).version()
 
       // Some internal code of older versions is not compatible with Node >6
@@ -28,10 +27,8 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        // We're loading the fastify plugin here because it includes `find-my-way` which is also
-        // used by restify.
-        before(() => agent.load(['restify', 'fastify']))
-        after(() => agent.close())
+        before(() => agent.load(['restify', 'find-my-way', 'http'], [{}, {}, { client: false }]))
+        after(() => agent.close({ ritmReset: false }))
 
         it('should do automatic instrumentation', done => {
           const server = restify.createServer()

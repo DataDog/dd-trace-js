@@ -4,7 +4,6 @@ const axios = require('axios')
 const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let tracer
@@ -12,7 +11,7 @@ describe('Plugin', () => {
   let app
 
   describe('fastify', () => {
-    withVersions(plugin, 'fastify', version => {
+    withVersions('fastify', 'fastify', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -24,11 +23,11 @@ describe('Plugin', () => {
       withExports('fastify', version, ['default', 'fastify'], '>=3', getExport => {
         describe('without configuration', () => {
           before(() => {
-            return agent.load('fastify')
+            return agent.load(['fastify', 'find-my-way', 'http'], [{}, {}, { client: false }])
           })
 
           after(() => {
-            return agent.close()
+            return agent.close({ ritmReset: false })
           })
 
           beforeEach(() => {
@@ -220,16 +219,31 @@ describe('Plugin', () => {
               next()
             })
 
+            app.addHook('preHandler', (request, reply, next) => {
+              expect(tracer.scope().active()).to.not.be.null
+              next ? next() : reply()
+            })
+
             app.addHook('onResponse', (request, reply, next) => {
               expect(tracer.scope().active()).to.not.be.null
               next ? next() : reply()
             })
 
-            app.get('/user', (request, reply) => reply.send())
+            app.use((req, res, next) => {
+              next()
+            })
+
+            app.route({
+              method: 'POST',
+              url: '/user',
+              handler: (request, reply) => {
+                reply.send()
+              }
+            })
 
             getPort().then(port => {
               app.listen(port, 'localhost', () => {
-                axios.get(`http://localhost:${port}/user`)
+                axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
                   .then(() => done())
                   .catch(done)
               })
