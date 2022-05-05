@@ -48,13 +48,16 @@ jobs:
         run: |
           yarn
           yarn build
+          mv out /tmp/out
+      - uses: actions/checkout@v3
+        with:
+          ref: gh-pages
       - name: Deploy
-        working-directory: docs/out
         run: |
-          git init -b main
+          rm -rf *
+          mv /tmp/out/* .
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git remote add origin https://github.com/DataDog/dd-trace-js.git
           git add -A
           git commit -m ${{ fromJson(steps.pkg.outputs.json).version }}
-          git push -f origin main:gh-pages
+          git push

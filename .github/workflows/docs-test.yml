@@ -1,0 +1,51 @@
+name: Docs Test
+
+on:
+  push:
+    branches:
+      - gha-publish-docs
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: mkdir -p docs/out
+      - uses: actions/checkout@v3
+        with:
+          path: docs/out
+          ref: gh-pages
+      - uses: actions/setup-node@v3
+      - id: pkg
+        run: |
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "::set-output name=json::$content"
+      # - run: yarn
+      - uses: actions/checkout@v3
+      - run: git branch
+        working-directory: docs/out
+      - run: ls -lisa
+        working-directory: docs/out
+      - run: rm -rf *
+        working-directory: docs/out
+      - run: ls -lisa
+        working-directory: docs/out
+      # - name: Build
+      #   working-directory: docs
+      #   run: |
+      #     yarn
+      #     yarn build
+      # - name: Deploy
+      #   working-directory: docs/out
+      #   run: |
+      #     git init -b main
+      #     git config user.name github-actions
+      #     git config user.email github-actions@github.com
+      #     git remote add origin https://github.com/DataDog/dd-trace-js
+      #     git add -A
+      #     git commit -m ${{ fromJson(steps.pkg.outputs.json).version }}
+      #     git push -f origin main:gh-pages
