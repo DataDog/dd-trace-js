@@ -2,11 +2,9 @@
 
 const axios = require('axios')
 const getPort = require('get-port')
-const http = require('http')
 const semver = require('semver')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 const composeP = (...fs) => x =>
   fs.reduceRight(then, x)
@@ -24,6 +22,7 @@ const then = (x, f) =>
 
 describe('Plugin', () => {
   let paperplane
+  let http
   let server
   let span
   let tracer
@@ -43,25 +42,26 @@ describe('Plugin', () => {
   })
 
   describe('paperplane', () => {
-    withVersions(plugin, 'paperplane', version => {
+    withVersions('paperplane', 'paperplane', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
 
       afterEach(() => {
-        server.close()
+        server && server.close()
       })
 
       describe('without configuration', () => {
         before(() => {
-          return agent.load('paperplane')
+          return agent.load(['paperplane', 'http'], [{}, { client: false }])
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
+          http = require('http')
           paperplane = require(`../../../versions/paperplane@${version}`).get()
         })
 
@@ -446,19 +446,19 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load('paperplane', {
+          return agent.load(['paperplane', 'http'], [{
             service: 'custom',
             validateStatus: code => code < 400,
-            headers: ['User-Agent']
-          })
+            headers: ['User-Agent'],
+            logInjection: true
+          }, { client: false }])
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
-          tracer._tracer._logInjection = true
           paperplane = require(`../../../versions/paperplane@${version}`).get()
         })
 
@@ -565,7 +565,7 @@ describe('Plugin', () => {
 
               const record = JSON.parse(console.info.firstCall.args[0])
 
-              expect(record).to.have.deep.property('dd', {
+              expect(record.dd).to.deep.include({
                 trace_id: span.context().toTraceId(),
                 span_id: span.context().toSpanId()
               })
@@ -588,7 +588,7 @@ describe('Plugin', () => {
 
               const record = JSON.parse(console.info.firstCall.args[0])
 
-              expect(record).to.have.deep.property('dd', {
+              expect(record.dd).to.deep.include({
                 trace_id: span.context().toTraceId(),
                 span_id: span.context().toSpanId()
               })
