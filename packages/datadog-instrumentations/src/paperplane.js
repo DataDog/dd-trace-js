@@ -69,7 +69,7 @@ addHook({ name, versions, file: 'lib/routes.js' }, exports => {
 
 if (nodeMajor <= 12) {
   addHook({ name, versions: ['2.3.0 - 2.3.1'] }, paperplane => {
-    shimmer.wrap(paperplane, 'mount', wrapRoutes)
+    shimmer.wrap(paperplane, 'mount', wrapMount)
     shimmer.wrap(paperplane, 'routes', wrapRoutes)
 
     return paperplane
