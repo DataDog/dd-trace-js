@@ -279,6 +279,22 @@ describe('Plugin', () => {
             })
           })
 
+          // This is a regression test for https://github.com/DataDog/dd-trace-js/issues/2047
+          it('should not time out on async hooks', (done) => {
+            app.addHook('onRequest', async (request, reply) => {})
+
+            app.get('/user', (request, reply) => {
+              reply.send()
+            })
+
+            getPort().then(port => {
+              app.listen(port, 'localhost', async () => {
+                await axios.get(`http://localhost:${port}/user`)
+                done()
+              })
+            })
+          })
+
           it('should handle hook errors', done => {
             let error
 
