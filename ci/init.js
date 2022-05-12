@@ -1,3 +1,5 @@
+/* eslint-disable no-console */
+
 const path = require('path')
 const tracer = require('../packages/dd-trace')
 const { ORIGIN_KEY } = require('../packages/dd-trace/src/constants')
@@ -11,9 +13,16 @@ const options = {
   }
 }
 
-if (process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED && (process.env.DATADOG_API_KEY || process.env.DD_API_KEY)) {
-  options.experimental = {
-    exporter: 'datadog'
+if (process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED) {
+  if (process.env.DATADOG_API_KEY || process.env.DD_API_KEY) {
+    options.experimental = {
+      exporter: 'datadog'
+    }
+  } else {
+    console.error(`
+DD_CIVISIBILITY_AGENTLESS_ENABLED is set,
+but neither DD_API_KEY nor DATADOG_API_KEY are set in your environment.`)
+    process.exit(1)
   }
 }
 
