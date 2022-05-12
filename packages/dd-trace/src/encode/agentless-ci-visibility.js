@@ -2,6 +2,7 @@
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const Chunk = require('./chunk')
 const { AgentEncoder } = require('./0.4')
+const { version: ddTraceVersion } = require('../../../../package.json')
 
 const ENCODING_VERSION = 1
 
@@ -156,7 +157,8 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       version: ENCODING_VERSION,
       metadata: {
         '*': {
-          'language': 'javascript'
+          'language': 'javascript',
+          'library_version': ddTraceVersion
         }
       },
       events: []

@@ -17,6 +17,8 @@ const {
   DEFAULT_SERVICE_NAME
 } = require('../../src/encode/tags-processors')
 
+const { version: ddTraceVersion } = require('../../../../package.json')
+
 describe('agentless-ci-visibility-encode', () => {
   let encoder
   let writer
@@ -66,7 +68,8 @@ describe('agentless-ci-visibility-encode', () => {
 
     expect(decodedTrace.version.toNumber()).to.equal(1)
     expect(decodedTrace.metadata['*']).to.contain({
-      language: 'javascript'
+      language: 'javascript',
+      library_version: ddTraceVersion
     })
     const spanEvent = decodedTrace.events[0]
     expect(spanEvent.type).to.equal('span')
