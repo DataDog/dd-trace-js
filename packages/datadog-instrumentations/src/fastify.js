@@ -45,7 +45,7 @@ function wrapAddHook (addHook) {
 
       if (!requestResource) return fn.apply(this, arguments)
 
-      requestResource.runInAsyncScope(() => {
+      return requestResource.runInAsyncScope(() => {
         const hookResource = new AsyncResource('bound-anonymous-fn')
 
         try {
