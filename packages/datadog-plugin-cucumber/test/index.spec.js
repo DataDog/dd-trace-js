@@ -18,8 +18,11 @@ const {
   CI_APP_ORIGIN,
   ERROR_MESSAGE,
   TEST_SKIP_REASON,
-  TEST_FRAMEWORK_VERSION
+  TEST_FRAMEWORK_VERSION,
+  LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
+
+const { version: ddTraceVersion } = require('../../../package.json')
 
 const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
   const stdout = new PassThrough()
@@ -85,7 +88,8 @@ describe('Plugin', function () {
               [TEST_NAME]: 'pass scenario',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_STATUS]: 'pass'
+              [TEST_STATUS]: 'pass',
+              [LIBRARY_VERSION]: ddTraceVersion
             })
             expect(testSpan.metrics).to.contain({
               [SAMPLING_PRIORITY]: AUTO_KEEP

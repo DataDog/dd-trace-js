@@ -16,8 +16,11 @@ const {
   ERROR_TYPE,
   ERROR_MESSAGE,
   TEST_FRAMEWORK_VERSION,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
+
+const { version: ddTraceVersion } = require('../../../package.json')
 
 describe('Plugin', () => {
   let cypressExecutable
@@ -69,7 +72,8 @@ describe('Plugin', () => {
               [TEST_TYPE]: 'test',
               [ORIGIN_KEY]: CI_APP_ORIGIN,
               [TEST_IS_RUM_ACTIVE]: 'true',
-              [TEST_CODE_OWNERS]: JSON.stringify(['@datadog'])
+              [TEST_CODE_OWNERS]: JSON.stringify(['@datadog']),
+              [LIBRARY_VERSION]: ddTraceVersion
             })
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
