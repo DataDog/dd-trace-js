@@ -54,6 +54,7 @@ tracer.use('pg', {
 <h5 id="ioredis"></h5>
 <h5 id="ioredis-tags"></h5>
 <h5 id="ioredis-config"></h5>
+<h5 id="jest"></h5>
 <h5 id="kafkajs"></h5>
 <h5 id="koa"></h5>
 <h5 id="koa-tags"></h5>
@@ -62,6 +63,7 @@ tracer.use('pg', {
 <h5 id="memcached-tags"></h5>
 <h5 id="memcached-config"></h5>
 <h5 id="microgateway-core"></h5>
+<h5 id="mocha"></h5>
 <h5 id="moleculer"></h5>
 <h5 id="mongodb-core"></h5>
 <h5 id="mongodb-core-tags"></h5>
@@ -115,11 +117,13 @@ tracer.use('pg', {
 * [http](./interfaces/plugins.http.html)
 * [http2](./interfaces/plugins.http2.html)
 * [ioredis](./interfaces/plugins.ioredis.html)
+* [jest](./interfaces/plugins.jest.html)
 * [kafkajs](./interfaces/plugins.kafkajs.html)
 * [knex](./interfaces/plugins.knex.html)
 * [koa](./interfaces/plugins.koa.html)
 * [ioredis](./interfaces/plugins.ioredis.html)
 * [microgateway--core](./interfaces/plugins.microgateway_core.html)
+* [mocha](./interfaces/plugins.mocha.html)
 * [mongodb-core](./interfaces/plugins.mongodb_core.html)
 * [mysql](./interfaces/plugins.mysql.html)
 * [mysql2](./interfaces/plugins.mysql2.html)
