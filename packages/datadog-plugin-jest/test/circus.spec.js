@@ -17,8 +17,11 @@ const {
   JEST_TEST_RUNNER,
   ERROR_MESSAGE,
   TEST_PARAMETERS,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
+
+const { version: ddTraceVersion } = require('../../../package.json')
 
 describe('Plugin', function () {
   let jestExecutable
@@ -109,7 +112,8 @@ describe('Plugin', function () {
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-test.js',
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-circus',
-              [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/apm-js']) // reads from dd-trace-js
+              [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/apm-js']), // reads from dd-trace-js
+              [LIBRARY_VERSION]: ddTraceVersion
             })
             if (extraTags) {
               expect(testSpan.meta).to.contain(extraTags)

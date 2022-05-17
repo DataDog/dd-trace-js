@@ -16,8 +16,11 @@ const {
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
   ERROR_MESSAGE,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
+
+const { version: ddTraceVersion } = require('../../../package.json')
 
 describe('Plugin', () => {
   let jestExecutable
@@ -87,7 +90,8 @@ describe('Plugin', () => {
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-test.js',
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-jasmine2',
-              [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/apm-js']) // reads from dd-trace-js
+              [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/apm-js']), // reads from dd-trace-js
+              [LIBRARY_VERSION]: ddTraceVersion
             })
             if (extraTags) {
               expect(testSpan.meta).to.contain(extraTags)

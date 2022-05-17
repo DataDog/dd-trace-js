@@ -22,6 +22,7 @@ const id = require('../../id')
 const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
 const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
+const { version: ddTraceVersion } = require('../../../../../package.json')
 
 const TEST_FRAMEWORK = 'test.framework'
 const TEST_FRAMEWORK_VERSION = 'test.framework_version'
@@ -33,6 +34,7 @@ const TEST_PARAMETERS = 'test.parameters'
 const TEST_SKIP_REASON = 'test.skip_reason'
 const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
 const TEST_CODE_OWNERS = 'test.codeowners'
+const LIBRARY_VERSION = 'library_version'
 
 const ERROR_TYPE = 'error.type'
 const ERROR_MESSAGE = 'error.msg'
@@ -58,6 +60,7 @@ module.exports = {
   ERROR_MESSAGE,
   ERROR_STACK,
   CI_APP_ORIGIN,
+  LIBRARY_VERSION,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -149,7 +152,8 @@ function getTestCommonTags (name, suite, version) {
     [TEST_NAME]: name,
     [TEST_SUITE]: suite,
     [RESOURCE_NAME]: `${suite}.${name}`,
-    [TEST_FRAMEWORK_VERSION]: version
+    [TEST_FRAMEWORK_VERSION]: version,
+    [LIBRARY_VERSION]: ddTraceVersion
   }
 }
 
