@@ -32,7 +32,6 @@
     "test:shimmer:ci": "nyc --no-clean --include 'packages/datadog-shimmer/src/**/*.js' -- npm run test:shimmer",
     "leak:core": "node ./scripts/install_plugin_modules && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'",
     "leak:plugins": "yarn services && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape \"packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js\"",
-    "codecov": "codecov",
     "junit:upload": "node ./scripts/junit_report.js"
   },
   "repository": {
@@ -93,7 +92,6 @@
     "chalk": "^3.0.0",
     "checksum": "^0.1.1",
     "cli-table3": "^0.5.1",
-    "codecov": "3.8.1",
     "dotenv": "8.2.0",
     "eslint": "^7.32.0",
     "eslint-config-standard": "^11.0.0-beta.0",
