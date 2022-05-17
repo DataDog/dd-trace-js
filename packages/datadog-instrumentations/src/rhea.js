@@ -96,7 +96,10 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/connection.js' }, Connecti
       if (this[inFlightDeliveries]) {
         this[inFlightDeliveries].forEach(delivery => {
           const context = contexts.get(delivery)
-          const asyncResource = context.asyncResource
+          const asyncResource = context && context.asyncResource
+
+          if (!asyncResource) return
+
           asyncResource.runInAsyncScope(() => {
             errorCh.publish(error)
             finish(delivery, null)
@@ -160,19 +163,19 @@ function patchCircularBuffer (proto, Session) {
           shimmer.wrap(CircularBuffer.prototype, 'pop_if', popIf => function (fn) {
             arguments[0] = AsyncResource.bind(function (entry) {
               const context = contexts.get(entry)
-              const asyncResource = context.asyncResource
-              let shouldPop
-              if (asyncResource) {
-                fn = asyncResource.bind(fn, this)
-                shouldPop = fn(entry)
-                if (shouldPop && asyncResource) {
-                  const remoteState = entry.remote_state
-                  const state = remoteState && remoteState.constructor
-                    ? entry.remote_state.constructor.composite_type : undefined
-                  asyncResource.runInAsyncScope(() => {
-                    return finish(entry, state)
-                  })
-                }
+              const asyncResource = context && context.asyncResource
+
+              if (!asyncResource) return fn(entry)
+
+              const shouldPop = asyncResource.runInAsyncScope(() => fn(entry))
+
+              if (shouldPop) {
+                const remoteState = entry.remote_state
+                const state = remoteState && remoteState.constructor
+                  ? entry.remote_state.constructor.composite_type : undefined
+                asyncResource.runInAsyncScope(() => {
+                  return finish(entry, state)
+                })
               }
 
               return shouldPop
