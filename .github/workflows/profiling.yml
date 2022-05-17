@@ -17,7 +17,7 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:profiler:ci
-      - run: yarn codecov
+      - uses: codecov/codecov-action@v2
 
   ubuntu:
     runs-on: ubuntu-latest
@@ -33,7 +33,7 @@ jobs:
       - run: yarn test:profiler:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:profiler:ci
-      - run: yarn codecov
+      - uses: codecov/codecov-action@v2
 
   windows:
     runs-on: windows-latest
@@ -42,4 +42,4 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:profiler:ci
-      - run: yarn codecov
+      - uses: codecov/codecov-action@v2
