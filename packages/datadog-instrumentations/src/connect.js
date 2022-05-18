@@ -1,11 +1,12 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 
 const enterChannel = channel('apm:connect:middleware:enter')
 const errorChannel = channel('apm:connect:middleware:error')
 const exitChannel = channel('apm:connect:middleware:exit')
+const nextChannel = channel('apm:connect:middleware:next')
 const handleChannel = channel('apm:connect:request:handle')
 
 function wrapConnect (connect) {
@@ -60,30 +61,29 @@ function wrapLayerHandle (layer) {
   return shimmer.wrap(original, function () {
     if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
 
-    const middlewareResource = new AsyncResource('bound-anonymous-fn')
     const lastIndex = arguments.length - 1
     const name = original._name || original.name
     const req = arguments[arguments.length > 3 ? 1 : 0]
-    const next = AsyncResource.bind(arguments[lastIndex])
+    const next = arguments[lastIndex]
 
     if (typeof next === 'function') {
-      arguments[lastIndex] = wrapNext(req, middlewareResource.bind(next))
+      arguments[lastIndex] = wrapNext(req, next)
     }
 
-    return middlewareResource.runInAsyncScope(() => {
-      const route = layer.route
+    const route = layer.route
 
-      enterChannel.publish({ name, req, route })
+    enterChannel.publish({ name, req, route })
 
-      try {
-        return original.apply(this, arguments)
-      } catch (e) {
-        errorChannel.publish(e)
-        exitChannel.publish({ req })
+    try {
+      return original.apply(this, arguments)
+    } catch (e) {
+      errorChannel.publish(e)
+      nextChannel.publish({ req })
 
-        throw e
-      }
-    })
+      throw e
+    } finally {
+      exitChannel.publish({ req })
+    }
   })
 }
 
@@ -93,7 +93,7 @@ function wrapNext (req, next) {
       errorChannel.publish(error)
     }
 
-    exitChannel.publish({ req })
+    nextChannel.publish({ req })
 
     next.apply(null, arguments)
   }

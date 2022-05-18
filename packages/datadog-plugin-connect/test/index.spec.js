@@ -4,6 +4,7 @@ const axios = require('axios')
 const http = require('http')
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { AsyncLocalStorage } = require('async_hooks')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
@@ -720,7 +721,6 @@ describe('Plugin', () => {
 
           app.use((req, res, next) => {
             span = tracer.scope().active()
-            tracer.scope().activate(null, () => next())
             next()
           })
 
@@ -738,6 +738,35 @@ describe('Plugin', () => {
           getPort().then(port => {
             appListener = http.createServer(app).listen(port, 'localhost', () => {
               axios.get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should keep user stores untouched', done => {
+          const app = connect()
+          const storage = new AsyncLocalStorage()
+          const store = {}
+
+          app.use((req, res, next) => {
+            storage.run(store, () => next())
+          })
+
+          app.use((req, res) => {
+            try {
+              expect(storage.getStore()).to.equal(store)
+              done()
+            } catch (e) {
+              done(e)
+            }
+
+            res.end()
+          })
+
+          getPort().then(port => {
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`)
                 .catch(done)
             })
           })

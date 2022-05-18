@@ -1,11 +1,12 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 
 const enterChannel = channel('apm:koa:middleware:enter')
 const errorChannel = channel('apm:koa:middleware:error')
 const exitChannel = channel('apm:koa:middleware:exit')
+const nextChannel = channel('apm:koa:middleware:next')
 const handleChannel = channel('apm:koa:request:handle')
 const routeChannel = channel('apm:koa:request:route')
 
@@ -85,43 +86,38 @@ function wrapMiddleware (fn, layer) {
   return function (ctx, next) {
     if (!ctx || !enterChannel.hasSubscribers) return fn.apply(this, arguments)
 
-    const middlewareResource = new AsyncResource('bound-anonymous-fn')
     const req = ctx.req
 
-    return middlewareResource.runInAsyncScope(() => {
-      enterChannel.publish({ req, name })
+    enterChannel.publish({ req, name })
 
-      if (typeof next === 'function') {
-        arguments[1] = AsyncResource.bind(next)
+    try {
+      const result = fn.apply(this, arguments)
+
+      if (result && typeof result.then === 'function') {
+        return result.then(
+          result => {
+            fulfill(ctx, layer)
+            return result
+          },
+          err => {
+            fulfill(ctx, layer, err)
+            throw err
+          }
+        )
+      } else {
+        fulfill(ctx, layer)
+        return result
       }
-
-      try {
-        const result = fn.apply(this, arguments)
-
-        if (result && typeof result.then === 'function') {
-          return result.then(
-            result => {
-              exit(ctx, layer)
-              return result
-            },
-            err => {
-              exit(ctx, layer, err)
-              throw err
-            }
-          )
-        } else {
-          exit(ctx, layer)
-          return result
-        }
-      } catch (e) {
-        exit(ctx, layer, e)
-        throw e
-      }
-    })
+    } catch (e) {
+      fulfill(ctx, layer, e)
+      throw e
+    } finally {
+      exitChannel.publish({ req: ctx.req })
+    }
   }
 }
 
-function exit (ctx, layer, error) {
+function fulfill (ctx, layer, error) {
   if (error) {
     errorChannel.publish(error)
   }
@@ -134,7 +130,7 @@ function exit (ctx, layer, error) {
     routeChannel.publish({ req, route })
   }
 
-  exitChannel.publish(ctx)
+  nextChannel.publish(ctx)
 }
 
 addHook({ name: 'koa', versions: ['>=2'] }, Koa => {

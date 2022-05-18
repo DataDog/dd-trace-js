@@ -26,15 +26,19 @@ class RouterPlugin extends WebPlugin {
       web.setRoute(req, context.route)
     })
 
-    this.addSub(`apm:${this.constructor.name}:middleware:exit`, ({ req }) => {
+    this.addSub(`apm:${this.constructor.name}:middleware:exit`, () => {
+      this.exit()
+    })
+
+    this.addSub(`apm:${this.constructor.name}:middleware:next`, ({ req }) => {
       const context = this._contexts.get(req)
 
-      if (!context) return
+      if (context) {
+        context.stack.pop()
 
-      context.stack.pop()
-
-      if (context.middleware.length > 0) {
-        context.middleware.pop().finish()
+        if (context.middleware.length > 0) {
+          context.middleware.pop().finish()
+        }
       }
     })
 
