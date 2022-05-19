@@ -83,7 +83,10 @@ describe('WAFCallback', () => {
         },
         rulesInfo: {
           loaded: 3,
-          failed: 0
+          failed: 2,
+          errors: {
+            'invalid rule': ['id1', 'id2']
+          }
         },
         createContext: sinon.spy(() => ({
           run: sinon.stub().returns({ action: 'monitor', data: '[]' }),
@@ -112,7 +115,8 @@ describe('WAFCallback', () => {
       expect(Object.fromEntries(Reporter.metricsQueue)).to.deep.equal({
         '_dd.appsec.waf.version': '1.2.3',
         '_dd.appsec.event_rules.loaded': 3,
-        '_dd.appsec.event_rules.error_count': 0,
+        '_dd.appsec.event_rules.error_count': 2,
+        '_dd.appsec.event_rules.errors': '{"invalid rule":["id1","id2"]}',
         'manual.keep': true
       })
       expect(waf.ddwaf).to.equal(ddwaf)
