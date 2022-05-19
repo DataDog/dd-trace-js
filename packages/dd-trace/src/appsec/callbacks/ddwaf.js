@@ -33,10 +33,11 @@ class WAFCallback {
 
     Reporter.metricsQueue.set('_dd.appsec.waf.version', `${version.major}.${version.minor}.${version.patch}`)
 
-    const { loaded, failed } = this.ddwaf.rulesInfo
+    const { loaded, failed, errors } = this.ddwaf.rulesInfo
 
     Reporter.metricsQueue.set('_dd.appsec.event_rules.loaded', loaded)
     Reporter.metricsQueue.set('_dd.appsec.event_rules.error_count', failed)
+    if (failed) Reporter.metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(errors))
 
     Reporter.metricsQueue.set('manual.keep', true)
 
