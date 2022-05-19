@@ -200,10 +200,10 @@
     "@babel/helper-validator-identifier" "^7.16.7"
     to-fast-properties "^2.0.0"
 
-"@datadog/native-appsec@^1.1.1":
-  version "1.1.1"
-  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-1.1.1.tgz#a9aff685217d47b1444f10529c7d442351b98486"
-  integrity sha512-Aez74nNpfUlvJ5RyHuycy7tyl4BLCESPH8xG9INDIplIvgGIWGwlZRhhkQ/33623m6JpwsHqw9I9kvvgoiJTqQ==
+"@datadog/native-appsec@^1.2.0":
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-1.2.0.tgz#724621cfcab7d92a0780deb6046f9d52740262a6"
+  integrity sha512-Brv9m8eKeJG8meeHd37V0Cz513TSce52nGRTEQ7O6/fmvlKGg64Z4HYasEZ1dRYwif0KPYPnZGvWHcnDld4ilA==
   dependencies:
     detect-libc "^1.0.3"
     minimist "^1.2.6"
