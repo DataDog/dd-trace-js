@@ -101,6 +101,14 @@ const web = {
 
     return span
   },
+  wrapServerEvents (server) {
+    const context = contexts.get(server)
+    if (!context.instrumented) {
+      this.wrapServerEventsEnd(context)
+      this.wrapServerEventsInfo(context)
+      context.instrumented = true
+    }
+  },
   wrap (req) {
     const context = contexts.get(req)
     if (!context.instrumented) {
@@ -118,9 +126,28 @@ const web = {
     return callback && tracer.scope().activate(span, () => callback(span))
   },
 
+  reactivateServerScope (server, tracer, span, config, fn) {
+    // configure context
+    const context = this.patchServerEvents(server, span)
+    context.config = config
+
+    context.tracer = tracer
+
+    this.wrapServerEvents(server)
+
+    // Reactive the scope for the server events pending here
+    return context
+      ? context.tracer.scope().activate(context.span, fn) && span.finish()
+      : fn()
+  },
+
   // Reactivate the request scope in case it was changed by a middleware.
   reactivate (req, fn) {
     return reactivate(req, fn)
+  },
+
+  enterServer (server) {
+    contexts.get(server)
   },
 
   // Add a route segment that will be used for the resource name.
@@ -200,6 +227,31 @@ const web = {
   // Register a callback to run before res.end() is called.
   beforeEnd (req, callback) {
     contexts.get(req).beforeEnd.push(callback)
+  },
+
+  // prepare the path server for instrumentation
+  patchServerEvents (server, span) {
+    let context = contexts.get(server)
+
+    if (context) return context
+
+    context = contexts.get(server.info)
+
+    if (context) {
+      contexts.set(server, context)
+      return context
+    }
+
+    context = {
+      server: server.info,
+      span: span,
+      app: 'app-name',
+      config: {}
+    }
+
+    contexts.set(server, context)
+
+    return context
   },
 
   // Prepare the request for instrumentation.
@@ -335,6 +387,20 @@ const web = {
       return returnValue
     }
   },
+  wrapServerEventsEnd (context) {
+    const scope = context.tracer.scope()
+    const server = context.server
+
+    Object.defineProperty(server, 'end', {
+      configurable: true,
+      get () {
+        return ends.get(this)
+      },
+      set (value) {
+        ends.set(this, scope.bind(value, context.span))
+      }
+    })
+  },
   wrapEnd (context) {
     const scope = context.tracer.scope()
     const req = context.req
@@ -354,6 +420,12 @@ const web = {
         ends.set(this, scope.bind(value, context.span))
       }
     })
+  },
+  wrapServerEventsInfo (context) {
+    const scope = context.tracer.scope()
+    const server = context.server
+
+    scope.bind(server, context.span)
   },
   wrapEvents (context) {
     const scope = context.tracer.scope()
