@@ -87,7 +87,7 @@ class RouterPlugin extends WebPlugin {
       route = context.stack.join('')
 
       // Longer route is more likely to be the actual route handler route.
-      if (route.length > context.route.length) {
+      if (isMoreSpecificThan(route, context.route)) {
         context.route = route
       }
     } else {
@@ -102,6 +102,17 @@ class RouterPlugin extends WebPlugin {
 
     return context
   }
+}
+
+function isMoreSpecificThan(routeA, routeB) {
+  if (!routeIsRegex(routeA) && routeIsRegex(routeB)) {
+    return true;
+  }
+  return routeA.length > routeB.length;
+}
+
+function routeIsRegex(route) {
+  return route.startsWith('(/') && route.endsWith('/)');
 }
 
 module.exports = RouterPlugin

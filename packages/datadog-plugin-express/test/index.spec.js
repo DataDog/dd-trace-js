@@ -548,6 +548,36 @@ describe('Plugin', () => {
           })
         })
 
+        it('should not lose the current path when route handler preceeded by a longer middleware resource', done => {
+          const app = express()
+
+          app.use(/\/foo\/(bar|baz|bez)/, (req, res, next) => {
+            next()
+          })
+
+          app.get('/foo/bar', (req, res) => {
+            res.status(200).send('')
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                console.log(spans);
+                expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/foo/bar`)
+                .catch(done)
+            })
+          })
+        })
+
         it('should not lose the current path on next', done => {
           const app = express()
           const Router = express.Router
