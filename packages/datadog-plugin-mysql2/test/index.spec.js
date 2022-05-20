@@ -227,7 +227,7 @@ describe('Plugin', () => {
             expect(traces[0][0]).to.have.property('service', 'custom')
             sinon.assert.calledWith(serviceSpy, sinon.match({
               host: 'localhost',
-              port: 3306,
+              user: 'root',
               database: 'db'
             }))
             done()
