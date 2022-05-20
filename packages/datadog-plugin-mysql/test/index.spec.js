@@ -140,6 +140,44 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with service configured as function', () => {
+        const serviceSpy = sinon.stub().returns('custom')
+        let connection
+
+        afterEach((done) => {
+          connection.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
+        })
+
+        beforeEach(async () => {
+          await agent.load('mysql', { service: serviceSpy })
+          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
+
+          connection = mysql.createConnection({
+            host: 'localhost',
+            user: 'root',
+            database: 'db'
+          })
+
+          connection.connect()
+        })
+
+        it('should be configured with the correct values', done => {
+          agent.use(traces => {
+            expect(traces[0][0]).to.have.property('service', 'custom')
+            sinon.assert.calledWith(serviceSpy, sinon.match({
+              host: 'localhost',
+              port: 3306,
+              database: 'db'
+            }))
+            done()
+          })
+
+          connection.query('SELECT 1 + 1 AS solution', () => {})
+        })
+      })
+
       describe('with a connection pool', () => {
         let pool
 
