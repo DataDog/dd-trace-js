@@ -13,6 +13,8 @@ const options = {
   }
 }
 
+let shouldInit = true
+
 if (process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED) {
   if (process.env.DATADOG_API_KEY || process.env.DD_API_KEY) {
     options.experimental = {
@@ -20,9 +22,11 @@ if (process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED) {
     }
   } else {
     console.error(`
-DD_CIVISIBILITY_AGENTLESS_ENABLED is set,
-but neither DD_API_KEY nor DATADOG_API_KEY are set in your environment.`)
-    process.exit(1)
+      DD_CIVISIBILITY_AGENTLESS_ENABLED is set, \
+      but neither DD_API_KEY nor DATADOG_API_KEY are set in your environment, \
+      so dd-trace will not be initialized.`
+    )
+    shouldInit = false
   }
 }
 
@@ -45,8 +49,9 @@ try {
   // ignore error and let the tracer initialize anyway
 }
 
-tracer.init(options)
-
-tracer.use('fs', false)
+if (shouldInit) {
+  tracer.init(options)
+  tracer.use('fs', false)
+}
 
 module.exports = tracer
