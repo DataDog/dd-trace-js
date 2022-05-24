@@ -22,6 +22,7 @@ const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
+const HTTP_USERAGENT = tags.HTTP_USERAGENT
 const MANUAL_DROP = tags.MANUAL_DROP
 
 const HTTP_STATUS_OK = 200
@@ -30,6 +31,7 @@ const HTTP2_HEADER_SCHEME = ':scheme'
 const HTTP2_HEADER_METHOD = ':method'
 const HTTP2_HEADER_PATH = ':path'
 const HTTP2_HEADER_STATUS = ':status'
+const HTTP2_HEADER_USERAGENT = ':user-agent'
 
 function createWrapEmit (tracer, config) {
   return function wrapEmit (emit) {
@@ -141,7 +143,8 @@ function addRequestTags (stream, headers) {
     [HTTP_METHOD]: headers[HTTP2_HEADER_METHOD],
     [HTTP_URL]: url.split('?')[0],
     [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: WEB
+    [SPAN_TYPE]: WEB,
+    [HTTP_USERAGENT]: headers[HTTP2_HEADER_USERAGENT]
   })
 }
 
