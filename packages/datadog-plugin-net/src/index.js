@@ -30,11 +30,9 @@ class NetPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub(`apm:net:ipc:end`, this.exit.bind(this))
-
     this.addSub(`apm:net:ipc:error`, errorHandler)
 
-    this.addSub(`apm:net:ipc:async-end`, defaultAsyncEnd)
+    this.addSub(`apm:net:ipc:finish`, defaultFinish)
 
     this.addSub(`apm:net:tcp:start`, ({ options }) => {
       const store = storage.getStore()
@@ -62,11 +60,9 @@ class NetPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub(`apm:net:tcp:end`, this.exit.bind(this))
-
     this.addSub(`apm:net:tcp:error`, errorHandler)
 
-    this.addSub(`apm:net:tcp:async-end`, defaultAsyncEnd)
+    this.addSub(`apm:net:tcp:finish`, defaultFinish)
 
     this.addSub(`apm:net:tcp:connection`, ({ socket }) => {
       const span = storage.getStore().span
@@ -78,7 +74,7 @@ class NetPlugin extends Plugin {
   }
 }
 
-function defaultAsyncEnd () {
+function defaultFinish () {
   storage.getStore().span.finish()
 }
 
