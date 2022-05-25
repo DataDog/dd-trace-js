@@ -27,7 +27,6 @@ module.exports = class Plugin {
   constructor (tracer) {
     this._subscriptions = []
     this._enabled = false
-    this._storeStack = []
     this._tracer = tracer
   }
 
@@ -37,7 +36,6 @@ module.exports = class Plugin {
 
   enter (span, store) {
     store = store || storage.getStore()
-    this._storeStack.push(store)
     storage.enterWith({ ...store, span })
   }
 
@@ -46,10 +44,6 @@ module.exports = class Plugin {
     const store = storage.getStore()
     this._storeStack.push(store)
     storage.enterWith({ noop: true })
-  }
-
-  exit () {
-    storage.enterWith(this._storeStack.pop())
   }
 
   addSub (channelName, handler) {
