@@ -41,8 +41,6 @@ module.exports = class Plugin {
 
   /** Prevents creation of spans here and for all async descendants. */
   skip () {
-    const store = storage.getStore()
-    this._storeStack.push(store)
     storage.enterWith({ noop: true })
   }
 
