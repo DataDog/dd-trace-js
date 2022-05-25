@@ -144,7 +144,7 @@ function addRequestTags (stream, headers) {
     [HTTP_URL]: url.split('?')[0],
     [SPAN_KIND]: SERVER,
     [SPAN_TYPE]: WEB,
-    [HTTP_USERAGENT]: headers[HTTP2_HEADER_USERAGENT]
+    [HTTP_USERAGENT]: headers['user-agent']
   })
 }
 
