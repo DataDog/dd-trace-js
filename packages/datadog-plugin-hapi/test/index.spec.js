@@ -4,7 +4,6 @@ const axios = require('axios')
 const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let tracer
@@ -15,7 +14,7 @@ describe('Plugin', () => {
   let reply
 
   describe('hapi', () => {
-    withVersions(plugin, ['hapi', '@hapi/hapi'], (version, module) => {
+    withVersions('hapi', ['hapi', '@hapi/hapi'], (version, module) => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         handler = (request, h, body) => h.response ? h.response(body) : h(body)
@@ -31,11 +30,11 @@ describe('Plugin', () => {
       })
 
       after(() => {
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
       before(() => {
-        return agent.load('hapi')
+        return agent.load(['hapi', 'http'], [{}, { client: false }])
           .then(() => {
             Hapi = require(`../../../versions/${module}@${version}`).get()
           })
