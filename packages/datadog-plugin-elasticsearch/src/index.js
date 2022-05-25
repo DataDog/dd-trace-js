@@ -34,16 +34,12 @@ class ElasticsearchPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub('apm:elasticsearch:query:end', () => {
-      this.exit()
-    })
-
     this.addSub('apm:elasticsearch:query:error', err => {
       const span = storage.getStore().span
       span.setTag('error', err)
     })
 
-    this.addSub('apm:elasticsearch:query:async-end', ({ params }) => {
+    this.addSub('apm:elasticsearch:query:finish', ({ params }) => {
       const span = storage.getStore().span
       this.config.hooks.query(span, params)
       span.finish()

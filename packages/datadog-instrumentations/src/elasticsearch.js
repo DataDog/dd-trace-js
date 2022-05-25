@@ -8,8 +8,7 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:elasticsearch:query:start')
-const asyncEndCh = channel('apm:elasticsearch:query:async-end')
-const endCh = channel('apm:elasticsearch:query:end')
+const finishCh = channel('apm:elasticsearch:query:finish')
 const errorCh = channel('apm:elasticsearch:query:error')
 
 addHook({ name: '@elastic/transport', file: 'lib/Transport.js', versions: ['>=8'] }, (exports) => {
@@ -36,43 +35,42 @@ function wrapRequest (request) {
     if (!params) return request.apply(this, arguments)
 
     const parentResource = new AsyncResource('bound-anonymous-fn')
-
-    startCh.publish({ params })
-
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    try {
-      const lastIndex = arguments.length - 1
-      cb = arguments[lastIndex]
+    return asyncResource.runInAsyncScope(() => {
+      startCh.publish({ params })
 
-      if (typeof cb === 'function') {
-        cb = parentResource.bind(cb)
+      try {
+        const lastIndex = arguments.length - 1
+        cb = arguments[lastIndex]
 
-        arguments[lastIndex] = asyncResource.bind(function (error) {
-          finish(params, error)
-          return cb.apply(null, arguments)
-        })
-        return request.apply(this, arguments)
-      } else {
-        const promise = request.apply(this, arguments)
-        if (promise && typeof promise.then === 'function') {
-          const onResolve = asyncResource.bind(() => finish(params))
-          const onReject = asyncResource.bind(e => finish(params, e))
+        if (typeof cb === 'function') {
+          cb = parentResource.bind(cb)
 
-          promise.then(onResolve, onReject)
+          arguments[lastIndex] = asyncResource.bind(function (error) {
+            finish(params, error)
+            return cb.apply(null, arguments)
+          })
+          return request.apply(this, arguments)
         } else {
-          finish(params)
-        }
-        return promise
-      }
-    } catch (err) {
-      err.stack // trigger getting the stack at the original throwing point
-      errorCh.publish(err)
+          const promise = request.apply(this, arguments)
+          if (promise && typeof promise.then === 'function') {
+            const onResolve = asyncResource.bind(() => finish(params))
+            const onReject = asyncResource.bind(e => finish(params, e))
 
-      throw err
-    } finally {
-      endCh.publish(undefined)
-    }
+            promise.then(onResolve, onReject)
+          } else {
+            finish(params)
+          }
+          return promise
+        }
+      } catch (err) {
+        err.stack // trigger getting the stack at the original throwing point
+        errorCh.publish(err)
+
+        throw err
+      }
+    })
   }
 }
 
@@ -80,5 +78,5 @@ function finish (params, error) {
   if (error) {
     errorCh.publish(error)
   }
-  asyncEndCh.publish({ params })
+  finishCh.publish({ params })
 }
