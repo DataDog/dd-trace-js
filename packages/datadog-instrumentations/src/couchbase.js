@@ -9,8 +9,7 @@ const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Bucket => {
   const startCh = channel('apm:couchbase:query:start')
-  const asyncEndCh = channel('apm:couchbase:query:async-end')
-  const endCh = channel('apm:couchbase:query:end')
+  const finishCh = channel('apm:couchbase:query:finish')
   const errorCh = channel('apm:couchbase:query:error')
 
   Bucket.prototype._maybeInvoke = wrapMaybeInvoke(Bucket.prototype._maybeInvoke)
@@ -25,27 +24,28 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
 
     const n1qlQuery = q && q.statement
 
-    startCh.publish({ resource: n1qlQuery, bucket: this })
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    return asyncResource.runInAsyncScope(() => {
+      startCh.publish({ resource: n1qlQuery, bucket: this })
 
-    emitter.once('rows', AsyncResource.bind(() => {
-      asyncEndCh.publish(undefined)
-    }))
+      emitter.once('rows', asyncResource.bind(() => {
+        finishCh.publish(undefined)
+      }))
 
-    emitter.once('error', AsyncResource.bind((error) => {
-      errorCh.publish(error)
-      asyncEndCh.publish(undefined)
-    }))
+      emitter.once('error', asyncResource.bind((error) => {
+        errorCh.publish(error)
+        finishCh.publish(undefined)
+      }))
 
-    try {
-      return _n1qlReq.apply(this, arguments)
-    } catch (err) {
-      err.stack // trigger getting the stack at the original throwing point
-      errorCh.publish(err)
+      try {
+        return _n1qlReq.apply(this, arguments)
+      } catch (err) {
+        err.stack // trigger getting the stack at the original throwing point
+        errorCh.publish(err)
 
-      throw err
-    } finally {
-      endCh.publish(undefined)
-    }
+        throw err
+      }
+    })
   })
 
   Bucket.prototype.upsert = wrap('apm:couchbase:upsert', Bucket.prototype.upsert)
@@ -103,8 +103,7 @@ function wrapQuery (query) {
 
 function wrap (prefix, fn) {
   const startCh = channel(prefix + ':start')
-  const endCh = channel(prefix + ':end')
-  const asyncEndCh = channel(prefix + ':async-end')
+  const finishCh = channel(prefix + ':finish')
   const errorCh = channel(prefix + ':error')
 
   const wrapped = function (key, value, options, callback) {
@@ -116,28 +115,31 @@ function wrap (prefix, fn) {
 
     if (callbackIndex < 0) return fn.apply(this, arguments)
 
-    const cb = arguments[callbackIndex]
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    startCh.publish({ bucket: this })
+    return asyncResource.runInAsyncScope(() => {
+      const cb = callbackResource.bind(arguments[callbackIndex])
 
-    arguments[callbackIndex] = function (error, result) {
-      if (error) {
+      startCh.publish({ bucket: this })
+
+      arguments[callbackIndex] = asyncResource.bind(function (error, result) {
+        if (error) {
+          errorCh.publish(error)
+        }
+        finishCh.publish(result)
+        return cb.apply(this, arguments)
+      })
+
+      try {
+        return fn.apply(this, arguments)
+      } catch (error) {
+        error.stack // trigger getting the stack at the original throwing point
         errorCh.publish(error)
+
+        throw error
       }
-      asyncEndCh.publish(result)
-      return cb.apply(this, arguments)
-    }
-
-    try {
-      return fn.apply(this, arguments)
-    } catch (error) {
-      error.stack // trigger getting the stack at the original throwing point
-      errorCh.publish(error)
-
-      throw error
-    } finally {
-      endCh.publish(undefined)
-    }
+    })
   }
   return shimmer.wrap(fn, wrapped)
 }
