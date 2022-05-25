@@ -9,8 +9,7 @@ const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'tedious', versions: [ '>=1.0.0' ] }, tedious => {
   const startCh = channel('apm:tedious:request:start')
-  const asyncEndCh = channel('apm:tedious:request:async-end')
-  const endCh = channel('apm:tedious:request:end')
+  const finishCh = channel('apm:tedious:request:finish')
   const errorCh = channel('apm:tedious:request:error')
   shimmer.wrap(tedious.Connection.prototype, 'makeRequest', makeRequest => function (request) {
     if (!startCh.hasSubscribers) {
@@ -23,31 +22,32 @@ addHook({ name: 'tedious', versions: [ '>=1.0.0' ] }, tedious => {
       return makeRequest.apply(this, arguments)
     }
 
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
     const connectionConfig = this.config
 
-    startCh.publish({ queryOrProcedure, connectionConfig })
+    return asyncResource.runInAsyncScope(() => {
+      startCh.publish({ queryOrProcedure, connectionConfig })
 
-    const cb = asyncResource.bind(request.callback, request)
-    request.callback = AsyncResource.bind(function (error) {
-      if (error) {
+      const cb = callbackResource.bind(request.callback, request)
+      request.callback = asyncResource.bind(function (error) {
+        if (error) {
+          errorCh.publish(error)
+        }
+        finishCh.publish(undefined)
+
+        return cb.apply(this, arguments)
+      }, null, request)
+
+      try {
+        return makeRequest.apply(this, arguments)
+      } catch (error) {
         errorCh.publish(error)
+
+        throw error
       }
-      asyncEndCh.publish(undefined)
-
-      return cb.apply(this, arguments)
-    }, null, request)
-
-    try {
-      return makeRequest.apply(this, arguments)
-    } catch (error) {
-      errorCh.publish(error)
-
-      throw error
-    } finally {
-      endCh.publish(undefined)
-    }
+    })
   })
 
   return tedious
