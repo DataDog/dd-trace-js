@@ -31,7 +31,6 @@ const HTTP2_HEADER_SCHEME = ':scheme'
 const HTTP2_HEADER_METHOD = ':method'
 const HTTP2_HEADER_PATH = ':path'
 const HTTP2_HEADER_STATUS = ':status'
-const HTTP2_HEADER_USERAGENT = ':user-agent'
 
 function createWrapEmit (tracer, config) {
   return function wrapEmit (emit) {
