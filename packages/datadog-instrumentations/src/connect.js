@@ -5,7 +5,6 @@ const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 
 const enterChannel = channel('apm:connect:middleware:enter')
 const errorChannel = channel('apm:connect:middleware:error')
-const exitChannel = channel('apm:connect:middleware:exit')
 const nextChannel = channel('apm:connect:middleware:next')
 const handleChannel = channel('apm:connect:request:handle')
 
@@ -83,8 +82,6 @@ function wrapLayerHandle (layer) {
         nextChannel.publish({ req })
 
         throw e
-      } finally {
-        exitChannel.publish({ req })
       }
     })
   })
@@ -96,7 +93,7 @@ function wrapNext (req, next) {
       errorChannel.publish(error)
     }
 
-    exitChannel.publish({ req })
+    nextChannel.publish({ req })
 
     next.apply(null, arguments)
   }

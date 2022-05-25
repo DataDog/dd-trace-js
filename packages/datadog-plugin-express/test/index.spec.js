@@ -1,5 +1,6 @@
 'use strict'
 
+const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -951,6 +952,35 @@ describe('Plugin', () => {
           expect(layer.handle).to.have.ownProperty('stack')
         })
 
+        it('should keep user stores untouched', done => {
+          const app = express()
+          const storage = new AsyncLocalStorage()
+          const store = {}
+
+          app.use((req, res, next) => {
+            storage.run(store, () => next())
+          })
+
+          app.get('/user', (req, res) => {
+            try {
+              expect(storage.getStore()).to.equal(store)
+              done()
+            } catch (e) {
+              done(e)
+            }
+
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+        })
+
         withVersions(plugin, 'loopback', loopbackVersion => {
           let loopback
 
@@ -1173,7 +1203,7 @@ describe('Plugin', () => {
 
           app.use((req, res, next) => {
             span = tracer.scope().active()
-            tracer.scope().activate(null, () => next())
+            next()
           })
 
           app.get('/user', (req, res) => {
