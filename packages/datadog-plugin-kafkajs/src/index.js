@@ -60,10 +60,6 @@ class KafkajsPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub(`apm:kafkajs:end`, () => {
-      this.exit()
-    })
-
     this.addSub(`apm:kafkajs:consume:error`, errorHandler)
 
     this.addSub(`apm:kafkajs:consume:finish`, finishHandler)
