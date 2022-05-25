@@ -46,6 +46,10 @@ module.exports = class Plugin {
     storage.enterWith({ noop: true })
   }
 
+  exit () {
+    throw new Error('should not get here') // TODO: remove this when all done
+  }
+
   addSub (channelName, handler) {
     this._subscriptions.push(new Subscription(channelName, handler))
   }
