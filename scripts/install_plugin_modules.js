@@ -55,18 +55,15 @@ async function assertVersions () {
       const plugin = plugins[key]
       if (plugin.prototype instanceof Plugin) {
         const instrumentations = []
-        const instrument = {
-          addHook (instrumentation) {
-            instrumentations.push(instrumentation)
-          }
+        const name = plugin.name
+
+        try {
+          loadInstFile(`${name}/server.js`, instrumentations)
+          loadInstFile(`${name}/client.js`, instrumentations)
+        } catch (e) {
+          loadInstFile(`${name}.js`, instrumentations)
         }
-        const instPath = path.join(
-          __dirname,
-          `../packages/datadog-instrumentations/src/${plugin.name}.js`
-        )
-        proxyquire.noPreserveCache()(instPath, {
-          './helpers/instrument': instrument
-        })
+
         return instrumentations
       } else {
         return plugin
@@ -229,4 +226,19 @@ function sha1 (str) {
   const shasum = crypto.createHash('sha1')
   shasum.update(str)
   return shasum.digest('hex')
+}
+
+function loadInstFile (file, instrumentations) {
+  const instrument = {
+    addHook (instrumentation) {
+      instrumentations.push(instrumentation)
+    }
+  }
+
+  const instPath = path.join(__dirname, `../packages/datadog-instrumentations/src/${file}`)
+
+  proxyquire.noPreserveCache()(instPath, {
+    './helpers/instrument': instrument,
+    '../helpers/instrument': instrument
+  })
 }

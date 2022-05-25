@@ -1,60 +1,50 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
+const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { moleculerTags } = require('./util')
 
-function createWrapCall (tracer, config) {
-  return function wrapCall (call) {
-    return function callWithTrace (actionName, params, opts) {
-      const options = {
-        service: config.service,
-        resource: actionName,
+class MoleculerClientPlugin extends Plugin {
+  constructor (...args) {
+    super(...args)
+
+    this.addSub('apm:moleculer:call:start', ({ actionName, params, opts }) => {
+      const store = storage.getStore()
+      const childOf = store && store.span
+      const span = this.tracer.startSpan('moleculer.call', {
+        childOf,
         tags: {
-          'span.kind': 'client'
+          'service.name': this.config.service || this.tracer._service,
+          'span.kind': 'client',
+          'resource.name': actionName
         }
+      })
+
+      this.tracer.inject(span, 'text_map', opts.meta)
+
+      this.enter(span, store)
+    })
+
+    this.addSub('apm:moleculer:call:finish', ({ broker, ctx }) => {
+      const store = storage.getStore()
+      const span = store.span
+
+      if (ctx) {
+        const endpoint = ctx.endpoint || {}
+        const node = endpoint.node || {}
+
+        span.addTags({
+          'out.host': node.hostname,
+          'out.port': node.port,
+          ...moleculerTags(broker, ctx, this.config)
+        })
       }
 
-      opts = arguments[2] = opts || {}
-      opts.meta = opts.meta || {}
+      span.finish()
+    })
 
-      arguments.length = Math.max(3, arguments.length)
-
-      return tracer.trace('moleculer.call', options, () => {
-        const span = tracer.scope().active()
-
-        tracer.inject(span, 'text_map', opts.meta)
-
-        const promise = call.apply(this, arguments)
-
-        if (promise.ctx) {
-          const endpoint = promise.ctx.endpoint || {}
-          const node = endpoint.node || {}
-
-          span.addTags({
-            'out.host': node.hostname,
-            'out.port': node.port,
-            ...moleculerTags(this, promise.ctx, config)
-          })
-        }
-
-        return promise
-      })
-    }
+    this.addSub('apm:moleculer:call:error', this.addError)
   }
 }
 
-module.exports = [
-  {
-    name: 'moleculer',
-    versions: ['>=0.14'],
-    patch ({ ServiceBroker }, tracer, config) {
-      if (config.client === false) return
-
-      config = Object.assign({}, config, config.client)
-
-      this.wrap(ServiceBroker.prototype, 'call', createWrapCall(tracer, config))
-    },
-    unpatch ({ ServiceBroker }) {
-      this.unwrap(ServiceBroker.prototype, 'call')
-    }
-  }
-]
+module.exports = MoleculerClientPlugin
