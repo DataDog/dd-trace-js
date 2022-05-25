@@ -13,8 +13,7 @@ const inFlightDeliveries = Symbol('inFlightDeliveries')
 const patched = new WeakSet()
 const dispatchCh = channel('apm:rhea:dispatch')
 const errorCh = channel('apm:rhea:error')
-const asyncEndCh = channel('apm:rhea:async-end')
-const endCh = channel('apm:rhea:end')
+const finishCh = channel('apm:rhea:finish')
 
 const contexts = new WeakMap()
 
@@ -35,24 +34,24 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
     const targetAddress = this.options && this.options.target &&
       this.options.target.address ? this.options.target.address : undefined
 
-    startSendCh.publish({ targetAddress, host, port, msg })
-    const delivery = send.apply(this, arguments)
     const asyncResource = new AsyncResource('bound-anonymous-fn')
-    const context = {
-      asyncResource
-    }
-    contexts.set(delivery, context)
+    return asyncResource.runInAsyncScope(() => {
+      startSendCh.publish({ targetAddress, host, port, msg })
+      const delivery = send.apply(this, arguments)
+      const context = {
+        asyncResource
+      }
+      contexts.set(delivery, context)
 
-    addToInFlightDeliveries(this.connection, delivery)
-    try {
-      return delivery
-    } catch (err) {
-      errorCh.publish(err)
+      addToInFlightDeliveries(this.connection, delivery)
+      try {
+        return delivery
+      } catch (err) {
+        errorCh.publish(err)
 
-      throw err
-    } finally {
-      endCh.publish(undefined)
-    }
+        throw err
+      }
+    })
   })
 
   shimmer.wrap(Receiver.prototype, 'dispatch', dispatch => function (eventName, msgObj) {
@@ -62,26 +61,26 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
     }
 
     if (eventName === 'message' && msgObj) {
-      startReceiveCh.publish({ msgObj, connection: this.connection })
+      const asyncResource = new AsyncResource('bound-anonymous-fn')
+      return asyncResource.runInAsyncScope(() => {
+        startReceiveCh.publish({ msgObj, connection: this.connection })
 
-      if (msgObj.delivery) {
-        const asyncResource = new AsyncResource('bound-anonymous-fn')
-        const context = {
-          asyncResource
+        if (msgObj.delivery) {
+          const context = {
+            asyncResource
+          }
+          contexts.set(msgObj.delivery, context)
+          msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery, msgObj.delivery.update)
+          addToInFlightDeliveries(this.connection, msgObj.delivery)
         }
-        contexts.set(msgObj.delivery, context)
-        msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery, msgObj.delivery.update)
-        addToInFlightDeliveries(this.connection, msgObj.delivery)
-      }
-      try {
-        return dispatch.apply(this, arguments)
-      } catch (err) {
-        errorCh.publish(err)
+        try {
+          return dispatch.apply(this, arguments)
+        } catch (err) {
+          errorCh.publish(err)
 
-        throw err
-      } finally {
-        endCh.publish(undefined)
-      }
+          throw err
+        }
+      })
     }
 
     return dispatch.apply(this, arguments)
@@ -205,7 +204,7 @@ function finish (delivery, state) {
     if (state) {
       dispatchCh.publish({ state })
     }
-    asyncEndCh.publish(undefined)
+    finishCh.publish(undefined)
     if (obj.connection && obj.connection[inFlightDeliveries]) {
       obj.connection[inFlightDeliveries].delete(delivery)
     }

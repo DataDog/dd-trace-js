@@ -61,13 +61,9 @@ class RheaPlugin extends Plugin {
       storage.getStore().span.setTag('error', error)
     })
 
-    this.addSub(`apm:rhea:async-end`, () => {
+    this.addSub(`apm:rhea:finish`, () => {
       const span = storage.getStore().span
       span.finish()
-    })
-
-    this.addSub(`apm:rhea:end`, () => {
-      this.exit()
     })
 
     this.addSub(`apm:rhea:dispatch`, ({ state }) => {
