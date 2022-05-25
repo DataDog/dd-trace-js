@@ -17,7 +17,6 @@ require,lodash.sortby,MIT,Copyright JS Foundation and other contributors
 require,lodash.uniq,MIT,Copyright JS Foundation and other contributors
 require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk
 require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
-require,multer,MIT,Copyright 2014 Hage Yaapa
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
 require,performance-now,MIT,Copyright 2013 Braveg1rl
@@ -46,6 +45,7 @@ dev,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 dev,jszip,MIT,Copyright 2015-2016 Stuart Knightley and contributors
 dev,mkdirp,MIT,Copyright 2010 James Halliday
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
+dev,multer,MIT,Copyright 2014 Hage Yaapa
 dev,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors
