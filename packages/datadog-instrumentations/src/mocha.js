@@ -4,12 +4,11 @@ const shimmer = require('../../datadog-shimmer')
 const testStartCh = channel('ci:mocha:test:start')
 const errorCh = channel('ci:mocha:test:error')
 const skipCh = channel('ci:mocha:test:skip')
-const testEndCh = channel('ci:mocha:test:end')
-const testAsyncEndCh = channel('ci:mocha:test:async-end')
-const suiteEndCh = channel('ci:mocha:suite:end')
+const testFinishCh = channel('ci:mocha:test:finish')
+const suiteFinishCh = channel('ci:mocha:suite:finish')
 const hookErrorCh = channel('ci:mocha:hook:error')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
-const testRunEndCh = channel('ci:mocha:run:end')
+const testRunFinishCh = channel('ci:mocha:run:finish')
 
 // TODO: remove when root hooks and fixtures are implemented
 const patched = new WeakSet()
@@ -38,59 +37,58 @@ function mochaHook (Runner) {
   patched.add(Runner)
 
   shimmer.wrap(Runner.prototype, 'runTest', runTest => function () {
-    if (!testStartCh.hasSubscribers) {
+    if (!testStartCh.hasSubscribers || isRetry(this.test)) {
       return runTest.apply(this, arguments)
     }
 
-    if (!isRetry(this.test)) {
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    return asyncResource.runInAsyncScope(() => {
       testStartCh.publish(this.test)
-    }
 
-    this.once('test end', AsyncResource.bind(() => {
-      let status
+      this.once('test end', AsyncResource.bind(() => {
+        let status
 
-      if (this.test.pending) {
-        status = 'skipped'
-      } else if (this.test.state !== 'failed' && !this.test.timedOut) {
-        status = 'pass'
-      } else {
-        status = 'fail'
+        if (this.test.pending) {
+          status = 'skipped'
+        } else if (this.test.state !== 'failed' && !this.test.timedOut) {
+          status = 'pass'
+        } else {
+          status = 'fail'
+        }
+
+        testFinishCh.publish(status)
+      }))
+
+      this.once('fail', AsyncResource.bind((test, err) => {
+        errorCh.publish(err)
+      }))
+
+      this.once('pending', AsyncResource.bind((test) => {
+        skipCh.publish(test)
+      }))
+
+      try {
+        return runTest.apply(this, arguments)
+      } catch (err) {
+        errorCh.publish(err)
+        throw err
       }
-
-      testAsyncEndCh.publish(status)
-    }))
-
-    this.once('fail', AsyncResource.bind((test, err) => {
-      errorCh.publish(err)
-    }))
-
-    this.once('pending', AsyncResource.bind((test) => {
-      skipCh.publish(test)
-    }))
-
-    try {
-      return runTest.apply(this, arguments)
-    } catch (err) {
-      errorCh.publish(err)
-      throw err
-    } finally {
-      testEndCh.publish(undefined)
-    }
+    })
   })
 
   shimmer.wrap(Runner.prototype, 'runTests', runTests => function () {
-    if (!suiteEndCh.hasSubscribers) {
+    if (!suiteFinishCh.hasSubscribers) {
       return runTests.apply(this, arguments)
     }
     this.once('end', AsyncResource.bind(() => {
-      testRunEndCh.publish(undefined)
+      testRunFinishCh.publish()
     }))
     runTests.apply(this, arguments)
     const suite = arguments[0]
     // We call `getAllTestsInSuite` with the root suite so every skipped test
     // should already have an associated test span.
     const tests = getAllTestsInSuite(suite)
-    suiteEndCh.publish(tests)
+    suiteFinishCh.publish(tests)
   })
 
   shimmer.wrap(Runner.prototype, 'fail', fail => function (hook, error) {
