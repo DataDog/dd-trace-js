@@ -56,7 +56,7 @@ addHook({ name: 'amqp10', file: 'lib/receiver_link.js', versions: ['>=3'] }, Rec
         errorCh.publish(err)
         throw err
       } finally {
-        finishCh.publish(undefined)
+        finishCh.publish()
       }
     })
   })
@@ -67,5 +67,5 @@ function finish (finishCh, errorCh, error) {
   if (error) {
     errorCh.publish(error)
   }
-  finishCh.publish(undefined)
+  finishCh.publish()
 }

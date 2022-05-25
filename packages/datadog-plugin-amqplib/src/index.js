@@ -76,10 +76,9 @@ class AmqplibPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub(`apm:amqplib:command:end`, () => {
+    this.addSub(`apm:amqplib:command:finish`, () => {
       const span = storage.getStore().span
       span.finish()
-      this.exit()
     })
 
     this.addSub(`apm:amqplib:command:error`, err => {
