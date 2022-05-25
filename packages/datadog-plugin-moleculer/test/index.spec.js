@@ -4,7 +4,6 @@ const { expect } = require('chai')
 const getPort = require('get-port')
 const os = require('os')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 const sort = trace => trace.sort((a, b) => a.start.toNumber() - b.start.toNumber())
 
@@ -13,7 +12,7 @@ describe('Plugin', () => {
   let port
 
   describe('moleculer', () => {
-    withVersions(plugin, 'moleculer', version => {
+    withVersions('moleculer', 'moleculer', version => {
       const startBroker = async () => {
         const { ServiceBroker } = require(`../../../versions/moleculer@${version}`).get()
 
@@ -49,7 +48,7 @@ describe('Plugin', () => {
           before(() => agent.load('moleculer', { client: false }))
           before(() => startBroker())
           after(() => broker.stop())
-          after(() => agent.close())
+          after(() => agent.close({ ritmReset: false }))
 
           it('should do automatic instrumentation', done => {
             agent.use(traces => {
@@ -93,7 +92,7 @@ describe('Plugin', () => {
           }))
           before(() => startBroker())
           after(() => broker.stop())
-          after(() => agent.close())
+          after(() => agent.close({ ritmReset: false }))
 
           it('should have the configured service name', done => {
             agent.use(traces => {
@@ -110,7 +109,7 @@ describe('Plugin', () => {
           before(() => agent.load('moleculer', { server: false }))
           before(() => startBroker())
           after(() => broker.stop())
-          after(() => agent.close())
+          after(() => agent.close({ ritmReset: false }))
 
           it('should do automatic instrumentation', done => {
             agent.use(traces => {
@@ -143,7 +142,7 @@ describe('Plugin', () => {
           }))
           before(() => startBroker())
           after(() => broker.stop())
-          after(() => agent.close())
+          after(() => agent.close({ ritmReset: false }))
 
           it('should have the configured service name', done => {
             agent.use(traces => {
@@ -159,7 +158,7 @@ describe('Plugin', () => {
         before(() => agent.load('moleculer'))
         before(() => startBroker())
         after(() => broker.stop())
-        after(() => agent.close())
+        after(() => agent.close({ ritmReset: false }))
 
         it('should propagate context', async () => {
           let spanId
@@ -223,7 +222,7 @@ describe('Plugin', () => {
 
         after(() => clientBroker.stop())
         after(() => broker.stop())
-        after(() => agent.close())
+        after(() => agent.close({ ritmReset: false }))
 
         it('should propagate context', async () => {
           let spanId
