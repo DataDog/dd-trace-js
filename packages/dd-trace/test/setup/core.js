@@ -34,16 +34,30 @@ afterEach(() => {
 
 function loadInst (plugin) {
   const instrumentations = []
+
+  try {
+    loadInstFile(`${plugin}/server.js`, instrumentations)
+    loadInstFile(`${plugin}/client.js`, instrumentations)
+  } catch (e) {
+    loadInstFile(`${plugin}.js`, instrumentations)
+  }
+
+  return instrumentations
+}
+
+function loadInstFile (file, instrumentations) {
   const instrument = {
     addHook (instrumentation) {
       instrumentations.push(instrumentation)
     }
   }
-  const instPath = path.join(__dirname, `../../../datadog-instrumentations/src/${plugin}.js`)
+
+  const instPath = path.join(__dirname, `../../../datadog-instrumentations/src/${file}`)
+
   proxyquire.noPreserveCache()(instPath, {
-    './helpers/instrument': instrument
+    './helpers/instrument': instrument,
+    '../helpers/instrument': instrument
   })
-  return instrumentations
 }
 
 function withVersions (plugin, modules, range, cb) {
