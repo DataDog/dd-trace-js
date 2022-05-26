@@ -20,6 +20,7 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           registry-url: 'https://registry.npmjs.org'
+      - run: yarn
       - run: npm publish --tag latest-node8 --tag latest-node10
       - id: pkg
         run: |
