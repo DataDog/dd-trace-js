@@ -48,15 +48,14 @@ class JestPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub('ci:jest:test:end', (status) => {
+    this.addSub('ci:jest:test:finish', (status) => {
       const span = storage.getStore().span
       span.setTag(TEST_STATUS, status)
       span.finish()
       finishAllTraceSpans(span)
-      this.exit()
     })
 
-    this.addSub('ci:jest:test-suite:end', () => {
+    this.addSub('ci:jest:test-suite:finish', () => {
       this.tracer._exporter._writer.flush()
     })
 

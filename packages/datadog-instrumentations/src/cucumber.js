@@ -1,13 +1,11 @@
 'use strict'
 
-const { addHook, channel } = require('./helpers/instrument')
+const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 const runStartCh = channel('ci:cucumber:run:start')
-const runEndCh = channel('ci:cucumber:run:end')
-const runAsyncEndCh = channel('ci:cucumber:run:async-end')
+const runFinishCh = channel('ci:cucumber:run:finish')
 const runStepStartCh = channel('ci:cucumber:run-step:start')
-const runStepEndCh = channel('ci:cucumber:run-step:end')
 const errorCh = channel('ci:cucumber:error')
 
 // TODO: remove in a later major version
@@ -49,23 +47,24 @@ function wrapRun (pl, isLatestVersion) {
       return run.apply(this, arguments)
     }
 
-    runStartCh.publish({ pickleName: this.pickle.name, pickleUri: this.pickle.uri })
-    try {
-      const promise = run.apply(this, arguments)
-      promise.finally(() => {
-        const result = this.getWorstStepResult()
-        const { status, skipReason, errorMessage } = isLatestVersion
-          ? getStatusFromResultLatest(result) : getStatusFromResult(result)
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    return asyncResource.runInAsyncScope(() => {
+      runStartCh.publish({ pickleName: this.pickle.name, pickleUri: this.pickle.uri })
+      try {
+        const promise = run.apply(this, arguments)
+        promise.finally(() => {
+          const result = this.getWorstStepResult()
+          const { status, skipReason, errorMessage } = isLatestVersion
+            ? getStatusFromResultLatest(result) : getStatusFromResult(result)
 
-        runAsyncEndCh.publish({ status, skipReason, errorMessage })
-      })
-      return promise
-    } catch (err) {
-      errorCh.publish(err)
-      throw err
-    } finally {
-      runEndCh.publish(undefined)
-    }
+          runFinishCh.publish({ status, skipReason, errorMessage })
+        })
+        return promise
+      } catch (err) {
+        errorCh.publish(err)
+        throw err
+      }
+    })
   })
   shimmer.wrap(pl.prototype, 'runStep', runStep => function () {
     if (!runStepStartCh.hasSubscribers) {
@@ -80,23 +79,24 @@ function wrapRun (pl, isLatestVersion) {
       resource = testStep.isHook ? 'hook' : testStep.pickleStep.text
     }
 
-    runStepStartCh.publish({ resource })
-    try {
-      const promise = runStep.apply(this, arguments)
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    return asyncResource.runInAsyncScope(() => {
+      runStepStartCh.publish({ resource })
+      try {
+        const promise = runStep.apply(this, arguments)
 
-      promise.then((result) => {
-        const { status, skipReason, errorMessage } = isLatestVersion
-          ? getStatusFromResultLatest(result) : getStatusFromResult(result)
+        promise.then((result) => {
+          const { status, skipReason, errorMessage } = isLatestVersion
+            ? getStatusFromResultLatest(result) : getStatusFromResult(result)
 
-        runAsyncEndCh.publish({ isStep: true, status, skipReason, errorMessage })
-      })
-      return promise
-    } catch (err) {
-      errorCh.publish(err)
-      throw err
-    } finally {
-      runStepEndCh.publish(undefined)
-    }
+          runFinishCh.publish({ isStep: true, status, skipReason, errorMessage })
+        })
+        return promise
+      } catch (err) {
+        errorCh.publish(err)
+        throw err
+      }
+    })
   })
 }
 

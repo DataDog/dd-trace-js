@@ -8,8 +8,7 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel(`apm:mongodb:query:start`)
-const endCh = channel(`apm:mongodb:query:end`)
-const asyncEndCh = channel(`apm:mongodb:query:async-end`)
+const finishCh = channel(`apm:mongodb:query:finish`)
 const errorCh = channel(`apm:mongodb:query:error`)
 
 addHook({ name: 'mongodb-core', versions: ['2 - 3.1.9'] }, Server => {
@@ -79,8 +78,7 @@ function wrapUnifiedCommand (command, operation, name) {
     if (!startCh.hasSubscribers) {
       return command.apply(this, arguments)
     }
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return instrument(asyncResource, operation, command, this, arguments, server, ns, ops, { name })
+    return instrument(operation, command, this, arguments, server, ns, ops, { name })
   }
   return shimmer.wrap(command, wrapped)
 }
@@ -90,7 +88,6 @@ function wrapConnectionCommand (command, operation, name) {
     if (!startCh.hasSubscribers) {
       return command.apply(this, arguments)
     }
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
     const hostParts = typeof this.address === 'string' ? this.address.split(':') : ''
     const options = hostParts.length === 2
       ? { host: hostParts[0], port: hostParts[1] }
@@ -98,7 +95,7 @@ function wrapConnectionCommand (command, operation, name) {
     const topology = { s: { options } }
 
     ns = `${ns.db}.${ns.collection}`
-    return instrument(asyncResource, operation, command, this, arguments, topology, ns, ops, { name })
+    return instrument(operation, command, this, arguments, topology, ns, ops, { name })
   }
   return shimmer.wrap(command, wrapped)
 }
@@ -108,11 +105,10 @@ function wrapQuery (query, operation, name) {
     if (!startCh.hasSubscribers) {
       return query.apply(this, arguments)
     }
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
     const pool = this.server.s.pool
     const ns = this.ns
     const ops = this.cmd
-    return instrument(asyncResource, operation, query, this, arguments, pool, ns, ops)
+    return instrument(operation, query, this, arguments, pool, ns, ops)
   }
 
   return shimmer.wrap(query, wrapped)
@@ -123,10 +119,9 @@ function wrapCursor (cursor, operation, name) {
     if (!startCh.hasSubscribers) {
       return cursor.apply(this, arguments)
     }
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
     const pool = this.server.s.pool
     const ns = this.ns
-    return instrument(asyncResource, operation, cursor, this, arguments, pool, ns, {}, { name })
+    return instrument(operation, cursor, this, arguments, pool, ns, {}, { name })
   }
   return shimmer.wrap(cursor, wrapped)
 }
@@ -136,44 +131,45 @@ function wrapCommand (command, operation, name) {
     if (!startCh.hasSubscribers) {
       return command.apply(this, arguments)
     }
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return instrument(asyncResource, operation, command, this, arguments, this, ns, ops, { name })
+    return instrument(operation, command, this, arguments, this, ns, ops, { name })
   }
   return shimmer.wrap(command, wrapped)
 }
 
-function instrument (ar, operation, command, ctx, args, server, ns, ops, options = {}) {
+function instrument (operation, command, ctx, args, server, ns, ops, options = {}) {
   const name = options.name || (ops && Object.keys(ops)[0])
   const index = args.length - 1
   let callback = args[index]
 
   if (typeof callback !== 'function') return command.apply(ctx, args)
 
-  callback = ar.bind(callback)
-
   const serverInfo = server && server.s && server.s.options
+  const callbackResource = new AsyncResource('bound-anonymous-fn')
+  const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-  startCh.publish({ ns, ops, options: serverInfo, name })
+  callback = callbackResource.bind(callback)
 
-  args[index] = AsyncResource.bind(function (err, res) {
-    if (err) {
+  return asyncResource.runInAsyncScope(() => {
+    startCh.publish({ ns, ops, options: serverInfo, name })
+
+    args[index] = asyncResource.bind(function (err, res) {
+      if (err) {
+        errorCh.publish(err)
+      }
+
+      finishCh.publish()
+
+      if (callback) {
+        return callback.apply(this, arguments)
+      }
+    })
+
+    try {
+      return command.apply(ctx, args)
+    } catch (err) {
       errorCh.publish(err)
-    }
 
-    asyncEndCh.publish(undefined)
-
-    if (callback) {
-      return callback.apply(this, arguments)
+      throw err
     }
   })
-
-  try {
-    return command.apply(ctx, args)
-  } catch (err) {
-    errorCh.publish(err)
-
-    throw err
-  } finally {
-    endCh.publish(undefined)
-  }
 }

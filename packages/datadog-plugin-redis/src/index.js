@@ -55,16 +55,12 @@ class RedisPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub(`apm:${this.constructor.name}:command:end`, () => {
-      this.exit()
-    })
-
     this.addSub(`apm:${this.constructor.name}:command:error`, err => {
       const span = storage.getStore().span
       span.setTag('error', err)
     })
 
-    this.addSub(`apm:${this.constructor.name}:command:async-end`, () => {
+    this.addSub(`apm:${this.constructor.name}:command:finish`, () => {
       const span = storage.getStore().span
       span.finish()
     })

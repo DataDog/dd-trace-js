@@ -48,8 +48,7 @@ function patchResolveShorthands (prototype) {
 
 function wrap (prefix, fn, expectedArgs, rrtype) {
   const startCh = channel(prefix + ':start')
-  const endCh = channel(prefix + ':end')
-  const asyncEndCh = channel(prefix + ':async-end')
+  const finishCh = channel(prefix + ':finish')
   const errorCh = channel(prefix + ':error')
 
   const wrapped = function () {
@@ -67,27 +66,29 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
     if (rrtype) {
       startArgs.push(rrtype)
     }
-    startCh.publish(startArgs)
 
-    arguments[arguments.length - 1] = function (error, result) {
-      if (error) {
-        errorCh.publish(error)
-      }
-      asyncEndCh.publish(result)
-      cb.apply(this, arguments)
-    }
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    return asyncResource.runInAsyncScope(() => {
+      startCh.publish(startArgs)
 
-    try {
-      return fn.apply(this, arguments)
+      arguments[arguments.length - 1] = asyncResource.bind(function (error, result) {
+        if (error) {
+          errorCh.publish(error)
+        }
+        finishCh.publish(result)
+        cb.apply(this, arguments)
+      })
+
+      try {
+        return fn.apply(this, arguments)
       // TODO deal with promise versions when we support `dns/promises`
-    } catch (error) {
-      error.stack // trigger getting the stack at the original throwing point
-      errorCh.publish(error)
+      } catch (error) {
+        error.stack // trigger getting the stack at the original throwing point
+        errorCh.publish(error)
 
-      throw error
-    } finally {
-      endCh.publish(undefined)
-    }
+        throw error
+      }
+    })
   }
 
   return shimmer.wrap(fn, wrapped)

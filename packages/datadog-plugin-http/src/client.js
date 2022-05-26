@@ -54,9 +54,7 @@ class HttpClientPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub('apm:http:client:request:end', this.exit.bind(this))
-
-    this.addSub('apm:http:client:request:async-end', ({ req, res }) => {
+    this.addSub('apm:http:client:request:finish', ({ req, res }) => {
       const span = storage.getStore().span
       if (res) {
         span.setTag(HTTP_STATUS_CODE, res.statusCode)

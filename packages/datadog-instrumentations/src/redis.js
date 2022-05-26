@@ -8,8 +8,7 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:redis:command:start')
-const asyncEndCh = channel('apm:redis:command:async-end')
-const endCh = channel('apm:redis:command:end')
+const finishCh = channel('apm:redis:command:finish')
 const errorCh = channel('apm:redis:command:error')
 
 addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1'] }, redis => {
@@ -21,16 +20,18 @@ addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js',
     const name = command[0]
     const args = command.slice(1)
 
-    start(this, name, args)
-
-    const res = addCommand.apply(this, arguments)
     const asyncResource = new AsyncResource('bound-anonymous-fn')
-    const onResolve = asyncResource.bind(() => finish(asyncEndCh, errorCh))
-    const onReject = asyncResource.bind(err => finish(asyncEndCh, errorCh, err))
+    return asyncResource.runInAsyncScope(() => {
+      start(this, name, args)
 
-    res.then(onResolve, onReject)
-    endCh.publish(undefined)
-    return res
+      const res = addCommand.apply(this, arguments)
+      const onResolve = asyncResource.bind(() => finish(finishCh, errorCh))
+      const onReject = asyncResource.bind(err => finish(finishCh, errorCh, err))
+
+      res.then(onResolve, onReject)
+
+      return res
+    })
   })
   return redis
 })
@@ -41,23 +42,23 @@ addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
 
     if (!options.callback) return internalSendCommand.apply(this, arguments)
 
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
+    const cb = callbackResource.bind(options.callback)
 
-    const cb = asyncResource.bind(options.callback)
+    return asyncResource.runInAsyncScope(() => {
+      start(this, options.command, options.args)
 
-    start(this, options.command, options.args)
+      options.callback = asyncResource.bind(wrapCallback(finishCh, errorCh, cb))
 
-    options.callback = AsyncResource.bind(wrapCallback(asyncEndCh, errorCh, cb))
+      try {
+        return internalSendCommand.apply(this, arguments)
+      } catch (err) {
+        errorCh.publish(err)
 
-    try {
-      return internalSendCommand.apply(this, arguments)
-    } catch (err) {
-      errorCh.publish(err)
-
-      throw err
-    } finally {
-      endCh.publish(undefined)
-    }
+        throw err
+      }
+    })
   })
   return redis
 })
@@ -68,29 +69,30 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
       return sendCommand.apply(this, arguments)
     }
 
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    start(this, command, args)
+    return asyncResource.runInAsyncScope(() => {
+      start(this, command, args)
 
-    if (typeof callback === 'function') {
-      const cb = asyncResource.bind(callback)
-      arguments[2] = AsyncResource.bind(wrapCallback(asyncEndCh, errorCh, cb))
-    } else if (Array.isArray(args) && typeof args[args.length - 1] === 'function') {
-      const cb = asyncResource.bind(args[args.length - 1])
-      args[args.length - 1] = AsyncResource.bind(wrapCallback(asyncEndCh, errorCh, cb))
-    } else {
-      arguments[2] = AsyncResource.bind(wrapCallback(asyncEndCh, errorCh))
-    }
+      if (typeof callback === 'function') {
+        const cb = callbackResource.bind(callback)
+        arguments[2] = asyncResource.bind(wrapCallback(finishCh, errorCh, cb))
+      } else if (Array.isArray(args) && typeof args[args.length - 1] === 'function') {
+        const cb = callbackResource.bind(args[args.length - 1])
+        args[args.length - 1] = asyncResource.bind(wrapCallback(finishCh, errorCh, cb))
+      } else {
+        arguments[2] = asyncResource.bind(wrapCallback(finishCh, errorCh))
+      }
 
-    try {
-      return sendCommand.apply(this, arguments)
-    } catch (err) {
-      errorCh.publish(err)
+      try {
+        return sendCommand.apply(this, arguments)
+      } catch (err) {
+        errorCh.publish(err)
 
-      throw err
-    } finally {
-      endCh.publish(undefined)
-    }
+        throw err
+      }
+    })
   })
   return redis
 })
@@ -101,18 +103,18 @@ function start (client, command, args) {
   startCh.publish({ db, command, args, connectionOptions })
 }
 
-function wrapCallback (asyncEndCh, errorCh, callback) {
+function wrapCallback (finishCh, errorCh, callback) {
   return function (err) {
-    finish(asyncEndCh, errorCh, err)
+    finish(finishCh, errorCh, err)
     if (callback) {
       return callback.apply(this, arguments)
     }
   }
 }
 
-function finish (asyncEndCh, errorCh, error) {
+function finish (finishCh, errorCh, error) {
   if (error) {
     errorCh.publish(error)
   }
-  asyncEndCh.publish(undefined)
+  finishCh.publish()
 }

@@ -31,16 +31,12 @@ class SharedbPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub(`apm:sharedb:request:end`, () => {
-      this.exit()
-    })
-
     this.addSub(`apm:sharedb:request:error`, err => {
       const span = storage.getStore().span
       span.setTag('error', err)
     })
 
-    this.addSub(`apm:sharedb:request:async-end`, ({ request, res }) => {
+    this.addSub(`apm:sharedb:request:finish`, ({ request, res }) => {
       const span = storage.getStore().span
       if (this.config.hooks && this.config.hooks.reply) {
         this.config.hooks.reply(span, request, res)

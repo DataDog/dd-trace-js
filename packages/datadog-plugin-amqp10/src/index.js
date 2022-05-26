@@ -42,16 +42,12 @@ class Amqp10Plugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub(`apm:amqp10:send:end`, () => {
-      this.exit()
-    })
-
     this.addSub(`apm:amqp10:send:error`, err => {
       const span = storage.getStore().span
       span.setTag('error', err)
     })
 
-    this.addSub(`apm:amqp10:send:async-end`, () => {
+    this.addSub(`apm:amqp10:send:finish`, () => {
       const span = storage.getStore().span
       span.finish()
     })
@@ -85,9 +81,8 @@ class Amqp10Plugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub(`apm:amqp10:receive:end`, () => {
+    this.addSub(`apm:amqp10:receive:finish`, () => {
       storage.getStore().span.finish()
-      this.exit()
     })
 
     this.addSub(`apm:amqp10:receive:error`, err => {

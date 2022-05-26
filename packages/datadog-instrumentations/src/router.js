@@ -8,7 +8,7 @@ const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 function createWrapRouterMethod (name) {
   const enterChannel = channel(`apm:${name}:middleware:enter`)
   const errorChannel = channel(`apm:${name}:middleware:error`)
-  const exitChannel = channel(`apm:${name}:middleware:exit`)
+  const nextChannel = channel(`apm:${name}:middleware:next`)
 
   const layerMatchers = new WeakMap()
   const regexpCache = Object.create(null)
@@ -24,10 +24,10 @@ function createWrapRouterMethod (name) {
       const lastIndex = arguments.length - 1
       const name = original._name || original.name
       const req = arguments[arguments.length > 3 ? 1 : 0]
-      const next = AsyncResource.bind(arguments[lastIndex])
+      const next = arguments[lastIndex]
 
       if (typeof next === 'function') {
-        arguments[lastIndex] = wrapNext(req, middlewareResource.bind(next))
+        arguments[lastIndex] = wrapNext(req, next)
       }
 
       return middlewareResource.runInAsyncScope(() => {
@@ -50,7 +50,7 @@ function createWrapRouterMethod (name) {
           return original.apply(this, arguments)
         } catch (e) {
           errorChannel.publish(e)
-          exitChannel.publish({ req })
+          nextChannel.publish({ req })
 
           throw e
         }
@@ -92,7 +92,7 @@ function createWrapRouterMethod (name) {
         errorChannel.publish(error)
       }
 
-      exitChannel.publish({ req })
+      nextChannel.publish({ req })
 
       next.apply(null, arguments)
     }

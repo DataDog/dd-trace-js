@@ -9,11 +9,10 @@ class DNSPlugin extends Plugin {
     return 'dns'
   }
 
-  addSubs (func, start, asyncEnd = defaultAsyncEnd) {
+  addSubs (func, start, finish = defaultFinish) {
     this.addSub(`apm:dns:${func}:start`, start)
-    this.addSub(`apm:dns:${func}:end`, this.exit.bind(this))
     this.addSub(`apm:dns:${func}:error`, errorHandler)
-    this.addSub(`apm:dns:${func}:async-end`, asyncEnd)
+    this.addSub(`apm:dns:${func}:finish`, finish)
   }
 
   startSpan (name, customTags, store) {
@@ -88,7 +87,7 @@ class DNSPlugin extends Plugin {
   }
 }
 
-function defaultAsyncEnd () {
+function defaultFinish () {
   storage.getStore().span.finish()
 }
 

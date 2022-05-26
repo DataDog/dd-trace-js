@@ -5,9 +5,9 @@ const shimmer = require('../../datadog-shimmer')
 
 const testStartCh = channel('ci:jest:test:start')
 const testSkippedCh = channel('ci:jest:test:skip')
-const testRunEndCh = channel('ci:jest:test:end')
+const testRunFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
-const testSuiteEnd = channel('ci:jest:test-suite:end')
+const testSuiteFinish = channel('ci:jest:test-suite:finish')
 
 const {
   getTestSuitePath,
@@ -55,7 +55,7 @@ function getWrappedEnvironment (BaseEnvironment) {
     }
     async teardown () {
       super.teardown().finally(() => {
-        testSuiteEnd.publish()
+        testSuiteFinish.publish()
       })
     }
 
@@ -105,7 +105,7 @@ function getWrappedEnvironment (BaseEnvironment) {
             const formattedError = formatJestError(event.test.errors[0])
             testErrCh.publish(formattedError)
           }
-          testRunEndCh.publish(status)
+          testRunFinishCh.publish(status)
           // restore in case it is retried
           event.test.fn = originalTestFns.get(event.test)
         })
@@ -163,7 +163,7 @@ addHook({
             const formattedError = formatJestError(spec.result.failedExpectations[0].error)
             testErrCh.publish(formattedError)
           }
-          testRunEndCh.publish(specStatusToTestStatus[spec.result.status])
+          testRunFinishCh.publish(specStatusToTestStatus[spec.result.status])
           onComplete.apply(this, arguments)
         })
         arguments[0] = callback
