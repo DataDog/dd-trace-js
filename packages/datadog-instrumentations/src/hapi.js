@@ -1,13 +1,12 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel } = require('./helpers/instrument')
+const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 
 const handleChannel = channel('apm:hapi:request:handle')
 const routeChannel = channel('apm:hapi:request:route')
 const errorChannel = channel('apm:hapi:request:error')
 const enterChannel = channel('apm:hapi:extension:enter')
-const exitChannel = channel('apm:hapi:extension:exit')
 
 function wrapServer (server) {
   return function (options) {
@@ -107,13 +106,13 @@ function wrapHandler (handler) {
 
     if (!req) return handler.apply(this, arguments)
 
-    enterChannel.publish({ req })
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    try {
+    return asyncResource.runInAsyncScope(() => {
+      enterChannel.publish({ req })
+
       return handler.apply(this, arguments)
-    } finally {
-      exitChannel.publish({ req })
-    }
+    })
   }
 }
 
