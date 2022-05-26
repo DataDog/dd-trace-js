@@ -1,5 +1,6 @@
 'use strict'
 
+const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
 const getPort = require('get-port')
 const semver = require('semver')
@@ -632,7 +633,7 @@ describe('Plugin', () => {
 
             app.use((ctx, next) => {
               span = tracer.scope().active()
-              return tracer.scope().activate(null, () => next())
+              return next()
             })
 
             app.use(ctx => {
@@ -640,6 +641,34 @@ describe('Plugin', () => {
 
               try {
                 expect(tracer.scope().active()).to.equal(span).and.to.not.be.null
+                done()
+              } catch (e) {
+                done(e)
+              }
+            })
+
+            getPort().then(port => {
+              appListener = app.listen(port, 'localhost', () => {
+                axios.get(`http://localhost:${port}/user`)
+                  .catch(done)
+              })
+            })
+          })
+
+          it('should keep user stores untouched', done => {
+            const app = new Koa()
+            const storage = new AsyncLocalStorage()
+            const store = {}
+
+            app.use((ctx, next) => {
+              return storage.run(store, () => next())
+            })
+
+            app.use(ctx => {
+              ctx.body = ''
+
+              try {
+                expect(storage.getStore()).to.equal(store)
                 done()
               } catch (e) {
                 done(e)

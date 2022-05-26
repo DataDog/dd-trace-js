@@ -2,14 +2,14 @@
 
 const {
   channel,
-  addHook
+  addHook,
+  AsyncResource
 } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
 const startServerCh = channel('apm:http:server:request:start')
-const endServerCh = channel('apm:http:server:request:end')
 const errorServerCh = channel('apm:http:server:request:error')
-const asyncEndServerCh = channel('apm:http:server:request:finish')
+const finishServerCh = channel('apm:http:server:request:finish')
 
 addHook({ name: 'https' }, http => {
   // http.ServerResponse not present on https
@@ -30,7 +30,7 @@ function wrapResponseEmit (emit) {
     }
 
     if (eventName === 'finish') {
-      asyncEndServerCh.publish({ req: this.req })
+      finishServerCh.publish({ req: this.req })
     }
 
     return emit.apply(this, arguments)
@@ -44,17 +44,19 @@ function wrapEmit (emit) {
 
     if (eventName === 'request') {
       res.req = req
-      startServerCh.publish({ req, res })
 
-      try {
-        return emit.apply(this, arguments)
-      } catch (err) {
-        errorServerCh.publish(err)
+      const asyncResource = new AsyncResource('bound-anonymous-fn')
+      return asyncResource.runInAsyncScope(() => {
+        startServerCh.publish({ req, res })
 
-        throw err
-      } finally {
-        endServerCh.publish(undefined)
-      }
+        try {
+          return emit.apply(this, arguments)
+        } catch (err) {
+          errorServerCh.publish(err)
+
+          throw err
+        }
+      })
     }
     return emit.apply(this, arguments)
   }

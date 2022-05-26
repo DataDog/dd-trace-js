@@ -35,16 +35,12 @@ class TediousPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub(`apm:tedious:request:end`, () => {
-      this.exit()
-    })
-
     this.addSub(`apm:tedious:request:error`, err => {
       const span = storage.getStore().span
       span.setTag('error', err)
     })
 
-    this.addSub(`apm:tedious:request:async-end`, () => {
+    this.addSub(`apm:tedious:request:finish`, () => {
       const span = storage.getStore().span
       span.finish()
     })

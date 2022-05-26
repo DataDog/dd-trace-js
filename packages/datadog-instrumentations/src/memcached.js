@@ -10,8 +10,7 @@ const shimmer = require('../../datadog-shimmer')
 addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
   const startCh = channel('apm:memcached:command:start')
   const startWithArgsCh = channel('apm:memcached:command:start:with-args')
-  const asyncEndCh = channel('apm:memcached:command:async-end')
-  const endCh = channel('apm:memcached:command:end')
+  const finishCh = channel('apm:memcached:command:finish')
   const errorCh = channel('apm:memcached:command:error')
 
   shimmer.wrap(Memcached.prototype, 'command', command => function (queryCompiler, server) {
@@ -19,34 +18,37 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
       return command.apply(this, arguments)
     }
 
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
     const client = this
 
-    const wrappedQueryCompiler = function () {
+    const wrappedQueryCompiler = asyncResource.bind(function () {
       const query = queryCompiler.apply(this, arguments)
-      const callback = asyncResource.bind(query.callback)
+      const callback = callbackResource.bind(query.callback)
 
-      query.callback = AsyncResource.bind(function (err) {
+      query.callback = asyncResource.bind(function (err) {
         if (err) {
           errorCh.publish(err)
         }
-        asyncEndCh.publish(undefined)
+        finishCh.publish()
 
         return callback.apply(this, arguments)
       })
       startWithArgsCh.publish({ client, server, query })
 
       return query
-    }
+    })
 
-    startCh.publish(undefined)
+    return asyncResource.runInAsyncScope(() => {
+      startCh.publish()
 
-    arguments[0] = wrappedQueryCompiler
+      arguments[0] = wrappedQueryCompiler
 
-    const result = command.apply(this, arguments)
-    endCh.publish(undefined)
-    return result
+      const result = command.apply(this, arguments)
+
+      return result
+    })
   })
 
   return Memcached

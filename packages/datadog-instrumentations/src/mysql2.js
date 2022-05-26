@@ -9,8 +9,7 @@ const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connection => {
   const startCh = channel('apm:mysql2:query:start')
-  const asyncEndCh = channel('apm:mysql2:query:async-end')
-  const endCh = channel('apm:mysql2:query:end')
+  const finishCh = channel('apm:mysql2:query:finish')
   const errorCh = channel('apm:mysql2:query:error')
 
   shimmer.wrap(Connection.prototype, 'addCommand', addCommand => function (cmd) {
@@ -42,24 +41,26 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
   }
 
   function wrapExecute (cmd, execute, asyncResource, config) {
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
+
     return asyncResource.bind(function executeWithTrace (packet, connection) {
       const sql = cmd.statement ? cmd.statement.query : cmd.sql
 
       startCh.publish({ sql, conf: config })
 
       if (this.onResult) {
-        const onResult = asyncResource.bind(this.onResult)
+        const onResult = callbackResource.bind(this.onResult)
 
-        this.onResult = AsyncResource.bind(function (error) {
+        this.onResult = asyncResource.bind(function (error) {
           if (error) {
             errorCh.publish(error)
           }
-          asyncEndCh.publish(undefined)
+          finishCh.publish(undefined)
           onResult.apply(this, arguments)
         }, 'bound-anonymous-fn', this)
       } else {
-        this.on('error', AsyncResource.bind(error => errorCh.publish(error)))
-        this.on('end', AsyncResource.bind(() => asyncEndCh.publish(undefined)))
+        this.on('error', asyncResource.bind(error => errorCh.publish(error)))
+        this.on('end', asyncResource.bind(() => finishCh.publish(undefined)))
       }
 
       this.execute = execute
@@ -68,8 +69,6 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
         return execute.apply(this, arguments)
       } catch (err) {
         errorCh.publish(err)
-      } finally {
-        endCh.publish(undefined)
       }
     }, cmd)
   }

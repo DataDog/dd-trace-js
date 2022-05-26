@@ -40,16 +40,12 @@ class PGPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub(`apm:pg:query:end`, () => {
-      this.exit()
-    })
-
     this.addSub(`apm:pg:query:error`, err => {
       const span = storage.getStore().span
       span.setTag('error', err)
     })
 
-    this.addSub(`apm:pg:query:async-end`, () => {
+    this.addSub(`apm:pg:query:finish`, () => {
       const span = storage.getStore().span
       span.finish()
     })

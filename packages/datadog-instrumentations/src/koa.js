@@ -5,7 +5,7 @@ const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 
 const enterChannel = channel('apm:koa:middleware:enter')
 const errorChannel = channel('apm:koa:middleware:error')
-const exitChannel = channel('apm:koa:middleware:exit')
+const nextChannel = channel('apm:koa:middleware:next')
 const handleChannel = channel('apm:koa:request:handle')
 const routeChannel = channel('apm:koa:request:route')
 
@@ -92,7 +92,7 @@ function wrapMiddleware (fn, layer) {
       enterChannel.publish({ req, name })
 
       if (typeof next === 'function') {
-        arguments[1] = AsyncResource.bind(next)
+        arguments[1] = next
       }
 
       try {
@@ -101,27 +101,27 @@ function wrapMiddleware (fn, layer) {
         if (result && typeof result.then === 'function') {
           return result.then(
             result => {
-              exit(ctx, layer)
+              fulfill(ctx, layer)
               return result
             },
             err => {
-              exit(ctx, layer, err)
+              fulfill(ctx, layer, err)
               throw err
             }
           )
         } else {
-          exit(ctx, layer)
+          fulfill(ctx, layer)
           return result
         }
       } catch (e) {
-        exit(ctx, layer, e)
+        fulfill(ctx, layer, e)
         throw e
       }
     })
   }
 }
 
-function exit (ctx, layer, error) {
+function fulfill (ctx, layer, error) {
   if (error) {
     errorChannel.publish(error)
   }
@@ -134,7 +134,7 @@ function exit (ctx, layer, error) {
     routeChannel.publish({ req, route })
   }
 
-  exitChannel.publish(ctx)
+  nextChannel.publish(ctx)
 }
 
 addHook({ name: 'koa', versions: ['>=2'] }, Koa => {

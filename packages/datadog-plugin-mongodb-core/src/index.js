@@ -43,15 +43,11 @@ class MongodbCorePlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub(`apm:mongodb:query:end`, () => {
-      this.exit()
-    })
-
     this.addSub(`apm:mongodb:query:error`, err => {
       storage.getStore().span.setTag('error', err)
     })
 
-    this.addSub(`apm:mongodb:query:async-end`, () => {
+    this.addSub(`apm:mongodb:query:finish`, () => {
       storage.getStore().span.finish()
     })
   }

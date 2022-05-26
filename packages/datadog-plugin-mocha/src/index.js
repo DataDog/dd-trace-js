@@ -56,7 +56,7 @@ class MochaPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub('ci:mocha:test:async-end', (status) => {
+    this.addSub('ci:mocha:test:finish', (status) => {
       // if the status is skipped the span has already been finished
       if (status === 'skipped') {
         return
@@ -67,10 +67,6 @@ class MochaPlugin extends Plugin {
 
       span.finish()
       finishAllTraceSpans(span)
-    })
-
-    this.addSub('ci:mocha:test:end', () => {
-      this.exit()
     })
 
     // This covers programmatically skipped tests (that do go through `runTest`)
@@ -92,7 +88,7 @@ class MochaPlugin extends Plugin {
       }
     })
 
-    this.addSub('ci:mocha:suite:end', tests => {
+    this.addSub('ci:mocha:suite:finish', tests => {
       tests.forEach(test => {
         const { pending: isSkipped } = test
         // `tests` includes every test, so we need a way to mark
@@ -121,7 +117,7 @@ class MochaPlugin extends Plugin {
       this._testNameToParams[name] = params
     })
 
-    this.addSub('ci:mocha:run:end', () => {
+    this.addSub('ci:mocha:run:finish', () => {
       this.tracer._exporter._writer.flush()
     })
   }
