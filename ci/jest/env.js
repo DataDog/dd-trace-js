@@ -19,11 +19,9 @@ if (process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED) {
       }
     })
   } else {
-    console.error(`
-      DD_CIVISIBILITY_AGENTLESS_ENABLED is set, \
-      but neither DD_API_KEY nor DATADOG_API_KEY are set in your environment, \
-      so dd-trace will not be initialized.`
-    )
+    console.error(`DD_CIVISIBILITY_AGENTLESS_ENABLED is set, \
+but neither DD_API_KEY nor DATADOG_API_KEY are set in your environment, \
+so dd-trace will not be initialized.`)
   }
 } else {
   tracer.init({
