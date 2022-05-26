@@ -31,8 +31,6 @@ class HapiPlugin extends RouterPlugin {
     this.addSub('apm:hapi:extension:enter', ({ req }) => {
       this.enter(this._requestSpans.get(req))
     })
-
-    this.addSub('apm:hapi:extension:exit', () => this.exit())
   }
 }
 
