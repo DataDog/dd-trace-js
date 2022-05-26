@@ -54,10 +54,6 @@ class CucumberPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub('ci:cucumber:run:end', () => {
-      this.exit()
-    })
-
     this.addSub('ci:cucumber:run-step:start', ({ resource }) => {
       const store = storage.getStore()
       const childOf = store ? store.span : store
@@ -71,11 +67,7 @@ class CucumberPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub('ci:cucumber:run-step:end', () => {
-      this.exit()
-    })
-
-    this.addSub('ci:cucumber:run:async-end', ({ isStep, status, skipReason, errorMessage }) => {
+    this.addSub('ci:cucumber:run:finish', ({ isStep, status, skipReason, errorMessage }) => {
       const span = storage.getStore().span
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 

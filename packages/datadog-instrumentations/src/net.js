@@ -8,13 +8,11 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 const startICPCh = channel('apm:net:ipc:start')
-const asyncICPEndCh = channel('apm:net:ipc:async-end')
-const endICPCh = channel('apm:net:ipc:end')
+const finishICPCh = channel('apm:net:ipc:finish')
 const errorICPCh = channel('apm:net:ipc:error')
 
 const startTCPCh = channel('apm:net:tcp:start')
-const asyncTCPEndCh = channel('apm:net:tcp:async-end')
-const endTCPCh = channel('apm:net:tcp:end')
+const finishTCPCh = channel('apm:net:tcp:finish')
 const errorTCPCh = channel('apm:net:tcp:error')
 
 const connectionCh = channel(`apm:net:tcp:connection`)
@@ -33,31 +31,32 @@ addHook({ name: 'net' }, net => {
 
     if (!options) return connect.apply(this, arguments)
 
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
     if (typeof callback === 'function') {
-      arguments[lastIndex] = asyncResource.bind(callback)
+      arguments[lastIndex] = callbackResource.bind(callback)
     }
 
     const protocol = options.path ? 'ipc' : 'tcp'
 
-    if (protocol === 'ipc') {
-      startICPCh.publish({ options })
-      setupListeners(this, 'ipc', asyncResource)
-    } else {
-      startTCPCh.publish({ options })
-      setupListeners(this, 'tcp', asyncResource)
-    }
+    return asyncResource.runInAsyncScope(() => {
+      if (protocol === 'ipc') {
+        startICPCh.publish({ options })
+        setupListeners(this, 'ipc', asyncResource)
+      } else {
+        startTCPCh.publish({ options })
+        setupListeners(this, 'tcp', asyncResource)
+      }
 
-    try {
-      return connect.apply(this, arguments)
-    } catch (err) {
-      protocol === 'ipc' ? errorICPCh.publish(err) : errorTCPCh.publish(err)
+      try {
+        return connect.apply(this, arguments)
+      } catch (err) {
+        protocol === 'ipc' ? errorICPCh.publish(err) : errorTCPCh.publish(err)
 
-      throw err
-    } finally {
-      protocol === 'ipc' ? endICPCh.publish(undefined) : endTCPCh.publish(undefined)
-    }
+        throw err
+      }
+    })
   })
 
   return net
@@ -84,17 +83,17 @@ function getOptions (args) {
   }
 }
 
-function setupListeners (socket, protocol, ar) {
+function setupListeners (socket, protocol, asyncResource) {
   const events = ['connect', 'error', 'close', 'timeout']
 
-  const wrapListener = AsyncResource.bind(function (error) {
+  const wrapListener = asyncResource.bind(function (error) {
     if (error) {
       protocol === 'ipc' ? errorICPCh.publish(error) : errorTCPCh.publish(error)
     }
-    protocol === 'ipc' ? asyncICPEndCh.publish(undefined) : asyncTCPEndCh.publish(undefined)
+    protocol === 'ipc' ? finishICPCh.publish(undefined) : finishTCPCh.publish(undefined)
   })
 
-  const localListener = AsyncResource.bind(function () {
+  const localListener = asyncResource.bind(function () {
     connectionCh.publish({ socket })
   })
 

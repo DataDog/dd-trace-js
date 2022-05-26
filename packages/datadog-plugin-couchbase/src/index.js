@@ -9,11 +9,10 @@ class CouchBasePlugin extends Plugin {
     return 'couchbase'
   }
 
-  addSubs (func, start, asyncEnd = defaultAsyncEnd) {
+  addSubs (func, start, finish = defaultFinish) {
     this.addSub(`apm:couchbase:${func}:start`, start)
-    this.addSub(`apm:couchbase:${func}:end`, this.exit.bind(this))
     this.addSub(`apm:couchbase:${func}:error`, errorHandler)
-    this.addSub(`apm:couchbase:${func}:async-end`, asyncEnd)
+    this.addSub(`apm:couchbase:${func}:finish`, finish)
   }
 
   startSpan (operation, customTags, store, bucket) {
@@ -63,7 +62,7 @@ class CouchBasePlugin extends Plugin {
   }
 }
 
-function defaultAsyncEnd () {
+function defaultFinish () {
   storage.getStore().span.finish()
 }
 

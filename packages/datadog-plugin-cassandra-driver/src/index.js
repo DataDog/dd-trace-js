@@ -43,15 +43,11 @@ class CassandraDriverPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub(`apm:cassandra:query:end`, () => {
-      this.exit()
-    })
-
     this.addSub(`apm:cassandra:query:error`, err => {
       storage.getStore().span.setTag('error', err)
     })
 
-    this.addSub(`apm:cassandra:query:async-end`, () => {
+    this.addSub(`apm:cassandra:query:finish`, () => {
       storage.getStore().span.finish()
     })
 

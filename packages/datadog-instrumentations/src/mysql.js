@@ -9,12 +9,10 @@ const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connection => {
   const startCh = channel('apm:mysql:query:start')
-  const asyncEndCh = channel('apm:mysql:query:async-end')
-  const endCh = channel('apm:mysql:query:end')
+  const finishCh = channel('apm:mysql:query:finish')
   const errorCh = channel('apm:mysql:query:error')
 
   shimmer.wrap(Connection.prototype, 'query', query => function () {
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
     if (!startCh.hasSubscribers) {
       return query.apply(this, arguments)
     }
@@ -22,37 +20,40 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
     const sql = arguments[0].sql ? arguments[0].sql : arguments[0]
     const conf = this.config
 
-    startCh.publish({ sql, conf })
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    try {
-      const res = query.apply(this, arguments)
+    return asyncResource.runInAsyncScope(() => {
+      startCh.publish({ sql, conf })
 
-      if (res._callback) {
-        const cb = asyncResource.bind(res._callback)
-        res._callback = AsyncResource.bind(function (error, result) {
-          if (error) {
-            errorCh.publish(error)
-          }
-          asyncEndCh.publish(result)
+      try {
+        const res = query.apply(this, arguments)
 
-          return cb.apply(this, arguments)
-        })
-      } else {
-        const cb = AsyncResource.bind(function () {
-          asyncEndCh.publish(undefined)
-        })
-        res.on('end', cb)
+        if (res._callback) {
+          const cb = callbackResource.bind(res._callback)
+          res._callback = asyncResource.bind(function (error, result) {
+            if (error) {
+              errorCh.publish(error)
+            }
+            finishCh.publish(result)
+
+            return cb.apply(this, arguments)
+          })
+        } else {
+          const cb = asyncResource.bind(function () {
+            finishCh.publish(undefined)
+          })
+          res.on('end', cb)
+        }
+
+        return res
+      } catch (err) {
+        err.stack // trigger getting the stack at the original throwing point
+        errorCh.publish(err)
+
+        throw err
       }
-
-      return res
-    } catch (err) {
-      err.stack // trigger getting the stack at the original throwing point
-      errorCh.publish(err)
-
-      throw err
-    } finally {
-      endCh.publish(undefined)
-    }
+    })
   })
 
   return Connection

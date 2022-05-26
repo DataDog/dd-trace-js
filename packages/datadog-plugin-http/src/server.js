@@ -31,10 +31,6 @@ class HttpServerPlugin extends Plugin {
       }
     })
 
-    this.addSub('apm:http:server:request:end', () => {
-      this.exit()
-    })
-
     this.addSub('apm:http:server:request:error', (error) => {
       const span = storage.getStore().span
       span.addTags({

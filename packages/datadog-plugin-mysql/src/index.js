@@ -37,10 +37,6 @@ class MySQLPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub(`apm:${this.constructor.name}:query:end`, () => {
-      this.exit()
-    })
-
     this.addSub(`apm:${this.constructor.name}:query:error`, err => {
       if (err) {
         const span = storage.getStore().span
@@ -48,7 +44,7 @@ class MySQLPlugin extends Plugin {
       }
     })
 
-    this.addSub(`apm:${this.constructor.name}:query:async-end`, () => {
+    this.addSub(`apm:${this.constructor.name}:query:finish`, () => {
       const span = storage.getStore().span
       span.finish()
     })

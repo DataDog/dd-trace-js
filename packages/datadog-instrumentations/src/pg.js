@@ -8,8 +8,7 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:pg:query:start')
-const asyncEndCh = channel('apm:pg:query:async-end')
-const endCh = channel('apm:pg:query:end')
+const finishCh = channel('apm:pg:query:finish')
 const errorCh = channel('apm:pg:query:error')
 
 addHook({ name: 'pg', versions: ['>=4.5.5'] }, pg => {
@@ -28,8 +27,6 @@ function wrapQuery (query) {
       return query.apply(this, arguments)
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
     const retval = query.apply(this, arguments)
 
     const queryQueue = this.queryQueue || this._queryQueue
@@ -39,37 +36,40 @@ function wrapQuery (query) {
     if (!pgQuery) {
       return retval
     }
+
     const statement = pgQuery.text
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    startCh.publish({ params: this.connectionParameters, statement })
+    return asyncResource.runInAsyncScope(() => {
+      startCh.publish({ params: this.connectionParameters, statement })
 
-    const finish = AsyncResource.bind(function (error) {
-      if (error) {
-        errorCh.publish(error)
+      const finish = asyncResource.bind(function (error) {
+        if (error) {
+          errorCh.publish(error)
+        }
+        finishCh.publish()
+      })
+
+      if (pgQuery.callback) {
+        const originalCallback = callbackResource.bind(pgQuery.callback)
+        pgQuery.callback = function (err, res) {
+          finish(err)
+          return originalCallback.apply(this, arguments)
+        }
+      } else if (pgQuery.once) {
+        pgQuery
+          .once('error', finish)
+          .once('end', () => finish())
+      } else {
+        pgQuery.then(() => finish(), finish)
       }
-      asyncEndCh.publish(undefined)
+
+      try {
+        return retval
+      } catch (err) {
+        errorCh.publish(err)
+      }
     })
-
-    if (pgQuery.callback) {
-      const originalCallback = asyncResource.bind(pgQuery.callback)
-      pgQuery.callback = function (err, res) {
-        finish(err)
-        return originalCallback.apply(this, arguments)
-      }
-    } else if (pgQuery.once) {
-      pgQuery
-        .once('error', finish)
-        .once('end', () => finish())
-    } else {
-      pgQuery.then(() => finish(), finish)
-    }
-
-    try {
-      return retval
-    } catch (err) {
-      errorCh.publish(err)
-    } finally {
-      endCh.publish(undefined)
-    }
   }
 }

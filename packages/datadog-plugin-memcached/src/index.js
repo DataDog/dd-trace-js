@@ -28,10 +28,6 @@ class MemcachedPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub('apm:memcached:command:end', () => {
-      this.exit()
-    })
-
     this.addSub('apm:memcached:command:start:with-args', ({ client, server, query }) => {
       const span = storage.getStore().span
       span.addTags({
@@ -54,7 +50,7 @@ class MemcachedPlugin extends Plugin {
       span.setTag('error', err)
     })
 
-    this.addSub('apm:memcached:command:async-end', () => {
+    this.addSub('apm:memcached:command:finish', () => {
       const span = storage.getStore().span
       span.finish()
     })

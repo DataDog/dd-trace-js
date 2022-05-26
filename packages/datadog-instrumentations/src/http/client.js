@@ -13,8 +13,7 @@ const shimmer = require('../../../datadog-shimmer')
 const log = require('../../../dd-trace/src/log')
 
 const startClientCh = channel('apm:http:client:request:start')
-const asyncEndClientCh = channel('apm:http:client:request:async-end')
-const endClientCh = channel('apm:http:client:request:end')
+const finishClientCh = channel('apm:http:client:request:finish')
 const errorClientCh = channel('apm:http:client:request:error')
 
 addHook({ name: 'https' }, hookFn)
@@ -36,7 +35,6 @@ function patch (http, methodName) {
       if (!startClientCh.hasSubscribers) {
         return request.apply(this, arguments)
       }
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
 
       let args
 
@@ -46,57 +44,59 @@ function patch (http, methodName) {
         log.error(e)
         return request.apply(this, arguments)
       }
-      startClientCh.publish({ args, http })
 
-      const ar = new AsyncResource('bound-anonymous-fn')
+      const callbackResource = new AsyncResource('bound-anonymous-fn')
+      const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-      let finished = false
-      let callback = args.callback
+      return asyncResource.runInAsyncScope(() => {
+        startClientCh.publish({ args, http })
 
-      if (callback) {
-        callback = asyncResource.bind(callback)
-      }
+        let finished = false
+        let callback = args.callback
 
-      const options = args.options
-      const req = ar.bind(request).call(this, options, callback)
-      const emit = req.emit
-
-      const finish = (req, res) => {
-        if (!finished) {
-          finished = true
-          asyncEndClientCh.publish({ req, res })
+        if (callback) {
+          callback = callbackResource.bind(callback)
         }
-      }
 
-      req.emit = function (eventName, arg) {
-        ar.runInAsyncScope(() => {
-          switch (eventName) {
-            case 'response': {
-              const res = arg
-              const listener = ar.bind(() => finish(req, res))
-              res.on('end', listener)
-              res.on('error', listener)
-              break
-            }
-            case 'connect':
-            case 'upgrade':
-              finish(req, arg)
-              break
-            case 'error':
-              errorClientCh.publish(arg)
-            case 'abort': // deprecated and replaced by `close` in node 17
-            case 'timeout':
-            case 'close':
-              finish(req)
+        const options = args.options
+        const req = request.call(this, options, callback)
+        const emit = req.emit
+
+        const finish = (req, res) => {
+          if (!finished) {
+            finished = true
+            finishClientCh.publish({ req, res })
           }
-        })
+        }
 
-        return emit.apply(this, arguments)
-      }
+        req.emit = function (eventName, arg) {
+          asyncResource.runInAsyncScope(() => {
+            switch (eventName) {
+              case 'response': {
+                const res = arg
+                const listener = asyncResource.bind(() => finish(req, res))
+                res.on('end', listener)
+                res.on('error', listener)
+                break
+              }
+              case 'connect':
+              case 'upgrade':
+                finish(req, arg)
+                break
+              case 'error':
+                errorClientCh.publish(arg)
+              case 'abort': // deprecated and replaced by `close` in node 17
+              case 'timeout':
+              case 'close':
+                finish(req)
+            }
+          })
 
-      endClientCh.publish(undefined)
+          return emit.apply(this, arguments)
+        }
 
-      return req
+        return req
+      })
     }
   }
 
