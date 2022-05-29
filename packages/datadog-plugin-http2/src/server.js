@@ -22,6 +22,7 @@ const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
+const HTTP_USERAGENT = tags.HTTP_USERAGENT
 const MANUAL_DROP = tags.MANUAL_DROP
 
 const HTTP_STATUS_OK = 200
@@ -141,7 +142,8 @@ function addRequestTags (stream, headers) {
     [HTTP_METHOD]: headers[HTTP2_HEADER_METHOD],
     [HTTP_URL]: url.split('?')[0],
     [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: WEB
+    [SPAN_TYPE]: WEB,
+    [HTTP_USERAGENT]: headers['user-agent']
   })
 }
 

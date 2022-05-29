@@ -23,6 +23,7 @@ const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
+const HTTP_USERAGENT = tags.HTTP_USERAGENT
 const MANUAL_DROP = tags.MANUAL_DROP
 
 const HTTP2_HEADER_AUTHORITY = ':authority'
@@ -412,7 +413,8 @@ function addRequestTags (context) {
     [HTTP_URL]: url.split('?')[0],
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: WEB
+    [SPAN_TYPE]: WEB,
+    [HTTP_USERAGENT]: req.headers['user-agent']
   })
 
   addHeaders(context)
