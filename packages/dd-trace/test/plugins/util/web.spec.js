@@ -19,6 +19,7 @@ const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
+const HTTP_USERAGENT = tags.HTTP_USERAGENT
 
 describe('plugins/util/web', () => {
   let web
@@ -160,6 +161,7 @@ describe('plugins/util/web', () => {
       it('should add request tags to the span', () => {
         req.method = 'GET'
         req.url = '/user/123'
+        req.headers['user-agent'] = 'curl'
         res.statusCode = '200'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
@@ -171,7 +173,8 @@ describe('plugins/util/web', () => {
             [SPAN_TYPE]: WEB,
             [HTTP_URL]: 'http://localhost/user/123',
             [HTTP_METHOD]: 'GET',
-            [SPAN_KIND]: SERVER
+            [SPAN_KIND]: SERVER,
+            [HTTP_USERAGENT]: 'curl'
           })
         })
       })
@@ -336,6 +339,7 @@ describe('plugins/util/web', () => {
 
       it('should support https', () => {
         req.url = '/user/123'
+        req.headers['user-agent'] = 'curl'
         req.socket = { encrypted: true }
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
@@ -347,7 +351,8 @@ describe('plugins/util/web', () => {
             [SPAN_TYPE]: WEB,
             [HTTP_URL]: 'https://localhost/user/123',
             [HTTP_METHOD]: 'GET',
-            [SPAN_KIND]: SERVER
+            [SPAN_KIND]: SERVER,
+            [HTTP_USERAGENT]: 'curl'
           })
         })
       })
@@ -359,7 +364,8 @@ describe('plugins/util/web', () => {
           ':scheme': 'https',
           ':authority': 'localhost',
           ':method': 'GET',
-          ':path': '/user/123'
+          ':path': '/user/123',
+          'user-agent': 'curl'
         }
         res.statusCode = '200'
 
@@ -372,7 +378,8 @@ describe('plugins/util/web', () => {
             [SPAN_TYPE]: WEB,
             [HTTP_URL]: 'https://localhost/user/123',
             [HTTP_METHOD]: 'GET',
-            [SPAN_KIND]: SERVER
+            [SPAN_KIND]: SERVER,
+            [HTTP_USERAGENT]: 'curl'
           })
         })
       })

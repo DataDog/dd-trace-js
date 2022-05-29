@@ -15,6 +15,7 @@ declare const tags: {
   HTTP_ROUTE: 'http.route'
   HTTP_REQUEST_HEADERS: 'http.request.headers'
   HTTP_RESPONSE_HEADERS: 'http.response.headers'
+  HTTP_USERAGENT: 'http.useragent'
 }
 
 export = tags
