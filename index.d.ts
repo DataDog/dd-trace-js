@@ -1210,13 +1210,15 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [mysql](https://github.com/mysqljs/mysql) module.
    */
-  interface mysql extends Instrumentation {}
+  interface mysql extends Instrumentation {
+    service?: string | ((params: any) => string);
+  }
 
   /**
    * This plugin automatically instruments the
    * [mysql2](https://github.com/brianmario/mysql2) module.
    */
-  interface mysql2 extends Instrumentation {}
+  interface mysql2 extends mysql {}
 
   /**
    * This plugin automatically instruments the
