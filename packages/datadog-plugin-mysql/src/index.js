@@ -12,25 +12,26 @@ class MySQLPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub(`apm:${this.constructor.name}:query:start`, ({ sql, conf }) => {
+    this.addSub(`apm:${this.constructor.name}:query:start`, ({ sql, conf: dbConfig }) => {
+      const service = getServiceName(this.tracer, this.config, dbConfig)
       const store = storage.getStore()
       const childOf = store ? store.span : store
       const span = this.tracer.startSpan('mysql.query', {
         childOf,
         tags: {
-          'service.name': this.config.service || `${this.tracer._service}-mysql`,
+          'service.name': service,
           'span.type': 'sql',
           'span.kind': 'client',
           'db.type': 'mysql',
-          'db.user': conf.user,
-          'out.host': conf.host,
-          'out.port': conf.port,
+          'db.user': dbConfig.user,
+          'out.host': dbConfig.host,
+          'out.port': dbConfig.port,
           'resource.name': sql
         }
       })
 
-      if (conf.database) {
-        span.setTag('db.name', conf.database)
+      if (dbConfig.database) {
+        span.setTag('db.name', dbConfig.database)
       }
 
       analyticsSampler.sample(span, this.config.measured)
@@ -48,6 +49,16 @@ class MySQLPlugin extends Plugin {
       const span = storage.getStore().span
       span.finish()
     })
+  }
+}
+
+function getServiceName (tracer, config, dbConfig) {
+  if (typeof config.service === 'function') {
+    return config.service(dbConfig)
+  } else if (config.service) {
+    return config.service
+  } else {
+    return `${tracer._service}-mysql`
   }
 }
 
