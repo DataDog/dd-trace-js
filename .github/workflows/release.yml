@@ -21,11 +21,12 @@ jobs:
         with:
           registry-url: 'https://registry.npmjs.org'
       - run: yarn
-      - run: npm publish --tag latest-node8 --tag latest-node10
+      - run: npm publish --tag latest-node10
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
           echo "::set-output name=json::$content"
+      - run: npm dist-tag add dd-trace@${{ fromJson(steps.pkg.outputs.json).version }} latest-node8
       - run: |
           git tag v${{ fromJson(steps.pkg.outputs.json).version }}
           git push origin v${{ fromJson(steps.pkg.outputs.json).version }}
