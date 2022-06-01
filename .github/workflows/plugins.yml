@@ -445,15 +445,17 @@ jobs:
     runs-on: ubuntu-latest
     services:
       kafka:
-        image: wurstmeister/kafka
+        image: debezium/kafka:1.7
         env:
-          KAFKA_ADVERTISED_HOST_NAME: '127.0.0.1'
-          KAFKA_CREATE_TOPICS: 'test-topic:1:1'
-          KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+          CLUSTER_ID: 5Yr1SIgYQz-b-dgRabWx4g
+          NODE_ID: "1"
+          CREATE_TOPICS: "test-topic:1:1"
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:9092
+          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
         ports:
           - 9092:9092
-      zookeeper:
-        image: wurstmeister/zookeeper
+          - 9093:9093
     env:
       PLUGINS: kafkajs
       SERVICES: kafka
