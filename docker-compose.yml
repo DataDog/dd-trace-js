@@ -109,9 +109,6 @@ services:
       - FORCE_NONINTERACTIVE=true
       - START_WEB=0
       - LAMBDA_EXECUTOR=local
-      - DEBUG=true
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock"
   kafka:
     image: debezium/kafka:1.7
     ports:

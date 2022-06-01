@@ -14,14 +14,14 @@ function waitForAWS () {
     // Set the region
     AWS.config.update({ region: 'us-east-1' })
 
-    const ddbEndpoint = new AWS.Endpoint('http://localhost:4569')
-    const kinesisEndpoint = new AWS.Endpoint('http://localhost:4568')
-    const s3Endpoint = new AWS.Endpoint('http://localhost:4572')
-    const sqsEndpoint = new AWS.Endpoint('http://localhost:4576')
-    const snsEndpoint = new AWS.Endpoint('http://localhost:4575')
-    const route53Endpoint = new AWS.Endpoint('http://localhost:4580')
-    const redshiftEndpoint = new AWS.Endpoint('http://localhost:4577')
-    const lambdaEndpoint = new AWS.Endpoint('http://localhost:4566')
+    const ddbEndpoint = new AWS.Endpoint('http://127.0.0.1:4569')
+    const kinesisEndpoint = new AWS.Endpoint('http://127.0.0.1:4568')
+    const s3Endpoint = new AWS.Endpoint('http://127.0.0.1:4572')
+    const sqsEndpoint = new AWS.Endpoint('http://127.0.0.1:4576')
+    const snsEndpoint = new AWS.Endpoint('http://127.0.0.1:4575')
+    const route53Endpoint = new AWS.Endpoint('http://127.0.0.1:4580')
+    const redshiftEndpoint = new AWS.Endpoint('http://127.0.0.1:4577')
+    const lambdaEndpoint = new AWS.Endpoint('http://127.0.0.1:4566')
 
     const ddb = new AWS.DynamoDB({ endpoint: ddbEndpoint })
     const kinesis = new AWS.Kinesis({ endpoint: kinesisEndpoint })

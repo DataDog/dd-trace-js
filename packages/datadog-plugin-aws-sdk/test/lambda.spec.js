@@ -30,7 +30,7 @@ describe('Plugin', () => {
         before(done => {
           AWS = require(`../../../versions/aws-sdk@${version}`).get()
 
-          const lambdaEndpoint = new AWS.Endpoint('http://localhost:4566')
+          const lambdaEndpoint = new AWS.Endpoint('http://127.0.0.1:4566')
           lambda = new AWS.Lambda({ endpoint: lambdaEndpoint, region: 'us-east-1' })
 
           lambda.createFunction({
