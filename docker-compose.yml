@@ -112,13 +112,16 @@ services:
       - DEBUG=true
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
-  zookeeper:
-    image: wurstmeister/zookeeper
   kafka:
-    image: wurstmeister/kafka
+    image: debezium/kafka:1.7
     ports:
       - "127.0.0.1:9092:9092"
+      - "127.0.0.1:9093:9093"
     environment:
-      KAFKA_ADVERTISED_HOST_NAME: 127.0.0.1
-      KAFKA_CREATE_TOPICS: "test-topic:1:1"
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      - CLUSTER_ID=5Yr1SIgYQz-b-dgRabWx4g
+      - NODE_ID=1
+      - CREATE_TOPICS="test-topic:1:1"
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://127.0.0.1:9092
+      - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
+
