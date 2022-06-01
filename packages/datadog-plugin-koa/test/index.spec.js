@@ -285,13 +285,42 @@ describe('Plugin', () => {
             })
           })
 
-          it('should not lose the route if next() is called', done => {
+          it('should not lose the route if next() is called in middleware', done => {
             const app = new Koa()
             const router = new Router()
 
             router.get('/user/:id', (ctx, next) => {
               ctx.body = ''
               return next()
+            })
+
+            app
+              .use(router.routes())
+              .use(router.allowedMethods())
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', (e) => {
+              axios
+                .get(`http://localhost:${port}/user/123`)
+                .catch(done)
+            })
+          })
+
+          it('should not lose the route if next() is called in a previous middleware', done => {
+            const app = new Koa()
+            const router = new Router()
+
+            router.use((ctx, next) => next())
+            router.get('/user/:id', (ctx, next) => {
+              ctx.body = ''
             })
 
             app
