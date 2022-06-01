@@ -135,7 +135,7 @@ describe('Plugin', function () {
             expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: 20000 })
+          }, { timeoutMs: 10000 })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
