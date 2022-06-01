@@ -89,7 +89,10 @@ function wrapMiddleware (fn, layer) {
     const req = ctx.req
 
     return middlewareResource.runInAsyncScope(() => {
-      enterChannel.publish({ req, name })
+      const path = layer && layer.path
+      const route = path !== '(.*)' && path !== '([^/]*)' && path
+
+      enterChannel.publish({ req, name, route })
 
       if (typeof next === 'function') {
         arguments[1] = next
@@ -101,33 +104,33 @@ function wrapMiddleware (fn, layer) {
         if (result && typeof result.then === 'function') {
           return result.then(
             result => {
-              fulfill(ctx, layer)
+              fulfill(ctx)
               return result
             },
             err => {
-              fulfill(ctx, layer, err)
+              fulfill(ctx, err)
               throw err
             }
           )
         } else {
-          fulfill(ctx, layer)
+          fulfill(ctx)
           return result
         }
       } catch (e) {
-        fulfill(ctx, layer, e)
+        fulfill(ctx, e)
         throw e
       }
     })
   }
 }
 
-function fulfill (ctx, layer, error) {
+function fulfill (ctx, error) {
   if (error) {
     errorChannel.publish(error)
   }
 
   const req = ctx.req
-  const route = ctx.routePath || (layer && layer.path)
+  const route = ctx.routePath
 
   // TODO: make sure that the parent class cannot override this in `enter`
   if (route) {
