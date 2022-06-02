@@ -78,15 +78,13 @@ async function assertVersions () {
   const externalNames = Object.keys(externals).filter(name => ~names.indexOf(name))
   for (const name of externalNames) {
     for (const inst of [].concat(externals[name])) {
-      if (!inst.dep) {
-        await assertInstrumentation(inst, true)
-      }
+      await assertInstrumentation(inst, true)
     }
   }
 }
 
 async function assertInstrumentation (instrumentation, external) {
-  const versions = [].concat(instrumentation.versions)
+  const versions = [].concat(instrumentation.versions || [])
   for (const version of versions) {
     if (version) {
       await assertModules(instrumentation.name, semver.coerce(version).version, external)
