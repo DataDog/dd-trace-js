@@ -227,6 +227,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
+      - run: yarn install
       # These two install are only for installing cypress' browsers outside the test
       - name: Install oldest Cypress version
         run: npx cypress@6.7.0 run
