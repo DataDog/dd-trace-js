@@ -23,7 +23,7 @@ const {
 
 const { version: ddTraceVersion } = require('../../../package.json')
 
-describe('Plugin', () => {
+describe('Plugin', function () {
   let cypressExecutable
   let appPort
   let agentListenPort
