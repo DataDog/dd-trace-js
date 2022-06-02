@@ -1,6 +1,7 @@
 'use strict'
 const getPort = require('get-port')
 const { expect } = require('chai')
+const semver = require('semver')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const appServer = require('./app/app-server')
@@ -46,7 +47,8 @@ describe('Plugin', () => {
       it('instruments tests', function (done) {
         process.env.DD_TRACE_AGENT_PORT = agentListenPort
         cypressExecutable.run({
-          project: './packages/datadog-plugin-cypress/test/app',
+          project: semver.intersects(version, '>=10')
+            ? './packages/datadog-plugin-cypress/test/app-10' : './packages/datadog-plugin-cypress/test/app',
           config: {
             baseUrl: `http://localhost:${appPort}`
           },
