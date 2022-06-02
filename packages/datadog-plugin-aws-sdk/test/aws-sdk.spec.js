@@ -18,14 +18,16 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
+          return agent.load(['aws-sdk', 'http'], [{}, { server: false }])
+        })
+
+        before(() => {
           AWS = require(`../../../versions/aws-sdk@${version}`).get()
 
           const endpoint = new AWS.Endpoint('http://127.0.0.1:4572')
 
           s3 = new AWS.S3({ endpoint, s3ForcePathStyle: true })
           tracer = require('../../dd-trace')
-
-          return agent.load(['aws-sdk', 'http'], [{}, { server: false }])
         })
 
         after(() => {
@@ -127,13 +129,6 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          AWS = require(`../../../versions/aws-sdk@${version}`).get()
-
-          const endpoint = new AWS.Endpoint('http://127.0.0.1:5000')
-
-          s3 = new AWS.S3({ endpoint, s3ForcePathStyle: true })
-          tracer = require('../../dd-trace')
-
           return agent.load(['aws-sdk', 'http'], [{
             service: 'test',
             splitByAwsService: false,
@@ -146,6 +141,15 @@ describe('Plugin', () => {
               }
             }
           }, { server: false }])
+        })
+
+        before(() => {
+          AWS = require(`../../../versions/aws-sdk@${version}`).get()
+
+          const endpoint = new AWS.Endpoint('http://127.0.0.1:5000')
+
+          s3 = new AWS.S3({ endpoint, s3ForcePathStyle: true })
+          tracer = require('../../dd-trace')
         })
 
         after(() => {
@@ -172,16 +176,18 @@ describe('Plugin', () => {
 
       describe('with service configuration', () => {
         before(() => {
+          return agent.load(['aws-sdk', 'http'], [{
+            service: 'test',
+            s3: false
+          }, { server: false }])
+        })
+
+        before(() => {
           AWS = require(`../../../versions/aws-sdk@${version}`).get()
 
           s3 = new AWS.S3({ endpoint: new AWS.Endpoint('http://127.0.0.1:4572'), s3ForcePathStyle: true })
           sqs = new AWS.SQS({ endpoint: new AWS.Endpoint('http://127.0.0.1:4576') })
           tracer = require('../../dd-trace')
-
-          return agent.load(['aws-sdk', 'http'], [{
-            service: 'test',
-            s3: false
-          }, { server: false }])
         })
 
         after(() => {

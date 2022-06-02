@@ -180,7 +180,7 @@ describe('Plugin', () => {
 
             expect(span).to.include({
               name: 'aws.request',
-              resource: 'sendMessage http://127.0.0.1:4576/queue/SQS_QUEUE_NAME'
+              resource: 'sendMessage http://localhost:4576/queue/SQS_QUEUE_NAME'
             })
 
             total++
@@ -191,7 +191,7 @@ describe('Plugin', () => {
 
             expect(span).to.include({
               name: 'aws.request',
-              resource: 'receiveMessage http://127.0.0.1:4576/queue/SQS_QUEUE_NAME'
+              resource: 'receiveMessage http://localhost:4576/queue/SQS_QUEUE_NAME'
             })
 
             total++
