@@ -10,7 +10,11 @@ const options = {
   }
 }
 
-if (process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED) {
+const isAgentlessEnabled = process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED &&
+  process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED !== 'false' &&
+  process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED !== '0'
+
+if (isAgentlessEnabled) {
   if (process.env.DATADOG_API_KEY || process.env.DD_API_KEY) {
     tracer.init({
       ...options,
