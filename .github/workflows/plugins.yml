@@ -227,12 +227,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
-      - name: Cypress install
-        uses: cypress-io/github-action@v2
-        with:
-          # Disable running of tests within install job
-          runTests: false
-          build: yarn install
+      # These two install are only for installing cypress' browsers outside the test
+      - name: Install oldest Cypress version
+        run: npx cypress@6.7.0 run
+        continue-on-error: true
+      - name: Install newest Cypress version
+        run: npx cypress run
+        continue-on-error: true
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
