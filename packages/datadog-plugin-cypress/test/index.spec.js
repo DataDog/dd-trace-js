@@ -28,8 +28,8 @@ describe('Plugin', () => {
   let appPort
   let agentListenPort
   withVersions('cypress', 'cypress', (version, moduleName) => {
+    this.timeout(20000)
     beforeEach(function () {
-      this.timeout(10000)
       return agent.load().then(() => {
         agentListenPort = agent.server.address().port
         cypressExecutable = require(`../../../versions/cypress@${version}`).get()
@@ -43,7 +43,6 @@ describe('Plugin', () => {
     afterEach(done => appServer.close(done))
 
     describe('cypress', function () {
-      this.timeout(120000)
       it('instruments tests', function (done) {
         process.env.DD_TRACE_AGENT_PORT = agentListenPort
         cypressExecutable.run({
