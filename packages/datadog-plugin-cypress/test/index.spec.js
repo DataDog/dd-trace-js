@@ -27,8 +27,8 @@ describe('Plugin', () => {
   let cypressExecutable
   let appPort
   let agentListenPort
+  this.timeout(20000)
   withVersions('cypress', 'cypress', (version, moduleName) => {
-    this.timeout(20000)
     beforeEach(function () {
       return agent.load().then(() => {
         agentListenPort = agent.server.address().port
