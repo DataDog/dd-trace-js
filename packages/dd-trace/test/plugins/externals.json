@@ -128,7 +128,8 @@
   "pino": [
     {
       "name": "pino-pretty",
-      "dep": true
+      "dep": true,
+      "versions": ["8.0.0"]
     }
   ],
   "q": [

@@ -21,7 +21,7 @@ describe('Plugin', () => {
       })
 
       withExports('pino', version, ['default', 'pino'], '>=6.8.0', getExport => {
-        function setup (options) {
+        function setup (options = {}) {
           const pino = getExport()
 
           span = tracer.startSpan('test')
@@ -30,6 +30,14 @@ describe('Plugin', () => {
           stream._write = () => {}
 
           sinon.spy(stream, 'write')
+
+          if (semver.intersects(version, '>=8') && options.prettyPrint) {
+            delete options.prettyPrint // deprecated
+
+            const pretty = require(`../../../versions/pino-pretty@8.0.0`).get()
+
+            stream = pretty().pipe(stream)
+          }
 
           logger = pino && pino(options, stream)
         }
