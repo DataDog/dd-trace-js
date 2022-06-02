@@ -30,7 +30,7 @@ describe('Plugin', () => {
         before(done => {
           AWS = require(`../../../versions/aws-sdk@${version}`).get()
 
-          const endpoint = new AWS.Endpoint('http://localhost:4576')
+          const endpoint = new AWS.Endpoint('http://127.0.0.1:4576')
 
           sqs = new AWS.SQS({ endpoint, region: 'us-east-1' })
           sqs.createQueue(queueOptions, (err, res) => {
@@ -152,7 +152,7 @@ describe('Plugin', () => {
         before(done => {
           AWS = require(`../../../versions/aws-sdk@${version}`).get()
 
-          const endpoint = new AWS.Endpoint('http://localhost:4576')
+          const endpoint = new AWS.Endpoint('http://127.0.0.1:4576')
 
           sqs = new AWS.SQS({ endpoint, region: 'us-east-1' })
           sqs.createQueue(queueOptions, (err, res) => {

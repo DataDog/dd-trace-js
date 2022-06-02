@@ -15,13 +15,14 @@ function wrapRequest (send) {
     const channelSuffix = getChannelSuffix(serviceIdentifier)
     const startCh = channel(`apm:aws:request:start:${channelSuffix}`)
     if (!startCh.hasSubscribers) return send.apply(this, arguments)
+    const innerAr = new AsyncResource('apm:aws:request:inner')
     const outerAr = new AsyncResource('apm:aws:request:outer')
 
-    this.on('complete', response => {
-      channel(`apm:aws:request:complete:${channelSuffix}`).publish({ response })
-    })
+    return innerAr.runInAsyncScope(() => {
+      this.on('complete', innerAr.bind(response => {
+        channel(`apm:aws:request:complete:${channelSuffix}`).publish({ response })
+      }))
 
-    return new AsyncResource('apm:aws:request:inner').runInAsyncScope(() => {
       startCh.publish({
         serviceIdentifier,
         operation: this.operation,
