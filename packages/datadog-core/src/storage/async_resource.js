@@ -69,7 +69,7 @@ class AsyncResourceStorage {
   }
 
   _executionAsyncResource () {
-    return executionAsyncResource()
+    return executionAsyncResource() || {}
   }
 }
 
