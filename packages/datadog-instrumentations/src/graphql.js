@@ -40,7 +40,7 @@ addHook({ name: 'graphql', file: 'language/parser.js', versions: ['>=0.10'] }, p
             return parse.apply(this, arguments)
         }
 
-        startCh.publish({ conf })
+        startCh.publish()
         let document
         try {
             document = parse.apply(this, arguments)
@@ -76,7 +76,7 @@ addHook({ name: 'graphql', file: 'validation/validate.js', versions: ['>=0.10'] 
             return val.apply(this, arguments)
         }
 
-        startCh.publish({ conf, docSource: documentSources.get(document), document })
+        startCh.publish({ docSource: documentSources.get(document), document })
 
         let errors
         try {

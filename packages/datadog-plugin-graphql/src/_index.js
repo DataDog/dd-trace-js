@@ -14,12 +14,11 @@ class GraphQLPlugin extends Plugin {
 
         /** Parser Subs */
 
-        this.addSub('apm:graphql:parser:start', ({ conf }) => {
-            // conf or this.config?
+        this.addSub('apm:graphql:parser:start', () => {
             const store = storage.getStore()
-            const span = startSpan('parser', conf, this.tracer, store)
+            const span = startSpan('parser', this.config, this.tracer, store)
 
-            analytics_sampler.sample(span, conf.measured, true)
+            analytics_sampler.sample(span, this.config.measured, true)
             this.enter(span, store)
         })
 
@@ -48,15 +47,15 @@ class GraphQLPlugin extends Plugin {
 
         /** Validate Subs */
 
-        this.addSub('apm:graphql:validate:start', ({ conf, docSource, document }) => {
+        this.addSub('apm:graphql:validate:start', ({ docSource, document }) => {
             const store = storage.getStore()
-            const span = startSpan('validate', conf, this.tracer, store)
+            const span = startSpan('validate', this.config, this.tracer, store)
 
-            analytics_sampler.sample(span, conf.measured, true)
+            analytics_sampler.sample(span, this.config.measured, true)
 
             if (document && document.loc) {
                 const tags = {}
-                if (conf.source && document) {
+                if (this.config.source && document) {
                     tags['graphql.source'] = docSource
                 }
 
