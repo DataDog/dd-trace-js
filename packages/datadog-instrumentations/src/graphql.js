@@ -91,7 +91,7 @@ function normalizePositional (args, defaultFieldResolver) {
 
 function wrapResolve (resolve, config) {
   // need to return an asyncresource call here?
-  if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return AsyncResource.bind(resolve)
+  if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return resolve
 
   const responsePathAsArray = config.collapse
     ? withCollapse(pathToArray)
