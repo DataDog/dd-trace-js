@@ -47,15 +47,15 @@ function incomingHttpStartTranslator (data) {
       '_dd.runtime_family': 'nodejs'
     })
   }
+}
 
+function incomingHttpEndTranslator (data) {
   const store = Gateway.startContext()
 
   store.set('req', data.req)
   store.set('res', data.res)
-}
 
-function incomingHttpEndTranslator (data) {
-  const context = Gateway.getContext()
+  const context = store.get('context')
 
   if (!context) return
 
