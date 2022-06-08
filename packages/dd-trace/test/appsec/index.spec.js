@@ -116,9 +116,6 @@ describe('AppSec Index', () => {
 
   describe('incomingHttpStartTranslator', () => {
     it('should propagate incoming http start data', () => {
-      const store = new Map()
-      sinon.stub(Gateway, 'startContext').returns(store)
-
       const topSpan = {
         addTags: sinon.stub()
       }
@@ -148,16 +145,14 @@ describe('AppSec Index', () => {
         '_dd.appsec.enabled': 1,
         '_dd.runtime_family': 'nodejs'
       })
-      expect(Gateway.startContext).to.have.been.calledOnce
-      expect(store.get('req')).to.equal(req)
-      expect(store.get('res')).to.equal(res)
       expect(Gateway.propagate).to.not.have.been.called
     })
   })
 
   describe('incomingHttpEndTranslator', () => {
     it('should do nothing when context is not found', () => {
-      sinon.stub(Gateway, 'getContext').returns(null)
+      const store = new Map()
+      sinon.stub(Gateway, 'startContext').returns(store)
 
       const req = {}
       const res = {
@@ -173,15 +168,18 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(Gateway.getContext).to.have.been.calledOnce
+      expect(Gateway.startContext).to.have.been.calledOnce
+      expect(store.get('req')).to.equal(req)
+      expect(store.get('res')).to.equal(res)
       expect(Gateway.propagate).to.not.have.been.called
       expect(Reporter.finishRequest).to.not.have.been.called
     })
 
     it('should propagate incoming http end data', () => {
       const context = {}
-
-      sinon.stub(Gateway, 'getContext').returns(context)
+      const store = new Map()
+      store.set('context', context)
+      sinon.stub(Gateway, 'startContext').returns(store)
 
       const req = {
         url: '/path',
@@ -209,7 +207,9 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(Gateway.getContext).to.have.been.calledOnce
+      expect(Gateway.startContext).to.have.been.calledOnce
+      expect(store.get('req')).to.equal(req)
+      expect(store.get('res')).to.equal(res)
       expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
@@ -230,8 +230,9 @@ describe('AppSec Index', () => {
 
     it('should propagate incoming http end data with invalid framework properties', () => {
       const context = {}
-
-      sinon.stub(Gateway, 'getContext').returns(context)
+      const store = new Map()
+      store.set('context', context)
+      sinon.stub(Gateway, 'startContext').returns(store)
 
       const req = {
         url: '/path',
@@ -264,7 +265,9 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(Gateway.getContext).to.have.been.calledOnce
+      expect(Gateway.startContext).to.have.been.calledOnce
+      expect(store.get('req')).to.equal(req)
+      expect(store.get('res')).to.equal(res)
       expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
@@ -285,8 +288,9 @@ describe('AppSec Index', () => {
 
     it('should propagate incoming http end data with express', () => {
       const context = {}
-
-      sinon.stub(Gateway, 'getContext').returns(context)
+      const store = new Map()
+      store.set('context', context)
+      sinon.stub(Gateway, 'startContext').returns(store)
 
       const req = {
         url: '/path',
@@ -330,7 +334,9 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(Gateway.getContext).to.have.been.calledOnce
+      expect(Gateway.startContext).to.have.been.calledOnce
+      expect(store.get('req')).to.equal(req)
+      expect(store.get('res')).to.equal(res)
       expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
