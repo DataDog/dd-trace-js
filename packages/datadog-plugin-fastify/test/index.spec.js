@@ -1,5 +1,6 @@
 'use strict'
 
+const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
 const getPort = require('get-port')
 const semver = require('semver')
@@ -291,6 +292,35 @@ describe('Plugin', () => {
               app.listen(port, 'localhost', async () => {
                 await axios.get(`http://localhost:${port}/user`)
                 done()
+              })
+            })
+          })
+
+          it('should keep user stores untouched', done => {
+            const storage = new AsyncLocalStorage()
+            const store = {}
+
+            global.getStore = () => storage.getStore()
+
+            app.addHook('onRequest', (request, reply, next) => {
+              storage.run(store, () => next())
+            })
+
+            app.get('/user', (request, reply) => {
+              try {
+                expect(storage.getStore()).to.equal(store)
+                done()
+              } catch (e) {
+                done(e)
+              }
+
+              reply.send()
+            })
+
+            getPort().then(port => {
+              app.listen(port, 'localhost', () => {
+                axios.get(`http://localhost:${port}/user`)
+                  .catch(done)
               })
             })
           })
