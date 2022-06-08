@@ -1,6 +1,7 @@
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const analytics_sampler = require('../../dd-trace/src/analytics_sampler')
+const log = require('../../dd-trace/src/log')
 
 class GraphQLPlugin extends Plugin {
     static get name() {
@@ -11,6 +12,8 @@ class GraphQLPlugin extends Plugin {
         super(...args)
 
         /** Execute Subs */
+
+
 
         /** Parser Subs */
 
@@ -32,7 +35,6 @@ class GraphQLPlugin extends Plugin {
 
             span.addTags(tags)
 
-            // this.config or conf? (since validated config)
             this.config.hooks.parse(span, source, document)
 
             span.finish()
@@ -126,6 +128,7 @@ function getHooks(config) {
 }
 
 // non-lodash pick
+
 function pick(obj, selectors) {
     return Object.fromEntries(Object.entries(obj).filter(([key]) => selectors.includes(key)))
 }
