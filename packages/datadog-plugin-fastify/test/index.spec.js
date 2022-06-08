@@ -6,6 +6,8 @@ const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 
+const host = 'localhost'
+
 describe('Plugin', () => {
   let tracer
   let fastify
@@ -62,7 +64,7 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios
                   .get(`http://localhost:${port}/user`)
                   .catch(done)
@@ -96,7 +98,7 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios
                   .get(`http://localhost:${port}/user/123`)
                   .catch(done)
@@ -129,7 +131,7 @@ describe('Plugin', () => {
                   .then(done)
                   .catch(done)
 
-                app.listen(port, 'localhost', () => {
+                app.listen({ host, port }, () => {
                   axios
                     .get(`http://localhost:${port}/user/123`)
                     .catch(done)
@@ -150,7 +152,7 @@ describe('Plugin', () => {
             })
 
             getPort().then(port => {
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios.get(`http://localhost:${port}/user`)
                   .then(() => done())
                   .catch(done)
@@ -167,7 +169,7 @@ describe('Plugin', () => {
             app.get('/user', (request, reply) => reply.send())
 
             getPort().then(port => {
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios.get(`http://localhost:${port}/user`)
                   .then(() => done())
                   .catch(done)
@@ -182,7 +184,7 @@ describe('Plugin', () => {
             })
 
             getPort().then(port => {
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
                   .then(() => done())
                   .catch(done)
@@ -206,7 +208,7 @@ describe('Plugin', () => {
             })
 
             getPort().then(port => {
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
                   .then(() => done())
                   .catch(done)
@@ -243,7 +245,7 @@ describe('Plugin', () => {
             })
 
             getPort().then(port => {
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
                   .then(() => done())
                   .catch(done)
@@ -272,7 +274,7 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios
                   .get(`http://localhost:${port}/user`)
                   .catch(() => {})
@@ -289,7 +291,7 @@ describe('Plugin', () => {
             })
 
             getPort().then(port => {
-              app.listen(port, 'localhost', async () => {
+              app.listen({ host, port }, async () => {
                 await axios.get(`http://localhost:${port}/user`)
                 done()
               })
@@ -318,7 +320,7 @@ describe('Plugin', () => {
             })
 
             getPort().then(port => {
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios.get(`http://localhost:${port}/user`)
                   .catch(done)
               })
@@ -351,7 +353,7 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios
                   .get(`http://localhost:${port}/user`)
                   .catch(() => {})
@@ -380,7 +382,7 @@ describe('Plugin', () => {
                   .then(done)
                   .catch(done)
 
-                app.listen(port, 'localhost', () => {
+                app.listen({ host, port }, () => {
                   axios
                     .get(`http://localhost:${port}/user`)
                     .catch(() => {})
@@ -412,7 +414,7 @@ describe('Plugin', () => {
                   .then(done)
                   .catch(done)
 
-                app.listen(port, 'localhost', () => {
+                app.listen({ host, port }, () => {
                   axios
                     .get(`http://localhost:${port}/user`)
                     .catch(() => {})
@@ -444,7 +446,7 @@ describe('Plugin', () => {
                   .then(done)
                   .catch(done)
 
-                app.listen(port, 'localhost', () => {
+                app.listen({ host, port }, () => {
                   axios
                     .get(`http://localhost:${port}/user`)
                     .catch(() => {})
@@ -482,7 +484,7 @@ describe('Plugin', () => {
                   .then(done)
                   .catch(done)
 
-                app.listen(port, 'localhost', () => {
+                app.listen({ host, port }, () => {
                   axios
                     .get(`http://localhost:${port}/user`)
                     .catch(() => {})
