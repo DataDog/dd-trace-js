@@ -20,7 +20,7 @@ const patchedTypes = new WeakSet()
 const executeStartResolveCh = channel('apm:graphql:execute:resolve:start')
 const executeCh = channel('apm:graphql:execute:execute')
 const executeFinishCh = channel('apm:graphql:execute:finish')
-// const executeErrorCh = channel('apm:graphql:execute:error')
+const executeUpdateFieldCh = channel('apm:graphql:execute:updateField')
 
 // parse channels
 const parseStartCh = channel('apm:graphql:parser:start')
@@ -90,7 +90,6 @@ function normalizePositional (args, defaultFieldResolver) {
 }
 
 function wrapResolve (resolve, config) {
-  // need to return an asyncresource call here?
   if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return resolve
 
   const responsePathAsArray = config.collapse
@@ -104,7 +103,6 @@ function wrapResolve (resolve, config) {
 
     const path = responsePathAsArray(info && info.path)
 
-    // parent.asyncresource or field.asyncresource
     if (config.depth >= 0) {
       const depth = path.filter(item => typeof item === 'string').length
 
@@ -116,7 +114,9 @@ function wrapResolve (resolve, config) {
     }
     const field = assertField(context, info, path)
 
-    return wrapFn(resolve, field.asyncResource, this, arguments, (err) => { })
+    return wrapFn(resolve, field.asyncResource, this, arguments, (err) => {
+      executeUpdateFieldCh.publish(field)
+    })
   }
 
   patchedResolvers.add(resolveAsync)
