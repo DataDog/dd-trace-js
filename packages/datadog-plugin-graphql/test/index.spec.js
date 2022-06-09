@@ -3,7 +3,6 @@
 const { expect } = require('chai')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 describe('Plugin', () => {
   let tracer
@@ -139,7 +138,7 @@ describe('Plugin', () => {
   }
 
   describe('graphql', () => {
-    withVersions(plugin, 'graphql', version => {
+    withVersions('graphql', 'graphql', version => {
       before(() => {
         sort = spans => spans.sort((a, b) => {
           const order = [
@@ -172,7 +171,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         it('should instrument parsing', done => {
@@ -215,7 +214,7 @@ describe('Plugin', () => {
           graphql.graphql({ schema, source, variableValues }).catch(done)
         })
 
-        it('should instrument execution', done => {
+        it.only('should instrument execution', done => {
           const source = `query MyQuery { hello(name: "world") }`
           const variableValues = { who: 'world' }
 
@@ -1052,7 +1051,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -1113,7 +1112,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -1151,7 +1150,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -1220,7 +1219,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -1272,7 +1271,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -1326,7 +1325,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
@@ -1382,7 +1381,7 @@ describe('Plugin', () => {
           key => config.hooks[key].resetHistory()
         ))
 
-        after(() => agent.close())
+        after(() => agent.close({ ritmReset: false }))
 
         it('should run the execute hook before graphql.execute span is finished', done => {
           const document = graphql.parse(source)
@@ -1493,7 +1492,7 @@ describe('Plugin', () => {
         })
       })
 
-      withVersions(plugin, 'apollo-server-core', apolloVersion => {
+      withVersions('graphql', 'apollo-server-core', apolloVersion => {
         let runQuery
         let mergeSchemas
         let makeExecutableSchema
@@ -1515,7 +1514,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         it('should support apollo-server schema stitching', done => {

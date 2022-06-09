@@ -19,8 +19,10 @@ const patchedTypes = new WeakSet()
 // execute channels
 const executeStartResolveCh = channel('apm:graphql:execute:resolve:start')
 const executeCh = channel('apm:graphql:execute:execute')
-const executeFinishCh = channel('apm:graphql:execute:finish')
+const executeFinishExecuteCh = channel('apm:graphql:execute:finish')
+const executeFinishResolveCh = channel('apm:graphql:execute:resolve:finish')
 const executeUpdateFieldCh = channel('apm:graphql:execute:updateField')
+const executeErrorCh = channel('apm:graphql:execute:error')
 
 // parse channels
 const parseStartCh = channel('apm:graphql:parser:start')
@@ -115,7 +117,7 @@ function wrapResolve (resolve, config) {
     const field = assertField(context, info, path)
 
     return wrapFn(resolve, field.asyncResource, this, arguments, (err) => {
-      executeUpdateFieldCh.publish(field)
+      executeUpdateFieldCh.publish({ field, err })
     })
   }
 
@@ -127,15 +129,15 @@ function wrapResolve (resolve, config) {
 function wrapFn (fn, aR, thisArg, args, cb) {
   cb = cb || (() => { })
 
-  // remove new instance every time, take in as argument
+  // might need a cb resource to make sure cb runs in same scope
 
   return aR.runInAsyncScope(() => {
     try {
       const result = fn.apply(thisArg, args)
       if (result && typeof result.then === 'function') {
         result.then(
-          res => cb(null, res),
-          err => cb(err)
+          aR.bind(res => cb(null, res)),
+          aR.bind(err => cb(err))
         )
       }
       return result
@@ -225,10 +227,19 @@ function wrapFieldType (field) {
   wrapFields(unwrappedType)
 }
 
+function finishResolvers ({ fields }) {
+  Object.keys(fields).reverse().forEach(key => {
+    const field = fields[key]
+    const asyncResource = field.asyncResource
+    asyncResource.runInAsyncScope(() => {
+      executeErrorCh.publish(field.error)
+      executeFinishResolveCh.publish(field.finishTime)
+    })
+  })
+}
+
 addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] }, execute => {
   const defaultFieldResolver = execute.defaultFieldResolver
-
-  // const startCh = channel('apm:graphql:execute:start')
 
   shimmer.wrap(execute, 'execute', exe => function () {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -254,7 +265,8 @@ addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] },
       asyncResource.runInAsyncScope(() => {
         executeCh.publish({
           operation,
-          args
+          args,
+          docSource: documentSources.get(document)
         })
       })
 
@@ -262,10 +274,11 @@ addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] },
 
       contexts.set(contextValue, context)
 
-      // publish to channel to start execution span
-
       return wrapFn(exe, asyncResource, this, arguments, (err, res) => {
-        executeFinishCh.publish({ res, err }) // publish any errors and result in single call
+        finishResolvers(context)
+
+        executeErrorCh.publish(err || (res && res.errors && res.errors[0]))
+        executeFinishExecuteCh.publish({ res, args }) // publish any errors and result in single call
       })
     })
   })
@@ -281,7 +294,7 @@ addHook({ name: 'graphql', file: 'language/parser.js', versions: ['>=0.10'] }, p
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
     return asyncResource.runInAsyncScope(() => {
-      parseStartCh.publish(undefined)
+      parseStartCh.publish()
       let document
       try {
         document = parse.apply(this, arguments)
