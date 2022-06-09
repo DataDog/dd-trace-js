@@ -14,6 +14,10 @@ class GraphQLPlugin extends Plugin {
 
     /** Execute Subs */
 
+    this.addSub('apm:graphql:execute:start', (config) => {
+      config.config = this.config
+    })
+
     this.addSub('apm:graphql:execute:updateField', ({ field, err }) => {
       const span = storage.getStore().span
       field.finishTime = span._getTime ? span._getTime() : 0

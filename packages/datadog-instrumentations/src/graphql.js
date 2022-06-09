@@ -17,6 +17,7 @@ const patchedTypes = new WeakSet()
 /** CHANNELS */
 
 // execute channels
+const executeStartCh = channel('apm:graphql:execute:start')
 const executeStartResolveCh = channel('apm:graphql:execute:resolve:start')
 const executeCh = channel('apm:graphql:execute:execute')
 const executeFinishExecuteCh = channel('apm:graphql:execute:finish')
@@ -67,18 +68,18 @@ function withCollapse (responsePathAsArray) {
   }
 }
 
-function normalizeArgs (args, defaultFieldResolver) {
-  if (args.length !== 1) return normalizePositional(args, defaultFieldResolver)
+function normalizeArgs (args, defaultFieldResolver, conf) {
+  if (args.length !== 1) return normalizePositional(args, defaultFieldResolver, conf)
 
   args[0].contextValue = args[0].contextValue || {}
-  args[0].fieldResolver = wrapResolve(args[0].fieldResolver || defaultFieldResolver)
+  args[0].fieldResolver = wrapResolve(args[0].fieldResolver || defaultFieldResolver, conf)
 
   return args[0]
 }
 
-function normalizePositional (args, defaultFieldResolver) {
+function normalizePositional (args, defaultFieldResolver, conf) {
   args[3] = args[3] || {} // contextValue
-  args[6] = wrapResolve(args[6] || defaultFieldResolver) // fieldResolver
+  args[6] = wrapResolve(args[6] || defaultFieldResolver, conf) // fieldResolver
 
   return {
     schema: args[0],
@@ -101,6 +102,7 @@ function wrapResolve (resolve, config) {
   function resolveAsync (_source, _args, contextValue, info) {
     const context = contexts.get(contextValue)
 
+    AsyncResource.bind(resolve)
     if (!context) return resolve.apply(this, arguments)
 
     const path = responsePathAsArray(info && info.path)
@@ -194,7 +196,7 @@ function getField (context, path) {
   return context.fields[path.join('.')]
 }
 
-function wrapFields (type) {
+function wrapFields (type, conf) {
   if (!type || !type.fields || patchedTypes.has(type)) {
     return
   }
@@ -204,18 +206,18 @@ function wrapFields (type) {
   Object.keys(type._fields).forEach(key => {
     const field = type._fields[key]
 
-    wrapFieldResolve(field)
-    wrapFieldType(field)
+    wrapFieldResolve(field, conf)
+    wrapFieldType(field, conf)
   })
 }
 
-function wrapFieldResolve (field) {
+function wrapFieldResolve (field, conf) {
   if (!field || !field.resolve) return
 
-  field.resolve = wrapResolve(field.resolve)
+  field.resolve = wrapResolve(field.resolve, conf)
 }
 
-function wrapFieldType (field) {
+function wrapFieldType (field, conf) {
   if (!field || !field.type) return
 
   let unwrappedType = field.type
@@ -224,7 +226,7 @@ function wrapFieldType (field) {
     unwrappedType = unwrappedType.ofType
   }
 
-  wrapFields(unwrappedType)
+  wrapFields(unwrappedType, conf)
 }
 
 function finishResolvers ({ fields }) {
@@ -240,11 +242,15 @@ function finishResolvers ({ fields }) {
 
 addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] }, execute => {
   const defaultFieldResolver = execute.defaultFieldResolver
+  const conf = {}
 
   shimmer.wrap(execute, 'execute', exe => function () {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
-      const args = normalizeArgs(arguments, defaultFieldResolver)
+      executeStartCh.publish(conf)
+      const { config } = conf
+
+      const args = normalizeArgs(arguments, defaultFieldResolver, config)
       const schema = args.schema
       const document = args.document
       const source = documentSources.get(document)
@@ -256,11 +262,10 @@ addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] },
       }
 
       if (schema) {
-        wrapFields(schema._queryType)
-        wrapFields(schema._mutationType)
+        wrapFields(schema._queryType, conf)
+        wrapFields(schema._mutationType, conf)
       }
 
-      // here we can map async resources...
       const asyncResource = new AsyncResource('bound-anonymous-fn')
       asyncResource.runInAsyncScope(() => {
         executeCh.publish({
