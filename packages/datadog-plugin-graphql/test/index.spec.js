@@ -214,7 +214,7 @@ describe('Plugin', () => {
           graphql.graphql({ schema, source, variableValues }).catch(done)
         })
 
-        it.only('should instrument execution', done => {
+        it('should instrument execution', done => {
           const source = `query MyQuery { hello(name: "world") }`
           const variableValues = { who: 'world' }
 

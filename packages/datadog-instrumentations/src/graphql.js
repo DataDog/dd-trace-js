@@ -333,7 +333,7 @@ addHook({ name: 'graphql', file: 'validation/validate.js', versions: ['>=0.10'] 
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    asyncResource.runInAsyncScope(() => {
+    return asyncResource.runInAsyncScope(() => {
       validateStartCh.publish({ docSource: documentSources.get(document), document })
 
       let errors
