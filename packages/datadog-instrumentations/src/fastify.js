@@ -85,8 +85,8 @@ function wrapAddHook (addHook) {
   }
 }
 
-function onRequest (request, reply, next) {
-  if (typeof next !== 'function') return
+function onRequest (request, reply, done) {
+  if (typeof done !== 'function') return
 
   const req = getReq(request)
   const res = getRes(reply)
@@ -96,37 +96,41 @@ function onRequest (request, reply, next) {
 
   return requestResource.runInAsyncScope(() => {
     handleChannel.publish({ req, res })
-    return next()
+    return done()
   })
 }
 
-function preHandler (request, reply, next) {
-  if (typeof next !== 'function') return
-  if (!reply || typeof reply.send !== 'function') return next()
+function preHandler (request, reply, done) {
+  if (typeof done !== 'function') return
+  if (!reply || typeof reply.send !== 'function') return done()
 
   const req = getReq(request)
   const requestResource = requestResources.get(req)
 
   reply.send = wrapSend(reply.send, requestResource)
 
-  next()
+  done()
 }
 
-function preValidation (request, reply, next) {
+function preValidation (request, reply, done) {
   const req = getReq(request)
   const parsingResource = parsingResources.get(req)
 
-  if (!parsingResource) return next()
+  if (!parsingResource) return done()
 
-  parsingResource.runInAsyncScope(() => next())
+  parsingResource.runInAsyncScope(() => done())
 }
 
-function preParsing (request, reply, next) {
+function preParsing (request, reply, payload, done) {
+  if (typeof done !== 'function') {
+    done = payload
+  }
+
   const req = getReq(request)
   const parsingResource = new AsyncResource('bound-anonymous-fn')
 
   parsingResources.set(req, parsingResource)
-  parsingResource.runInAsyncScope(() => next())
+  parsingResource.runInAsyncScope(() => done())
 }
 
 function wrapSend (send, resource) {
