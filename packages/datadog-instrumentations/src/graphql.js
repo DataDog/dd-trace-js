@@ -99,7 +99,7 @@ function wrapResolve (resolve, config) {
     ? withCollapse(pathToArray)
     : pathToArray
 
-  function resolveAsync (_source, _args, contextValue, info) {
+  function resolveAsync (source, args, contextValue, info) {
     const context = contexts.get(contextValue)
 
     AsyncResource.bind(resolve)
@@ -141,6 +141,8 @@ function wrapFn (fn, aR, thisArg, args, cb) {
           aR.bind(res => cb(null, res)),
           aR.bind(err => cb(err))
         )
+      } else {
+        cb(null, result)
       }
       return result
     } catch (err) {
@@ -266,7 +268,7 @@ addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] },
         wrapFields(schema._mutationType, conf)
       }
 
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
+      // const asyncResource = new AsyncResource('bound-anonymous-fn')
       asyncResource.runInAsyncScope(() => {
         executeCh.publish({
           operation,
