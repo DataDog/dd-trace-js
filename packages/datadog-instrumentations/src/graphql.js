@@ -80,6 +80,7 @@ function normalizeArgs (args, defaultFieldResolver, conf) {
 function normalizePositional (args, defaultFieldResolver, conf) {
   args[3] = args[3] || {} // contextValue
   args[6] = wrapResolve(args[6] || defaultFieldResolver, conf) // fieldResolver
+  args.length = Math.max(args.length, 7)
 
   return {
     schema: args[0],
@@ -102,9 +103,8 @@ function wrapResolve (resolve, config) {
   function resolveAsync (source, args, contextValue, info) {
     const context = contexts.get(contextValue)
 
-    AsyncResource.bind(resolve)
+    // AsyncResource.bind(resolve)
     if (!context) return resolve.apply(this, arguments)
-
     const path = responsePathAsArray(info && info.path)
 
     if (config.depth >= 0) {
@@ -160,21 +160,23 @@ function assertField (context, info, path) {
 
   if (!field) {
     const parent = getParentField(context, path)
-
     const asyncResource = new AsyncResource('bound-anonymous-fn')
+    // parent.asyncResource.runInAsyncScope(() => {
     asyncResource.runInAsyncScope(() => {
+      /* we want to spawn the new span off of the parent, not a new async resource
+      a new async resource will be used to facilitate finish callbacks */
       executeStartResolveCh.publish({
         path,
         info,
         context
       })
-    })
 
-    field = fields[pathString] = {
-      parent,
-      asyncResource,
-      error: null
-    }
+      field = fields[pathString] = {
+        parent,
+        asyncResource,
+        error: null
+      }
+    })
   }
 
   return field
@@ -183,7 +185,6 @@ function assertField (context, info, path) {
 function getParentField (context, path) {
   for (let i = path.length - 1; i > 0; i--) {
     const field = getField(context, path.slice(0, i))
-
     if (field) {
       return field
     }
@@ -199,7 +200,7 @@ function getField (context, path) {
 }
 
 function wrapFields (type, conf) {
-  if (!type || !type.fields || patchedTypes.has(type)) {
+  if (!type || !type._fields || patchedTypes.has(type)) {
     return
   }
 
@@ -215,7 +216,6 @@ function wrapFields (type, conf) {
 
 function wrapFieldResolve (field, conf) {
   if (!field || !field.resolve) return
-
   field.resolve = wrapResolve(field.resolve, conf)
 }
 
@@ -269,12 +269,10 @@ addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] },
       }
 
       // const asyncResource = new AsyncResource('bound-anonymous-fn')
-      asyncResource.runInAsyncScope(() => {
-        executeCh.publish({
-          operation,
-          args,
-          docSource: documentSources.get(document)
-        })
+      executeCh.publish({
+        operation,
+        args,
+        docSource: documentSources.get(document)
       })
 
       const context = { source, asyncResource, fields: {} }
