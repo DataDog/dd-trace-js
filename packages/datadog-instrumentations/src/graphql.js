@@ -160,24 +160,30 @@ function assertField (context, info, path) {
 
   if (!field) {
     const parent = getParentField(context, path)
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    // parent.asyncResource.runInAsyncScope(() => {
-    asyncResource.runInAsyncScope(() => {
-      /* we want to spawn the new span off of the parent, not a new async resource
-      a new async resource will be used to facilitate finish callbacks */
-      executeStartResolveCh.publish({
-        path,
-        info,
-        context
+
+    // we want to spawn the new span off of the parent, not a new async resource
+    parent.asyncResource.runInAsyncScope(() => {
+      /* this child resource will run a branched scope off of the parent resource, which
+      accesses the parent span from the storage unit in its own scope */
+      const childResource = new AsyncResource('bound-anonymous-fn')
+
+      childResource.runInAsyncScope(() => {
+        executeStartResolveCh.publish({
+          path,
+          info,
+          context
+        })
       })
 
       field = fields[pathString] = {
         parent,
-        asyncResource,
+        asyncResource: childResource,
         error: null
       }
     })
   }
+
+  // console.log(context.fields)
 
   return field
 }
