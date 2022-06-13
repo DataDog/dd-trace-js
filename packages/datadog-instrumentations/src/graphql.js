@@ -95,7 +95,6 @@ function normalizePositional (args, defaultFieldResolver, conf) {
 
 function wrapResolve (resolve, config) {
   if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return resolve
-
   const responsePathAsArray = config.collapse
     ? withCollapse(pathToArray)
     : pathToArray
@@ -105,6 +104,7 @@ function wrapResolve (resolve, config) {
 
     // AsyncResource.bind(resolve)
     if (!context) return resolve.apply(this, arguments)
+
     const path = responsePathAsArray(info && info.path)
 
     if (config.depth >= 0) {
@@ -131,12 +131,11 @@ function wrapResolve (resolve, config) {
 function wrapFn (fn, aR, thisArg, args, cb) {
   cb = cb || (() => { })
 
-  // might need a cb resource to make sure cb runs in same scope
-
   return aR.runInAsyncScope(() => {
     try {
       const result = fn.apply(thisArg, args)
       if (result && typeof result.then === 'function') {
+        // bind callback to this scope
         result.then(
           aR.bind(res => cb(null, res)),
           aR.bind(err => cb(err))
@@ -182,8 +181,6 @@ function assertField (context, info, path) {
       }
     })
   }
-
-  // console.log(context.fields)
 
   return field
 }
@@ -270,8 +267,8 @@ addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] },
       }
 
       if (schema) {
-        wrapFields(schema._queryType, conf)
-        wrapFields(schema._mutationType, conf)
+        wrapFields(schema._queryType, config)
+        wrapFields(schema._mutationType, config)
       }
 
       // const asyncResource = new AsyncResource('bound-anonymous-fn')

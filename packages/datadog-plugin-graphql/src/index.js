@@ -26,7 +26,6 @@ class GraphQLPlugin extends Plugin {
 
     this.addSub('apm:graphql:execute:resolve:start', ({ path, info, context }) => {
       const store = storage.getStore()
-      // console.log('making span for ', info.fieldName, '\n')
       const span = startSpan('resolve', this.config, this.tracer, store)
       const document = context.source
       const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
