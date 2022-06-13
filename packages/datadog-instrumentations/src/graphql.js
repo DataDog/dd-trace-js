@@ -102,7 +102,6 @@ function wrapResolve (resolve, config) {
   function resolveAsync (source, args, contextValue, info) {
     const context = contexts.get(contextValue)
 
-    // AsyncResource.bind(resolve)
     if (!context) return resolve.apply(this, arguments)
 
     const path = responsePathAsArray(info && info.path)
@@ -271,7 +270,6 @@ addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] },
         wrapFields(schema._mutationType, config)
       }
 
-      // const asyncResource = new AsyncResource('bound-anonymous-fn')
       executeCh.publish({
         operation,
         args,
@@ -286,7 +284,7 @@ addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] },
         finishResolvers(context)
 
         executeErrorCh.publish(err || (res && res.errors && res.errors[0]))
-        executeFinishExecuteCh.publish({ res, args }) // publish any errors and result in single call
+        executeFinishExecuteCh.publish({ res, args })
       })
     })
   })
