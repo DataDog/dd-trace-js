@@ -343,6 +343,36 @@ describe('Plugin', () => {
             })
           })
 
+          it('should not lose the route if next() is called in a previous router', done => {
+            const app = new Koa()
+            const router1 = new Router()
+            const router2 = new Router()
+
+            router2.use(async (ctx, next) => next())
+            router2.get('/plop', (ctx) => {
+              ctx.body = 'bar'
+            })
+
+            router1.use('/public', router2.routes())
+
+            app.use(router1.routes())
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /public/plop')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', (e) => {
+              axios
+                .get(`http://localhost:${port}/public/plop`)
+                .catch(done)
+            })
+          })
+
           it('should support nested routers', done => {
             const app = new Koa()
             const forums = new Router()
