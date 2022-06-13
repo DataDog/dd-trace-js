@@ -2,7 +2,7 @@
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
-const analytisSampler = require('../../dd-trace/src/analytics_sampler')
+const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const log = require('../../dd-trace/src/log')
 
 let tools
@@ -32,7 +32,7 @@ class GraphQLPlugin extends Plugin {
       const document = context.source
       const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
 
-      analytisSampler.sample(span, this.config.measured)
+      analyticsSampler.sample(span, this.config.measured)
 
       span.addTags({
         'resource.name': `${info.fieldName}:${info.returnType}`,
@@ -70,17 +70,12 @@ class GraphQLPlugin extends Plugin {
       addDocumentTags(span, args.document, this.config, docSource)
       addVariableTags(this.config, span, args.variableValues)
 
-      analytisSampler.sample(span, this.config.measured, true)
+      analyticsSampler.sample(span, this.config.measured, true)
 
       this.enter(span, store)
     })
 
-    this.addSub('apm:graphql:execute:error', (error) => {
-      if (error) {
-        const span = storage.getStore().span
-        span.setTag('error', error)
-      }
-    })
+    this.addSub('apm:graphql:execute:error', this.addError)
 
     this.addSub('apm:graphql:execute:finish', ({ res, args }) => {
       const span = storage.getStore().span
@@ -99,7 +94,7 @@ class GraphQLPlugin extends Plugin {
       const store = storage.getStore()
       const span = startSpan('parse', this.config, this.tracer, store)
 
-      analytisSampler.sample(span, this.config.measured, true)
+      analyticsSampler.sample(span, this.config.measured, true)
       this.enter(span, store)
     })
 
@@ -118,12 +113,7 @@ class GraphQLPlugin extends Plugin {
       span.finish()
     })
 
-    this.addSub('apm:graphql:parser:error', err => {
-      if (err) {
-        const span = storage.getStore().span
-        span.setTag('error', err)
-      }
-    })
+    this.addSub('apm:graphql:parser:error', this.addError)
 
     /** Validate Subs */
 
@@ -131,7 +121,7 @@ class GraphQLPlugin extends Plugin {
       const store = storage.getStore()
       const span = startSpan('validate', this.config, this.tracer, store)
 
-      analytisSampler.sample(span, this.config.measured, true)
+      analyticsSampler.sample(span, this.config.measured, true)
 
       if (document && document.loc) {
         const tags = {}
@@ -151,12 +141,7 @@ class GraphQLPlugin extends Plugin {
       span.finish()
     })
 
-    this.addSub('apm:graphql:validate:error', err => {
-      if (err) {
-        const span = storage.getStore().span
-        span.setTag('error', err)
-      }
-    })
+    this.addSub('apm:graphql:validate:error', this.addError)
   }
 
   configure (config) {
