@@ -93,6 +93,119 @@ function normalizePositional (args, defaultFieldResolver, conf) {
   }
 }
 
+function wrapParse (parse) {
+  return function (source) {
+    if (!parseStartCh.hasSubscribers) {
+      return parse.apply(this, arguments)
+    }
+
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+    return asyncResource.runInAsyncScope(() => {
+      parseStartCh.publish()
+      let document
+      try {
+        document = parse.apply(this, arguments)
+        const operation = getOperation(document)
+
+        if (!operation) return document
+
+        if (source) {
+          documentSources.set(document, source.body || source)
+        }
+
+        return document
+      } catch (err) {
+        err.stack
+        parseErrorCh.publish(err)
+
+        throw err
+      } finally {
+        parseFinishCh.publish({ source, document, docSource: documentSources.get(document) })
+      }
+    })
+  }
+}
+
+function wrapValidate (validate) {
+  return function (_schema, document, _rules, _typeInfo) {
+    if (!validateStartCh.hasSubscribers) {
+      return validate.apply(this, arguments)
+    }
+
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+    return asyncResource.runInAsyncScope(() => {
+      validateStartCh.publish({ docSource: documentSources.get(document), document })
+
+      let errors
+      try {
+        errors = validate.apply(this, arguments)
+        validateErrorCh.publish(errors && errors[0])
+        return errors
+      } catch (err) {
+        err.stack
+        validateErrorCh.publish(err)
+
+        throw err
+      } finally {
+        validateFinishCh.publish({ document, errors })
+      }
+    })
+  }
+}
+
+function wrapExecute (execute) {
+  return function (exe) {
+    const defaultFieldResolver = execute.defaultFieldResolver
+    const conf = {}
+    return function () {
+      if (!executeStartCh.hasSubscribers) {
+        return exe.apply(this, arguments)
+      }
+
+      const asyncResource = new AsyncResource('bound-anonymous-fn')
+      return asyncResource.runInAsyncScope(() => {
+        executeStartCh.publish(conf)
+        const { config } = conf
+
+        const args = normalizeArgs(arguments, defaultFieldResolver, config)
+        const schema = args.schema
+        const document = args.document
+        const source = documentSources.get(document)
+        const contextValue = args.contextValue
+        const operation = getOperation(document, args.operationName)
+
+        if (contexts.has(contextValue)) {
+          return exe.apply(this, arguments)
+        }
+
+        if (schema) {
+          wrapFields(schema._queryType, config)
+          wrapFields(schema._mutationType, config)
+        }
+
+        executeCh.publish({
+          operation,
+          args,
+          docSource: documentSources.get(document)
+        })
+
+        const context = { source, asyncResource, fields: {} }
+
+        contexts.set(contextValue, context)
+
+        return wrapFn(exe, asyncResource, this, arguments, (err, res) => {
+          finishResolvers(context)
+
+          executeErrorCh.publish(err || (res && res.errors && res.errors[0]))
+          executeFinishExecuteCh.publish({ res, args })
+        })
+      })
+    }
+  }
+}
+
 function wrapResolve (resolve, config) {
   if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return resolve
   const responsePathAsArray = config.collapse
@@ -245,117 +358,17 @@ function finishResolvers ({ fields }) {
 }
 
 addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] }, execute => {
-  const defaultFieldResolver = execute.defaultFieldResolver
-  const conf = {}
-
-  shimmer.wrap(execute, 'execute', exe => function () {
-    if (!executeStartCh.hasSubscribers) {
-      return exe.apply(this, arguments)
-    }
-
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      executeStartCh.publish(conf)
-      const { config } = conf
-
-      const args = normalizeArgs(arguments, defaultFieldResolver, config)
-      const schema = args.schema
-      const document = args.document
-      const source = documentSources.get(document)
-      const contextValue = args.contextValue
-      const operation = getOperation(document, args.operationName)
-
-      if (contexts.has(contextValue)) {
-        return exe.apply(this, arguments)
-      }
-
-      if (schema) {
-        wrapFields(schema._queryType, config)
-        wrapFields(schema._mutationType, config)
-      }
-
-      executeCh.publish({
-        operation,
-        args,
-        docSource: documentSources.get(document)
-      })
-
-      const context = { source, asyncResource, fields: {} }
-
-      contexts.set(contextValue, context)
-
-      return wrapFn(exe, asyncResource, this, arguments, (err, res) => {
-        finishResolvers(context)
-
-        executeErrorCh.publish(err || (res && res.errors && res.errors[0]))
-        executeFinishExecuteCh.publish({ res, args })
-      })
-    })
-  })
+  shimmer.wrap(execute, 'execute', wrapExecute(execute))
   return execute
 })
 
 addHook({ name: 'graphql', file: 'language/parser.js', versions: ['>=0.10'] }, parser => {
-  shimmer.wrap(parser, 'parse', parse => function (source) {
-    if (!parseStartCh.hasSubscribers) {
-      return parse.apply(this, arguments)
-    }
-
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    return asyncResource.runInAsyncScope(() => {
-      parseStartCh.publish()
-      let document
-      try {
-        document = parse.apply(this, arguments)
-        const operation = getOperation(document)
-
-        if (!operation) return document
-
-        if (source) {
-          documentSources.set(document, source.body || source)
-        }
-
-        return document
-      } catch (err) {
-        err.stack
-        parseErrorCh.publish(err)
-
-        throw err
-      } finally {
-        parseFinishCh.publish({ source, document, docSource: documentSources.get(document) })
-      }
-    })
-  })
+  shimmer.wrap(parser, 'parse', wrapParse)
   return parser
 })
 
 addHook({ name: 'graphql', file: 'validation/validate.js', versions: ['>=0.10'] }, validate => {
-  shimmer.wrap(validate, 'validate', val => function (_schema, document, _rules, _typeInfo) {
-    if (!validateStartCh.hasSubscribers) {
-      return val.apply(this, arguments)
-    }
-
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    return asyncResource.runInAsyncScope(() => {
-      validateStartCh.publish({ docSource: documentSources.get(document), document })
-
-      let errors
-      try {
-        errors = val.apply(this, arguments)
-        validateErrorCh.publish(errors && errors[0])
-        return errors
-      } catch (err) {
-        err.stack
-        validateErrorCh.publish(err)
-
-        throw err
-      } finally {
-        validateFinishCh.publish({ document, errors })
-      }
-    })
-  })
+  shimmer.wrap(validate, 'validate', wrapValidate)
 
   return validate
 })
