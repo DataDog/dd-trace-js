@@ -249,6 +249,10 @@ addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] },
   const conf = {}
 
   shimmer.wrap(execute, 'execute', exe => function () {
+    if (!executeStartCh.hasSubscribers) {
+      return exe.apply(this, arguments)
+    }
+
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
       executeStartCh.publish(conf)
