@@ -28,37 +28,7 @@ class GraphQLPlugin extends Plugin {
 
     this.addSub('apm:graphql:resolve:start', ({ path, info, context }) => {
       const store = storage.getStore()
-      const span = startSpan('resolve', this.config, this.tracer, store)
-      const document = context.source
-      const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
-
-      analyticsSampler.sample(span, this.config.measured)
-
-      span.addTags({
-        'resource.name': `${info.fieldName}:${info.returnType}`,
-        'graphql.field.name': info.fieldName,
-        'graphql.field.path': path.join('.'),
-        'graphql.field.type': info.returnType.name
-      })
-
-      if (fieldNode) {
-        if (this.config.source && document && fieldNode.loc) {
-          span.setTag('graphql.source', document.substring(fieldNode.loc.start, fieldNode.loc.end))
-        }
-
-        if (this.config.variables && fieldNode.arguments) {
-          const variables = this.config.variables(info.variableValues)
-
-          fieldNode.arguments
-            .filter(arg => arg.value && arg.value.kind === 'Variable')
-            .filter(arg => arg.value.name && variables[arg.value.name.value])
-            .map(arg => arg.value.name.value)
-            .forEach(name => {
-              span.setTag(`graphql.variables.${name}`, variables[name])
-            })
-        }
-      }
-      this.enter(span, store)
+      startResolveSpan(store, info, path, context, this.config, this.tracer, this.enter)
     })
 
     this.addSub('apm:graphql:execute:execute', ({ operation, args, docSource }) => {
@@ -200,6 +170,40 @@ function pick (obj, selectors) {
 }
 
 // span-related
+
+function startResolveSpan (store, info, path, context, config, tracer, enter) {
+  const span = startSpan('resolve', config, tracer, store)
+  const document = context.source
+  const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
+
+  analyticsSampler.sample(span, config.measured)
+
+  span.addTags({
+    'resource.name': `${info.fieldName}:${info.returnType}`,
+    'graphql.field.name': info.fieldName,
+    'graphql.field.path': path.join('.'),
+    'graphql.field.type': info.returnType.name
+  })
+
+  if (fieldNode) {
+    if (config.source && document && fieldNode.loc) {
+      span.setTag('graphql.source', document.substring(fieldNode.loc.start, fieldNode.loc.end))
+    }
+
+    if (config.variables && fieldNode.arguments) {
+      const variables = config.variables(info.variableValues)
+
+      fieldNode.arguments
+        .filter(arg => arg.value && arg.value.kind === 'Variable')
+        .filter(arg => arg.value.name && variables[arg.value.name.value])
+        .map(arg => arg.value.name.value)
+        .forEach(name => {
+          span.setTag(`graphql.variables.${name}`, variables[name])
+        })
+    }
+  }
+  enter(span, store)
+}
 
 function startSpan (name, conf, tracer, store, options) {
   const service = getService(tracer, conf)
