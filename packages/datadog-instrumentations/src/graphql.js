@@ -18,10 +18,10 @@ const patchedTypes = new WeakSet()
 
 // execute channels
 const executeStartCh = channel('apm:graphql:execute:start')
-const executeStartResolveCh = channel('apm:graphql:execute:resolve:start')
+const executeStartResolveCh = channel('apm:graphql:resolve:start')
 const executeCh = channel('apm:graphql:execute:execute')
 const executeFinishExecuteCh = channel('apm:graphql:execute:finish')
-const executeFinishResolveCh = channel('apm:graphql:execute:resolve:finish')
+const executeFinishResolveCh = channel('apm:graphql:resolve:finish')
 const executeUpdateFieldCh = channel('apm:graphql:execute:updateField')
 const executeErrorCh = channel('apm:graphql:execute:error')
 
@@ -224,7 +224,6 @@ function wrapResolve (resolve, config) {
 
       if (config.depth < depth) {
         const parent = getParentField(context, path)
-
         return wrapFn(resolve, parent.asyncResource, this, arguments)
       }
     }

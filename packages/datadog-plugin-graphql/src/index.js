@@ -26,7 +26,7 @@ class GraphQLPlugin extends Plugin {
       field.error = field.error || err
     })
 
-    this.addSub('apm:graphql:execute:resolve:start', ({ path, info, context }) => {
+    this.addSub('apm:graphql:resolve:start', ({ path, info, context }) => {
       const store = storage.getStore()
       const span = startSpan('resolve', this.config, this.tracer, store)
       const document = context.source
@@ -83,7 +83,7 @@ class GraphQLPlugin extends Plugin {
       span.finish()
     })
 
-    this.addSub('apm:graphql:execute:resolve:finish', finishTime => {
+    this.addSub('apm:graphql:resolve:finish', finishTime => {
       const span = storage.getStore().span
       span.finish(finishTime)
     })
