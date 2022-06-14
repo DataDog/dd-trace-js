@@ -279,7 +279,6 @@ function assertField (context, info, path) {
 
       childResource.runInAsyncScope(() => {
         executeStartResolveCh.publish({
-          path,
           info,
           context
         })

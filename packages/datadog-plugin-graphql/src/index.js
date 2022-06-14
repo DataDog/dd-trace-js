@@ -26,8 +26,12 @@ class GraphQLPlugin extends Plugin {
       field.error = field.error || err
     })
 
-    this.addSub('apm:graphql:resolve:start', ({ path, info, context }) => {
+    this.addSub('apm:graphql:resolve:start', ({ info, context }) => {
       const store = storage.getStore()
+      const responsePathAsArray = this.config.collapse
+        ? withCollapse(pathToArray)
+        : pathToArray
+      const path = responsePathAsArray(info && info.path)
       startResolveSpan(store, info, path, context, this.config, this.tracer, this.enter)
     })
 
@@ -121,6 +125,23 @@ class GraphQLPlugin extends Plugin {
 
 function getService (tracer, config) {
   return config.service || tracer._service
+}
+
+function pathToArray (path) {
+  const flattened = []
+  let curr = path
+  while (curr) {
+    flattened.push(curr.key)
+    curr = curr.prev
+  }
+  return flattened.reverse()
+}
+
+function withCollapse (responsePathAsArray) {
+  return function () {
+    return responsePathAsArray.apply(this, arguments)
+      .map(segment => typeof segment === 'number' ? '*' : segment)
+  }
 }
 
 // config validator helpers
