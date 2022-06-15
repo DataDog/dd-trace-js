@@ -140,12 +140,10 @@ function getService (tracer, config) {
  */
 function hasLikePath (context, computedPathArray) {
   const computedPath = computedPathArray.join('.')
-  if (computedPath) {
-    const paths = Object.keys(context.fields)
-    const number = '([0-9]+)'
-    const regexPath = new RegExp(computedPath.replaceAll('*', number))
-    return paths.filter(path => regexPath.test(path)).length > 0
-  }
+  const paths = Object.keys(context.fields)
+  const number = '([0-9]+)'
+  const regexPath = new RegExp(computedPath.replace(/\*/g, number))
+  return paths.filter(path => regexPath.test(path)).length > 0
 }
 
 function depthPredicate (info, config, func) {
