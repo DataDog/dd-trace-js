@@ -140,17 +140,12 @@ function getService (tracer, config) {
  */
 function hasLikePath (context, computedPathArray) {
   const computedPath = computedPathArray.join('.')
-  const paths = Object.keys(context.fields)
-  const number = '([0-9]+)'
-  const regexPath = new RegExp(computedPath.replaceAll('*', number))
-  return paths.filter(path => regexPath.test(path)).length > 0
-}
-
-function getPath (info, config) {
-  const responsePathAsArray = config.collapse
-    ? withCollapse(pathToArray)
-    : pathToArray
-  return responsePathAsArray(info && info.path)
+  if (computedPath) {
+    const paths = Object.keys(context.fields)
+    const number = '([0-9]+)'
+    const regexPath = new RegExp(computedPath.replaceAll('*', number))
+    return paths.filter(path => regexPath.test(path)).length > 0
+  }
 }
 
 function depthPredicate (info, config, func) {
@@ -158,6 +153,13 @@ function depthPredicate (info, config, func) {
   const path = getPath(info, config)
   const depth = path.filter(item => typeof item === 'string').length
   if (config.depth < 0 || config.depth >= depth) func(path)
+}
+
+function getPath (info, config) {
+  const responsePathAsArray = config.collapse
+    ? withCollapse(pathToArray)
+    : pathToArray
+  return responsePathAsArray(info && info.path)
 }
 
 function pathToArray (path) {
