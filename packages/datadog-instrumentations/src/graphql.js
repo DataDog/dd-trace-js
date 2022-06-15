@@ -17,11 +17,11 @@ const patchedTypes = new WeakSet()
 /** CHANNELS */
 
 // execute channels
-const executeStartResolveCh = channel('apm:graphql:resolve:start')
-const executeCh = channel('apm:graphql:execute:start')
-const executeFinishExecuteCh = channel('apm:graphql:execute:finish')
-const executeFinishResolveCh = channel('apm:graphql:resolve:finish')
-const executeUpdateFieldCh = channel('apm:graphql:resolve:updateField')
+const startResolveCh = channel('apm:graphql:resolve:start')
+const startExecuteCh = channel('apm:graphql:execute:start')
+const finishExecuteCh = channel('apm:graphql:execute:finish')
+const finishResolveCh = channel('apm:graphql:resolve:finish')
+const updateFieldCh = channel('apm:graphql:resolve:updateField')
 const executeErrorCh = channel('apm:graphql:execute:error')
 
 // parse channels
@@ -142,6 +142,10 @@ function wrapExecute (execute) {
   return function (exe) {
     const defaultFieldResolver = execute.defaultFieldResolver
     return function () {
+      if (!startExecuteCh.hasSubscribers) {
+        return exe.apply(this, arguments)
+      }
+
       const asyncResource = new AsyncResource('bound-anonymous-fn')
       return asyncResource.runInAsyncScope(() => {
         const args = normalizeArgs(arguments, defaultFieldResolver)
@@ -160,7 +164,7 @@ function wrapExecute (execute) {
           wrapFields(schema._mutationType)
         }
 
-        executeCh.publish({
+        startExecuteCh.publish({
           operation,
           args,
           docSource: documentSources.get(document)
@@ -170,11 +174,11 @@ function wrapExecute (execute) {
 
         contexts.set(contextValue, context)
 
-        return wrapFn(exe, asyncResource, this, arguments, (err, res) => {
+        return callInAsyncScope(exe, asyncResource, this, arguments, (err, res) => {
           finishResolvers(context)
 
           executeErrorCh.publish(err || (res && res.errors && res.errors[0]))
-          executeFinishExecuteCh.publish({ res, args })
+          finishExecuteCh.publish({ res, args })
         })
       })
     }
@@ -193,8 +197,8 @@ function wrapResolve (resolve) {
 
     const field = assertField(context, info, path)
 
-    return wrapFn(resolve, field.asyncResource, this, arguments, (err) => {
-      executeUpdateFieldCh.publish({ field, info, err })
+    return callInAsyncScope(resolve, field.asyncResource, this, arguments, (err) => {
+      updateFieldCh.publish({ field, info, err })
     })
   }
 
@@ -203,8 +207,8 @@ function wrapResolve (resolve) {
   return resolveAsync
 }
 
-function wrapFn (fn, aR, thisArg, args, cb) {
-  cb = cb || (() => { })
+function callInAsyncScope (fn, aR, thisArg, args, cb) {
+  cb = cb || (() => {})
 
   return aR.runInAsyncScope(() => {
     try {
@@ -252,8 +256,7 @@ function assertField (context, info, path) {
       const childResource = new AsyncResource('bound-anonymous-fn')
 
       childResource.runInAsyncScope(() => {
-        executeStartResolveCh.publish({
-          path,
+        startResolveCh.publish({
           info,
           context
         })
@@ -325,7 +328,7 @@ function finishResolvers ({ fields }) {
     const asyncResource = field.asyncResource
     asyncResource.runInAsyncScope(() => {
       executeErrorCh.publish(field.error)
-      executeFinishResolveCh.publish(field.finishTime)
+      finishResolveCh.publish(field.finishTime)
     })
   })
 }

@@ -28,7 +28,7 @@ class GraphQLPlugin extends Plugin {
       })
     })
 
-    this.addSub('apm:graphql:resolve:start', ({ path, info, context }) => {
+    this.addSub('apm:graphql:resolve:start', ({ info, context }) => {
       const store = storage.getStore()
       depthPredicate(info, this.config, (computedPath) => {
         if (!hasLikePath(context, computedPath)) {
@@ -133,16 +133,15 @@ function getService (tracer, config) {
 
 /** This function is used for collapsed fields, where on the
  * instrumentation, we store fields by a default of config.collapse = false.
- * So, to avoid starting spans for properly computed paths, in the case of
- * config.collapse = true, this function ignores any previously declared fields
- * that have non-collapsed properties. In the case where the user intentionally
- * sets config.collapse = false, there should be no change.
+ * So, to avoid starting spans for properly computed paths that already have a span,
+ * in the case of config.collapse = true, this function computes if there exits a path
+ * that has already been processed for a span that either looks like or is the computed path.
+ * In the case where the user intentionally sets config.collapse = false, there should be no change.
  */
 function hasLikePath (context, computedPath) {
-  computedPath = computedPath.join('.')
   const paths = Object.keys(context.fields)
   const number = '([0-9]+)'
-  const regexPath = new RegExp(computedPath.replaceAll('*', number))
+  const regexPath = new RegExp(computedPath.join('.').replaceAll('*', number))
   return paths.filter(path => regexPath.test(path)).length > 0
 }
 
