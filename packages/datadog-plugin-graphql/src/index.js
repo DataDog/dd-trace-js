@@ -16,10 +16,6 @@ class GraphQLPlugin extends Plugin {
 
     /** Execute Subs */
 
-    this.addSub('apm:graphql:execute:start', (config) => {
-      config.config = this.config
-    })
-
     this.addSub('apm:graphql:resolve:updateField', ({ field, info, err }) => {
       depthPredicate(info, this.config, () => {
         const span = storage.getStore().span
