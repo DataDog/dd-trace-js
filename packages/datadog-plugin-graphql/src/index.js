@@ -138,10 +138,11 @@ function getService (tracer, config) {
  * that has already been processed for a span that either looks like or is the computed path.
  * In the case where the user intentionally sets config.collapse = false, there should be no change.
  */
-function hasLikePath (context, computedPath) {
+function hasLikePath (context, computedPathArray) {
+  const computedPath = computedPathArray.join('.')
   const paths = Object.keys(context.fields)
   const number = '([0-9]+)'
-  const regexPath = new RegExp(computedPath.join('.').replaceAll('*', number))
+  const regexPath = new RegExp(computedPath.replaceAll('*', number))
   return paths.filter(path => regexPath.test(path)).length > 0
 }
 
