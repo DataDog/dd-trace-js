@@ -17,12 +17,11 @@ const patchedTypes = new WeakSet()
 /** CHANNELS */
 
 // execute channels
-const executeStartCh = channel('apm:graphql:execute:start')
 const executeStartResolveCh = channel('apm:graphql:resolve:start')
-const executeCh = channel('apm:graphql:execute:execute')
+const executeCh = channel('apm:graphql:execute:start')
 const executeFinishExecuteCh = channel('apm:graphql:execute:finish')
 const executeFinishResolveCh = channel('apm:graphql:resolve:finish')
-const executeUpdateFieldCh = channel('apm:graphql:execute:updateField')
+const executeUpdateFieldCh = channel('apm:graphql:resolve:updateField')
 const executeErrorCh = channel('apm:graphql:execute:error')
 
 // parse channels
@@ -51,35 +50,19 @@ function getOperation (document, operationName) {
     return definitions.find(def => types.indexOf(def.operation) !== -1)
   }
 }
-function pathToArray (path) {
-  const flattened = []
-  let curr = path
-  while (curr) {
-    flattened.push(curr.key)
-    curr = curr.prev
-  }
-  return flattened.reverse()
-}
 
-function withCollapse (responsePathAsArray) {
-  return function () {
-    return responsePathAsArray.apply(this, arguments)
-      .map(segment => typeof segment === 'number' ? '*' : segment)
-  }
-}
-
-function normalizeArgs (args, defaultFieldResolver, conf) {
-  if (args.length !== 1) return normalizePositional(args, defaultFieldResolver, conf)
+function normalizeArgs (args, defaultFieldResolver) {
+  if (args.length !== 1) return normalizePositional(args, defaultFieldResolver)
 
   args[0].contextValue = args[0].contextValue || {}
-  args[0].fieldResolver = wrapResolve(args[0].fieldResolver || defaultFieldResolver, conf)
+  args[0].fieldResolver = wrapResolve(args[0].fieldResolver || defaultFieldResolver)
 
   return args[0]
 }
 
-function normalizePositional (args, defaultFieldResolver, conf) {
+function normalizePositional (args, defaultFieldResolver) {
   args[3] = args[3] || {} // contextValue
-  args[6] = wrapResolve(args[6] || defaultFieldResolver, conf) // fieldResolver
+  args[6] = wrapResolve(args[6] || defaultFieldResolver) // fieldResolver
   args.length = Math.max(args.length, 7)
 
   return {
@@ -158,18 +141,10 @@ function wrapValidate (validate) {
 function wrapExecute (execute) {
   return function (exe) {
     const defaultFieldResolver = execute.defaultFieldResolver
-    const conf = {}
     return function () {
-      if (!executeStartCh.hasSubscribers) {
-        return exe.apply(this, arguments)
-      }
-
       const asyncResource = new AsyncResource('bound-anonymous-fn')
       return asyncResource.runInAsyncScope(() => {
-        executeStartCh.publish(conf)
-        const { config } = conf
-
-        const args = normalizeArgs(arguments, defaultFieldResolver, config)
+        const args = normalizeArgs(arguments, defaultFieldResolver)
         const schema = args.schema
         const document = args.document
         const source = documentSources.get(document)
@@ -181,8 +156,8 @@ function wrapExecute (execute) {
         }
 
         if (schema) {
-          wrapFields(schema._queryType, config)
-          wrapFields(schema._mutationType, config)
+          wrapFields(schema._queryType)
+          wrapFields(schema._mutationType)
         }
 
         executeCh.publish({
@@ -206,31 +181,20 @@ function wrapExecute (execute) {
   }
 }
 
-function wrapResolve (resolve, config) {
+function wrapResolve (resolve) {
   if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return resolve
-  const responsePathAsArray = config.collapse
-    ? withCollapse(pathToArray)
-    : pathToArray
 
   function resolveAsync (source, args, contextValue, info) {
     const context = contexts.get(contextValue)
 
     if (!context) return resolve.apply(this, arguments)
 
-    const path = responsePathAsArray(info && info.path)
+    const path = pathToArray(info && info.path)
 
-    if (config.depth >= 0) {
-      const depth = path.filter(item => typeof item === 'string').length
-
-      if (config.depth < depth) {
-        const parent = getParentField(context, path)
-        return wrapFn(resolve, parent.asyncResource, this, arguments)
-      }
-    }
     const field = assertField(context, info, path)
 
     return wrapFn(resolve, field.asyncResource, this, arguments, (err) => {
-      executeUpdateFieldCh.publish({ field, err })
+      executeUpdateFieldCh.publish({ field, info, err })
     })
   }
 
@@ -262,6 +226,16 @@ function wrapFn (fn, aR, thisArg, args, cb) {
   })
 }
 
+function pathToArray (path) {
+  const flattened = []
+  let curr = path
+  while (curr) {
+    flattened.push(curr.key)
+    curr = curr.prev
+  }
+  return flattened.reverse()
+}
+
 function assertField (context, info, path) {
   const pathString = path.join('.')
   const fields = context.fields
@@ -279,6 +253,7 @@ function assertField (context, info, path) {
 
       childResource.runInAsyncScope(() => {
         executeStartResolveCh.publish({
+          path,
           info,
           context
         })
@@ -312,7 +287,7 @@ function getField (context, path) {
   return context.fields[path.join('.')]
 }
 
-function wrapFields (type, conf) {
+function wrapFields (type) {
   if (!type || !type._fields || patchedTypes.has(type)) {
     return
   }
@@ -322,17 +297,17 @@ function wrapFields (type, conf) {
   Object.keys(type._fields).forEach(key => {
     const field = type._fields[key]
 
-    wrapFieldResolve(field, conf)
-    wrapFieldType(field, conf)
+    wrapFieldResolve(field)
+    wrapFieldType(field)
   })
 }
 
-function wrapFieldResolve (field, conf) {
+function wrapFieldResolve (field) {
   if (!field || !field.resolve) return
-  field.resolve = wrapResolve(field.resolve, conf)
+  field.resolve = wrapResolve(field.resolve)
 }
 
-function wrapFieldType (field, conf) {
+function wrapFieldType (field) {
   if (!field || !field.type) return
 
   let unwrappedType = field.type
@@ -341,7 +316,7 @@ function wrapFieldType (field, conf) {
     unwrappedType = unwrappedType.ofType
   }
 
-  wrapFields(unwrappedType, conf)
+  wrapFields(unwrappedType)
 }
 
 function finishResolvers ({ fields }) {

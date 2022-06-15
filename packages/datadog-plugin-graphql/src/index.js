@@ -20,22 +20,24 @@ class GraphQLPlugin extends Plugin {
       config.config = this.config
     })
 
-    this.addSub('apm:graphql:execute:updateField', ({ field, err }) => {
-      const span = storage.getStore().span
-      field.finishTime = span._getTime ? span._getTime() : 0
-      field.error = field.error || err
+    this.addSub('apm:graphql:resolve:updateField', ({ field, info, err }) => {
+      depthPredicate(info, this.config, () => {
+        const span = storage.getStore().span
+        field.finishTime = span._getTime ? span._getTime() : 0
+        field.error = field.error || err
+      })
     })
 
-    this.addSub('apm:graphql:resolve:start', ({ info, context }) => {
+    this.addSub('apm:graphql:resolve:start', ({ path, info, context }) => {
       const store = storage.getStore()
-      const responsePathAsArray = this.config.collapse
-        ? withCollapse(pathToArray)
-        : pathToArray
-      const path = responsePathAsArray(info && info.path)
-      startResolveSpan(store, info, path, context, this.config, this.tracer, this.enter)
+      depthPredicate(info, this.config, (computedPath) => {
+        if (!hasLikePath(context, computedPath)) {
+          startResolveSpan(store, info, computedPath, context, this.config, this.tracer, this.enter)
+        }
+      })
     })
 
-    this.addSub('apm:graphql:execute:execute', ({ operation, args, docSource }) => {
+    this.addSub('apm:graphql:execute:start', ({ operation, args, docSource }) => {
       const store = storage.getStore()
       const span = startSpan('execute', this.config, this.tracer, store)
 
@@ -123,8 +125,39 @@ class GraphQLPlugin extends Plugin {
   }
 }
 
+// general helpers
+
 function getService (tracer, config) {
   return config.service || tracer._service
+}
+
+/** This function is used for collapsed fields, where on the
+ * instrumentation, we store fields by a default of config.collapse = false.
+ * So, to avoid starting spans for properly computed paths, in the case of
+ * config.collapse = true, this function ignores any previously declared fields
+ * that have non-collapsed properties. In the case where the user intentionally
+ * sets config.collapse = false, there should be no change.
+ */
+function hasLikePath (context, computedPath) {
+  computedPath = computedPath.join('.')
+  const paths = Object.keys(context.fields)
+  const number = '([0-9]+)'
+  const regexPath = new RegExp(computedPath.replaceAll('*', number))
+  return paths.filter(path => regexPath.test(path)).length > 0
+}
+
+function getPath (info, config) {
+  const responsePathAsArray = config.collapse
+    ? withCollapse(pathToArray)
+    : pathToArray
+  return responsePathAsArray(info && info.path)
+}
+
+function depthPredicate (info, config, func) {
+  func = func || (() => {})
+  const path = getPath(info, config)
+  const depth = path.filter(item => typeof item === 'string').length
+  if (config.depth < 0 || config.depth >= depth) func(path)
 }
 
 function pathToArray (path) {
