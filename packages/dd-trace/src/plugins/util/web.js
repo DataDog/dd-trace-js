@@ -1,5 +1,6 @@
 'use strict'
 
+const vm = require('vm')
 const uniq = require('lodash.uniq')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
@@ -43,13 +44,15 @@ const web = {
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
     const middleware = getMiddlewareSetting(config)
+    const qsObfuscator = getQsObfuscator(config)
 
     return Object.assign({}, config, {
       headers,
       validateStatus,
       hooks,
       filter,
-      middleware
+      middleware,
+      qsObfuscator
     })
   },
 
@@ -406,11 +409,12 @@ function reactivate (req, fn) {
 }
 
 function addRequestTags (context) {
-  const { req, span } = context
-  const url = extractURL(req)
+  const { req, span, config } = context
+  let url = extractURL(req)
+  url = obfuscateQs(config.qsObfuscator, url)
 
   span.addTags({
-    [HTTP_URL]: url.split('?')[0],
+    [HTTP_URL]: url,
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
     [SPAN_TYPE]: WEB,
@@ -482,6 +486,33 @@ function getProtocol (req) {
   return 'http'
 }
 
+function obfuscateQs (obfuscator, url) {
+  if (obfuscator === false) return url
+
+  const i = url.indexOf('?')
+
+  if (i === -1) return url
+
+  const path = url.slice(0, i)
+
+  if (obfuscator === true) return path
+
+  let qs = url.slice(i + 1)
+
+  try {
+    qs = vm.runInNewContext('decodeURIComponent(qs).replace(obfuscator, \'<redacted>\')', {
+      qs,
+      obfuscator
+    }, {
+      timeout: 200
+    })
+
+    return `${path}?${qs}`
+  } catch {
+    return path
+  }
+}
+
 function getHeadersToRecord (config) {
   if (Array.isArray(config.headers)) {
     try {
@@ -519,6 +550,17 @@ function getMiddlewareSetting (config) {
   }
 
   return true
+}
+
+function getQsObfuscator (config) {
+  if (config.qsObfuscator === '') return false
+
+  try {
+    return new RegExp(config.qsObfuscator, 'gi')
+  } catch (e) {
+    log.error('Expected `qsObfuscator` to be a valid regular expression.')
+    return true
+  }
 }
 
 module.exports = web

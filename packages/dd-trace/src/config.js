@@ -44,6 +44,14 @@ class Config {
       process.env.DD_LOGS_INJECTION,
       false
     )
+    const DD_OBFUSCATION_QUERY_STRING_REGEXP = coalesce(
+      options.qsObfuscator,
+      process.env.DD_OBFUSCATION_QUERY_STRING_REGEXP,
+      `(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|\
+consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^&]+|"\\s*:\\s*"[^"]+")|bearer\\s+\
+[a-z0-9\\._\\-]|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-\
+]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
+    )
     const DD_RUNTIME_METRICS_ENABLED = coalesce(
       options.runtimeMetrics, // TODO: remove when enabled by default
       process.env.DD_RUNTIME_METRICS_ENABLED,
@@ -194,6 +202,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.debug = isTrue(DD_TRACE_DEBUG)
     this.logInjection = isTrue(DD_LOGS_INJECTION)
+    this.qsObfuscator = DD_OBFUSCATION_QUERY_STRING_REGEXP
     this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
