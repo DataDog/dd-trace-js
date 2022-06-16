@@ -53,6 +53,7 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('tracing', true)
     expect(config).to.have.property('debug', false)
+    expect(config).to.have.property('qsObfuscator').with.length(439)
     expect(config).to.have.property('protocolVersion', '0.4')
     expect(config).to.have.nested.property('dogstatsd.hostname', '127.0.0.1')
     expect(config).to.have.nested.property('dogstatsd.port', '8125')
@@ -99,6 +100,7 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
+    process.env.DD_OBFUSCATION_QUERY_STRING_REGEXP = 'regex'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
@@ -131,6 +133,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('debug', true)
+    expect(config).to.have.property('qsObfuscator', 'regex')
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('hostname', 'agent')
     expect(config).to.have.nested.property('dogstatsd.hostname', 'dsd-agent')
@@ -201,6 +204,7 @@ describe('Config', () => {
     const config = new Config({
       enabled: false,
       debug: true,
+      qsObfuscator: 'regex',
       protocolVersion: '0.5',
       site: 'datadoghq.eu',
       hostname: 'agent',
@@ -235,6 +239,7 @@ describe('Config', () => {
       appsec: true
     })
 
+    expect(config).to.have.property('qsObfuscator', 'regex')
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('hostname', 'agent')
@@ -314,6 +319,7 @@ describe('Config', () => {
   })
 
   it('should give priority to the options', () => {
+    process.env.DD_OBFUSCATION_QUERY_STRING_REGEXP = ''
     process.env.DD_TRACE_AGENT_URL = 'https://agent2:6218'
     process.env.DD_SITE = 'datadoghq.eu'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
@@ -343,6 +349,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
 
     const config = new Config({
+      qsObfuscator: 'regex',
       protocolVersion: '0.5',
       protocol: 'https',
       site: 'datadoghq.com',
@@ -377,6 +384,7 @@ describe('Config', () => {
       }
     })
 
+    expect(config).to.have.property('qsObfuscator', 'regex')
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
