@@ -175,7 +175,7 @@ function wrapExecute (execute) {
         contexts.set(contextValue, context)
 
         return callInAsyncScope(exe, asyncResource, this, arguments, (err, res) => {
-          finishResolvers(context)
+          if (finishResolveCh.hasSubscribers) finishResolvers(context)
 
           executeErrorCh.publish(err || (res && res.errors && res.errors[0]))
           finishExecuteCh.publish({ res, args })
@@ -186,7 +186,9 @@ function wrapExecute (execute) {
 }
 
 function wrapResolve (resolve) {
-  if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return resolve
+  if (typeof resolve !== 'function' || patchedResolvers.has(resolve) || !startResolveCh.hasSubscribers) {
+    return resolve
+  }
 
   function resolveAsync (source, args, contextValue, info) {
     const context = contexts.get(contextValue)
