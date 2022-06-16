@@ -136,10 +136,9 @@ function finishStream (stream) {
 
 function addRequestTags (stream, headers, config) {
   const span = stream._datadog.span
-  const url = web.obfuscateQs(
-    config,
-    `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
-  )
+  let url = `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
+  
+  url = web.obfuscateQs(config.qsObfuscator, url)
 
   span.addTags({
     [HTTP_METHOD]: headers[HTTP2_HEADER_METHOD],
