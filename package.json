@@ -60,7 +60,7 @@
   "dependencies": {
     "@datadog/native-appsec": "^1.2.0",
     "@datadog/native-metrics": "^1.2.0",
-    "@datadog/pprof": "^0.4.0",
+    "@datadog/pprof": "^0.5.0",
     "@datadog/sketches-js": "^1.0.4",
     "@types/node": ">=12",
     "crypto-randomuuid": "^1.0.0",
@@ -108,6 +108,7 @@
     "mocha": "8",
     "multer": "^1.4.5-lts.1",
     "msgpack-lite": "^0.1.26",
+    "multer": "^1.4.2",
     "nock": "^11.3.3",
     "nyc": "^15.1.0",
     "proxyquire": "^1.8.0",

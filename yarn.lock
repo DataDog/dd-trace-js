@@ -217,10 +217,10 @@
     nan "^2.15.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/pprof@^0.4.0":
-  version "0.4.0"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-0.4.0.tgz#9d6acb23dd8edfff0171cbb52ac559bbab13ba74"
-  integrity sha512-TG9w9xAqr/Dr6WI/StSirkGKiT9gQXMFx0zJeC/yjYtZWCO/8X7fwfCZJOMcQq4yBvMyKMDHFSNp1XVAKIRorQ==
+"@datadog/pprof@^0.5.0":
+  version "0.5.0"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-0.5.0.tgz#6a194d6b2ff597237ee84c95dd1ca7774382bb45"
+  integrity sha512-RysFJwGcf6iQVsc197mnnNpQGNv89xgXH9Weo22JbfF8hcDDsh8n2WHEIpSfmSs4fgE9iLF5lil6KPnlYiDsQw==
   dependencies:
     delay "^5.0.0"
     findit2 "^2.2.3"
@@ -228,7 +228,7 @@
     node-gyp-build "^3.9.0"
     p-limit "^3.0.0"
     pify "^5.0.0"
-    protobufjs "~6.11.0"
+    protobufjs "~6.11.3"
     rimraf "^3.0.2"
     semver "^7.3.5"
     source-map "^0.7.3"
@@ -2923,10 +2923,29 @@ propagate@^2.0.0:
   resolved "https://registry.yarnpkg.com/propagate/-/propagate-2.0.1.tgz#40cdedab18085c792334e64f0ac17256d38f9a45"
   integrity sha512-vGrhOavPSTz4QVNuBNdcNXePNdNMaO1xj9yBeH1ScQPjk/rhg9sSlCXPhMkFuaNNW/syTvYqsnbIJxMBfRbbag==
 
-protobufjs@^6.10.2, protobufjs@~6.11.0:
+protobufjs@^6.10.2:
   version "6.11.2"
   resolved "https://registry.yarnpkg.com/protobufjs/-/protobufjs-6.11.2.tgz#de39fabd4ed32beaa08e9bb1e30d08544c1edf8b"
   integrity sha512-4BQJoPooKJl2G9j3XftkIXjoC9C0Av2NOrWmbLWT1vH32GcSUHjM0Arra6UfTsVyfMAuFzaLucXn1sadxJydAw==
+  dependencies:
+    "@protobufjs/aspromise" "^1.1.2"
+    "@protobufjs/base64" "^1.1.2"
+    "@protobufjs/codegen" "^2.0.4"
+    "@protobufjs/eventemitter" "^1.1.0"
+    "@protobufjs/fetch" "^1.1.0"
+    "@protobufjs/float" "^1.0.2"
+    "@protobufjs/inquire" "^1.1.0"
+    "@protobufjs/path" "^1.1.2"
+    "@protobufjs/pool" "^1.1.0"
+    "@protobufjs/utf8" "^1.1.0"
+    "@types/long" "^4.0.1"
+    "@types/node" ">=13.7.0"
+    long "^4.0.0"
+
+protobufjs@~6.11.3:
+  version "6.11.3"
+  resolved "https://registry.yarnpkg.com/protobufjs/-/protobufjs-6.11.3.tgz#637a527205a35caa4f3e2a9a4a13ddffe0e7af74"
+  integrity sha512-xL96WDdCZYdU7Slin569tFX712BxsxslWwAfAhCYjQKGTq7dAU91Lomy6nLLhh/dyGhk/YH4TwTSRxTzhuHyZg==
   dependencies:
     "@protobufjs/aspromise" "^1.1.2"
     "@protobufjs/base64" "^1.1.2"
