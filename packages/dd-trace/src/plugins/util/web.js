@@ -364,6 +364,32 @@ const web = {
     const res = context.res
 
     scope.bind(res, context.span)
+  },
+  obfuscateQs (obfuscator, url) {
+    if (obfuscator === false) return url
+
+    const i = url.indexOf('?')
+
+    if (i === -1) return url
+
+    const path = url.slice(0, i)
+
+    if (obfuscator === true) return path
+
+    let qs = url.slice(i + 1)
+
+    try {
+      qs = vm.runInNewContext('decodeURIComponent(qs).replace(obfuscator, \'<redacted>\')', {
+        qs,
+        obfuscator
+      }, {
+        timeout: 200
+      })
+
+      return `${path}?${qs}`
+    } catch {
+      return path
+    }
   }
 }
 
@@ -411,7 +437,7 @@ function reactivate (req, fn) {
 function addRequestTags (context) {
   const { req, span, config } = context
   let url = extractURL(req)
-  url = obfuscateQs(config.qsObfuscator, url)
+  url = web.obfuscateQs(config.qsObfuscator, url)
 
   span.addTags({
     [HTTP_URL]: url,
@@ -484,33 +510,6 @@ function getProtocol (req) {
   if (req.connection && req.connection.encrypted) return 'https'
 
   return 'http'
-}
-
-function obfuscateQs (obfuscator, url) {
-  if (obfuscator === false) return url
-
-  const i = url.indexOf('?')
-
-  if (i === -1) return url
-
-  const path = url.slice(0, i)
-
-  if (obfuscator === true) return path
-
-  let qs = url.slice(i + 1)
-
-  try {
-    qs = vm.runInNewContext('decodeURIComponent(qs).replace(obfuscator, \'<redacted>\')', {
-      qs,
-      obfuscator
-    }, {
-      timeout: 200
-    })
-
-    return `${path}?${qs}`
-  } catch {
-    return path
-  }
 }
 
 function getHeadersToRecord (config) {
