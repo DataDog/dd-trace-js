@@ -552,14 +552,24 @@ function getMiddlewareSetting (config) {
 }
 
 function getQsObfuscator (config) {
-  if (config.qsObfuscator === '') return false
+  const obfuscator = config.qsObfuscator
 
-  try {
-    return new RegExp(config.qsObfuscator, 'gi')
-  } catch (e) {
-    log.error('Expected `qsObfuscator` to be a valid regular expression.')
-    return true
+  if (typeof obfuscator === 'boolean') {
+    return obfuscator
+  } else if (typeof obfuscator === 'string') {
+    if (obfuscator === '') return false // disable obfuscator
+
+    try {
+      return new RegExp(obfuscator, 'gi')
+    } catch (err) {
+      log.error(err)
+      log.error('Expected `qsObfuscator` to be a valid regex string.')
+    }
+  } else if (config.hasOwnProperty('qsObfuscator')) {
+    log.error('Expected `qsObfuscator` to be a regex string or boolean.')
   }
+
+  return true
 }
 
 module.exports = web
