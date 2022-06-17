@@ -189,9 +189,11 @@ function wrapResolve (resolve) {
   if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return resolve
 
   function resolveAsync (source, args, contextValue, info) {
+    if (!startResolveCh.hasSubscribers) return resolve.apply(this, arguments)
+
     const context = contexts.get(contextValue)
 
-    if (!startResolveCh.hasSubscribers || !context) return resolve.apply(this, arguments)
+    if (!context) return resolve.apply(this, arguments)
 
     const path = pathToArray(info && info.path)
 
