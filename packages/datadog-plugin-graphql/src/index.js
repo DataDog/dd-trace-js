@@ -4,6 +4,7 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const log = require('../../dd-trace/src/log')
+const GraphQLResolvePlugin = require('./resolve')
 
 let tools
 class GraphQLPlugin extends Plugin {
@@ -16,22 +17,8 @@ class GraphQLPlugin extends Plugin {
 
     /** Execute Subs */
 
-    this.addSub('apm:graphql:resolve:updateField', ({ field, info, err }) => {
-      depthPredicate(info, this.config, () => {
-        const span = storage.getStore().span
-        field.finishTime = span._getTime ? span._getTime() : 0
-        field.error = field.error || err
-      })
-    })
-
-    this.addSub('apm:graphql:resolve:start', ({ info, context }) => {
-      const store = storage.getStore()
-      depthPredicate(info, this.config, (computedPath) => {
-        if (!hasLikePath(context, computedPath)) {
-          startResolveSpan(store, info, computedPath, context, this.config, this.tracer, this.enter)
-        }
-      })
-    })
+    // resolve plugin separated for disabling purposes
+    this.resolve = new GraphQLResolvePlugin(...args)
 
     this.addSub('apm:graphql:execute:start', ({ operation, args, docSource }) => {
       const store = storage.getStore()
@@ -53,11 +40,6 @@ class GraphQLPlugin extends Plugin {
       const span = storage.getStore().span
       this.config.hooks.execute(span, args, res)
       span.finish()
-    })
-
-    this.addSub('apm:graphql:resolve:finish', finishTime => {
-      const span = storage.getStore().span
-      span.finish(finishTime)
     })
 
     /** Parser Subs */
@@ -117,59 +99,13 @@ class GraphQLPlugin extends Plugin {
   }
 
   configure (config) {
-    return super.configure(validateConfig(config))
-  }
-}
+    const validated = validateConfig(config)
 
-// general helpers
+    // this will disable resolve subscribers if `config.depth` is set to 0
+    const resolveConfig = validated.depth === 0 ? false : validated
+    this.resolve.configure(resolveConfig)
 
-function getService (tracer, config) {
-  return config.service || tracer._service
-}
-
-/** This function is used for collapsed fields, where on the
- * instrumentation, we store fields by a default of config.collapse = false.
- * So, to avoid starting spans for properly computed paths that already have a span,
- * in the case of config.collapse = true, this function computes if there exits a path
- * that has already been processed for a span that either looks like or is the computed path.
- * In the case where the user intentionally sets config.collapse = false, there should be no change.
- */
-function hasLikePath (context, computedPathArray) {
-  const computedPath = computedPathArray.join('.')
-  const paths = Object.keys(context.fields)
-  const number = '([0-9]+)'
-  const regexPath = new RegExp(computedPath.replace(/\*/g, number))
-  return paths.filter(path => regexPath.test(path)).length > 0
-}
-
-function depthPredicate (info, config, func) {
-  func = func || (() => {})
-  const path = getPath(info, config)
-  const depth = path.filter(item => typeof item === 'string').length
-  if (config.depth < 0 || config.depth >= depth) func(path)
-}
-
-function getPath (info, config) {
-  const responsePathAsArray = config.collapse
-    ? withCollapse(pathToArray)
-    : pathToArray
-  return responsePathAsArray(info && info.path)
-}
-
-function pathToArray (path) {
-  const flattened = []
-  let curr = path
-  while (curr) {
-    flattened.push(curr.key)
-    curr = curr.prev
-  }
-  return flattened.reverse()
-}
-
-function withCollapse (responsePathAsArray) {
-  return function () {
-    return responsePathAsArray.apply(this, arguments)
-      .map(segment => typeof segment === 'number' ? '*' : segment)
+    return super.configure(validated)
   }
 }
 
@@ -221,42 +157,8 @@ function pick (obj, selectors) {
 
 // span-related
 
-function startResolveSpan (store, info, path, context, config, tracer, enter) {
-  const span = startSpan('resolve', config, tracer, store)
-  const document = context.source
-  const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
-
-  analyticsSampler.sample(span, config.measured)
-
-  span.addTags({
-    'resource.name': `${info.fieldName}:${info.returnType}`,
-    'graphql.field.name': info.fieldName,
-    'graphql.field.path': path.join('.'),
-    'graphql.field.type': info.returnType.name
-  })
-
-  if (fieldNode) {
-    if (config.source && document && fieldNode.loc) {
-      span.setTag('graphql.source', document.substring(fieldNode.loc.start, fieldNode.loc.end))
-    }
-
-    if (config.variables && fieldNode.arguments) {
-      const variables = config.variables(info.variableValues)
-
-      fieldNode.arguments
-        .filter(arg => arg.value && arg.value.kind === 'Variable')
-        .filter(arg => arg.value.name && variables[arg.value.name.value])
-        .map(arg => arg.value.name.value)
-        .forEach(name => {
-          span.setTag(`graphql.variables.${name}`, variables[name])
-        })
-    }
-  }
-  enter(span, store)
-}
-
 function startSpan (name, conf, tracer, store, options) {
-  const service = getService(tracer, conf)
+  const service = conf.service || tracer._service
   const childOf = store ? store.span : store
   options = options || {}
   return tracer.startSpan(`graphql.${name}`, {
