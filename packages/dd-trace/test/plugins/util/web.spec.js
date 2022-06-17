@@ -75,6 +75,7 @@ describe('plugins/util/web', () => {
       expect(config.hooks).to.be.an('object')
       expect(config.hooks).to.have.property('request')
       expect(config.hooks.request).to.be.a('function')
+      expect(config).to.have.property('qsObfuscator', true)
     })
 
     it('should use the shared config if set', () => {
@@ -83,13 +84,15 @@ describe('plugins/util/web', () => {
         validateStatus: code => false,
         hooks: {
           request: () => 'test'
-        }
+        },
+        qsObfuscator: '.*'
       })
 
       expect(config.headers).to.include('test')
       expect(config.validateStatus(200)).to.equal(false)
       expect(config).to.have.property('hooks')
       expect(config.hooks.request()).to.equal('test')
+      expect(config).to.have.property('qsObfuscator').deep.equal(/.*/gi)
     })
 
     it('should use the server config if set', () => {
@@ -99,7 +102,8 @@ describe('plugins/util/web', () => {
           validateStatus: code => false,
           hooks: {
             request: () => 'test'
-          }
+          },
+          qsObfuscator: '.*'
         }
       })
 
@@ -107,6 +111,7 @@ describe('plugins/util/web', () => {
       expect(config.validateStatus(200)).to.equal(false)
       expect(config).to.have.property('hooks')
       expect(config.hooks.request()).to.equal('test')
+      expect(config).to.have.property('qsObfuscator').deep.equal(/.*/gi)
     })
 
     it('should prioritize the server config over the shared config', () => {
@@ -259,6 +264,26 @@ describe('plugins/util/web', () => {
 
           expect(tags).to.include({
             [HTTP_URL]: 'http://localhost/user/123'
+          })
+        })
+      })
+
+      it('should obfuscate the query string from the URL', () => {
+        const config = web.normalizeConfig({
+          qsObfuscator: 'secret=.*?(&|$)'
+        })
+
+        req.method = 'GET'
+        req.url = '/user/123?secret=password&foo=bar'
+        res.statusCode = '200'
+
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
+          res.end()
+
+          expect(tags).to.include({
+            [HTTP_URL]: 'http://localhost/user/123?<redacted>foo=bar'
           })
         })
       })
@@ -825,6 +850,50 @@ describe('plugins/util/web', () => {
     it('should filter the url', () => {
       const filtered = config.filter('/_notokay')
       expect(filtered).to.equal(false)
+    })
+  })
+
+  describe('obfuscateQs', () => {
+    const regex = new RegExp('secret', 'gi')
+    const url = 'http://perdu.com/path/'
+    const qs = '?data=secret'
+
+    it('should not obfuscate when passed false', () => {
+      const result = web.obfuscateQs(false, url + qs)
+
+      expect(result).to.equal(url + qs)
+    })
+
+    it('should not obfuscate when no querystring is found', () => {
+      const result = web.obfuscateQs(regex, url)
+
+      expect(result).to.equal(url)
+    })
+
+    it('should remove the querystring if passed true', () => {
+      const result = web.obfuscateQs(true, url + qs)
+
+      expect(result).to.equal(url)
+    })
+
+    it('should url decode querystring before obfuscation', () => {
+      const result = web.obfuscateQs(regex, url + '?data=%73%65%63%72%65%74')
+
+      expect(result).to.equal(url + '?data=<redacted>')
+    })
+
+    it('should prevent catastrophic regex', () => {
+      const regex = new RegExp('=(a*)*$', 'gi')
+
+      const result = web.obfuscateQs(regex, url + '?data=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab')
+
+      expect(result).to.equal(url)
+    })
+
+    it('should obfuscate only the querystring part of the url', () => {
+      const result = web.obfuscateQs(regex, url + 'secret/' + qs)
+
+      expect(result).to.equal(url + 'secret/?data=<redacted>')
     })
   })
 })
