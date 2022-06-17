@@ -124,6 +124,14 @@ describe('plugins/util/web', () => {
 
       expect(config.headers).to.include('bar')
     })
+
+    it('should default qsObfuscator to true when passed a bad regex', () => {
+      const config = web.normalizeConfig({
+        qsObfuscator: '(?)'
+      })
+
+      expect(config).to.have.property('qsObfuscator', true)
+    })
   })
 
   describe('instrument', () => {
