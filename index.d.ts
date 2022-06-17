@@ -201,6 +201,12 @@ export declare interface TracerOptions {
   logInjection?: boolean,
 
   /**
+   * Specifies a regex that will redact sensitive data from the querystring reported in the `http.url` tag.
+   * `true` to redact all the querystring and `false` to disable redaction.
+   */
+   qsObfuscator?: string | boolean,
+
+  /**
    * Whether to enable startup logs.
    * @default true
    */

@@ -34,6 +34,7 @@ let promise: Promise<void>;
 ddTrace.init();
 tracer.init({
   logInjection: true,
+  qsObfuscator: '.*',
   startupLogs: false,
   env: 'test',
   version: '1.0.0',
