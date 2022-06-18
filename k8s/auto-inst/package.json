@@ -1,0 +1,8 @@
+{
+  "name": "@datadog/k8s-autoinstrumentation",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "dd-trace": "*"
+  }
+}
