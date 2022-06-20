@@ -93,24 +93,17 @@ describe('Plugin', () => {
         })
 
         it('should propagate context to plugins', done => {
+          const onrequest = (req, res, options, cb) => {
+            expect(tracer.scope().active()).to.not.be.null
+            cb()
+          }
+
           const first = {
-            init: (config, logging, stats) => ({
-              onrequest: (req, res, options, cb) => {
-                expect(tracer.scope().active()).to.not.be.null
-                cb()
-                // tracer.scope().activate('test', () => cb())
-              }
-            })
+            init: (config, logging, stats) => ({ onrequest })
           }
 
           const second = {
-            init: (req, res, options, cb) => ({
-              onrequest: (req, res, options, cb) => {
-                expect(tracer.scope().active()).to.not.be.null
-                cb()
-                // tracer.scope().activate('test', () => cb())
-              }
-            })
+            init: (config, logging, stats) => ({ onrequest })
           }
 
           gateway.addPlugin('first', first.init)
