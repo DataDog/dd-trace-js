@@ -13,13 +13,13 @@ const pageLoadChannel = channel('apm:next:page:load')
 const requestResources = new WeakMap()
 
 function wrapHandleRequest (handleRequest) {
-  return function handleRequestWithTrace (req, res, pathname, query) {
+  return function (req, res, pathname, query) {
     return instrument(req, res, () => handleRequest.apply(this, arguments))
   }
 }
 
 function wrapHandleApiRequest (handleApiRequest) {
-  return function handleApiRequestWithTrace (req, res, pathname, query) {
+  return function (req, res, pathname, query) {
     return instrument(req, res, () => {
       const promise = handleApiRequest.apply(this, arguments)
 
@@ -37,31 +37,31 @@ function wrapHandleApiRequest (handleApiRequest) {
 }
 
 function wrapRenderToResponse (renderToResponse) {
-  return function renderToResponseWithTrace (ctx) {
+  return function (ctx) {
     return instrument(ctx.req, ctx.res, () => renderToResponse.apply(this, arguments))
   }
 }
 
 function wrapRenderErrorToResponse (renderErrorToResponse) {
-  return function renderErrorToResponseWithTrace (ctx) {
+  return function (ctx) {
     return instrument(ctx.req, ctx.res, () => renderErrorToResponse.apply(this, arguments))
   }
 }
 
 function wrapRenderToHTML (renderToHTML) {
-  return function renderToHTMLWithTrace (req, res, pathname, query, parsedUrl) {
+  return function (req, res, pathname, query, parsedUrl) {
     return instrument(req, res, () => renderToHTML.apply(this, arguments))
   }
 }
 
 function wrapRenderErrorToHTML (renderErrorToHTML) {
-  return function renderErrorToHTMLWithTrace (err, req, res, pathname, query) {
+  return function (err, req, res, pathname, query) {
     return instrument(req, res, () => renderErrorToHTML.apply(this, arguments))
   }
 }
 
 function wrapFindPageComponents (findPageComponents) {
-  return function findPageComponentsWithTrace (pathname, query) {
+  return function (pathname, query) {
     const result = findPageComponents.apply(this, arguments)
 
     if (result) {
