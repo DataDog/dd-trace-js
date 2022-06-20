@@ -6,7 +6,6 @@ const getPort = require('get-port')
 const os = require('os')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const proxy = require('./proxy')
 
 describe('Plugin', () => {
@@ -46,7 +45,7 @@ describe('Plugin', () => {
   }
 
   describe('microgateway-core', () => {
-    withVersions(plugin, 'microgateway-core', (version) => {
+    withVersions('microgateway-core', 'microgateway-core', (version) => {
       beforeEach(async () => {
         gatewayPort = await getPort()
         proxyPort = await getPort()
@@ -61,11 +60,11 @@ describe('Plugin', () => {
         before(() => {
           tracer = require('../../dd-trace')
 
-          return agent.load('microgateway-core')
+          return agent.load(['microgateway-core', 'http'], [{}, { client: false }])
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(done => {
@@ -94,18 +93,24 @@ describe('Plugin', () => {
         })
 
         it('should propagate context to plugins', done => {
-          const onrequest = (req, res, options, cb) => {
-            expect(tracer.scope().active()).to.not.be.null
-
-            tracer.scope().activate(null, () => cb())
-          }
-
           const first = {
-            init: (config, logging, stats) => ({ onrequest })
+            init: (config, logging, stats) => ({
+              onrequest: (req, res, options, cb) => {
+                expect(tracer.scope().active()).to.not.be.null
+                cb()
+                // tracer.scope().activate('test', () => cb())
+              }
+            })
           }
 
           const second = {
-            init: (config, logging, stats) => ({ onrequest })
+            init: (req, res, options, cb) => ({
+              onrequest: (req, res, options, cb) => {
+                expect(tracer.scope().active()).to.not.be.null
+                cb()
+                // tracer.scope().activate('test', () => cb())
+              }
+            })
           }
 
           gateway.addPlugin('first', first.init)
