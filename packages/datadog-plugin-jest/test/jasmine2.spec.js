@@ -11,6 +11,7 @@ const {
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
+  TEST_SOURCE_FILE,
   TEST_STATUS,
   CI_APP_ORIGIN,
   TEST_FRAMEWORK_VERSION,
@@ -88,6 +89,7 @@ describe('Plugin', () => {
               [TEST_NAME]: name,
               [TEST_STATUS]: status,
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-test.js',
+              [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-test.js',
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-jasmine2',
               [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/apm-js']), // reads from dd-trace-js
@@ -144,6 +146,7 @@ describe('Plugin', () => {
               [TEST_NAME]: name,
               [TEST_STATUS]: 'fail',
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
+              [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-jasmine2'
             })
@@ -189,7 +192,8 @@ describe('Plugin', () => {
               [TEST_NAME]: name,
               [TEST_STATUS]: status,
               [TEST_FRAMEWORK]: 'jest',
-              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-focus.js'
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
+              [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js'
             })
           })
         })

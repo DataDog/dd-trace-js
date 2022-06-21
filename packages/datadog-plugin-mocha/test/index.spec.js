@@ -12,6 +12,7 @@ const {
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
+  TEST_SOURCE_FILE,
   TEST_STATUS,
   TEST_PARAMETERS,
   ERROR_TYPE,
@@ -146,7 +147,8 @@ describe('Plugin', () => {
               [TEST_STATUS]: 'fail',
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'mocha',
-              [TEST_SUITE]: testSuite
+              [TEST_SUITE]: testSuite,
+              [TEST_SOURCE_FILE]: testSuite
             })
             expect(testSpan.meta).to.contain({
               [ERROR_TYPE]: 'AssertionError',
@@ -208,7 +210,8 @@ describe('Plugin', () => {
                 [TEST_STATUS]: test.status,
                 [TEST_TYPE]: 'test',
                 [TEST_FRAMEWORK]: 'mocha',
-                [TEST_SUITE]: testSuite
+                [TEST_SUITE]: testSuite,
+                [TEST_SOURCE_FILE]: testSuite
               })
               if (test.fileName === 'mocha-test-fail.js') {
                 expect(testSpan.meta).to.contain({
@@ -246,6 +249,7 @@ describe('Plugin', () => {
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'mocha',
               [TEST_SUITE]: testSuite,
+              [TEST_SOURCE_FILE]: testSuite,
               [TEST_PARAMETERS]: JSON.stringify({ arguments: [1, 2, 3], metadata: {} })
             })
             expect(testSpan.parent_id.toString()).to.equal('0')
@@ -280,7 +284,8 @@ describe('Plugin', () => {
             [TEST_NAME]: 'mocha-test-integration-http can do integration http',
             [TEST_STATUS]: 'pass',
             [TEST_FRAMEWORK]: 'mocha',
-            [TEST_SUITE]: testSuite
+            [TEST_SUITE]: testSuite,
+            [TEST_SOURCE_FILE]: testSuite
           })
         }).then(done, done)
 
