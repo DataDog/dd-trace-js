@@ -28,7 +28,7 @@ function getConfig (name, config = {}) {
 const disabledPlugins = process.env.DD_TRACE_DISABLED_PLUGINS
 
 const collectDisabledPlugins = () => {
-  return new Set(disabledPlugins && disabledPlugins.split(',').map(plugin => plugin.trim().toLowerCase()))
+  return new Set(disabledPlugins && disabledPlugins.split(',').map(plugin => plugin.trim()))
 }
 
 // TODO actually ... should we be looking at envrionment variables this deep down in the code?
