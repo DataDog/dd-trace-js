@@ -14,7 +14,7 @@ const {
   getTestParametersString
 } = require('../../dd-trace/src/plugins/util/test')
 
-const { getFormattedJestTestParameters } = require('../../datadog-plugin-jest/src/util')
+const { getFormattedJestTestParameters, getJestTestName } = require('../../datadog-plugin-jest/src/util')
 
 const specStatusToTestStatus = {
   'pending': 'skip',
@@ -64,30 +64,30 @@ function getWrappedEnvironment (BaseEnvironment) {
         await super.handleTestEvent(event, state)
       }
 
-      const globalExpect = this.global.expect
       const setNameToParams = (name, params) => { this.nameToParams[name] = params }
 
       if (event.name === 'setup') {
-        shimmer.wrap(this.global.test, 'each', each => function () {
-          const testParameters = getFormattedJestTestParameters(arguments)
-          const eachBind = each.apply(this, arguments)
-          return function () {
-            const [testName] = arguments
-            setNameToParams(testName, testParameters)
-            return eachBind.apply(this, arguments)
-          }
-        })
+        if (this.global.test) {
+          shimmer.wrap(this.global.test, 'each', each => function () {
+            const testParameters = getFormattedJestTestParameters(arguments)
+            const eachBind = each.apply(this, arguments)
+            return function () {
+              const [testName] = arguments
+              setNameToParams(testName, testParameters)
+              return eachBind.apply(this, arguments)
+            }
+          })
+        }
       }
       if (event.name === 'test_start') {
         const testParameters = getTestParametersString(this.nameToParams, event.test.name)
-
         // Async resource for this test is created here
         // It is used later on by the test_done handler
         const asyncResource = new AsyncResource('bound-anonymous-fn')
         asyncResources.set(event.test, asyncResource)
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
-            name: globalExpect.getState().currentTestName,
+            name: getJestTestName(event.test),
             suite: this.testSuite,
             runner: 'jest-circus',
             testParameters
@@ -112,7 +112,7 @@ function getWrappedEnvironment (BaseEnvironment) {
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
         testSkippedCh.publish({
-          name: globalExpect.getState().currentTestName,
+          name: getJestTestName(event.test),
           suite: this.testSuite,
           runner: 'jest-circus'
         })
