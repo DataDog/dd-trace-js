@@ -34,6 +34,7 @@ const TEST_PARAMETERS = 'test.parameters'
 const TEST_SKIP_REASON = 'test.skip_reason'
 const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
 const TEST_CODE_OWNERS = 'test.codeowners'
+const TEST_SOURCE_FILE = 'test.source.file'
 const LIBRARY_VERSION = 'library_version'
 
 const ERROR_TYPE = 'error.type'
@@ -56,6 +57,7 @@ module.exports = {
   TEST_PARAMETERS,
   TEST_SKIP_REASON,
   TEST_IS_RUM_ACTIVE,
+  TEST_SOURCE_FILE,
   ERROR_TYPE,
   ERROR_MESSAGE,
   ERROR_STACK,
@@ -151,6 +153,7 @@ function getTestCommonTags (name, suite, version) {
     [SAMPLING_PRIORITY]: AUTO_KEEP,
     [TEST_NAME]: name,
     [TEST_SUITE]: suite,
+    [TEST_SOURCE_FILE]: suite,
     [RESOURCE_NAME]: `${suite}.${name}`,
     [TEST_FRAMEWORK_VERSION]: version,
     [LIBRARY_VERSION]: ddTraceVersion
