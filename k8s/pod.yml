@@ -7,6 +7,7 @@ spec:
   initContainers:
     - name: node-init
       image: bengl/test-auto-inst:latest  # put the library image here
+      imagePullPolicy: Never
       command: ["sh", "copy-dd-trace.sh", "/autoinstrumentation"]
       volumeMounts:
         - name: autoinstrumentation
@@ -24,6 +25,10 @@ spec:
       volumeMounts:
         - name: autoinstrumentation
           mountPath: /autoinstrumentation
+    - name: test-agent
+      image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+      env:
+
   volumes:
     - name: autoinstrumentation
       emptyDir: {}
