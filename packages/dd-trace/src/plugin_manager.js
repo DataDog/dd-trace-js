@@ -2,6 +2,7 @@
 
 const { isTrue } = require('./util')
 const plugins = require('./plugins')
+const log = require('./log')
 
 // instrument everything that needs Plugin System V2 instrumentation
 require('../../datadog-instrumentations')
@@ -21,6 +22,15 @@ function getConfig (name, config = {}) {
   return config
 }
 
+// TODO: maybe needs to DRY up as well, but depending on how the remaining old plugins
+// are migrated to the new system, can stay here for now, since this is the level
+// this check maybe should be happening on, even if it deals with env variabls
+const disabledPlugins = process.env.DD_TRACE_DISABLED_PLUGINS
+
+const collectDisabledPlugins = () => {
+  return new Set(disabledPlugins && disabledPlugins.split(',').map(plugin => plugin.trim().toLowerCase()))
+}
+
 // TODO actually ... should we be looking at envrionment variables this deep down in the code?
 
 // TODO this must always be a singleton.
@@ -28,7 +38,18 @@ module.exports = class PluginManager {
   constructor (tracer) {
     this._pluginsByName = {}
     this._configsByName = {}
+
+    const _disabledPlugins = collectDisabledPlugins()
+
     for (const PluginClass of Object.values(plugins)) {
+      /**
+       * disabling the plugin here instead of in `configure` so we don't waste subscriber
+       * resources on a plugin that will eventually be disabled anyways
+       */
+      if (_disabledPlugins.has(PluginClass.name)) {
+        log.debug(`Plugin "${PluginClass.name}" was disabled via configuration option.`)
+        continue
+      }
       if (typeof PluginClass !== 'function') continue
       this._pluginsByName[PluginClass.name] = new PluginClass(tracer)
       this._configsByName[PluginClass.name] = {}
