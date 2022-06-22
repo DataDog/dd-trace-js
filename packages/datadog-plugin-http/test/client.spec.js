@@ -708,7 +708,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should record aborted requests as errors', done => {
+        it('should not record aborted requests as errors', done => {
           const app = express()
 
           app.get('/user', (req, res) => {})
@@ -716,7 +716,7 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('error', 1)
+                expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.not.have.property('http.status_code')
               })
               .then(done)
