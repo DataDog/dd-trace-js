@@ -1,6 +1,6 @@
 'use strict'
 
-const tracerVersion = require('../lib/version')
+const tracerVersion = require('../../../package.json').version
 const pkg = require('./pkg')
 const containerId = require('./exporters/common/docker').id()
 const requirePackageJson = require('./require-package-json')

@@ -4,7 +4,7 @@ const mainLogger = require('./log')
 
 const os = require('os')
 const { inspect } = require('util')
-const tracerVersion = require('../lib/version')
+const tracerVersion = require('../../../package.json').version
 const requirePackageJson = require('./require-package-json')
 
 const logger = Object.create(mainLogger)

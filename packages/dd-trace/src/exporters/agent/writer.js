@@ -4,7 +4,7 @@ const request = require('../common/request')
 const { startupLog } = require('../../startup-log')
 const metrics = require('../../metrics')
 const log = require('../../log')
-const tracerVersion = require('../../../lib/version')
+const tracerVersion = require('../../../../../package.json').version
 const BaseWriter = require('../common/writer')
 
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
