@@ -15,7 +15,7 @@ const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const logger = require('../../../src/log')
 const { perftools } = require('@datadog/pprof/proto/profile')
 const semver = require('semver')
-const version = require('../../../lib/version')
+const version = require('../../../../../package.json').version
 
 if (!semver.satisfies(process.version, '>=10.12')) {
   describe = describe.skip // eslint-disable-line no-global-assign

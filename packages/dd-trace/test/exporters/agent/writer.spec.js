@@ -54,7 +54,7 @@ function describeWriter (protocolVersion) {
       '../common/request': request,
       '../../encode/0.4': { AgentEncoder },
       '../../encode/0.5': { AgentEncoder },
-      '../../../lib/version': 'tracerVersion',
+      '../../../../../package.json': { version: 'tracerVersion' },
       '../../log': log
     })
     writer = new Writer({ url, prioritySampler, protocolVersion })
