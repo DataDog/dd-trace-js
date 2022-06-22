@@ -61,7 +61,7 @@
     "@datadog/native-appsec": "^1.2.0",
     "@datadog/native-metrics": "^1.2.0",
     "@datadog/pprof": "^0.5.0",
-    "@datadog/sketches-js": "^1.0.4",
+    "@datadog/sketches-js": "^1.0.5",
     "@types/node": ">=12",
     "crypto-randomuuid": "^1.0.0",
     "diagnostics_channel": "^1.1.0",
