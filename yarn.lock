@@ -209,10 +209,10 @@
     minimist "^1.2.6"
     tar "^6.1.11"
 
-"@datadog/native-metrics@^1.2.0":
-  version "1.2.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-metrics/-/native-metrics-1.2.0.tgz#6f8d39ba870d247ba5c72297ab5ed8461f686279"
-  integrity sha512-U1jXtN60+HL0KHzyYi9+QaNdbXqKjQGANSoqAdMCFzRG7ZuAQ8kjKng4RIY6QT/kOZQZ17UalrsqhUQjuVsRpA==
+"@datadog/native-metrics@^1.3.0":
+  version "1.3.0"
+  resolved "https://registry.yarnpkg.com/@datadog/native-metrics/-/native-metrics-1.3.0.tgz#a4deb7ab454f7dfd67e923812ef6ee51d57985dd"
+  integrity sha512-vl+jJPynF1SoNoajiczgAMTDJYpbDtmzgZquy6dCyPXpSanUIE9Oui4CSVz2Z2DX3ediKh69MfaV6I7EXd+P7Q==
   dependencies:
     nan "^2.15.0"
     node-gyp-build "^3.9.0"
