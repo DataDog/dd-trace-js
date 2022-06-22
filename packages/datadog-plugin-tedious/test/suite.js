@@ -6,5 +6,5 @@ suiteTest({
   modName: 'tedious',
   repoUrl: 'tediousjs/tedious',
   commitish: 'latest',
-  testCmd: 'npm run test-all'
+  testCmd: 'npm run test'
 })
