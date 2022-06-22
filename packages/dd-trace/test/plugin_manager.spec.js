@@ -8,6 +8,8 @@ describe('Plugin Manager', () => {
   let PluginManager
   let Two
   let Four
+  let Five
+  let Six
   let pm
 
   beforeEach(() => {
@@ -32,7 +34,18 @@ describe('Plugin Manager', () => {
         static get name () {
           return 'four'
         }
-      }
+      },
+      five: class Five extends FakePlugin {
+        static get name () {
+          return 'five'
+        }
+      },
+      six: class Six extends FakePlugin {
+        static get name () {
+          return 'six'
+        }
+      },
+      seven: {}
     }
 
     Two = plugins.two
@@ -40,11 +53,23 @@ describe('Plugin Manager', () => {
     Four = plugins.four
     Four.prototype.configure = sinon.spy()
 
+    // disabled plugins
+    Five = plugins.five
+    Five.prototype.configure = sinon.spy()
+    Six = plugins.six
+    Six.prototype.configure = sinon.spy()
+
+    process.env.DD_TRACE_DISABLED_PLUGINS = 'five,six,seven'
+
     PluginManager = proxyquire.noPreserveCache()('../src/plugin_manager', {
       './plugins': { ...plugins, '@noCallThru': true },
       '../../datadog-instrumentations': {}
     })
     pm = new PluginManager(tracer)
+  })
+
+  afterEach(() => {
+    delete process.env.DD_TRACE_DISABLED_PLUGINS
   })
 
   describe('constructor', () => {
@@ -81,6 +106,17 @@ describe('Plugin Manager', () => {
       it('works with boolean true', () => {
         pm.configurePlugin('two', true)
         expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true })
+      })
+    })
+    describe('with disabled plugins', () => {
+      it('should not call configure on individual enable override', () => {
+        pm.configurePlugin('five', { enabled: true })
+        expect(Five.prototype.configure).to.not.have.been.called
+      })
+      it('should not configure all disabled plugins', () => {
+        pm.configure({})
+        expect(Five.prototype.configure).to.not.have.been.called
+        expect(Six.prototype.configure).to.not.have.been.called
       })
     })
     describe('with env var true', () => {
