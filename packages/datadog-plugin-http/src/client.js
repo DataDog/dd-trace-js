@@ -64,8 +64,6 @@ class HttpClientPlugin extends Plugin {
         }
 
         addResponseHeaders(res, span, this.config)
-      } else {
-        span.setTag('error', 1)
       }
 
       addRequestHeaders(req, span, this.config)
@@ -84,11 +82,16 @@ class HttpClientPlugin extends Plugin {
 
 function errorHandler (err) {
   const span = storage.getStore().span
-  span.addTags({
-    'error.type': err.name,
-    'error.msg': err.message,
-    'error.stack': err.stack
-  })
+
+  if (err) {
+    span.addTags({
+      'error.type': err.name,
+      'error.msg': err.message,
+      'error.stack': err.stack
+    })
+  } else {
+    span.setTag('error', 1)
+  }
 }
 
 function addResponseHeaders (res, span, config) {
