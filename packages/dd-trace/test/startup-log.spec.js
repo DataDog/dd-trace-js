@@ -1,7 +1,7 @@
 'use strict'
 
 const os = require('os')
-const tracerVersion = require('../lib/version')
+const tracerVersion = require('../../../package.json').version
 
 describe('startup logging', () => {
   let semverVersion
