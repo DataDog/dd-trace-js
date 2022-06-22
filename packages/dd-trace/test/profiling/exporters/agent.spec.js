@@ -133,7 +133,9 @@ describe('exporters/agent', () => {
       sockets.forEach(socket => socket.end())
     })
 
-    it('should send profiles as pprof to the intake', async () => {
+    it('should send profiles as pprof to the intake', async function () {
+      this.timeout(10000)
+
       const exporter = new AgentExporter({ url, logger, uploadTimeout: 100 })
       const start = new Date()
       const end = new Date()
