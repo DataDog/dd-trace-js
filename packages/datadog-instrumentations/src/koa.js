@@ -90,7 +90,7 @@ function wrapMiddleware (fn, layer) {
 
     return middlewareResource.runInAsyncScope(() => {
       const path = layer && layer.path
-      const route = path !== '(.*)' && path !== '([^/]*)' && path
+      const route = typeof path === 'string' && !path.endsWith('(.*)') && !path.endsWith('([^/]*)') && path
 
       enterChannel.publish({ req, name, route })
 
