@@ -84,9 +84,9 @@ function patch (http, methodName) {
                 finish(req, arg)
                 break
               case 'error':
+              case 'timeout':
                 errorClientCh.publish(arg)
               case 'abort': // deprecated and replaced by `close` in node 17
-              case 'timeout':
               case 'close':
                 finish(req)
             }
