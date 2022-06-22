@@ -107,7 +107,7 @@
     "mkdirp": "^0.5.1",
     "mocha": "8",
     "msgpack-lite": "^0.1.26",
-    "multer": "^1.4.2",
+    "multer": "^1.4.5-lts.1",
     "nock": "^11.3.3",
     "nyc": "^15.1.0",
     "proxyquire": "^1.8.0",
