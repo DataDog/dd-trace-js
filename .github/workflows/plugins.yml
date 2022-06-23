@@ -876,8 +876,10 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
       - uses: codecov/codecov-action@v2
 
   when:
