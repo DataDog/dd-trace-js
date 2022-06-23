@@ -33,4 +33,16 @@ function getFormattedJestTestParameters (testParameters) {
   return formattedParameters
 }
 
-module.exports = { getFormattedJestTestParameters }
+// https://github.com/facebook/jest/blob/3e38157ad5f23fb7d24669d24fae8ded06a7ab75/packages/jest-circus/src/utils.ts#L396
+function getJestTestName (test) {
+  const titles = []
+  let parent = test
+  do {
+    titles.unshift(parent.name)
+  } while ((parent = parent.parent))
+
+  titles.shift() // remove TOP_DESCRIBE_BLOCK_NAME
+  return titles.join(' ')
+}
+
+module.exports = { getFormattedJestTestParameters, getJestTestName }

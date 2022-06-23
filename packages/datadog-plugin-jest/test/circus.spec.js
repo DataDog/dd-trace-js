@@ -3,6 +3,7 @@ const fs = require('fs')
 const path = require('path')
 
 const nock = require('nock')
+const semver = require('semver')
 
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -234,6 +235,32 @@ describe('Plugin', function () {
           options.projects
         )
       })
+
+      // option available from 26.5.0:
+      // https://github.com/facebook/jest/blob/7f2731ef8bebac7f226cfc0d2446854603a557a9/CHANGELOG.md#2650
+      if (semver.intersects(version, '>=26.5.0')) {
+        it('does not crash when injectGlobals is false', (done) => {
+          agent.use(trace => {
+            const testSpan = trace[0].find(span => span.type === 'test')
+            expect(testSpan.meta).to.contain({
+              [TEST_NAME]: 'jest-inject-globals will be run',
+              [TEST_STATUS]: 'pass',
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-inject-globals.js'
+            })
+          }).then(() => done()).catch(done)
+
+          const options = {
+            ...jestCommonOptions,
+            testRegex: 'jest-inject-globals.js',
+            injectGlobals: false
+          }
+
+          jestExecutable.runCLI(
+            options,
+            options.projects
+          )
+        })
+      }
     })
   })
 })
