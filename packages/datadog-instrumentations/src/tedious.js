@@ -13,7 +13,7 @@ addHook({ name: 'tedious', versions: [ '>=1.0.0' ] }, tedious => {
   const errorCh = channel('apm:tedious:request:error')
   shimmer.wrap(tedious.Connection.prototype, 'makeRequest', makeRequest => function (request) {
     if (!startCh.hasSubscribers) {
-      return request.apply(this, arguments)
+      return makeRequest.apply(this, arguments)
     }
 
     const queryOrProcedure = getQueryOrProcedure(request)
