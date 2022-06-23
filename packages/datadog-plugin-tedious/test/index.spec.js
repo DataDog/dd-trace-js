@@ -70,6 +70,26 @@ describe('Plugin', () => {
         }
       })
 
+      describe('with tedious disabled', () => {
+        beforeEach(() => {
+          tracer.use('tedious', false)
+        })
+
+        afterEach(() => {
+          tracer.use('tedious', true)
+        })
+
+        it('should successfully finish a valid query', done => {
+          const query = 'SELECT 1 + 1 AS solution'
+
+          const request = new tds.Request(query, (err) => {
+            if (err) return done(err)
+            done()
+          })
+          connection.execSql(request)
+        })
+      })
+
       it('should run the Request callback in the parent context', done => {
         const span = tracer.startSpan('test')
 
