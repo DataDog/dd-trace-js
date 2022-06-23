@@ -93,6 +93,7 @@ class Config {
     )
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED,
+      !process.env.AWS_LAMBDA_FUNCTION_NAME,
       true
     )
     const DD_TRACE_DEBUG = coalesce(
