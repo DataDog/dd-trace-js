@@ -59,6 +59,10 @@
     {
       "name": "jest-circus",
       "versions": [">=24.8.0"]
+    },
+    {
+      "name": "@jest/globals",
+      "versions": [">=26.5.0"]
     }
   ],
   "knex": [
