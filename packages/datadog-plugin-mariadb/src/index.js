@@ -45,11 +45,13 @@ class MariadbPlugin extends Plugin {
   }
 }
 
-function getServiceName(tracer, config) {
-  if (config.service) {
-    return config.service;
+function getServiceName (tracer, config) {
+  if (typeof config.service === 'function') {
+    return config.service()
+  } else if (config.service) {
+    return config.service
   } else {
-    return `${tracer._service}-mariadb`;
+    return `${tracer._service}-mariadb`
   }
 }
 
