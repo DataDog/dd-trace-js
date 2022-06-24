@@ -548,6 +548,14 @@ describe('Config', () => {
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
   })
 
+  it('should not set DD_TRACE_TELEMETRY_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+
+    const config = new Config()
+
+    expect(config.telemetryEnabled).to.be.false
+  })
+
   context('auto configuration w/ unix domain sockets', () => {
     context('on windows', () => {
       it('should not be used', () => {
