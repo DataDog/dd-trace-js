@@ -564,6 +564,7 @@ interface Plugins {
   "kafkajs": plugins.kafkajs
   "knex": plugins.knex;
   "koa": plugins.koa;
+  "mariadb": plugins.mariadb;
   "memcached": plugins.memcached;
   "microgateway-core": plugins.microgateway_core;
   "mocha": plugins.mocha;
@@ -1140,6 +1141,14 @@ declare namespace plugins {
    * [kafkajs](https://kafka.js.org/) module.
    */
   interface kafkajs extends Instrumentation {}
+
+  /**
+   * This plugin automatically instruments the
+   * [mariadb](https://github.com/mariadb-corporation/mariadb-connector-nodejs) module.
+   */
+   interface mariadb extends Instrumentation {
+    service?: string | ((params: any) => string);
+  }
 
   /**
    * This plugin automatically instruments the
