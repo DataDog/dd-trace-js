@@ -57,28 +57,24 @@ addHook(
           return queryStream.apply(this, arguments);
         }
 
-        const asyncResource = new AsyncResource('bound-anonymous-fn');
+        startCh.publish({ sql });
 
-        return asyncResource.runInAsyncScope(() => {
-          startCh.publish({ sql });
+        try {
+          const stream = queryStream.apply(this, arguments);
 
-          try {
-            const stream = queryStream.apply(this, arguments);
+          stream
+            .once('end', () => finishCh.publish())
+            .once('error', (e) => {
+              errorCh.publish(e);
+              finishCh.publish();
+            });
 
-            stream
-              .once('end', () => finishCh.publish())
-              .once('error', (e) => {
-                errorCh.publish(e);
-                finishCh.publish();
-              });
-
-            return stream;
-          } catch (e) {
-            errorCh.publish(e);
-            finishCh.publish();
-            throw e;
-          }
-        });
+          return stream;
+        } catch (e) {
+          errorCh.publish(e);
+          finishCh.publish();
+          throw e;
+        }
       };
     });
 
