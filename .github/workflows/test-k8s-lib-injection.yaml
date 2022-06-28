@@ -1,0 +1,35 @@
+name: "Lib Injection Test"
+
+on: push
+
+jobs:
+  lib-injection-test:
+    runs-on: ubuntu-latest
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f # 2.3.4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@dc7b9719a96d48369863986a06765841d7ea23f6 # 2.0.0
+
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@d08cf6ff1575077dee99962540d77ce91c62387d # 1.3.0
+        with:
+          config: k8s/kind-config.yaml
+          kubectl_version: v1.22.10
+          node_image: kindest/node:v1.22.9
+
+      - name: Finish initializing kind+k8s for docker registry service
+        run: |
+          docker network connect "kind" "$(docker container ls --filter "ancestor=registry:2" --quiet)"
+          kubectl apply -f k8s/local-registry-config.yaml
+      - name: Build injection image
+        run: |
+          npm pack
+          cp dd-trace-*.tgz k8s/auto-inst/dd-trace.tgz
+          docker build k8s/auto-inst --build-arg npm_pkg=./dd-trace.tgz -t localhost:5000/dd-trace-js-init:${GITHUB_SHA}

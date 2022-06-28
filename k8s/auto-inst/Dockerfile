@@ -7,9 +7,11 @@
 # - Grant the necessary access to `/autoinstrumentation` directory. `chmod -R go+r /autoinstrumentation`
 FROM node:16 AS build
 
+ARG npm_pkg
+
 WORKDIR /operator-build
 COPY . .
 
-RUN npm install
+RUN npm install ${npm_pkg}
 
 ADD copy-dd-trace.sh /operator-build/copy-dd-trace.sh
