@@ -100,7 +100,7 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
-    process.env.DD_OBFUSCATION_QUERY_STRING_REGEXP = 'regex'
+    process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = 'regex'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
@@ -319,7 +319,7 @@ describe('Config', () => {
   })
 
   it('should give priority to the options', () => {
-    process.env.DD_OBFUSCATION_QUERY_STRING_REGEXP = ''
+    process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = ''
     process.env.DD_TRACE_AGENT_URL = 'https://agent2:6218'
     process.env.DD_SITE = 'datadoghq.eu'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'

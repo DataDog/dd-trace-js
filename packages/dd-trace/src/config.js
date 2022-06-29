@@ -47,9 +47,9 @@ class Config {
       process.env.DD_LOGS_INJECTION,
       false
     )
-    const DD_OBFUSCATION_QUERY_STRING_REGEXP = coalesce(
+    const DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = coalesce(
       options.queryStringObfuscation,
-      process.env.DD_OBFUSCATION_QUERY_STRING_REGEXP,
+      process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       qsRegex
     )
     const DD_RUNTIME_METRICS_ENABLED = coalesce(
@@ -202,7 +202,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.debug = isTrue(DD_TRACE_DEBUG)
     this.logInjection = isTrue(DD_LOGS_INJECTION)
-    this.queryStringObfuscation = DD_OBFUSCATION_QUERY_STRING_REGEXP
+    this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
     this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
