@@ -53,7 +53,7 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('tracing', true)
     expect(config).to.have.property('debug', false)
-    expect(config).to.have.property('queryStringObfuscation').with.length(439)
+    expect(config).to.have.property('queryStringObfuscation').with.length(641)
     expect(config).to.have.property('protocolVersion', '0.4')
     expect(config).to.have.nested.property('dogstatsd.hostname', '127.0.0.1')
     expect(config).to.have.nested.property('dogstatsd.port', '8125')
