@@ -202,9 +202,9 @@ export declare interface TracerOptions {
 
   /**
    * Specifies a regex that will redact sensitive data from the querystring reported in the `http.url` tag.
-   * `true` to redact all the querystring and `false` to disable redaction.
+   * '' (empty string) to disable redaction.
    */
-   qsObfuscator?: string | boolean,
+   queryStringObfuscation?: string,
 
   /**
    * Whether to enable startup logs.

@@ -75,7 +75,7 @@ describe('plugins/util/web', () => {
       expect(config.hooks).to.be.an('object')
       expect(config.hooks).to.have.property('request')
       expect(config.hooks.request).to.be.a('function')
-      expect(config).to.have.property('qsObfuscator', true)
+      expect(config).to.have.property('queryStringObfuscation', true)
     })
 
     it('should use the shared config if set', () => {
@@ -85,14 +85,14 @@ describe('plugins/util/web', () => {
         hooks: {
           request: () => 'test'
         },
-        qsObfuscator: '.*'
+        queryStringObfuscation: 'a*'
       })
 
       expect(config.headers).to.include('test')
       expect(config.validateStatus(200)).to.equal(false)
       expect(config).to.have.property('hooks')
       expect(config.hooks.request()).to.equal('test')
-      expect(config).to.have.property('qsObfuscator').deep.equal(/.*/gi)
+      expect(config).to.have.property('queryStringObfuscation').deep.equal(/a*/gi)
     })
 
     it('should use the server config if set', () => {
@@ -103,7 +103,7 @@ describe('plugins/util/web', () => {
           hooks: {
             request: () => 'test'
           },
-          qsObfuscator: '.*'
+          queryStringObfuscation: 'a*'
         }
       })
 
@@ -111,7 +111,7 @@ describe('plugins/util/web', () => {
       expect(config.validateStatus(200)).to.equal(false)
       expect(config).to.have.property('hooks')
       expect(config.hooks.request()).to.equal('test')
-      expect(config).to.have.property('qsObfuscator').deep.equal(/.*/gi)
+      expect(config).to.have.property('queryStringObfuscation').deep.equal(/a*/gi)
     })
 
     it('should prioritize the server config over the shared config', () => {
@@ -125,12 +125,12 @@ describe('plugins/util/web', () => {
       expect(config.headers).to.include('bar')
     })
 
-    it('should default qsObfuscator to true when passed a bad regex', () => {
+    it('should default queryStringObfuscation to true when passed a bad regex', () => {
       const config = web.normalizeConfig({
-        qsObfuscator: '(?)'
+        queryStringObfuscation: '(?)'
       })
 
-      expect(config).to.have.property('qsObfuscator', true)
+      expect(config).to.have.property('queryStringObfuscation', true)
     })
   })
 
@@ -278,7 +278,7 @@ describe('plugins/util/web', () => {
 
       it('should obfuscate the query string from the URL', () => {
         const config = web.normalizeConfig({
-          qsObfuscator: 'secret=.*?(&|$)'
+          queryStringObfuscation: 'secret=.*?(&|$)'
         })
 
         req.method = 'GET'

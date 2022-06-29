@@ -45,7 +45,7 @@ class Config {
       false
     )
     const DD_OBFUSCATION_QUERY_STRING_REGEXP = coalesce(
-      options.qsObfuscator,
+      options.queryStringObfuscation,
       process.env.DD_OBFUSCATION_QUERY_STRING_REGEXP,
       `(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|\
 consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^&]+|"\\s*:\\s*"[^"]+")|bearer\\s+\
@@ -202,7 +202,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.debug = isTrue(DD_TRACE_DEBUG)
     this.logInjection = isTrue(DD_LOGS_INJECTION)
-    this.qsObfuscator = DD_OBFUSCATION_QUERY_STRING_REGEXP
+    this.queryStringObfuscation = DD_OBFUSCATION_QUERY_STRING_REGEXP
     this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)

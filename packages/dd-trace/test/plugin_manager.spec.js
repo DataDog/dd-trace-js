@@ -159,18 +159,18 @@ describe('Plugin Manager', () => {
       pm.configure({
         serviceMapping: { two: 'deux' },
         logInjection: true,
-        qsObfuscator: 'regex'
+        queryStringObfuscation: 'regex'
       })
       expect(Two.prototype.configure).to.have.been.calledWith({
         enabled: true,
         service: 'deux',
         logInjection: true,
-        qsObfuscator: 'regex'
+        queryStringObfuscation: 'regex'
       })
       expect(Four.prototype.configure).to.have.been.calledWith({
         enabled: true,
         logInjection: true,
-        qsObfuscator: 'regex'
+        queryStringObfuscation: 'regex'
       })
     })
   })

@@ -44,7 +44,7 @@ const web = {
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
     const middleware = getMiddlewareSetting(config)
-    const qsObfuscator = getQsObfuscator(config)
+    const queryStringObfuscation = getQsObfuscator(config)
 
     return Object.assign({}, config, {
       headers,
@@ -52,7 +52,7 @@ const web = {
       hooks,
       filter,
       middleware,
-      qsObfuscator
+      queryStringObfuscation
     })
   },
 
@@ -437,7 +437,7 @@ function reactivate (req, fn) {
 function addRequestTags (context) {
   const { req, span, config } = context
   let url = extractURL(req)
-  url = web.obfuscateQs(config.qsObfuscator, url)
+  url = web.obfuscateQs(config.queryStringObfuscation, url)
 
   span.addTags({
     [HTTP_URL]: url,
@@ -552,7 +552,7 @@ function getMiddlewareSetting (config) {
 }
 
 function getQsObfuscator (config) {
-  const obfuscator = config.qsObfuscator
+  const obfuscator = config.queryStringObfuscation
 
   if (typeof obfuscator === 'boolean') {
     return obfuscator
@@ -563,10 +563,10 @@ function getQsObfuscator (config) {
       return new RegExp(obfuscator, 'gi')
     } catch (err) {
       log.error(err)
-      log.error('Expected `qsObfuscator` to be a valid regex string.')
+      log.error('Expected `queryStringObfuscation` to be a valid regex string.')
     }
-  } else if (config.hasOwnProperty('qsObfuscator')) {
-    log.error('Expected `qsObfuscator` to be a regex string or boolean.')
+  } else if (config.hasOwnProperty('queryStringObfuscation')) {
+    log.error('Expected `queryStringObfuscation` to be a regex string or boolean.')
   }
 
   return true

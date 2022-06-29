@@ -53,7 +53,7 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('tracing', true)
     expect(config).to.have.property('debug', false)
-    expect(config).to.have.property('qsObfuscator').with.length(439)
+    expect(config).to.have.property('queryStringObfuscation').with.length(439)
     expect(config).to.have.property('protocolVersion', '0.4')
     expect(config).to.have.nested.property('dogstatsd.hostname', '127.0.0.1')
     expect(config).to.have.nested.property('dogstatsd.port', '8125')
@@ -133,7 +133,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('debug', true)
-    expect(config).to.have.property('qsObfuscator', 'regex')
+    expect(config).to.have.property('queryStringObfuscation', 'regex')
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('hostname', 'agent')
     expect(config).to.have.nested.property('dogstatsd.hostname', 'dsd-agent')
@@ -204,7 +204,7 @@ describe('Config', () => {
     const config = new Config({
       enabled: false,
       debug: true,
-      qsObfuscator: 'regex',
+      queryStringObfuscation: 'regex',
       protocolVersion: '0.5',
       site: 'datadoghq.eu',
       hostname: 'agent',
@@ -239,7 +239,7 @@ describe('Config', () => {
       appsec: true
     })
 
-    expect(config).to.have.property('qsObfuscator', 'regex')
+    expect(config).to.have.property('queryStringObfuscation', 'regex')
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('hostname', 'agent')
@@ -349,7 +349,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
 
     const config = new Config({
-      qsObfuscator: 'regex',
+      queryStringObfuscation: 'regex',
       protocolVersion: '0.5',
       protocol: 'https',
       site: 'datadoghq.com',
@@ -384,7 +384,7 @@ describe('Config', () => {
       }
     })
 
-    expect(config).to.have.property('qsObfuscator', 'regex')
+    expect(config).to.have.property('queryStringObfuscation', 'regex')
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
