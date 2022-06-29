@@ -33,3 +33,7 @@ jobs:
           npm pack
           cp dd-trace-*.tgz k8s/auto-inst/dd-trace.tgz
           docker build k8s/auto-inst --build-arg npm_pkg=./dd-trace.tgz -t localhost:5000/dd-trace-js-init:${GITHUB_SHA}
+          docker push localhost:5000/dd-trace-js-init:${GITHUB_SHA}
+      - name: Run sample app
+        run: |
+
