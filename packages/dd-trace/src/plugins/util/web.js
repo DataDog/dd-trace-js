@@ -1,6 +1,5 @@
 'use strict'
 
-const vm = require('vm')
 const uniq = require('lodash.uniq')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
@@ -44,15 +43,13 @@ const web = {
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
     const middleware = getMiddlewareSetting(config)
-    const queryStringObfuscation = getQsObfuscator(config)
 
     return Object.assign({}, config, {
       headers,
       validateStatus,
       hooks,
       filter,
-      middleware,
-      queryStringObfuscation
+      middleware
     })
   },
 
@@ -364,32 +361,6 @@ const web = {
     const res = context.res
 
     scope.bind(res, context.span)
-  },
-  obfuscateQs (obfuscator, url) {
-    if (obfuscator === false) return url
-
-    const i = url.indexOf('?')
-
-    if (i === -1) return url
-
-    const path = url.slice(0, i)
-
-    if (obfuscator === true) return path
-
-    let qs = url.slice(i + 1)
-
-    try {
-      qs = vm.runInNewContext('decodeURIComponent(qs).replace(obfuscator, \'<redacted>\')', {
-        qs,
-        obfuscator
-      }, {
-        timeout: 200
-      })
-
-      return `${path}?${qs}`
-    } catch {
-      return path
-    }
   }
 }
 
@@ -435,9 +406,8 @@ function reactivate (req, fn) {
 }
 
 function addRequestTags (context) {
-  const { req, span, config } = context
-  let url = extractURL(req)
-  url = web.obfuscateQs(config.queryStringObfuscation, url)
+  const { req, span } = context
+  const url = extractURL(req)
 
   span.addTags({
     [HTTP_URL]: url,
@@ -551,25 +521,6 @@ function getMiddlewareSetting (config) {
   return true
 }
 
-function getQsObfuscator (config) {
-  const obfuscator = config.queryStringObfuscation
 
-  if (typeof obfuscator === 'boolean') {
-    return obfuscator
-  } else if (typeof obfuscator === 'string') {
-    if (obfuscator === '') return false // disable obfuscator
-
-    try {
-      return new RegExp(obfuscator, 'gi')
-    } catch (err) {
-      log.error(err)
-      log.error('Expected `queryStringObfuscation` to be a valid regex string.')
-    }
-  } else if (config.hasOwnProperty('queryStringObfuscation')) {
-    log.error('Expected `queryStringObfuscation` to be a regex string or boolean.')
-  }
-
-  return true
-}
 
 module.exports = web

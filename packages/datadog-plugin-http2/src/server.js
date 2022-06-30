@@ -89,7 +89,7 @@ function instrumentStream (tracer, config, stream, headers, name, callback) {
 
   wrapStreamEnd(stream)
 
-  addRequestTags(stream, headers, config)
+  addRequestTags(stream, headers)
   addRequestHeaders(stream, headers)
   addResourceTags(stream, headers)
 
@@ -134,10 +134,9 @@ function finishStream (stream) {
   stream._datadog.finished = true
 }
 
-function addRequestTags (stream, headers, config) {
+function addRequestTags (stream, headers) {
   const span = stream._datadog.span
-  let url = `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
-  url = web.obfuscateQs(config.queryStringObfuscation, url)
+  const url = `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
 
   span.addTags({
     [HTTP_METHOD]: headers[HTTP2_HEADER_METHOD],

@@ -52,14 +52,13 @@ module.exports = class PluginManager {
 
   // like instrumenter.enable()
   configure (config) {
-    const { logInjection, serviceMapping, queryStringObfuscation } = config
+    const { logInjection, serviceMapping } = config
 
     if (config.plugins !== false) {
       for (const name in this._pluginsByName) {
         const pluginConfig = {
           ...this._configsByName[name],
-          logInjection,
-          queryStringObfuscation
+          logInjection
         }
         if (serviceMapping && serviceMapping[name]) {
           pluginConfig.service = serviceMapping[name]
