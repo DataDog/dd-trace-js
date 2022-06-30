@@ -8,6 +8,7 @@ const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
+const log = require('./log')
 const uuid = require('crypto-randomuuid')
 
 const fromEntries = Object.fromEntries || (entries =>
@@ -46,11 +47,6 @@ class Config {
       options.logInjection,
       process.env.DD_LOGS_INJECTION,
       false
-    )
-    const DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = coalesce(
-      options.queryStringObfuscation,
-      process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
-      qsRegex
     )
     const DD_RUNTIME_METRICS_ENABLED = coalesce(
       options.runtimeMetrics, // TODO: remove when enabled by default
@@ -116,6 +112,16 @@ class Config {
       parseInt(options.flushMinSpans),
       parseInt(process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS),
       1000
+    )
+    const DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = coalesce(
+      options.queryStringObfuscation,
+      process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
+      qsRegex
+    )
+    const DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP_TIMEOUT = coalesce(
+      parseInt(options.queryStringObfuscationTimeout),
+      parseInt(process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP_TIMEOUT),
+      5
     )
     const DD_TRACE_B3_ENABLED = coalesce(
       options.experimental && options.experimental.b3,
@@ -202,7 +208,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.debug = isTrue(DD_TRACE_DEBUG)
     this.logInjection = isTrue(DD_LOGS_INJECTION)
-    this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
     this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
@@ -212,6 +217,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.sampleRate = coalesce(Math.min(Math.max(sampler.sampleRate, 0), 1), 1)
+    this.queryStringObfuscation = getQsObfuscator(DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
+    this.queryStringObfuscationTimeout = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP_TIMEOUT
     this.logger = options.logger
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE
@@ -281,6 +288,26 @@ function getAgentUrl (url, options) {
   ) {
     return new URL('unix:///var/run/datadog/apm.socket')
   }
+}
+
+function getQsObfuscator (obfuscator) {
+  if (typeof obfuscator === 'boolean') return obfuscator
+
+  if (typeof obfuscator === 'string') {
+    if (obfuscator === '') return false // disable obfuscator
+
+    if (obfuscator === '.*') return true // optimize full redact
+
+    try {
+      return new RegExp(obfuscator, 'gi')
+    } catch (err) {
+      log.error(err)
+    }
+  }
+
+  log.error('Expected `queryStringObfuscation` to be a valid regex string.')
+
+  return true
 }
 
 module.exports = Config
