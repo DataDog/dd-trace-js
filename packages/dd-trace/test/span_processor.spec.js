@@ -60,6 +60,7 @@ describe('SpanProcessor', () => {
 
     processor.process(finishedSpan)
 
+    expect(format).to.have.been.calledOnceWithExactly(finishedSpan, config)
     expect(trace).to.have.deep.property('started', [])
     expect(trace).to.have.deep.property('finished', [])
     expect(finishedSpan.context()).to.have.deep.property('_tags', {})

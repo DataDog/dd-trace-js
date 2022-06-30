@@ -53,12 +53,13 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('tracing', true)
     expect(config).to.have.property('debug', false)
-    expect(config).to.have.property('queryStringObfuscation').with.length(641)
     expect(config).to.have.property('protocolVersion', '0.4')
     expect(config).to.have.nested.property('dogstatsd.hostname', '127.0.0.1')
     expect(config).to.have.nested.property('dogstatsd.port', '8125')
     expect(config).to.have.property('flushInterval', 2000)
     expect(config).to.have.property('flushMinSpans', 1000)
+    expect(config).to.have.nested.property('queryStringObfuscation.source').with.length(625)
+    expect(config).to.have.property('queryStringObfuscationTimeout', 5)
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.have.property('service', 'node')
@@ -100,7 +101,6 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
-    process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = 'regex'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
@@ -110,6 +110,8 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     process.env.DD_SERVICE = 'service'
     process.env.DD_VERSION = '1.0.0'
+    process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = ''
+    process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP_TIMEOUT = '42'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_ENV = 'test'
@@ -133,13 +135,14 @@ describe('Config', () => {
 
     expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('debug', true)
-    expect(config).to.have.property('queryStringObfuscation', 'regex')
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('hostname', 'agent')
     expect(config).to.have.nested.property('dogstatsd.hostname', 'dsd-agent')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '1.0.0')
+    expect(config).to.have.property('queryStringObfuscation', false)
+    expect(config).to.have.property('queryStringObfuscationTimeout', 42)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('env', 'test')
@@ -204,7 +207,6 @@ describe('Config', () => {
     const config = new Config({
       enabled: false,
       debug: true,
-      queryStringObfuscation: 'regex',
       protocolVersion: '0.5',
       site: 'datadoghq.eu',
       hostname: 'agent',
@@ -221,6 +223,8 @@ describe('Config', () => {
       tags,
       flushInterval: 5000,
       flushMinSpans: 500,
+      queryStringObfuscation: true,
+      queryStringObfuscationTimeout: 42,
       runtimeMetrics: true,
       reportHostname: true,
       plugins: false,
@@ -239,7 +243,6 @@ describe('Config', () => {
       appsec: true
     })
 
-    expect(config).to.have.property('queryStringObfuscation', 'regex')
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('hostname', 'agent')
@@ -257,6 +260,8 @@ describe('Config', () => {
     expect(config.tags).to.have.property('env', 'test')
     expect(config).to.have.property('flushInterval', 5000)
     expect(config).to.have.property('flushMinSpans', 500)
+    expect(config).to.have.property('queryStringObfuscation', true)
+    expect(config).to.have.property('queryStringObfuscationTimeout', 42)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
@@ -319,7 +324,6 @@ describe('Config', () => {
   })
 
   it('should give priority to the options', () => {
-    process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = ''
     process.env.DD_TRACE_AGENT_URL = 'https://agent2:6218'
     process.env.DD_SITE = 'datadoghq.eu'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
@@ -327,6 +331,8 @@ describe('Config', () => {
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
     process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
+    process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '^$'
+    process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP_TIMEOUT = 11
     process.env.DD_SERVICE = 'service'
     process.env.DD_VERSION = '0.0.0'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
@@ -349,7 +355,6 @@ describe('Config', () => {
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
 
     const config = new Config({
-      queryStringObfuscation: 'regex',
       protocolVersion: '0.5',
       protocol: 'https',
       site: 'datadoghq.com',
@@ -361,6 +366,8 @@ describe('Config', () => {
       runtimeMetrics: false,
       reportHostname: false,
       flushMinSpans: 500,
+      queryStringObfuscation: '.*',
+      queryStringObfuscationTimeout: 42,
       service: 'test',
       version: '1.0.0',
       env: 'development',
@@ -384,7 +391,6 @@ describe('Config', () => {
       }
     })
 
-    expect(config).to.have.property('queryStringObfuscation', 'regex')
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
@@ -395,6 +401,8 @@ describe('Config', () => {
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('flushMinSpans', 500)
+    expect(config).to.have.property('queryStringObfuscation', true)
+    expect(config).to.have.property('queryStringObfuscationTimeout', 42)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('env', 'development')
