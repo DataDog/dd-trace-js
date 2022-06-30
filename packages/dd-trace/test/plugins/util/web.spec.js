@@ -247,22 +247,6 @@ describe('plugins/util/web', () => {
         })
       })
 
-      it('should remove the query string from the URL', () => {
-        req.method = 'GET'
-        req.url = '/user/123?foo=bar'
-        res.statusCode = '200'
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          const tags = span.context()._tags
-
-          res.end()
-
-          expect(tags).to.include({
-            [HTTP_URL]: 'http://localhost/user/123'
-          })
-        })
-      })
-
       it('should handle CORS preflight', () => {
         const headers = [
           'x-datadog-origin',
