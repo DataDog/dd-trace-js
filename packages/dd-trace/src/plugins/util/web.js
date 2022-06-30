@@ -521,6 +521,4 @@ function getMiddlewareSetting (config) {
   return true
 }
 
-
-
 module.exports = web

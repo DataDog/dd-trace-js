@@ -26,7 +26,7 @@ class SpanProcessor {
 
       for (const span of started) {
         if (span._duration !== undefined) {
-          formatted.push(format(span))
+          formatted.push(format(span, this._config))
         } else {
           active.push(span)
         }
