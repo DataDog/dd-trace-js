@@ -34,7 +34,6 @@ let promise: Promise<void>;
 ddTrace.init();
 tracer.init({
   logInjection: true,
-  queryStringObfuscation: '.*',
   startupLogs: false,
   env: 'test',
   version: '1.0.0',
@@ -72,6 +71,8 @@ tracer.init({
   },
   flushInterval: 1000,
   flushMinSpans: 500,
+  queryStringObfuscation: '.*',
+  queryStringObfuscationTimeout: 10,
   lookup: () => {},
   sampleRate: 0.1,
   service: 'test',
