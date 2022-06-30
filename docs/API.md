@@ -435,11 +435,12 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | dogstatsd.port  | `DD_DOGSTATSD_PORT`                | `8125`         | The port of the Dogstatsd agent that metrics will be submitted to. |
 | env             | `DD_ENV`                           | -              | Set an application’s environment e.g. `prod`, `pre-prod`, `stage`. |
 | logInjection    | `DD_LOGS_INJECTION`                | `false`        | Enable automatic injection of trace IDs in logs for supported logging libraries. |
-| queryStringObfuscation | `DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP` | -     | A regex to redact sensitive data from the querystring reported in `http.url` tag. Can be an empty string to disable redaction. |
 | tags            | `DD_TAGS`                          | `{}`           | Set global tags that should be applied to all spans and metrics. When passed as an environment variable, the format is `key:value,key:value` |
 | sampleRate      | `DD_TRACE_SAMPLE_RATE`             | -              | Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent. |
 | flushInterval   | -                                  | `2000`         | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | flushMinSpans   | `DD_TRACE_PARTIAL_FLUSH_MIN_SPANS` | `1000`         | Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces. |
+| queryStringObfuscation | `DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP` | - | A regex to redact sensitive data from the querystring reported in the `http.url` tag. Can be an empty string to disable redaction or `.*` to redact all querystring. |
+| queryStringObfuscationTimeout | `DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP_TIMEOUT` | `5` | Timeout for the querystring obfuscation operation. Meant to avoid catastrophic regex backtracking. |
 | lookup          | -                                  | `dns.lookup()` | Custom function for DNS lookups when sending requests to the agent. |
 | protocolVersion | `DD_TRACE_AGENT_PROTOCOL_VERSION`  | `0.4`          | Protocol version to use for requests to the agent. The version configured must be supported by the agent version installed or all traces will be dropped. |
 | runtimeMetrics  | `DD_RUNTIME_METRICS_EN ABLED`      | `false`        | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
