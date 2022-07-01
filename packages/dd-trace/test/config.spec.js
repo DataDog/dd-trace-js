@@ -294,6 +294,7 @@ describe('Config', () => {
       tags,
       flushInterval: 5000,
       flushMinSpans: 500,
+      queryStringObfuscation: '?)',
       plugins: false
     })
 
@@ -308,6 +309,7 @@ describe('Config', () => {
     expect(config.tags).to.have.property('foo', 'bar')
     expect(config).to.have.property('flushInterval', 5000)
     expect(config).to.have.property('flushMinSpans', 500)
+    expect(config).to.have.property('queryStringObfuscation', true)
     expect(config).to.have.property('plugins', false)
   })
 
