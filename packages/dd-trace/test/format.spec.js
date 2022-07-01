@@ -385,5 +385,91 @@ describe('format', () => {
       trace = format(span)
       expect(trace.metrics[MEASURED]).to.equal(0)
     })
+
+    describe('obfuscateQs', () => {
+      const url = 'http://perdu.com/path/'
+      const qs = '?data=secret'
+
+      let config
+
+      beforeEach(() => {
+        config = {
+          queryStringObfuscation: new RegExp('secret', 'gi'),
+          queryStringObfuscationTimeout: 5
+        }
+      })
+
+      it('should not obfuscate the querystring when config is false', () => {
+        config.queryStringObfuscation = false
+
+        spanContext._tags['http.url'] = url + qs
+
+        trace = format(span, config)
+
+        expect(trace.meta).to.have.property('http.url', url + qs)
+      })
+
+      it('should not obfuscate the querystring when it is absent', () => {
+        spanContext._tags['http.url'] = url
+
+        trace = format(span, config)
+
+        expect(trace.meta).to.have.property('http.url', url)
+      })
+
+      it('should obfuscate all querystring when config is true', () => {
+        config.queryStringObfuscation = true
+
+        spanContext._tags['http.url'] = url + qs
+
+        trace = format(span, config)
+
+        expect(trace.meta).to.have.property('http.url', url)
+      })
+
+      it('should obfsucate querystring', () => {
+        spanContext._tags['http.url'] = url + qs
+
+        trace = format(span, config)
+
+        expect(trace.meta).to.have.property('http.url', url + '?data=<redacted>')
+      })
+
+      it('should not url decode querystring before obfuscation', () => {
+        spanContext._tags['http.url'] = url + '?data=%73%65%63%72%65%74'
+
+        trace = format(span, config)
+
+        expect(trace.meta).to.have.property('http.url', url + '?data=%73%65%63%72%65%74')
+      })
+
+      it('should obfuscate only the querystring part of the url', () => {
+        spanContext._tags['http.url'] = url + 'secret/' + qs
+
+        trace = format(span, config)
+
+        expect(trace.meta).to.have.property('http.url', url + 'secret/?data=<redacted>')
+      })
+
+      it('should obfuscate all querystring when timeout config is reached', () => {
+        config.queryStringObfuscationTimeout = 0
+
+        spanContext._tags['http.url'] = url + qs
+
+        trace = format(span, config)
+
+        expect(trace.meta).to.have.property('http.url', url)
+      })
+
+      it('should prevent catastrophic regex', () => {
+        config.queryStringObfuscation = new RegExp('=(a*)*$', 'gi')
+
+        spanContext._tags['http.url'] = url + '?data=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab'
+
+        trace = format(span, config)
+
+        expect(trace.meta).to.have.property('http.url', url)
+      })
+    })
   })
 })
