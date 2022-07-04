@@ -184,6 +184,8 @@ function isUrl (obj) {
     typeof obj.toString === 'function'
 }
 
+const obfuscatorScript = new vm.Script('qs.replace(obfuscator, \'<redacted>\')')
+
 function obfuscateQs (url, config) {
   const { queryStringObfuscation, queryStringObfuscationTimeout } = config
 
@@ -200,7 +202,7 @@ function obfuscateQs (url, config) {
   let qs = url.slice(i + 1)
 
   try {
-    qs = vm.runInNewContext('qs.replace(obfuscator, \'<redacted>\')', {
+    qs = obfuscatorScript.runInNewContext({
       qs,
       obfuscator: queryStringObfuscation
     }, {
