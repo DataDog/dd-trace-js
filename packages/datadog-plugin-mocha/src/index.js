@@ -57,10 +57,6 @@ class MochaPlugin extends Plugin {
     })
 
     this.addSub('ci:mocha:test:finish', (status) => {
-      // if the status is skipped the span has already been finished
-      if (status === 'skipped') {
-        return
-      }
       const span = storage.getStore().span
 
       span.setTag(TEST_STATUS, status)
@@ -69,11 +65,14 @@ class MochaPlugin extends Plugin {
       finishAllTraceSpans(span)
     })
 
-    // This covers programmatically skipped tests (that do go through `runTest`)
-    this.addSub('ci:mocha:test:skip', () => {
-      const span = storage.getStore().span
-      span.setTag(TEST_STATUS, 'skip')
-      span.finish()
+    this.addSub('ci:mocha:test:skip', (test) => {
+      const store = storage.getStore()
+      // skipped through it.skip, so the span is not created yet
+      // for this test
+      if (!store) {
+        const testSpan = this.startTestSpan(test)
+        this.enter(testSpan, store)
+      }
     })
 
     this.addSub('ci:mocha:test:error', (err) => {
@@ -104,13 +103,6 @@ class MochaPlugin extends Plugin {
         testSpan.setTag(TEST_STATUS, 'skip')
         testSpan.finish()
       })
-    })
-
-    this.addSub('ci:mocha:hook:error', ({ test, error }) => {
-      const testSpan = this.startTestSpan(test)
-      testSpan.setTag(TEST_STATUS, 'fail')
-      testSpan.setTag('error', error)
-      testSpan.finish()
     })
 
     this.addSub('ci:mocha:test:parameterize', ({ name, params }) => {

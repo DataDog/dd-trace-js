@@ -13,67 +13,94 @@ const testRunFinishCh = channel('ci:mocha:run:finish')
 // TODO: remove when root hooks and fixtures are implemented
 const patched = new WeakSet()
 
-function isRetry (test) {
-  return test._currentRetry !== undefined && test._currentRetry !== 0
-}
-
-function getAllTestsInSuite (root) {
-  const tests = []
-  function getTests (suiteOrTest) {
-    suiteOrTest.tests.forEach(test => {
-      tests.push(test)
-    })
-    suiteOrTest.suites.forEach(suite => {
-      getTests(suite)
-    })
-  }
-  getTests(root)
-  return tests
-}
+const testToAr = new WeakMap()
+const originalFns = new WeakMap()
 
 function mochaHook (Runner) {
   if (patched.has(Runner)) return Runner
 
   patched.add(Runner)
 
-  shimmer.wrap(Runner.prototype, 'runTest', runTest => function () {
-    if (!testStartCh.hasSubscribers || isRetry(this.test)) {
-      return runTest.apply(this, arguments)
+  shimmer.wrap(Runner.prototype, 'run', run => function () {
+    if (!testStartCh.hasSubscribers) {
+      return run.apply(this, arguments)
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      testStartCh.publish(this.test)
+    this.on('test', (test) => {
+      const asyncResource = new AsyncResource('bound-anonymous-fn')
+      testToAr.set(test, asyncResource)
+      asyncResource.runInAsyncScope(() => {
+        testStartCh.publish(test)
+      })
+    })
 
-      this.once('test end', AsyncResource.bind(() => {
-        let status
+    this.on('test end', (test) => {
+      const asyncResource = testToAr.get(test)
+      let status
+      if (test.pending) {
+        status = 'skip'
+      } else if (test.state !== 'failed' && !test.timedOut) {
+        status = 'pass'
+      } else {
+        status = 'fail'
+      }
 
-        if (this.test.pending) {
-          status = 'skipped'
-        } else if (this.test.state !== 'failed' && !this.test.timedOut) {
-          status = 'pass'
-        } else {
-          status = 'fail'
-        }
-
-        testFinishCh.publish(status)
-      }))
-
-      this.once('fail', AsyncResource.bind((test, err) => {
-        errorCh.publish(err)
-      }))
-
-      this.once('pending', AsyncResource.bind((test) => {
-        skipCh.publish(test)
-      }))
-
-      try {
-        return runTest.apply(this, arguments)
-      } catch (err) {
-        errorCh.publish(err)
-        throw err
+      if (!test.parent._afterEach.length) {
+        asyncResource.runInAsyncScope(() => {
+          testFinishCh.publish(status)
+        })
       }
     })
+
+    // if it passes, hook end will be run. Otherwise, 'fail'
+    this.on('hook end', (hook) => {
+      const test = hook.ctx.currentTest
+      if (test && hook.parent._afterEach.includes(hook)) { // only if it's an afterEach
+        const asyncResource = testToAr.get(test)
+        asyncResource.runInAsyncScope(() => {
+          testFinishCh.publish('pass')
+        })
+      }
+    })
+
+    this.on('fail', (testOrHook, err) => {
+      let test = testOrHook
+      const isHook = testOrHook.type === 'hook'
+      if (isHook && testOrHook.ctx) {
+        test = testOrHook.ctx.currentTest
+      }
+      const asyncResource = testToAr.get(test)
+      if (asyncResource) {
+        asyncResource.runInAsyncScope(() => {
+          if (isHook) {
+            err.message = `${testOrHook.title}: ${err.message}`
+            errorCh.publish(err)
+            // if it's a hook and it has failed, 'test end' will not be called
+            testFinishCh.publish('fail')
+          } else {
+            errorCh.publish(err)
+          }
+        })
+      }
+    })
+
+    this.on('pending', (test) => {
+      const ar = testToAr.get(test)
+      if (ar) {
+        ar.runInAsyncScope(() => {
+          skipCh.publish(test)
+        })
+      } else {
+        // if there is no async resource, the test has been skipped through `test.skip``
+        const asyncResource = new AsyncResource('bound-anonymous-fn')
+        testToAr.set(test, asyncResource)
+        asyncResource.runInAsyncScope(() => {
+          skipCh.publish(test)
+        })
+      }
+    })
+
+    return run.apply(this, arguments)
   })
 
   shimmer.wrap(Runner.prototype, 'runTests', runTests => function () {
@@ -83,12 +110,7 @@ function mochaHook (Runner) {
     this.once('end', AsyncResource.bind(() => {
       testRunFinishCh.publish()
     }))
-    runTests.apply(this, arguments)
-    const suite = arguments[0]
-    // We call `getAllTestsInSuite` with the root suite so every skipped test
-    // should already have an associated test span.
-    const tests = getAllTestsInSuite(suite)
-    suiteFinishCh.publish(tests)
+    return runTests.apply(this, arguments)
   })
 
   shimmer.wrap(Runner.prototype, 'fail', fail => function (hook, error) {
@@ -128,6 +150,34 @@ addHook({
   versions: ['>=5.2.0'],
   file: 'lib/runner.js'
 }, mochaHook)
+
+addHook({
+  name: 'mocha',
+  versions: ['>=5.2.0'],
+  file: 'lib/runnable.js'
+}, (Runnable) => {
+  shimmer.wrap(Runnable.prototype, 'run', run => function () {
+    let asyncResource
+    if (this.fn.asyncResource) {
+      const originalFn = originalFns.get(this)
+      this.fn = originalFn
+    }
+
+    if (this.type === 'hook' && this.ctx.currentTest) {
+      const test = this.ctx.currentTest
+      asyncResource = testToAr.get(test)
+    }
+    if (this.type === 'test') {
+      asyncResource = testToAr.get(this)
+    }
+    if (asyncResource && this.fn) {
+      originalFns.set(this, this.fn)
+      this.fn = asyncResource.bind(this.fn)
+    }
+    return run.apply(this, arguments)
+  })
+  return Runnable
+})
 
 addHook({
   name: 'mocha-each',
