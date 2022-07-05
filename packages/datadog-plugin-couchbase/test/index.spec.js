@@ -48,6 +48,9 @@ describe('Plugin', () => {
               cluster = _cluster
               bucket = cluster.bucket('datadog-test')
               collection = bucket.defaultCollection()
+              console.log('cluster:', cluster)
+              console.log('bucket:', bucket)
+              console.log('collection:', collection)
             }).then(done).catch(err => done(err))
           }, () => {
             cluster = new couchbase.Cluster('localhost:8091')
@@ -153,7 +156,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
                 withSemverGTE3(version, () => {
-                  expect(span.meta).to.have.property('couchbase.cluster.name', '_default')
+                  expect(span.meta).to.have.property('couchbase.collection.name', '_default')
                 })
               })
               .then(done)
@@ -180,6 +183,7 @@ describe('Plugin', () => {
                 bucket.upsert('testdoc', { name: 'Frank' })
               } catch (e) {
                 expect(e.message).to.equal('Third argument needs to be an object or callback.')
+                done()
               }
             })
           })
