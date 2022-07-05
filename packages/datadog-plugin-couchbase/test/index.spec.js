@@ -7,7 +7,7 @@ const proxyquire = require('proxyquire').noPreserveCache()
 
 function withSemverGTE3 (version, option1, option2) {
   if (typeof version === 'function') {
-    console.log(version())
+    console.log(version.toString())
   }
   option1 = option1 || (() => {})
   option2 = option2 || (() => {})
