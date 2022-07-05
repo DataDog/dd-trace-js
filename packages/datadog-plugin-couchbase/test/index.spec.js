@@ -8,8 +8,9 @@ const proxyquire = require('proxyquire').noPreserveCache()
 function withSemverGTE3 (version, option1, option2) {
   option1 = option1 || (() => {})
   option2 = option2 || (() => {})
+  const min = semver.minVersion(version).version // get the lowerbound of range, or version
 
-  if (semver.satisfies('3.0.0', version)) {
+  if (semver.gte(min, '3.0.0')) {
     option1()
   } else {
     option2()
@@ -104,7 +105,7 @@ describe('Plugin', () => {
         })
 
         describe('queries on cluster', () => {
-          it.only('should handle N1QL queries', done => {
+          it('should handle N1QL queries', done => {
             const query = 'SELECT 1+1'
 
             agent
