@@ -48,7 +48,7 @@ describe('Plugin', () => {
               cluster = _cluster
               bucket = cluster.bucket('datadog-test')
               collection = bucket.defaultCollection()
-            }).catch(err => done(err))
+            }).then(done).catch(err => done(err))
           }, () => {
             cluster = new couchbase.Cluster('localhost:8091')
             cluster.authenticate('Administrator', 'password')
