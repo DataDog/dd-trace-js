@@ -8,9 +8,8 @@ const proxyquire = require('proxyquire').noPreserveCache()
 function withSemverGTE3 (version, option1, option2) {
   option1 = option1 || (() => {})
   option2 = option2 || (() => {})
-  const min = semver.minVersion(version).version // get the lowerbound of range, or version
 
-  if (semver.gte(min, '3.0.0')) {
+  if (semver.intersects('>=3.0.0', version)) {
     option1()
   } else {
     option2()
@@ -40,7 +39,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(done => {
-          withSemverGTE3(version, async () => {
+          withSemverGTE3(version, () => {
             couchbase.connect('localhost:8091', {
               username: 'Administrator',
               password: 'password'
@@ -48,9 +47,6 @@ describe('Plugin', () => {
               cluster = _cluster
               bucket = cluster.bucket('datadog-test')
               collection = bucket.defaultCollection()
-              console.log('cluster:', cluster)
-              console.log('bucket:', bucket)
-              console.log('collection:', collection)
             }).then(done).catch(err => done(err))
           }, () => {
             cluster = new couchbase.Cluster('localhost:8091')
@@ -128,7 +124,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            withSemverGTE3(version, async () => {
+            withSemverGTE3(version, () => {
               cluster.query(query).catch(err => done(err))
             }, () => {
               const n1qlQuery = N1qlQuery.fromString(query)
@@ -189,28 +185,26 @@ describe('Plugin', () => {
           })
         })
 
-        describe('queries on buckets', () => {
-          it('should handle N1QL queries', done => {
-            const query = 'SELECT 1+2'
+        // after v3, buckets no longer support querying
+        // TODO: bucket viewquery?
+        withSemverGTE3(version, undefined, () => {
+          describe('queries on buckets', () => {
+            it('should handle N1QL queries', done => {
+              const query = 'SELECT 1+2'
 
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                expect(span).to.have.property('name', 'couchbase.query')
-                expect(span).to.have.property('service', 'test-couchbase')
-                expect(span).to.have.property('resource', query)
-                expect(span).to.have.property('type', 'sql')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                withSemverGTE3(version, undefined, () => {
+              agent
+                .use(traces => {
+                  const span = traces[0][0]
+                  expect(span).to.have.property('name', 'couchbase.query')
+                  expect(span).to.have.property('service', 'test-couchbase')
+                  expect(span).to.have.property('resource', query)
+                  expect(span).to.have.property('type', 'sql')
+                  expect(span.meta).to.have.property('span.kind', 'client')
                   expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
                 })
-              })
-              .then(done)
-              .catch(done)
+                .then(done)
+                .catch(done)
 
-            withSemverGTE3(version, () => {
-              cluster.query(query).catch(e => done(e))
-            }, () => {
               const n1qlQuery = N1qlQuery.fromString(query)
               bucket.query(n1qlQuery, (err) => {
                 if (err) done(err)
