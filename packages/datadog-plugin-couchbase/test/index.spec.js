@@ -6,9 +6,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 
 function withSemverGTE3 (version, option1, option2) {
-  if (typeof version === 'function') {
-    console.log(version.toString())
-  }
   option1 = option1 || (() => {})
   option2 = option2 || (() => {})
   const min = semver.minVersion(version).version // get the lowerbound of range, or version
@@ -94,7 +91,7 @@ describe('Plugin', () => {
           const span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {
-            withSemverGTE3(() => {
+            withSemverGTE3(version, () => {
               collection.get('1').then(() => {
                 expect(tracer.scope().active()).to.equal(span)
               }).then(done)
@@ -119,7 +116,7 @@ describe('Plugin', () => {
                 expect(span).to.have.property('resource', query)
                 expect(span).to.have.property('type', 'sql')
                 expect(span.meta).to.have.property('span.kind', 'client')
-                withSemverGTE3(() => {
+                withSemverGTE3(version, () => {
                   expect(span.meta).to.have.property('couchbase.cluster.name', 'datadog-test')
                 }, () => {
                   expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
@@ -155,14 +152,14 @@ describe('Plugin', () => {
                 expect(span).to.have.property('resource', 'couchbase.upsert')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
-                withSemverGTE3(() => {
+                withSemverGTE3(version, () => {
                   expect(span.meta).to.have.property('couchbase.cluster.name', '_default')
                 })
               })
               .then(done)
               .catch(done)
 
-            withSemverGTE3(() => {
+            withSemverGTE3(version, () => {
               collection.upsert('testdoc', { name: 'Frank' }).catch(err => done(err))
             }, () => {
               bucket.upsert('testdoc', { name: 'Frank' }, (err, result) => {
@@ -172,7 +169,7 @@ describe('Plugin', () => {
           })
 
           it('should skip instrumentation for invalid arguments', (done) => {
-            withSemverGTE3(() => {
+            withSemverGTE3(version, () => {
               try {
                 cluster.query(undefined)
               } catch (e) {
@@ -200,14 +197,14 @@ describe('Plugin', () => {
                 expect(span).to.have.property('resource', query)
                 expect(span).to.have.property('type', 'sql')
                 expect(span.meta).to.have.property('span.kind', 'client')
-                withSemverGTE3(undefined, () => {
+                withSemverGTE3(version, undefined, () => {
                   expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
                 })
               })
               .then(done)
               .catch(done)
 
-            withSemverGTE3(() => {
+            withSemverGTE3(version, () => {
               cluster.query(query).catch(e => done(e))
             }, () => {
               const n1qlQuery = N1qlQuery.fromString(query)
