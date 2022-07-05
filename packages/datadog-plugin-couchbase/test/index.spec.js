@@ -6,8 +6,9 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 
 function withSemverGTE3 (version, option1, option2) {
-  console.log(version)
-  console.log(typeof version)
+  if (typeof version === 'function') {
+    console.log(version())
+  }
   option1 = option1 || (() => {})
   option2 = option2 || (() => {})
   const min = semver.minVersion(version).version // get the lowerbound of range, or version
