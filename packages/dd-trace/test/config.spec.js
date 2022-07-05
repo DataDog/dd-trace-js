@@ -78,6 +78,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
+    expect(config).to.have.property('telemetryEnabled', true)
   })
 
   it('should initialize from the default service', () => {

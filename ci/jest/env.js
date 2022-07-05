@@ -20,7 +20,8 @@ if (isAgentlessEnabled) {
       ...options,
       experimental: {
         exporter: 'datadog'
-      }
+      },
+      telemetryEnabled: false
     })
   } else {
     console.error(`DD_CIVISIBILITY_AGENTLESS_ENABLED is set, \

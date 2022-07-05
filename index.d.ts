@@ -446,6 +446,12 @@ export declare interface TracerOptions {
      */
     obfuscatorValueRegex?: string
   };
+
+  /**
+   * Whether to enable telemetry.
+   * @default true
+   */
+  telemetryEnabled?: boolean
 }
 
 /**
