@@ -6,6 +6,8 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 
 function withSemverGTE3 (version, option1, option2) {
+  console.log(version)
+  console.log(typeof version)
   option1 = option1 || (() => {})
   option2 = option2 || (() => {})
   const min = semver.minVersion(version).version // get the lowerbound of range, or version
@@ -73,9 +75,10 @@ describe('Plugin', () => {
             withSemverGTE3(version, () => {
               cluster.query(query).then(rows => {
                 expect(tracer.scope().active()).to.equal(span)
-              }).catch(err => {
-                done(err)
-              })
+              }).then(done)
+                .catch(err => {
+                  done(err)
+                })
             }, () => {
               const n1qlQuery = N1qlQuery.fromString(query)
               cluster.query(n1qlQuery, (err, rows) => {
@@ -93,8 +96,7 @@ describe('Plugin', () => {
             withSemverGTE3(() => {
               collection.get('1').then(() => {
                 expect(tracer.scope().active()).to.equal(span)
-                done()
-              })
+              }).then(done)
             }, () => {
               bucket.get('1', () => {
                 expect(tracer.scope().active()).to.equal(span)
@@ -127,7 +129,6 @@ describe('Plugin', () => {
 
             withSemverGTE3(version, async () => {
               cluster.query(query).catch(err => done(err))
-              done()
             }, () => {
               const n1qlQuery = N1qlQuery.fromString(query)
               cluster.query(n1qlQuery, (err) => {
