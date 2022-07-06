@@ -89,30 +89,13 @@ function wrap (prefix, fn) {
 }
 
 // semver >=3
-function wrapWithName (name) {
-  return function (operation) {
-    return function () { // no arguments used by us
-      return wrapCBorPromise(operation, name, {
-        collection: { name: this._name || '_default' },
-        bucket: { name: this._scope._bucket._name }
-      })
-    }
-  }
-}
 
-function wrapV3Query (query) {
-  return function (q, _options, _callback) {
-    const resource = q && (typeof q === 'string' ? q : q.statement) // if it's a n1ql query
-    return wrapCBorPromise(query, 'query', { resource })
-  }
-}
-
-function wrapCBorPromise (fn, name, startData) {
+const wrapCBandPromise = (fn, name, startData, thisArg, args) => {
   const startCh = channel(`apm:couchbase:${name}:start`)
   const finishCh = channel(`apm:couchbase:${name}:finish`)
   const errorCh = channel(`apm:couchbase:${name}:error`)
 
-  if (!startCh.hasSubscribers) return fn.apply(this, arguments)
+  if (!startCh.hasSubscribers) return fn.apply(thisArg, args)
 
   const asyncResource = new AsyncResource('bound-anonymous-fn')
   const callbackResource = new AsyncResource('bound-anonymous-fn')
@@ -121,19 +104,19 @@ function wrapCBorPromise (fn, name, startData) {
     startCh.publish(startData)
 
     try {
-      const cbIndex = findCallbackIndex(arguments)
+      const cbIndex = findCallbackIndex(args)
       if (cbIndex >= 0) {
         // v3 offers callback or promises event handling
-        const cb = callbackResource.bind(arguments[cbIndex])
-        arguments[cbIndex] = asyncResource.bind(function (error, result) {
+        const cb = callbackResource.bind(args[cbIndex])
+        args[cbIndex] = asyncResource.bind(function (error, result) {
           if (error) {
             errorCh.publish(error)
           }
           finishCh.publish({ result })
-          return cb.apply(this, arguments)
+          return cb.apply(thisArg, args)
         })
       }
-      const res = fn.apply(this, arguments)
+      const res = fn.apply(thisArg, args)
 
       // semver >=3 will always return promise by default
       res.then(
@@ -148,16 +131,33 @@ function wrapCBorPromise (fn, name, startData) {
   })
 }
 
+function wrapWithName (name) {
+  return function (operation) {
+    return function () { // no arguments used by us
+      return wrapCBandPromise(operation, name, {
+        collection: { name: this._name || '_default' },
+        bucket: { name: this._scope._bucket._name }
+      }, this, arguments)
+    }
+  }
+}
+
+function wrapV3Query (query) {
+  return function (q) {
+    const resource = q && (typeof q === 'string' ? q : q.statement)
+    return wrapCBandPromise(query, 'query', { resource }, this, arguments)
+  }
+}
+
 function wrapPromiseHelperFn (fn) {
   return function () {
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
     const cbIndex = findCallbackIndex(arguments)
-    arguments[cbIndex] = AsyncResource.bind(arguments[cbIndex])
+    if (cbIndex >= 0) {
+      arguments[cbIndex] = asyncResource.bind(arguments[cbIndex])
+    }
 
-    return new Promise((resolve, reject) => {
-      fn.apply(this, arguments)
-        .then(AsyncResource.bind(res => resolve(res)))
-        .catch(AsyncResource.bind(err => reject(err)))
-    })
+    return asyncResource.runInAsyncScope(() => fn.apply(this, arguments))
   }
 }
 
@@ -260,13 +260,15 @@ addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.0'] }
 
 addHook({ name: 'couchbase', file: 'dist/cluster.js', versions: ['>=3.2.0'] }, cluster => {
   const Cluster = cluster.Cluster
+
   shimmer.wrap(Cluster.prototype, 'query', wrapV3Query)
   return cluster
 })
 
 addHook({ name: 'couchbase', file: 'dist/utilities.js', versions: ['>=3.2.0'] }, utilities => {
   const PromiseHelper = utilities.PromiseHelper
-  shimmer.wrap(PromiseHelper.prototype, 'wrapAsync', wrapPromiseHelperFn)
-  shimmer.wrap(PromiseHelper.prototype, 'wrap', wrapPromiseHelperFn)
+
+  shimmer.wrap(PromiseHelper, 'wrap', wrapPromiseHelperFn)
+  shimmer.wrap(PromiseHelper, 'wrapAsync', wrapPromiseHelperFn)
   return utilities
 })
