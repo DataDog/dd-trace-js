@@ -115,9 +115,7 @@ describe('Plugin', () => {
                 expect(span).to.have.property('resource', query)
                 expect(span).to.have.property('type', 'sql')
                 expect(span.meta).to.have.property('span.kind', 'client')
-                withSemverGTE3(version, () => {
-                  expect(span.meta).to.have.property('couchbase.cluster.name', 'datadog-test')
-                }, () => {
+                withSemverGTE3(version, undefined, () => {
                   expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
                 })
               })
