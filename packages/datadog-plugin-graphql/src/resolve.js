@@ -83,12 +83,27 @@ class GraphQLResolvePlugin extends Plugin {
  * that has already been processed for a span that either looks like or is the computed path.
  * In the case where the user intentionally sets config.collapse = false, there should be no change.
  */
-function hasLikePath (context, computedPathArray) {
-  const computedPath = computedPathArray.join('.')
+function hasLikePath (context, actualPath) {
   const paths = Object.keys(context.fields)
-  const number = '([0-9]+)'
-  const regexPath = new RegExp(computedPath.replace(/\*/g, number))
-  return paths.filter(path => regexPath.test(path)).length > 0
+  for (let i = 0; i < paths.length; i++) {
+    const arrayPath = paths[i].split('.')
+    if (arrayPath.length !== actualPath.length) continue
+    let matches = true
+    for (let j = 0; j < arrayPath.length; j++) {
+      const seg1 = arrayPath[j]
+      const seg2 = actualPath[j]
+      if (seg1 !== seg2) {
+        if (seg1 === '*' || seg2 === '*') {
+          matches = true
+        } else {
+          matches = false
+          break
+        }
+      }
+    }
+    if (matches) return true
+  }
+  return false
 }
 
 function depthPredicate (info, config, func) {
