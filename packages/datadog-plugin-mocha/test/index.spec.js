@@ -353,18 +353,29 @@ describe('Plugin', () => {
         const testFilePath = path.join(__dirname, 'mocha-fail-hook-async.js')
 
         const testNames = [
-          { name: 'mocha-fail-hook-async will run but be reported as failed', status: 'fail' },
-          { name: 'mocha-fail-hook-async-other will run and be reported as passed', status: 'pass' }
+          {
+            name: 'mocha-fail-hook-async will run but be reported as failed',
+            status: 'fail',
+            errorMsg: '"after each" hook for "will run but be reported as failed"'
+          },
+          {
+            name: 'mocha-fail-hook-async-other will run and be reported as passed',
+            status: 'pass'
+          },
+          {
+            name: 'mocha-fail-hook-async-other-before will not run and be reported as failed',
+            status: 'fail',
+            errorMsg: '"before each" hook for "will not run and be reported as failed"'
+          }
         ]
 
-        const assertionPromises = testNames.map(({ name, status }) => {
+        const assertionPromises = testNames.map(({ name, status, errorMsg }) => {
           return agent.use(trace => {
             const testSpan = trace[0][0]
             expect(testSpan.meta[TEST_NAME]).to.equal(name)
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
-            if (status === 'fail') {
-              expect(testSpan.meta[ERROR_MESSAGE].startsWith(
-                `"after each" hook for "will run but be reported as failed"`)).to.equal(true)
+            if (errorMsg) {
+              expect(testSpan.meta[ERROR_MESSAGE].startsWith(errorMsg)).to.equal(true)
               expect(testSpan.meta[ERROR_TYPE]).to.equal('Error')
               expect(testSpan.meta[ERROR_STACK]).not.to.be.undefined
             }
