@@ -19,8 +19,6 @@ const {
   getTestCommonTags
 } = require('../../dd-trace/src/plugins/util/test')
 
-const skippedTests = new WeakSet()
-
 function getTestSpanMetadata (tracer, test, sourceRoot) {
   const childOf = getTestParentSpan(tracer)
 
@@ -85,24 +83,6 @@ class MochaPlugin extends Plugin {
           span.setTag('error', err)
         }
       }
-    })
-
-    this.addSub('ci:mocha:suite:finish', tests => {
-      tests.forEach(test => {
-        const { pending: isSkipped } = test
-        // `tests` includes every test, so we need a way to mark
-        // the test as already accounted for. We do this through `skippedTests`.
-        // If the test is already marked as skipped, we don't create an additional test span.
-        if (!isSkipped || skippedTests.has(test)) {
-          return
-        }
-        skippedTests.add(test)
-
-        const testSpan = this.startTestSpan(test)
-
-        testSpan.setTag(TEST_STATUS, 'skip')
-        testSpan.finish()
-      })
     })
 
     this.addSub('ci:mocha:test:parameterize', ({ name, params }) => {

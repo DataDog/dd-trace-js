@@ -5,10 +5,12 @@ const testStartCh = channel('ci:mocha:test:start')
 const errorCh = channel('ci:mocha:test:error')
 const skipCh = channel('ci:mocha:test:skip')
 const testFinishCh = channel('ci:mocha:test:finish')
-const suiteFinishCh = channel('ci:mocha:suite:finish')
-const hookErrorCh = channel('ci:mocha:hook:error')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 const testRunFinishCh = channel('ci:mocha:run:finish')
+
+function isRetry (test) {
+  return test._currentRetry !== undefined && test._currentRetry !== 0
+}
 
 // TODO: remove when root hooks and fixtures are implemented
 const patched = new WeakSet()
@@ -27,15 +29,18 @@ function mochaHook (Runner) {
     }
 
     this.on('test', (test) => {
+      if (isRetry(test)) {
+        return
+      }
       const asyncResource = new AsyncResource('bound-anonymous-fn')
-      testToAr.set(test, asyncResource)
+      testToAr.set(test.ctx, asyncResource) // ctx is preserved across retries
       asyncResource.runInAsyncScope(() => {
         testStartCh.publish(test)
       })
     })
 
     this.on('test end', (test) => {
-      const asyncResource = testToAr.get(test)
+      const asyncResource = testToAr.get(test.ctx)
       let status
       if (test.pending) {
         status = 'skip'
@@ -56,7 +61,7 @@ function mochaHook (Runner) {
     this.on('hook end', (hook) => {
       const test = hook.ctx.currentTest
       if (test && hook.parent._afterEach.includes(hook)) { // only if it's an afterEach
-        const asyncResource = testToAr.get(test)
+        const asyncResource = testToAr.get(test.ctx)
         asyncResource.runInAsyncScope(() => {
           testFinishCh.publish('pass')
         })
@@ -69,7 +74,7 @@ function mochaHook (Runner) {
       if (isHook && testOrHook.ctx) {
         test = testOrHook.ctx.currentTest
       }
-      const asyncResource = testToAr.get(test)
+      const asyncResource = testToAr.get(test.ctx)
       if (asyncResource) {
         asyncResource.runInAsyncScope(() => {
           if (isHook) {
@@ -93,7 +98,7 @@ function mochaHook (Runner) {
       } else {
         // if there is no async resource, the test has been skipped through `test.skip``
         const asyncResource = new AsyncResource('bound-anonymous-fn')
-        testToAr.set(test, asyncResource)
+        testToAr.set(test.ctx, asyncResource)
         asyncResource.runInAsyncScope(() => {
           skipCh.publish(test)
         })
@@ -104,24 +109,13 @@ function mochaHook (Runner) {
   })
 
   shimmer.wrap(Runner.prototype, 'runTests', runTests => function () {
-    if (!suiteFinishCh.hasSubscribers) {
+    if (!testRunFinishCh.hasSubscribers) {
       return runTests.apply(this, arguments)
     }
     this.once('end', AsyncResource.bind(() => {
       testRunFinishCh.publish()
     }))
     return runTests.apply(this, arguments)
-  })
-
-  shimmer.wrap(Runner.prototype, 'fail', fail => function (hook, error) {
-    if (!hookErrorCh.hasSubscribers) {
-      return fail.apply(this, arguments)
-    }
-    if (error && hook.ctx && hook.ctx.currentTest) {
-      error.message = `${hook.title}: ${error.message}`
-      hookErrorCh.publish({ test: hook.ctx.currentTest, error })
-    }
-    return fail.apply(this, arguments)
   })
 
   return Runner
@@ -158,20 +152,29 @@ addHook({
 }, (Runnable) => {
   shimmer.wrap(Runnable.prototype, 'run', run => function () {
     let asyncResource
-    if (this.fn.asyncResource) {
-      const originalFn = originalFns.get(this)
-      this.fn = originalFn
-    }
 
     if (this.type === 'hook' && this.ctx.currentTest) {
       const test = this.ctx.currentTest
-      asyncResource = testToAr.get(test)
+      asyncResource = testToAr.get(test.ctx)
+      if (this.fn.asyncResource) {
+        // we can't use ctx for originalFns, because it's the same for hooks and tests
+        const originalFn = originalFns.get(this)
+        this.fn = originalFn
+      }
     }
     if (this.type === 'test') {
-      asyncResource = testToAr.get(this)
+      asyncResource = testToAr.get(this.ctx)
+      if (this.fn.asyncResource) {
+        const originalFn = originalFns.get(this.ctx)
+        this.fn = originalFn
+      }
     }
     if (asyncResource && this.fn) {
-      originalFns.set(this, this.fn)
+      if (this.type === 'hook' && this.ctx.currentTest) {
+        originalFns.set(this, this.fn)
+      } else if (this.type === 'test') {
+        originalFns.set(this.ctx, this.fn)
+      }
       this.fn = asyncResource.bind(this.fn)
     }
     return run.apply(this, arguments)

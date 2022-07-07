@@ -3,7 +3,6 @@ const { expect } = require('chai')
 let currentTestTraceId
 
 describe('mocha-active-span-in-hooks', function () {
-  this.timeout(10000000)
   before(() => {
     expect(global._ddtrace.scope().active()).to.equal(null)
   })

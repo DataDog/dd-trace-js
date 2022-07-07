@@ -403,7 +403,7 @@ describe('Plugin', () => {
         mocha.run()
       })
 
-      it.skip('works with retries', (done) => {
+      it('works with retries', (done) => {
         const testFilePath = path.join(__dirname, 'mocha-test-retries.js')
 
         const testNames = [
