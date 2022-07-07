@@ -86,12 +86,12 @@ describe('Plugin', () => {
           })
         })
 
-        it('should run any Bucket operations in the parent context', done => {
+        it('should run any Bucket or Collection operations in the parent context', done => {
           const span = tracer.startSpan('test')
 
           tracer.scope().activate(span, () => {
             withSemverGTE3(version, () => {
-              collection.get('1').then(() => {
+              collection.exists('1').then(() => {
                 expect(tracer.scope().active()).to.equal(span)
               }).then(done).catch(done)
             }, () => {
@@ -123,7 +123,7 @@ describe('Plugin', () => {
               .catch(done)
 
             withSemverGTE3(version, () => {
-              cluster.query(query).catch(err => done(err))
+              cluster.query(query).catch(done)
             }, () => {
               const n1qlQuery = N1qlQuery.fromString(query)
               cluster.query(n1qlQuery, (err) => {
