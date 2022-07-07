@@ -1,7 +1,6 @@
 const { expect } = require('chai')
 
 describe('mocha-fail-hook-async', function () {
-  this.timeout(10000)
   afterEach((done) => {
     setTimeout(() => {
       done(new Error('yeah error'))
@@ -13,7 +12,6 @@ describe('mocha-fail-hook-async', function () {
 })
 
 describe('mocha-fail-hook-async-other', function () {
-  this.timeout(10000)
   afterEach((done) => {
     done()
   })
@@ -23,13 +21,27 @@ describe('mocha-fail-hook-async-other', function () {
 })
 
 describe('mocha-fail-hook-async-other-before', function () {
-  this.timeout(10000)
   beforeEach((done) => {
     setTimeout(() => {
       done(new Error('yeah error'))
     }, 200)
   })
   it('will not run and be reported as failed', () => {
+    expect(true).to.equal(true)
+  })
+})
+
+describe('mocha-fail-hook-async-other-second-after', function () {
+  afterEach((done) => {
+    done()
+  })
+  afterEach((done) => {
+    // the second afterEach will fail
+    setTimeout(() => {
+      done(new Error('yeah error'))
+    }, 200)
+  })
+  it('will run and be reported as failed', () => {
     expect(true).to.equal(true)
   })
 })

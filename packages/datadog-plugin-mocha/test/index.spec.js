@@ -356,7 +356,7 @@ describe('Plugin', () => {
           {
             name: 'mocha-fail-hook-async will run but be reported as failed',
             status: 'fail',
-            errorMsg: '"after each" hook for "will run but be reported as failed"'
+            errorMsg: '"after each" hook for "will run but be reported as failed": yeah error'
           },
           {
             name: 'mocha-fail-hook-async-other will run and be reported as passed',
@@ -365,7 +365,12 @@ describe('Plugin', () => {
           {
             name: 'mocha-fail-hook-async-other-before will not run and be reported as failed',
             status: 'fail',
-            errorMsg: '"before each" hook for "will not run and be reported as failed"'
+            errorMsg: '"before each" hook for "will not run and be reported as failed": yeah error'
+          },
+          {
+            name: 'mocha-fail-hook-async-other-second-after will run and be reported as failed',
+            status: 'fail',
+            errorMsg: '"after each" hook for "will run and be reported as failed": yeah error'
           }
         ]
 
