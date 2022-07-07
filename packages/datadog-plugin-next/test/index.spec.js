@@ -6,7 +6,6 @@ const axios = require('axios')
 const getPort = require('get-port')
 const { execSync, spawn } = require('child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const { writeFileSync } = require('fs')
 
 describe('Plugin', function () {
@@ -14,7 +13,7 @@ describe('Plugin', function () {
   let port
 
   describe('next', () => {
-    withVersions(plugin, 'next', version => {
+    withVersions('next', 'next', version => {
       const startServer = withConfig => {
         before(async () => {
           port = await getPort()
@@ -36,15 +35,16 @@ describe('Plugin', function () {
             }
           })
 
-          server.on('error', done)
-          server.stderr.on('data', () => {})
-          server.stdout.on('data', () => done())
+          server.once('error', done)
+          server.stdout.once('data', () => done())
+          server.stderr.on('data', chunk => process.stderr.write(chunk))
+          server.stdout.on('data', chunk => process.stdout.write(chunk))
         })
 
         after(async () => {
           server.kill()
           await axios.get(`http://localhost:${port}/api/hello/world`).catch(() => {})
-          await agent.close()
+          await agent.close({ ritmReset: false })
         })
       }
 
