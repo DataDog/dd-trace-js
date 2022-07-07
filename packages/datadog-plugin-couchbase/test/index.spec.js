@@ -93,7 +93,7 @@ describe('Plugin', () => {
             withSemverGTE3(version, () => {
               collection.get('1').then(() => {
                 expect(tracer.scope().active()).to.equal(span)
-              }).then(done)
+              }).then(done).catch(done)
             }, () => {
               bucket.get('1', () => {
                 expect(tracer.scope().active()).to.equal(span)

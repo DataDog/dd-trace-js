@@ -90,7 +90,7 @@ function wrap (prefix, fn) {
 
 // semver >=3
 
-const wrapCBandPromise = (fn, name, startData, thisArg, args) => {
+function wrapCBandPromise (fn, name, startData, thisArg, args) {
   const startCh = channel(`apm:couchbase:${name}:start`)
   const finishCh = channel(`apm:couchbase:${name}:finish`)
   const errorCh = channel(`apm:couchbase:${name}:error`)
@@ -152,6 +152,7 @@ function wrapV3Query (query) {
 function wrapPromiseHelperFn (fn) {
   return function () {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
+
     const cbIndex = findCallbackIndex(arguments)
     if (cbIndex >= 0) {
       arguments[cbIndex] = asyncResource.bind(arguments[cbIndex])
@@ -226,7 +227,6 @@ addHook({ name: 'couchbase', file: 'lib/collection.js', versions: ['>=3.0.0 <3.2
   shimmer.wrap(Collection.prototype, 'insert', wrapWithName('insert'))
   shimmer.wrap(Collection.prototype, 'replace', wrapWithName('replace'))
   shimmer.wrap(Collection.prototype, 'append', wrapWithName('append'))
-  shimmer.wrap(Collection.prototype, 'prepend', wrapWithName('prepend'))
 
   return Collection
 })
@@ -253,7 +253,6 @@ addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.0'] }
   shimmer.wrap(Collection.prototype, 'insert', wrapWithName('insert'))
   shimmer.wrap(Collection.prototype, 'replace', wrapWithName('replace'))
   shimmer.wrap(Collection.prototype, 'append', wrapWithName('append'))
-  shimmer.wrap(Collection.prototype, 'prepend', wrapWithName('prepend'))
 
   return collection
 })
