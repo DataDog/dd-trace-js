@@ -168,8 +168,9 @@ describe('Plugin', () => {
           it('should skip instrumentation for invalid arguments', (done) => {
             withSemverGTE3(version, () => {
               try {
-                cluster.query(undefined)
+                cluster.query(undefined).catch(done) // catch bad errors
               } catch (e) {
+                expect(e.message).to.equal('Cannot read properties of undefined (reading \'toString\')')
                 done()
               }
             }, () => {
