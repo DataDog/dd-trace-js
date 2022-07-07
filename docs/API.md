@@ -456,8 +456,6 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | appsec.wafTimeout           | `DD_APPSEC_WAF_TIMEOUT`                        | `5000`  | Limits the WAF synchronous execution time (in microseconds). |
 | appsec.obfuscatorKeyRegex   | `DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP`   | -       | A regex to redact sensitive data by its key in attack reports. |
 | appsec.obfuscatorValueRegex | `DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP` | -       | A regex to redact sensitive data by its value in attack reports. |
-| telemetryEnabled | `DD_TRACE_TELEMETRY_ENABLED` | -       | Whether to enable capturing telemetry. |
-
 
 <h3 id="custom-logging">Custom Logging</h3>
 
