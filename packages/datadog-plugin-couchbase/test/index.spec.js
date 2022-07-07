@@ -73,9 +73,7 @@ describe('Plugin', () => {
               cluster.query(query).then(rows => {
                 expect(tracer.scope().active()).to.equal(span)
               }).then(done)
-                .catch(err => {
-                  done(err)
-                })
+                .catch(done)
             }, () => {
               const n1qlQuery = N1qlQuery.fromString(query)
               cluster.query(n1qlQuery, (err, rows) => {
@@ -167,15 +165,18 @@ describe('Plugin', () => {
 
           it('should skip instrumentation for invalid arguments', (done) => {
             withSemverGTE3(version, () => {
-              try {
-                cluster.query(undefined).catch(done) // catch bad errors
-              } catch (e) {
+              const checkError = (e) => {
                 expect(e.message).to.be.oneOf([
                   // depending on version of node
                   'Cannot read property \'toString\' of undefined',
                   'Cannot read properties of undefined (reading \'toString\')'
                 ])
                 done()
+              }
+              try {
+                cluster.query(undefined).catch(checkError) // catch bad errors
+              } catch (e) {
+                checkError(e)
               }
             }, () => {
               try {
