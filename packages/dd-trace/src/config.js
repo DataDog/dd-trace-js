@@ -92,7 +92,6 @@ class Config {
       false
     )
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
-      options.telemetryEnabled,
       process.env.DD_TRACE_TELEMETRY_ENABLED,
       !process.env.AWS_LAMBDA_FUNCTION_NAME
     )
@@ -238,7 +237,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     }
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
-    this.telemetryEnabled = isTrue(DD_TRACE_TELEMETRY_ENABLED)
+    // Disabled for CI Visibility's agentless
+    this.telemetryEnabled = DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED)
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.appsec = {
       enabled: isTrue(DD_APPSEC_ENABLED),
