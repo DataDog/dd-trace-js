@@ -14,6 +14,11 @@ function findCallbackIndex (args) {
   return -1
 }
 
+// handles n1ql and string queries
+function getQueryResource (q) {
+  return q && (typeof q === 'string' ? q : q.statement)
+}
+
 // semver >=2 <3
 function wrapMaybeInvoke (_maybeInvoke) {
   const wrapped = function (fn, args) {
@@ -144,7 +149,7 @@ function wrapWithName (name) {
 
 function wrapV3Query (query) {
   return function (q) {
-    const resource = q && (typeof q === 'string' ? q : q.statement)
+    const resource = getQueryResource(q)
     return wrapCBandPromise(query, 'query', { resource }, this, arguments)
   }
 }
@@ -178,7 +183,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
 
     if (!emitter || !emitter.once) return _n1qlReq.apply(this, arguments)
 
-    const n1qlQuery = q && q.statement
+    const n1qlQuery = getQueryResource(q)
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
