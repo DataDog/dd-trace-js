@@ -6,7 +6,19 @@ const errorCh = channel('ci:mocha:test:error')
 const skipCh = channel('ci:mocha:test:skip')
 const testFinishCh = channel('ci:mocha:test:finish')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
+
+const testRunStartCh = channel('ci:mocha:run:start')
 const testRunFinishCh = channel('ci:mocha:run:finish')
+
+const testSuiteStartCh = channel('ci:mocha:test-suite:start')
+const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
+
+// TODO: remove when root hooks and fixtures are implemented
+const patched = new WeakSet()
+
+const testToAr = new WeakMap()
+const originalFns = new WeakMap()
+const testSuiteToAr = new WeakMap()
 
 function isRetry (test) {
   return test._currentRetry !== undefined && test._currentRetry !== 0
@@ -23,12 +35,6 @@ function getTestAsyncResource (test) {
   return testToAr.get(originalFn)
 }
 
-// TODO: remove when root hooks and fixtures are implemented
-const patched = new WeakSet()
-
-const testToAr = new WeakMap()
-const originalFns = new WeakMap()
-
 function mochaHook (Runner) {
   if (patched.has(Runner)) return Runner
 
@@ -38,6 +44,46 @@ function mochaHook (Runner) {
     if (!testStartCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
+
+    this.once('end', () => {
+      // get actual status
+      testRunFinishCh.publish('pass')
+    })
+
+    this.once('start', function () {
+      testRunStartCh.publish()
+    })
+
+    this.on('suite', function (suite) {
+      if (suite.root) {
+        return
+      }
+      const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+      testSuiteToAr.set(suite, asyncResource)
+
+      asyncResource.runInAsyncScope(() => {
+        testSuiteStartCh.publish(suite)
+      })
+    })
+
+    this.on('suite end', function (suite) {
+      if (suite.root) {
+        return
+      }
+      let state = 'passed'
+      suite.eachTest(test => {
+        if (test.state === 'failed' || test.timedOut) {
+          state = 'failed'
+        }
+      })
+
+      const asyncResource = testSuiteToAr.get(suite)
+      asyncResource.runInAsyncScope(() => {
+        // get suite status
+        testSuiteFinishCh.publish(state)
+      })
+    })
 
     this.on('test', (test) => {
       if (isRetry(test)) {
@@ -127,9 +173,6 @@ function mochaHook (Runner) {
     if (!testRunFinishCh.hasSubscribers) {
       return runTests.apply(this, arguments)
     }
-    this.once('end', AsyncResource.bind(() => {
-      testRunFinishCh.publish()
-    }))
     return runTests.apply(this, arguments)
   })
 
