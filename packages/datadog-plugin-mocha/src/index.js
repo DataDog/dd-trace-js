@@ -53,9 +53,7 @@ class MochaPlugin extends Plugin {
     this.sourceRoot = process.cwd()
     this.codeOwnersEntries = getCodeOwnersFileEntries(this.sourceRoot)
 
-    this.addSub('ci:mocha:run:start', () => {
-      const processArgv = process.argv.slice(2).join(' ')
-      const command = `mocha ${processArgv}`
+    this.addSub('ci:mocha:run:start', (command) => {
       const childOf = getTestParentSpan(this.tracer)
       const testSessionSpanMetadata = getTestSessionCommonTags(command, this.tracer._version)
 

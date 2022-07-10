@@ -25,6 +25,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { version: ddTraceVersion } = require('../../../package.json')
+const { expect } = require('chai')
 
 const ASYNC_TESTS = [
   {
@@ -438,6 +439,27 @@ describe('Plugin', () => {
         Promise.all(assertionPromises)
           .then(() => done())
           .catch(done)
+
+        const mocha = new Mocha({
+          reporter: function () {} // silent on internal tests
+        })
+        mocha.addFile(testFilePath)
+        mocha.run()
+      })
+
+      it('works with test suite level visibility', (done) => {
+        const testFilePath = path.join(__dirname, 'mocha-test-suite-level')
+
+        agent.use(trace => {
+          const spans = trace[0]
+          const testSessionSpan = spans.find(span => span.type === 'test_session_end')
+          const testSuiteSpans = spans.filter(span => span.type === 'test_suite_end')
+
+          expect(testSessionSpan.type).to.equal('test_session_end')
+          expect(testSessionSpan.meta[TEST_STATUS]).to.equal('fail')
+          expect(testSuiteSpans.length).to.equal(2)
+          expect(testSuiteSpans.every(span => span.meta[TEST_STATUS] === 'fail')).to.equal(true)
+        }).then(() => done()).catch(done)
 
         const mocha = new Mocha({
           reporter: function () {} // silent on internal tests

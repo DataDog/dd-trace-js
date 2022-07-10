@@ -14,7 +14,6 @@ function formatSpan (span) {
   if (span.type === 'test' && span.meta && span.meta.test_session_id) {
     encodingVersion = 2
   }
-  debugger
   return {
     type: ALLOWED_CONTENT_TYPES.includes(span.type) ? span.type : 'span',
     version: encodingVersion,

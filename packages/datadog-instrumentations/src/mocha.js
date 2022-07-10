@@ -45,13 +45,20 @@ function mochaHook (Runner) {
       return run.apply(this, arguments)
     }
 
-    this.once('end', () => {
-      // get actual status
-      testRunFinishCh.publish('pass')
+    this.once('end', function () {
+      let status = 'pass'
+      if (this.stats) {
+        status = this.stats.failures === 0 ? 'pass' : 'fail'
+      } else if (this.failures !== 0) {
+        status = 'fail'
+      }
+      testRunFinishCh.publish(status)
     })
 
     this.once('start', function () {
-      testRunStartCh.publish()
+      const processArgv = process.argv.slice(2).join(' ')
+      const command = `mocha ${processArgv}`
+      testRunStartCh.publish(command)
     })
 
     this.on('suite', function (suite) {
@@ -71,17 +78,21 @@ function mochaHook (Runner) {
       if (suite.root) {
         return
       }
-      let state = 'passed'
-      suite.eachTest(test => {
-        if (test.state === 'failed' || test.timedOut) {
-          state = 'failed'
-        }
-      })
+      let status = 'pass'
+      if (suite.pending) {
+        status = 'skip'
+      } else {
+        suite.eachTest(test => {
+          if (test.state === 'failed' || test.timedOut) {
+            status = 'fail'
+          }
+        })
+      }
 
       const asyncResource = testSuiteToAr.get(suite)
       asyncResource.runInAsyncScope(() => {
         // get suite status
-        testSuiteFinishCh.publish(state)
+        testSuiteFinishCh.publish(status)
       })
     })
 
