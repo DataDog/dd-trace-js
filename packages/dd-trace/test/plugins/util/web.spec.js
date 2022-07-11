@@ -1,5 +1,6 @@
 'use strict'
 
+const vm = require('vm')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const tags = require('../../../../../ext/tags')
@@ -872,6 +873,83 @@ describe('plugins/util/web', () => {
     it('should filter the url', () => {
       const filtered = config.filter('/_notokay')
       expect(filtered).to.equal(false)
+    })
+  })
+
+  describe('obfuscateQs', () => {
+    const url = 'http://perdu.com/path/'
+    const qs = '?data=secret'
+
+    let config
+
+    beforeEach(() => {
+      config = {
+        queryStringObfuscation: new RegExp('secret', 'gi'),
+        queryStringObfuscationTimeout: null
+      }
+    })
+
+    afterEach(() => {
+      sinon.restore()
+    })
+
+    it('should not obfuscate when passed false', () => {
+      config.queryStringObfuscation = false
+
+      const result = web.obfuscateQs(config, url + qs)
+
+      expect(result).to.equal(url + qs)
+    })
+
+    it('should not obfuscate when no querystring is found', () => {
+      const result = web.obfuscateQs(config, url)
+
+      expect(result).to.equal(url)
+    })
+
+    it('should remove the querystring if passed true', () => {
+      config.queryStringObfuscation = true
+
+      const result = web.obfuscateQs(config, url + qs)
+
+      expect(result).to.equal(url)
+    })
+
+    it('should obfuscate only the querystring part of the url without vm', () => {
+      sinon.spy(vm.Script.prototype, 'runInNewContext')
+
+      const result = web.obfuscateQs(config, url + 'secret/' + qs)
+
+      expect(result).to.equal(url + 'secret/?data=<redacted>')
+      expect(vm.Script.prototype.runInNewContext).to.not.have.been.called
+    })
+
+    it('should obfuscate only the querystring part of the url with vm', () => {
+      sinon.spy(vm.Script.prototype, 'runInNewContext')
+
+      config.queryStringObfuscationTimeout = 99999
+
+      const result = web.obfuscateQs(config, url + 'secret/' + qs)
+
+      expect(result).to.equal(url + 'secret/?data=<redacted>')
+      expect(vm.Script.prototype.runInNewContext).to.have.been.calledOnce
+    })
+
+    it('should obfuscate all querystring when timeout config is reached', () => {
+      config.queryStringObfuscationTimeout = 0
+
+      const result = web.obfuscateQs(config, url + qs)
+
+      expect(result).to.equal(url)
+    })
+
+    it('should prevent catastrophic regex when passed timeout', () => {
+      config.queryStringObfuscation = new RegExp('=(a*)*$', 'gi')
+      config.queryStringObfuscationTimeout = 5
+
+      const result = web.obfuscateQs(config, url + '?data=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab')
+
+      expect(result).to.equal(url)
     })
   })
 })
