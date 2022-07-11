@@ -71,8 +71,6 @@ tracer.init({
   },
   flushInterval: 1000,
   flushMinSpans: 500,
-  queryStringObfuscation: '.*',
-  queryStringObfuscationTimeout: 10,
   lookup: () => {},
   sampleRate: 0.1,
   service: 'test',
