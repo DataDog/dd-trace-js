@@ -162,11 +162,17 @@ describe('Plugin Manager', () => {
         queryStringObfuscation: '.*',
         queryStringObfuscationTimeout: 42
       })
-      expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true, service: 'deux', logInjection: true })
+      expect(Two.prototype.configure).to.have.been.calledWith({
+        enabled: true,
+        service: 'deux',
+        logInjection: true,
+        queryStringObfuscation: '.*',
+        queryStringObfuscationTimeout: 42
+      })
       expect(Four.prototype.configure).to.have.been.calledWith({
         enabled: true,
         logInjection: true,
-        queryStringObfuscation: ':*',
+        queryStringObfuscation: '.*',
         queryStringObfuscationTimeout: 42
       })
     })
