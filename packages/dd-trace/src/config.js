@@ -8,7 +8,6 @@ const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
-const log = require('./log')
 const uuid = require('crypto-randomuuid')
 
 const fromEntries = Object.fromEntries || (entries =>
