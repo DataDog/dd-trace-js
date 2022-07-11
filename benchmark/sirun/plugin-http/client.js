@@ -24,4 +24,4 @@ function request (url) {
   })
 }
 
-request(`http://localhost:${port}/`)
+request(`http://localhost:${port}/?aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&token=secret&aaaaaaaaaaaa`)
