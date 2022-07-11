@@ -58,8 +58,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.port', '8125')
     expect(config).to.have.property('flushInterval', 2000)
     expect(config).to.have.property('flushMinSpans', 1000)
-    expect(config).to.have.nested.property('queryStringObfuscation.source').with.length(625)
-    expect(config).to.have.property('queryStringObfuscationTimeout', 5)
+    expect(config).to.have.property('queryStringObfuscation').with.length(625)
+    expect(config).to.have.property('queryStringObfuscationTimeout', null)
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.have.property('service', 'node')
@@ -141,7 +141,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '1.0.0')
-    expect(config).to.have.property('queryStringObfuscation', false)
+    expect(config).to.have.property('queryStringObfuscation', '')
     expect(config).to.have.property('queryStringObfuscationTimeout', 42)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
@@ -223,8 +223,6 @@ describe('Config', () => {
       tags,
       flushInterval: 5000,
       flushMinSpans: 500,
-      queryStringObfuscation: true,
-      queryStringObfuscationTimeout: 42,
       runtimeMetrics: true,
       reportHostname: true,
       plugins: false,
@@ -260,8 +258,6 @@ describe('Config', () => {
     expect(config.tags).to.have.property('env', 'test')
     expect(config).to.have.property('flushInterval', 5000)
     expect(config).to.have.property('flushMinSpans', 500)
-    expect(config).to.have.property('queryStringObfuscation', true)
-    expect(config).to.have.property('queryStringObfuscationTimeout', 42)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
@@ -294,7 +290,6 @@ describe('Config', () => {
       tags,
       flushInterval: 5000,
       flushMinSpans: 500,
-      queryStringObfuscation: '?)',
       plugins: false
     })
 
@@ -309,7 +304,6 @@ describe('Config', () => {
     expect(config.tags).to.have.property('foo', 'bar')
     expect(config).to.have.property('flushInterval', 5000)
     expect(config).to.have.property('flushMinSpans', 500)
-    expect(config).to.have.property('queryStringObfuscation', true)
     expect(config).to.have.property('plugins', false)
   })
 
@@ -333,8 +327,6 @@ describe('Config', () => {
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
     process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
-    process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '^$'
-    process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP_TIMEOUT = 11
     process.env.DD_SERVICE = 'service'
     process.env.DD_VERSION = '0.0.0'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
@@ -368,8 +360,6 @@ describe('Config', () => {
       runtimeMetrics: false,
       reportHostname: false,
       flushMinSpans: 500,
-      queryStringObfuscation: '.*',
-      queryStringObfuscationTimeout: 42,
       service: 'test',
       version: '1.0.0',
       env: 'development',
@@ -403,8 +393,6 @@ describe('Config', () => {
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('flushMinSpans', 500)
-    expect(config).to.have.property('queryStringObfuscation', true)
-    expect(config).to.have.property('queryStringObfuscationTimeout', 42)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('env', 'development')
