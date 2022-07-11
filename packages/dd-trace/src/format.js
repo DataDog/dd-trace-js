@@ -1,6 +1,5 @@
 'use strict'
 
-const vm = require('vm')
 const constants = require('./constants')
 const tags = require('../../../ext/tags')
 const id = require('./id')
@@ -20,12 +19,12 @@ const map = {
   'resource.name': 'resource'
 }
 
-function format (span, config) {
+function format (span) {
   const formatted = formatSpan(span)
 
   extractRootTags(formatted, span)
   extractChunkTags(formatted, span)
-  extractTags(formatted, span, config)
+  extractTags(formatted, span)
 
   return formatted
 }
@@ -47,7 +46,7 @@ function formatSpan (span) {
   }
 }
 
-function extractTags (trace, span, config) {
+function extractTags (trace, span) {
   const context = span.context()
   const origin = context._trace.origin
   const tags = context._tags
@@ -68,9 +67,6 @@ function extractTags (trace, span, config) {
       // HACK: remove when Datadog supports numeric status code
       case 'http.status_code':
         addTag(trace.meta, {}, tag, tags[tag] && String(tags[tag]))
-        break
-      case 'http.url':
-        addTag(trace.meta, {}, tag, obfuscateQs(tags[tag], config))
         break
       case HOSTNAME_KEY:
       case MEASURED:
@@ -184,35 +180,6 @@ function isUrl (obj) {
     typeof obj.toString === 'function'
 }
 
-const obfuscatorScript = new vm.Script('qs.replace(obfuscator, \'<redacted>\')')
 
-function obfuscateQs (url, config) {
-  const { queryStringObfuscation, queryStringObfuscationTimeout } = config
-
-  if (queryStringObfuscation === false) return url
-
-  const i = url.indexOf('?')
-
-  if (i === -1) return url
-
-  const path = url.slice(0, i)
-
-  if (queryStringObfuscation === true) return path
-
-  let qs = url.slice(i + 1)
-
-  try {
-    qs = obfuscatorScript.runInNewContext({
-      qs,
-      obfuscator: queryStringObfuscation
-    }, {
-      timeout: queryStringObfuscationTimeout
-    })
-
-    return `${path}?${qs}`
-  } catch {
-    return path
-  }
-}
 
 module.exports = format
