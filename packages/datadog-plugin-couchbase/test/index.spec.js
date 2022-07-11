@@ -169,13 +169,15 @@ describe('Plugin', () => {
                 expect(e.message).to.be.oneOf([
                   // depending on version of node
                   'Cannot read property \'toString\' of undefined',
-                  'Cannot read properties of undefined (reading \'toString\')'
+                  'Cannot read properties of undefined (reading \'toString\')',
+                  'parsing failure' // sdk 4
                 ])
                 done()
               }
               try {
                 cluster.query(undefined).catch(checkError) // catch bad errors
               } catch (e) {
+                // catch errors conventionally as well
                 checkError(e)
               }
             }, () => {
