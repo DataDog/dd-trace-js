@@ -84,15 +84,13 @@ describe('plugins/util/web', () => {
         validateStatus: code => false,
         hooks: {
           request: () => 'test'
-        },
-        queryStringObfuscation: 'a*'
+        }
       })
 
       expect(config.headers).to.include('test')
       expect(config.validateStatus(200)).to.equal(false)
       expect(config).to.have.property('hooks')
       expect(config.hooks.request()).to.equal('test')
-      expect(config).to.have.property('queryStringObfuscation').deep.equal(/a*/gi)
     })
 
     it('should use the server config if set', () => {
@@ -102,8 +100,7 @@ describe('plugins/util/web', () => {
           validateStatus: code => false,
           hooks: {
             request: () => 'test'
-          },
-          queryStringObfuscation: 'a*'
+          }
         }
       })
 
@@ -111,7 +108,6 @@ describe('plugins/util/web', () => {
       expect(config.validateStatus(200)).to.equal(false)
       expect(config).to.have.property('hooks')
       expect(config.hooks.request()).to.equal('test')
-      expect(config).to.have.property('queryStringObfuscation').deep.equal(/a*/gi)
     })
 
     it('should prioritize the server config over the shared config', () => {
@@ -125,12 +121,46 @@ describe('plugins/util/web', () => {
       expect(config.headers).to.include('bar')
     })
 
-    it('should default queryStringObfuscation to true when passed a bad regex', () => {
-      const config = web.normalizeConfig({
-        queryStringObfuscation: '(?)'
+    describe('queryStringObfuscation', () => {
+      it('should keep booleans as is', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: false
+        })
+
+        expect(config).to.have.property('queryStringObfuscation', false)
       })
 
-      expect(config).to.have.property('queryStringObfuscation', true)
+      it('should change to false when passed empty string', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: ''
+        })
+
+        expect(config).to.have.property('queryStringObfuscation', false)
+      })
+
+      it('should change to true when passed ".*"', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: '.*'
+        })
+
+        expect(config).to.have.property('queryStringObfuscation', true)
+      })
+
+      it('should convert to regex when passed valid string', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: 'a*'
+        })
+
+        expect(config).to.have.deep.property('queryStringObfuscation', /a*/gi)
+      })
+
+      it('should default to true when passed a bad regex', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: '(?)'
+        })
+
+        expect(config).to.have.property('queryStringObfuscation', true)
+      })
     })
   })
 
