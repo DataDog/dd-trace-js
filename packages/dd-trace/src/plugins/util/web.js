@@ -1,5 +1,6 @@
 'use strict'
 
+const vm = require('vm')
 const uniq = require('lodash.uniq')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
@@ -33,6 +34,8 @@ const HTTP2_HEADER_PATH = ':path'
 const contexts = new WeakMap()
 const ends = new WeakMap()
 
+const obfuscatorScript = new vm.Script('qs.replace(obfuscator, \'<redacted>\')')
+
 const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
@@ -43,13 +46,15 @@ const web = {
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
     const middleware = getMiddlewareSetting(config)
+    const queryStringObfuscation = getQsObfuscator(config)
 
     return Object.assign({}, config, {
       headers,
       validateStatus,
       hooks,
       filter,
-      middleware
+      middleware,
+      queryStringObfuscation
     })
   },
 
@@ -299,6 +304,39 @@ const web = {
     context.span.finish()
     context.finished = true
   },
+  obfuscateQs (config, url) {
+    const { queryStringObfuscation, queryStringObfuscationTimeout } = config
+
+    if (queryStringObfuscation === false) return url
+
+    const i = url.indexOf('?')
+
+    if (i === -1) return url
+
+    const path = url.slice(0, i)
+
+    if (queryStringObfuscation === true) return path
+
+    let qs = url.slice(i + 1)
+
+    if (queryStringObfuscationTimeout === null) {
+      qs = qs.replace(queryStringObfuscation, '<redacted>')
+      return `${path}?${qs}`
+    }
+
+    try {
+      qs = obfuscatorScript.runInNewContext({
+        qs,
+        obfuscator: queryStringObfuscation
+      }, {
+        timeout: queryStringObfuscationTimeout
+      })
+
+      return `${path}?${qs}`
+    } catch {
+      return path
+    }
+  },
   wrapWriteHead (context) {
     const { req, res } = context
     const writeHead = res.writeHead
@@ -406,11 +444,11 @@ function reactivate (req, fn) {
 }
 
 function addRequestTags (context) {
-  const { req, span } = context
+  const { req, span, config } = context
   const url = extractURL(req)
 
   span.addTags({
-    [HTTP_URL]: url,
+    [HTTP_URL]: web.obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
     [SPAN_TYPE]: WEB,
@@ -516,6 +554,32 @@ function getMiddlewareSetting (config) {
     return config.middleware
   } else if (config && config.hasOwnProperty('middleware')) {
     log.error('Expected `middleware` to be a boolean.')
+  }
+
+  return true
+}
+
+function getQsObfuscator (config) {
+  const obfuscator = config.queryStringObfuscation
+
+  if (typeof obfuscator === 'boolean') {
+    return obfuscator
+  }
+
+  if (typeof obfuscator === 'string') {
+    if (obfuscator === '') return false // disable obfuscator
+
+    if (obfuscator === '.*') return true // optimize full redact
+
+    try {
+      return new RegExp(obfuscator, 'gi')
+    } catch (err) {
+      log.error(err)
+    }
+  }
+
+  if (config.hasOwnProperty('queryStringObfuscation')) {
+    log.error('Expected `queryStringObfuscation` to be a regex string or boolean.')
   }
 
   return true
