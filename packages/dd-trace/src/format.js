@@ -180,6 +180,4 @@ function isUrl (obj) {
     typeof obj.toString === 'function'
 }
 
-
-
 module.exports = format
