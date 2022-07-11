@@ -40,14 +40,14 @@ describe('Plugin', () => {
 
         beforeEach(done => {
           withSemverGTE3(version, () => {
-            couchbase.connect('localhost:8091', {
+            couchbase.connect('couchbase://localhost', {
               username: 'Administrator',
               password: 'password'
             }).then(_cluster => {
               cluster = _cluster
               bucket = cluster.bucket('datadog-test')
               collection = bucket.defaultCollection()
-            }).then(done).catch(err => done(err))
+            }).then(done).catch(done)
           }, () => {
             cluster = new couchbase.Cluster('localhost:8091')
             cluster.authenticate('Administrator', 'password')
