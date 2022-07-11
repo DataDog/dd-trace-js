@@ -54,6 +54,9 @@ class MochaPlugin extends Plugin {
     this.codeOwnersEntries = getCodeOwnersFileEntries(this.sourceRoot)
 
     this.addSub('ci:mocha:run:start', (command) => {
+      if (!this.config.isAgentlessEnabled) {
+        return
+      }
       const childOf = getTestParentSpan(this.tracer)
       const testSessionSpanMetadata = getTestSessionCommonTags(command, this.tracer._version)
 
@@ -68,6 +71,9 @@ class MochaPlugin extends Plugin {
     })
 
     this.addSub('ci:mocha:test-suite:start', (suite) => {
+      if (!this.config.isAgentlessEnabled) {
+        return
+      }
       const store = storage.getStore()
       const testSuiteMetadata = getTestSuiteCommonTags(this.command, this.tracer._version, suite.fullTitle())
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
@@ -82,15 +88,20 @@ class MochaPlugin extends Plugin {
     })
 
     this.addSub('ci:mocha:test-suite:finish', (status) => {
+      if (!this.config.isAgentlessEnabled) {
+        return
+      }
       const span = storage.getStore().span
       span.setTag(TEST_STATUS, status)
       span.finish()
     })
 
     this.addSub('ci:mocha:test-suite:error', (err) => {
+      if (!this.config.isAgentlessEnabled) {
+        return
+      }
       const span = storage.getStore().span
       span.setTag('error', err)
-      span.finish()
     })
 
     this.addSub('ci:mocha:test:start', (test) => {
@@ -136,17 +147,29 @@ class MochaPlugin extends Plugin {
     })
 
     this.addSub('ci:mocha:run:finish', (status) => {
-      this.testSessionSpan.setTag(TEST_STATUS, status)
-      this.testSessionSpan.finish()
-      finishAllTraceSpans(this.testSessionSpan)
+      if (this.testSessionSpan) {
+        this.testSessionSpan.setTag(TEST_STATUS, status)
+        this.testSessionSpan.finish()
+        finishAllTraceSpans(this.testSessionSpan)
+      }
       this.tracer._exporter._writer.flush()
     })
   }
 
   startTestSpan (test) {
+    const testSuiteTags = {}
     const testSuiteSpan = this._testSuites.get(test.parent)
-    const testSuiteId = testSuiteSpan.context()._spanId.toString('hex')
-    const testSessionId = this.testSessionSpan.context()._traceId.toString('hex')
+
+    if (testSuiteSpan) {
+      const testSuiteId = testSuiteSpan.context()._spanId.toString('hex')
+      testSuiteTags[TEST_SUITE_ID] = testSuiteId
+    }
+
+    if (this.testSessionSpan) {
+      const testSessionId = this.testSessionSpan.context()._traceId.toString('hex')
+      testSuiteTags[TEST_SESSION_ID] = testSessionId
+      testSuiteTags[TEST_COMMAND] = this.command
+    }
 
     const { childOf, ...testSpanMetadata } = getTestSpanMetadata(this.tracer, test, this.sourceRoot)
 
@@ -166,9 +189,7 @@ class MochaPlugin extends Plugin {
         tags: {
           ...this.testEnvironmentMetadata,
           ...testSpanMetadata,
-          [TEST_SUITE_ID]: testSuiteId,
-          [TEST_SESSION_ID]: testSessionId,
-          [TEST_COMMAND]: this.command
+          ...testSuiteTags
         }
       })
     testSpan.context()._trace.origin = CI_APP_ORIGIN

@@ -9,6 +9,11 @@ const ENCODING_VERSION = 1
 
 const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_suite_end', 'test']
 
+const TEST_SUITE_KEYS_LENGTH = 11
+const TEST_SESSION_KEYS_LENGTH = 10
+
+const CHUNK_SIZE = 4 * 1024 * 1024 // 4MB
+
 function formatSpan (span) {
   let encodingVersion = ENCODING_VERSION
   if (span.type === 'test' && span.meta && span.meta.test_session_id) {
@@ -28,8 +33,8 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this.runtimeId = runtimeId
     this.service = service
     this.env = env
-    this._traceBytes = new Chunk()
-    this._stringBytes = new Chunk()
+    this._traceBytes = new Chunk(CHUNK_SIZE)
+    this._stringBytes = new Chunk(CHUNK_SIZE)
     this._stringCount = 0
     this._stringMap = {}
 
@@ -41,7 +46,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeTestSuite (bytes, content) {
-    this._encodeMapPrefix(bytes, content, 11)
+    this._encodeMapPrefix(bytes, TEST_SUITE_KEYS_LENGTH)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, content.type)
 
@@ -70,7 +75,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeTestSession (bytes, content) {
-    this._encodeMapPrefix(bytes, content, 10)
+    this._encodeMapPrefix(bytes, TEST_SESSION_KEYS_LENGTH)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, content.type)
 
@@ -96,11 +101,13 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeEventContent (bytes, content) {
+    const keysLength = Object.keys(content).length
     if (content.meta.test_session_id) {
-      this._encodeMapPrefix(bytes, content, Object.keys(content).length + 2)
+      this._encodeMapPrefix(bytes, keysLength + 2)
     } else {
-      this._encodeMapPrefix(bytes, content)
+      this._encodeMapPrefix(bytes, keysLength)
     }
+
     if (content.type) {
       this._encodeString(bytes, 'type')
       this._encodeString(bytes, content.type)
@@ -138,7 +145,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeEvent (bytes, event) {
-    this._encodeMapPrefix(bytes, event)
+    this._encodeMapPrefix(bytes, Object.keys(event).length)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, event.type)
 
@@ -187,11 +194,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     buffer[offset + 8] = lo
   }
 
-  _encodeMapPrefix (bytes, map, length) {
-    let keysLength = Object.keys(map).length
-    if (length) {
-      keysLength = length
-    }
+  _encodeMapPrefix (bytes, keysLength) {
     const buffer = bytes.buffer
     const offset = bytes.length
 
@@ -254,11 +257,11 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       payload.metadata['*']['runtime-id'] = this.runtimeId
     }
 
-    this._encodeMapPrefix(bytes, payload)
+    this._encodeMapPrefix(bytes, Object.keys(payload).length)
     this._encodeString(bytes, 'version')
     this._encodeNumber(bytes, payload.version)
     this._encodeString(bytes, 'metadata')
-    this._encodeMapPrefix(bytes, payload.metadata)
+    this._encodeMapPrefix(bytes, Object.keys(payload.metadata).length)
     this._encodeString(bytes, '*')
     this._encodeMap(bytes, payload.metadata['*'])
     this._encodeString(bytes, 'events')

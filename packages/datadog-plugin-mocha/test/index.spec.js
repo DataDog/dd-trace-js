@@ -25,7 +25,6 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { version: ddTraceVersion } = require('../../../package.json')
-const { expect } = require('chai')
 
 const ASYNC_TESTS = [
   {
@@ -98,7 +97,7 @@ describe('Plugin', () => {
         .get('/')
         .reply(200, 'OK')
 
-      return agent.load(['mocha', 'http']).then(() => {
+      return agent.load(['mocha', 'http'], { isAgentlessEnabled: true }).then(() => {
         Mocha = require(`../../../versions/mocha@${version}`).get()
       })
     })
