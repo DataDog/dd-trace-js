@@ -12,6 +12,7 @@ const testRunFinishCh = channel('ci:mocha:run:finish')
 
 const testSuiteStartCh = channel('ci:mocha:test-suite:start')
 const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
+const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 
 // TODO: remove when root hooks and fixtures are implemented
 const patched = new WeakSet()
@@ -156,6 +157,15 @@ function mochaHook (Runner) {
             testFinishCh.publish('fail')
           } else {
             errorCh.publish(err)
+          }
+          // we propagate the error to the suite
+          const testSuiteAsyncResource = testSuiteToAr.get(test.parent)
+          if (testSuiteAsyncResource) {
+            const testSuiteError = new Error(`Test "${test.fullTitle()}" failed with message "${err.message}"`)
+            testSuiteError.stack = err.stack
+            testSuiteAsyncResource.runInAsyncScope(() => {
+              testSuiteErrorCh.publish(testSuiteError)
+            })
           }
         })
       }

@@ -87,6 +87,12 @@ class MochaPlugin extends Plugin {
       span.finish()
     })
 
+    this.addSub('ci:mocha:test-suite:error', (err) => {
+      const span = storage.getStore().span
+      span.setTag('error', err)
+      span.finish()
+    })
+
     this.addSub('ci:mocha:test:start', (test) => {
       const store = storage.getStore()
       const span = this.startTestSpan(test)
