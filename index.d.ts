@@ -280,19 +280,6 @@ export declare interface TracerOptions {
    flushMinSpans?: number;
 
   /**
-   * Specifies a regex that will redact sensitive data from the querystring reported in the `http.url` tag.
-   * '' (empty string) to disable redaction.
-   * '.*' to redact all querystring.
-   */
-   queryStringObfuscation?: string
-
-  /**
-   * Controls the maximum amount of time in milliseconds the querystring obfuscation operation is allowed to run synchronously for.
-   * @default 5
-   */
-   queryStringObfuscationTimeout?: number
-
-  /**
    * Whether to enable runtime metrics.
    * @default false
    */
