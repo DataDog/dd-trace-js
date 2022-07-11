@@ -53,7 +53,9 @@ module.exports = class Plugin {
 
     if (!store || !store.span) return
 
-    store.span.setTag('error', error)
+    if (!store.span._spanContext._tags['error']) {
+      store.span.setTag('error', error || 1)
+    }
   }
 
   configure (config) {
