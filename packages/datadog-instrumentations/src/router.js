@@ -47,11 +47,13 @@ function createWrapRouterMethod (name) {
         enterChannel.publish({ name, req, route })
 
         try {
-          return original.apply(this, arguments)
+          const ret = original.apply(this, arguments)
+          if (typeof ret === 'object' && typeof ret.then === 'function') {
+            ret.catch(e => handleError(e, req))
+          }
+          return ret
         } catch (e) {
-          errorChannel.publish(e)
-          nextChannel.publish({ req })
-
+          handleError(e, req)
           throw e
         }
       })
@@ -62,6 +64,11 @@ function createWrapRouterMethod (name) {
     handle._datadog_orig = original
 
     return handle
+  }
+
+  function handleError (error, req) {
+    errorChannel.publish(error)
+    nextChannel.publish({ req })
   }
 
   function wrapStack (stack, offset, matchers) {
