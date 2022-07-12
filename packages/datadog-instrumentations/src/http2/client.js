@@ -10,7 +10,7 @@ const responseChannel = channel('apm:http2:client:response')
 
 function createWrapEmit (requestResource, parentResource) {
   return function wrapEmit (emit) {
-    return function emitWithTrace (event, arg1) {
+    return function (event, arg1) {
       requestResource.runInAsyncScope(() => {
         switch (event) {
           case 'response':
@@ -33,7 +33,7 @@ function createWrapEmit (requestResource, parentResource) {
 
 function createWrapRequest (authority, options) {
   return function wrapRequest (request) {
-    return function requestWithTrace (headers) {
+    return function (headers) {
       const parentResource = new AsyncResource('bound-anonymous-fn')
       const requestResource = new AsyncResource('bound-anonymous-fn')
 
@@ -51,7 +51,7 @@ function createWrapRequest (authority, options) {
 }
 
 function wrapConnect (connect) {
-  return function connectWithTrace (authority, options) {
+  return function (authority, options) {
     const session = connect.apply(this, arguments)
 
     shimmer.wrap(session, 'request', createWrapRequest(authority, options))
