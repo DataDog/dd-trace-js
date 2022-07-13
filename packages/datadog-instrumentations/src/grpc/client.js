@@ -118,26 +118,26 @@ function wrapCallback (requestResource, parentResource, callback) {
 function wrapStream (call, requestResource, parentResource) {
   if (!call || typeof call.emit !== 'function') return
 
-  const emit = call.emit
+  shimmer.wrap(call, 'emit', emit => {
+    return function (eventName, ...args) {
+      requestResource.runInAsyncScope(() => {
+        switch (eventName) {
+          case 'error':
+            errorChannel.publish(args[0])
 
-  call.emit = function (eventName, ...args) {
-    requestResource.runInAsyncScope(() => {
-      switch (eventName) {
-        case 'error':
-          errorChannel.publish(args[0])
+            break
+          case 'status':
+            finishChannel.publish(args[0])
 
-          break
-        case 'status':
-          finishChannel.publish(args[0])
+            break
+        }
+      })
 
-          break
-      }
-    })
-
-    return parentResource.runInAsyncScope(() => {
-      return emit.apply(this, arguments)
-    })
-  }
+      return parentResource.runInAsyncScope(() => {
+        return emit.apply(this, arguments)
+      })
+    }
+  })
 }
 
 function callMethod (client, method, args, path, metadata, type) {

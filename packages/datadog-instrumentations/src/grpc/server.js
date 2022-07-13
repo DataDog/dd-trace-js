@@ -48,7 +48,7 @@ function wrapHandler (func, name) {
         arguments[1] = wrapCallback(callback, requestResource, parentResource)
       }
 
-      call.emit = requestResource.bind(call.emit)
+      shimmer.wrap(call, 'emit', emit => requestResource.bind(emit))
 
       return func.apply(this, arguments)
     })
@@ -66,36 +66,36 @@ function wrapRegister (register) {
 }
 
 function wrapStream (call, requestResource) {
-  const emit = call.emit
-
   if (call.call && call.call.sendStatus) {
     call.call.sendStatus = wrapSendStatus(call.call.sendStatus, requestResource)
   }
 
-  call.emit = function (eventName, ...args) {
-    switch (eventName) {
-      case 'error':
-        errorChannel.publish(args[0])
-        finishChannel.publish({ code: args[0].code })
+  shimmer.wrap(call, 'emit', emit => {
+    return function (eventName, ...args) {
+      switch (eventName) {
+        case 'error':
+          errorChannel.publish(args[0])
+          finishChannel.publish({ code: args[0].code })
 
-        break
+          break
 
-        // Finish the span of the response only if it was successful.
-        // Otherwise it'll be finished in the `error` listener.
-      case 'finish':
-        if (call.status) {
-          updateChannel.publish(call.status)
-        }
+          // Finish the span of the response only if it was successful.
+          // Otherwise it'll be finished in the `error` listener.
+        case 'finish':
+          if (call.status) {
+            updateChannel.publish(call.status)
+          }
 
-        if (!call.status || call.status.code === 0) {
-          finishChannel.publish()
-        }
+          if (!call.status || call.status.code === 0) {
+            finishChannel.publish()
+          }
 
-        break
+          break
+      }
+
+      return emit.apply(this, arguments)
     }
-
-    return emit.apply(this, arguments)
-  }
+  })
 }
 
 function wrapCallback (callback, requestResource, parentResource) {
