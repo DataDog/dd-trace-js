@@ -248,7 +248,8 @@ describe('Plugin Manager', () => {
         serviceMapping: { two: 'deux' },
         logInjection: true,
         clientIpHeaderDisabled: true,
-        clientIpHeader: 'x-true-client-ip'
+        clientIpHeader: 'x-true-client-ip',
+        queryStringObfuscation: '.*'
       })
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
@@ -257,13 +258,15 @@ describe('Plugin Manager', () => {
         service: 'deux',
         logInjection: true,
         clientIpHeaderDisabled: true,
-        clientIpHeader: 'x-true-client-ip'
+        clientIpHeader: 'x-true-client-ip',
+        queryStringObfuscation: '.*'
       })
       expect(Four.prototype.configure).to.have.been.calledWithMatch({
         enabled: true,
         logInjection: true,
         clientIpHeaderDisabled: true,
-        clientIpHeader: 'x-true-client-ip'
+        clientIpHeader: 'x-true-client-ip',
+        queryStringObfuscation: '.*'
       })
     })
   })
