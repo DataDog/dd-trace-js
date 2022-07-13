@@ -73,8 +73,6 @@ class Http2ClientPlugin extends Plugin {
       }
 
       addHeaderTags(span, headers, HTTP_RESPONSE_HEADERS, this.config)
-
-      span.finish()
     })
 
     this.addSub('apm:http2:client:request:finish', () => {
