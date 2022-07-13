@@ -1,7 +1,7 @@
 version: "2"
 services:
   couchbase:
-    image: rishabhdev/couchbase-server-sandbox:latest
+    image: sabrenner/couchbase-arm64-server-sandbox:latest
     ports:
       - "127.0.0.1:8091-8095:8091-8095"
       - "127.0.0.1:11210:11210"
