@@ -32,6 +32,15 @@
       "env": {
         "SERVER_USE_TRACER": "1"
       }
+    },
+    "server-querystring-obfuscation": {
+      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
+      "run": "node server.js",
+      "baseline": "server-with-tracer",
+      "env": {
+        "SERVER_USE_TRACER": "1",
+        "CLIENT_LONG_QUERYSTRING": "1"
+      }
     }
   }
 }
