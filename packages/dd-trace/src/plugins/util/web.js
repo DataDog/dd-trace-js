@@ -307,16 +307,15 @@ const web = {
     if (queryStringObfuscation === false) return url
 
     const i = url.indexOf('?')
-
     if (i === -1) return url
 
     const path = url.slice(0, i)
-
     if (queryStringObfuscation === true) return path
 
     let qs = url.slice(i + 1)
 
     qs = qs.replace(queryStringObfuscation, '<redacted>')
+
     return `${path}?${qs}`
   },
   wrapWriteHead (context) {
