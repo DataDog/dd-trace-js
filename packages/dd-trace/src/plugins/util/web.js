@@ -58,13 +58,15 @@ const web = {
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
     const middleware = getMiddlewareSetting(config)
+    const queryStringObfuscation = getQsObfuscator(config)
 
     return Object.assign({}, config, {
       headers,
       validateStatus,
       hooks,
       filter,
-      middleware
+      middleware,
+      queryStringObfuscation
     })
   },
 
@@ -368,6 +370,24 @@ const web = {
     return req.socket && req.socket.remoteAddress
   },
 
+  obfuscateQs (config, url) {
+    const { queryStringObfuscation } = config
+
+    if (queryStringObfuscation === false) return url
+
+    const i = url.indexOf('?')
+    if (i === -1) return url
+
+    const path = url.slice(0, i)
+    if (queryStringObfuscation === true) return path
+
+    let qs = url.slice(i + 1)
+
+    qs = qs.replace(queryStringObfuscation, '<redacted>')
+
+    return `${path}?${qs}`
+  },
+
   wrapWriteHead (context) {
     const { req, res } = context
     const writeHead = res.writeHead
@@ -458,11 +478,11 @@ function reactivate (req, fn) {
 }
 
 function addRequestTags (context) {
-  const { req, span } = context
+  const { req, span, config } = context
   const url = extractURL(req)
 
   span.addTags({
-    [HTTP_URL]: url.split('?')[0],
+    [HTTP_URL]: web.obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
     [SPAN_TYPE]: WEB,
@@ -614,6 +634,32 @@ function getMiddlewareSetting (config) {
     return config.middleware
   } else if (config && config.hasOwnProperty('middleware')) {
     log.error('Expected `middleware` to be a boolean.')
+  }
+
+  return true
+}
+
+function getQsObfuscator (config) {
+  const obfuscator = config.queryStringObfuscation
+
+  if (typeof obfuscator === 'boolean') {
+    return obfuscator
+  }
+
+  if (typeof obfuscator === 'string') {
+    if (obfuscator === '') return false // disable obfuscator
+
+    if (obfuscator === '.*') return true // optimize full redact
+
+    try {
+      return new RegExp(obfuscator, 'gi')
+    } catch (err) {
+      log.error(err)
+    }
+  }
+
+  if (config.hasOwnProperty('queryStringObfuscation')) {
+    log.error('Expected `queryStringObfuscation` to be a regex string or boolean.')
   }
 
   return true
