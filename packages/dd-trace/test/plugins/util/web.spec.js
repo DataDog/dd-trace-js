@@ -1,6 +1,5 @@
 'use strict'
 
-const vm = require('vm')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const tags = require('../../../../../ext/tags')
@@ -884,13 +883,8 @@ describe('plugins/util/web', () => {
 
     beforeEach(() => {
       config = {
-        queryStringObfuscation: new RegExp('secret', 'gi'),
-        queryStringObfuscationTimeout: null
+        queryStringObfuscation: new RegExp('secret', 'gi')
       }
-    })
-
-    afterEach(() => {
-      sinon.restore()
     })
 
     it('should not obfuscate when passed false', () => {
@@ -915,41 +909,10 @@ describe('plugins/util/web', () => {
       expect(result).to.equal(url)
     })
 
-    it('should obfuscate only the querystring part of the url without vm', () => {
-      sinon.spy(vm.Script.prototype, 'runInNewContext')
-
+    it('should obfuscate only the querystring part of the url', () => {
       const result = web.obfuscateQs(config, url + 'secret/' + qs)
 
       expect(result).to.equal(url + 'secret/?data=<redacted>')
-      expect(vm.Script.prototype.runInNewContext).to.not.have.been.called
-    })
-
-    it('should obfuscate only the querystring part of the url with vm', () => {
-      sinon.spy(vm.Script.prototype, 'runInNewContext')
-
-      config.queryStringObfuscationTimeout = 99999
-
-      const result = web.obfuscateQs(config, url + 'secret/' + qs)
-
-      expect(result).to.equal(url + 'secret/?data=<redacted>')
-      expect(vm.Script.prototype.runInNewContext).to.have.been.calledOnce
-    })
-
-    it('should obfuscate all querystring when timeout config is reached', () => {
-      config.queryStringObfuscationTimeout = 0
-
-      const result = web.obfuscateQs(config, url + qs)
-
-      expect(result).to.equal(url)
-    })
-
-    it('should prevent catastrophic regex when passed timeout', () => {
-      config.queryStringObfuscation = new RegExp('=(a*)*$', 'gi')
-      config.queryStringObfuscationTimeout = 5
-
-      const result = web.obfuscateQs(config, url + '?data=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab')
-
-      expect(result).to.equal(url)
     })
   })
 })

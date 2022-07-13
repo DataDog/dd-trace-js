@@ -1,6 +1,5 @@
 'use strict'
 
-const vm = require('vm')
 const uniq = require('lodash.uniq')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
@@ -33,8 +32,6 @@ const HTTP2_HEADER_PATH = ':path'
 
 const contexts = new WeakMap()
 const ends = new WeakMap()
-
-const obfuscatorScript = new vm.Script('qs.replace(obfuscator, \'<redacted>\')')
 
 const web = {
   // Ensure the configuration has the correct structure and defaults.
@@ -305,7 +302,7 @@ const web = {
     context.finished = true
   },
   obfuscateQs (config, url) {
-    const { queryStringObfuscation, queryStringObfuscationTimeout } = config
+    const { queryStringObfuscation } = config
 
     if (queryStringObfuscation === false) return url
 
@@ -319,23 +316,8 @@ const web = {
 
     let qs = url.slice(i + 1)
 
-    if (queryStringObfuscationTimeout === null) {
-      qs = qs.replace(queryStringObfuscation, '<redacted>')
-      return `${path}?${qs}`
-    }
-
-    try {
-      qs = obfuscatorScript.runInNewContext({
-        qs,
-        obfuscator: queryStringObfuscation
-      }, {
-        timeout: queryStringObfuscationTimeout
-      })
-
-      return `${path}?${qs}`
-    } catch {
-      return path
-    }
+    qs = qs.replace(queryStringObfuscation, '<redacted>')
+    return `${path}?${qs}`
   },
   wrapWriteHead (context) {
     const { req, res } = context

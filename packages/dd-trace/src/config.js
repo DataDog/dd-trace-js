@@ -116,10 +116,6 @@ class Config {
       process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       qsRegex
     )
-    const DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP_TIMEOUT = coalesce(
-      parseInt(process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP_TIMEOUT),
-      null
-    )
     const DD_TRACE_B3_ENABLED = coalesce(
       options.experimental && options.experimental.b3,
       process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
@@ -215,7 +211,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.sampleRate = coalesce(Math.min(Math.max(sampler.sampleRate, 0), 1), 1)
     this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
-    this.queryStringObfuscationTimeout = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP_TIMEOUT
     this.logger = options.logger
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE
