@@ -46,7 +46,9 @@ function mochaHook (Runner) {
       return run.apply(this, arguments)
     }
 
-    this.once('end', function () {
+    const testRunAsyncResource = new AsyncResource('bound-anonymous-fn')
+
+    this.once('end', testRunAsyncResource.bind(function () {
       let status = 'pass'
       if (this.stats) {
         status = this.stats.failures === 0 ? 'pass' : 'fail'
@@ -54,13 +56,13 @@ function mochaHook (Runner) {
         status = 'fail'
       }
       testRunFinishCh.publish(status)
-    })
+    }))
 
-    this.once('start', function () {
+    this.once('start', testRunAsyncResource.bind(function () {
       const processArgv = process.argv.slice(2).join(' ')
       const command = `mocha ${processArgv}`
       testRunStartCh.publish(command)
-    })
+    }))
 
     this.on('suite', function (suite) {
       if (suite.root) {
