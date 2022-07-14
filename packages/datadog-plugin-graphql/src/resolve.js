@@ -12,12 +12,15 @@ class GraphQLResolvePlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub('apm:graphql:resolve:start', ({ info, context, collapsedPathString }) => {
+    this.addSub('apm:graphql:resolve:start', ({ info, context }) => {
       const store = storage.getStore()
       depthPredicate(info, this.config, (computedPath) => {
         const computedPathString = computedPath.join('.')
         if ((!this.config.collapse && !context.fields[computedPathString]) ||
-             !context.collapsedPaths[collapsedPathString]) {
+             !context.collapsedPaths[computedPathString]) {
+          // cache the collapsed string here
+          if (this.config.collapse) context.collapsedPaths[computedPathString] = true
+
           const service = this.config.service || this.tracer._service
           const childOf = store ? store.span : store
           const span = this.tracer.startSpan(`graphql.resolve`, {

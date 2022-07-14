@@ -246,10 +246,8 @@ function assertField (context, info) {
   const pathInfo = info && info.path
 
   const path = pathToArray(pathInfo)
-  const collapsedPath = pathToArray(pathInfo, false)
 
   const pathString = path.join('.')
-  const collapsedPathString = collapsedPath.join('.')
   const fields = context.fields
 
   let field = fields[pathString]
@@ -266,8 +264,7 @@ function assertField (context, info) {
       childResource.runInAsyncScope(() => {
         startResolveCh.publish({
           info,
-          context,
-          collapsedPathString
+          context
         })
       })
 
@@ -276,8 +273,6 @@ function assertField (context, info) {
         asyncResource: childResource,
         error: null
       }
-
-      context.collapsedPaths[collapsedPathString] = true
     })
   }
 
