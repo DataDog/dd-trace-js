@@ -24,7 +24,6 @@ class DatadogTracer extends Tracer {
     options = Object.assign({
       childOf: this.scope().active()
     }, options)
-
     if (!options.childOf && options.orphanable === false) {
       return fn(null, () => {})
     }
@@ -41,8 +40,22 @@ class DatadogTracer extends Tracer {
         }))
       }
 
-      const result = this.scope().activate(span, () => fn(span))
-
+      // const result = this.scope().activate(span, () => fn(span))
+      const result = this.scope().activate(span, () => {
+        if (process.env.DD_TRACE_MAX_DURATION) {
+          setTimeout(() => {
+            console.log('SETTING KILLALL IN MAIN TRACER')
+            const active = this.currentSpan()
+            const err = new Error('Datadog detected an impending timeout')
+            addError(active, err)
+            active.setTag('error', 1)
+            this._processor.killAll()
+            active.finish()
+            console.log('active scope tags', active._spanContext._tags)
+          }, process.env.DD_TRACE_MAX_DURATION)
+        }
+        return fn(span)
+      })
       if (result && typeof result.then === 'function') {
         result.then(
           () => span.finish(),

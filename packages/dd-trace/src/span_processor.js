@@ -11,6 +11,7 @@ class SpanProcessor {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
+    this._killAll = false
   }
 
   process (span) {
@@ -21,6 +22,16 @@ class SpanProcessor {
     const { flushMinSpans } = this._config
     const { started, finished } = trace
 
+    if (this._killAll) {
+      console.log('killall set, killing spans')
+      started.map(startedSpan => {
+        console.log('started is', startedSpan)
+        if (!startedSpan._duration) {
+          console.log('killing unfinished span', startedSpan)
+          startedSpan.finish()
+        }
+      })
+    }
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this._prioritySampler.sample(spanContext)
 
@@ -37,7 +48,13 @@ class SpanProcessor {
       }
 
       this._erase(trace, active)
+    } else {
+      console.log('NOT FLUSHING BECAUSE STARTED AND FINISHED NOT EQUAL')
     }
+  }
+
+  killAll () {
+    this._killAll = true
   }
 
   _erase (trace, active) {
