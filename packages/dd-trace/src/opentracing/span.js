@@ -1,22 +1,15 @@
 'use strict'
 
-// TODO (new internal tracer): use DC events for lifecycle metrics and test them
-
 const opentracing = require('opentracing')
 const now = require('performance-now')
-const semver = require('semver')
 const Span = opentracing.Span
 const SpanContext = require('./span_context')
 const id = require('../id')
 const tagger = require('../tagger')
-const metrics = require('../metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 
 const { DD_TRACE_EXPERIMENTAL_STATE_TRACKING } = process.env
-
-const unfinishedRegistry = createRegistry('unfinished')
-const finishedRegistry = createRegistry('finished')
 
 class DatadogSpan extends Span {
   constructor (tracer, processor, prioritySampler, fields, debug) {
@@ -32,7 +25,6 @@ class DatadogSpan extends Span {
     this._processor = processor
     this._prioritySampler = prioritySampler
     this._store = storage.getStore()
-    this._name = operationName
 
     this._spanContext = this._createContext(parent)
     this._spanContext._name = operationName
@@ -40,13 +32,6 @@ class DatadogSpan extends Span {
     this._spanContext._hostname = hostname
 
     this._startTime = fields.startTime || this._getTime()
-
-    if (this._debug && unfinishedRegistry) {
-      metrics.increment('runtime.node.spans.unfinished')
-      metrics.increment('runtime.node.spans.unfinished.by.name', `span_name:${operationName}`)
-
-      unfinishedRegistry.register(this, operationName, this)
-    }
   }
 
   toString () {
@@ -137,16 +122,6 @@ class DatadogSpan extends Span {
       }
     }
 
-    if (this._debug && finishedRegistry) {
-      metrics.decrement('runtime.node.spans.unfinished')
-      metrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
-      metrics.increment('runtime.node.spans.finished')
-      metrics.increment('runtime.node.spans.finished.by.name', `span_name:${this._name}`)
-
-      unfinishedRegistry.unregister(this)
-      finishedRegistry.register(this, this._name)
-    }
-
     finishTime = parseFloat(finishTime) || this._getTime()
 
     this._duration = finishTime - this._startTime
@@ -154,15 +129,6 @@ class DatadogSpan extends Span {
     this._spanContext._isFinished = true
     this._processor.process(this)
   }
-}
-
-function createRegistry (type) {
-  if (!semver.satisfies(process.version, '>=14.6')) return
-
-  return new global.FinalizationRegistry(name => {
-    metrics.decrement(`runtime.node.spans.${type}`)
-    metrics.decrement(`runtime.node.spans.${type}.by.name`, [`span_name:${name}`])
-  })
 }
 
 module.exports = DatadogSpan
