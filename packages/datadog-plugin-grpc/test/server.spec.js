@@ -2,9 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
-const plugin = require('../src/server')
 const Readable = require('stream').Readable
-const kinds = require('../src/kinds')
 const pkgs = ['grpc', '@grpc/grpc-js']
 
 describe('Plugin', () => {
@@ -60,7 +58,7 @@ describe('Plugin', () => {
       server.forceShutdown()
     })
 
-    withVersions(plugin, pkgs, (version, pkg) => {
+    withVersions('grpc', pkgs, (version, pkg) => {
       describe('without configuration', () => {
         before(() => {
           return agent.load('grpc', { client: false })
@@ -71,7 +69,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         it('should handle `unary` calls', async () => {
@@ -93,7 +91,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
               expect(traces[0][0].meta).to.have.property('grpc.method.package', 'test')
               expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getUnary')
-              expect(traces[0][0].meta).to.have.property('grpc.method.kind', kinds.unary)
+              expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'unary')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].meta).to.have.property('component', 'grpc')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
@@ -118,7 +116,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('grpc.method.name', 'getServerStream')
               expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
               expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getServerStream')
-              expect(traces[0][0].meta).to.have.property('grpc.method.kind', kinds.server_stream)
+              expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'server_streaming')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
             })
@@ -143,7 +141,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('grpc.method.name', 'getBidi')
               expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
               expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getBidi')
-              expect(traces[0][0].meta).to.have.property('grpc.method.kind', kinds.bidi)
+              expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'bidi_streaming')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
             })
@@ -321,7 +319,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         it('should be configured with the correct values', async () => {
@@ -356,7 +354,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         it('should handle request metadata', async () => {
