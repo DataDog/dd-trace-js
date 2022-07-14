@@ -14,7 +14,7 @@ const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
 
 const spanId = id('0234567812345678')
 
-describe('format', () => {
+describe.only('format', () => {
   let format
   let span
   let trace
