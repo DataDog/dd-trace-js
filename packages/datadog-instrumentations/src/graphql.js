@@ -170,7 +170,7 @@ function wrapExecute (execute) {
           docSource: documentSources.get(document)
         })
 
-        const context = { source, asyncResource, fields: {} }
+        const context = { source, asyncResource, fields: {}, collapsedPaths: {} }
 
         contexts.set(contextValue, context)
 
@@ -195,9 +195,7 @@ function wrapResolve (resolve) {
 
     if (!context) return resolve.apply(this, arguments)
 
-    const path = pathToArray(info && info.path)
-
-    const field = assertField(context, info, path)
+    const field = assertField(context, info)
 
     return callInAsyncScope(resolve, field.asyncResource, this, arguments, (err) => {
       updateFieldCh.publish({ field, info, err })
@@ -232,18 +230,26 @@ function callInAsyncScope (fn, aR, thisArg, args, cb) {
   })
 }
 
-function pathToArray (path) {
+function pathToArray (path, includeNumbers = true) {
   const flattened = []
   let curr = path
   while (curr) {
-    flattened.push(curr.key)
+    const key = curr.key
+    flattened.push(key)
+    if (typeof key === 'number' && !includeNumbers) flattened.splice(-1)
     curr = curr.prev
   }
   return flattened.reverse()
 }
 
-function assertField (context, info, path) {
+function assertField (context, info) {
+  const pathInfo = info && info.path
+
+  const path = pathToArray(pathInfo)
+  const collapsedPath = pathToArray(pathInfo, false)
+
   const pathString = path.join('.')
+  const collapsedPathString = collapsedPath.join('.')
   const fields = context.fields
 
   let field = fields[pathString]
@@ -260,7 +266,8 @@ function assertField (context, info, path) {
       childResource.runInAsyncScope(() => {
         startResolveCh.publish({
           info,
-          context
+          context,
+          collapsedPathString
         })
       })
 
@@ -269,6 +276,8 @@ function assertField (context, info, path) {
         asyncResource: childResource,
         error: null
       }
+
+      context.collapsedPaths[collapsedPathString] = true
     })
   }
 

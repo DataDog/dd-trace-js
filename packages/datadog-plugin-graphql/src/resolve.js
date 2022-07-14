@@ -12,10 +12,12 @@ class GraphQLResolvePlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub('apm:graphql:resolve:start', ({ info, context }) => {
+    this.addSub('apm:graphql:resolve:start', ({ info, context, collapsedPathString }) => {
       const store = storage.getStore()
       depthPredicate(info, this.config, (computedPath) => {
-        if (!hasLikePath(context, computedPath)) {
+        const computedPathString = computedPath.join('.')
+        if ((!this.config.collapse && !context.fields[computedPathString]) ||
+             !context.collapsedPaths[collapsedPathString]) {
           const service = this.config.service || this.tracer._service
           const childOf = store ? store.span : store
           const span = this.tracer.startSpan(`graphql.resolve`, {
@@ -33,7 +35,7 @@ class GraphQLResolvePlugin extends Plugin {
           span.addTags({
             'resource.name': `${info.fieldName}:${info.returnType}`,
             'graphql.field.name': info.fieldName,
-            'graphql.field.path': computedPath.join('.'),
+            'graphql.field.path': computedPathString,
             'graphql.field.type': info.returnType.name
           })
 
@@ -75,36 +77,6 @@ class GraphQLResolvePlugin extends Plugin {
 }
 
 // helpers
-
-/** This function is used for collapsed fields, where on the
- * instrumentation, we store fields by a default of config.collapse = false.
- * So, to avoid starting spans for properly computed paths that already have a span,
- * in the case of config.collapse = true, this function computes if there exits a path
- * that has already been processed for a span that either looks like or is the computed path.
- * In the case where the user intentionally sets config.collapse = false, there should be no change.
- */
-function hasLikePath (context, actualPath) {
-  const paths = Object.keys(context.fields)
-  for (let i = 0; i < paths.length; i++) {
-    const arrayPath = paths[i].split('.')
-    if (arrayPath.length !== actualPath.length) continue
-    let matches = true
-    for (let j = 0; j < arrayPath.length; j++) {
-      const seg1 = arrayPath[j]
-      const seg2 = actualPath[j]
-      if (seg1 !== seg2) {
-        if (seg1 === '*' || seg2 === '*') {
-          matches = true
-        } else {
-          matches = false
-          break
-        }
-      }
-    }
-    if (matches) return true
-  }
-  return false
-}
 
 function depthPredicate (info, config, func) {
   func = func || (() => {})
