@@ -4,6 +4,7 @@ const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 
 const enterChannel = channel('apm:connect:middleware:enter')
+const exitChannel = channel('apm:connect:middleware:exit')
 const errorChannel = channel('apm:connect:middleware:error')
 const nextChannel = channel('apm:connect:middleware:next')
 const handleChannel = channel('apm:connect:request:handle')
@@ -80,6 +81,7 @@ function wrapLayerHandle (layer) {
       } catch (e) {
         errorChannel.publish(e)
         nextChannel.publish({ req })
+        exitChannel.publish({ req })
 
         throw e
       }
@@ -94,6 +96,7 @@ function wrapNext (req, next) {
     }
 
     nextChannel.publish({ req })
+    exitChannel.publish({ req })
 
     next.apply(null, arguments)
   }
