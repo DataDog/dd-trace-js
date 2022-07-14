@@ -25,10 +25,10 @@ class SpanProcessor {
     if (this._killAll) {
       console.log('killall set, killing spans')
       started.map(startedSpan => {
-        console.log('started is', startedSpan)
-        if (!startedSpan._duration) {
-          console.log('killing unfinished span', startedSpan)
-          startedSpan.finish()
+        console.log('started is', startedSpan._spanContext._name, startedSpan.context().toSpanId())
+        if (!startedSpan._finished) {
+          console.log('killing unfinished span ID', startedSpan._spanContext._name, startedSpan.context().toSpanId())
+          startedSpan.finish(startedSpan._getTime(), true)
         }
       })
     }
@@ -130,6 +130,7 @@ class SpanProcessor {
     }
 
     for (const span of trace.finished) {
+      console.log('removing span tags in _erase with id', span._spanContext._name, span.context().toSpanId())
       span.context()._tags = {}
     }
 

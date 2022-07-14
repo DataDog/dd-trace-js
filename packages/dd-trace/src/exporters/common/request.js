@@ -11,6 +11,7 @@ const httpsAgent = new https.Agent({ keepAlive: true })
 const containerId = docker.id()
 
 function request (data, options, keepAlive, callback) {
+  console.log('flushing in request!!')
   if (!options.headers) {
     options.headers = {}
   }

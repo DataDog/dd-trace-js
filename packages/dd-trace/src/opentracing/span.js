@@ -67,6 +67,10 @@ class DatadogSpan extends Span {
     return `Span${json}`
   }
 
+  finish(finishTime, processed = false) {
+    this._finish(finishTime, processed)
+  }
+
   _createContext (parent) {
     let spanContext
 
@@ -126,7 +130,7 @@ class DatadogSpan extends Span {
     this._prioritySampler.sample(this, false)
   }
 
-  _finish (finishTime) {
+  _finish (finishTime, processed = false) {
     if (this._duration !== undefined) {
       return
     }
@@ -152,7 +156,9 @@ class DatadogSpan extends Span {
     this._duration = finishTime - this._startTime
     this._spanContext._trace.finished.push(this)
     this._spanContext._isFinished = true
-    this._processor.process(this)
+    if (!processed) {
+      this._processor.process(this)
+    }
   }
 }
 

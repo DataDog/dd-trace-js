@@ -50,8 +50,8 @@ class DatadogTracer extends Tracer {
             addError(active, err)
             active.setTag('error', 1)
             this._processor.killAll()
-            active.finish()
             console.log('active scope tags', active._spanContext._tags)
+            active.finish()
           }, process.env.DD_TRACE_MAX_DURATION)
         }
         return fn(span)
