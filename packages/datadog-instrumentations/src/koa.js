@@ -4,6 +4,7 @@ const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 
 const enterChannel = channel('apm:koa:middleware:enter')
+const exitChannel = channel('apm:koa:middleware:exit')
 const errorChannel = channel('apm:koa:middleware:error')
 const nextChannel = channel('apm:koa:middleware:next')
 const handleChannel = channel('apm:koa:request:handle')
@@ -95,7 +96,7 @@ function wrapMiddleware (fn, layer) {
       enterChannel.publish({ req, name, route })
 
       if (typeof next === 'function') {
-        arguments[1] = next
+        arguments[1] = wrapNext(req, next)
       }
 
       try {
@@ -137,7 +138,15 @@ function fulfill (ctx, error) {
     routeChannel.publish({ req, route })
   }
 
-  nextChannel.publish(ctx)
+  exitChannel.publish({ req })
+}
+
+function wrapNext (req, next) {
+  return function () {
+    nextChannel.publish({ req })
+
+    return next.apply(null, arguments)
+  }
 }
 
 addHook({ name: 'koa', versions: ['>=2'] }, Koa => {
