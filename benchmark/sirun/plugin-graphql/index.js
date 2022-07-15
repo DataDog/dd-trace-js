@@ -8,10 +8,10 @@ if (Number(process.env.WITH_TRACER)) {
 
   // Note: depth must be an integer >= 0, and collapse either 0 or 1 (true or false)
   if (Number(process.env.WITH_DEPTH)) {
-    tracer.use('graphql', { depth: +process.env.WITH_DEPTH })
+    tracer.use('graphql', { depth: Number(process.env.WITH_DEPTH) })
   } else if (process.env.WITH_DEPTH_AND_COLLAPSE) {
     const [depth, collapse] = process.env.WITH_DEPTH_AND_COLLAPSE.split(',')
-    tracer.use('graphql', { depth: +depth, collapse: !!+collapse })
+    tracer.use('graphql', { depth: Number(depth), collapse: Number(collapse) > 0 })
   }
 }
 
