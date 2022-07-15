@@ -40,12 +40,12 @@ describe('Plugin', () => {
         if (appListener) {
           appListener.close()
         }
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load('http2')
+          return agent.load('http2', { server: false })
             .then(() => {
               http2 = require('http2')
             })
