@@ -7,8 +7,8 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-function findCallbackIndex (args) {
-  for (let i = args.length - 1; i >= 2; i--) {
+function findCallbackIndex (args, lowerbound = 2) {
+  for (let i = args.length - 1; i >= lowerbound; i--) {
     if (typeof args[i] === 'function') return i
   }
   return -1
@@ -162,7 +162,7 @@ function wrapPromiseHelperFn (fn) {
   return function () {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    const cbIndex = findCallbackIndex(arguments)
+    const cbIndex = findCallbackIndex(arguments, 1)
     if (cbIndex >= 0) {
       arguments[cbIndex] = asyncResource.bind(arguments[cbIndex])
     }
