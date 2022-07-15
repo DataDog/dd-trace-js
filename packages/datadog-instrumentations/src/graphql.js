@@ -230,13 +230,11 @@ function callInAsyncScope (fn, aR, thisArg, args, cb) {
   })
 }
 
-function pathToArray (path, includeNumbers = true) {
+function pathToArray (path) {
   const flattened = []
   let curr = path
   while (curr) {
-    const key = curr.key
-    flattened.push(key)
-    if (typeof key === 'number' && !includeNumbers) flattened.splice(-1)
+    flattened.push(curr.key)
     curr = curr.prev
   }
   return flattened.reverse()
