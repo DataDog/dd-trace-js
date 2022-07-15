@@ -170,7 +170,7 @@ function wrapExecute (execute) {
           docSource: documentSources.get(document)
         })
 
-        const context = { source, asyncResource, fields: {}, collapsedPaths: {} }
+        const context = { source, asyncResource, fields: {} }
 
         contexts.set(contextValue, context)
 

@@ -4,6 +4,8 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
+const collapsedPathSym = Symbol('collapsedPaths')
+
 class GraphQLResolvePlugin extends Plugin {
   static get name () {
     return 'graphql'
@@ -17,9 +19,12 @@ class GraphQLResolvePlugin extends Plugin {
       depthPredicate(info, this.config, (computedPath) => {
         const computedPathString = computedPath.join('.')
         if ((!this.config.collapse && !context.fields[computedPathString]) ||
-             !context.collapsedPaths[computedPathString]) {
+             !context[collapsedPathSym]?.[computedPathString]) {
           // cache the collapsed string here
-          if (this.config.collapse) context.collapsedPaths[computedPathString] = true
+          if (this.config.collapse) {
+            if (!context[collapsedPathSym]) context[collapsedPathSym] = {}
+            context[collapsedPathSym][computedPathString] = true
+          }
 
           const service = this.config.service || this.tracer._service
           const childOf = store ? store.span : store
