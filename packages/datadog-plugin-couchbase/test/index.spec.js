@@ -191,6 +191,34 @@ describe('Plugin', () => {
           })
         })
 
+        withSemverGTE3(version, () => {
+          describe('operations on sdk >=3 still work with callbacks', () => {
+            it('should perform operation with no error', done => {
+              const query = 'SELECT 1+1'
+
+              agent
+                .use(traces => {
+                  const span = traces[0][0]
+                  expect(span).to.have.property('name', 'couchbase.query')
+                  expect(span).to.have.property('service', 'test-couchbase')
+                  expect(span).to.have.property('resource', query)
+                  expect(span).to.have.property('type', 'sql')
+                  expect(span.meta).to.have.property('span.kind', 'client')
+                })
+                .then(done)
+                .catch(done)
+
+              // instead of catching promise-based error
+              cluster.query(query, (err) => { if (err) done(err) })
+            })
+          })
+
+          it('should catch error in callback', done => {
+            const invalidIndex = '-1'
+            collection.get(invalidIndex, (err) => { if (err) done() })
+          })
+        })
+
         // after v3, buckets no longer support querying
         // TODO: bucket viewquery?
         withSemverGTE3(version, undefined, () => {
