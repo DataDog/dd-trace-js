@@ -1,7 +1,7 @@
 {
   "name": "plugin-graphql",
   "run": "node index.js",
-  "cachegrind": true,
+  "cachegrind": false,
   "iterations": 3,
   "variants": {
     "control": {},
@@ -11,22 +11,18 @@
     },
     "with-depth-off": {
       "baseline": "control",
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0"},
-      "cachegrind": false
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0"}
     },"with-depth-on-max": {
       "baseline": "control",
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4"},
-      "cachegrind": false
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4"}
     },
     "with-depth-and-collapse-off": {
       "baseline": "control",
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0"},
-      "cachegrind": false
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0"}
     },
     "with-depth-and-collapse-on": {
       "baseline": "control",
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,1"},
-      "cachegrind": false
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,1"}
     }
   }
 }
