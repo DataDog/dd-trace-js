@@ -106,7 +106,6 @@ const web = {
     const context = contexts.get(req)
     if (!context.instrumented) {
       this.wrapEnd(context)
-      this.wrapEvents(context)
       context.instrumented = true
     }
   },
@@ -355,12 +354,6 @@ const web = {
         ends.set(this, scope.bind(value, context.span))
       }
     })
-  },
-  wrapEvents (context) {
-    const scope = context.tracer.scope()
-    const res = context.res
-
-    scope.bind(res, context.span)
   }
 }
 

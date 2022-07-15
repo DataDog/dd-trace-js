@@ -154,9 +154,11 @@ function getRes (reply) {
 }
 
 function publishError (error, resource) {
-  resource.runInAsyncScope(() => {
-    errorChannel.publish(error)
-  })
+  if (error) {
+    resource.runInAsyncScope(() => {
+      errorChannel.publish(error)
+    })
+  }
 
   return error
 }
