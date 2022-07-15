@@ -82,7 +82,7 @@ describe('Plugin', () => {
           return agent
             .use(traces => {
               expect(traces[0][0]).to.deep.include({
-                name: 'grpc.request',
+                name: 'grpc.server',
                 service: 'test',
                 resource: '/test.TestService/getUnary',
                 type: 'web'
@@ -108,7 +108,7 @@ describe('Plugin', () => {
           return agent
             .use(traces => {
               expect(traces[0][0]).to.deep.include({
-                name: 'grpc.request',
+                name: 'grpc.server',
                 service: 'test',
                 resource: '/test.TestService/getServerStream',
                 type: 'web'
@@ -133,7 +133,7 @@ describe('Plugin', () => {
           return agent
             .use(traces => {
               expect(traces[0][0]).to.deep.include({
-                name: 'grpc.request',
+                name: 'grpc.server',
                 service: 'test',
                 resource: '/test.TestService/getBidi',
                 type: 'web'

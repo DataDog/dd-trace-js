@@ -19,13 +19,13 @@ class GrpcServerPlugin extends Plugin {
       const metadataFilter = this.config.metadataFilter
       const store = storage.getStore()
       const childOf = extract(this.tracer, metadata)
-      const span = this.tracer.startSpan('grpc.request', {
+      const span = this.tracer.startSpan('grpc.server', {
         childOf,
         tags: {
           [Tags.SPAN_KIND]: 'server',
           'span.type': 'web',
           'resource.name': name,
-          'service.name': this.config.service || `${this.tracer._service}`,
+          'service.name': this.config.service || this.tracer._service,
           'component': 'grpc'
         }
       })
