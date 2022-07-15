@@ -19,7 +19,7 @@ class GraphQLResolvePlugin extends Plugin {
       depthPredicate(info, this.config, (computedPath) => {
         const computedPathString = computedPath.join('.')
         if ((!this.config.collapse && !context.fields[computedPathString]) ||
-             (context[collapsedPathSym] && !context[collapsedPathSym][computedPathString])) {
+             (!context[collapsedPathSym] || !context[collapsedPathSym][computedPathString])) {
           // cache the collapsed string here
           if (this.config.collapse) {
             if (!context[collapsedPathSym]) context[collapsedPathSym] = {}
