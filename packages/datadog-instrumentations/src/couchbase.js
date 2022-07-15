@@ -19,6 +19,10 @@ function getQueryResource (q) {
   return q && (typeof q === 'string' ? q : q.statement)
 }
 
+function wrapAllNames (names, action) {
+  names.forEach(name => action(name))
+}
+
 // semver >=2 <3
 function wrapMaybeInvoke (_maybeInvoke) {
   const wrapped = function (fn, args) {
@@ -209,11 +213,9 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
     })
   })
 
-  Bucket.prototype.upsert = wrap('apm:couchbase:upsert', Bucket.prototype.upsert)
-  Bucket.prototype.insert = wrap('apm:couchbase:insert', Bucket.prototype.insert)
-  Bucket.prototype.replace = wrap('apm:couchbase:replace', Bucket.prototype.replace)
-  Bucket.prototype.append = wrap('apm:couchbase:append', Bucket.prototype.append)
-  Bucket.prototype.prepend = wrap('apm:couchbase:prepend', Bucket.prototype.prepend)
+  wrapAllNames(['upsert', 'insert', 'replace', 'append', 'prepend'], name => {
+    Bucket.prototype[name] = wrap(`apm:couchbase:${name}`, Bucket.prototype[name])
+  })
 
   return Bucket
 })
@@ -228,10 +230,9 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Clu
 // semver >=3 <3.2.0
 
 addHook({ name: 'couchbase', file: 'lib/collection.js', versions: ['>=3.0.0 <3.2.0'] }, Collection => {
-  shimmer.wrap(Collection.prototype, 'upsert', wrapWithName('upsert'))
-  shimmer.wrap(Collection.prototype, 'insert', wrapWithName('insert'))
-  shimmer.wrap(Collection.prototype, 'replace', wrapWithName('replace'))
-  shimmer.wrap(Collection.prototype, 'append', wrapWithName('append'))
+  wrapAllNames(['upsert', 'insert', 'replace'], name => {
+    shimmer.wrap(Collection.prototype, name, wrapWithName(name))
+  })
 
   return Collection
 })
@@ -242,10 +243,10 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['>=3.0.0 <3.2.0'
 })
 
 addHook({ name: 'couchbase', file: 'lib/promisehelper.js', versions: ['>=3.0.0 <3.2.0'] }, PromiseHelper => {
-  shimmer.wrap(PromiseHelper.prototype, 'wrapAsync', wrapPromiseHelperFn)
-  shimmer.wrap(PromiseHelper.prototype, 'wrap', wrapPromiseHelperFn)
-  shimmer.wrap(PromiseHelper.prototype, 'wrapRowEmitter', wrapPromiseHelperFn)
-  shimmer.wrap(PromiseHelper.prototype, 'wrapStreamEmitter', wrapPromiseHelperFn)
+  wrapAllNames(['wrapAsync', 'wrap', 'wrapRowEmitter', 'wrapStreamEmitter'], name => {
+    shimmer.wrap(PromiseHelper.prototype, name, wrapPromiseHelperFn)
+  })
+
   return PromiseHelper
 })
 
@@ -254,10 +255,9 @@ addHook({ name: 'couchbase', file: 'lib/promisehelper.js', versions: ['>=3.0.0 <
 addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.0'] }, collection => {
   const Collection = collection.Collection
 
-  shimmer.wrap(Collection.prototype, 'upsert', wrapWithName('upsert'))
-  shimmer.wrap(Collection.prototype, 'insert', wrapWithName('insert'))
-  shimmer.wrap(Collection.prototype, 'replace', wrapWithName('replace'))
-  shimmer.wrap(Collection.prototype, 'append', wrapWithName('append'))
+  wrapAllNames(['upsert', 'insert', 'replace'], name => {
+    shimmer.wrap(Collection.prototype, name, wrapWithName(name))
+  })
 
   return collection
 })
@@ -272,7 +272,9 @@ addHook({ name: 'couchbase', file: 'dist/cluster.js', versions: ['>=3.2.0'] }, c
 addHook({ name: 'couchbase', file: 'dist/utilities.js', versions: ['>=3.2.0'] }, utilities => {
   const PromiseHelper = utilities.PromiseHelper
 
-  shimmer.wrap(PromiseHelper, 'wrap', wrapPromiseHelperFn)
-  shimmer.wrap(PromiseHelper, 'wrapAsync', wrapPromiseHelperFn)
+  wrapAllNames(['wrap', 'wrapAsync'], name => {
+    shimmer.wrap(PromiseHelper, name, wrapPromiseHelperFn)
+  })
+
   return utilities
 })
