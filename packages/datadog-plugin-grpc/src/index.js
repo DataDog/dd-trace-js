@@ -1,6 +1,34 @@
 'use strict'
 
-const client = require('./client')
-const server = require('./server')
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const GrpcServerPlugin = require('./server')
+const GrpcClientPlugin = require('./client')
 
-module.exports = [].concat(client, server)
+class GrpcPlugin extends Plugin {
+  static get name () {
+    return 'grpc'
+  }
+
+  constructor (...args) {
+    super(...args)
+    this.server = new GrpcServerPlugin(...args)
+    this.client = new GrpcClientPlugin(...args)
+  }
+
+  configure (config) {
+    const clientConfig = config.client === false ? false : {
+      ...config,
+      ...config.client
+    }
+
+    const serverConfig = config.server === false ? false : {
+      ...config,
+      ...config.server
+    }
+
+    this.server.configure(serverConfig)
+    this.client.configure(clientConfig)
+  }
+}
+
+module.exports = GrpcPlugin

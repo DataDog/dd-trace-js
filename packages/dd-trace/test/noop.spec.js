@@ -35,12 +35,6 @@ describe('NoopTracer', () => {
     })
   })
 
-  describe('currentSpan', () => {
-    it('should return null', () => {
-      expect(tracer.currentSpan()).to.be.null
-    })
-  })
-
   describe('startSpan', () => {
     it('should return a span with a valid context', () => {
       const span = tracer.startSpan()

@@ -32,10 +32,14 @@ class RouterPlugin extends WebPlugin {
       if (!context) return
 
       context.stack.pop()
+    })
 
-      if (context.middleware.length > 0) {
-        context.middleware.pop().finish()
-      }
+    this.addSub(`apm:${this.constructor.name}:middleware:exit`, ({ req }) => {
+      const context = this._contexts.get(req)
+
+      if (!context || context.middleware.length === 0) return
+
+      context.middleware.pop().finish()
     })
 
     this.addSub(`apm:${this.constructor.name}:middleware:error`, this.addError)

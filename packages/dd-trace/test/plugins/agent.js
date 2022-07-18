@@ -132,11 +132,6 @@ module.exports = {
     }
   },
 
-  // Return the current active span.
-  currentSpan () {
-    return tracer.scope().active()
-  },
-
   // Stop the mock agent, reset all expectations and wipe the require cache.
   close (opts = {}) {
     const { ritmReset } = opts

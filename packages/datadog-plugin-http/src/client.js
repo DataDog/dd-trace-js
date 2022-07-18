@@ -190,7 +190,7 @@ function getServiceName (tracer, config, options) {
     return config.service
   }
 
-  return `${tracer._service}-http-client`
+  return tracer._service
 }
 
 function getHost (options) {

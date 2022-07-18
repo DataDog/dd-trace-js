@@ -13,7 +13,10 @@ const metrics = require('../metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 
-const { DD_TRACE_EXPERIMENTAL_STATE_TRACKING } = process.env
+const {
+  DD_TRACE_EXPERIMENTAL_STATE_TRACKING,
+  DD_TRACE_EXPERIMENTAL_SPAN_COUNTS
+} = process.env
 
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
@@ -41,7 +44,7 @@ class DatadogSpan extends Span {
 
     this._startTime = fields.startTime || this._getTime()
 
-    if (this._debug && unfinishedRegistry) {
+    if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       metrics.increment('runtime.node.spans.unfinished')
       metrics.increment('runtime.node.spans.unfinished.by.name', `span_name:${operationName}`)
 
@@ -137,7 +140,7 @@ class DatadogSpan extends Span {
       }
     }
 
-    if (this._debug && finishedRegistry) {
+    if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       metrics.decrement('runtime.node.spans.unfinished')
       metrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
       metrics.increment('runtime.node.spans.finished')

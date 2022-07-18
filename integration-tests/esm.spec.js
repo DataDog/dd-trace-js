@@ -50,7 +50,7 @@ describe('esm', () => {
         assert.strictEqual(payload.length, 1)
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
-        assert.propertyVal(payload[0][0], 'name', 'http.request')
+        assert.propertyVal(payload[0][0], 'name', 'web.request')
       })
     })
   })
