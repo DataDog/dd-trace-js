@@ -93,6 +93,18 @@ tracer.init({
   }
 });
 
+tracer.init({
+  experimental: {
+    iast: true
+  }
+})
+
+tracer.init({
+  experimental: {
+    iast: false
+  }
+})
+
 const httpOptions = {
   service: 'test',
   allowlist: ['url', /url/, url => true],
