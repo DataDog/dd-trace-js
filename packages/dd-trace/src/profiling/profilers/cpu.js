@@ -40,41 +40,45 @@ class NativeCpuProfiler {
     this._started = false
     this._cpuProfiler = undefined
 
-    beforeCh.subscribe(() => {
-      if (!this._cpuProfiler) return
+    // Bind to this so the same value can be used to unsubscribe later
+    this._enter = this._enter.bind(this)
+    this._exit = this._exit.bind(this)
+  }
 
-      const active = getActiveSpan()
-      if (!active) return
+  _enter () {
+    if (!this._cpuProfiler) return
 
-      const activeCtx = active._context()
-      if (!activeCtx) return
+    const active = getActiveSpan()
+    if (!active) return
 
-      const spans = getStartedSpans(active)
-      if (!spans || !spans.length) return
+    const activeCtx = active._context()
+    if (!activeCtx) return
 
-      const firstCtx = spans[0]._context()
-      if (!firstCtx) return
+    const spans = getStartedSpans(active)
+    if (!spans || !spans.length) return
 
-      const labels = {
-        'local root span id': firstCtx.toSpanId(),
-        'span id': activeCtx.toSpanId()
-      }
+    const firstCtx = spans[0]._context()
+    if (!firstCtx) return
 
-      const webServerTags = spans
-        .map(getSpanContextTags)
-        .filter(isWebServerSpan)[0]
+    const labels = {
+      'local root span id': firstCtx.toSpanId(),
+      'span id': activeCtx.toSpanId()
+    }
 
-      if (webServerTags) {
-        labels['trace endpoint'] = endpointNameFromTags(webServerTags)
-      }
+    const webServerTags = spans
+      .map(getSpanContextTags)
+      .filter(isWebServerSpan)[0]
 
-      this._cpuProfiler.labels = labels
-    })
+    if (webServerTags) {
+      labels['trace endpoint'] = endpointNameFromTags(webServerTags)
+    }
 
-    afterCh.subscribe(() => {
-      if (!this._cpuProfiler) return
-      this._cpuProfiler.labels = {}
-    })
+    this._cpuProfiler.labels = labels
+  }
+
+  _exit () {
+    if (!this._cpuProfiler) return
+    this._cpuProfiler.labels = {}
   }
 
   start ({ mapper } = {}) {
@@ -88,6 +92,10 @@ class NativeCpuProfiler {
     }
 
     this._cpuProfiler.start(this._frequency)
+
+    this._enter()
+    beforeCh.subscribe(this._enter)
+    afterCh.subscribe(this._exit)
   }
 
   profile () {
@@ -104,6 +112,8 @@ class NativeCpuProfiler {
     this._started = false
 
     this._cpuProfiler.stop()
+    beforeCh.unsubscribe(this._enter)
+    afterCh.unsubscribe(this._exit)
   }
 }
 
