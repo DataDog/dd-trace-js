@@ -113,16 +113,17 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
     startCh.publish(startData)
 
     try {
-      const cbIndex = findCallbackIndex(args)
+      const cbIndex = findCallbackIndex(args, 1)
       if (cbIndex >= 0) {
         // v3 offers callback or promises event handling
+        // NOTE: this does not work with v3.2.0-3.2.1 cluster.query, as there is a bug in the couchbase source code
         const cb = callbackResource.bind(args[cbIndex])
         args[cbIndex] = asyncResource.bind(function (error, result) {
           if (error) {
             errorCh.publish(error)
           }
           finishCh.publish({ result })
-          return cb.apply(thisArg, args)
+          return cb.apply(thisArg, arguments)
         })
       }
       const res = fn.apply(thisArg, args)
@@ -155,19 +156,6 @@ function wrapV3Query (query) {
   return function (q) {
     const resource = getQueryResource(q)
     return wrapCBandPromise(query, 'query', { resource }, this, arguments)
-  }
-}
-
-function wrapPromiseHelperFn (fn) {
-  return function () {
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    const cbIndex = findCallbackIndex(arguments, 1)
-    if (cbIndex >= 0) {
-      arguments[cbIndex] = asyncResource.bind(arguments[cbIndex])
-    }
-
-    return asyncResource.runInAsyncScope(() => fn.apply(this, arguments))
   }
 }
 
@@ -242,14 +230,6 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['>=3.0.0 <3.2.0'
   return Cluster
 })
 
-addHook({ name: 'couchbase', file: 'lib/promisehelper.js', versions: ['>=3.0.0 <3.2.0'] }, PromiseHelper => {
-  wrapAllNames(['wrapAsync', 'wrap', 'wrapRowEmitter', 'wrapStreamEmitter'], name => {
-    shimmer.wrap(PromiseHelper.prototype, name, wrapPromiseHelperFn)
-  })
-
-  return PromiseHelper
-})
-
 // semver >=3.2.0
 
 addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.0'] }, collection => {
@@ -262,19 +242,9 @@ addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.0'] }
   return collection
 })
 
-addHook({ name: 'couchbase', file: 'dist/cluster.js', versions: ['>=3.2.0'] }, cluster => {
+addHook({ name: 'couchbase', file: 'dist/cluster.js', versions: ['3.2.0 - 3.2.1', '>=3.2.2'] }, cluster => {
   const Cluster = cluster.Cluster
 
   shimmer.wrap(Cluster.prototype, 'query', wrapV3Query)
   return cluster
-})
-
-addHook({ name: 'couchbase', file: 'dist/utilities.js', versions: ['>=3.2.0'] }, utilities => {
-  const PromiseHelper = utilities.PromiseHelper
-
-  wrapAllNames(['wrap', 'wrapAsync'], name => {
-    shimmer.wrap(PromiseHelper, name, wrapPromiseHelperFn)
-  })
-
-  return utilities
 })

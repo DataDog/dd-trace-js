@@ -191,11 +191,12 @@ describe('Plugin', () => {
           })
         })
 
+        // specific semver >=3 checks
         withSemverGTE3(version, () => {
           describe('operations on sdk >=3 still work with callbacks', () => {
-            it('should perform operation with no error', done => {
-              const query = 'SELECT 1+1'
-
+            it('should perform normal cluster query operation with callback', done => {
+              // console.log('version intersects', semver.intersects(version, '3.0.0 - 3.2.1'))
+              // TODO: does this reall test it
               agent
                 .use(traces => {
                   const span = traces[0][0]
@@ -204,18 +205,40 @@ describe('Plugin', () => {
                   expect(span).to.have.property('resource', query)
                   expect(span).to.have.property('type', 'sql')
                   expect(span.meta).to.have.property('span.kind', 'client')
+                  withSemverGTE3(version, undefined, () => {
+                    expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
+                  })
                 })
                 .then(done)
                 .catch(done)
 
-              // instead of catching promise-based error
-              cluster.query(query, (err) => { if (err) done(err) })
+              const query = 'SELECT 1+1'
+              cluster.query(query, (err, rows) => {
+                if (err) done(err)
+              })
             })
-          })
+            describe('errors are handled correctly in callbacks', () => {
+              it('should catch error in callback for non-traced functions', done => {
+                const invalidIndex = '-1'
+                collection.get(invalidIndex, (err) => { if (err) done() })
+              })
 
-          it('should catch error in callback', done => {
-            const invalidIndex = '-1'
-            collection.get(invalidIndex, (err) => { if (err) done() })
+              // due to bug in couchbase for these versions (see JSCBC-945)
+              if (!semver.intersects('3.2.0 - 3.2.1', version)) {
+                it('should catch errors in callback and report error in trace', done => {
+                  const invalidQuery = 'SELECT'
+                  const cb = sinon.spy()
+                  agent
+                    .use(traces => {
+                      const span = traces[0][0]
+                      expect(cb).to.have.been.calledOnce
+                      // different couchbase sdk versions will have different error messages/types
+                      expect(span.error).to.equal(1)
+                    }).then(done).catch(done)
+                  cluster.query(invalidQuery, cb)
+                })
+              }
+            })
           })
         })
 
