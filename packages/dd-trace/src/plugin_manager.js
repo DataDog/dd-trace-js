@@ -73,13 +73,17 @@ module.exports = class PluginManager {
 
   // like instrumenter.enable()
   configure (config) {
-    const { logInjection, serviceMapping } = config
+    const { logInjection, serviceMapping, experimental } = config
 
     if (config.plugins !== false) {
       for (const name in this._pluginsByName) {
         const pluginConfig = {
           ...this._configsByName[name],
           logInjection
+        }
+        // TODO: update so that it's available for every CI Visibility's plugin
+        if (name === 'mocha') {
+          pluginConfig.isAgentlessEnabled = experimental && experimental.exporter === 'datadog'
         }
         if (serviceMapping && serviceMapping[name]) {
           pluginConfig.service = serviceMapping[name]
