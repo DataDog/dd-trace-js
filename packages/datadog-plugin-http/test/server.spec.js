@@ -131,6 +131,19 @@ describe('Plugin', () => {
 
         expect(() => res.emit('finish')).to.not.throw()
       })
+
+      it('should not cause `end` to be called multiple times', done => {
+        app = (req, res) => {
+          res.end = sinon.spy(res.end)
+
+          res.on('finish', () => {
+            expect(res.end).to.have.been.calledOnce
+            done()
+          })
+        }
+
+        axios.get(`http://localhost:${port}/user`).catch(done)
+      })
     })
 
     describe('with a blocklist configuration', () => {
