@@ -221,6 +221,32 @@ describe('profiler', () => {
     sinon.assert.calledOnce(consoleLogger.error)
   })
 
+  it('should log encoded profile', async () => {
+    exporter.export.rejects(new Error('boom'))
+
+    await profiler._start({ profilers, exporters, logger })
+
+    clock.tick(INTERVAL)
+
+    await waitForExport()
+
+    const [
+      startWall,
+      startSpace,
+      collectWall,
+      collectSpace,
+      submit
+    ] = consoleLogger.debug.getCalls()
+
+    sinon.assert.calledWithMatch(startWall, 'Started wall profiler')
+    sinon.assert.calledWithMatch(startSpace, 'Started space profiler')
+
+    expect(collectWall.args[0]()).to.match(/^Collected wall profile: /)
+    expect(collectSpace.args[0]()).to.match(/^Collected space profile: /)
+
+    sinon.assert.calledWithMatch(submit, 'Submitted profiles')
+  })
+
   it('should skip submit with no profiles', async () => {
     const start = new Date()
     const end = new Date()
