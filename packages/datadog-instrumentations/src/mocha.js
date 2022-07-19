@@ -6,7 +6,20 @@ const errorCh = channel('ci:mocha:test:error')
 const skipCh = channel('ci:mocha:test:skip')
 const testFinishCh = channel('ci:mocha:test:finish')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
+
+const testRunStartCh = channel('ci:mocha:run:start')
 const testRunFinishCh = channel('ci:mocha:run:finish')
+
+const testSuiteStartCh = channel('ci:mocha:test-suite:start')
+const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
+const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
+
+// TODO: remove when root hooks and fixtures are implemented
+const patched = new WeakSet()
+
+const testToAr = new WeakMap()
+const originalFns = new WeakMap()
+const testSuiteToAr = new WeakMap()
 
 function isRetry (test) {
   return test._currentRetry !== undefined && test._currentRetry !== 0
@@ -23,12 +36,6 @@ function getTestAsyncResource (test) {
   return testToAr.get(originalFn)
 }
 
-// TODO: remove when root hooks and fixtures are implemented
-const patched = new WeakSet()
-
-const testToAr = new WeakMap()
-const originalFns = new WeakMap()
-
 function mochaHook (Runner) {
   if (patched.has(Runner)) return Runner
 
@@ -38,6 +45,59 @@ function mochaHook (Runner) {
     if (!testStartCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
+
+    const testRunAsyncResource = new AsyncResource('bound-anonymous-fn')
+
+    this.once('end', testRunAsyncResource.bind(function () {
+      let status = 'pass'
+      if (this.stats) {
+        status = this.stats.failures === 0 ? 'pass' : 'fail'
+      } else if (this.failures !== 0) {
+        status = 'fail'
+      }
+      testRunFinishCh.publish(status)
+    }))
+
+    this.once('start', testRunAsyncResource.bind(function () {
+      const processArgv = process.argv.slice(2).join(' ')
+      const command = `mocha ${processArgv}`
+      testRunStartCh.publish(command)
+    }))
+
+    this.on('suite', function (suite) {
+      if (suite.root) {
+        return
+      }
+      const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+      testSuiteToAr.set(suite, asyncResource)
+
+      asyncResource.runInAsyncScope(() => {
+        testSuiteStartCh.publish(suite)
+      })
+    })
+
+    this.on('suite end', function (suite) {
+      if (suite.root) {
+        return
+      }
+      let status = 'pass'
+      if (suite.pending) {
+        status = 'skip'
+      } else {
+        suite.eachTest(test => {
+          if (test.state === 'failed' || test.timedOut) {
+            status = 'fail'
+          }
+        })
+      }
+
+      const asyncResource = testSuiteToAr.get(suite)
+      asyncResource.runInAsyncScope(() => {
+        // get suite status
+        testSuiteFinishCh.publish(status)
+      })
+    })
 
     this.on('test', (test) => {
       if (isRetry(test)) {
@@ -100,6 +160,15 @@ function mochaHook (Runner) {
           } else {
             errorCh.publish(err)
           }
+          // we propagate the error to the suite
+          const testSuiteAsyncResource = testSuiteToAr.get(test.parent)
+          if (testSuiteAsyncResource) {
+            const testSuiteError = new Error(`Test "${test.fullTitle()}" failed with message "${err.message}"`)
+            testSuiteError.stack = err.stack
+            testSuiteAsyncResource.runInAsyncScope(() => {
+              testSuiteErrorCh.publish(testSuiteError)
+            })
+          }
         })
       }
     })
@@ -127,9 +196,6 @@ function mochaHook (Runner) {
     if (!testRunFinishCh.hasSubscribers) {
       return runTests.apply(this, arguments)
     }
-    this.once('end', AsyncResource.bind(() => {
-      testRunFinishCh.publish()
-    }))
     return runTests.apply(this, arguments)
   })
 
