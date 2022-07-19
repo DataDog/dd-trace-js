@@ -101,7 +101,11 @@ function spawnProc (filename, options = {}) {
         resolve(proc)
       })
       .on('error', reject)
-      .on('exit', code => reject(new Error(`Process exited with status code ${code}.`)))
+      .on('exit', code => {
+        if (code !== 0) {
+          reject(new Error(`Process exited with status code ${code}.`))
+        }
+      })
   })
 }
 
