@@ -21,7 +21,7 @@ const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
 
-describe('plugins/util/web', () => {
+describe.only('plugins/util/web', () => {
   let web
   let tracer
   let span

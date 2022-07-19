@@ -45,7 +45,7 @@ class HttpServerPlugin extends Plugin {
 
       if (!context || !context.res) return // Not created by a http.Server instance.
 
-      web.wrapRes(context, context.req, context.res, context.res.end)()
+      web.finishAll(context)
     })
   }
 
