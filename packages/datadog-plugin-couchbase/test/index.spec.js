@@ -195,8 +195,6 @@ describe('Plugin', () => {
         withSemverGTE3(version, () => {
           describe('operations on sdk >=3 still work with callbacks', () => {
             it('should perform normal cluster query operation with callback', done => {
-              // console.log('version intersects', semver.intersects(version, '3.0.0 - 3.2.1'))
-              // TODO: does this reall test it
               agent
                 .use(traces => {
                   const span = traces[0][0]
