@@ -300,6 +300,23 @@ const web = {
     context.span.finish()
     context.finished = true
   },
+
+  finishAll (context) {
+    const { req, res } = context
+
+    for (const beforeEnd of context.beforeEnd) {
+      beforeEnd()
+    }
+
+    web.finishMiddleware(context)
+
+    if (incomingHttpRequestEnd.hasSubscribers) {
+      incomingHttpRequestEnd.publish({ req, res })
+    }
+
+    web.finishSpan(context)
+  },
+
   obfuscateQs (config, url) {
     const { queryStringObfuscation } = config
 
@@ -337,21 +354,9 @@ const web = {
   },
   wrapRes (context, req, res, end) {
     return function () {
-      for (const beforeEnd of context.beforeEnd) {
-        beforeEnd()
-      }
+      web.finishAll(context)
 
-      web.finishMiddleware(context)
-
-      if (incomingHttpRequestEnd.hasSubscribers) {
-        incomingHttpRequestEnd.publish({ req, res })
-      }
-
-      const returnValue = end.apply(res, arguments)
-
-      web.finishSpan(context)
-
-      return returnValue
+      return end.apply(res, arguments)
     }
   },
   wrapEnd (context) {
