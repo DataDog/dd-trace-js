@@ -15,8 +15,15 @@ const {
   CI_WORKSPACE_PATH
 } = require('./tags')
 
+const cache = new Map()
+
 // If there is ciMetadata, it takes precedence.
 function getGitMetadata (ciMetadata) {
+  const cacheKey = JSON.stringify(ciMetadata)
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey)
+  }
+
   const {
     commitSHA,
     branch,
@@ -39,7 +46,7 @@ function getGitMetadata (ciMetadata) {
     committerDate
   ] = sanitizedExec('git show -s --format=%an,%ae,%aI,%cn,%ce,%cI', { stdio: 'pipe' }).split(',')
 
-  return {
+  const result = {
     [GIT_REPOSITORY_URL]:
       repositoryUrl || sanitizedExec('git ls-remote --get-url', { stdio: 'pipe' }),
     [GIT_COMMIT_MESSAGE]:
@@ -55,6 +62,10 @@ function getGitMetadata (ciMetadata) {
     [GIT_TAG]: tag,
     [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git rev-parse --show-toplevel', { stdio: 'pipe' })
   }
+
+  cache.set(cacheKey, result)
+
+  return result
 }
 
 module.exports = { getGitMetadata }
