@@ -49,6 +49,10 @@ class Tracer extends BaseTracer {
         metrics.start(config)
       }
 
+      if (process.env.DD_CSI_ENABLED === 'true') {
+        require('./appsec/iast/csi').init()
+      }
+
       if (config.tracing) {
         // dirty require for now so zero appsec code is executed unless explicitly enabled
         if (config.appsec.enabled) {
