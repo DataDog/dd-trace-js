@@ -15,7 +15,7 @@ class CouchBasePlugin extends Plugin {
     this.addSub(`apm:couchbase:${func}:finish`, finish)
   }
 
-  startSpan (operation, customTags, store, containers) {
+  startSpan (operation, customTags, store, { bucket, collection }) {
     const tags = {
       'db.type': 'couchbase',
       'component': 'couchbase',
@@ -32,9 +32,8 @@ class CouchBasePlugin extends Plugin {
       tags
     })
 
-    Object.keys(containers).forEach(containerType => {
-      span.setTag(`couchbase.${containerType}.name`, containers[containerType].name)
-    })
+    if (bucket) span.setTag(`couchbase.bucket.name`, bucket.name)
+    if (collection) span.setTag(`couchbase.collection.name`, collection.name)
 
     analyticsSampler.sample(span, this.config.measured)
     return span
@@ -43,10 +42,10 @@ class CouchBasePlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSubs('query', ({ resource, containers }) => {
+    this.addSubs('query', ({ resource, bucket }) => {
       const store = storage.getStore()
       const span = this.startSpan('query', { 'span.type': 'sql', 'resource.name': resource },
-        store, containers)
+        store, { bucket })
       this.enter(span, store)
     })
 
@@ -57,9 +56,9 @@ class CouchBasePlugin extends Plugin {
     this._addCommandSubs('prepend')
   }
   _addCommandSubs (name) {
-    this.addSubs(name, (containers) => {
+    this.addSubs(name, ({ bucket, collection }) => {
       const store = storage.getStore()
-      const span = this.startSpan(name, {}, store, containers)
+      const span = this.startSpan(name, {}, store, { bucket, collection })
       this.enter(span, store)
     })
   }

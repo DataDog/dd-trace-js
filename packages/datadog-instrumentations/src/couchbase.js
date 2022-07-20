@@ -155,7 +155,7 @@ function wrapWithName (name) {
 function wrapV3Query (query) {
   return function (q) {
     const resource = getQueryResource(q)
-    return wrapCBandPromise(query, 'query', { resource, containers: {} }, this, arguments)
+    return wrapCBandPromise(query, 'query', { resource }, this, arguments)
   }
 }
 
@@ -179,7 +179,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
-      startCh.publish({ resource: n1qlQuery, containers: { bucket: { name: this.name || this._name } } })
+      startCh.publish({ resource: n1qlQuery, bucket: { name: this.name || this._name } })
 
       emitter.once('rows', asyncResource.bind(() => {
         finishCh.publish(undefined)
