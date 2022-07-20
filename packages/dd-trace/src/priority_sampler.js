@@ -29,12 +29,12 @@ const DEFAULT_KEY = 'service:,env:'
 const defaultSampler = new Sampler(AUTO_KEEP)
 
 class PrioritySampler {
-  constructor (env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
+  constructor (env, { sampleRate, rateLimit = 100, samplingRules = [] } = {}) {
     this._env = env
-    this._rules = this._normalizeRules(rules, sampleRate)
+    this._samplingRules = this._normalizeRules(samplingRules, sampleRate)
     this._limiter = new RateLimiter(rateLimit)
 
-    setSamplingRules(this._rules)
+    setSamplingRules(this._samplingRules)
 
     this.update({})
   }
@@ -169,8 +169,10 @@ class PrioritySampler {
     }
   }
 
-  _normalizeRules (rules, sampleRate) {
-    return rules
+  _normalizeRules (samplingRules, sampleRate) {
+    samplingRules = [].concat(samplingRules || [])
+
+    return samplingRules
       .concat({ sampleRate })
       .map(rule => ({ ...rule, sampleRate: parseFloat(rule.sampleRate) }))
       .filter(rule => !isNaN(rule.sampleRate))
@@ -178,8 +180,8 @@ class PrioritySampler {
   }
 
   _findRule (context) {
-    for (let i = 0, l = this._rules.length; i < l; i++) {
-      if (this._matchRule(context, this._rules[i])) return this._rules[i]
+    for (let i = 0, l = this._samplingRules.length; i < l; i++) {
+      if (this._matchRule(context, this._samplingRules[i])) return this._samplingRules[i]
     }
   }
 

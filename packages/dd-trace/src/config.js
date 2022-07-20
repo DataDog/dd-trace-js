@@ -16,6 +16,14 @@ const fromEntries = Object.fromEntries || (entries =>
 // eslint-disable-next-line max-len
 const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
 
+function safeJsonParse (input) {
+  try {
+    return JSON.parse(input)
+  } catch (err) {
+    return []
+  }
+}
+
 class Config {
   constructor (options) {
     options = options || {}
@@ -240,19 +248,17 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       false
     )
 
-    const sampler = (options.experimental && options.experimental.sampler) || {}
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
-
-    Object.assign(sampler, {
+    const sampler = {
       sampleRate: coalesce(
         options.sampleRate,
-        ingestion.sampleRate,
-        sampler.sampleRate,
-        process.env.DD_TRACE_SAMPLE_RATE
+        process.env.DD_TRACE_SAMPLE_RATE,
+        ingestion.sampleRate
       ),
-      rateLimit: coalesce(ingestion.rateLimit, sampler.rateLimit, process.env.DD_TRACE_RATE_LIMIT)
-    })
+      rateLimit: coalesce(options.rateLimit, process.env.DD_TRACE_RATE_LIMIT, ingestion.rateLimit),
+      samplingRules: coalesce(options.samplingRules, safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES || '[]'))
+    }
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
@@ -289,9 +295,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       traceparent: isTrue(DD_TRACE_TRACEPARENT_ENABLED),
       runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
       exporter: DD_TRACE_EXPORTER,
-      enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED),
-      sampler
+      enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED)
     }
+    this.sampler = sampler
     this.reportHostname = isTrue(coalesce(options.reportHostname, process.env.DD_TRACE_REPORT_HOSTNAME, false))
     this.scope = process.env.DD_TRACE_SCOPE
     this.logLevel = coalesce(
