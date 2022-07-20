@@ -14,6 +14,7 @@ const { tagger } = require('./tagger')
 const {
   DD_PROFILING_ENABLED,
   DD_PROFILING_PROFILERS,
+  DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
   DD_ENV,
   DD_TAGS,
   DD_SERVICE,
@@ -38,6 +39,8 @@ class Config {
       DD_PROFILING_UPLOAD_TIMEOUT, 60 * 1000)
     const sourceMap = coalesce(options.sourceMap,
       DD_PROFILING_SOURCE_MAP, true)
+    const endpointCollection = coalesce(options.endpointCollection,
+      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED, false)
 
     this.enabled = String(enabled) !== 'false'
     this.service = service
@@ -54,6 +57,7 @@ class Config {
     this.flushInterval = flushInterval
     this.uploadTimeout = uploadTimeout
     this.sourceMap = sourceMap
+    this.endpointCollection = endpointCollection
 
     const hostname = coalesce(options.hostname, DD_AGENT_HOST, 'localhost')
     const port = coalesce(options.port, DD_TRACE_AGENT_PORT, 8126)
@@ -65,8 +69,8 @@ class Config {
     ], this)
 
     const profilers = coalesce(options.profilers, DD_PROFILING_PROFILERS, [
-      new WallProfiler(),
-      new SpaceProfiler()
+      new WallProfiler(this),
+      new SpaceProfiler(this)
     ])
 
     this.profilers = ensureProfilers(profilers, this)

@@ -126,8 +126,7 @@ describe('profilers/native/cpu', () => {
       const spanId = span.context().toSpanId()
       sinon.assert.calledWithMatch(setter, {
         'local root span id': spanId,
-        'span id': spanId,
-        'trace endpoint': 'resource'
+        'span id': spanId
       })
 
       setter.resetHistory()
@@ -136,7 +135,35 @@ describe('profilers/native/cpu', () => {
         // Should also have labels available asynchronously
         sinon.assert.calledWithMatch(setter, {
           'local root span id': spanId,
-          'span id': spanId,
+          'span id': spanId
+        })
+        cb()
+      })
+    })
+  })
+
+  it('should collect endpoints', () => {
+    tracer.init()
+    tracer.trace('foo.bar', {
+      service: 'service',
+      resource: 'resource',
+      type: 'web'
+    }, (_, cb) => {
+      const profiler = new NativeCpuProfiler({
+        endpointCollection: true
+      })
+      profiler.start()
+
+      // Should immediately have labels available
+      sinon.assert.calledWithMatch(setter, {
+        'trace endpoint': 'resource'
+      })
+
+      setter.resetHistory()
+
+      setImmediate(() => {
+        // Should also have labels available asynchronously
+        sinon.assert.calledWithMatch(setter, {
           'trace endpoint': 'resource'
         })
         cb()

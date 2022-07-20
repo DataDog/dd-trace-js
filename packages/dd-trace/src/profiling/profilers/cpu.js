@@ -28,7 +28,10 @@ function isWebServerSpan (tags) {
 }
 
 function endpointNameFromTags (tags) {
-  return tags['resource.name'] || [tags['http.method'], tags['http.route']].filter(v => v).join(' ')
+  return tags['resource.name'] || [
+    tags['http.method'],
+    tags['http.route']
+  ].filter(v => v).join(' ')
 }
 
 class NativeCpuProfiler {
@@ -39,6 +42,7 @@ class NativeCpuProfiler {
     this._pprof = undefined
     this._started = false
     this._cpuProfiler = undefined
+    this._endpointCollection = options.endpointCollection
 
     // Bind to this so the same value can be used to unsubscribe later
     this._enter = this._enter.bind(this)
@@ -65,12 +69,14 @@ class NativeCpuProfiler {
       'span id': activeCtx.toSpanId()
     }
 
-    const webServerTags = spans
-      .map(getSpanContextTags)
-      .filter(isWebServerSpan)[0]
+    if (this._endpointCollection) {
+      const webServerTags = spans
+        .map(getSpanContextTags)
+        .filter(isWebServerSpan)[0]
 
-    if (webServerTags) {
-      labels['trace endpoint'] = endpointNameFromTags(webServerTags)
+      if (webServerTags) {
+        labels['trace endpoint'] = endpointNameFromTags(webServerTags)
+      }
     }
 
     this._cpuProfiler.labels = labels
