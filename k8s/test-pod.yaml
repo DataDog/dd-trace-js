@@ -6,26 +6,43 @@ metadata:
 spec:
   initContainers:
     - name: node-init
-      image: bengl/test-auto-inst:latest  # put the library image here
-      imagePullPolicy: Never
+      image: localhost:5000/dd-trace-js-init:latest
       command: ["sh", "copy-dd-trace.sh", "/autoinstrumentation"]
       volumeMounts:
         - name: autoinstrumentation
           mountPath: /autoinstrumentation
   containers:
-    - name: app
-      image: bengl/test-sample-app # put the app image here
+    - image: localhost:5000/sample-app:latest
       env:
         - name: NODE_OPTIONS
           value: --require=/autoinstrumentation/node_modules/dd-trace/init
         - name: DD_TRACE_DEBUG
           value: "true"
+        - name: DD_AGENT_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: DD_AGENT_PORT
+          value: "18126"
+      name: sample-app
+      readinessProbe:
+        initialDelaySeconds: 5
+        periodSeconds: 15
+        timeoutSeconds: 10
+        successThreshold: 1
+        failureThreshold: 10
+        httpGet:
+          host:
+          scheme: HTTP
+          path: /
+          port: 18080
       ports:
-        - containerPort: 8080
+        - containerPort: 18080
+          hostPort: 18080
+          protocol: TCP
       volumeMounts:
         - name: autoinstrumentation
           mountPath: /autoinstrumentation
-
   volumes:
     - name: autoinstrumentation
       emptyDir: {}

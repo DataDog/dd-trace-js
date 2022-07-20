@@ -5,5 +5,5 @@ WORKDIR /usr/src/app
 
 COPY . .
 
-EXPOSE 8080
+EXPOSE 18080
 CMD [ "node", "index.js" ]

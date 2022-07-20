@@ -34,6 +34,29 @@ jobs:
           cp dd-trace-*.tgz k8s/auto-inst/dd-trace.tgz
           docker build k8s/auto-inst --build-arg npm_pkg=./dd-trace.tgz -t localhost:5000/dd-trace-js-init:${GITHUB_SHA}
           docker push localhost:5000/dd-trace-js-init:${GITHUB_SHA}
-      - name: Run sample app
+      - name: Build sample app image
         run: |
-
+          docker build k8s/sample-app --build-arg npm_pkg=./dd-trace.tgz -t localhost:5000/sample-app:${GITHUB_SHA}
+          docker push localhost:5000/dd-trace-js-init:${GITHUB_SHA}
+      - name: Deploy apm test trace agent
+        run: |
+          kubectl apply -f k8s/dd-apm-test-agent-config.yaml
+          kubectl rollout status daemonset/datadog-agent
+          kubectl wait $(kubectl get pods -l app=datadog-agent -o name) --for condition=ready
+          sleep 5
+      - name: Deploy test pod
+        run: |
+          kubectl apply -f k8s/test-pod.yaml
+          kubectl wait pod/sample-app --for condition=ready
+          sleep 5
+      - name: Test
+        run: |
+          wget http://localhost:18126/test/traces
+          TRACES=`cat traces`
+          if [[ ${#TRACES} -lt 3 ]] ; then
+            echo "No traces reported - ${TRACES}"
+            exit 1
+          else
+            echo "Traces reported - ${TRACES}"
+            exit 0
+          fi
