@@ -190,6 +190,31 @@ export declare interface SamplingRule {
 }
 
 /**
+ * Span sampling rules to ingest single spans where the enclosing trace is dropped
+ */
+export declare interface SpanSamplingRule {
+  /**
+   * Sampling rate for this rule. Will default to 1.0 (always) if not provided.
+   */
+  sampleRate?: Number
+
+  /**
+   * Maximum number of spans matching a span sampling rule to be allowed per second.
+   */
+  maxPerSecond?: Number
+
+  /**
+   * Service name or pattern on which to apply this rule. The rule will apply to all services if not provided.
+   */
+  service?: string
+
+  /**
+   * Operation name or pattern on which to apply this rule. The rule will apply to all operation names if not provided.
+   */
+  name?: string
+}
+
+/**
  * List of options available to the tracer.
  */
 export declare interface TracerOptions {
@@ -282,6 +307,12 @@ export declare interface TracerOptions {
    * @default []
    */
   samplingRules?: SamplingRule[]
+
+  /**
+   * Span sampling rules that take effect when the enclosing trace is dropped, to ingest single spans
+   * @default []
+   */
+  spanSamplingRules?: SpanSamplingRule[]
 
   /**
    * Interval in milliseconds at which the tracer will submit traces to the agent.

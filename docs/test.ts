@@ -72,6 +72,10 @@ tracer.init({
     { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
     { sampleRate: 0.1, service: /foo/, name: /foo\.request/ }
   ],
+  spanSamplingRules: [
+    { sampleRate: 1.0, service: 'foo', name: 'foo.request', maxPerSecond: 5 },
+    { sampleRate: 0.5, service: 'ba?', name: 'ba?.*', maxPerSecond: 10 }
+  ],
   service: 'test',
   tags: {
     foo: 'bar'
