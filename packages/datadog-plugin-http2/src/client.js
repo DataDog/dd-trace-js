@@ -1,12 +1,14 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+
 const URL = require('url').URL
 const log = require('../../dd-trace/src/log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const shimmer = require('../../datadog-shimmer')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -19,6 +21,73 @@ const HTTP2_HEADER_METHOD = ':method'
 const HTTP2_HEADER_PATH = ':path'
 const HTTP2_HEADER_STATUS = ':status'
 const HTTP2_METHOD_GET = 'GET'
+
+class Http2ClientPlugin extends Plugin {
+  static get name () {
+    return 'http2'
+  }
+
+  constructor (...args) {
+    super(...args)
+
+    this.addSub('apm:http2:client:request:start', ({ authority, options, headers = {} }) => {
+      const sessionDetails = extractSessionDetails(authority, options)
+      const path = headers[HTTP2_HEADER_PATH] || '/'
+      const pathname = path.split(/[?#]/)[0]
+      const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
+      const uri = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${pathname}`
+
+      const store = storage.getStore()
+      const childOf = store ? store.span : store
+      const span = this.tracer.startSpan('http.request', {
+        childOf,
+        tags: {
+          [SPAN_KIND]: CLIENT,
+          'service.name': getServiceName(this.tracer, this.config, sessionDetails),
+          'resource.name': method,
+          'span.type': 'http',
+          'http.method': method,
+          'http.url': uri
+        }
+      })
+
+      addHeaderTags(span, headers, HTTP_REQUEST_HEADERS, this.config)
+
+      if (!hasAmazonSignature(headers, path)) {
+        this.tracer.inject(span, HTTP_HEADERS, headers)
+      }
+
+      analyticsSampler.sample(span, this.config.measured)
+
+      this.enter(span, store)
+    })
+
+    this.addSub('apm:http2:client:response', (headers) => {
+      const span = storage.getStore().span
+      const status = headers && headers[HTTP2_HEADER_STATUS]
+
+      span.setTag(HTTP_STATUS_CODE, status)
+
+      if (!this.config.validateStatus(status)) {
+        this.addError()
+      }
+
+      addHeaderTags(span, headers, HTTP_RESPONSE_HEADERS, this.config)
+    })
+
+    this.addSub('apm:http2:client:request:finish', () => {
+      const span = storage.getStore().span
+
+      span.finish()
+    })
+
+    this.addSub('apm:http2:client:request:error', this.addError)
+  }
+
+  configure (config) {
+    return super.configure(normalizeConfig(config))
+  }
+}
 
 function extractSessionDetails (authority, options) {
   if (typeof authority === 'string') {
@@ -49,7 +118,7 @@ function getServiceName (tracer, config, sessionDetails) {
     return config.service
   }
 
-  return `${tracer._service}-http-client`
+  return tracer._service
 }
 
 function hasAmazonSignature (headers, path) {
@@ -84,9 +153,7 @@ function getStatusValidator (config) {
   return code => code < 400 || code >= 500
 }
 
-function normalizeConfig (tracer, config) {
-  config = config.client || config
-
+function normalizeConfig (config) {
   const validateStatus = getStatusValidator(config)
   const headers = getHeaders(config)
 
@@ -94,26 +161,6 @@ function normalizeConfig (tracer, config) {
     validateStatus,
     headers
   })
-}
-
-function addResponseTags (headers, span, config) {
-  const status = headers && headers[HTTP2_HEADER_STATUS]
-
-  span.setTag(HTTP_STATUS_CODE, status)
-
-  if (!config.validateStatus(status)) {
-    span.setTag('error', 1)
-  }
-
-  addHeaderTags(span, headers, HTTP_RESPONSE_HEADERS, config)
-}
-
-function addRequestTags (headers, span, config) {
-  addHeaderTags(span, headers, HTTP_REQUEST_HEADERS, config)
-}
-
-function addErrorTags (span, error) {
-  span.setTag('error', error)
 }
 
 function addHeaderTags (span, headers, prefix, config) {
@@ -136,99 +183,4 @@ function getHeaders (config) {
     .map(key => key.toLowerCase())
 }
 
-function startSpan (tracer, config, headers, sessionDetails) {
-  headers = headers || {}
-
-  const scope = tracer.scope()
-  const childOf = scope.active()
-
-  const path = headers[HTTP2_HEADER_PATH] || '/'
-  const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
-  const url = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${path}`
-
-  const span = tracer.startSpan('http.request', {
-    childOf,
-    tags: {
-      [SPAN_KIND]: CLIENT,
-      'service.name': getServiceName(tracer, config, sessionDetails),
-      'resource.name': method,
-      'span.type': 'http',
-      'http.method': method,
-      'http.url': url.split('?')[0]
-    }
-  })
-
-  if (!hasAmazonSignature(headers, path)) {
-    tracer.inject(span, HTTP_HEADERS, headers)
-  }
-
-  analyticsSampler.sample(span, config.measured)
-  return span
-}
-
-function createWrapEmit (tracer, config, span) {
-  return function wrapEmit (emit) {
-    return function emitWithTrace (event, arg1) {
-      switch (event) {
-        case 'response':
-          addResponseTags(arg1, span, config)
-          break
-        case 'error':
-          addErrorTags(span, arg1)
-        case 'close': // eslint-disable-line no-fallthrough
-          span.finish()
-          break
-      }
-      return emit.apply(this, arguments)
-    }
-  }
-}
-
-function createWrapRequest (tracer, config, sessionDetails) {
-  return function wrapRequest (request) {
-    if (!sessionDetails) return request
-
-    return function requestWithTrace (headers, options) {
-      const scope = tracer.scope()
-      const span = startSpan(tracer, config, headers, sessionDetails)
-
-      addRequestTags(headers, span, config)
-
-      const req = scope.bind(request, span).apply(this, arguments)
-
-      shimmer.wrap(req, 'emit', createWrapEmit(tracer, config, span))
-      scope.bind(req)
-
-      return req
-    }
-  }
-}
-
-function createWrapConnect (tracer, config) {
-  config = normalizeConfig(tracer, config)
-
-  return function wrapConnect (connect) {
-    return function connectWithTrace (authority, options) {
-      const session = connect.apply(this, arguments)
-
-      const sessionDetails = extractSessionDetails(authority, options)
-
-      shimmer.wrap(session, 'request', createWrapRequest(tracer, config, sessionDetails))
-      return session
-    }
-  }
-}
-
-module.exports = [
-  {
-    name: 'http2',
-    patch: function (http2, tracer, config) {
-      if (config.client === false) return
-
-      this.wrap(http2, 'connect', createWrapConnect(tracer, config))
-    },
-    unpatch: function (http2) {
-      this.unwrap(http2, 'connect')
-    }
-  }
-]
+module.exports = Http2ClientPlugin

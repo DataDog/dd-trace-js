@@ -16,10 +16,13 @@ const {
   getTestParametersString,
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
-  getTestCommonTags
+  getTestCommonTags,
+  getTestSessionCommonTags,
+  getTestSuiteCommonTags,
+  TEST_SUITE_ID,
+  TEST_SESSION_ID,
+  TEST_COMMAND
 } = require('../../dd-trace/src/plugins/util/test')
-
-const skippedTests = new WeakSet()
 
 function getTestSpanMetadata (tracer, test, sourceRoot) {
   const childOf = getTestParentSpan(tracer)
@@ -44,10 +47,62 @@ class MochaPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
+    this._testSuites = new WeakMap()
     this._testNameToParams = {}
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('mocha', this.config)
     this.sourceRoot = process.cwd()
     this.codeOwnersEntries = getCodeOwnersFileEntries(this.sourceRoot)
+
+    this.addSub('ci:mocha:run:start', (command) => {
+      if (!this.config.isAgentlessEnabled) {
+        return
+      }
+      const childOf = getTestParentSpan(this.tracer)
+      const testSessionSpanMetadata = getTestSessionCommonTags(command, this.tracer._version)
+
+      this.command = command
+      this.testSessionSpan = this.tracer.startSpan('mocha.test_session', {
+        childOf,
+        tags: {
+          ...this.testEnvironmentMetadata,
+          ...testSessionSpanMetadata
+        }
+      })
+    })
+
+    this.addSub('ci:mocha:test-suite:start', (suite) => {
+      if (!this.config.isAgentlessEnabled) {
+        return
+      }
+      const store = storage.getStore()
+      const testSuiteMetadata = getTestSuiteCommonTags(this.command, this.tracer._version, suite.fullTitle())
+      const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
+        childOf: this.testSessionSpan,
+        tags: {
+          ...this.testEnvironmentMetadata,
+          ...testSuiteMetadata
+        }
+      })
+      this.enter(testSuiteSpan, store)
+      this._testSuites.set(suite, testSuiteSpan)
+    })
+
+    this.addSub('ci:mocha:test-suite:finish', (status) => {
+      if (!this.config.isAgentlessEnabled) {
+        return
+      }
+      const span = storage.getStore().span
+      span.setTag(TEST_STATUS, status)
+      span.finish()
+    })
+
+    this.addSub('ci:mocha:test-suite:error', (err) => {
+      if (!this.config.isAgentlessEnabled) {
+        return
+      }
+      const span = storage.getStore().span
+      span.setTag('error', err)
+    })
 
     this.addSub('ci:mocha:test:start', (test) => {
       const store = storage.getStore()
@@ -57,10 +112,6 @@ class MochaPlugin extends Plugin {
     })
 
     this.addSub('ci:mocha:test:finish', (status) => {
-      // if the status is skipped the span has already been finished
-      if (status === 'skipped') {
-        return
-      }
       const span = storage.getStore().span
 
       span.setTag(TEST_STATUS, status)
@@ -69,11 +120,14 @@ class MochaPlugin extends Plugin {
       finishAllTraceSpans(span)
     })
 
-    // This covers programmatically skipped tests (that do go through `runTest`)
-    this.addSub('ci:mocha:test:skip', () => {
-      const span = storage.getStore().span
-      span.setTag(TEST_STATUS, 'skip')
-      span.finish()
+    this.addSub('ci:mocha:test:skip', (test) => {
+      const store = storage.getStore()
+      // skipped through it.skip, so the span is not created yet
+      // for this test
+      if (!store) {
+        const testSpan = this.startTestSpan(test)
+        this.enter(testSpan, store)
+      }
     })
 
     this.addSub('ci:mocha:test:error', (err) => {
@@ -88,41 +142,35 @@ class MochaPlugin extends Plugin {
       }
     })
 
-    this.addSub('ci:mocha:suite:finish', tests => {
-      tests.forEach(test => {
-        const { pending: isSkipped } = test
-        // `tests` includes every test, so we need a way to mark
-        // the test as already accounted for. We do this through `skippedTests`.
-        // If the test is already marked as skipped, we don't create an additional test span.
-        if (!isSkipped || skippedTests.has(test)) {
-          return
-        }
-        skippedTests.add(test)
-
-        const testSpan = this.startTestSpan(test)
-
-        testSpan.setTag(TEST_STATUS, 'skip')
-        testSpan.finish()
-      })
-    })
-
-    this.addSub('ci:mocha:hook:error', ({ test, error }) => {
-      const testSpan = this.startTestSpan(test)
-      testSpan.setTag(TEST_STATUS, 'fail')
-      testSpan.setTag('error', error)
-      testSpan.finish()
-    })
-
     this.addSub('ci:mocha:test:parameterize', ({ name, params }) => {
       this._testNameToParams[name] = params
     })
 
-    this.addSub('ci:mocha:run:finish', () => {
+    this.addSub('ci:mocha:run:finish', (status) => {
+      if (this.testSessionSpan) {
+        this.testSessionSpan.setTag(TEST_STATUS, status)
+        this.testSessionSpan.finish()
+        finishAllTraceSpans(this.testSessionSpan)
+      }
       this.tracer._exporter._writer.flush()
     })
   }
 
   startTestSpan (test) {
+    const testSuiteTags = {}
+    const testSuiteSpan = this._testSuites.get(test.parent)
+
+    if (testSuiteSpan) {
+      const testSuiteId = testSuiteSpan.context()._spanId.toString('hex')
+      testSuiteTags[TEST_SUITE_ID] = testSuiteId
+    }
+
+    if (this.testSessionSpan) {
+      const testSessionId = this.testSessionSpan.context()._traceId.toString('hex')
+      testSuiteTags[TEST_SESSION_ID] = testSessionId
+      testSuiteTags[TEST_COMMAND] = this.command
+    }
+
     const { childOf, ...testSpanMetadata } = getTestSpanMetadata(this.tracer, test, this.sourceRoot)
 
     const testParametersString = getTestParametersString(this._testNameToParams, test.title)
@@ -140,7 +188,8 @@ class MochaPlugin extends Plugin {
         childOf,
         tags: {
           ...this.testEnvironmentMetadata,
-          ...testSpanMetadata
+          ...testSpanMetadata,
+          ...testSuiteTags
         }
       })
     testSpan.context()._trace.origin = CI_APP_ORIGIN

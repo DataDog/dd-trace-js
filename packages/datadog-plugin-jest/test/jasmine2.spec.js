@@ -112,7 +112,7 @@ describe('Plugin', () => {
             expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          })
+          }, { timeoutMs: 30000 })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -158,7 +158,7 @@ describe('Plugin', () => {
               `packages/datadog-plugin-jest/test/jest-hook-failure.js.${name}`
             )
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          })
+          }, { timeoutMs: 30000 })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -195,7 +195,7 @@ describe('Plugin', () => {
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js'
             })
-          })
+          }, { timeoutMs: 30000 })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)

@@ -195,9 +195,7 @@ function wrapResolve (resolve) {
 
     if (!context) return resolve.apply(this, arguments)
 
-    const path = pathToArray(info && info.path)
-
-    const field = assertField(context, info, path)
+    const field = assertField(context, info)
 
     return callInAsyncScope(resolve, field.asyncResource, this, arguments, (err) => {
       updateFieldCh.publish({ field, info, err })
@@ -242,7 +240,11 @@ function pathToArray (path) {
   return flattened.reverse()
 }
 
-function assertField (context, info, path) {
+function assertField (context, info) {
+  const pathInfo = info && info.path
+
+  const path = pathToArray(pathInfo)
+
   const pathString = path.join('.')
   const fields = context.fields
 

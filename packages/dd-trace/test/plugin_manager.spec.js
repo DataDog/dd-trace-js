@@ -194,10 +194,20 @@ describe('Plugin Manager', () => {
     it('observes configuration options', () => {
       pm.configure({
         serviceMapping: { two: 'deux' },
-        logInjection: true
+        logInjection: true,
+        queryStringObfuscation: '.*'
       })
-      expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true, service: 'deux', logInjection: true })
-      expect(Four.prototype.configure).to.have.been.calledWith({ enabled: true, logInjection: true })
+      expect(Two.prototype.configure).to.have.been.calledWith({
+        enabled: true,
+        service: 'deux',
+        logInjection: true,
+        queryStringObfuscation: '.*'
+      })
+      expect(Four.prototype.configure).to.have.been.calledWith({
+        enabled: true,
+        logInjection: true,
+        queryStringObfuscation: '.*'
+      })
     })
   })
 

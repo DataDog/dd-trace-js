@@ -40,7 +40,6 @@ tracer.use('pg', {
 <h5 id="generic-pool"></h5>
 <h5 id="google-cloud-pubsub"></h5>
 <h5 id="fastify"></h5>
-<h5 id="fs"></h5>
 <h5 id="graphql"></h5>
 <h5 id="graphql-tags"></h5>
 <h5 id="graphql-config"></h5>
@@ -108,7 +107,6 @@ tracer.use('pg', {
 * [elasticsearch](./interfaces/plugins.elasticsearch.html)
 * [express](./interfaces/plugins.express.html)
 * [fastify](./interfaces/plugins.fastify.html)
-* [fs](./interfaces/plugins.fs.html)
 * [generic-pool](./interfaces/plugins.generic_pool.html)
 * [google-cloud-pubsub](./interfaces/plugins.google_cloud_pubsub.html)
 * [graphql](./interfaces/plugins.graphql.html)
@@ -439,6 +437,7 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | sampleRate      | `DD_TRACE_SAMPLE_RATE`             | -              | Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent. |
 | flushInterval   | -                                  | `2000`         | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | flushMinSpans   | `DD_TRACE_PARTIAL_FLUSH_MIN_SPANS` | `1000`         | Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces. |
+| -               | `DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP` | -      | A regex to redact sensitive data from incoming requests' querystring reported in the `http.url` tag (matches will be replaced with `<redacted>`). Can be an empty string to disable redaction or `.*` to redact all querystring. **WARNING: this regex will execute for every incoming request on an unsafe input (url), please make sure you use a safe regex.** |
 | -               | `DD_TRACE_CLIENT_IP_HEADER_DISABLED` | `false`      | Whether to enable HTTP client IP reporting. Setting this to `true` will disable collection of the `http.client_ip` tag. |
 | -               | `DD_TRACE_CLIENT_IP_HEADER`        | -              | Custom header name to source the `http.client_ip` tag from. |
 | lookup          | -                                  | `dns.lookup()` | Custom function for DNS lookups when sending requests to the agent. |

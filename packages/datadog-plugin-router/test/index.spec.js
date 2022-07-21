@@ -19,7 +19,7 @@ describe('Plugin', () => {
     return http.createServer((req, res) => {
       const config = web.normalizeConfig({})
 
-      web.instrument(tracer, config, req, res, 'http.request')
+      web.instrument(tracer, config, req, res, 'web.request')
 
       return router(req, res, err => {
         res.writeHead(err ? 500 : 404)

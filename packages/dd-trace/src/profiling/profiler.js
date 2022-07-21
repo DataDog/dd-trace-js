@@ -91,7 +91,12 @@ class Profiler extends EventEmitter {
         if (!profile) continue
 
         profiles[profiler.type] = await profiler.encode(profile)
-        this._logger.debug(`Collected ${profiler.type} profile: ` + JSON.stringify(profile))
+        this._logger.debug(() => {
+          const profileJson = JSON.stringify(profile, (key, value) => {
+            return typeof value === 'bigint' ? value.toString() : value
+          })
+          return `Collected ${profiler.type} profile: ` + profileJson
+        })
       }
 
       this._capture(this._config.flushInterval)

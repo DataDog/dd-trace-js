@@ -76,8 +76,10 @@ module.exports = class PluginManager {
     const {
       logInjection,
       serviceMapping,
+      queryStringObfuscation,
       clientIpHeaderDisabled,
-      clientIpHeader
+      clientIpHeader,
+      experimental
     } = config
 
     if (config.plugins !== false) {
@@ -85,8 +87,13 @@ module.exports = class PluginManager {
         const pluginConfig = {
           ...this._configsByName[name],
           logInjection,
+          queryStringObfuscation,
           clientIpHeaderDisabled,
           clientIpHeader
+        }
+        // TODO: update so that it's available for every CI Visibility's plugin
+        if (name === 'mocha') {
+          pluginConfig.isAgentlessEnabled = experimental && experimental.exporter === 'datadog'
         }
         if (serviceMapping && serviceMapping[name]) {
           pluginConfig.service = serviceMapping[name]
