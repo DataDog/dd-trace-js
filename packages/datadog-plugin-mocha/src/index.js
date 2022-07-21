@@ -47,13 +47,11 @@ class MochaPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
+    this._hasBeenUsed = false
     this._testSuites = new WeakMap()
     this._testNameToParams = {}
-    this.testEnvironmentMetadata = getTestEnvironmentMetadata('mocha', this.config)
-    this.sourceRoot = process.cwd()
-    this.codeOwnersEntries = getCodeOwnersFileEntries(this.sourceRoot)
 
-    this.addSub('ci:mocha:run:start', (command) => {
+    this.addMochaSub('ci:mocha:run:start', (command) => {
       if (!this.config.isAgentlessEnabled) {
         return
       }
@@ -70,7 +68,7 @@ class MochaPlugin extends Plugin {
       })
     })
 
-    this.addSub('ci:mocha:test-suite:start', (suite) => {
+    this.addMochaSub('ci:mocha:test-suite:start', (suite) => {
       if (!this.config.isAgentlessEnabled) {
         return
       }
@@ -87,7 +85,7 @@ class MochaPlugin extends Plugin {
       this._testSuites.set(suite, testSuiteSpan)
     })
 
-    this.addSub('ci:mocha:test-suite:finish', (status) => {
+    this.addMochaSub('ci:mocha:test-suite:finish', (status) => {
       if (!this.config.isAgentlessEnabled) {
         return
       }
@@ -96,7 +94,7 @@ class MochaPlugin extends Plugin {
       span.finish()
     })
 
-    this.addSub('ci:mocha:test-suite:error', (err) => {
+    this.addMochaSub('ci:mocha:test-suite:error', (err) => {
       if (!this.config.isAgentlessEnabled) {
         return
       }
@@ -104,14 +102,14 @@ class MochaPlugin extends Plugin {
       span.setTag('error', err)
     })
 
-    this.addSub('ci:mocha:test:start', (test) => {
+    this.addMochaSub('ci:mocha:test:start', (test) => {
       const store = storage.getStore()
       const span = this.startTestSpan(test)
 
       this.enter(span, store)
     })
 
-    this.addSub('ci:mocha:test:finish', (status) => {
+    this.addMochaSub('ci:mocha:test:finish', (status) => {
       const span = storage.getStore().span
 
       span.setTag(TEST_STATUS, status)
@@ -120,7 +118,7 @@ class MochaPlugin extends Plugin {
       finishAllTraceSpans(span)
     })
 
-    this.addSub('ci:mocha:test:skip', (test) => {
+    this.addMochaSub('ci:mocha:test:skip', (test) => {
       const store = storage.getStore()
       // skipped through it.skip, so the span is not created yet
       // for this test
@@ -130,7 +128,7 @@ class MochaPlugin extends Plugin {
       }
     })
 
-    this.addSub('ci:mocha:test:error', (err) => {
+    this.addMochaSub('ci:mocha:test:error', (err) => {
       if (err) {
         const span = storage.getStore().span
         if (err.constructor.name === 'Pending' && !this.forbidPending) {
@@ -142,17 +140,30 @@ class MochaPlugin extends Plugin {
       }
     })
 
-    this.addSub('ci:mocha:test:parameterize', ({ name, params }) => {
+    this.addMochaSub('ci:mocha:test:parameterize', ({ name, params }) => {
       this._testNameToParams[name] = params
     })
 
-    this.addSub('ci:mocha:run:finish', (status) => {
+    this.addMochaSub('ci:mocha:run:finish', (status) => {
       if (this.testSessionSpan) {
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testSessionSpan.finish()
         finishAllTraceSpans(this.testSessionSpan)
       }
       this.tracer._exporter._writer.flush()
+    })
+  }
+
+  addMochaSub (channelName, handler) {
+    this.addSub(channelName, (...args) => {
+      if (!this._hasBeenUsed) {
+        // run one off
+        this.testEnvironmentMetadata = getTestEnvironmentMetadata('mocha', this.config)
+        this.sourceRoot = process.cwd()
+        this.codeOwnersEntries = getCodeOwnersFileEntries(this.sourceRoot)
+      }
+      this._hasBeenUsed = true
+      handler(...args)
     })
   }
 
