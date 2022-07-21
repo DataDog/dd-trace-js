@@ -11,11 +11,11 @@ class CouchBasePlugin extends Plugin {
 
   addSubs (func, start, finish = defaultFinish) {
     this.addSub(`apm:couchbase:${func}:start`, start)
-    this.addSub(`apm:couchbase:${func}:error`, errorHandler)
+    this.addSub(`apm:couchbase:${func}:error`, this.addError)
     this.addSub(`apm:couchbase:${func}:finish`, finish)
   }
 
-  startSpan (operation, customTags, store, bucket) {
+  startSpan (operation, customTags, store, { bucket, collection }) {
     const tags = {
       'db.type': 'couchbase',
       'component': 'couchbase',
@@ -32,7 +32,8 @@ class CouchBasePlugin extends Plugin {
       tags
     })
 
-    span.setTag('couchbase.bucket.name', bucket.name || bucket._name)
+    if (bucket) span.setTag(`couchbase.bucket.name`, bucket.name)
+    if (collection) span.setTag(`couchbase.collection.name`, collection.name)
 
     analyticsSampler.sample(span, this.config.measured)
     return span
@@ -43,7 +44,8 @@ class CouchBasePlugin extends Plugin {
 
     this.addSubs('query', ({ resource, bucket }) => {
       const store = storage.getStore()
-      const span = this.startSpan('query', { 'span.type': 'sql', 'resource.name': resource }, store, bucket)
+      const span = this.startSpan('query', { 'span.type': 'sql', 'resource.name': resource },
+        store, { bucket })
       this.enter(span, store)
     })
 
@@ -54,9 +56,9 @@ class CouchBasePlugin extends Plugin {
     this._addCommandSubs('prepend')
   }
   _addCommandSubs (name) {
-    this.addSubs(name, ({ bucket }) => {
+    this.addSubs(name, ({ bucket, collection }) => {
       const store = storage.getStore()
-      const span = this.startSpan(name, {}, store, bucket)
+      const span = this.startSpan(name, {}, store, { bucket, collection })
       this.enter(span, store)
     })
   }
@@ -64,10 +66,6 @@ class CouchBasePlugin extends Plugin {
 
 function defaultFinish () {
   storage.getStore().span.finish()
-}
-
-function errorHandler (error) {
-  storage.getStore().span.setTag('error', error)
 }
 
 module.exports = CouchBasePlugin
