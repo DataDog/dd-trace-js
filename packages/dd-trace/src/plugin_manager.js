@@ -36,66 +36,81 @@ const collectDisabledPlugins = () => {
 // TODO this must always be a singleton.
 module.exports = class PluginManager {
   constructor (tracer) {
+    this._tracer = tracer
     this._pluginsByName = {}
     this._configsByName = {}
-
-    const _disabledPlugins = collectDisabledPlugins()
-
-    for (const PluginClass of Object.values(plugins)) {
-      /**
-       * disabling the plugin here instead of in `configure` so we don't waste subscriber
-       * resources on a plugin that will eventually be disabled anyways
-       */
-      if (_disabledPlugins.has(PluginClass.name)) {
-        log.debug(`Plugin "${PluginClass.name}" was disabled via configuration option.`)
-        continue
-      }
-      if (typeof PluginClass !== 'function') continue
-      this._pluginsByName[PluginClass.name] = new PluginClass(tracer)
-      this._configsByName[PluginClass.name] = {}
-    }
+    this._disabledPlugins = collectDisabledPlugins()
   }
 
   // like instrumenter.use()
   configurePlugin (name, pluginConfig) {
-    if (!(name in this._pluginsByName)) return
     if (typeof pluginConfig === 'boolean') {
       pluginConfig = { enabled: pluginConfig }
     }
+    if (!pluginConfig) {
+      pluginConfig = { enabled: true }
+    }
 
-    const config = {
+    this._configsByName[name] = {
       ...this._configsByName[name],
       ...pluginConfig
     }
 
-    this._pluginsByName[name].configure(getConfig(name, config))
+    if (this._pluginsByName[name]) {
+      this._pluginsByName[name].configure(getConfig(name, this._configsByName[name]))
+    }
   }
 
   // like instrumenter.enable()
-  configure (config) {
+  configure (config = {}) {
     const { logInjection, serviceMapping, experimental, queryStringObfuscation } = config
 
-    if (config.plugins !== false) {
-      for (const name in this._pluginsByName) {
-        const pluginConfig = {
-          ...this._configsByName[name],
-          logInjection,
-          queryStringObfuscation
-        }
-        // TODO: update so that it's available for every CI Visibility's plugin
-        if (name === 'mocha') {
-          pluginConfig.isAgentlessEnabled = experimental && experimental.exporter === 'datadog'
-        }
-        if (serviceMapping && serviceMapping[name]) {
-          pluginConfig.service = serviceMapping[name]
-        }
-        this.configurePlugin(name, pluginConfig)
+    for (const PluginClass of Object.values(plugins)) {
+      const name = PluginClass.name
+
+      if (this._disabledPlugins.has(name)) {
+        log.debug(`Plugin "${name}" was disabled via configuration option.`)
+        continue
       }
+
+      if (typeof PluginClass !== 'function') continue
+
+      this._pluginsByName[name] = new PluginClass(this._tracer)
+
+      if (config.plugins === false) continue
+
+      const pluginConfig = {
+        ...this._configsByName[name]
+      }
+
+      if (logInjection !== undefined) {
+        pluginConfig.logInjection = logInjection
+      }
+
+      if (queryStringObfuscation !== undefined) {
+        pluginConfig.queryStringObfuscation = queryStringObfuscation
+      }
+
+      // TODO: update so that it's available for every CI Visibility's plugin
+      if (name === 'mocha') {
+        pluginConfig.isAgentlessEnabled = experimental && experimental.exporter === 'datadog'
+      }
+
+      if (serviceMapping && serviceMapping[name]) {
+        pluginConfig.service = serviceMapping[name]
+      }
+
+      this.configurePlugin(name, pluginConfig)
     }
   }
 
   // This is basically just for testing. like intrumenter.disable()
   destroy () {
-    for (const name in this._pluginsByName) this._pluginsByName[name].configure({ enabled: false })
+    for (const name in this._pluginsByName) {
+      this._pluginsByName[name].configure({ enabled: false })
+    }
+
+    this._pluginsByName = {}
+    this._configsByName = {}
   }
 }
