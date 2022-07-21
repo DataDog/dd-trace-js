@@ -1,7 +1,7 @@
 const path = require('path')
-const fileLine = {
-  getFirstNonDDFileAndLine,
-  getFirstNonDDFileAndLineFromCallsites, // Exported only for test purposes
+const pathLine = {
+  getFirstNonDDPathAndLine,
+  getFirstNonDDPathAndLineFromCallsites, // Exported only for test purposes
   calculateDDBasePath, // Exported only for test purposes
   ddBasePath: calculateDDBasePath(__dirname) // Only for test purposes
 }
@@ -24,14 +24,14 @@ function getCallSiteInfo () {
   return callsiteList
 }
 
-function getFirstNonDDFileAndLineFromCallsites (callsites) {
+function getFirstNonDDPathAndLineFromCallsites (callsites) {
   if (callsites) {
     for (let i = 0; i < callsites.length; i++) {
       const callsite = callsites[i]
-      const file = callsite.getFileName()
-      if (file.indexOf(fileLine.ddBasePath) === -1) {
+      const path = callsite.getFileName()
+      if (path.indexOf(pathLine.ddBasePath) === -1) {
         return {
-          file,
+          path,
           line: callsite.getLineNumber()
         }
       }
@@ -40,7 +40,7 @@ function getFirstNonDDFileAndLineFromCallsites (callsites) {
   return null
 }
 
-function getFirstNonDDFileAndLine () {
-  return getFirstNonDDFileAndLineFromCallsites(getCallSiteInfo())
+function getFirstNonDDPathAndLine () {
+  return getFirstNonDDPathAndLineFromCallsites(getCallSiteInfo())
 }
-module.exports = fileLine
+module.exports = pathLine
