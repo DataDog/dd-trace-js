@@ -1216,7 +1216,7 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
-   * [mysql2](https://github.com/brianmario/mysql2) module.
+   * [mysql2](https://github.com/sidorares/node-mysql2) module.
    */
   interface mysql2 extends mysql {}
 
