@@ -2,7 +2,7 @@
 
 const tracer = require('../../packages/dd-trace')
 const { ORIGIN_KEY } = require('../../packages/dd-trace/src/constants')
-const { isTrue } = require('../packages/dd-trace/src/util')
+const { isTrue } = require('../../packages/dd-trace/src/util')
 
 const options = {
   startupLogs: false,
