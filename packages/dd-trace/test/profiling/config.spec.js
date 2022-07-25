@@ -2,12 +2,18 @@
 
 const { expect } = require('chai')
 const os = require('os')
-const { AgentExporter } = require('../../src/profiling/exporters/agent')
+const { satisfies } = require('semver')
 const { FileExporter } = require('../../src/profiling/exporters/file')
 const CpuProfiler = require('../../src/profiling/profilers/cpu')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
+
+const exporter = satisfies(process.version.slice(1), '>= 16.8')
+  ? 'agent-v16'
+  : 'agent'
+
+const { AgentExporter } = require(`../../src/profiling/exporters/${exporter}`)
 
 describe('config', () => {
   let Config

@@ -10,6 +10,7 @@ const { request } = require('http')
 const getPort = require('get-port')
 const proxyquire = require('proxyquire')
 const { gunzipSync } = require('zlib')
+const { satisfies } = require('semver')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const logger = require('../../../src/log')
@@ -108,7 +109,11 @@ describe('exporters/agent', () => {
     http = {
       request: sinon.spy(request)
     }
-    const agent = proxyquire('../../../src/profiling/exporters/agent', {
+    const name = satisfies(process.version.slice(1), '>= 16.8')
+      ? 'agent-v16'
+      : 'agent'
+
+    const agent = proxyquire(`../../../src/profiling/exporters/${name}`, {
       '../../exporters/common/docker': docker,
       'http': http
     })
@@ -322,10 +327,16 @@ describe('exporters/agent', () => {
     })
 
     it('should support Unix domain sockets', async () => {
-      const exporter = new AgentExporter({ url: new URL(`unix://${url}`), logger, uploadTimeout: 100 })
+      const exporter = new AgentExporter({
+        url: new URL(`unix://${url}`),
+        uploadTimeout: 100,
+        logger
+      })
       const start = new Date()
       const end = new Date()
-      const tags = { foo: 'bar' }
+      const tags = {
+        'runtime-id': 'a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
+      }
 
       const [ wall, space ] = await Promise.all([
         createProfile(['wall', 'microseconds']),
@@ -340,42 +351,7 @@ describe('exporters/agent', () => {
       await new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
           try {
-            expect(req.body).to.have.property('language', 'javascript')
-            expect(req.body).to.have.property('runtime', 'nodejs')
-            expect(req.body).to.have.property('runtime_version', process.version)
-            expect(req.body).to.have.property('profiler_version', version)
-            expect(req.body).to.have.property('format', 'pprof')
-            expect(req.body).to.have.deep.property('tags', [
-              'language:javascript',
-              'runtime:nodejs',
-              `runtime_version:${process.version}`,
-              `profiler_version:${version}`,
-              'format:pprof',
-              'foo:bar'
-            ])
-            expect(req.body).to.have.deep.property('types', ['wall', 'space'])
-            expect(req.body).to.have.property('recording-start', start.toISOString())
-            expect(req.body).to.have.property('recording-end', end.toISOString())
-
-            expect(req.files[0]).to.have.property('fieldname', 'data[0]')
-            expect(req.files[0]).to.have.property('originalname', 'wall.pb.gz')
-            expect(req.files[0]).to.have.property('mimetype', 'application/octet-stream')
-            expect(req.files[0]).to.have.property('size', req.files[0].buffer.length)
-
-            expect(req.files[1]).to.have.property('fieldname', 'data[1]')
-            expect(req.files[1]).to.have.property('originalname', 'space.pb.gz')
-            expect(req.files[1]).to.have.property('mimetype', 'application/octet-stream')
-            expect(req.files[1]).to.have.property('size', req.files[1].buffer.length)
-
-            const wallProfile = decode(gunzipSync(req.files[0].buffer))
-            const spaceProfile = decode(gunzipSync(req.files[1].buffer))
-
-            expect(wallProfile).to.be.a.profile
-            expect(spaceProfile).to.be.a.profile
-
-            expect(wallProfile).to.deep.equal(decode(gunzipSync(profiles.wall)))
-            expect(spaceProfile).to.deep.equal(decode(gunzipSync(profiles.space)))
-
+            verifyRequest(req, profiles, start, end)
             resolve()
           } catch (e) {
             reject(e)

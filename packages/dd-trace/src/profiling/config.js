@@ -1,15 +1,20 @@
 'use strict'
 
 const coalesce = require('koalas')
+const fs = require('fs')
 const os = require('os')
+const { satisfies } = require('semver')
 const { URL } = require('url')
-const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
 const CpuProfiler = require('./profilers/cpu')
 const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
 const { tagger } = require('./tagger')
+
+const { AgentExporter } = satisfies(process.version.slice(1), '>= 16.8')
+  ? require('./exporters/agent-v16')
+  : require('./exporters/agent')
 
 const {
   DD_PROFILING_ENABLED,
@@ -57,8 +62,8 @@ class Config {
 
     const hostname = coalesce(options.hostname, DD_AGENT_HOST, 'localhost')
     const port = coalesce(options.port, DD_TRACE_AGENT_PORT, 8126)
-    this.url = new URL(coalesce(options.url, DD_TRACE_AGENT_URL,
-      `http://${hostname || 'localhost'}:${port || 8126}`))
+    this.url = getAgentUrl(coalesce(options.url, DD_TRACE_AGENT_URL,
+      `http://${hostname || 'localhost'}:${port || 8126}`), options)
 
     this.exporters = ensureExporters(options.exporters || [
       new AgentExporter(this)
@@ -139,4 +144,21 @@ function ensureLogger (logger) {
   }
 
   return logger
+}
+
+function getAgentUrl (url, options) {
+  if (url) return new URL(url)
+
+  if (os.type() === 'Windows_NT') return
+
+  if (
+    !options.hostname &&
+    !options.port &&
+    !process.env.DD_AGENT_HOST &&
+    !process.env.DD_TRACE_AGENT_HOSTNAME &&
+    !process.env.DD_TRACE_AGENT_PORT &&
+    fs.existsSync('/var/run/datadog/apm.socket')
+  ) {
+    return new URL('unix:///var/run/datadog/apm.socket')
+  }
 }
