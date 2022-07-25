@@ -21,7 +21,7 @@ const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
 
-describe('plugins/util/web', () => {
+describe.only('plugins/util/web', () => {
   let web
   let tracer
   let span
@@ -768,11 +768,11 @@ describe('plugins/util/web', () => {
       })
     })
 
-    it('should not override an existing error', () => {
+    it('should override an existing error', () => {
       const error = new Error('boom')
 
-      web.addError(req, error)
       web.addError(req, new Error('prrr'))
+      web.addError(req, error)
       web.addStatusError(req, 500)
 
       expect(tags).to.include({
