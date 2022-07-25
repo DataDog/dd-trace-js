@@ -6,7 +6,6 @@ require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
 require,@types/node,MIT,Copyright Authors
 require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
 require,diagnostics_channel,MIT,Copyright 2021 Simon D.
-require,form-data,MIT,Copyright 2012 Felix Geisendörfer and contributors
 require,ignore,MIT,Copyright 2013 Kael Zhang and contributors
 require,import-in-the-middle,Apache license 2.0,Copyright 2021 Datadog Inc.
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
