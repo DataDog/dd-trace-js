@@ -23,6 +23,13 @@ jobs:
           kubectl_version: v1.22.10
           node_image: kindest/node:v1.22.9
 
+      - name: Deploy apm test trace agent
+        run: |
+          kubectl apply -f k8s/dd-apm-test-agent-config.yaml
+          kubectl rollout status daemonset/datadog-agent
+          kubectl wait $(kubectl get pods -l app=datadog-agent -o name) --for condition=ready
+          sleep 5
+
       - name: Build injection image
         run: |
           npm pack
@@ -34,13 +41,6 @@ jobs:
         run: |
           docker build k8s/sample-app --build-arg npm_pkg=./dd-trace.tgz -t ghcr.io/datadog/dd-trace-js/sample-app:${GITHUB_SHA}
           docker push ghcr.io/datadog/dd-trace-js/sample-app:${GITHUB_SHA}
-
-      - name: Deploy apm test trace agent
-        run: |
-          kubectl apply -f k8s/dd-apm-test-agent-config.yaml
-          kubectl rollout status daemonset/datadog-agent
-          kubectl wait $(kubectl get pods -l app=datadog-agent -o name) --for condition=ready
-          sleep 5
 
       - name: Deploy test pod
         run: |
