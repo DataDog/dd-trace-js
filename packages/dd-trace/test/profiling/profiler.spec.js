@@ -10,7 +10,9 @@ const WallProfiler = require('../../src/profiling/profilers/wall')
 
 const INTERVAL = 65 * 1000
 
-describe('profiler', () => {
+describe('profiler', function () {
+  this.timeout(10000) // TODO: fix slow tests
+
   let Profiler
   let profiler
   let wallProfiler
