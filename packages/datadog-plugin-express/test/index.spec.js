@@ -181,6 +181,45 @@ describe('Plugin', () => {
           })
         })
 
+        it('should do automatic instrumentation on middleware that break the async context', done => {
+          let next
+
+          const app = express()
+          const interval = setInterval(() => {
+            if (next) {
+              next()
+              clearInterval(interval)
+            }
+          })
+
+          app.use(function breaking (req, res, _next) {
+            next = _next
+          })
+          app.get('/user/:id', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                expect(spans[0]).to.have.property('name', 'express.request')
+                expect(spans[3]).to.have.property('resource', 'breaking')
+                expect(spans[3]).to.have.property('name', 'express.middleware')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user/1`)
+                .catch(done)
+            })
+          })
+        })
+
         it('should surround matchers based on regular expressions', done => {
           const app = express()
           const router = express.Router()
