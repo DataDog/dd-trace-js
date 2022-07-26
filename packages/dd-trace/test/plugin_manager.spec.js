@@ -72,44 +72,61 @@ describe('Plugin Manager', () => {
     delete process.env.DD_TRACE_DISABLED_PLUGINS
   })
 
-  describe('constructor', () => {
-    it('instantiates plugin classes', () => {
-      expect(instantiated).to.deep.equal(['two', 'four'])
-    })
-  })
-
   describe('configurePlugin', () => {
     it('does not throw for old-style plugins', () => {
       expect(() => pm.configurePlugin('one', false)).to.not.throw()
     })
+    describe('without configure', () => {
+      it('should not configure plugins', () => {
+        pm.configurePlugin('two')
+        expect(Two.prototype.configure).to.not.have.been.called
+      })
+      it('should keep the config for future configure calls', () => {
+        pm.configurePlugin('two', { foo: 'bar' })
+        pm.configure()
+        expect(Two.prototype.configure).to.have.been.calledWith({
+          enabled: true,
+          foo: 'bar'
+        })
+      })
+    })
     describe('without env vars', () => {
+      beforeEach(() => pm.configure())
+
       it('works with no config param', () => {
+        pm.configure()
         pm.configurePlugin('two')
         expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true })
       })
       it('works with empty object config', () => {
+        pm.configure()
         pm.configurePlugin('two', {})
         expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true })
       })
       it('works with "enabled: false" object config', () => {
+        pm.configure()
         pm.configurePlugin('two', { enabled: false })
         expect(Two.prototype.configure).to.have.been.calledWith({ enabled: false })
       })
       it('works with "enabled: true" object config', () => {
+        pm.configure()
         pm.configurePlugin('two', { enabled: true })
         expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true })
       })
       it('works with boolean false', () => {
+        pm.configure()
         pm.configurePlugin('two', false)
         expect(Two.prototype.configure).to.have.been.calledWith({ enabled: false })
       })
       it('works with boolean true', () => {
+        pm.configure()
         pm.configurePlugin('two', true)
         expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true })
       })
     })
     describe('with disabled plugins', () => {
       it('should not call configure on individual enable override', () => {
+        pm.configure()
         pm.configurePlugin('five', { enabled: true })
         expect(Five.prototype.configure).to.not.have.been.called
       })
@@ -120,6 +137,7 @@ describe('Plugin Manager', () => {
       })
     })
     describe('with env var true', () => {
+      beforeEach(() => pm.configure())
       beforeEach(() => {
         process.env.DD_TRACE_TWO_ENABLED = '1'
       })
@@ -152,6 +170,7 @@ describe('Plugin Manager', () => {
       })
     })
     describe('with env var false', () => {
+      beforeEach(() => pm.configure())
       beforeEach(() => {
         process.env.DD_TRACE_TWO_ENABLED = '0'
       })
@@ -186,6 +205,10 @@ describe('Plugin Manager', () => {
   })
 
   describe('configure', () => {
+    it('instantiates plugin classes', () => {
+      pm.configure()
+      expect(instantiated).to.deep.equal(['two', 'four'])
+    })
     it('skips configuring plugins entirely when plugins is false', () => {
       pm.configurePlugin = sinon.spy()
       pm.configure({ plugins: false })
@@ -202,6 +225,8 @@ describe('Plugin Manager', () => {
   })
 
   describe('destroy', () => {
+    beforeEach(() => pm.configure())
+
     it('should disable the plugins', () => {
       pm.destroy()
       expect(Two.prototype.configure).to.have.been.calledWith({ enabled: false })
