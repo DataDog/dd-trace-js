@@ -145,6 +145,8 @@ jobs:
 
   node-bench-sirun-plugin-http: *node-bench-sirun-base
 
+  node-bench-sirun-plugin-jest: *node-bench-sirun-base
+
   node-bench-sirun-scope: *node-bench-sirun-base
 
   node-bench-sirun-exporting-pipeline: *node-bench-sirun-base
@@ -227,6 +229,7 @@ workflows:
       - node-bench-sirun-plugin-q: *matrix-exact-supported-node-versions
       - node-bench-sirun-plugin-bluebird: *matrix-exact-supported-node-versions
       - node-bench-sirun-plugin-http: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-jest: *matrix-exact-supported-node-versions
       - node-bench-sirun-plugin-net: *matrix-exact-supported-node-versions
       - node-bench-sirun-scope: *matrix-exact-supported-node-versions
       - node-bench-sirun-exporting-pipeline: *matrix-exact-supported-node-versions
@@ -244,6 +247,7 @@ workflows:
             - node-bench-sirun-plugin-q
             - node-bench-sirun-plugin-bluebird
             - node-bench-sirun-plugin-http
+            - node-bench-sirun-plugin-jest
             - node-bench-sirun-plugin-net
             - node-bench-sirun-scope
             - node-bench-sirun-exporting-pipeline

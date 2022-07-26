@@ -1,0 +1,17 @@
+{
+  "name": "plugin-jest",
+  "cachegrind": true,
+  "iterations": 10,
+  "variants": {
+    "control": {
+      "run": "node run-test.js"
+    },
+    "ci-visibility-enabled": {
+      "run": "node run-test.js",
+      "baseline": "control",
+      "env": {
+        "USE_TRACER": "1"
+      }
+    }
+  }
+}

@@ -38,28 +38,27 @@ class JestPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
-    this.codeOwnersEntries = getCodeOwnersFileEntries()
+    this._hasBeenUsed = false
 
-    this.addSub('ci:jest:test:start', (test) => {
+    this.addJestSub('ci:jest:test:start', (test) => {
       const store = storage.getStore()
       const span = this.startTestSpan(test)
 
       this.enter(span, store)
     })
 
-    this.addSub('ci:jest:test:finish', (status) => {
+    this.addJestSub('ci:jest:test:finish', (status) => {
       const span = storage.getStore().span
       span.setTag(TEST_STATUS, status)
       span.finish()
       finishAllTraceSpans(span)
     })
 
-    this.addSub('ci:jest:test-suite:finish', () => {
+    this.addJestSub('ci:jest:test-suite:finish', () => {
       this.tracer._exporter._writer.flush()
     })
 
-    this.addSub('ci:jest:test:err', (error) => {
+    this.addJestSub('ci:jest:test:err', (error) => {
       if (error) {
         const span = storage.getStore().span
         span.setTag(TEST_STATUS, 'fail')
@@ -67,10 +66,22 @@ class JestPlugin extends Plugin {
       }
     })
 
-    this.addSub('ci:jest:test:skip', (test) => {
+    this.addJestSub('ci:jest:test:skip', (test) => {
       const span = this.startTestSpan(test)
       span.setTag(TEST_STATUS, 'skip')
       span.finish()
+    })
+  }
+
+  addJestSub (channelName, handler) {
+    this.addSub(channelName, (...args) => {
+      if (!this._hasBeenUsed) {
+        // run one off
+        this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
+        this.codeOwnersEntries = getCodeOwnersFileEntries()
+      }
+      this._hasBeenUsed = true
+      handler(...args)
     })
   }
 
