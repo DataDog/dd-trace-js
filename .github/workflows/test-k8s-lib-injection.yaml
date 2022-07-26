@@ -52,7 +52,7 @@ jobs:
 
       - name: Test
         run: |
-          wget http://localhost:18126/test/traces || true
+          wget http://localhost:18126/test/session/traces || true
           kubectl logs $(kubectl get pods -l app=datadog-agent -o name)
 
           TRACES=`cat traces`
