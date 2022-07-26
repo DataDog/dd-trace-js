@@ -232,19 +232,19 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['>=3.0.0 <3.2.0'
 
 // semver >=3.2.0
 
-addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['3.2.0 - 4.1.0'] }, collection => {
-  const Collection = collection.Collection
+// addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['3.2.0 - 4.1.0'] }, collection => {
+//   const Collection = collection.Collection
 
-  wrapAllNames(['upsert', 'insert', 'replace'], name => {
-    shimmer.wrap(Collection.prototype, name, wrapWithName(name))
-  })
+//   wrapAllNames(['upsert', 'insert', 'replace'], name => {
+//     shimmer.wrap(Collection.prototype, name, wrapWithName(name))
+//   })
 
-  return collection
-})
+//   return collection
+// })
 
-addHook({ name: 'couchbase', file: 'dist/cluster.js', versions: ['3.2.0 - 3.2.1', '3.2.2 - 4.1.0'] }, cluster => {
-  const Cluster = cluster.Cluster
+// addHook({ name: 'couchbase', file: 'dist/cluster.js', versions: ['3.2.0 - 3.2.1', '3.2.2 - 4.1.0'] }, cluster => {
+//   const Cluster = cluster.Cluster
 
-  shimmer.wrap(Cluster.prototype, 'query', wrapV3Query)
-  return cluster
-})
+//   shimmer.wrap(Cluster.prototype, 'query', wrapV3Query)
+//   return cluster
+// })
