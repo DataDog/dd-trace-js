@@ -77,6 +77,8 @@ class GraphQLResolvePlugin extends Plugin {
       })
     })
 
+    this.addSub('apm:graphql:resolve:error', this.addError)
+
     this.addSub('apm:graphql:resolve:finish', finishTime => {
       const span = storage.getStore().span
       span.finish(finishTime)
