@@ -28,22 +28,6 @@ commands:
           paths:
             - ./node_modules
             - ./yarn.lock
-  setup-sirun-tests:
-    steps:
-      - run:
-          name: Install dependencies
-          command: |
-            if [[ $CIRCLE_JOB == *"plugin"* ]]; then
-              export PLUGINS=$(node -p "process.env.CIRCLE_JOB.replace(/.*plugin-/, '').replace('-latest', '').replace(/-\d*$/, '')")
-              node ./scripts/install_plugin_modules
-            fi
-      - run:
-          name: Install system deps
-          command: apt-get update && apt-get install -y valgrind wget
-      - run:
-          name: Install sirun
-          command: wget https://github.com/DataDog/sirun/releases/download/v0.1.9/sirun-v0.1.9-x86_64-unknown-linux-gnu.tar.gz && tar zxf sirun-v0.1.9-x86_64-unknown-linux-gnu.tar.gz && mv sirun /usr/bin
-
 
 node-bench-base: &node-bench-base
   resource_class: small
@@ -77,7 +61,19 @@ node-bench-sirun-base: &node-bench-sirun-base
   working_directory: ~/dd-trace-js
   steps:
     - checkout-and-yarn-install
-    - setup-sirun-tests
+    - run:
+        name: Install dependencies
+        command: |
+          if [[ $CIRCLE_JOB == *"plugin"* ]]; then
+            export PLUGINS=$(node -p "process.env.CIRCLE_JOB.replace(/.*plugin-/, '').replace('-latest', '').replace(/-\d*$/, '')")
+            node ./scripts/install_plugin_modules
+          fi
+    - run:
+        name: Install system deps
+        command: apt-get update && apt-get install -y valgrind wget
+    - run:
+        name: Install sirun
+        command: wget https://github.com/DataDog/sirun/releases/download/v0.1.9/sirun-v0.1.9-x86_64-unknown-linux-gnu.tar.gz && tar zxf sirun-v0.1.9-x86_64-unknown-linux-gnu.tar.gz && mv sirun /usr/bin
     - run:
         name: Run sirun
         command: |
@@ -149,6 +145,8 @@ jobs:
 
   node-bench-sirun-plugin-http: *node-bench-sirun-base
 
+  node-bench-sirun-plugin-mocha: *node-bench-sirun-base
+
   node-bench-sirun-scope: *node-bench-sirun-base
 
   node-bench-sirun-exporting-pipeline: *node-bench-sirun-base
@@ -162,29 +160,6 @@ jobs:
   node-bench-sirun-plugin-graphql: *node-bench-sirun-base
 
   node-bench-sirun-appsec: *node-bench-sirun-base
-
-  node-bench-sirun-plugin-mocha:
-    <<: *node-bench-sirun-base
-    steps:
-      - checkout-and-yarn-install
-      - setup-sirun-tests
-      - run:
-          name: Run sirun
-          command: |
-            cd benchmark/sirun/plugin-mocha
-            node /root/dd-trace-js/benchmark/sirun/run-all-variants.js | tee ../$CIRCLE_JOB-sirun-output.ndjson output.ndjson
-            node generate-metric-from-sirun.js
-      - persist_to_workspace:
-          root: ~/dd-trace-js
-          paths:
-            - benchmark/sirun/*-sirun-output.ndjson
-      - run:
-          name: Upload metrics
-          command: |
-            curl --fail -X POST -H 'Content-Type: application/json' -d @./benchmark/sirun/plugin-mocha/output-control.json https://api.datadoghq.com/api/v1/series?api_key=$DATADOG_API_KEY
-            curl --fail -X POST -H 'Content-Type: application/json' -d @./benchmark/sirun/plugin-mocha/output-ci-visibility-enabled.json https://api.datadoghq.com/api/v1/series?api_key=$DATADOG_API_KEY
-
-
 
   node-bench-sirun-all:
     docker:
@@ -254,6 +229,7 @@ workflows:
       - node-bench-sirun-plugin-q: *matrix-exact-supported-node-versions
       - node-bench-sirun-plugin-bluebird: *matrix-exact-supported-node-versions
       - node-bench-sirun-plugin-http: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-mocha: *matrix-exact-supported-node-versions
       - node-bench-sirun-plugin-net: *matrix-exact-supported-node-versions
       - node-bench-sirun-scope: *matrix-exact-supported-node-versions
       - node-bench-sirun-exporting-pipeline: *matrix-exact-supported-node-versions
@@ -261,7 +237,6 @@ workflows:
       - node-bench-sirun-plugin-dns: *matrix-exact-supported-node-versions
       - node-bench-sirun-plugin-graphql: *matrix-exact-supported-node-versions
       - node-bench-sirun-appsec: *matrix-exact-supported-node-versions
-      - node-bench-sirun-plugin-mocha: *matrix-exact-supported-node-versions
       - node-bench-sirun-all:
           requires:
             - node-bench-sirun-startup
@@ -272,6 +247,7 @@ workflows:
             - node-bench-sirun-plugin-q
             - node-bench-sirun-plugin-bluebird
             - node-bench-sirun-plugin-http
+            - node-bench-sirun-plugin-mocha
             - node-bench-sirun-plugin-net
             - node-bench-sirun-scope
             - node-bench-sirun-exporting-pipeline
@@ -279,7 +255,6 @@ workflows:
             - node-bench-sirun-plugin-dns
             - node-bench-sirun-plugin-graphql
             - node-bench-sirun-appsec
-            - node-bench-sirun-plugin-mocha
       - node-ci-visibility-performance-benchmark
 
   nightly-bench:
