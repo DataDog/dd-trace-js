@@ -30,7 +30,7 @@ class FormData extends Readable {
   }
 
   _appendMetadata (key, value) {
-    this._data.push(`Content-Disposition: form-data; name="${key}" \r\n\r\n${value}\r\n`)
+    this._data.push(`Content-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`)
   }
 
   _appendFile (key, value, { filename, contentType = 'application/octet-stream' }) {
