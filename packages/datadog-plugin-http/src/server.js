@@ -17,7 +17,7 @@ class HttpServerPlugin extends Plugin {
       const store = storage.getStore()
       const span = web.startSpan(this.tracer, this.config, req, res, 'http.request')
 
-      this.enter(span, store)
+      this.enter(span, { ...store, req })
 
       const context = web.getContext(req)
 
@@ -32,12 +32,7 @@ class HttpServerPlugin extends Plugin {
     })
 
     this.addSub('apm:http:server:request:error', (error) => {
-      const span = storage.getStore().span
-      span.addTags({
-        'error.type': error.name,
-        'error.msg': error.message,
-        'error.stack': error.stack
-      })
+      web.addError(error)
     })
 
     this.addSub('apm:http:server:request:finish', ({ req }) => {

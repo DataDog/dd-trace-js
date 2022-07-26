@@ -46,7 +46,15 @@ class RouterPlugin extends WebPlugin {
       context.middleware.pop().finish()
     })
 
-    this.addSub(`apm:${this.constructor.name}:middleware:error`, this.addError)
+    this.addSub(`apm:${this.constructor.name}:middleware:error`, err => {
+      const store = storage.getStore()
+
+      web.addError(store.req, err)
+
+      if (this.config.middleware) {
+        this.addError(err)
+      }
+    })
 
     this.addSub(`apm:http:server:request:finish`, ({ req }) => {
       const context = this._contexts.get(req)

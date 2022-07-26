@@ -875,6 +875,9 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property('error.type', error.name)
+                expect(spans[0].meta).to.have.property('error.msg', error.message)
+                expect(spans[0].meta).to.have.property('error.stack', error.stack)
                 expect(spans[0].meta).to.have.property('http.status_code', '500')
               })
               .then(done)
@@ -902,6 +905,10 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property('error.type', error.name)
+                expect(spans[0].meta).to.have.property('error.msg', error.message)
+                expect(spans[0].meta).to.have.property('error.stack', error.stack)
                 expect(spans[3]).to.have.property('error', 1)
                 expect(spans[3].meta).to.have.property('error.type', error.name)
                 expect(spans[3].meta).to.have.property('error.msg', error.message)
@@ -932,6 +939,10 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property('error.type', error.name)
+                expect(spans[0].meta).to.have.property('error.msg', error.message)
+                expect(spans[0].meta).to.have.property('error.stack', error.stack)
                 expect(spans[3]).to.have.property('error', 1)
                 expect(spans[3].meta).to.have.property('error.type', error.name)
                 expect(spans[3].meta).to.have.property('error.msg', error.message)
@@ -1324,7 +1335,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should mark middleware errors regardless of status codes configuration', done => {
+        it('should only handle errors for configured status codes', done => {
           const app = express()
 
           app.use((req, res, next) => {
@@ -1341,7 +1352,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0]).to.have.property('error', 0)
                 expect(spans[0]).to.have.property('resource', 'GET /user')
                 expect(spans[0].meta).to.have.property('http.status_code', '400')
               })
@@ -1400,6 +1411,9 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property('error.type', error.name)
+                expect(spans[0].meta).to.have.property('error.msg', error.message)
+                expect(spans[0].meta).to.have.property('error.stack', error.stack)
                 expect(spans[0].meta).to.have.property('http.status_code', '500')
               })
               .then(done)
