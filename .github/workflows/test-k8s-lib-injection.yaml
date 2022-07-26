@@ -52,7 +52,9 @@ jobs:
 
       - name: Test
         run: |
-          wget http://localhost:18126/test/traces
+          wget http://localhost:18126/test/traces || true
+          kubectl logs $(kubectl get pods -l app=datadog-agent -o name)
+
           TRACES=`cat traces`
           if [[ ${#TRACES} -lt 3 ]] ; then
             echo "No traces reported - ${TRACES}"
