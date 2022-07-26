@@ -2,6 +2,7 @@
 
 const tracer = require('../../packages/dd-trace')
 const { ORIGIN_KEY } = require('../../packages/dd-trace/src/constants')
+const { isTrue } = require('../../packages/dd-trace/src/util')
 
 const options = {
   startupLogs: false,
@@ -10,9 +11,7 @@ const options = {
   }
 }
 
-const isAgentlessEnabled = process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED &&
-  process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED !== 'false' &&
-  process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED !== '0'
+const isAgentlessEnabled = isTrue(process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED)
 
 if (isAgentlessEnabled) {
   if (process.env.DATADOG_API_KEY || process.env.DD_API_KEY) {
