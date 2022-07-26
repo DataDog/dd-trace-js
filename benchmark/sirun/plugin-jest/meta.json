@@ -1,7 +1,7 @@
 {
   "name": "plugin-jest",
   "cachegrind": true,
-  "iterations": 10,
+  "iterations": 3,
   "variants": {
     "control": {
       "run": "node run-test.js"
