@@ -22,7 +22,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.hostIP
-        - name: DD_AGENT_PORT
+        - name: DD_TRACE_AGENT_PORT
           value: "18126"
       name: sample-app
       readinessProbe:
