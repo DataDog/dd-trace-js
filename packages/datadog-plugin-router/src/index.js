@@ -18,7 +18,7 @@ class RouterPlugin extends WebPlugin {
     this.addSub(`apm:${this.constructor.name}:middleware:enter`, ({ req, name, route }) => {
       const childOf = this._getActive(req)
       const span = this._getMiddlewareSpan(name, childOf)
-      const context = this._createContext(req, route, span)
+      const context = this._createContext(req, route, childOf)
 
       if (childOf !== span) {
         context.middleware.push(span)
