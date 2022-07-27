@@ -1,8 +1,11 @@
 'use strict'
 
+const { channel } = require('diagnostics_channel')
 const { isTrue } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
+
+const loadedChannel = channel('dd-trace:instrumentation:loaded')
 
 // instrument everything that needs Plugin System V2 instrumentation
 require('../../datadog-instrumentations')
@@ -22,24 +25,45 @@ function getConfig (name, config = {}) {
   return config
 }
 
-// TODO: maybe needs to DRY up as well, but depending on how the remaining old plugins
-// are migrated to the new system, can stay here for now, since this is the level
-// this check maybe should be happening on, even if it deals with env variabls
-const disabledPlugins = process.env.DD_TRACE_DISABLED_PLUGINS
+const { DD_TRACE_DISABLED_PLUGINS } = process.env
 
-const collectDisabledPlugins = () => {
-  return new Set(disabledPlugins && disabledPlugins.split(',').map(plugin => plugin.trim()))
-}
+const disabledPlugins = new Set(
+  DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())
+)
 
 // TODO actually ... should we be looking at envrionment variables this deep down in the code?
+
+const pluginClasses = {}
 
 // TODO this must always be a singleton.
 module.exports = class PluginManager {
   constructor (tracer) {
     this._tracer = tracer
+    this._tracerConfig = {}
     this._pluginsByName = {}
     this._configsByName = {}
-    this._disabledPlugins = collectDisabledPlugins()
+
+    this._loadedSubscriber = ({ name }) => {
+      const Plugin = plugins[name]
+
+      if (Plugin && typeof Plugin === 'function' && !pluginClasses[Plugin.name]) {
+        // TODO: remove the need to load the plugin class in order to disable the plugin
+        if (disabledPlugins.has(Plugin.name)) {
+          log.debug(`Plugin "${Plugin.name}" was disabled via configuration option.`)
+
+          // TODO: clean this up
+          pluginClasses[Plugin.name] = class NoopPlugin {
+            configure () {}
+          }
+        } else {
+          pluginClasses[Plugin.name] = Plugin
+        }
+
+        this.configurePlugin(Plugin.name, {})
+      }
+    }
+
+    loadedChannel.subscribe(this._loadedSubscriber)
   }
 
   // like instrumenter.use()
@@ -53,55 +77,23 @@ module.exports = class PluginManager {
 
     this._configsByName[name] = {
       ...this._configsByName[name],
+      ...this._getSharedConfig(name),
       ...pluginConfig
     }
 
-    if (this._pluginsByName[name]) {
-      this._pluginsByName[name].configure(getConfig(name, this._configsByName[name]))
+    const Plugin = pluginClasses[name]
+
+    if (!Plugin) return
+    if (!this._pluginsByName[name]) {
+      this._pluginsByName[name] = new Plugin(this._tracer)
     }
+
+    this._pluginsByName[name].configure(getConfig(name, this._configsByName[name]))
   }
 
   // like instrumenter.enable()
   configure (config = {}) {
-    const { logInjection, serviceMapping, experimental, queryStringObfuscation } = config
-
-    for (const PluginClass of Object.values(plugins)) {
-      const name = PluginClass.name
-
-      if (this._disabledPlugins.has(name)) {
-        log.debug(`Plugin "${name}" was disabled via configuration option.`)
-        continue
-      }
-
-      if (typeof PluginClass !== 'function') continue
-
-      this._pluginsByName[name] = new PluginClass(this._tracer)
-
-      if (config.plugins === false) continue
-
-      const pluginConfig = {
-        ...this._configsByName[name]
-      }
-
-      if (logInjection !== undefined) {
-        pluginConfig.logInjection = logInjection
-      }
-
-      if (queryStringObfuscation !== undefined) {
-        pluginConfig.queryStringObfuscation = queryStringObfuscation
-      }
-
-      // TODO: update so that it's available for every CI Visibility's plugin
-      if (name === 'mocha') {
-        pluginConfig.isAgentlessEnabled = experimental && experimental.exporter === 'datadog'
-      }
-
-      if (serviceMapping && serviceMapping[name]) {
-        pluginConfig.service = serviceMapping[name]
-      }
-
-      this.configurePlugin(name, pluginConfig)
-    }
+    this._tracerConfig = config
   }
 
   // This is basically just for testing. like intrumenter.disable()
@@ -110,7 +102,37 @@ module.exports = class PluginManager {
       this._pluginsByName[name].configure({ enabled: false })
     }
 
-    this._pluginsByName = {}
-    this._configsByName = {}
+    loadedChannel.unsubscribe(this._loadedSubscriber)
+  }
+
+  // TODO: figure out a better way to handle this
+  _getSharedConfig (name) {
+    const {
+      logInjection,
+      serviceMapping,
+      experimental,
+      queryStringObfuscation
+    } = this._tracerConfig
+
+    const sharedConfig = {}
+
+    if (logInjection !== undefined) {
+      sharedConfig.logInjection = logInjection
+    }
+
+    if (queryStringObfuscation !== undefined) {
+      sharedConfig.queryStringObfuscation = queryStringObfuscation
+    }
+
+    // TODO: update so that it's available for every CI Visibility's plugin
+    if (name === 'mocha') {
+      sharedConfig.isAgentlessEnabled = experimental && experimental.exporter === 'datadog'
+    }
+
+    if (serviceMapping && serviceMapping[name]) {
+      sharedConfig.service = serviceMapping[name]
+    }
+
+    return sharedConfig
   }
 }

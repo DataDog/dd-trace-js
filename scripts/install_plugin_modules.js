@@ -29,7 +29,11 @@ fs.readdirSync(path.join(__dirname, '../packages/datadog-instrumentations/src'))
   .filter(file => file.endsWith('js'))
   .forEach(file => {
     file = file.replace('.js', '')
-    plugins[file] = { name: file, prototype: Object.create(Plugin.prototype) }
+    Object.defineProperty(plugins, file, {
+      get () {
+        return { name: file, prototype: Object.create(Plugin.prototype) }
+      }
+    })
   })
 
 run()
