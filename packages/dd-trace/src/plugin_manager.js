@@ -11,7 +11,9 @@ const loadedChannel = channel('dd-trace:instrumentation:loaded')
 require('../../datadog-instrumentations')
 
 // TODO this is shared w/ instrumenter. DRY up.
-function getConfig (name, config = {}) {
+function getConfig (name, config) {
+  config = { ...config }
+
   const enabled = process.env[`DD_TRACE_${name.toUpperCase()}_ENABLED`.replace(/[^a-z0-9_]/ig, '_')]
   if (enabled !== undefined) {
     config.enabled = isTrue(enabled)
