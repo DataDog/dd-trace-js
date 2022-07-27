@@ -24,11 +24,24 @@ const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
+const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const MANUAL_DROP = tags.MANUAL_DROP
 
 const HTTP2_HEADER_AUTHORITY = ':authority'
 const HTTP2_HEADER_SCHEME = ':scheme'
 const HTTP2_HEADER_PATH = ':path'
+
+const ipHeaderList = [
+  'x-forwarded-for',
+  'x-real-ip',
+  'client-ip',
+  'x-forwarded',
+  'x-cluster-client-ip',
+  'forwarded-for',
+  'forwarded',
+  'via',
+  'true-client-ip'
+]
 
 const contexts = new WeakMap()
 const ends = new WeakMap()
@@ -334,6 +347,59 @@ const web = {
 
     return `${path}?${qs}`
   },
+
+  extractIp (context) {
+    const { req, config } = context
+
+    if (config.clientIpHeaderDisabled) return null
+
+    const headers = req.headers
+    let foundIp
+
+    if (config.clientIpHeader) {
+      const header = headers[config.clientIpHeader]
+      if (!header) return null
+
+      foundIp = findFirstIp(header)
+    } else {
+      const foundHeaders = []
+
+      for (let i = 0; i < ipHeaderList.length; i++) {
+        if (headers[ipHeaderList[i]]) {
+          foundHeaders.push(ipHeaderList[i])
+        }
+      }
+
+      if (foundHeaders.length === 0) {
+        foundIp = req.socket && req.socket.remoteAddress
+      } else if (foundHeaders.length === 1) {
+        const header = headers[foundHeaders[0]]
+        const firstIp = findFirstIp(header)
+
+        foundIp = firstIp || (req.socket && req.socket.remoteAddress)
+      } else if (foundHeaders.length > 1) {
+        const tags = {}
+        let headersList = ''
+
+        for (let i = 0; i < foundHeaders.length; i++) {
+          const headerName = foundHeaders[i]
+
+          headersList = headersList ? `${headersList},${headerName}` : headerName
+
+          tags[`${HTTP_REQUEST_HEADERS}.${headerName}`] = headers[headerName]
+        }
+
+        tags['_dd.multiple-ip-headers'] = headersList
+
+        return tags
+      }
+    }
+
+    if (!foundIp) return null
+
+    return { [HTTP_CLIENT_IP]: foundIp }
+  },
+
   wrapWriteHead (context) {
     const { req, res } = context
     const writeHead = res.writeHead
@@ -426,13 +492,13 @@ function addRequestTags (context) {
   const { req, span, config } = context
   const url = extractURL(req)
 
-  span.addTags({
+  span.addTags(Object.assign({
     [HTTP_URL]: web.obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
     [SPAN_TYPE]: WEB,
     [HTTP_USERAGENT]: req.headers['user-agent']
-  })
+  }, web.extractIp(context)))
 
   addHeaders(context)
 }
@@ -497,6 +563,9 @@ function getProtocol (req) {
   if (req.connection && req.connection.encrypted) return 'https'
 
   return 'http'
+}
+
+function findFirstIp (str) {
 }
 
 function getHeadersToRecord (config) {
