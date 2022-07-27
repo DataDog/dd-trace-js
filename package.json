@@ -66,7 +66,7 @@
     "crypto-randomuuid": "^1.0.0",
     "diagnostics_channel": "^1.1.0",
     "ignore": "^5.2.0",
-    "import-in-the-middle": "^1.2.1",
+    "import-in-the-middle": "^1.2.3",
     "koalas": "^1.0.2",
     "limiter": "^1.1.4",
     "lodash.kebabcase": "^4.1.1",
