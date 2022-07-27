@@ -174,7 +174,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       couchbase:
-        image: sabrenner/couchbase-server-sandbox:latest
+        image: sabrenner/couchbase-server-sandbox:sandbox
         ports:
           - 8091-8095:8091-8095
           - 11210:11210
