@@ -57,7 +57,6 @@ module.exports = {
         config = [].concat(config)
 
         server.on('close', () => {
-          tracer._instrumenter.disable()
           tracer = null
         })
 
@@ -67,6 +66,7 @@ module.exports = {
           flushInterval: 0,
           plugins: false
         }, tracerConfig))
+        tracer.setUrl(`http://127.0.0.1:${port}`)
 
         for (let i = 0, l = pluginName.length; i < l; i++) {
           tracer.use(pluginName[i], config[i])
@@ -135,7 +135,6 @@ module.exports = {
   // Stop the mock agent, reset all expectations and wipe the require cache.
   close (opts = {}) {
     const { ritmReset } = opts
-    this.wipe()
 
     listener.close()
     listener = null
@@ -146,11 +145,9 @@ module.exports = {
     if (ritmReset !== false) {
       ritm.reset()
     }
-    delete require.cache[require.resolve('../..')]
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
-    delete global._ddtrace
 
     return new Promise((resolve, reject) => {
       this.server.on('close', () => {

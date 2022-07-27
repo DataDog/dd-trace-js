@@ -5,7 +5,7 @@ const { isTrue } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
 
-const loadedChannel = channel('dd-trace:instrumentation:loaded')
+const loadChannel = channel('dd-trace:instrumentation:load')
 
 // instrument everything that needs Plugin System V2 instrumentation
 require('../../datadog-instrumentations')
@@ -61,11 +61,11 @@ module.exports = class PluginManager {
           pluginClasses[Plugin.name] = Plugin
         }
 
-        this.configurePlugin(Plugin.name, {})
+        this.configurePlugin(Plugin.name, this._configsByName[name])
       }
     }
 
-    loadedChannel.subscribe(this._loadedSubscriber)
+    loadChannel.subscribe(this._loadedSubscriber)
   }
 
   // like instrumenter.use()
@@ -78,7 +78,6 @@ module.exports = class PluginManager {
     }
 
     this._configsByName[name] = {
-      ...this._configsByName[name],
       ...this._getSharedConfig(name),
       ...pluginConfig
     }
@@ -90,6 +89,7 @@ module.exports = class PluginManager {
       this._pluginsByName[name] = new Plugin(this._tracer)
     }
 
+    // console.log(this._configsByName[name])
     this._pluginsByName[name].configure(getConfig(name, this._configsByName[name]))
   }
 
@@ -104,7 +104,7 @@ module.exports = class PluginManager {
       this._pluginsByName[name].configure({ enabled: false })
     }
 
-    loadedChannel.unsubscribe(this._loadedSubscriber)
+    loadChannel.unsubscribe(this._loadedSubscriber)
   }
 
   // TODO: figure out a better way to handle this
