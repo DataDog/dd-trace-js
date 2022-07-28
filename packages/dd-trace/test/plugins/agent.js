@@ -134,7 +134,7 @@ module.exports = {
 
   // Stop the mock agent, reset all expectations and wipe the require cache.
   close (opts = {}) {
-    const { ritmReset } = opts
+    const { ritmReset, wipe } = opts
 
     listener.close()
     listener = null
@@ -142,13 +142,15 @@ module.exports = {
     sockets = []
     agent = null
     handlers.clear()
+    if (wipe) {
+      this.wipe()
+    }
     if (ritmReset !== false) {
       ritm.reset()
     }
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
-
     return new Promise((resolve, reject) => {
       this.server.on('close', () => {
         this.server = null
@@ -160,6 +162,9 @@ module.exports = {
 
   // Wipe the require cache.
   wipe () {
+    delete require.cache[require.resolve('../..')]
+    delete global._ddtrace
+
     const basedir = path.join(__dirname, '..', '..', '..', '..', 'versions')
     const exceptions = ['/libpq/', '/grpc/', '/sqlite3/', '/couchbase/'] // wiping native modules results in errors
       .map(exception => new RegExp(exception))
