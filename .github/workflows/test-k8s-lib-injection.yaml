@@ -47,7 +47,6 @@ jobs:
           sed -i "s|LATEST|$GITHUB_SHA|g" k8s/test-pod.yaml
           kubectl apply -f k8s/test-pod.yaml
           kubectl wait pod/sample-app --for condition=ready
-          kubectl logs sample-app
           sleep 5
 
       - name: Test

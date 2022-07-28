@@ -1,3 +1,8 @@
+Here are some instructions for working with the init image for local
+development (i.e. when working on the init image itself).
+
+Replace any namespaces with your own, including in `local-pod.yml`.
+
 ### Building init image
 
 ```
@@ -5,7 +10,8 @@ cd auto-inst
 docker build . --tag bengl/test-auto-inst:latest
 docker push bengl/test-auto-inst:latest
 ```
-### Building app image
+
+### Building sample app image
 
 ```
 cd sample-app
@@ -17,9 +23,9 @@ docker push bengl/test-sample-app:latest
 
 ```
 kubectl pod delete sample-app # if it's already running
-kubectl apply -f pod.yml
+kubectl apply -f local-pod.yml
 # do the following 3 commands in separate terminal windows
 kubectl logs -f sample-app
-kubectl port-forward sample-app 8080:8080
-curl localhost:8080
+kubectl port-forward sample-app 18080:18080
+curl localhost:18080
 ```
