@@ -45,3 +45,12 @@ describe('mocha-fail-hook-async-other-second-after', function () {
     expect(true).to.equal(true)
   })
 })
+
+describe('mocha-fail-test-after-each-passes', function () {
+  afterEach((done) => {
+    done()
+  })
+  it('will fail and be reported as failed', () => {
+    expect(true).to.equal(false)
+  })
+})
