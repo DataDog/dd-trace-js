@@ -181,8 +181,8 @@ describe('telemetry', () => {
       }, 10)
     })
   })
-})
 
+})
 async function testSeq (seqId, reqType, validatePayload) {
   while (traceAgent.reqs.length < seqId) {
     await once(traceAgent, 'handled-req')
@@ -229,3 +229,170 @@ function getMochaDeps () {
     version: requirePackageJson(name, mochaModule).version
   }))
 }
+
+describe('telemetry.getDependencies', () => {
+  let telemetry
+  let origSetInterval
+  const pkg = {}
+  const request = sinon.stub()
+  const requirePackageJson = sinon.stub()
+  const instrumenter = {
+    '_instrumented': {
+      keys () { return [] }
+    }
+  }
+  const pluginManager = {
+    '_pluginsByName': []
+  }
+  const config = {
+    telemetryEnabled: true,
+    tags: {
+      'runtime-id': 'a1b2c3'
+    }
+  }
+  beforeEach(() => {
+    origSetInterval = setInterval
+
+    global.setInterval = () => { return { unref: function () {} } }
+    telemetry = proxyquire('../src/telemetry', {
+      './exporters/common/docker': {
+        id () {
+          return 'test docker id'
+        }
+      },
+      os: {
+        hostname () {
+          return 'test hostname'
+        }
+      },
+      './exporters/common/request': request,
+      './require-package-json': requirePackageJson,
+      './pkg': pkg
+    })
+  })
+
+  afterEach(() => {
+    telemetry.stop()
+    global.setInterval = origSetInterval
+    sinon.reset()
+  })
+
+  it('should not fail without dependencies', () => {
+    pkg.dependencies = undefined
+    request.callsFake(function (datastring) {
+      const data = JSON.parse(datastring)
+      expect(data.payload.dependencies).to.have.length(0)
+    })
+    telemetry.start(config, instrumenter, pluginManager)
+    expect(request).to.have.been.calledOnce
+  })
+
+  it('should not fail with empty dependencies', () => {
+    pkg.dependencies = null
+    request.callsFake(function (datastring) {
+      const data = JSON.parse(datastring)
+      expect(data.payload.dependencies).to.have.length(0)
+    })
+    telemetry.start(config, instrumenter, pluginManager)
+    expect(request).to.have.been.calledOnce
+    expect(requirePackageJson).not.to.have.been.called
+  })
+
+  it('should return main package.json version without node_modules package.json', () => {
+    pkg.dependencies = {
+      'test_dep': '^1.0.0'
+    }
+    requirePackageJson.returns(null)
+    request.callsFake(function (datastring) {
+      const data = JSON.parse(datastring)
+      expect(data.payload.dependencies).to.have.length(1)
+      expect(data.payload.dependencies[0].version).to.be.equals('^1.0.0')
+    })
+    telemetry.start(config, instrumenter, pluginManager)
+    expect(request).to.have.been.calledOnce
+  })
+
+  it('should return version in node_modules package.json', () => {
+    pkg.dependencies = {
+      'test_dep': '^1.0.0'
+    }
+    requirePackageJson.returns({ version: '1.0.8' })
+    request.callsFake(function (dataString) {
+      const data = JSON.parse(dataString)
+      expect(data.payload.dependencies).to.have.length(1)
+      expect(data.payload.dependencies[0].version).to.be.equals('1.0.8')
+    })
+    telemetry.start(config, instrumenter, pluginManager)
+    expect(request).to.have.been.calledOnce
+  })
+
+  it('should return transitive dependencies', () => {
+    pkg.dependencies = {
+      'test_dep': '^1.0.0'
+    }
+    requirePackageJson.callsFake((modulePath) => {
+      if (modulePath.indexOf('node_modules/test_dep') > -1) {
+        return {
+          dependencies: {
+            'transitive_dep': '~2.4.2'
+          },
+          version: '1.0.8'
+        }
+      } else if (modulePath.indexOf('node_modules/transitive_dep') > -1) {
+        return {
+          version: '2.4.2'
+        }
+      }
+      return {}
+    })
+    request.callsFake(function (dataString) {
+      const data = JSON.parse(dataString)
+      expect(data.payload.dependencies).to.have.length(2)
+      expect(data.payload.dependencies[1].version).to.be.equals('1.0.8')
+      expect(data.payload.dependencies[0].version).to.be.equals('2.4.2')
+    })
+    telemetry.start(config, instrumenter, pluginManager)
+    expect(request).to.have.been.calledOnce
+  })
+
+  it('should not repeat dependencies', () => {
+    pkg.dependencies = {
+      'test_dep1': '^1.0.0',
+      'test_dep2': '^2.0.1'
+    }
+    requirePackageJson.callsFake((modulePath) => {
+      if (modulePath.indexOf('node_modules/test_dep1') > -1) {
+        return {
+          dependencies: {
+            'transitive_dep': '~2.4.2'
+          },
+          version: '1.0.8'
+        }
+      } else if (modulePath.indexOf('node_modules/test_dep2') > -1) {
+        return {
+          dependencies: {
+            'transitive_dep': '~2.4.1'
+          },
+          version: '2.0.2'
+        }
+      } else if (modulePath.indexOf('node_modules/transitive_dep') > -1) {
+        return {
+          version: '2.4.2'
+        }
+      }
+      return {}
+    })
+    request.callsFake(function (dataString) {
+      const data = JSON.parse(dataString)
+      expect(data.payload.dependencies).to.have.length(3)
+      expect(data.payload.dependencies[2].name).to.be.equals('test_dep2')
+      expect(data.payload.dependencies[2].version).to.be.equals('2.0.2')
+      expect(data.payload.dependencies[1].name).to.be.equals('test_dep1')
+      expect(data.payload.dependencies[1].version).to.be.equals('1.0.8')
+      expect(data.payload.dependencies[0].name).to.be.equals('transitive_dep')
+      expect(data.payload.dependencies[0].version).to.be.equals('2.4.2')
+    })
+    telemetry.start(config, instrumenter, pluginManager)
+    expect(request).to.have.been.calledOnce
+  })
+})

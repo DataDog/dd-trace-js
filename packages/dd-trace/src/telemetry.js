@@ -51,17 +51,30 @@ function getDependencies () {
   if (!dependencies) {
     return deps
   }
-  const rootDir = pkg.findRoot()
-  for (const [name, version] of Object.entries(dependencies)) {
-    const dep = { name }
-    try {
-      dep.version = requirePackageJson(
-        path.join(rootDir, 'node_modules', name.replace('/', path.sep))
-      ).version
-    } catch (e) {
-      dep.version = version
+  return findTransitiveDependencies({ dependencies })
+}
+
+function findTransitiveDependencies (dependency, rootDir, foundDependencies) {
+  rootDir = rootDir || pkg.findRoot()
+  foundDependencies = foundDependencies || new Set()
+  const { dependencies } = dependency
+  const deps = []
+  if (dependencies) {
+    for (const [name, version] of Object.entries(dependencies)) {
+      if (!foundDependencies.has(name)) {
+        foundDependencies.add(name)
+        const tDep = { name }
+        try {
+          const fullDep = requirePackageJson(path.join(rootDir, 'node_modules', tDep.name.replace('/', path.sep)))
+          tDep.version = fullDep.version
+          const transitiveDependencies = findTransitiveDependencies(fullDep, rootDir, foundDependencies)
+          transitiveDependencies.forEach(dep => deps.push(dep))
+        } catch (e) {
+          tDep.version = version
+        }
+        deps.push(tDep)
+      }
     }
-    deps.push(dep)
   }
   return deps
 }
