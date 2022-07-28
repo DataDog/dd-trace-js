@@ -181,8 +181,8 @@ describe('telemetry', () => {
       }, 10)
     })
   })
-
 })
+
 async function testSeq (seqId, reqType, validatePayload) {
   while (traceAgent.reqs.length < seqId) {
     await once(traceAgent, 'handled-req')
@@ -274,7 +274,9 @@ describe('telemetry.getDependencies', () => {
   afterEach(() => {
     telemetry.stop()
     global.setInterval = origSetInterval
-    sinon.reset()
+    request.reset()
+    requirePackageJson.reset()
+    sinon.restore()
   })
 
   it('should not fail without dependencies', () => {
