@@ -1,7 +1,6 @@
 const overheadController = require('../../../src/appsec/iast/overhead-controller')
 
 describe('Overhead controller', () => {
-
   describe('Single shot operation', () => {
     it('should not allow with empty context', () => {
       expect(overheadController.hasQuotaSingleShot(overheadController.SINGLE_SHOT_OPERATIONS[0], {})).to.be.false
@@ -47,7 +46,6 @@ describe('Overhead controller', () => {
   })
 
   describe('Long running operation', () => {
-
     it('should not allow with empty context', () => {
       const quota = overheadController.hasQuotaLongRunning(overheadController.LONG_RUNNING_OPERATIONS[0], {})
       expect(quota.isAcquired()).to.be.false
