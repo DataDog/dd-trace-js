@@ -371,6 +371,10 @@ describe('Plugin', () => {
             name: 'mocha-fail-hook-async-other-second-after will run and be reported as failed',
             status: 'fail',
             errorMsg: '"after each" hook for "will run and be reported as failed": yeah error'
+          },
+          {
+            name: 'mocha-fail-test-after-each-passes will fail and be reported as failed',
+            status: 'fail'
           }
         ]
 
