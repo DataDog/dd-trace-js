@@ -21,6 +21,16 @@ const testToAr = new WeakMap()
 const originalFns = new WeakMap()
 const testSuiteToAr = new WeakMap()
 
+function getTestStatus (test) {
+  if (test.pending) {
+    return 'skip'
+  }
+  if (test.state !== 'failed' && !test.timedOut) {
+    return 'pass'
+  }
+  return 'fail'
+}
+
 function isRetry (test) {
   return test._currentRetry !== undefined && test._currentRetry !== 0
 }
@@ -112,14 +122,7 @@ function mochaHook (Runner) {
 
     this.on('test end', (test) => {
       const asyncResource = getTestAsyncResource(test)
-      let status
-      if (test.pending) {
-        status = 'skip'
-      } else if (test.state !== 'failed' && !test.timedOut) {
-        status = 'pass'
-      } else {
-        status = 'fail'
-      }
+      const status = getTestStatus(test)
 
       // if there are afterEach to be run, we don't finish the test yet
       if (!test.parent._afterEach.length) {
@@ -135,9 +138,10 @@ function mochaHook (Runner) {
       if (test && hook.parent._afterEach.includes(hook)) { // only if it's an afterEach
         const isLastAfterEach = hook.parent._afterEach.indexOf(hook) === hook.parent._afterEach.length - 1
         if (isLastAfterEach) {
+          const status = getTestStatus(test)
           const asyncResource = getTestAsyncResource(test)
           asyncResource.runInAsyncScope(() => {
-            testFinishCh.publish('pass')
+            testFinishCh.publish(status)
           })
         }
       }
