@@ -57,6 +57,7 @@ module.exports = class PluginManager {
     const Plugin = pluginClasses[name]
 
     if (!Plugin) return
+    if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
     if (!this._pluginsByName[name]) {
       this._pluginsByName[name] = new Plugin(this._tracer)
     }
