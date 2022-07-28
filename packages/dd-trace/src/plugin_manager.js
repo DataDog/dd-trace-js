@@ -1,7 +1,7 @@
 'use strict'
 
 const { channel } = require('diagnostics_channel')
-const { isTrue } = require('./util')
+const { isFalse } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
 
@@ -9,23 +9,6 @@ const loadChannel = channel('dd-trace:instrumentation:load')
 
 // instrument everything that needs Plugin System V2 instrumentation
 require('../../datadog-instrumentations')
-
-// TODO this is shared w/ instrumenter. DRY up.
-function getConfig (name, config) {
-  config = { ...config }
-
-  const enabled = process.env[`DD_TRACE_${name.toUpperCase()}_ENABLED`.replace(/[^a-z0-9_]/ig, '_')]
-  if (enabled !== undefined) {
-    config.enabled = isTrue(enabled)
-  }
-
-  // TODO is this the best/correct place for this default?
-  if (!('enabled' in config)) {
-    config.enabled = true
-  }
-
-  return config
-}
 
 const { DD_TRACE_DISABLED_PLUGINS } = process.env
 
@@ -49,8 +32,10 @@ module.exports = class PluginManager {
       const Plugin = plugins[name]
 
       if (Plugin && typeof Plugin === 'function' && !pluginClasses[Plugin.name]) {
+        const enabled = process.env[`DD_TRACE_${name.toUpperCase()}_ENABLED`.replace(/[^a-z0-9_]/ig, '_')]
+
         // TODO: remove the need to load the plugin class in order to disable the plugin
-        if (disabledPlugins.has(Plugin.name)) {
+        if (isFalse(enabled) || disabledPlugins.has(Plugin.name)) {
           log.debug(`Plugin "${Plugin.name}" was disabled via configuration option.`)
 
           // TODO: clean this up
@@ -59,29 +44,16 @@ module.exports = class PluginManager {
           }
         } else {
           pluginClasses[Plugin.name] = Plugin
-        }
 
-        this.configurePlugin(Plugin.name, this._configsByName[name])
+          this.loadPlugin(Plugin.name)
+        }
       }
     }
 
     loadChannel.subscribe(this._loadedSubscriber)
   }
 
-  // like instrumenter.use()
-  configurePlugin (name, pluginConfig) {
-    if (typeof pluginConfig === 'boolean') {
-      pluginConfig = { enabled: pluginConfig }
-    }
-    if (!pluginConfig) {
-      pluginConfig = { enabled: true }
-    }
-
-    this._configsByName[name] = {
-      ...this._getSharedConfig(name),
-      ...pluginConfig
-    }
-
+  loadPlugin (name) {
     const Plugin = pluginClasses[name]
 
     if (!Plugin) return
@@ -89,8 +61,26 @@ module.exports = class PluginManager {
       this._pluginsByName[name] = new Plugin(this._tracer)
     }
 
-    // console.log(this._configsByName[name])
-    this._pluginsByName[name].configure(getConfig(name, this._configsByName[name]))
+    const pluginConfig = this._configsByName[name] || {
+      enabled: this._tracerConfig.plugins !== false
+    }
+
+    this._pluginsByName[name].configure({
+      ...this._getSharedConfig(name),
+      ...pluginConfig
+    })
+  }
+
+  // TODO: merge config instead of replacing
+  configurePlugin (name, pluginConfig) {
+    const enabled = this._isEnabled(pluginConfig)
+
+    this._configsByName[name] = {
+      ...pluginConfig,
+      enabled
+    }
+
+    this.loadPlugin(name)
   }
 
   // like instrumenter.enable()
@@ -105,6 +95,13 @@ module.exports = class PluginManager {
     }
 
     loadChannel.unsubscribe(this._loadedSubscriber)
+  }
+
+  _isEnabled (pluginConfig) {
+    if (typeof pluginConfig === 'boolean') return pluginConfig
+    if (!pluginConfig) return true
+
+    return pluginConfig.enabled !== false
   }
 
   // TODO: figure out a better way to handle this

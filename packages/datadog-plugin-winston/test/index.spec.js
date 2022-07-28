@@ -38,6 +38,7 @@ function createLogServer () {
 describe('Plugin', () => {
   let winston
   let tracer
+  let Transport
   let transport
   let httpTransport
   let log
@@ -54,7 +55,7 @@ describe('Plugin', () => {
 
     spy = sinon.spy()
 
-    class Transport extends winston.Transport {}
+    Transport = class extends winston.Transport {}
 
     if (semver.intersects(version, '>=3')) {
       log = sinon.spy((meta) => spy(meta.dd))
@@ -63,6 +64,7 @@ describe('Plugin', () => {
     }
 
     Transport.prototype.log = log
+    Transport.prototype.name = 'dd'
 
     transport = new Transport()
     httpTransport = new winston.transports.Http({
@@ -93,6 +95,14 @@ describe('Plugin', () => {
     withVersions('winston', 'winston', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
+      })
+
+      afterEach(() => {
+        if (!winston.configure) {
+          winston.remove('dd')
+          winston.remove('http')
+          winston.add(winston.transports.Console)
+        }
       })
 
       afterEach(() => {
