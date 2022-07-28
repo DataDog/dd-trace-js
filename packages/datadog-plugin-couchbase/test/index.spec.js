@@ -151,8 +151,7 @@ describe('Plugin', () => {
 
     // TODO: problematic versions with testing
     const ignoreVersion = version =>
-      semver.intersects(version, '>=4.1.0') ||
-      semver.intersects(version, '3.2.2 - 3.2.3')
+      semver.intersects(version, '3.2.2 - 3.2.4')
 
     withVersions('couchbase', 'couchbase', '>=3.0.0', version => {
       if (!ignoreVersion(version)) {
