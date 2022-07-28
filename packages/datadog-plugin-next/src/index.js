@@ -21,7 +21,7 @@ class NextPlugin extends Plugin {
         childOf,
         tags: {
           'service.name': this.config.service || this.tracer._service,
-          'resource.name': 'test',
+          'resource.name': req.method,
           'span.type': 'web',
           'span.kind': 'server',
           'http.method': req.method
