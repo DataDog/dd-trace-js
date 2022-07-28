@@ -86,6 +86,10 @@ module.exports = class PluginManager {
   // like instrumenter.enable()
   configure (config = {}) {
     this._tracerConfig = config
+
+    for (const name in this._pluginsByName) {
+      this.loadPlugin(name)
+    }
   }
 
   // This is basically just for testing. like intrumenter.disable()
