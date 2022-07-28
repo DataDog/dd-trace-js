@@ -4,6 +4,7 @@ const tracerVersion = require('../../../package.json').version
 const proxyquire = require('proxyquire')
 const requirePackageJson = require('../src/require-package-json')
 const http = require('http')
+const path = require('path')
 const { once } = require('events')
 const { storage } = require('../../datadog-core')
 
@@ -333,14 +334,14 @@ describe('telemetry.getDependencies', () => {
       'test_dep': '^1.0.0'
     }
     requirePackageJson.callsFake((modulePath) => {
-      if (modulePath.indexOf('node_modules/test_dep') > -1) {
+      if (modulePath.indexOf(path.join('node_modules', 'test_dep')) > -1) {
         return {
           dependencies: {
             'transitive_dep': '~2.4.2'
           },
           version: '1.0.8'
         }
-      } else if (modulePath.indexOf('node_modules/transitive_dep') > -1) {
+      } else if (modulePath.indexOf(path.join('node_modules', 'transitive_dep')) > -1) {
         return {
           version: '2.4.2'
         }
@@ -363,21 +364,21 @@ describe('telemetry.getDependencies', () => {
       'test_dep2': '^2.0.1'
     }
     requirePackageJson.callsFake((modulePath) => {
-      if (modulePath.indexOf('node_modules/test_dep1') > -1) {
+      if (modulePath.indexOf(path.join('node_modules', 'test_dep1')) > -1) {
         return {
           dependencies: {
             'transitive_dep': '~2.4.2'
           },
           version: '1.0.8'
         }
-      } else if (modulePath.indexOf('node_modules/test_dep2') > -1) {
+      } else if (modulePath.indexOf(path.join('node_modules', 'test_dep2')) > -1) {
         return {
           dependencies: {
             'transitive_dep': '~2.4.1'
           },
           version: '2.0.2'
         }
-      } else if (modulePath.indexOf('node_modules/transitive_dep') > -1) {
+      } else if (modulePath.indexOf(path.join('node_modules', 'transitive_dep')) > -1) {
         return {
           version: '2.4.2'
         }
