@@ -32,16 +32,14 @@ module.exports = class PluginManager {
       const Plugin = plugins[name]
 
       if (Plugin && typeof Plugin === 'function' && !pluginClasses[Plugin.name]) {
-        const enabled = process.env[`DD_TRACE_${name.toUpperCase()}_ENABLED`.replace(/[^a-z0-9_]/ig, '_')]
+        const envName = `DD_TRACE_${Plugin.name.toUpperCase()}_ENABLED`
+        const enabled = process.env[envName.replace(/[^a-z0-9_]/ig, '_')]
 
         // TODO: remove the need to load the plugin class in order to disable the plugin
         if (isFalse(enabled) || disabledPlugins.has(Plugin.name)) {
           log.debug(`Plugin "${Plugin.name}" was disabled via configuration option.`)
 
-          // TODO: clean this up
-          pluginClasses[Plugin.name] = class NoopPlugin {
-            configure () {}
-          }
+          pluginClasses[Plugin.name] = null
         } else {
           pluginClasses[Plugin.name] = Plugin
 
