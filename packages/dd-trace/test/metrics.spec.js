@@ -46,7 +46,9 @@ describe('metrics', () => {
   })
 
   describe('start', () => {
-    it('it should initialize the Dogstatsd client with the correct options', () => {
+    it('it should initialize the Dogstatsd client with the correct options', function () {
+      this.timeout(10000)
+
       expect(Client).to.have.been.calledWithMatch({
         host: 'localhost',
         tags: [
