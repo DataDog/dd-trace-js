@@ -142,14 +142,14 @@ module.exports = {
     sockets = []
     agent = null
     handlers.clear()
-    if (wipe) {
-      this.wipe()
+    for (const plugin of plugins) {
+      tracer.use(plugin, { enabled: false })
     }
     if (ritmReset !== false) {
       ritm.reset()
     }
-    for (const plugin of plugins) {
-      tracer.use(plugin, { enabled: false })
+    if (wipe) {
+      this.wipe()
     }
     return new Promise((resolve, reject) => {
       this.server.on('close', () => {

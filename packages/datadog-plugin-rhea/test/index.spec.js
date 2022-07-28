@@ -17,11 +17,11 @@ describe('Plugin', () => {
         })
 
         afterEach((done) => {
-          agent.close({ ritmReset: false })
-          agent.wipe()
           context.connection.once('connection_close', () => done())
           context.connection.close()
         })
+
+        afterEach(() => agent.close({ ritmReset: false }))
 
         describe('without configuration', () => {
           beforeEach(() => agent.load('rhea'))
@@ -167,8 +167,6 @@ describe('Plugin', () => {
         })
 
         afterEach((done) => {
-          agent.close({ ritmReset: false })
-          agent.wipe()
           if (connection.socket_ready) {
             connection.once('connection_close', () => done())
             connection.close()
@@ -176,6 +174,8 @@ describe('Plugin', () => {
             done()
           }
         })
+
+        afterEach(() => agent.close({ ritmReset: false }))
 
         describe('with defaults', () => {
           beforeEach(() => agent.load('rhea'))

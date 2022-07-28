@@ -16,18 +16,14 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        const promise = Promise.all([
+        return Promise.all([
           receiver && receiver.detach(),
           sender && sender.detach()
         ])
-
-        return promise
-          .then(() => {
-            client.disconnect()
-            agent.close({ ritmReset: false })
-            agent.wipe()
-          })
       })
+
+      afterEach(() => client.disconnect())
+      afterEach(() => agent.close({ ritmReset: false }))
 
       describe('without configuration', () => {
         beforeEach(() => {
