@@ -7,4 +7,4 @@ COPY . .
 
 RUN npm install ${npm_pkg}
 
-ADD copy-dd-trace.sh /operator-build/copy-dd-trace.sh
+ADD copy-lib.sh /operator-build/copy-lib.sh

@@ -8,7 +8,7 @@ spec:
     - name: node-init
       image: bengl/test-auto-inst:latest  # put the library image here
       imagePullPolicy: Never
-      command: ["sh", "copy-dd-trace.sh", "/autoinstrumentation"]
+      command: ["sh", "copy-lib.sh", "/autoinstrumentation"]
       volumeMounts:
         - name: autoinstrumentation
           mountPath: /autoinstrumentation

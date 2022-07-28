@@ -7,7 +7,7 @@ spec:
   initContainers:
     - name: node-init
       image: ghcr.io/datadog/dd-trace-js/dd-trace-js-init:LATEST
-      command: ["sh", "copy-dd-trace.sh", "/autoinstrumentation"]
+      command: ["sh", "copy-lib.sh", "/autoinstrumentation"]
       volumeMounts:
         - name: autoinstrumentation
           mountPath: /autoinstrumentation
