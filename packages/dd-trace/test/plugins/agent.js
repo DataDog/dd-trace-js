@@ -164,7 +164,7 @@ module.exports = {
   // Wipe the require cache.
   wipe () {
     const basedir = path.join(__dirname, '..', '..', '..', '..', 'versions')
-    const exceptions = ['/libpq/', '/grpc/', '/sqlite3/'] // wiping native modules results in errors
+    const exceptions = ['/libpq/', '/grpc/', '/sqlite3/', '/couchbase/'] // wiping native modules results in errors
       .map(exception => new RegExp(exception))
 
     Object.keys(require.cache)
