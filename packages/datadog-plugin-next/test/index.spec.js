@@ -199,7 +199,7 @@ describe('Plugin', function () {
         })
 
         describe('for static files', () => {
-          it.only('should do automatic instrumentation', done => {
+          it('should do automatic instrumentation', done => {
             agent
               .use(traces => {
                 const spans = traces[0]
