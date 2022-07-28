@@ -7,7 +7,7 @@ const REPORT_VULNERABILITY = 'REPORT_VULNERABILITY'
 
 class Quota {
   constructor (reserved, release) {
-    this._acquired = reserved
+    this._acquired = !!reserved
     this._operationRelease = release
     this._released = false
   }
@@ -38,7 +38,10 @@ const LONG_RUNNING_OPERATIONS = {
       concurrentRequestTokens++
     },
     name: ANALYZE_REQUEST,
-    initialTokenBucketSize: 2
+    initialTokenBucketSize: 2,
+    initContext: (context) => {
+      context.isRequestAnalyzed = false
+    }
   }
 }
 
@@ -55,32 +58,45 @@ const SINGLE_SHOT_OPERATIONS = {
       return reserved
     },
     name: REPORT_VULNERABILITY,
-    initialTokenBucketSize: 2
+    initialTokenBucketSize: 2,
+    initContext: function (context) {
+      context.tokens[REPORT_VULNERABILITY] = this.initialTokenBucketSize
+    }
   }
 }
 
 function hasQuotaSingleShot (operation, iastContext) {
-  iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY] = iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY] || _initializeContext()
-  return operation.hasQuota(iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY])
+  return iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]
+    ? operation.hasQuota(iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY])
+    : false
 }
 
 function hasQuotaLongRunning (operation, iastContext) {
-  iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY] = iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY] || _initializeContext()
-  const reserved = operation.hasQuota(iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY])
+  const reserved = iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY] &&
+    operation.hasQuota(iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY])
   return new Quota(reserved, () => operation.release(iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]))
 }
 
-function _initializeContext () {
-  return {
-    tokens: {
-      [REPORT_VULNERABILITY]: SINGLE_SHOT_OPERATIONS[REPORT_VULNERABILITY].initialTokenBucketSize
-    }
+function getInitialContext () {
+  const oceContext = {
+    tokens: {}
   }
+
+  for (const operation in LONG_RUNNING_OPERATIONS) {
+    LONG_RUNNING_OPERATIONS[operation].initContext(oceContext)
+  }
+
+  for (const operation in SINGLE_SHOT_OPERATIONS) {
+    SINGLE_SHOT_OPERATIONS[operation].initContext(oceContext)
+  }
+
+  return oceContext
 }
 
 module.exports = {
   LONG_RUNNING_OPERATIONS,
   SINGLE_SHOT_OPERATIONS,
+  getInitialContext,
   hasQuotaSingleShot,
   hasQuotaLongRunning
 }
