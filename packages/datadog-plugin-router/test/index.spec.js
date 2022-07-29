@@ -40,7 +40,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          return agent.load('router')
+          return agent.load(['http', 'router'])
         })
 
         after(() => {
