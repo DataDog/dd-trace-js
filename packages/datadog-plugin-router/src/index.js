@@ -16,11 +16,15 @@ class RouterPlugin extends WebPlugin {
     this._contexts = new WeakMap()
 
     this.addSub(`apm:${this.constructor.name}:middleware:enter`, ({ req, name, route }) => {
-      const store = storage.getStore()
-      const context = this._createContext(req, route)
-      const span = this._getMiddlewareSpan(context, store, name)
+      const childOf = this._getActive(req)
+      const span = this._getMiddlewareSpan(name, childOf)
+      const context = this._createContext(req, route, childOf)
 
-      this.enter(span, store)
+      if (childOf !== span) {
+        context.middleware.push(span)
+      }
+
+      this.enter(span)
 
       web.patch(req)
       web.setRoute(req, context.route)
@@ -42,7 +46,15 @@ class RouterPlugin extends WebPlugin {
       context.middleware.pop().finish()
     })
 
-    this.addSub(`apm:${this.constructor.name}:middleware:error`, this.addError)
+    this.addSub(`apm:${this.constructor.name}:middleware:error`, err => {
+      const store = storage.getStore()
+
+      web.addError(store.req, err)
+
+      if (this.config.middleware) {
+        this.addError(err)
+      }
+    })
 
     this.addSub(`apm:http:server:request:finish`, ({ req }) => {
       const context = this._contexts.get(req)
@@ -57,9 +69,22 @@ class RouterPlugin extends WebPlugin {
     })
   }
 
-  _getMiddlewareSpan (context, store, name) {
-    const childOf = store && store.span
+  _getActive (req) {
+    const context = this._contexts.get(req)
 
+    if (!context) return this._getStoreSpan()
+    if (context.middleware.length === 0) return context.span
+
+    return context.middleware[context.middleware.length - 1]
+  }
+
+  _getStoreSpan () {
+    const store = storage.getStore()
+
+    return store && store.span
+  }
+
+  _getMiddlewareSpan (name, childOf) {
     if (this.config.middleware === false) {
       return childOf
     }
@@ -71,14 +96,12 @@ class RouterPlugin extends WebPlugin {
       }
     })
 
-    context.middleware.push(span)
-
     analyticsSampler.sample(span, this.config.measured)
 
     return span
   }
 
-  _createContext (req, route) {
+  _createContext (req, route, span) {
     let context = this._contexts.get(req)
 
     if (!route || route === '/' || route === '*') {
@@ -96,6 +119,7 @@ class RouterPlugin extends WebPlugin {
       }
     } else {
       context = {
+        span,
         stack: [route],
         route,
         middleware: []

@@ -275,9 +275,9 @@ const web = {
     const context = contexts.get(req)
     const span = context.span
     const error = context.error
-    const hasMiddlewareError = span.context()._tags['error'] || span.context()._tags['error.msg']
+    const hasExistingError = span.context()._tags['error'] || span.context()._tags['error.msg']
 
-    if (!hasMiddlewareError && !context.config.validateStatus(statusCode)) {
+    if (!hasExistingError && !context.config.validateStatus(statusCode)) {
       span.setTag(ERROR, error || true)
     }
   },
@@ -286,7 +286,7 @@ const web = {
   addError (req, error) {
     if (error instanceof Error) {
       const context = contexts.get(req)
-      context.error = context.error || error
+      context.error = error
     }
   },
 

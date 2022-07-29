@@ -158,17 +158,22 @@ describe('Plugin', () => {
                 expect(spans[0]).to.have.property('name', 'express.request')
                 expect(spans[1]).to.have.property('resource', 'query')
                 expect(spans[1]).to.have.property('name', 'express.middleware')
-                expect(spans[1].parent_id.toString()).to.equal(spans[0].trace_id.toString())
+                expect(spans[1].parent_id.toString()).to.equal(spans[0].span_id.toString())
                 expect(spans[2]).to.have.property('resource', 'expressInit')
                 expect(spans[2]).to.have.property('name', 'express.middleware')
+                expect(spans[2].parent_id.toString()).to.equal(spans[0].span_id.toString())
                 expect(spans[3]).to.have.property('resource', 'named')
                 expect(spans[3]).to.have.property('name', 'express.middleware')
+                expect(spans[3].parent_id.toString()).to.equal(spans[0].span_id.toString())
                 expect(spans[4]).to.have.property('resource', 'router')
                 expect(spans[4]).to.have.property('name', 'express.middleware')
+                expect(spans[4].parent_id.toString()).to.equal(spans[0].span_id.toString())
                 expect(spans[5].resource).to.match(/^bound\s.*$/)
                 expect(spans[5]).to.have.property('name', 'express.middleware')
+                expect(spans[5].parent_id.toString()).to.equal(spans[4].span_id.toString())
                 expect(spans[6]).to.have.property('resource', '<anonymous>')
                 expect(spans[6]).to.have.property('name', 'express.middleware')
+                expect(spans[6].parent_id.toString()).to.equal(spans[5].span_id.toString())
               })
               .then(done)
               .catch(done)
@@ -176,6 +181,45 @@ describe('Plugin', () => {
             appListener = app.listen(port, 'localhost', () => {
               axios
                 .get(`http://localhost:${port}/app/user/1`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should do automatic instrumentation on middleware that break the async context', done => {
+          let next
+
+          const app = express()
+          const interval = setInterval(() => {
+            if (next) {
+              next()
+              clearInterval(interval)
+            }
+          })
+
+          app.use(function breaking (req, res, _next) {
+            next = _next
+          })
+          app.get('/user/:id', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+                expect(spans[0]).to.have.property('name', 'express.request')
+                expect(spans[3]).to.have.property('resource', 'breaking')
+                expect(spans[3]).to.have.property('name', 'express.middleware')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user/1`)
                 .catch(done)
             })
           })
@@ -836,6 +880,9 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property('error.type', error.name)
+                expect(spans[0].meta).to.have.property('error.msg', error.message)
+                expect(spans[0].meta).to.have.property('error.stack', error.stack)
                 expect(spans[0].meta).to.have.property('http.status_code', '500')
               })
               .then(done)
@@ -863,6 +910,10 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property('error.type', error.name)
+                expect(spans[0].meta).to.have.property('error.msg', error.message)
+                expect(spans[0].meta).to.have.property('error.stack', error.stack)
                 expect(spans[3]).to.have.property('error', 1)
                 expect(spans[3].meta).to.have.property('error.type', error.name)
                 expect(spans[3].meta).to.have.property('error.msg', error.message)
@@ -893,6 +944,10 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property('error.type', error.name)
+                expect(spans[0].meta).to.have.property('error.msg', error.message)
+                expect(spans[0].meta).to.have.property('error.stack', error.stack)
                 expect(spans[3]).to.have.property('error', 1)
                 expect(spans[3].meta).to.have.property('error.type', error.name)
                 expect(spans[3].meta).to.have.property('error.msg', error.message)
@@ -1285,7 +1340,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should mark middleware errors regardless of status codes configuration', done => {
+        it('should only handle errors for configured status codes', done => {
           const app = express()
 
           app.use((req, res, next) => {
@@ -1302,7 +1357,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0]).to.have.property('error', 0)
                 expect(spans[0]).to.have.property('resource', 'GET /user')
                 expect(spans[0].meta).to.have.property('http.status_code', '400')
               })
@@ -1361,6 +1416,9 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property('error.type', error.name)
+                expect(spans[0].meta).to.have.property('error.msg', error.message)
+                expect(spans[0].meta).to.have.property('error.stack', error.stack)
                 expect(spans[0].meta).to.have.property('http.status_code', '500')
               })
               .then(done)

@@ -115,7 +115,7 @@ describe('Plugin', function () {
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-test.js',
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-circus',
-              [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/apm-js']), // reads from dd-trace-js
+              [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/dd-trace-js']), // reads from dd-trace-js
               [LIBRARY_VERSION]: ddTraceVersion
             })
             if (extraTags) {
