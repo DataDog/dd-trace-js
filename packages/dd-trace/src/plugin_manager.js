@@ -97,7 +97,7 @@ module.exports = class PluginManager {
       if (queryStringObfuscation !== undefined) {
         pluginConfig.queryStringObfuscation = queryStringObfuscation
       }
-      
+
       if (clientIpHeaderDisabled !== undefined) {
         pluginConfig.clientIpHeaderDisabled = clientIpHeaderDisabled
       }
