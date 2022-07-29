@@ -26,9 +26,8 @@ class Quota {
 
 const LONG_RUNNING_OPERATIONS = {
   ANALYZE_REQUEST: {
-    hasQuota: (context) => {
+    hasQuota: () => {
       const reserved = concurrentRequestTokens > 0
-      context.isRequestAnalyzed = reserved
       if (reserved) {
         concurrentRequestTokens--
       }
@@ -39,8 +38,8 @@ const LONG_RUNNING_OPERATIONS = {
     },
     name: ANALYZE_REQUEST,
     initialTokenBucketSize: 2,
-    initContext: (context) => {
-      context.isRequestAnalyzed = false
+    initRequestContext: (context) => {
+      context.isRequestAnalyzed = true
     }
   }
 }
@@ -51,7 +50,7 @@ const SINGLE_SHOT_OPERATIONS = {
   REPORT_VULNERABILITY: {
     hasQuota: (context) => {
       if (!context.isRequestAnalyzed) return false
-      const reserved = !!context.tokens[REPORT_VULNERABILITY] && context.tokens[REPORT_VULNERABILITY] > 0
+      const reserved = context.tokens[REPORT_VULNERABILITY] > 0
       if (reserved) {
         context.tokens[REPORT_VULNERABILITY]--
       }
@@ -59,44 +58,45 @@ const SINGLE_SHOT_OPERATIONS = {
     },
     name: REPORT_VULNERABILITY,
     initialTokenBucketSize: 2,
-    initContext: function (context) {
+    initRequestContext: function (context) {
       context.tokens[REPORT_VULNERABILITY] = this.initialTokenBucketSize
     }
   }
 }
 
 function hasQuotaSingleShot (operation, iastContext) {
-  return iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]
-    ? operation.hasQuota(iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY])
-    : false
+  if (!iastContext || !iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]) {
+    return false
+  }
+  return operation.hasQuota(iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY])
 }
 
-function hasQuotaLongRunning (operation, iastContext) {
-  const reserved = iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY] &&
-    operation.hasQuota(iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY])
-  return new Quota(reserved, () => operation.release(iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]))
+function hasQuotaLongRunning (operation) {
+  const reserved = operation.hasQuota()
+  return new Quota(reserved, () => operation.release())
 }
 
-function getInitialContext () {
+function initializeRequestContext (iastContext) {
   const oceContext = {
     tokens: {}
   }
 
   for (const operation in LONG_RUNNING_OPERATIONS) {
-    LONG_RUNNING_OPERATIONS[operation].initContext(oceContext)
+    LONG_RUNNING_OPERATIONS[operation].initRequestContext(oceContext)
   }
 
   for (const operation in SINGLE_SHOT_OPERATIONS) {
-    SINGLE_SHOT_OPERATIONS[operation].initContext(oceContext)
+    SINGLE_SHOT_OPERATIONS[operation].initRequestContext(oceContext)
   }
 
-  return oceContext
+  iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY] = oceContext
 }
 
 module.exports = {
+  OVERHEAD_CONTROLLER_CONTEXT_KEY,
   LONG_RUNNING_OPERATIONS,
   SINGLE_SHOT_OPERATIONS,
-  getInitialContext,
+  initializeRequestContext,
   hasQuotaSingleShot,
   hasQuotaLongRunning
 }
