@@ -1,6 +1,7 @@
 'use strict'
 
 const uniq = require('lodash.uniq')
+const ip6addr = require('ip6adddr')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
 const log = require('../../log')
@@ -565,7 +566,71 @@ function getProtocol (req) {
   return 'http'
 }
 
+const v4PrivateCidrs = [
+  '127.0.0.0/8',
+  '10.0.0.0/8',
+  '172.16.0.0/12',
+  '192.168.0.0/16',
+  '169.254.0.0/16'
+].map(cidr => ip6addr.createCIDR(cidr)).map(cidr => [ cidr.address().toLong(), cidr.broadcast().toLong() ])
+
+const v6PrivateCidrs = [
+  '::1/128',
+  'fec0::/10',
+  'fe80::/10',
+  'fc00::/7',
+  'fd00::/8'
+].map(cidr => ip6addr.createCIDR(cidr))
+
 function findFirstIp (str) {
+  let firstPrivateIp
+  const splitted = str.split(',')
+
+  for (let i = 0; i < splitted.length; i++) {
+    const chunk = splitted[i].trim()
+
+    // TODO: strip port and interface data ?
+
+    let ip
+
+    try {
+      ip = ip6addr.parse(chunk)
+    } catch {
+      // not a valid ip, skip to next chunk
+      continue
+    }
+
+    let isPrivate = false
+
+    if (ip._attrs.ipv4Mapped || ip._attrs.ipv4Bare) {
+      // optimization to compare ipv4s numerically
+      const numericIp = ((ip._fields[6] << 16) >>> 0) + ip._fields[7]
+
+      for (let j = 0; j < v4PrivateCidrs.length; j++) {
+        if (numericIp >= v4PrivateCidrs[j][0] && numericIp <= v4PrivateCidrs[j][1]) {
+          isPrivate = true
+          break
+        }
+      }
+    } else {
+      for (let j = 0; j < v6PrivateCidrs.length; j++) {
+        if (v6PrivateCidrs[j].contains(ip)) {
+          isPrivate = true
+          break
+        }
+      }
+    }
+
+    if (isPrivate) {
+      // it's private, only save the first one found
+      if (!firstPrivateIp) firstPrivateIp = chunk
+    } else {
+      // it's public, return it immediately
+      return chunk
+    }
+  }
+
+  return firstPrivateIp
 }
 
 function getHeadersToRecord (config) {
