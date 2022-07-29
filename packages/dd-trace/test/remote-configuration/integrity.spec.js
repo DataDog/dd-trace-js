@@ -1,7 +1,6 @@
 'use strict'
-require('../setup/node');
 
-const {checkIntegrity} = require('../../src/remote-configuration/integrity')
+const { checkIntegrity } = require('../../src/remote-configuration/integrity')
 const validOneFile = require('./samples/validOneFile.json')
 const tufTargetsMissingTargetFile = require('./samples/tufTargetsMissingTargetFile.json')
 const tufTargetsInvalidSignature = require('./samples/tufTargetsInvalidSignature.json')
@@ -13,7 +12,6 @@ const TEST_KEY_ID = 'ed7672c9a24abda78872ee32ee71c7cb1d5235e8db4ecbf1ca28b9c50eb
 const TEST_PUBLIC_KEY = '7d3102e39abe71044d207550bda239c71380d013ec5a115f79f51622630054e6'
 
 describe('Remote configuration Index', () => {
-
   it('should accept a valid payload', () => {
     const res = checkIntegrity(TEST_PUBLIC_KEY, TEST_KEY_ID, validOneFile)
     expect(res)

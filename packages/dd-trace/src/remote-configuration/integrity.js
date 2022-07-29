@@ -53,8 +53,8 @@ function checkIntegrity (rcTargetsKey, rcTargetsKeyId, clientGetConfigsResponse)
     if (!configMeta) throw new Error(`target ${targetFiles[i].path} not found in targets`)
     const raw = localAtob(targetFiles[i].raw)
     const hash = crypto.createHash('sha256')
-    const rawHash = hash.update(Buffer.from(raw)).digest('hex');
-    if (raw.length !== configMeta.length || rawHash !== configMeta.hashes.sha256){
+    const rawHash = hash.update(Buffer.from(raw)).digest('hex')
+    if (raw.length !== configMeta.length || rawHash !== configMeta.hashes.sha256) {
       throw new Error(`target ${targetFiles[i].path} expected sha256 was ${configMeta.hashes.sha256}, ${rawHash} found`)
     }
   }
