@@ -1,9 +1,13 @@
 'use strict'
 
-const { DDSketch } = require('@datadog/sketches-js')
+let DDSketch
 
 class Histogram {
   constructor () {
+    if (!DDSketch) {
+      DDSketch = require('@datadog/sketches-js').DDSketch
+    }
+
     this.reset()
   }
 
