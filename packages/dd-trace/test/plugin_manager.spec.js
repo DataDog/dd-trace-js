@@ -5,7 +5,7 @@ const proxyquire = require('proxyquire')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
-describe('Plugin Manager', () => {
+describe.only('Plugin Manager', () => {
   let tracer
   let instantiated
   let PluginManager
@@ -80,7 +80,24 @@ describe('Plugin Manager', () => {
     it('does not throw for old-style plugins', () => {
       expect(() => pm.configurePlugin('one', false)).to.not.throw()
     })
+    describe('without configure', () => {
+      it('should not configure plugins', () => {
+        pm.configurePlugin('two')
+        loadChannel.publish({ name: 'two' })
+        expect(Two.prototype.configure).to.not.have.been.called
+      })
+      it('should keep the config for future configure calls', () => {
+        pm.configurePlugin('two', { foo: 'bar' })
+        pm.configure()
+        loadChannel.publish({ name: 'two' })
+        expect(Two.prototype.configure).to.have.been.calledWith({
+          enabled: true,
+          foo: 'bar'
+        })
+      })
+    })
     describe('without env vars', () => {
+      beforeEach(() => pm.configure())
       it('works with no config param', () => {
         pm.configurePlugin('two')
         loadChannel.publish({ name: 'two' })
@@ -113,6 +130,7 @@ describe('Plugin Manager', () => {
       })
     })
     describe('with disabled plugins', () => {
+      beforeEach(() => pm.configure())
       it('should not call configure on individual enable override', () => {
         pm.configurePlugin('five', { enabled: true })
         expect(Five.prototype.configure).to.not.have.been.called
@@ -124,6 +142,7 @@ describe('Plugin Manager', () => {
       })
     })
     describe('with env var true', () => {
+      beforeEach(() => pm.configure())
       beforeEach(() => {
         process.env.DD_TRACE_TWO_ENABLED = '1'
       })
@@ -162,6 +181,7 @@ describe('Plugin Manager', () => {
       })
     })
     describe('with env var false', () => {
+      beforeEach(() => pm.configure())
       beforeEach(() => {
         process.env.DD_TRACE_TWO_ENABLED = '0'
       })
@@ -236,6 +256,7 @@ describe('Plugin Manager', () => {
   })
 
   describe('destroy', () => {
+    beforeEach(() => pm.configure())
     it('should disable the plugins', () => {
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
