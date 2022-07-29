@@ -3,7 +3,6 @@
 const NoopTracer = require('./noop/tracer')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
-const Instrumenter = require('./instrumenter')
 const PluginManager = require('./plugin_manager')
 const metrics = require('./metrics')
 const log = require('./log')
@@ -18,7 +17,6 @@ class Tracer {
   constructor () {
     this._initialized = false
     this._tracer = noop
-    this._instrumenter = new Instrumenter(this)
     this._pluginManager = new PluginManager(this)
   }
 
@@ -54,7 +52,6 @@ class Tracer {
         }
 
         this._tracer = new DatadogTracer(config)
-        this._instrumenter.enable(config)
         this._pluginManager.configure(config)
         setStartupLogInstrumenter(this._instrumenter)
         telemetry.start(config, this._instrumenter, this._pluginManager)
@@ -77,7 +74,6 @@ class Tracer {
   }
 
   use () {
-    this._instrumenter.use(...arguments)
     this._pluginManager.configurePlugin(...arguments)
     return this
   }
