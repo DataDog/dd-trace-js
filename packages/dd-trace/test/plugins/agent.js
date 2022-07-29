@@ -174,7 +174,7 @@ module.exports = {
 
   // Wipe the require cache.
   wipe () {
-    require.resolve('../..')._pluginManager.destroy()
+    require('../..')._pluginManager.destroy()
 
     delete require.cache[require.resolve('../..')]
     delete global._ddtrace
