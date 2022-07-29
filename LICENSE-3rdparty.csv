@@ -8,6 +8,7 @@ require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
 require,diagnostics_channel,MIT,Copyright 2021 Simon D.
 require,ignore,MIT,Copyright 2013 Kael Zhang and contributors
 require,import-in-the-middle,Apache license 2.0,Copyright 2021 Datadog Inc.
+require,ip6addr,Mozilla Public License Version 2.0,Copyright 2019, Joyent Inc.
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,limiter,MIT,Copyright 2011 John Hurliman
 require,lodash.kebabcase,MIT,Copyright JS Foundation and other contributors
