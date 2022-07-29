@@ -31,7 +31,8 @@ module.exports = class PluginManager {
     this._loadedSubscriber = ({ name }) => {
       const Plugin = plugins[name]
 
-      if (Plugin && typeof Plugin === 'function' && !pluginClasses[Plugin.name]) {
+      if (!Plugin || typeof Plugin !== 'function') return
+      if (!pluginClasses[Plugin.name]) {
         const envName = `DD_TRACE_${Plugin.name.toUpperCase()}_ENABLED`
         const enabled = process.env[envName.replace(/[^a-z0-9_]/ig, '_')]
 
@@ -42,10 +43,10 @@ module.exports = class PluginManager {
           pluginClasses[Plugin.name] = null
         } else {
           pluginClasses[Plugin.name] = Plugin
-
-          this.loadPlugin(Plugin.name)
         }
       }
+
+      this.loadPlugin(Plugin.name)
     }
 
     loadChannel.subscribe(this._loadedSubscriber)
@@ -55,10 +56,10 @@ module.exports = class PluginManager {
     const Plugin = pluginClasses[name]
 
     if (!Plugin) return
-    if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
     if (!this._pluginsByName[name]) {
       this._pluginsByName[name] = new Plugin(this._tracer)
     }
+    if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
 
     const pluginConfig = this._configsByName[name] || {
       enabled: this._tracerConfig.plugins !== false
