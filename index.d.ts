@@ -359,6 +359,12 @@ export declare interface TracerOptions {
      * @default false
      */
     enableGetRumData?: boolean
+
+    /**
+     * Whether to enable IAST.
+     * @default false
+     */
+    iast?: boolean;
   };
 
   /**

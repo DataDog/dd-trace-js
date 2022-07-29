@@ -79,6 +79,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
+    expect(config).to.have.nested.property('iast.enabled', false)
   })
 
   it('should initialize from the default service', () => {
@@ -128,6 +129,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = '42'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '.*'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
+    process.env.DD_IAST_ENABLED = 'true'
 
     const config = new Config()
 
@@ -158,6 +160,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
+    expect(config).to.have.nested.property('iast.enabled', true)
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -233,7 +236,8 @@ describe('Config', () => {
         sampler: {
           sampleRate: 1,
           rateLimit: 1000
-        }
+        },
+        iast: true
       },
       appsec: true
     })
@@ -269,6 +273,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
+    expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: 0.5, rateLimit: 1000 })
   })
 
@@ -344,6 +349,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
+    process.env.DD_IAST_ENABLED = 'false'
 
     const config = new Config({
       protocolVersion: '0.5',
@@ -368,7 +374,8 @@ describe('Config', () => {
         traceparent: false,
         runtimeId: false,
         exporter: 'agent',
-        enableGetRumData: false
+        enableGetRumData: false,
+        iast: true
       },
       appsec: {
         enabled: true,
@@ -406,6 +413,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
+    expect(config).to.have.nested.property('iast.enabled', true)
   })
 
   it('should give priority to non-experimental options', () => {

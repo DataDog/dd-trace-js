@@ -44,6 +44,7 @@ tracer.init({
     rateLimit: 500
   },
   experimental: {
+    iast: true,
     b3: true,
     runtimeId: true,
     exporter: 'log',
