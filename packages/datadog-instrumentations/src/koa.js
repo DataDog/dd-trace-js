@@ -127,7 +127,7 @@ function wrapMiddleware (fn, layer) {
 
 function fulfill (ctx, error) {
   if (error) {
-    errorChannel.publish(error)
+    errorChannel.publish({ req: context.req, error })
   }
 
   const req = ctx.req

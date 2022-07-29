@@ -24,6 +24,61 @@ describe('Plugin', () => {
         appListener = null
       })
 
+      describe('without http', () => {
+        before(() => {
+          return agent.load('express', { client: false })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(() => {
+          express = require(`../../../versions/express@${version}`).get()
+        })
+
+        it('should not instrument', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            const timer = setTimeout(done, 100)
+
+            agent.use(() => {
+              clearTimeout(timer)
+              done(new Error('Agent received an unexpected trace.'))
+            })
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should ignore middleware errors', (done) => {
+          const app = express()
+
+          app.use(() => { throw new Error('boom') })
+          app.use((err, req, res, next) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`)
+                .then(() => done())
+                .catch(done)
+            })
+          })
+        })
+      })
+
       describe('without configuration', () => {
         before(() => {
           return agent.load(['express', 'http'], [{}, { client: false }])
@@ -213,6 +268,47 @@ describe('Plugin', () => {
                 expect(spans[0]).to.have.property('name', 'express.request')
                 expect(spans[3]).to.have.property('resource', 'breaking')
                 expect(spans[3]).to.have.property('name', 'express.middleware')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user/1`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should handle errors on middleware that break the async context', done => {
+          let next
+
+          const error = new Error('boom')
+          const app = express()
+          const interval = setInterval(() => {
+            if (next) {
+              next()
+              clearInterval(interval)
+            }
+          })
+
+          app.use(function breaking (req, res, _next) {
+            next = _next
+          })
+          app.use(() => { throw error })
+          app.use((err, req, res, next) => next())
+          app.get('/user/:id', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('name', 'express.request')
+                expect(spans[4]).to.have.property('name', 'express.middleware')
+                expect(spans[4].meta).to.have.property('error.type', error.name)
               })
               .then(done)
               .catch(done)
