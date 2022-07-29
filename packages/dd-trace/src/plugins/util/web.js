@@ -1,7 +1,7 @@
 'use strict'
 
 const uniq = require('lodash.uniq')
-const ip6addr = require('ip6adddr')
+const ip6addr = require('ip6addr')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
 const log = require('../../log')
