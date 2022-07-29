@@ -195,18 +195,24 @@ describe('Plugin Manager', () => {
       pm.configure({
         serviceMapping: { two: 'deux' },
         logInjection: true,
-        queryStringObfuscation: '.*'
+        queryStringObfuscation: '.*',
+        clientIpHeaderDisabled: true,
+        clientIpHeader: 'x-true-client-ip'
       })
       expect(Two.prototype.configure).to.have.been.calledWith({
         enabled: true,
         service: 'deux',
         logInjection: true,
-        queryStringObfuscation: '.*'
+        queryStringObfuscation: '.*',
+        clientIpHeaderDisabled: true,
+        clientIpHeader: 'x-true-client-ip'
       })
       expect(Four.prototype.configure).to.have.been.calledWith({
         enabled: true,
         logInjection: true,
-        queryStringObfuscation: '.*'
+        queryStringObfuscation: '.*',
+        clientIpHeaderDisabled: true,
+        clientIpHeader: 'x-true-client-ip'
       })
     })
   })
