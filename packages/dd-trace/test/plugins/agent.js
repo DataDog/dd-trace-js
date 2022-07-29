@@ -20,18 +20,6 @@ let plugins = []
 module.exports = {
   // Load the plugin on the tracer with an optional config and start a mock agent.
   load (pluginName, config, tracerConfig = {}) {
-    pluginName = [].concat(pluginName)
-    plugins = pluginName
-    config = [].concat(config)
-
-    if (tracer) {
-      for (let i = 0, l = pluginName.length; i < l; i++) {
-        tracer.use(pluginName[i], config[i])
-      }
-
-      return Promise.resolve()
-    }
-
     tracer = require('../..')
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -64,6 +52,10 @@ module.exports = {
 
         listener = server.listen(port, () => resolve())
 
+        pluginName = [].concat(pluginName)
+        plugins = pluginName
+        config = [].concat(config)
+
         server.on('close', () => {
           tracer = null
         })
@@ -81,6 +73,18 @@ module.exports = {
         }
       })
     })
+  },
+
+  reload (pluginName, config) {
+    pluginName = [].concat(pluginName)
+    plugins = pluginName
+    config = [].concat(config)
+
+    for (let i = 0, l = pluginName.length; i < l; i++) {
+      tracer.use(pluginName[i], config[i])
+    }
+
+    return Promise.resolve()
   },
 
   // Register a callback with expectations to be run on every agent call.

@@ -10,6 +10,9 @@ describe('Plugin', () => {
   let callbackPolicy
 
   describe('amqp10', () => {
+    before(() => agent.load('rhea'))
+    after(() => agent.close({ ritmReset: false }))
+
     withVersions('amqp10', 'amqp10', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
@@ -23,11 +26,10 @@ describe('Plugin', () => {
       })
 
       afterEach(() => client.disconnect())
-      afterEach(() => agent.close({ ritmReset: false }))
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load('amqp10')
+          return agent.reload('amqp10')
             .then(() => {
               const amqp = require(`../../../versions/amqp10@${version}`).get()
               const None = amqp.Policy.Utils.SenderCallbackPolicies.None
@@ -163,7 +165,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         beforeEach(() => {
-          return agent.load('amqp10', { service: 'test' })
+          return agent.reload('amqp10', { service: 'test' })
             .then(() => {
               const amqp = require(`../../../versions/amqp10@${version}`).get()
 
