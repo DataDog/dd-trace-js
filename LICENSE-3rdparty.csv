@@ -9,6 +9,7 @@ require,diagnostics_channel,MIT,Copyright 2021 Simon D.
 require,form-data,MIT,Copyright 2012 Felix Geisendörfer and contributors
 require,ignore,MIT,Copyright 2013 Kael Zhang and contributors
 require,import-in-the-middle,Apache license 2.0,Copyright 2021 Datadog Inc.
+require,json-canonicalize,MIT,Copyright 2018 Riceball LEE
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,limiter,MIT,Copyright 2011 John Hurliman
 require,lodash.kebabcase,MIT,Copyright JS Foundation and other contributors
