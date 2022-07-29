@@ -6,7 +6,6 @@ const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
 
-const requestResources = new WeakMap()
 const parsingResources = new WeakMap()
 
 function wrapFastify (fastify, hasParsingEvents) {
@@ -42,16 +41,13 @@ function wrapAddHook (addHook) {
 
     arguments[arguments.length - 1] = shimmer.wrap(fn, function (request, reply, done) {
       const req = getReq(request)
-      const requestResource = requestResources.get(req)
-
-      if (!requestResource) return fn.apply(this, arguments)
 
       try {
         if (typeof done === 'function') {
           done = arguments[arguments.length - 1]
 
           arguments[arguments.length - 1] = function (err) {
-            publishError(err, requestResource)
+            publishError(err, req)
 
             if (name === 'onRequest' || name === 'preParsing') {
               const parsingResource = new AsyncResource('bound-anonymous-fn')
@@ -71,13 +67,13 @@ function wrapAddHook (addHook) {
           const promise = fn.apply(this, arguments)
 
           if (promise && typeof promise.catch === 'function') {
-            return promise.catch(err => publishError(err, requestResource))
+            return promise.catch(err => publishError(err, req))
           }
 
           return promise
         }
       } catch (e) {
-        throw publishError(e, requestResource)
+        throw publishError(e, req)
       }
     })
 
@@ -90,14 +86,10 @@ function onRequest (request, reply, done) {
 
   const req = getReq(request)
   const res = getRes(reply)
-  const requestResource = new AsyncResource('bound-anonymous-fn')
 
-  requestResources.set(req, requestResource)
+  handleChannel.publish({ req, res })
 
-  return requestResource.runInAsyncScope(() => {
-    handleChannel.publish({ req, res })
-    return done()
-  })
+  return done()
 }
 
 function preHandler (request, reply, done) {
@@ -105,9 +97,8 @@ function preHandler (request, reply, done) {
   if (!reply || typeof reply.send !== 'function') return done()
 
   const req = getReq(request)
-  const requestResource = requestResources.get(req)
 
-  reply.send = wrapSend(reply.send, requestResource)
+  reply.send = wrapSend(reply.send, req)
 
   done()
 }
@@ -133,12 +124,10 @@ function preParsing (request, reply, payload, done) {
   parsingResource.runInAsyncScope(() => done())
 }
 
-function wrapSend (send, resource) {
-  return function sendWithTrace (payload) {
-    if (payload instanceof Error) {
-      resource.runInAsyncScope(() => {
-        errorChannel.publish(payload)
-      })
+function wrapSend (send, req) {
+  return function sendWithTrace (error) {
+    if (error instanceof Error) {
+      errorChannel.publish({ req, error })
     }
 
     return send.apply(this, arguments)
@@ -153,11 +142,9 @@ function getRes (reply) {
   return reply && (reply.raw || reply.res || reply)
 }
 
-function publishError (error, resource) {
+function publishError (error, req) {
   if (error) {
-    resource.runInAsyncScope(() => {
-      errorChannel.publish(error)
-    })
+    errorChannel.publish({ error, req })
   }
 
   return error

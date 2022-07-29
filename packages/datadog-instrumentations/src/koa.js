@@ -126,12 +126,12 @@ function wrapMiddleware (fn, layer) {
 }
 
 function fulfill (ctx, error) {
-  if (error) {
-    errorChannel.publish(error)
-  }
-
   const req = ctx.req
   const route = ctx.routePath
+
+  if (error) {
+    errorChannel.publish({ req, error })
+  }
 
   // TODO: make sure that the parent class cannot override this in `enter`
   if (route) {

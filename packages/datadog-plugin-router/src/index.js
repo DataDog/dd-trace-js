@@ -16,7 +16,10 @@ class RouterPlugin extends WebPlugin {
     this._contexts = new WeakMap()
 
     this.addSub(`apm:${this.constructor.name}:middleware:enter`, ({ req, name, route }) => {
-      const childOf = this._getActive(req)
+      const childOf = this._getActive(req) || this._getStoreSpan()
+
+      if (!childOf) return
+
       const span = this._getMiddlewareSpan(name, childOf)
       const context = this._createContext(req, route, childOf)
 
@@ -46,14 +49,16 @@ class RouterPlugin extends WebPlugin {
       context.middleware.pop().finish()
     })
 
-    this.addSub(`apm:${this.constructor.name}:middleware:error`, err => {
-      const store = storage.getStore()
+    this.addSub(`apm:${this.constructor.name}:middleware:error`, ({ req, error }) => {
+      web.addError(req, error)
 
-      web.addError(store.req, err)
+      if (!this.config.middleware) return
 
-      if (this.config.middleware) {
-        this.addError(err)
-      }
+      const span = this._getActive(req)
+
+      if (!span) return
+
+      span.setTag('error', error)
     })
 
     this.addSub(`apm:http:server:request:finish`, ({ req }) => {
@@ -72,7 +77,7 @@ class RouterPlugin extends WebPlugin {
   _getActive (req) {
     const context = this._contexts.get(req)
 
-    if (!context) return this._getStoreSpan()
+    if (!context) return
     if (context.middleware.length === 0) return context.span
 
     return context.middleware[context.middleware.length - 1]
