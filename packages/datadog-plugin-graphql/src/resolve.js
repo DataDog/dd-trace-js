@@ -4,6 +4,8 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
+const collapsedPathSym = Symbol('collapsedPaths')
+
 class GraphQLResolvePlugin extends Plugin {
   static get name () {
     return 'graphql'
@@ -15,7 +17,15 @@ class GraphQLResolvePlugin extends Plugin {
     this.addSub('apm:graphql:resolve:start', ({ info, context }) => {
       const store = storage.getStore()
       depthPredicate(info, this.config, (computedPath) => {
-        if (!hasLikePath(context, computedPath)) {
+        const computedPathString = computedPath.join('.')
+        if ((!this.config.collapse && !context.fields[computedPathString]) ||
+             (!context[collapsedPathSym] || !context[collapsedPathSym][computedPathString])) {
+          // cache the collapsed string here
+          if (this.config.collapse) {
+            if (!context[collapsedPathSym]) context[collapsedPathSym] = {}
+            context[collapsedPathSym][computedPathString] = true
+          }
+
           const service = this.config.service || this.tracer._service
           const childOf = store ? store.span : store
           const span = this.tracer.startSpan(`graphql.resolve`, {
@@ -33,7 +43,7 @@ class GraphQLResolvePlugin extends Plugin {
           span.addTags({
             'resource.name': `${info.fieldName}:${info.returnType}`,
             'graphql.field.name': info.fieldName,
-            'graphql.field.path': computedPath.join('.'),
+            'graphql.field.path': computedPathString,
             'graphql.field.type': info.returnType.name
           })
 
@@ -75,21 +85,6 @@ class GraphQLResolvePlugin extends Plugin {
 }
 
 // helpers
-
-/** This function is used for collapsed fields, where on the
- * instrumentation, we store fields by a default of config.collapse = false.
- * So, to avoid starting spans for properly computed paths that already have a span,
- * in the case of config.collapse = true, this function computes if there exits a path
- * that has already been processed for a span that either looks like or is the computed path.
- * In the case where the user intentionally sets config.collapse = false, there should be no change.
- */
-function hasLikePath (context, computedPathArray) {
-  const computedPath = computedPathArray.join('.')
-  const paths = Object.keys(context.fields)
-  const number = '([0-9]+)'
-  const regexPath = new RegExp(computedPath.replace(/\*/g, number))
-  return paths.filter(path => regexPath.test(path)).length > 0
-}
 
 function depthPredicate (info, config, func) {
   func = func || (() => {})

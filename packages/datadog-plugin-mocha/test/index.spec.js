@@ -97,7 +97,7 @@ describe('Plugin', () => {
         .get('/')
         .reply(200, 'OK')
 
-      return agent.load(['mocha', 'http']).then(() => {
+      return agent.load(['mocha', 'http'], { isAgentlessEnabled: true }).then(() => {
         Mocha = require(`../../../versions/mocha@${version}`).get()
       })
     })
@@ -119,7 +119,7 @@ describe('Plugin', () => {
             expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
             expect(testSpan.meta[TEST_CODE_OWNERS]).to.equal(
-              JSON.stringify(['@DataDog/apm-js']) // reads from dd-trace-js
+              JSON.stringify(['@DataDog/dd-trace-js']) // reads from dd-trace-js
             )
             expect(testSpan.meta[LIBRARY_VERSION]).to.equal(ddTraceVersion)
           })
@@ -443,6 +443,45 @@ describe('Plugin', () => {
           reporter: function () {} // silent on internal tests
         })
         mocha.addFile(testFilePath)
+        mocha.run()
+      })
+
+      it('works with test suite level visibility', (done) => {
+        const testFilePath = path.join(__dirname, 'mocha-test-suite-level')
+        const testFilePathSecond = path.join(__dirname, 'mocha-test-suite-level-2')
+
+        agent.use(trace => {
+          const spans = trace[0]
+          const testSessionSpan = spans.find(span => span.type === 'test_session_end')
+          const testSuiteSpans = spans.filter(span => span.type === 'test_suite_end')
+
+          expect(testSessionSpan.meta[TEST_STATUS]).to.equal('fail')
+          expect(testSuiteSpans.length).to.equal(4)
+
+          expect(
+            testSuiteSpans.every(span => span.parent_id.toString() === testSessionSpan.span_id.toString())
+          ).to.be.true
+
+          expect(
+            testSuiteSpans.every(span => span.trace_id.toString() === testSessionSpan.trace_id.toString())
+          ).to.be.true
+
+          expect(testSuiteSpans.filter(span => span.meta[TEST_STATUS] === 'pass')).to.have.length(1)
+          expect(testSuiteSpans.filter(span => span.meta[TEST_STATUS] === 'fail')).to.have.length(2)
+          expect(testSuiteSpans.filter(span => span.meta[TEST_STATUS] === 'skip')).to.have.length(1)
+
+          const failedTestSuite = testSuiteSpans.find(span => span.meta[TEST_STATUS] === 'fail')
+
+          expect(failedTestSuite.meta[ERROR_MESSAGE]).to.equal(
+            'Test "mocha-test-suite-level-fail will fail" failed with message "expected 2 to equal 8"'
+          )
+        }).then(() => done()).catch(done)
+
+        const mocha = new Mocha({
+          reporter: function () {} // silent on internal tests
+        })
+        mocha.addFile(testFilePath)
+        mocha.addFile(testFilePathSecond)
         mocha.run()
       })
     })

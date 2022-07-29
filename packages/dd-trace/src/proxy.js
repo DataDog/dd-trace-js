@@ -22,11 +22,6 @@ class Tracer extends BaseTracer {
     this._tracer = noop
     this._instrumenter = new Instrumenter(this)
     this._pluginManager = new PluginManager(this)
-    this._deprecate = method => log.deprecate(`tracer.${method}`, [
-      `tracer.${method}() is deprecated.`,
-      'Please use tracer.startSpan() and tracer.scope() instead.',
-      'See: https://datadog.github.io/dd-trace-js/#manual-instrumentation.'
-    ].join(' '))
   }
 
   init (options) {
@@ -124,20 +119,6 @@ class Tracer extends BaseTracer {
 
   scope () {
     return this._tracer.scope.apply(this._tracer, arguments)
-  }
-
-  currentSpan () {
-    this._deprecate('currentSpan')
-    return this._tracer.currentSpan.apply(this._tracer, arguments)
-  }
-
-  bind (callback) {
-    this._deprecate('bind')
-    return callback
-  }
-
-  bindEmitter () {
-    this._deprecate('bindEmitter')
   }
 
   getRumData () {

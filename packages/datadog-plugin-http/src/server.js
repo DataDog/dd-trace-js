@@ -15,7 +15,7 @@ class HttpServerPlugin extends Plugin {
 
     this.addSub('apm:http:server:request:start', ({ req, res }) => {
       const store = storage.getStore()
-      const span = web.startSpan(this.tracer, this.config, req, res, 'http.request')
+      const span = web.startSpan(this.tracer, this.config, req, res, 'web.request')
 
       this.enter(span, store)
 
@@ -45,7 +45,7 @@ class HttpServerPlugin extends Plugin {
 
       if (!context || !context.res) return // Not created by a http.Server instance.
 
-      web.wrapRes(context, context.req, context.res, context.res.end)()
+      web.finishAll(context)
     })
   }
 

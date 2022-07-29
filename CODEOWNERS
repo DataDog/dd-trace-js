@@ -1,2 +1,1 @@
-* @DataDog/apm-js
-/packages/dd-trace/src/ci-visibility/ @DataDog/ci-app-tracers
+* @DataDog/dd-trace-js

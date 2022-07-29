@@ -24,10 +24,6 @@ class NoopTracer extends Tracer {
     return this._scope
   }
 
-  currentSpan () {
-    return null
-  }
-
   getRumData () {
     return ''
   }
