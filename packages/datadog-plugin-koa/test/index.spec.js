@@ -564,7 +564,7 @@ describe('Plugin', () => {
                 expect(spans[1].meta).to.include({
                   'error.type': error.name
                 })
-                expect(spans[0].error).to.equal(1)
+                expect(spans[1].error).to.equal(1)
               })
               .then(done)
               .catch(done)
