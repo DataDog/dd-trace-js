@@ -272,7 +272,10 @@ const web = {
   addError (req, error) {
     if (error instanceof Error) {
       const context = contexts.get(req)
-      context.error = error
+
+      if (context) {
+        context.error = error
+      }
     }
   },
 
