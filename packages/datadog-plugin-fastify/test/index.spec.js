@@ -426,6 +426,7 @@ describe('Plugin', () => {
               let error
 
               app.setErrorHandler((error, request, reply) => {
+                reply.statusCode = 500
                 reply.send()
               })
               app.get('/user', (request, reply) => {
@@ -439,9 +440,42 @@ describe('Plugin', () => {
 
                     expect(spans[0]).to.have.property('name', 'fastify.request')
                     expect(spans[0]).to.have.property('resource', 'GET /user')
+                    expect(spans[0]).to.have.property('error', 1)
                     expect(spans[0].meta).to.have.property('error.type', error.name)
                     expect(spans[0].meta).to.have.property('error.msg', error.message)
                     expect(spans[0].meta).to.have.property('error.stack', error.stack)
+                  })
+                  .then(done)
+                  .catch(done)
+
+                app.listen({ host, port }, () => {
+                  axios
+                    .get(`http://localhost:${port}/user`)
+                    .catch(() => {})
+                })
+              })
+            })
+
+            it('should ignore reply exceptions if the request succeeds', done => {
+              app.setErrorHandler((error, request, reply) => {
+                reply.statusCode = 200
+                reply.send()
+              })
+              app.get('/user', (request, reply) => {
+                throw new Error('boom')
+              })
+
+              getPort().then(port => {
+                agent
+                  .use(traces => {
+                    const spans = traces[0]
+
+                    expect(spans[0]).to.have.property('name', 'fastify.request')
+                    expect(spans[0]).to.have.property('resource', 'GET /user')
+                    expect(spans[0]).to.have.property('error', 0)
+                    expect(spans[0].meta).to.not.have.property('error.type')
+                    expect(spans[0].meta).to.not.have.property('error.msg')
+                    expect(spans[0].meta).to.not.have.property('error.stack')
                   })
                   .then(done)
                   .catch(done)
