@@ -1000,7 +1000,7 @@ describe('plugins/util/web', () => {
     })
 
     it('should return the first public ip in a list', () => {
-      req.headers['x-forwarded-for'] = '::1,notanip,  2001:0db8:85a3:0000:0000:8a2e:0370:7334 ,10.0.0.1,7.7.7.7'
+      req.headers['x-forwarded-for'] = '::ffff:127.0.0.1,  2001:0db8:85a3:0000:0000:8a2e:0370:7334 ,10.0.0.1,7.7.7.7'
 
       const result = web.extractIp(context)
 
@@ -1008,7 +1008,7 @@ describe('plugins/util/web', () => {
     })
 
     it('should return the first private ip ina list if no public ip is found', () => {
-      req.headers['x-forwarded-for'] = '::1,notanip,10.0.0.1,'
+      req.headers['x-forwarded-for'] = 'notanip,::1,10.0.0.1,'
 
       const result = web.extractIp(context)
 
