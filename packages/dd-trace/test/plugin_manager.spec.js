@@ -5,7 +5,7 @@ const proxyquire = require('proxyquire')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
-describe.only('Plugin Manager', () => {
+describe('Plugin Manager', () => {
   let tracer
   let instantiated
   let PluginManager
@@ -133,10 +133,12 @@ describe.only('Plugin Manager', () => {
       beforeEach(() => pm.configure())
       it('should not call configure on individual enable override', () => {
         pm.configurePlugin('five', { enabled: true })
+        loadChannel.publish({ name: 'five' })
         expect(Five.prototype.configure).to.not.have.been.called
       })
       it('should not configure all disabled plugins', () => {
         pm.configure({})
+        loadChannel.publish({ name: 'five' })
         expect(Five.prototype.configure).to.not.have.been.called
         expect(Six.prototype.configure).to.not.have.been.called
       })
@@ -222,6 +224,14 @@ describe.only('Plugin Manager', () => {
   })
 
   describe('configure', () => {
+    describe('without the load event', () => {
+      it('should not instantiate plugins', () => {
+        pm.configure()
+        pm.configurePlugin('two')
+        expect(instantiated).to.be.empty
+        expect(Two.prototype.configure).to.not.have.been.called
+      })
+    })
     it('instantiates plugin classes', () => {
       pm.configure()
       loadChannel.publish({ name: 'two' })
