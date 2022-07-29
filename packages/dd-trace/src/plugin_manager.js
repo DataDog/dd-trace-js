@@ -24,7 +24,7 @@ const pluginClasses = {}
 module.exports = class PluginManager {
   constructor (tracer) {
     this._tracer = tracer
-    this._tracerConfig = {}
+    this._tracerConfig = null
     this._pluginsByName = {}
     this._configsByName = {}
 
