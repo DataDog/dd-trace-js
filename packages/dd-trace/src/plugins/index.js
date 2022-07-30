@@ -27,6 +27,7 @@ module.exports = {
   get 'hapi' () { return require('../../../datadog-plugin-hapi/src') },
   get 'http' () { return require('../../../datadog-plugin-http/src') },
   get 'http2' () { return require('../../../datadog-plugin-http2/src') },
+  get 'https' () { return require('../../../datadog-plugin-http/src') },
   get 'ioredis' () { return require('../../../datadog-plugin-ioredis/src') },
   get 'jest-environment-node' () { return require('../../../datadog-plugin-jest/src') },
   get 'jest-environment-jsdom' () { return require('../../../datadog-plugin-jest/src') },
