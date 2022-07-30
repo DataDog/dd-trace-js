@@ -28,6 +28,7 @@ module.exports = {
   'hapi': () => require('../hapi'),
   'http': () => require('../http'),
   'http2': () => require('../http2'),
+  'https': () => require('../http'),
   'ioredis': () => require('../ioredis'),
   'jest-environment-node': () => require('../jest'),
   'jest-environment-jsdom': () => require('../jest'),
