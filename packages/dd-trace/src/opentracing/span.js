@@ -1,9 +1,9 @@
 'use strict'
 
 // TODO (new internal tracer): use DC events for lifecycle metrics and test them
-
 const opentracing = require('opentracing')
-const now = require('performance-now')
+const now = require('perf_hooks').performance.now
+const dateNow = Date.now
 const semver = require('semver')
 const Span = opentracing.Span
 const SpanContext = require('./span_context')
@@ -91,7 +91,7 @@ class DatadogSpan extends Span {
     }
 
     spanContext._trace.started.push(this)
-    spanContext._trace.startTime = spanContext._trace.startTime || Date.now()
+    spanContext._trace.startTime = spanContext._trace.startTime || dateNow()
     spanContext._trace.ticks = spanContext._trace.ticks || now()
 
     return spanContext
