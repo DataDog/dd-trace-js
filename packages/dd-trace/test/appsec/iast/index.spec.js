@@ -1,6 +1,6 @@
 const proxyquire = require('proxyquire')
 const { incomingHttpRequestEnd } = require('../../../src/appsec/gateway/channels')
-const { Quota } = require('../../../src/appsec/iast/overhead-controller')
+const { Quota, OVERHEAD_CONTROLLER_CONTEXT_KEY } = require('../../../src/appsec/iast/overhead-controller')
 
 describe('IAST Index', () => {
   let web
@@ -22,6 +22,7 @@ describe('IAST Index', () => {
     }
     overheadController = {
       hasQuotaLongRunning: sinon.stub(),
+      initializeRequestContext: sinon.stub(),
       LONG_RUNNING_OPERATIONS: {
         ANALYZE_REQUEST: {}
       }
@@ -81,7 +82,7 @@ describe('IAST Index', () => {
       expect(datadogCore.storage.getStore).to.be.calledOnce
     })
 
-    it('Adds IAST context to store', () => {
+    it('should add IAST context to store', () => {
       const store = {}
       const topContext = { span: {} }
       const data = { req: {} }
@@ -93,6 +94,17 @@ describe('IAST Index', () => {
       expect(store[IAST.IAST_CONTEXT_KEY].req).equals(data.req)
       expect(store[IAST.IAST_CONTEXT_KEY].rootSpan).equals(topContext.span)
       expect(store[IAST.IAST_CONTEXT_KEY].analyzeRequestQuota).not.undefined
+    })
+
+    it('should initialize OCE context when analyze request quota is acquired', () => {
+      const store = {}
+      const topContext = { span: {} }
+      const data = { req: {} }
+      datadogCore.storage.getStore.returns(store)
+      web.getContext.returns(topContext)
+      overheadController.hasQuotaLongRunning.returns(new Quota(true, () => {}))
+      IAST.onIncomingHttpRequestStart(data)
+      expect(overheadController.initializeRequestContext).to.be.calledOnce
     })
   })
 

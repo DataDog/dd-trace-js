@@ -3,7 +3,7 @@ const { sendVulnerabilities } = require('./vulnerability-reporter')
 const web = require('../../plugins/util/web')
 const IAST_CONTEXT_KEY = Symbol('_dd.iast.context')
 const { storage } = require('../../../../datadog-core')
-const { hasQuotaLongRunning, LONG_RUNNING_OPERATIONS } = require('./overhead-controller')
+const { hasQuotaLongRunning, LONG_RUNNING_OPERATIONS, initializeRequestContext } = require('./overhead-controller')
 
 function enable () {
   incomingHttpRequestEnd.subscribe(onIncomingHttpRequestEnd)
@@ -24,6 +24,7 @@ function onIncomingHttpRequestStart (data) {
         analyzeRequestQuota
       }
       if (analyzeRequestQuota.isAcquired()) {
+        initializeRequestContext(store[IAST_CONTEXT_KEY])
         const topContext = web.getContext(data.req)
         if (topContext) {
           const rootSpan = topContext.span
