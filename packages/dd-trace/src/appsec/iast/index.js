@@ -3,6 +3,7 @@ const { sendVulnerabilities } = require('./vulnerability-reporter')
 const web = require('../../plugins/util/web')
 const IAST_CONTEXT_KEY = Symbol('_dd.iast.context')
 const { storage } = require('../../../../datadog-core')
+const { hasQuotaLongRunning, LONG_RUNNING_OPERATIONS } = require('./overhead-controller')
 
 function enable () {
   incomingHttpRequestEnd.subscribe(onIncomingHttpRequestEnd)
@@ -15,14 +16,19 @@ function disable () {
 }
 
 function onIncomingHttpRequestStart (data) {
-  // TODO Add OCE check
   if (data && data.req) {
     const store = storage.getStore()
     if (store) {
-      const topContext = web.getContext(data.req)
-      if (topContext) {
-        const rootSpan = topContext.span
-        store[IAST_CONTEXT_KEY] = { rootSpan, req: data.req }
+      const analyzeRequestQuota = hasQuotaLongRunning(LONG_RUNNING_OPERATIONS.ANALYZE_REQUEST)
+      store[IAST_CONTEXT_KEY] = {
+        analyzeRequestQuota
+      }
+      if (analyzeRequestQuota.isAcquired()) {
+        const topContext = web.getContext(data.req)
+        if (topContext) {
+          const rootSpan = topContext.span
+          store[IAST_CONTEXT_KEY] = { ...store[IAST_CONTEXT_KEY], rootSpan, req: data.req }
+        }
       }
     }
   }
@@ -34,6 +40,9 @@ function onIncomingHttpRequestEnd (data) {
     const iastContext = store && store[IAST_CONTEXT_KEY]
     if (iastContext && iastContext.rootSpan) {
       sendVulnerabilities(iastContext, iastContext.rootSpan)
+    }
+    if (iastContext && iastContext.analyzeRequestQuota) {
+      iastContext.analyzeRequestQuota.release()
     }
   }
 }

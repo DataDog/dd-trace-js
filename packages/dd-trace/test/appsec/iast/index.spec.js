@@ -1,11 +1,13 @@
 const proxyquire = require('proxyquire')
 const { incomingHttpRequestEnd } = require('../../../src/appsec/gateway/channels')
+const { Quota } = require('../../../src/appsec/iast/overhead-controller')
 
 describe('IAST Index', () => {
   let web
   let vulnerabilityReporter
   let IAST
   let datadogCore
+  let overheadController
   beforeEach(() => {
     web = {
       getContext: sinon.stub()
@@ -18,10 +20,17 @@ describe('IAST Index', () => {
         getStore: sinon.stub()
       }
     }
+    overheadController = {
+      hasQuotaLongRunning: sinon.stub(),
+      LONG_RUNNING_OPERATIONS: {
+        ANALYZE_REQUEST: {}
+      }
+    }
     IAST = proxyquire('../../../src/appsec/iast', {
       '../../plugins/util/web': web,
       './vulnerability-reporter': vulnerabilityReporter,
-      '../../../../datadog-core': datadogCore
+      '../../../../datadog-core': datadogCore,
+      './overhead-controller': overheadController
     })
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
   })
@@ -59,6 +68,7 @@ describe('IAST Index', () => {
     it('should not fail with unexpected context', () => {
       datadogCore.storage.getStore.returns({})
       web.getContext.returns(null)
+      overheadController.hasQuotaLongRunning.returns(new Quota(true, () => {}))
       IAST.onIncomingHttpRequestStart({ req: {} })
       expect(web.getContext).to.be.calledOnce
     })
@@ -66,6 +76,7 @@ describe('IAST Index', () => {
     it('should not fail with unexpected store', () => {
       web.getContext.returns({})
       datadogCore.storage.getStore.returns(null)
+      overheadController.hasQuotaLongRunning.returns(new Quota(true, () => {}))
       IAST.onIncomingHttpRequestStart({ req: {} })
       expect(datadogCore.storage.getStore).to.be.calledOnce
     })
@@ -76,10 +87,12 @@ describe('IAST Index', () => {
       const data = { req: {} }
       datadogCore.storage.getStore.returns(store)
       web.getContext.returns(topContext)
+      overheadController.hasQuotaLongRunning.returns(new Quota(true, () => {}))
       IAST.onIncomingHttpRequestStart(data)
       expect(store[IAST.IAST_CONTEXT_KEY]).not.null
       expect(store[IAST.IAST_CONTEXT_KEY].req).equals(data.req)
       expect(store[IAST.IAST_CONTEXT_KEY].rootSpan).equals(topContext.span)
+      expect(store[IAST.IAST_CONTEXT_KEY].analyzeRequestQuota).not.undefined
     })
   })
 
@@ -116,6 +129,17 @@ describe('IAST Index', () => {
       datadogCore.storage.getStore.returns(store)
       IAST.onIncomingHttpRequestEnd({ req: {} })
       expect(vulnerabilityReporter.sendVulnerabilities).to.be.calledOnceWith(iastContext, span)
+    })
+
+    it('should release quota for analyze request with iast context', () => {
+      const _quotaRelease = sinon.stub()
+      const span = { key: 'val' }
+      const iastContext = { rootSpan: span, analyzeRequestQuota: new Quota(true, _quotaRelease) }
+      const store = { span }
+      store[IAST.IAST_CONTEXT_KEY] = iastContext
+      datadogCore.storage.getStore.returns(store)
+      IAST.onIncomingHttpRequestEnd({ req: {} })
+      expect(_quotaRelease).to.be.calledOnce
     })
   })
 })

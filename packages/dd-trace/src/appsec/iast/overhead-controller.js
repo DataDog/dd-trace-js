@@ -98,5 +98,6 @@ module.exports = {
   SINGLE_SHOT_OPERATIONS,
   initializeRequestContext,
   hasQuotaSingleShot,
-  hasQuotaLongRunning
+  hasQuotaLongRunning,
+  Quota
 }
