@@ -65,7 +65,8 @@ const SINGLE_SHOT_OPERATIONS = {
 }
 
 function hasQuotaSingleShot (operation, iastContext) {
-  if (!iastContext || !iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]) {
+  const oceContext = iastContext && iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]
+  if (!oceContext) {
     return false
   }
   return operation.hasQuota(iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY])
