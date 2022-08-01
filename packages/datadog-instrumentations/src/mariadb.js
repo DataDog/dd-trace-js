@@ -23,11 +23,14 @@ function wrapConnectionQuery(query) {
         const cmd = query.apply(this, arguments);
 
         cmd
-          .once("end", () => finishCh.publish())
-          .once("error", (e) => {
-            errorCh.publish(e);
-            finishCh.publish();
-          });
+          .once(
+            "end",
+            asyncResource.bind(() => finishCh.publish())
+          )
+          .once(
+            "error",
+            asyncResource.bind((e) => errorCh.publish(e))
+          );
 
         return cmd;
       } catch (e) {
