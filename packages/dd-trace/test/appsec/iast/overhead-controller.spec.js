@@ -29,9 +29,7 @@ describe('Overhead controller', () => {
       })
 
       it('should populate initial context with available tokens', () => {
-        const _iastContext = {}
-        overheadController.initializeRequestContext(_iastContext)
-        expect(_iastContext[oceContextKey])
+        expect(iastContext[oceContextKey])
           .to.have.nested.property(`tokens.${SINGLE_SHOT_OPERATION.name}`, SINGLE_SHOT_OPERATION.initialTokenBucketSize)
       })
 
