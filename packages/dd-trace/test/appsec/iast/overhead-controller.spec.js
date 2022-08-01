@@ -13,9 +13,10 @@ describe('Overhead controller', () => {
 
   describe('Single shot operation', () => {
     it('should not allow with no context', () => {
-      expect(overheadController.hasQuotaSingleShot(overheadController.SINGLE_SHOT_OPERATIONS[0])).to.be.false
-      expect(overheadController.hasQuotaSingleShot(overheadController.SINGLE_SHOT_OPERATIONS[0], null)).to.be.false
-      expect(overheadController.hasQuotaSingleShot(overheadController.SINGLE_SHOT_OPERATIONS[0], {})).to.be.false
+      const singleShotOperation = overheadController.SINGLE_SHOT_OPERATIONS.REPORT_VULNERABILITY
+      expect(overheadController.hasQuotaSingleShot(singleShotOperation)).to.be.false
+      expect(overheadController.hasQuotaSingleShot(singleShotOperation, null)).to.be.false
+      expect(overheadController.hasQuotaSingleShot(singleShotOperation, {})).to.be.false
     })
 
     describe('Report vulnerability', () => {
