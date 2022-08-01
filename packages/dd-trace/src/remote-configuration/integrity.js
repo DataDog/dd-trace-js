@@ -19,7 +19,9 @@ function localAtob (str) {
 
 function toDER (hex) {
   return Buffer.concat([
-    Buffer.from('302a300506032b6570032100', 'hex'), // Static value containing OID for algorithm
+    // based on https://keygen.sh/blog/how-to-use-hexadecimal-ed25519-keys-in-node/
+    // this magic number contains the OID for ed25519
+    Buffer.from('302a300506032b6570032100', 'hex'),
     Buffer.from(hex, 'hex')
   ])
 }
