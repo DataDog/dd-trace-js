@@ -69,7 +69,7 @@ function hasQuotaSingleShot (operation, iastContext) {
   if (!oceContext) {
     return false
   }
-  return operation.hasQuota(iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY])
+  return operation.hasQuota(oceContext)
 }
 
 function hasQuotaLongRunning (operation) {
