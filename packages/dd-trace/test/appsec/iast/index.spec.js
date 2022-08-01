@@ -1,6 +1,6 @@
 const proxyquire = require('proxyquire')
 const { incomingHttpRequestEnd } = require('../../../src/appsec/gateway/channels')
-const { Quota, OVERHEAD_CONTROLLER_CONTEXT_KEY } = require('../../../src/appsec/iast/overhead-controller')
+const { Quota } = require('../../../src/appsec/iast/overhead-controller')
 
 describe('IAST Index', () => {
   let web
