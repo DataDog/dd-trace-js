@@ -28,7 +28,7 @@ function onIncomingHttpRequestStart (data) {
         const topContext = web.getContext(data.req)
         if (topContext) {
           const rootSpan = topContext.span
-          store[IAST_CONTEXT_KEY] = { ...store[IAST_CONTEXT_KEY], rootSpan, req: data.req }
+          Object.assign(store[IAST_CONTEXT_KEY], { rootSpan, req: data.req })
         }
       }
     }
