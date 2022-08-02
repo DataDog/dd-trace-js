@@ -32,6 +32,7 @@ function checkIntegrity (rcTargetsKey, rcTargetsKeyId, clientGetConfigsResponse)
 
   const targetFiles = clientGetConfigsResponse.target_files
   if (!targetFiles) throw new Error('no field \'target_files\' in clientGetConfigsResponse object')
+  if (targetFiles.length === 0) return false
 
   const { signed, signatures } = JSON.parse(localAtob(targets))
   if (!signed) throw new Error('no field \'signed\' in targets object')

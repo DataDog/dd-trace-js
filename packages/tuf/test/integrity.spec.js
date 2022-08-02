@@ -1,6 +1,6 @@
 'use strict'
-
-const { checkIntegrity } = require('../../src/remote-configuration/integrity')
+const { expect } = require('chai')
+const { checkIntegrity } = require('../src/integrity')
 const validOneFile = require('./samples/validOneFile.json')
 const tufTargetsMissingTargetFile = require('./samples/tufTargetsMissingTargetFile.json')
 const tufTargetsInvalidSignature = require('./samples/tufTargetsInvalidSignature.json')
