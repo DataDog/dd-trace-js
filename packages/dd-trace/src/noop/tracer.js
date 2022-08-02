@@ -1,13 +1,10 @@
 'use strict'
 
-const Tracer = require('opentracing').Tracer
 const Scope = require('../noop/scope')
 const Span = require('./span')
 
-class NoopTracer extends Tracer {
+class NoopTracer {
   constructor (config) {
-    super(config)
-
     this._scope = new Scope()
     this._span = new Span(this)
   }
@@ -31,8 +28,14 @@ class NoopTracer extends Tracer {
   setUrl () {
   }
 
-  _startSpan (name, options) {
+  startSpan (name, options) {
     return this._span
+  }
+
+  inject (spanContext, format, carrier) {}
+
+  extract (format, carrier) {
+    return this._span.context()
   }
 
   setUser () {
