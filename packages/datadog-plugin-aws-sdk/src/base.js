@@ -1,6 +1,5 @@
 'use strict'
 
-const Tags = require('opentracing').Tags
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
@@ -33,7 +32,7 @@ class BaseAwsSdkPlugin extends Plugin {
       const serviceName = this.getServiceName(serviceIdentifier)
       const childOf = this.tracer.scope().active()
       const tags = {
-        [Tags.SPAN_KIND]: 'client',
+        'span.kind': 'client',
         'service.name': serviceName,
         'aws.operation': operation,
         'aws.region': awsRegion,

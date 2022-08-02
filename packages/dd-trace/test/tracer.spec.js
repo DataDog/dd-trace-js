@@ -1,6 +1,6 @@
 'use strict'
 
-const Span = require('opentracing').Span
+const Span = require('../src/opentracing/span')
 const { storage } = require('../../datadog-core')
 const Config = require('../src/config')
 const tags = require('../../../ext/tags')

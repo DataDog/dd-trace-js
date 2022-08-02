@@ -2,7 +2,7 @@
 
 const uniq = require('lodash.uniq')
 const analyticsSampler = require('../../analytics_sampler')
-const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
+const FORMAT_HTTP_HEADERS = 'http_headers'
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
