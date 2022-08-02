@@ -59,7 +59,7 @@ function request (data, options, keepAlive, callback) {
 
   const makeRequest = onError => {
     // Limit to 1 request by socket, otherwise drop payload.
-    if (activeRequests >= maxTotalSockets) return
+    if (activeRequests >= maxTotalSockets) return callback(null)
 
     activeRequests++
 
