@@ -2,10 +2,8 @@
 
 // TODO (new internal tracer): use DC events for lifecycle metrics and test them
 
-const opentracing = require('opentracing')
 const now = require('performance-now')
 const semver = require('semver')
-const Span = opentracing.Span
 const SpanContext = require('./span_context')
 const id = require('../id')
 const tagger = require('../tagger')
@@ -21,10 +19,8 @@ const {
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
-class DatadogSpan extends Span {
+class DatadogSpan {
   constructor (tracer, processor, prioritySampler, fields, debug) {
-    super()
-
     const operationName = fields.operationName
     const parent = fields.parent || null
     const tags = Object.assign({}, fields.tags)
@@ -70,6 +66,73 @@ class DatadogSpan extends Span {
     return `Span${json}`
   }
 
+  context () {
+    return this._spanContext
+  }
+
+  tracer () {
+    return this._parentTracer
+  }
+
+  setOperationName (name) {
+    this._spanContext._name = name
+    return this
+  }
+
+  setBaggageItem (key, value) {
+    this._spanContext._baggageItems[key] = value
+    return this
+  }
+
+  getBaggageItem (key) {
+    return this._spanContext._baggageItems[key]
+  }
+
+  setTag (key, value) {
+    this._addTags({ [key]: value })
+    return this
+  }
+
+  addTags (keyValueMap) {
+    this._addTags(keyValueMap)
+    return this
+  }
+
+  log () {
+    return this
+  }
+
+  logEvent () {}
+
+  finish (finishTime) {
+    if (this._duration !== undefined) {
+      return
+    }
+
+    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true') {
+      if (!this._spanContext._tags['service.name']) {
+        log.error(`Finishing invalid span: ${this}`)
+      }
+    }
+
+    if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
+      metrics.decrement('runtime.node.spans.unfinished')
+      metrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
+      metrics.increment('runtime.node.spans.finished')
+      metrics.increment('runtime.node.spans.finished.by.name', `span_name:${this._name}`)
+
+      unfinishedRegistry.unregister(this)
+      finishedRegistry.register(this, this._name)
+    }
+
+    finishTime = parseFloat(finishTime) || this._getTime()
+
+    this._duration = finishTime - this._startTime
+    this._spanContext._trace.finished.push(this)
+    this._spanContext._isFinished = true
+    this._processor.process(this)
+  }
+
   _createContext (parent) {
     let spanContext
 
@@ -103,59 +166,10 @@ class DatadogSpan extends Span {
     return startTime + now() - ticks
   }
 
-  _context () {
-    return this._spanContext
-  }
-
-  _tracer () {
-    return this._parentTracer
-  }
-
-  _setOperationName (name) {
-    this._spanContext._name = name
-  }
-
-  _setBaggageItem (key, value) {
-    this._spanContext._baggageItems[key] = value
-  }
-
-  _getBaggageItem (key) {
-    return this._spanContext._baggageItems[key]
-  }
-
   _addTags (keyValuePairs) {
     tagger.add(this._spanContext._tags, keyValuePairs)
 
     this._prioritySampler.sample(this, false)
-  }
-
-  _finish (finishTime) {
-    if (this._duration !== undefined) {
-      return
-    }
-
-    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true') {
-      if (!this._spanContext._tags['service.name']) {
-        log.error(`Finishing invalid span: ${this}`)
-      }
-    }
-
-    if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
-      metrics.decrement('runtime.node.spans.unfinished')
-      metrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
-      metrics.increment('runtime.node.spans.finished')
-      metrics.increment('runtime.node.spans.finished.by.name', `span_name:${this._name}`)
-
-      unfinishedRegistry.unregister(this)
-      finishedRegistry.register(this, this._name)
-    }
-
-    finishTime = parseFloat(finishTime) || this._getTime()
-
-    this._duration = finishTime - this._startTime
-    this._spanContext._trace.finished.push(this)
-    this._spanContext._isFinished = true
-    this._processor.process(this)
   }
 }
 
