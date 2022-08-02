@@ -31,8 +31,8 @@ function request (data, options, keepAlive, callback) {
   dataArray.forEach(buffer => firstRequest.write(buffer))
 
   // The first request will be retried
-  const firstRequestErrorHandler = (e) => {
-    log.debug('Retrying request to the intake: ' + e.stack)
+  const firstRequestErrorHandler = () => {
+    log.debug('Retrying request to the intake')
     const retriedReq = retriableRequest(options, client, callback)
     dataArray.forEach(buffer => retriedReq.write(buffer))
     // The retried request will fail normally
