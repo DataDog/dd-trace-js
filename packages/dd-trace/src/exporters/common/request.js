@@ -9,7 +9,8 @@ const docker = require('./docker')
 const { storage } = require('../../../../datadog-core')
 
 const keepAlive = true
-const maxTotalSockets = 8
+const maxTotalSockets = 1
+const maxActiveRequests = 8
 const httpAgent = new http.Agent({ keepAlive, maxTotalSockets })
 const httpsAgent = new https.Agent({ keepAlive, maxTotalSockets })
 const containerId = docker.id()
@@ -90,7 +91,7 @@ function byteLength (data) {
 
 Object.defineProperty(request, 'writable', {
   get () {
-    return activeRequests < maxTotalSockets
+    return activeRequests < maxActiveRequests
   }
 })
 
