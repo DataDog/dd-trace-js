@@ -77,7 +77,6 @@
     "module-details-from-path": "^1.0.3",
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.2",
-    "performance-now": "^2.1.0",
     "retry": "^0.10.1",
     "semver": "^5.5.0"
   },
