@@ -263,6 +263,13 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       version: this.version,
       'runtime-id': uuid()
     })
+
+    const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
+      false
+    )
+
+    this.isGitUploadEnabled = isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
   }
 }
 
