@@ -1,7 +1,7 @@
 'use strict'
 
 const crypto = require('crypto')
-const { canonicalize } = require('json-canonicalize')
+const { serialize } = require('./cjson')
 
 function findSig (signatures, rcTargetsKeyId) {
   for (const entry of signatures) {
@@ -39,7 +39,7 @@ function checkIntegrity (rcTargetsKey, rcTargetsKeyId, clientGetConfigsResponse)
   if (!signatures) throw new Error('no field \'signatures\' in targets object')
 
   const sig = findSig(signatures, rcTargetsKeyId)
-  const rawSigned = Buffer.from(canonicalize(signed))
+  const rawSigned = Buffer.from(serialize(signed))
 
   const key = crypto.createPublicKey({
     format: 'der',
