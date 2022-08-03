@@ -170,6 +170,25 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
+  couchbase-v2:
+    runs-on: ubuntu-latest
+    services:
+      couchbase:
+        image: rishabhdev/couchbase-server-sandbox:latest
+        ports:
+          - 8091-8095:8091-8095
+          - 11210:11210
+    env:
+      PLUGINS: couchbase
+      SERVICES: couchbase
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: codecov/codecov-action@v2
+
   couchbase:
     runs-on: ubuntu-latest
     services:
