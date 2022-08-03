@@ -58,8 +58,7 @@ function request (data, options, keepAlive, callback) {
   }
 
   const makeRequest = onError => {
-    // Limit to 1 request by socket, otherwise drop payload.
-    if (activeRequests >= maxTotalSockets) return callback(null)
+    if (!request.writable) return callback(null)
 
     activeRequests++
 
@@ -88,5 +87,11 @@ function request (data, options, keepAlive, callback) {
 function byteLength (data) {
   return data.length > 0 ? data.reduce((prev, next) => prev + next.length, 0) : 0
 }
+
+Object.defineProperty(request, 'writable', {
+  get () {
+    return activeRequests < maxTotalSockets
+  }
+})
 
 module.exports = request

@@ -1,4 +1,6 @@
 'use strict'
+
+const request = require('./request')
 const log = require('../../log')
 
 class Writer {
@@ -9,7 +11,10 @@ class Writer {
   flush (done = () => {}) {
     const count = this._encoder.count()
 
-    if (count > 0) {
+    if (!request.writable) {
+      this._encoder.reset()
+      done()
+    } else if (count > 0) {
       const payload = this._encoder.makePayload()
 
       this._sendPayload(payload, count, done)
@@ -19,6 +24,8 @@ class Writer {
   }
 
   append (spans) {
+    if (!request.writable) return
+
     log.debug(() => `Encoding trace: ${JSON.stringify(spans)}`)
 
     this._encode(spans)
