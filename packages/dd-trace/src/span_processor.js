@@ -22,16 +22,6 @@ class SpanProcessor {
     const { flushMinSpans } = this._config
     const { started, finished } = trace
 
-    if (this._killAll) {
-      console.log('killall set, killing spans')
-      started.map(startedSpan => {
-        console.log('started is', startedSpan._spanContext._name, startedSpan.context().toSpanId())
-        if (!startedSpan._finished) {
-          console.log('killing unfinished span ID', startedSpan._spanContext._name, startedSpan.context().toSpanId())
-          startedSpan.finish(startedSpan._getTime(), true)
-        }
-      })
-    }
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this._prioritySampler.sample(spanContext)
 
@@ -50,6 +40,17 @@ class SpanProcessor {
       this._erase(trace, active)
     } else {
       console.log('NOT FLUSHING BECAUSE STARTED AND FINISHED NOT EQUAL')
+    }
+
+    if (this._killAll) {
+      console.log('killall set, killing spans')
+      started.map(startedSpan => {
+        console.log('started is', startedSpan._spanContext._name, startedSpan.context().toSpanId())
+        if (!startedSpan._finished) {
+          console.log('killing unfinished span ID', startedSpan._spanContext._name, startedSpan.context().toSpanId())
+          startedSpan.finish()
+        }
+      })
     }
   }
 

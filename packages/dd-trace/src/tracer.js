@@ -42,16 +42,14 @@ class DatadogTracer extends Tracer {
 
       // const result = this.scope().activate(span, () => fn(span))
       const result = this.scope().activate(span, () => {
+        process.on('SIGUSR1', () => {
+          console.log("Caught interrupt signal");
+          this.crashFlush()
+        });
+
         if (process.env.DD_TRACE_MAX_DURATION) {
           setTimeout(() => {
-            console.log('SETTING KILLALL IN MAIN TRACER')
-            const active = this.currentSpan()
-            const err = new Error('Datadog detected an impending timeout')
-            addError(active, err)
-            active.setTag('error', 1)
-            this._processor.killAll()
-            console.log('active scope tags', active._spanContext._tags)
-            active.finish()
+            this.crashFlush()
           }, process.env.DD_TRACE_MAX_DURATION)
         }
         return fn(span)
@@ -76,6 +74,16 @@ class DatadogTracer extends Tracer {
     }
   }
 
+  crashFlush() {
+    console.log('SETTING KILLALL IN MAIN TRACER')
+    const active = this.currentSpan()
+    const err = new Error('Datadog detected an impending timeout')
+    addError(active, err)
+    active.setTag('error', 1)
+    this._processor.killAll()
+    console.log('active scope tags', active._spanContext._tags)
+    active.finish()
+  }
   wrap (name, options, fn) {
     const tracer = this
 
