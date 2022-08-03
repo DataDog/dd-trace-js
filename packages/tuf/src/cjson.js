@@ -1,4 +1,10 @@
 'use strict'
+/**
+ * Implementation of
+ * https://wiki.laptop.org/go/Canonical_JSON
+ * https://theupdateframework.github.io/specification/v1.0.30/index.html#metaformat
+ * that is needed for TUF serialization
+ */
 const { inspect } = require('util')
 
 function serialize (obj) {
