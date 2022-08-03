@@ -1,6 +1,6 @@
 'use strict'
 
-const Span = require('opentracing').Span
+const Span = require('../src/noop/span')
 
 describe('NoopTracer', () => {
   let NoopTracer
