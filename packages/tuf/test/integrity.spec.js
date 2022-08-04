@@ -4,7 +4,7 @@ const { checkIntegrity } = require('../src/integrity')
 const validOneFile = require('./samples/validOneFile.json')
 const tufTargetsMissingTargetFile = require('./samples/tufTargetsMissingTargetFile.json')
 const tufTargetsInvalidSignature = require('./samples/tufTargetsInvalidSignature.json')
-const tufTargetsSignedWithInvalidKey = require('./samples/tufTargetsSignedWithInvalidKey.json')
+const tufTargetsSignedWithInvalidKey = require('./samples/targetsSignedWithInvalidKey.json')
 const tufTargetsInvalidTargetFileHash = require('./samples/tufTargetsInvalidTargetFileHash.json')
 const tufTargetsInvalidTargetFileLength = require('./samples/tufTargetsInvalidTargetFileLength.json')
 
