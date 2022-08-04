@@ -1,7 +1,6 @@
 'use strict'
 
 const crypto = require('crypto')
-// const { serialize } = require('./cjson')
 const { extractSigned } = require('./extraction')
 
 function findSig (signatures, rcTargetsKeyId) {
