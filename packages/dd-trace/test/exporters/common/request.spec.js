@@ -71,8 +71,8 @@ describe('request', function () {
     })
   })
 
-  it('should timeout after 15 seconds by default', function (done) {
-    this.timeout(16000)
+  it('should timeout after 2 seconds by default', function (done) {
+    this.timeout(2001)
     nock('http://localhost:80')
       .put('/path')
       .times(2)
@@ -84,7 +84,7 @@ describe('request', function () {
       method: 'PUT'
     }, true, err => {
       expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('Network error trying to reach the intake: socket hang up')
+      expect(err.message).to.equal('socket hang up')
       done()
     })
   })
@@ -93,16 +93,16 @@ describe('request', function () {
     nock('http://localhost:80')
       .put('/path')
       .times(2)
-      .delay(2001)
+      .delay(1001)
       .reply(200)
 
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
-      timeout: 2000
+      timeout: 1000
     }, true, err => {
       expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('Network error trying to reach the intake: socket hang up')
+      expect(err.message).to.equal('socket hang up')
       done()
     })
   })
@@ -132,33 +132,30 @@ describe('request', function () {
       .put('/path')
       .reply(200, 'OK')
 
-    const req = request(Buffer.from(''), {
+    request(Buffer.from(''), {
       path: '/path',
       method: 'PUT'
     }, true, (err, res) => {
-      expect(log.debug).to.have.been.calledOnceWith('Retrying request to the intake')
       expect(res).to.equal('OK')
       done()
     })
-    req.reusedSocket = true
   })
 
   it('should not retry more than once', (done) => {
+    const error = new Error('Error ECONNRESET')
+
     nock('http://localhost:80')
       .put('/path')
-      .replyWithError({ code: 'ECONNRESET', message: 'Error ECONNRESET' })
+      .replyWithError(error)
       .put('/path')
-      .replyWithError({ code: 'ECONNRESET', message: 'Error ECONNRESET' })
+      .replyWithError(error)
 
-    const req = request(Buffer.from(''), {
+    request(Buffer.from(''), {
       path: '/path',
       method: 'PUT'
     }, true, (err, res) => {
-      expect(log.debug).to.have.been.calledOnceWith('Retrying request to the intake')
-      expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('Network error trying to reach the intake: Error ECONNRESET')
+      expect(err).to.equal(error)
       done()
     })
-    req.reusedSocket = true
   })
 })

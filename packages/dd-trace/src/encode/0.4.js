@@ -57,6 +57,10 @@ class AgentEncoder {
     return buffer
   }
 
+  reset () {
+    this._reset()
+  }
+
   _encode (bytes, trace) {
     this._encodeArrayPrefix(bytes, trace)
 
