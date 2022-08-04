@@ -12,7 +12,7 @@ const tufTargetsInvalidTargetFileLength = require('./samples/tufTargetsInvalidTa
 const TEST_KEY_ID = 'ed7672c9a24abda78872ee32ee71c7cb1d5235e8db4ecbf1ca28b9c50eb75d9e'
 const TEST_PUBLIC_KEY = '7d3102e39abe71044d207550bda239c71380d013ec5a115f79f51622630054e6'
 
-// This also tests the extraction under the hookd
+// This also tests the extraction under the hood
 describe('TUF', () => {
   describe('Remote configuration Index', () => {
     it('should accept a valid payload', () => {
