@@ -154,4 +154,23 @@ describe('git_metadata', () => {
       done()
     })
   })
+
+  it('should not crash if packfiles can not be accessed', (done) => {
+    const scope = nock('https://api.test.com')
+      .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({ data: [] }))
+      .post('/api/v2/git/repository/packfile')
+      .reply(204)
+
+    generatePackFilesForCommitsStub.returns([
+      'not-there',
+      'not there either'
+    ])
+
+    gitMetadata.sendGitMetadata('test.com', (err) => {
+      expect(err.message).to.contain('Error reading packfile: not-there')
+      expect(scope.isDone()).to.be.false
+      done()
+    })
+  })
 })

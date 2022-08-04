@@ -107,7 +107,7 @@ function getCommitsToExclude ({ url, repositoryUrl }, callback) {
 function uploadPackFile ({ url, packFileToUpload, repositoryUrl, headCommit }, callback) {
   const form = new FormData()
 
-  form.append('pushedSha', JSON.stringify({
+  const pushedSha = JSON.stringify({
     data: {
       id: headCommit,
       type: 'commit'
@@ -115,17 +115,22 @@ function uploadPackFile ({ url, packFileToUpload, repositoryUrl, headCommit }, c
     meta: {
       repository_url: repositoryUrl
     }
-  }), { contentType: 'application/json' })
-
-  // The original filename includes a random prefix, so we remove it here
-  const [, filename] = path.basename(packFileToUpload).split('-')
-
-  const packFileContent = fs.readFileSync(packFileToUpload)
-
-  form.append('packfile', packFileContent, {
-    filename,
-    contentType: 'application/octet-stream'
   })
+
+  form.append('pushedSha', pushedSha, { contentType: 'application/json' })
+
+  try {
+    const packFileContent = fs.readFileSync(packFileToUpload)
+    // The original filename includes a random prefix, so we remove it here
+    const [, filename] = path.basename(packFileToUpload).split('-')
+    form.append('packfile', packFileContent, {
+      filename,
+      contentType: 'application/octet-stream'
+    })
+  } catch (e) {
+    callback(new Error(`Error reading packfile: ${packFileToUpload}`))
+    return
+  }
 
   const commonOptions = getCommonRequestOptions(url)
 
