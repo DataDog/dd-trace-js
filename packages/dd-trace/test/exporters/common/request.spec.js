@@ -2,7 +2,7 @@
 
 const nock = require('nock')
 
-describe.only('request', function () {
+describe('request', function () {
   let request
   let log
   let docker
