@@ -59,8 +59,8 @@
   },
   "dependencies": {
     "@datadog/native-appsec": "^1.2.1",
-    "@datadog/native-metrics": "^1.4.1",
-    "@datadog/pprof": "^1.0.0",
+    "@datadog/native-metrics": "^1.4.2",
+    "@datadog/pprof": "^1.0.2",
     "@datadog/sketches-js": "^1.0.5",
     "@types/node": ">=12",
     "crypto-randomuuid": "^1.0.0",

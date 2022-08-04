@@ -199,18 +199,18 @@
     minimist "^1.2.6"
     tar "^6.1.11"
 
-"@datadog/native-metrics@^1.4.1":
-  version "1.4.1"
-  resolved "https://registry.yarnpkg.com/@datadog/native-metrics/-/native-metrics-1.4.1.tgz#fd7cda7de4384632c29eae1210a7cfb0a6a61410"
-  integrity sha512-YodThqbAHayz+8kuHrtqLF+Qa7BBfawNsW7jla4X6BvKHa310nYzhOfQNWmr7aTOajk7eeF1OqCcxT87E5rIzw==
+"@datadog/native-metrics@^1.4.2":
+  version "1.4.2"
+  resolved "https://registry.yarnpkg.com/@datadog/native-metrics/-/native-metrics-1.4.2.tgz#ca0c3cedcf56acc468a68c0e44e49d6c90430980"
+  integrity sha512-ExSIZCEo3pXTNQRuyQllIa+0pc2bVDOntlx0JMnu7+GjeEjJxGyVLw8tTx5EQUmHSLt0Jm7aeMW63C8DJnO27A==
   dependencies:
     nan "^2.15.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/pprof@^1.0.0":
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-1.0.0.tgz#a91bf1c5b3e53e9d49e26bdb1eeacda0b10adb2a"
-  integrity sha512-m4i45xvMFxmubsGi7NNYZ4VdwZ4bd9S6JXc6GZYvUMmJWkg4YnFkd6kre/El1nHvI1jXozxNuBOPEJHqNxxWYA==
+"@datadog/pprof@^1.0.2":
+  version "1.0.2"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-1.0.2.tgz#835b2e8596738348a5ba81e5e399cdf3bc85bd35"
+  integrity sha512-AMTK55W3Aa2QX2X8mN9SQfDGw3HvwIK9Or8pXQFss+kjtH5pCkO9oqE5838MeXgRh9BR8HWrjAQE3Ji7FRCK2g==
   dependencies:
     delay "^5.0.0"
     findit2 "^2.2.3"
