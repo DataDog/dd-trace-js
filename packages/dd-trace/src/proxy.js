@@ -10,7 +10,7 @@ const log = require('./log')
 const { isFalse } = require('./util')
 const { setStartupLogInstrumenter } = require('./startup-log')
 const telemetry = require('./telemetry')
-const { sendGitMetadata } = require('./git_metadata')
+const { sendGitMetadata } = require('./ci-visibility/exporters/git/git_metadata')
 
 const noop = new NoopTracer()
 

@@ -3,6 +3,8 @@ const nock = require('nock')
 const os = require('os')
 const fs = require('fs')
 
+const proxyquire = require('proxyquire').noPreserveCache()
+
 describe('git_metadata', () => {
   let gitMetadata
 
