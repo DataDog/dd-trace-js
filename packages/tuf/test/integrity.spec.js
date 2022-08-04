@@ -1,4 +1,5 @@
 'use strict'
+
 const { expect } = require('chai')
 const { checkIntegrity } = require('../src/integrity')
 const validOneFile = require('./samples/validOneFile.json')

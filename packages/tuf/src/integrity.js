@@ -1,7 +1,8 @@
 'use strict'
 
 const crypto = require('crypto')
-const { serialize } = require('./cjson')
+// const { serialize } = require('./cjson')
+const { extractSigned } = require('./extraction')
 
 function findSig (signatures, rcTargetsKeyId) {
   for (const entry of signatures) {
@@ -34,12 +35,13 @@ function checkIntegrity (rcTargetsKey, rcTargetsKeyId, clientGetConfigsResponse)
   if (!targetFiles) throw new Error('no field \'target_files\' in clientGetConfigsResponse object')
   if (targetFiles.length === 0) return false
 
-  const { signed, signatures } = JSON.parse(localAtob(targets))
+  const rawTargets = localAtob(targets)
+  const { signed, signatures } = JSON.parse(rawTargets)
   if (!signed) throw new Error('no field \'signed\' in targets object')
   if (!signatures) throw new Error('no field \'signatures\' in targets object')
 
   const sig = findSig(signatures, rcTargetsKeyId)
-  const rawSigned = Buffer.from(serialize(signed))
+  const rawSigned = Buffer.from(extractSigned(rawTargets))
 
   const key = crypto.createPublicKey({
     format: 'der',

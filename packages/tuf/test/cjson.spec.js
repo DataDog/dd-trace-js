@@ -1,4 +1,5 @@
 'use strict'
+
 const { expect } = require('chai')
 const { serialize } = require('../src/cjson')
 
