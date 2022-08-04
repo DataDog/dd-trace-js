@@ -3,7 +3,7 @@ const nock = require('nock')
 const os = require('os')
 const fs = require('fs')
 
-describe.only('git_metadata', () => {
+describe('git_metadata', () => {
   let gitMetadata
 
   const latestCommits = ['87ce64f636853fbebc05edfcefe9cccc28a7968b', 'cc424c261da5e261b76d982d5d361a023556e2aa']
@@ -34,8 +34,8 @@ describe.only('git_metadata', () => {
 
     generatePackFilesForCommitsStub = sinon.stub().returns([temporaryPackFile])
 
-    gitMetadata = proxyquire('../src/git_metadata', {
-      './plugins/util/git': {
+    gitMetadata = proxyquire('../../../../src/ci-visibility/exporters/git/git_metadata', {
+      '../../../plugins/util/git': {
         getLatestCommits: getLatestCommitsStub,
         getRepositoryUrl: getRepositoryUrlStub,
         generatePackFilesForCommits: generatePackFilesForCommitsStub,

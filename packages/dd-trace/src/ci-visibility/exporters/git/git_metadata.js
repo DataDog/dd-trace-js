@@ -4,15 +4,15 @@ const https = require('https')
 const path = require('path')
 
 // TODO: move this to a common place
-const FormData = require('./profiling/exporters/form-data')
+const FormData = require('../../../profiling/exporters/form-data')
 
-const log = require('./log')
+const log = require('../../../log')
 const {
   getLatestCommits,
   getRepositoryUrl,
   generatePackFilesForCommits,
   getCommitsToUpload
-} = require('./plugins/util/git')
+} = require('../../../plugins/util/git')
 
 const isValidSha = (sha) => /[0-9a-f]{40}/.test(sha)
 

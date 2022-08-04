@@ -181,6 +181,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
     )
 
+    const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
+      false
+    )
+
     const sampler = (options.experimental && options.experimental.sampler) || {}
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
@@ -256,6 +261,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP
     }
+    this.isGitUploadEnabled = isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
 
     tagger.add(this.tags, {
       service: this.service,
@@ -263,13 +269,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       version: this.version,
       'runtime-id': uuid()
     })
-
-    const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
-      process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
-      false
-    )
-
-    this.isGitUploadEnabled = isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
   }
 }
 
