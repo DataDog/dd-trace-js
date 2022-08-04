@@ -98,7 +98,7 @@ function wrapNext (req, next) {
     nextChannel.publish({ req })
     exitChannel.publish({ req })
 
-    next.apply(null, arguments)
+    next.apply(this, arguments)
   }
 }
 
