@@ -97,7 +97,7 @@ function createWrapRouterMethod (name) {
       nextChannel.publish({ req })
       exitChannel.publish({ req })
 
-      next.apply(null, arguments)
+      next.apply(this, arguments)
     }
   }
 

@@ -145,7 +145,7 @@ function wrapNext (req, next) {
   return function () {
     nextChannel.publish({ req })
 
-    return next.apply(null, arguments)
+    return next.apply(this, arguments)
   }
 }
 
