@@ -28,6 +28,13 @@ jobs:
       - run: |
           git tag v${{ fromJson(steps.pkg.outputs.json).version }}
           git push origin v${{ fromJson(steps.pkg.outputs.json).version }}
+      - name: Build injection image and push to github packages
+        run: |
+          node scripts/set-version-for-init-image.js ${{ fromJson(steps.pkg.outputs.json).version }}
+          npm pack dd-trace@${{ fromJson(steps.pkg.outputs.json).version }}
+          cp dd-trace-*.tgz k8s/auto-inst/dd-trace.tgz
+          docker build k8s/auto-inst --build-arg npm_pkg=./dd-trace.tgz -t ghcr.io/datadog/dd-trace-js/dd-trace-js-init:${{ fromJson(steps.pkg.outputs.json).version }}
+          docker push ghcr.io/datadog/dd-trace-js/dd-trace-js-init:${{ fromJson(steps.pkg.outputs.json).version }}
 
   docs:
     runs-on: ubuntu-latest
