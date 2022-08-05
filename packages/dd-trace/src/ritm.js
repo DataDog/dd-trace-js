@@ -3,6 +3,7 @@
 const path = require('path')
 const Module = require('module')
 const parse = require('module-details-from-path')
+const { moduleLoadStart } = require('./channel-itm')
 
 const origRequire = Module.prototype.require
 
@@ -77,6 +78,14 @@ function Hook (modules, options, onrequire) {
     // The module has already been loaded,
     // so the patching mark can be cleaned up.
     delete patching[filename]
+
+    if (moduleLoadStart.hasSubscribers) {
+      moduleLoadStart.publish({
+        filename,
+        module: exports,
+        request
+      })
+    }
 
     if (core) {
       hooks = moduleHooks[filename]
