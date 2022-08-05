@@ -62,16 +62,6 @@ function wrapDispatch (dispatch) {
   }
 }
 
-function wrapLifecycle (lifecycle) {
-  return function () {
-    const result = lifecycle.apply(this, arguments)
-
-    if (Array.isArray(result)) return result.map(wrapHandler)
-
-    return result
-  }
-}
-
 function wrapRebuild (rebuild) {
   return function (event) {
     const result = rebuild.apply(this, arguments)
@@ -166,20 +156,14 @@ addHook({ name: 'hapi', versions: ['>=17'] }, hapi => {
   return hapi
 })
 
-addHook({ name: 'hapi', versions: ['2 - 7.1', '8 - 16'] }, hapi => {
+addHook({ name: 'hapi', versions: ['16'] }, hapi => {
   shimmer.wrap(hapi.Server.prototype, 'start', wrapStart)
   shimmer.wrap(hapi.Server.prototype, 'ext', wrapExt)
 
   return hapi
 })
 
-addHook({ name: 'hapi', versions: ['^7.2'] }, hapi => {
-  shimmer.wrap(hapi, 'createServer', wrapServer)
-
-  return hapi
-})
-
-addHook({ name: 'hapi', versions: ['7.2 - 16'], file: 'lib/connection.js' }, Connection => {
+addHook({ name: 'hapi', versions: ['16'], file: 'lib/connection.js' }, Connection => {
   shimmer.wrap(Connection.prototype, '_dispatch', wrapDispatch)
 
   return Connection
@@ -191,20 +175,8 @@ addHook({ name: 'hapi', versions: ['>=17'], file: 'lib/core.js' }, Core => {
   return Core
 })
 
-addHook({ name: 'hapi', versions: ['2 - 7.1'], file: 'lib/server.js' }, Server => {
-  shimmer.wrap(Server.prototype, '_dispatch', wrapDispatch)
-
-  return Server
-})
-
-addHook({ name: 'hapi', versions: ['>=10.4'], file: 'lib/route.js' }, Route => {
+addHook({ name: 'hapi', versions: ['>=16'], file: 'lib/route.js' }, Route => {
   shimmer.wrap(Route.prototype, 'rebuild', wrapRebuild)
-
-  return Route
-})
-
-addHook({ name: 'hapi', versions: ['2 - 10.3'], file: 'lib/route.js' }, Route => {
-  shimmer.wrap(Route.prototype, 'lifecycle', wrapLifecycle)
 
   return Route
 })

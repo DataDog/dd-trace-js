@@ -131,7 +131,7 @@ function isEmitter (obj) {
   return typeof obj.emit === 'function' && typeof obj.once === 'function'
 }
 
-addHook({ name: 'grpc', versions: ['>=1.20.2'], file: 'src/server.js' }, server => {
+addHook({ name: 'grpc', versions: ['>=1.24.3'], file: 'src/server.js' }, server => {
   shimmer.wrap(server.Server.prototype, 'register', wrapRegister)
 
   return server

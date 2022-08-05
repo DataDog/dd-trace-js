@@ -99,7 +99,7 @@ node-upstream-base: &node-upstream-base
   parameters:
     node-version:
       type: string
-      default: "12"
+      default: "14"
   docker:
     - image: node:<< parameters.node-version >>
   working_directory: ~/dd-trace-js
@@ -219,7 +219,7 @@ workflows:
       - node-bench-sirun-startup: &matrix-exact-supported-node-versions
           matrix:
             parameters:
-              node-version: ["12", "14", "16"]
+              node-version: ["14", "16", "18"]
       - node-bench-sirun-spans: *matrix-exact-supported-node-versions
       - node-bench-sirun-async_hooks: *matrix-exact-supported-node-versions
       - node-bench-sirun-log: *matrix-exact-supported-node-versions
