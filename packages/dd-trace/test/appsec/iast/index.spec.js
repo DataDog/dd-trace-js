@@ -6,6 +6,7 @@ describe('IAST Index', () => {
   let vulnerabilityReporter
   let IAST
   let datadogCore
+  let analyzers
   beforeEach(() => {
     web = {
       getContext: sinon.stub()
@@ -18,10 +19,15 @@ describe('IAST Index', () => {
         getStore: sinon.stub()
       }
     }
+    analyzers = {
+      enableAllAnalyzers: sinon.stub(),
+      disableAllAnalyzers: sinon.stub()
+    }
     IAST = proxyquire('../../../src/appsec/iast', {
       '../../plugins/util/web': web,
       './vulnerability-reporter': vulnerabilityReporter,
-      '../../../../datadog-core': datadogCore
+      '../../../../datadog-core': datadogCore,
+      './analyzers': analyzers
     })
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
   })
@@ -36,6 +42,10 @@ describe('IAST Index', () => {
       IAST.enable()
       expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(IAST.onIncomingHttpRequestEnd)
     })
+    it('should enable all analyzers', () => {
+      IAST.enable()
+      expect(analyzers.enableAllAnalyzers).to.have.been.calledOnce
+    })
   })
 
   describe('disable', () => {
@@ -46,6 +56,10 @@ describe('IAST Index', () => {
       IAST.disable()
       expect(incomingHttpRequestEnd.unsubscribe)
         .to.have.been.calledOnceWithExactly(IAST.onIncomingHttpRequestEnd)
+    })
+    it('should disable all analyzers', () => {
+      IAST.disable()
+      expect(analyzers.disableAllAnalyzers).to.have.been.calledOnce
     })
   })
 

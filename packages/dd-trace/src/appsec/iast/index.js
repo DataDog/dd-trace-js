@@ -1,15 +1,18 @@
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../gateway/channels')
 const { sendVulnerabilities } = require('./vulnerability-reporter')
+const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
 const web = require('../../plugins/util/web')
 const IAST_CONTEXT_KEY = Symbol('_dd.iast.context')
 const { storage } = require('../../../../datadog-core')
 
 function enable () {
+  enableAllAnalyzers()
   incomingHttpRequestEnd.subscribe(onIncomingHttpRequestEnd)
   incomingHttpRequestStart.subscribe(onIncomingHttpRequestStart)
 }
 
 function disable () {
+  disableAllAnalyzers()
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(onIncomingHttpRequestEnd)
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(onIncomingHttpRequestStart)
 }
