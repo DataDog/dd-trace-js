@@ -6,6 +6,7 @@ const {
   AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const semver = require('semver')
 
 function findCallbackIndex (args, lowerbound = 2) {
   for (let i = args.length - 1; i >= lowerbound; i--) {
@@ -160,60 +161,63 @@ function wrapV3Query (query) {
 }
 
 // semver >=2 <3
-addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Bucket => {
-  const startCh = channel('apm:couchbase:query:start')
-  const finishCh = channel('apm:couchbase:query:finish')
-  const errorCh = channel('apm:couchbase:query:error')
+if (!semver.satisfies(process.version, '>=14.0.0')) {
+  // couchbase v2 won't build on LTS node versions greater than 12
+  addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Bucket => {
+    const startCh = channel('apm:couchbase:query:start')
+    const finishCh = channel('apm:couchbase:query:finish')
+    const errorCh = channel('apm:couchbase:query:error')
 
-  Bucket.prototype._maybeInvoke = wrapMaybeInvoke(Bucket.prototype._maybeInvoke)
-  Bucket.prototype.query = wrapQuery(Bucket.prototype.query)
+    Bucket.prototype._maybeInvoke = wrapMaybeInvoke(Bucket.prototype._maybeInvoke)
+    Bucket.prototype.query = wrapQuery(Bucket.prototype.query)
 
-  shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
-    if (!startCh.hasSubscribers) {
-      return _n1qlReq.apply(this, arguments)
-    }
-
-    if (!emitter || !emitter.once) return _n1qlReq.apply(this, arguments)
-
-    const n1qlQuery = getQueryResource(q)
-
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      startCh.publish({ resource: n1qlQuery, bucket: { name: this.name || this._name } })
-
-      emitter.once('rows', asyncResource.bind(() => {
-        finishCh.publish(undefined)
-      }))
-
-      emitter.once('error', asyncResource.bind((error) => {
-        errorCh.publish(error)
-        finishCh.publish(undefined)
-      }))
-
-      try {
+    shimmer.wrap(Bucket.prototype, '_n1qlReq', _n1qlReq => function (host, q, adhoc, emitter) {
+      if (!startCh.hasSubscribers) {
         return _n1qlReq.apply(this, arguments)
-      } catch (err) {
-        err.stack // trigger getting the stack at the original throwing point
-        errorCh.publish(err)
-
-        throw err
       }
+
+      if (!emitter || !emitter.once) return _n1qlReq.apply(this, arguments)
+
+      const n1qlQuery = getQueryResource(q)
+
+      const asyncResource = new AsyncResource('bound-anonymous-fn')
+      return asyncResource.runInAsyncScope(() => {
+        startCh.publish({ resource: n1qlQuery, bucket: { name: this.name || this._name } })
+
+        emitter.once('rows', asyncResource.bind(() => {
+          finishCh.publish(undefined)
+        }))
+
+        emitter.once('error', asyncResource.bind((error) => {
+          errorCh.publish(error)
+          finishCh.publish(undefined)
+        }))
+
+        try {
+          return _n1qlReq.apply(this, arguments)
+        } catch (err) {
+          err.stack // trigger getting the stack at the original throwing point
+          errorCh.publish(err)
+
+          throw err
+        }
+      })
     })
+
+    wrapAllNames(['upsert', 'insert', 'replace', 'append', 'prepend'], name => {
+      Bucket.prototype[name] = wrap(`apm:couchbase:${name}`, Bucket.prototype[name])
+    })
+
+    return Bucket
   })
 
-  wrapAllNames(['upsert', 'insert', 'replace', 'append', 'prepend'], name => {
-    Bucket.prototype[name] = wrap(`apm:couchbase:${name}`, Bucket.prototype[name])
+  addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Cluster => {
+    Cluster.prototype._maybeInvoke = wrapMaybeInvoke(Cluster.prototype._maybeInvoke)
+    Cluster.prototype.query = wrapQuery(Cluster.prototype.query)
+
+    return Cluster
   })
-
-  return Bucket
-})
-
-addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Cluster => {
-  Cluster.prototype._maybeInvoke = wrapMaybeInvoke(Cluster.prototype._maybeInvoke)
-  Cluster.prototype.query = wrapQuery(Cluster.prototype.query)
-
-  return Cluster
-})
+}
 
 // semver >=3 <3.2.0
 
