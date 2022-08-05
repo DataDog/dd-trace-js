@@ -798,7 +798,7 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
