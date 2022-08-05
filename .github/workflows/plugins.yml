@@ -672,7 +672,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: yarn install --ignore-engine
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
