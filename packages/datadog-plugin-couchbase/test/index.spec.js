@@ -5,6 +5,10 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 
+const { VERSION } = process.env
+const couchbasev2Versions = !VERSION || VERSION === 'v2' ? '<3.0.0' : '<0'
+const couchbasev3Versions = !VERSION || VERSION === 'v3' ? '>=3.0.0' : '<0'
+
 describe('Plugin', () => {
   let couchbase
 
@@ -17,7 +21,7 @@ describe('Plugin', () => {
       tracer = global.tracer = require('../../dd-trace')
     })
 
-    withVersions('couchbase', 'couchbase', '<3.0.0', version => {
+    withVersions('couchbase', 'couchbase', couchbasev2Versions, version => {
       let N1qlQuery
       describe('without configuration', () => {
         beforeEach(done => {
@@ -151,7 +155,7 @@ describe('Plugin', () => {
     const ignoreVersions = version =>
       semver.intersects(version, '^4.1.0')
 
-    withVersions('couchbase', 'couchbase', '>=3.0.0', version => {
+    withVersions('couchbase', 'couchbase', couchbasev3Versions, version => {
       let collection
 
       if (!ignoreVersions(version)) {

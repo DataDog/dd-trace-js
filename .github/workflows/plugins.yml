@@ -181,6 +181,7 @@ jobs:
     env:
       PLUGINS: couchbase
       SERVICES: couchbase
+      VERSION: v2
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
@@ -200,6 +201,7 @@ jobs:
     env:
       PLUGINS: couchbase
       SERVICES: couchbase
+      VERSION: v3
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
