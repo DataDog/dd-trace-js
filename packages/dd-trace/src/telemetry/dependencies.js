@@ -60,12 +60,8 @@ function cleanPath (path) {
   return path
 }
 
-function isCore (filename, request) {
-  return filename === request || filename === `node:${request}`
-}
-
 function isDependency (filename, request) {
-  return request.indexOf(`.${path.sep}`) !== 0 && request.indexOf(path.sep) !== 0 && !isCore(filename, request)
+  return request.indexOf(`.${path.sep}`) !== 0 && request.indexOf(path.sep) !== 0
 }
 
 module.exports = { start }
