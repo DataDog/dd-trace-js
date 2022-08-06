@@ -2,7 +2,6 @@
 
 const tracerVersion = require('../../../../package.json').version
 const proxyquire = require('proxyquire')
-const requirePackageJson = require('../../src/require-package-json')
 const http = require('http')
 const { once } = require('events')
 const { storage } = require('../../../datadog-core')
