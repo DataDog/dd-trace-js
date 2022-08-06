@@ -3,7 +3,7 @@
 const path = require('path')
 const Module = require('module')
 const parse = require('module-details-from-path')
-const { moduleLoadStart } = require('./channel-itm')
+const dc = require('diagnostics_channel')
 
 const origRequire = Module.prototype.require
 
@@ -15,7 +15,7 @@ let moduleHooks = Object.create(null)
 let cache = Object.create(null)
 let patching = Object.create(null)
 let patchedRequire = null
-
+const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 function Hook (modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)
   if (typeof modules === 'function') {
@@ -79,8 +79,8 @@ function Hook (modules, options, onrequire) {
     // so the patching mark can be cleaned up.
     delete patching[filename]
 
-    if (moduleLoadStart.hasSubscribers) {
-      moduleLoadStart.publish({
+    if (moduleLoadStartChannel.hasSubscribers) {
+      moduleLoadStartChannel.publish({
         filename,
         module: exports,
         request

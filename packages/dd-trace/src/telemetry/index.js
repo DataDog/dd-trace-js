@@ -1,10 +1,7 @@
 'use strict'
 
 const tracerVersion = require('../../../../package.json').version
-const pkg = require('../pkg')
 const containerId = require('../exporters/common/docker').id()
-const requirePackageJson = require('../require-package-json')
-const path = require('path')
 const os = require('os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
@@ -31,27 +28,6 @@ function getIntegrations () {
     sentIntegrations.add(pluginName)
   }
   return newIntegrations
-}
-
-function getDependencies () {
-  const deps = []
-  const { dependencies } = pkg
-  if (!dependencies) {
-    return deps
-  }
-  const rootDir = pkg.findRoot()
-  for (const [name, version] of Object.entries(dependencies)) {
-    const dep = { name }
-    try {
-      dep.version = requirePackageJson(
-        path.join(rootDir, 'node_modules', name.replace('/', path.sep))
-      ).version
-    } catch (e) {
-      dep.version = version
-    }
-    deps.push(dep)
-  }
-  return deps
 }
 
 function flatten (input, result = [], prefix = [], traversedObjects = null) {
