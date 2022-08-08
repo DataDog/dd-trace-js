@@ -150,7 +150,7 @@ describe('Plugin', () => {
           })
         })
       })
-    } else if (VERSION === 'v3') {
+    } else {
       const ignoreVersions = version =>
         semver.intersects(version, '^4.1.0')
 
