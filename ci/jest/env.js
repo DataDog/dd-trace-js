@@ -33,6 +33,4 @@ so dd-trace will not be initialized.`)
   })
 }
 
-tracer.use('fs', false)
-
 module.exports = tracer
