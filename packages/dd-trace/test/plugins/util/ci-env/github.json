@@ -14,7 +14,7 @@
     {
       "_dd.ci.env_vars.GITHUB_REPOSITORY": "ghactions-repo",
       "_dd.ci.env_vars.GITHUB_RUN_ID": "ghactions-pipeline-id",
-      "_dd.ci.env_vars.GITHUB_SERVER_URL": "https://github.com",
+      "_dd.ci.env_vars.GITHUB_SERVER_URL": "https://ghenterprise.com",
       "ci.job.url": "https://ghenterprise.com/ghactions-repo/commit/ghactions-commit/checks",
       "ci.pipeline.id": "ghactions-pipeline-id",
       "ci.pipeline.name": "ghactions-pipeline-name",
