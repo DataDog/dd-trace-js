@@ -152,7 +152,7 @@ describe('Plugin', () => {
       })
     } else {
       const ignoreVersions = version =>
-        semver.intersects(version, '3.2.0 - 3.2.1') ||
+        semver.intersects(version, '3.2.0 - 3.2.1') || // related to JSCBC-916
         semver.intersects(version, '^4.1.0') // multiple spdlog error
 
       withVersions('couchbase', 'couchbase', '>=3.0.0', version => {
