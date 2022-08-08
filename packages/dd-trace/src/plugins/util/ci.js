@@ -117,7 +117,7 @@ module.exports = {
         [GIT_COMMIT_SHA]: JENKINS_GIT_COMMIT,
         [GIT_REPOSITORY_URL]: JENKINS_GIT_REPOSITORY_URL || JENKINS_GIT_REPOSITORY_URL_1,
         [CI_WORKSPACE_PATH]: WORKSPACE,
-        [`${CI_ENV_VARS}.DD_CUSTOM_TRACE_ID`]: DD_CUSTOM_TRACE_ID
+        [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID })
       }
 
       const isTag = JENKINS_GIT_BRANCH && JENKINS_GIT_BRANCH.includes('tags')
@@ -180,9 +180,11 @@ module.exports = {
         [GIT_COMMIT_AUTHOR_NAME]: name,
         [GIT_COMMIT_AUTHOR_EMAIL]: email,
         [GIT_COMMIT_AUTHOR_DATE]: CI_COMMIT_TIMESTAMP,
-        [`${CI_ENV_VARS}.CI_PROJECT_URL`]: GITLAB_PROJECT_URL,
-        [`${CI_ENV_VARS}.CI_PIPELINE_ID`]: GITLAB_PIPELINE_ID,
-        [`${CI_ENV_VARS}.CI_JOB_ID`]: GITLAB_CI_JOB_ID
+        [CI_ENV_VARS]: JSON.stringify({
+          CI_PROJECT_URL: GITLAB_PROJECT_URL,
+          CI_PIPELINE_ID: GITLAB_PIPELINE_ID,
+          CI_JOB_ID: GITLAB_CI_JOB_ID
+        })
       }
     }
 
@@ -213,8 +215,10 @@ module.exports = {
         [CI_JOB_URL]: CIRCLE_BUILD_URL,
         [CI_WORKSPACE_PATH]: CIRCLE_WORKING_DIRECTORY,
         [CIRCLE_TAG ? GIT_TAG : GIT_BRANCH]: CIRCLE_TAG || CIRCLE_BRANCH,
-        [`${CI_ENV_VARS}.CIRCLE_WORKFLOW_ID`]: CIRCLE_WORKFLOW_ID,
-        [`${CI_ENV_VARS}.CIRCLE_BUILD_NUM`]: CIRCLE_BUILD_NUM
+        [CI_ENV_VARS]: JSON.stringify({
+          CIRCLE_WORKFLOW_ID,
+          CIRCLE_BUILD_NUM
+        })
       }
     }
 
@@ -255,10 +259,12 @@ module.exports = {
         [CI_JOB_URL]: jobUrl,
         [CI_WORKSPACE_PATH]: GITHUB_WORKSPACE,
         [refKey]: ref,
-        [`${CI_ENV_VARS}.GITHUB_SERVER_URL`]: GITHUB_SERVER_URL,
-        [`${CI_ENV_VARS}.GITHUB_REPOSITORY`]: GITHUB_REPOSITORY,
-        [`${CI_ENV_VARS}.GITHUB_RUN_ID`]: GITHUB_RUN_ID,
-        [`${CI_ENV_VARS}.GITHUB_RUN_ATTEMPT`]: GITHUB_RUN_ATTEMPT
+        [CI_ENV_VARS]: JSON.stringify({
+          GITHUB_SERVER_URL,
+          GITHUB_REPOSITORY,
+          GITHUB_RUN_ID,
+          GITHUB_RUN_ATTEMPT
+        })
       }
     }
 
@@ -459,8 +465,10 @@ module.exports = {
         [GIT_COMMIT_AUTHOR_NAME]: BUILDKITE_BUILD_AUTHOR,
         [GIT_COMMIT_AUTHOR_EMAIL]: BUILDKITE_BUILD_AUTHOR_EMAIL,
         [GIT_COMMIT_MESSAGE]: BUILDKITE_MESSAGE,
-        [`${CI_ENV_VARS}.BUILDKITE_BUILD_ID`]: BUILDKITE_BUILD_ID,
-        [`${CI_ENV_VARS}.BUILDKITE_JOB_ID`]: BUILDKITE_JOB_ID
+        [CI_ENV_VARS]: JSON.stringify({
+          BUILDKITE_BUILD_ID,
+          BUILDKITE_JOB_ID
+        })
       }
     }
 

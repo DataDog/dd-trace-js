@@ -13,8 +13,7 @@
       "CIRCLE_WORKING_DIRECTORY": "/foo/bar"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -41,8 +40,7 @@
       "CIRCLE_WORKING_DIRECTORY": "foo/bar"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -69,8 +67,7 @@
       "CIRCLE_WORKING_DIRECTORY": "/foo/bar~"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -97,8 +94,7 @@
       "CIRCLE_WORKING_DIRECTORY": "/foo/~/bar"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -127,8 +123,7 @@
       "USERPROFILE": "/not-my-home"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -157,8 +152,7 @@
       "USERPROFILE": "/not-my-home"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -187,8 +181,7 @@
       "USERPROFILE": "/not-my-home"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -215,8 +208,7 @@
       "CIRCLE_WORKING_DIRECTORY": "/foo/bar"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -243,8 +235,7 @@
       "CIRCLE_WORKING_DIRECTORY": "/foo/bar"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -272,8 +263,7 @@
       "CIRCLE_WORKING_DIRECTORY": "/foo/bar"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -301,8 +291,7 @@
       "CIRCLE_WORKING_DIRECTORY": "/foo/bar"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -329,8 +318,7 @@
       "CIRCLE_WORKING_DIRECTORY": "/foo/bar"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -357,8 +345,7 @@
       "CIRCLE_WORKING_DIRECTORY": "/foo/bar"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -385,8 +372,7 @@
       "CIRCLE_WORKING_DIRECTORY": "/foo/bar"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -413,8 +399,7 @@
       "CIRCLE_WORKING_DIRECTORY": "/foo/bar"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -441,8 +426,7 @@
       "CIRCLE_WORKING_DIRECTORY": "/foo/bar"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -476,8 +460,7 @@
       "DD_GIT_REPOSITORY_URL": "usersupplied-repo"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",
@@ -517,8 +500,7 @@
       "DD_GIT_TAG": "0.0.2"
     },
     {
-      "_dd.ci.env_vars.CIRCLE_BUILD_NUM": "circleci-pipeline-number",
-      "_dd.ci.env_vars.CIRCLE_WORKFLOW_ID": "circleci-pipeline-id",
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
       "ci.job.name": "circleci-job-name",
       "ci.job.url": "circleci-build-url",
       "ci.pipeline.id": "circleci-pipeline-id",

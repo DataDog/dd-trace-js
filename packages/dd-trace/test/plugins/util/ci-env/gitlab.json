@@ -19,9 +19,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -60,9 +58,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -102,9 +98,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -144,9 +138,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -188,9 +180,7 @@
       "USERPROFILE": "/not-my-home"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -232,9 +222,7 @@
       "USERPROFILE": "/not-my-home"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -276,9 +264,7 @@
       "USERPROFILE": "/not-my-home"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -318,9 +304,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -359,9 +343,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -400,9 +382,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -442,9 +422,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -484,9 +462,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -526,9 +502,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -568,9 +542,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -610,9 +582,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -652,9 +622,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -694,9 +662,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -736,9 +702,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -778,9 +742,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -826,9 +788,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
@@ -875,9 +835,7 @@
       "GITLAB_CI": "gitlab"
     },
     {
-      "_dd.ci.env_vars.CI_JOB_ID": "gitlab-job-id",
-      "_dd.ci.env_vars.CI_PIPELINE_ID": "gitlab-pipeline-id",
-      "_dd.ci.env_vars.CI_PROJECT_URL": "gitlab-project-url",
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
       "ci.job.name": "gitlab-job-name",
       "ci.job.url": "gitlab-job-url",
       "ci.pipeline.id": "gitlab-pipeline-id",
