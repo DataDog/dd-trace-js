@@ -18,7 +18,6 @@ describe('Overhead controller', () => {
     })
 
     describe('Global context', () => {
-
       before(() => {
         sinon.spy(global, 'setInterval')
         sinon.spy(global, 'clearInterval')
