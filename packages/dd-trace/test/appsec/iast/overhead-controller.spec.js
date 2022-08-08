@@ -4,6 +4,10 @@ const DatadogSpanContext = require('../../../src/opentracing/span_context')
 describe('Overhead controller', () => {
   const oceContextKey = overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY
 
+  beforeEach(() => {
+    overheadController._resetGlobalContext()
+  })
+
   describe('Initialize OCE context', () => {
     describe('Request context', () => {
       it('should populate request context', () => {
@@ -61,14 +65,12 @@ describe('Overhead controller', () => {
         })
 
         it('should allow when available tokens', () => {
-          iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].isRequestAnalyzed = true
           iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 2
           expect(overheadController.hasQuota(OPERATION, iastContext)).to.be.true
           expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 1)
         })
 
         it('should not allow when no available tokens', () => {
-          iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].isRequestAnalyzed = true
           iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 0
           expect(overheadController.hasQuota(OPERATION, iastContext)).to.be.false
           expect(iastContext[oceContextKey]).to.have.nested.property(`tokens.${OPERATION.name}`, 0)

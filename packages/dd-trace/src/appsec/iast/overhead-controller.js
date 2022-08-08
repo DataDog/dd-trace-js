@@ -49,6 +49,7 @@ function _resetGlobalContext () {
 }
 
 const _globalContextResetScheduler = new Scheduler(_resetGlobalContext, GLOBAL_CONTEXT_RESET_INTERVAL)
+_resetGlobalContext()
 
 function acquireRequest (rootSpan) {
   return (rootSpan.context().toSpanId() % 3) === 0
@@ -74,6 +75,7 @@ function stopGlobalContextResetScheduler () {
 module.exports = {
   OVERHEAD_CONTROLLER_CONTEXT_KEY,
   OPERATIONS,
+  _resetGlobalContext,
   startGlobalContextResetScheduler,
   stopGlobalContextResetScheduler,
   initializeRequestContext,
