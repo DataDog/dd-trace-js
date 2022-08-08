@@ -71,7 +71,7 @@ function startGlobalContextResetInterval () {
 
 function stopGlobalContextResetInterval () {
   if (globalContextResetInterval) {
-    clearInterval(globalContextResetInterval)
+    globalContextResetInterval = clearInterval(globalContextResetInterval)
   }
 }
 

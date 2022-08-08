@@ -9,10 +9,33 @@ describe('Overhead controller', () => {
   })
 
   describe('Initialize OCE context', () => {
-    it('should populate oce context', () => {
-      const iastContext = {}
-      overheadController.initializeRequestContext(iastContext)
-      expect(iastContext).to.have.nested.property(overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY)
+    describe('Request context', () => {
+      it('should populate request context', () => {
+        const iastContext = {}
+        overheadController.initializeRequestContext(iastContext)
+        expect(iastContext).to.have.nested.property(overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY)
+      })
+    })
+
+    describe('Global context', () => {
+
+      before(() => {
+        sinon.spy(global, 'setInterval')
+        sinon.spy(global, 'clearInterval')
+      })
+
+      afterEach(() => {
+        sinon.restore()
+      })
+
+      it('should start and stop global context refresh interval just once', () => {
+        overheadController.startGlobalContextResetInterval()
+        overheadController.startGlobalContextResetInterval()
+        overheadController.stopGlobalContextResetInterval()
+        overheadController.stopGlobalContextResetInterval()
+        expect(setInterval).to.have.been.calledOnce
+        expect(clearInterval).to.have.been.calledOnce
+      })
     })
   })
 
