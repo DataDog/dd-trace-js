@@ -1,56 +1,17 @@
 'use strict'
 
 const OVERHEAD_CONTROLLER_CONTEXT_KEY = 'oce'
+const GLOBAL_CONTEXT_RESET_INTERVAL = 30000
 
-const ANALYZE_REQUEST = 'ANALYZE_REQUEST'
 const REPORT_VULNERABILITY = 'REPORT_VULNERABILITY'
 
-class Quota {
-  constructor (reserved, release) {
-    this._acquired = !!reserved
-    this._operationRelease = release
-    this._released = false
-  }
+let globalContextResetInterval
+const GLOBAL_OCE_CONTEXT = {}
 
-  isAcquired () {
-    return this._acquired
-  }
-
-  release () {
-    if (this._acquired && !this._released) {
-      this._operationRelease()
-      this._released = true
-    }
-  }
-}
-
-const LONG_RUNNING_OPERATIONS = {
-  ANALYZE_REQUEST: {
-    hasQuota: () => {
-      const reserved = concurrentRequestTokens > 0
-      if (reserved) {
-        concurrentRequestTokens--
-      }
-      return reserved
-    },
-    release: () => {
-      concurrentRequestTokens++
-    },
-    name: ANALYZE_REQUEST,
-    initialTokenBucketSize: 2,
-    initRequestContext: (context) => {
-      context.isRequestAnalyzed = true
-    }
-  }
-}
-
-let concurrentRequestTokens = LONG_RUNNING_OPERATIONS.ANALYZE_REQUEST.initialTokenBucketSize
-
-const SINGLE_SHOT_OPERATIONS = {
+const OPERATIONS = {
   REPORT_VULNERABILITY: {
     hasQuota: (context) => {
-      if (!context.isRequestAnalyzed) return false
-      const reserved = context.tokens[REPORT_VULNERABILITY] > 0
+      const reserved = context && context.tokens[REPORT_VULNERABILITY] > 0
       if (reserved) {
         context.tokens[REPORT_VULNERABILITY]--
       }
@@ -58,47 +19,69 @@ const SINGLE_SHOT_OPERATIONS = {
     },
     name: REPORT_VULNERABILITY,
     initialTokenBucketSize: 2,
-    initRequestContext: function (context) {
+    initContext: function (context) {
       context.tokens[REPORT_VULNERABILITY] = this.initialTokenBucketSize
     }
   }
 }
 
-function hasQuotaSingleShot (operation, iastContext) {
-  const oceContext = iastContext && iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]
-  if (!oceContext) {
-    return false
-  }
-  return operation.hasQuota(oceContext)
-}
-
-function hasQuotaLongRunning (operation) {
-  const reserved = operation.hasQuota()
-  return new Quota(reserved, () => operation.release())
-}
-
-function initializeRequestContext (iastContext) {
+function _getNewContext () {
   const oceContext = {
     tokens: {}
   }
 
-  for (const operation in LONG_RUNNING_OPERATIONS) {
-    LONG_RUNNING_OPERATIONS[operation].initRequestContext(oceContext)
+  for (const operation in OPERATIONS) {
+    OPERATIONS[operation].initContext(oceContext)
   }
 
-  for (const operation in SINGLE_SHOT_OPERATIONS) {
-    SINGLE_SHOT_OPERATIONS[operation].initRequestContext(oceContext)
-  }
+  return oceContext
+}
 
-  iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY] = oceContext
+function _getContext (iastContext) {
+  if (iastContext && iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]) {
+    return iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY]
+  }
+  return GLOBAL_OCE_CONTEXT
+}
+
+function acquireRequest (rootSpan) {
+  return (rootSpan.context().toSpanId() % 3) === 0
+}
+
+function hasQuota (operation, iastContext) {
+  const oceContext = _getContext(iastContext)
+  return operation.hasQuota(oceContext)
+}
+
+function initializeRequestContext (iastContext) {
+  iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY] = _getNewContext()
+}
+
+function _resetGlobalContext () {
+  Object.assign(GLOBAL_OCE_CONTEXT, _getNewContext())
+}
+
+function startGlobalContextResetInterval () {
+  if (!globalContextResetInterval) {
+    globalContextResetInterval = setInterval(() => {
+      _resetGlobalContext()
+    }, GLOBAL_CONTEXT_RESET_INTERVAL)
+  }
+}
+
+function stopGlobalContextResetInterval () {
+  if (globalContextResetInterval) {
+    clearInterval(globalContextResetInterval)
+  }
 }
 
 module.exports = {
   OVERHEAD_CONTROLLER_CONTEXT_KEY,
-  LONG_RUNNING_OPERATIONS,
-  SINGLE_SHOT_OPERATIONS,
+  OPERATIONS,
+  startGlobalContextResetInterval,
+  stopGlobalContextResetInterval,
+  _resetGlobalContext,
   initializeRequestContext,
-  hasQuotaSingleShot,
-  hasQuotaLongRunning,
-  Quota
+  hasQuota,
+  acquireRequest
 }

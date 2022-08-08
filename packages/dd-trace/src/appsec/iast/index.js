@@ -3,32 +3,31 @@ const { sendVulnerabilities } = require('./vulnerability-reporter')
 const web = require('../../plugins/util/web')
 const IAST_CONTEXT_KEY = Symbol('_dd.iast.context')
 const { storage } = require('../../../../datadog-core')
-const { hasQuotaLongRunning, LONG_RUNNING_OPERATIONS, initializeRequestContext } = require('./overhead-controller')
+const overheadController = require('./overhead-controller')
 
 function enable () {
   incomingHttpRequestEnd.subscribe(onIncomingHttpRequestEnd)
   incomingHttpRequestStart.subscribe(onIncomingHttpRequestStart)
+  overheadController.startGlobalContextResetInterval()
 }
 
 function disable () {
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(onIncomingHttpRequestEnd)
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(onIncomingHttpRequestStart)
+  overheadController.stopGlobalContextResetInterval()
 }
 
 function onIncomingHttpRequestStart (data) {
   if (data && data.req) {
     const store = storage.getStore()
     if (store) {
-      const analyzeRequestQuota = hasQuotaLongRunning(LONG_RUNNING_OPERATIONS.ANALYZE_REQUEST)
-      store[IAST_CONTEXT_KEY] = {
-        analyzeRequestQuota
-      }
-      if (analyzeRequestQuota.isAcquired()) {
-        initializeRequestContext(store[IAST_CONTEXT_KEY])
-        const topContext = web.getContext(data.req)
-        if (topContext) {
-          const rootSpan = topContext.span
-          Object.assign(store[IAST_CONTEXT_KEY], { rootSpan, req: data.req })
+      const topContext = web.getContext(data.req)
+      if (topContext) {
+        const rootSpan = topContext.span
+        const isRequestAcquired = overheadController.acquireRequest(rootSpan)
+        if (isRequestAcquired) {
+          store[IAST_CONTEXT_KEY] = { rootSpan, req: data.req }
+          overheadController.initializeRequestContext(store[IAST_CONTEXT_KEY])
         }
       }
     }
@@ -41,9 +40,6 @@ function onIncomingHttpRequestEnd (data) {
     const iastContext = store && store[IAST_CONTEXT_KEY]
     if (iastContext && iastContext.rootSpan) {
       sendVulnerabilities(iastContext, iastContext.rootSpan)
-    }
-    if (iastContext && iastContext.analyzeRequestQuota) {
-      iastContext.analyzeRequestQuota.release()
     }
   }
 }

@@ -1,6 +1,5 @@
 const proxyquire = require('proxyquire')
 const { incomingHttpRequestEnd } = require('../../../src/appsec/gateway/channels')
-const { Quota } = require('../../../src/appsec/iast/overhead-controller')
 
 describe('IAST Index', () => {
   let web
@@ -21,11 +20,10 @@ describe('IAST Index', () => {
       }
     }
     overheadController = {
-      hasQuotaLongRunning: sinon.stub(),
+      acquireRequest: sinon.stub(),
       initializeRequestContext: sinon.stub(),
-      LONG_RUNNING_OPERATIONS: {
-        ANALYZE_REQUEST: {}
-      }
+      startGlobalContextResetInterval: sinon.stub(),
+      stopGlobalContextResetInterval: sinon.stub()
     }
     IAST = proxyquire('../../../src/appsec/iast', {
       '../../plugins/util/web': web,
@@ -46,6 +44,10 @@ describe('IAST Index', () => {
       IAST.enable()
       expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(IAST.onIncomingHttpRequestEnd)
     })
+    it('should start OCE global context', () => {
+      IAST.enable()
+      expect(overheadController.startGlobalContextResetInterval).to.have.been.calledOnce
+    })
   })
 
   describe('disable', () => {
@@ -56,6 +58,11 @@ describe('IAST Index', () => {
       IAST.disable()
       expect(incomingHttpRequestEnd.unsubscribe)
         .to.have.been.calledOnceWithExactly(IAST.onIncomingHttpRequestEnd)
+    })
+
+    it('should stop OCE global context', () => {
+      IAST.disable()
+      expect(overheadController.stopGlobalContextResetInterval).to.have.been.calledOnce
     })
   })
 
@@ -69,7 +76,7 @@ describe('IAST Index', () => {
     it('should not fail with unexpected context', () => {
       datadogCore.storage.getStore.returns({})
       web.getContext.returns(null)
-      overheadController.hasQuotaLongRunning.returns(new Quota(true, () => {}))
+      overheadController.acquireRequest.returns(true)
       IAST.onIncomingHttpRequestStart({ req: {} })
       expect(web.getContext).to.be.calledOnce
     })
@@ -77,7 +84,7 @@ describe('IAST Index', () => {
     it('should not fail with unexpected store', () => {
       web.getContext.returns({})
       datadogCore.storage.getStore.returns(null)
-      overheadController.hasQuotaLongRunning.returns(new Quota(true, () => {}))
+      overheadController.acquireRequest.returns(true)
       IAST.onIncomingHttpRequestStart({ req: {} })
       expect(datadogCore.storage.getStore).to.be.calledOnce
     })
@@ -88,21 +95,20 @@ describe('IAST Index', () => {
       const data = { req: {} }
       datadogCore.storage.getStore.returns(store)
       web.getContext.returns(topContext)
-      overheadController.hasQuotaLongRunning.returns(new Quota(true, () => {}))
+      overheadController.acquireRequest.returns(true)
       IAST.onIncomingHttpRequestStart(data)
       expect(store[IAST.IAST_CONTEXT_KEY]).not.null
       expect(store[IAST.IAST_CONTEXT_KEY].req).equals(data.req)
       expect(store[IAST.IAST_CONTEXT_KEY].rootSpan).equals(topContext.span)
-      expect(store[IAST.IAST_CONTEXT_KEY].analyzeRequestQuota).not.undefined
     })
 
-    it('should initialize OCE context when analyze request quota is acquired', () => {
+    it('should initialize OCE context when analyze request is acquired', () => {
       const store = {}
       const topContext = { span: {} }
       const data = { req: {} }
       datadogCore.storage.getStore.returns(store)
       web.getContext.returns(topContext)
-      overheadController.hasQuotaLongRunning.returns(new Quota(true, () => {}))
+      overheadController.acquireRequest.returns(true)
       IAST.onIncomingHttpRequestStart(data)
       expect(overheadController.initializeRequestContext).to.be.calledOnce
     })
@@ -141,17 +147,6 @@ describe('IAST Index', () => {
       datadogCore.storage.getStore.returns(store)
       IAST.onIncomingHttpRequestEnd({ req: {} })
       expect(vulnerabilityReporter.sendVulnerabilities).to.be.calledOnceWith(iastContext, span)
-    })
-
-    it('should release quota for analyze request with iast context', () => {
-      const _quotaRelease = sinon.stub()
-      const span = { key: 'val' }
-      const iastContext = { rootSpan: span, analyzeRequestQuota: new Quota(true, _quotaRelease) }
-      const store = { span }
-      store[IAST.IAST_CONTEXT_KEY] = iastContext
-      datadogCore.storage.getStore.returns(store)
-      IAST.onIncomingHttpRequestEnd({ req: {} })
-      expect(_quotaRelease).to.be.calledOnce
     })
   })
 })
