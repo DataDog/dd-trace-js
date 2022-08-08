@@ -29,7 +29,6 @@ so dd-trace will not be initialized.`)
 
 if (shouldInit) {
   tracer.init(options)
-  tracer.use('fs', false)
 }
 
 module.exports = tracer
