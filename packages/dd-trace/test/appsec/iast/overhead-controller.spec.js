@@ -4,36 +4,12 @@ const DatadogSpanContext = require('../../../src/opentracing/span_context')
 describe('Overhead controller', () => {
   const oceContextKey = overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY
 
-  beforeEach(() => {
-    overheadController._resetGlobalContext()
-  })
-
   describe('Initialize OCE context', () => {
     describe('Request context', () => {
       it('should populate request context', () => {
         const iastContext = {}
         overheadController.initializeRequestContext(iastContext)
         expect(iastContext).to.have.nested.property(overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY)
-      })
-    })
-
-    describe('Global context', () => {
-      before(() => {
-        sinon.spy(global, 'setInterval')
-        sinon.spy(global, 'clearInterval')
-      })
-
-      afterEach(() => {
-        sinon.restore()
-      })
-
-      it('should start and stop global context refresh interval just once', () => {
-        overheadController.startGlobalContextResetInterval()
-        overheadController.startGlobalContextResetInterval()
-        overheadController.stopGlobalContextResetInterval()
-        overheadController.stopGlobalContextResetInterval()
-        expect(setInterval).to.have.been.calledOnce
-        expect(clearInterval).to.have.been.calledOnce
       })
     })
   })

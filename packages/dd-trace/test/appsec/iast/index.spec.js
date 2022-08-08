@@ -22,8 +22,8 @@ describe('IAST Index', () => {
     overheadController = {
       acquireRequest: sinon.stub(),
       initializeRequestContext: sinon.stub(),
-      startGlobalContextResetInterval: sinon.stub(),
-      stopGlobalContextResetInterval: sinon.stub()
+      startGlobalContextResetScheduler: sinon.stub(),
+      stopGlobalContextResetScheduler: sinon.stub()
     }
     IAST = proxyquire('../../../src/appsec/iast', {
       '../../plugins/util/web': web,
@@ -46,7 +46,7 @@ describe('IAST Index', () => {
     })
     it('should start OCE global context', () => {
       IAST.enable()
-      expect(overheadController.startGlobalContextResetInterval).to.have.been.calledOnce
+      expect(overheadController.startGlobalContextResetScheduler).to.have.been.calledOnce
     })
   })
 
@@ -62,7 +62,7 @@ describe('IAST Index', () => {
 
     it('should stop OCE global context', () => {
       IAST.disable()
-      expect(overheadController.stopGlobalContextResetInterval).to.have.been.calledOnce
+      expect(overheadController.stopGlobalContextResetScheduler).to.have.been.calledOnce
     })
   })
 

@@ -1,11 +1,11 @@
 'use strict'
+const Scheduler = require('../../exporters/scheduler')
 
 const OVERHEAD_CONTROLLER_CONTEXT_KEY = 'oce'
 const GLOBAL_CONTEXT_RESET_INTERVAL = 30000
 
 const REPORT_VULNERABILITY = 'REPORT_VULNERABILITY'
 
-let globalContextResetInterval
 const GLOBAL_OCE_CONTEXT = {}
 
 const OPERATIONS = {
@@ -44,6 +44,12 @@ function _getContext (iastContext) {
   return GLOBAL_OCE_CONTEXT
 }
 
+function _resetGlobalContext () {
+  Object.assign(GLOBAL_OCE_CONTEXT, _getNewContext())
+}
+
+const _globalContextResetScheduler = new Scheduler(_resetGlobalContext, GLOBAL_CONTEXT_RESET_INTERVAL)
+
 function acquireRequest (rootSpan) {
   return (rootSpan.context().toSpanId() % 3) === 0
 }
@@ -57,31 +63,19 @@ function initializeRequestContext (iastContext) {
   iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY] = _getNewContext()
 }
 
-function _resetGlobalContext () {
-  Object.assign(GLOBAL_OCE_CONTEXT, _getNewContext())
+function startGlobalContextResetScheduler () {
+  _globalContextResetScheduler.start()
 }
 
-function startGlobalContextResetInterval () {
-  if (!globalContextResetInterval) {
-    globalContextResetInterval = setInterval(() => {
-      _resetGlobalContext()
-    }, GLOBAL_CONTEXT_RESET_INTERVAL)
-    globalContextResetInterval.unref()
-  }
-}
-
-function stopGlobalContextResetInterval () {
-  if (globalContextResetInterval) {
-    globalContextResetInterval = clearInterval(globalContextResetInterval)
-  }
+function stopGlobalContextResetScheduler () {
+  _globalContextResetScheduler.stop()
 }
 
 module.exports = {
   OVERHEAD_CONTROLLER_CONTEXT_KEY,
   OPERATIONS,
-  startGlobalContextResetInterval,
-  stopGlobalContextResetInterval,
-  _resetGlobalContext,
+  startGlobalContextResetScheduler,
+  stopGlobalContextResetScheduler,
   initializeRequestContext,
   hasQuota,
   acquireRequest

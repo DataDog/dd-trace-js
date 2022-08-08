@@ -8,13 +8,13 @@ const overheadController = require('./overhead-controller')
 function enable () {
   incomingHttpRequestEnd.subscribe(onIncomingHttpRequestEnd)
   incomingHttpRequestStart.subscribe(onIncomingHttpRequestStart)
-  overheadController.startGlobalContextResetInterval()
+  overheadController.startGlobalContextResetScheduler()
 }
 
 function disable () {
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(onIncomingHttpRequestEnd)
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(onIncomingHttpRequestStart)
-  overheadController.stopGlobalContextResetInterval()
+  overheadController.stopGlobalContextResetScheduler()
 }
 
 function onIncomingHttpRequestStart (data) {
