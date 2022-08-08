@@ -66,6 +66,7 @@ function startGlobalContextResetInterval () {
     globalContextResetInterval = setInterval(() => {
       _resetGlobalContext()
     }, GLOBAL_CONTEXT_RESET_INTERVAL)
+    globalContextResetInterval.unref()
   }
 }
 
