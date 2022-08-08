@@ -49,17 +49,17 @@ describe('Overhead controller', () => {
       const reserved = overheadController.acquireRequest(rootSpan)
       expect(reserved).to.be.true
     })
-  })
 
-  it('should not allow requests which span id is not divisible by 3', () => {
-    const rootSpan = {
-      context: sinon.stub().returns(new DatadogSpanContext({
-        spanId: 2
-      }))
-    }
+    it('should not allow requests which span id is not divisible by 3', () => {
+      const rootSpan = {
+        context: sinon.stub().returns(new DatadogSpanContext({
+          spanId: 2
+        }))
+      }
 
-    const reserved = overheadController.acquireRequest(rootSpan)
-    expect(reserved).to.be.false
+      const reserved = overheadController.acquireRequest(rootSpan)
+      expect(reserved).to.be.false
+    })
   })
 
   describe('Operations', () => {
