@@ -7,7 +7,7 @@ const Config = require('./config')
 const metrics = require('./metrics')
 const log = require('./log')
 const { isFalse } = require('./util')
-const { setStartupLogInstrumenter } = require('./startup-log')
+const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
 const { sendGitMetadata } = require('./ci-visibility/exporters/git/git_metadata')
 
@@ -53,8 +53,8 @@ class Tracer {
 
         this._tracer = new DatadogTracer(config)
         this._pluginManager.configure(config)
-        setStartupLogInstrumenter(this._instrumenter)
-        telemetry.start(config, this._instrumenter, this._pluginManager)
+        setStartupLogPluginManager(this._pluginManager)
+        telemetry.start(config, this._pluginManager)
       }
 
       if (config.isGitUploadEnabled) {

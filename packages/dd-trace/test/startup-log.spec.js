@@ -4,31 +4,24 @@ const os = require('os')
 const tracerVersion = require('../../../package.json').version
 
 describe('startup logging', () => {
-  let semverVersion
   let firstStderrCall
   let secondStderrCall
   before(() => {
     sinon.stub(console, 'info')
     sinon.stub(console, 'warn')
-    semverVersion = require('semver/package.json').version
     delete require.cache[require.resolve('../src/startup-log')]
     const {
       setStartupLogConfig,
-      setStartupLogInstrumenter,
+      setStartupLogPluginManager,
       setSamplingRules,
       startupLog
     } = require('../src/startup-log')
-    setStartupLogInstrumenter({
-      _instrumented: {
-        keys () {
-          return [{ name: 'http' }, { name: 'fs' }, { name: 'semver', versions: [] }]
-        }
-      },
-      _plugins: new Map([
-        ['fs', { config: {} }],
-        ['http', { config: {} }],
-        ['semver', { config: {} }]
-      ])
+    setStartupLogPluginManager({
+      _pluginsByName: {
+        http: { _enabled: true },
+        fs: { _enabled: true },
+        semver: { _enabled: true }
+      }
     })
     setStartupLogConfig({
       env: 'production',
@@ -90,6 +83,6 @@ describe('startup logging', () => {
     const integrationsLoaded = logObj.integrations_loaded
     expect(integrationsLoaded).to.include('fs')
     expect(integrationsLoaded).to.include('http')
-    expect(integrationsLoaded).to.include('semver@' + semverVersion)
+    expect(integrationsLoaded).to.include('semver')
   })
 })
