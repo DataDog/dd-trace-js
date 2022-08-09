@@ -5,9 +5,10 @@ const IAST_CONTEXT_KEY = Symbol('_dd.iast.context')
 const { storage } = require('../../../../datadog-core')
 const overheadController = require('./overhead-controller')
 
-function enable () {
+function enable (config) {
   incomingHttpRequestEnd.subscribe(onIncomingHttpRequestEnd)
   incomingHttpRequestStart.subscribe(onIncomingHttpRequestStart)
+  overheadController.configureOCE(config.iast.oce)
   overheadController.startGlobalContextResetScheduler()
 }
 

@@ -7,20 +7,22 @@ const GLOBAL_CONTEXT_RESET_INTERVAL = 30000
 const REPORT_VULNERABILITY = 'REPORT_VULNERABILITY'
 
 const GLOBAL_OCE_CONTEXT = {}
-
+let oceConfig = {}
 const OPERATIONS = {
   REPORT_VULNERABILITY: {
     hasQuota: (context) => {
-      const reserved = context && context.tokens[REPORT_VULNERABILITY] > 0
+      const reserved = context && context.tokens && context.tokens[REPORT_VULNERABILITY] > 0
       if (reserved) {
         context.tokens[REPORT_VULNERABILITY]--
       }
       return reserved
     },
     name: REPORT_VULNERABILITY,
-    initialTokenBucketSize: 2,
+    initialTokenBucketSize () {
+      return typeof oceConfig.maxContextOperations === 'number' ? oceConfig.maxContextOperations : 2
+    },
     initContext: function (context) {
-      context.tokens[REPORT_VULNERABILITY] = this.initialTokenBucketSize
+      context.tokens[REPORT_VULNERABILITY] = this.initialTokenBucketSize()
     }
   }
 }
@@ -52,7 +54,9 @@ const _globalContextResetScheduler = new Scheduler(_resetGlobalContext, GLOBAL_C
 _resetGlobalContext()
 
 function acquireRequest (rootSpan) {
-  return (rootSpan.context().toSpanId() % 3) === 0
+  const sampling = oceConfig && typeof oceConfig.requestSampling === 'number'
+    ? oceConfig.requestSampling : 30
+  return (rootSpan.context().toSpanId() % 100) <= sampling
 }
 
 function hasQuota (operation, iastContext) {
@@ -72,6 +76,10 @@ function stopGlobalContextResetScheduler () {
   _globalContextResetScheduler.stop()
 }
 
+function configureOCE (cfg) {
+  oceConfig = cfg
+}
+
 module.exports = {
   OVERHEAD_CONTROLLER_CONTEXT_KEY,
   OPERATIONS,
@@ -80,5 +88,6 @@ module.exports = {
   stopGlobalContextResetScheduler,
   initializeRequestContext,
   hasQuota,
-  acquireRequest
+  acquireRequest,
+  configureOCE
 }
