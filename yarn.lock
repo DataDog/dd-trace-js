@@ -224,12 +224,10 @@
     source-map "^0.7.3"
     split "^1.0.1"
 
-"@datadog/sketches-js@^1.0.5":
-  version "1.0.5"
-  resolved "https://registry.yarnpkg.com/@datadog/sketches-js/-/sketches-js-1.0.5.tgz#e3202c14e98c5e3aa530944aa03534ccbb9cafaf"
-  integrity sha512-1ZKyHxxgDI+zY0r+7msMUhFdLR7gkRgKGcNLdYjtXVyo5H64q16J/Khfp5+YAXOedKizKzT0Jf0kLwQ/IBU/pA==
-  dependencies:
-    protobufjs "^6.11.3"
+"@datadog/sketches-js@^2.0.0":
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/@datadog/sketches-js/-/sketches-js-2.0.0.tgz#621a83b1e0b7d5a4c2e496d6d0194aac0ddd5cd1"
+  integrity sha512-cR9r5sGYU64HLUe7vRvWuZO8qFrCPWanB/a2nrPPW5E7JVwt5j9QCEjhtPZo6LoImfVr3SajcbmyGwZfFLsHjw==
 
 "@eslint/eslintrc@^0.4.3":
   version "0.4.3"
@@ -2353,11 +2351,6 @@ log-symbols@4.0.0:
   dependencies:
     chalk "^4.0.0"
 
-long@^4.0.0:
-  version "4.0.0"
-  resolved "https://registry.yarnpkg.com/long/-/long-4.0.0.tgz#9a7b71cfb7d361a194ea555241c92f7468d5bf28"
-  integrity sha512-XsP+KhQif4bjX1kbuSiySJFNAehNxgLb6hPRGJ9QsUr8ajHkuXGdrHmFUTUUXhDwVX2R5bY4JNZEwbUiMhV+MA==
-
 long@^5.0.0:
   version "5.2.0"
   resolved "https://registry.yarnpkg.com/long/-/long-5.2.0.tgz#2696dadf4b4da2ce3f6f6b89186085d94d52fd61"
@@ -2914,25 +2907,6 @@ propagate@^2.0.0:
   version "2.0.1"
   resolved "https://registry.yarnpkg.com/propagate/-/propagate-2.0.1.tgz#40cdedab18085c792334e64f0ac17256d38f9a45"
   integrity sha512-vGrhOavPSTz4QVNuBNdcNXePNdNMaO1xj9yBeH1ScQPjk/rhg9sSlCXPhMkFuaNNW/syTvYqsnbIJxMBfRbbag==
-
-protobufjs@^6.11.3:
-  version "6.11.3"
-  resolved "https://registry.yarnpkg.com/protobufjs/-/protobufjs-6.11.3.tgz#637a527205a35caa4f3e2a9a4a13ddffe0e7af74"
-  integrity sha512-xL96WDdCZYdU7Slin569tFX712BxsxslWwAfAhCYjQKGTq7dAU91Lomy6nLLhh/dyGhk/YH4TwTSRxTzhuHyZg==
-  dependencies:
-    "@protobufjs/aspromise" "^1.1.2"
-    "@protobufjs/base64" "^1.1.2"
-    "@protobufjs/codegen" "^2.0.4"
-    "@protobufjs/eventemitter" "^1.1.0"
-    "@protobufjs/fetch" "^1.1.0"
-    "@protobufjs/float" "^1.0.2"
-    "@protobufjs/inquire" "^1.1.0"
-    "@protobufjs/path" "^1.1.2"
-    "@protobufjs/pool" "^1.1.0"
-    "@protobufjs/utf8" "^1.1.0"
-    "@types/long" "^4.0.1"
-    "@types/node" ">=13.7.0"
-    long "^4.0.0"
 
 protobufjs@^7.0.0:
   version "7.0.0"
