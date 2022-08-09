@@ -194,7 +194,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       parseInt(process.env.DD_IAST_OCE_REQUEST_SAMPLING_PERCENTAGE),
       defaultSampling
     )
-    const DD_IAST_OCE_REQUEST_SAMPLING_PERCENTAGE = requestSamplingPercentage < 0 || requestSamplingPercentage > 100 ? defaultSampling : requestSamplingPercentage;
+    const DD_IAST_OCE_REQUEST_SAMPLING_PERCENTAGE = requestSamplingPercentage < 0 ||
+      requestSamplingPercentage > 100 ? defaultSampling : requestSamplingPercentage
 
     const DD_IAST_OCE_MAX_CONCURRENT_REQUEST = coalesce(
       parseInt(options.experimental && options.experimental.iast && options.experimental.iast.oce &&
