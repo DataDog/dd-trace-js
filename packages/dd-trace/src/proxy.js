@@ -54,6 +54,9 @@ class Tracer extends BaseTracer {
         if (config.appsec.enabled) {
           require('./appsec').enable(config)
         }
+        if (config.iast.enabled) {
+          require('./appsec/iast').enable(config)
+        }
 
         this._tracer = new DatadogTracer(config)
         this._instrumenter.enable(config)
