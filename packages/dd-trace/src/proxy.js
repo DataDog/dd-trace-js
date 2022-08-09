@@ -52,7 +52,7 @@ class Tracer {
           require('./appsec').enable(config)
         }
         if (config.iast.enabled) {
-          require('./appsec/iast').enable()
+          require('./appsec/iast').enable(config)
         }
 
         this._tracer = new DatadogTracer(config)

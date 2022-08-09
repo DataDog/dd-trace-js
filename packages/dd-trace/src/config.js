@@ -182,9 +182,33 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     )
 
     const DD_IAST_ENABLED = coalesce(
-      options.experimental && options.experimental.iast,
+      options.experimental && options.experimental.iast &&
+      (options.experimental.iast === true || options.experimental.iast.enabled === true),
       process.env.DD_IAST_ENABLED,
       false
+    )
+    const defaultSampling = 30
+    const requestSamplingPercentage = coalesce(
+      parseInt(options.experimental && options.experimental.iast && options.experimental.iast.oce &&
+      options.experimental.iast.oce && options.experimental.iast.oce.requestSampling),
+      parseInt(process.env.DD_IAST_OCE_REQUEST_SAMPLING_PERCENTAGE),
+      defaultSampling
+    )
+    const DD_IAST_OCE_REQUEST_SAMPLING_PERCENTAGE = requestSamplingPercentage < 0 ||
+      requestSamplingPercentage > 100 ? defaultSampling : requestSamplingPercentage
+
+    const DD_IAST_OCE_MAX_CONCURRENT_REQUEST = coalesce(
+      parseInt(options.experimental && options.experimental.iast && options.experimental.iast.oce &&
+      options.experimental.iast.oce && options.experimental.iast.oce.maxConcurrentRequest),
+      parseInt(process.env.DD_IAST_OCE_MAX_CONCURRENT_REQUEST),
+      2
+    )
+
+    const DD_IAST_OCE_MAX_CONTEXT_OPERATIONS = coalesce(
+      parseInt(options.experimental && options.experimental.iast && options.experimental.iast.oce &&
+      options.experimental.iast.oce && options.experimental.iast.oce.maxContextOperations),
+      parseInt(process.env.DD_IAST_OCE_MAX_CONTEXT_OPERATIONS),
+      2
     )
 
     const sampler = (options.experimental && options.experimental.sampler) || {}
@@ -263,7 +287,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP
     }
     this.iast = {
-      enabled: isTrue(DD_IAST_ENABLED)
+      enabled: isTrue(DD_IAST_ENABLED),
+      oce: {
+        requestSampling: DD_IAST_OCE_REQUEST_SAMPLING_PERCENTAGE,
+        maxConcurrentRequest: DD_IAST_OCE_MAX_CONCURRENT_REQUEST,
+        maxContextOperations: DD_IAST_OCE_MAX_CONTEXT_OPERATIONS
+      }
     }
 
     tagger.add(this.tags, {

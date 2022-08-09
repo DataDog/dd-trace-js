@@ -361,10 +361,24 @@ export declare interface TracerOptions {
     enableGetRumData?: boolean
 
     /**
-     * Whether to enable IAST.
-     * @default false
+     * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
      */
-    iast?: boolean;
+    iast?: boolean  | {
+      /**
+       * Whether to enable IAST.
+       * @default false
+       */
+      enabled?: boolean,
+      oce?: {
+        /**
+         * Controls the percentage of requests that iast will analyze
+         * @default 30
+         */
+        requestSampling?: number,
+        maxConcurrentRequest?: number,
+        maxContextOperations?: number
+      }
+    }
   };
 
   /**
