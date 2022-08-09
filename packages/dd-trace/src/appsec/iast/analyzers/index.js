@@ -1,18 +1,16 @@
 'use strict'
 
-const analyzers = {
-  'weakHashAnalyzer': require('./weak-hash-analyzer')
-}
+const analyzers = require('./analyzers')
 
 function enableAllAnalyzers () {
   for (const analyzer in analyzers) {
-    analyzer.config(true)
+    analyzers[analyzer].configure(true)
   }
 }
 
 function disableAllAnalyzers () {
   for (const analyzer in analyzers) {
-    analyzer.config(false)
+    analyzers[analyzer].configure(false)
   }
 }
 
