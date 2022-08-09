@@ -29,31 +29,30 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.reload('amqp10')
+          agent.reload('amqp10')
+
+          const amqp = require(`../../../versions/amqp10@${version}`).get()
+          const None = amqp.Policy.Utils.SenderCallbackPolicies.None
+          const OnSettle = amqp.Policy.Utils.SenderCallbackPolicies.OnSettle
+
+          callbackPolicy = None || OnSettle
+
+          client = new amqp.Client(amqp.Policy.merge({
+            senderLink: {
+              callback: callbackPolicy
+            }
+          }))
+
+          return client.connect('amqp://admin:admin@localhost:5673')
             .then(() => {
-              const amqp = require(`../../../versions/amqp10@${version}`).get()
-              const None = amqp.Policy.Utils.SenderCallbackPolicies.None
-              const OnSettle = amqp.Policy.Utils.SenderCallbackPolicies.OnSettle
-
-              callbackPolicy = None || OnSettle
-
-              client = new amqp.Client(amqp.Policy.merge({
-                senderLink: {
-                  callback: callbackPolicy
-                }
-              }))
-
-              return client.connect('amqp://admin:admin@localhost:5673')
-                .then(() => {
-                  return Promise.all([
-                    client.createReceiver('amq.topic'),
-                    client.createSender('amq.topic')
-                  ])
-                })
-                .then(handlers => {
-                  receiver = handlers[0]
-                  sender = handlers[1]
-                })
+              return Promise.all([
+                client.createReceiver('amq.topic'),
+                client.createSender('amq.topic')
+              ])
+            })
+            .then(handlers => {
+              receiver = handlers[0]
+              sender = handlers[1]
             })
         })
 
@@ -165,23 +164,22 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         beforeEach(() => {
-          return agent.reload('amqp10', { service: 'test' })
+          agent.reload('amqp10', { service: 'test' })
+
+          const amqp = require(`../../../versions/amqp10@${version}`).get()
+
+          client = new amqp.Client()
+
+          return client.connect('amqp://admin:admin@localhost:5673')
             .then(() => {
-              const amqp = require(`../../../versions/amqp10@${version}`).get()
-
-              client = new amqp.Client()
-
-              return client.connect('amqp://admin:admin@localhost:5673')
-                .then(() => {
-                  return Promise.all([
-                    client.createReceiver('amq.topic'),
-                    client.createSender('amq.topic')
-                  ])
-                })
-                .then(handlers => {
-                  receiver = handlers[0]
-                  sender = handlers[1]
-                })
+              return Promise.all([
+                client.createReceiver('amq.topic'),
+                client.createSender('amq.topic')
+              ])
+            })
+            .then(handlers => {
+              receiver = handlers[0]
+              sender = handlers[1]
             })
         })
 

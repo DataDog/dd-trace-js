@@ -83,8 +83,6 @@ module.exports = {
     for (let i = 0, l = pluginName.length; i < l; i++) {
       tracer.use(pluginName[i], config[i])
     }
-
-    return Promise.resolve()
   },
 
   // Register a callback with expectations to be run on every agent call.
