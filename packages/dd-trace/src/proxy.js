@@ -1,7 +1,6 @@
 'use strict'
 
 const NoopTracer = require('./noop/tracer')
-const PluginManager = require('./plugin_manager')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
 const metrics = require('./metrics')
@@ -9,6 +8,7 @@ const log = require('./log')
 const { isFalse } = require('./util')
 const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
+const PluginManager = require('./plugin_manager')
 const { sendGitMetadata } = require('./ci-visibility/exporters/git/git_metadata')
 
 const noop = new NoopTracer()

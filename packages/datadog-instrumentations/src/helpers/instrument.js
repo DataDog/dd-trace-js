@@ -5,8 +5,6 @@ const semver = require('semver')
 const instrumentations = require('./instrumentations')
 const { AsyncResource } = require('async_hooks')
 
-require('./register')
-
 const channelMap = {}
 exports.channel = function (name) {
   const maybe = channelMap[name]
