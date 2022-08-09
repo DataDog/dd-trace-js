@@ -16,6 +16,7 @@ describe('TracerProxy', () => {
   let profiler
   let appsec
   let telemetry
+  let iast
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
@@ -61,7 +62,8 @@ describe('TracerProxy', () => {
       logger: 'logger',
       debug: true,
       profiling: {},
-      appsec: {}
+      appsec: {},
+      iast: {}
     }
     Config = sinon.stub().returns(config)
 
@@ -81,6 +83,10 @@ describe('TracerProxy', () => {
       start: sinon.spy()
     }
 
+    iast = {
+      enable: sinon.spy()
+    }
+
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop/tracer': NoopTracer,
@@ -90,6 +96,7 @@ describe('TracerProxy', () => {
       './log': log,
       './profiler': profiler,
       './appsec': appsec,
+      './appsec/iast': iast,
       './telemetry': telemetry
     })
 
@@ -174,6 +181,22 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(appsec.enable).to.have.been.called
+      })
+
+      it('should enable iast when configured', () => {
+        config.iast = { enabled: true }
+
+        proxy.init()
+
+        expect(iast.enable).to.have.been.calledOnce
+      })
+
+      it('should not enable iast when it is not configured', () => {
+        config.iast = {}
+
+        proxy.init()
+
+        expect(iast.enable).not.to.have.been.called
       })
 
       it('should not load the profiler when not configured', () => {
