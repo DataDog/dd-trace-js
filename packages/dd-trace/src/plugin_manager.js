@@ -93,7 +93,7 @@ module.exports = class PluginManager {
   configure (config = {}) {
     this._tracerConfig = config
 
-    for (const name in this._pluginsByName) {
+    for (const name in pluginClasses) {
       this.loadPlugin(name)
     }
   }
