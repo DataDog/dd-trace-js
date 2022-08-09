@@ -1,9 +1,9 @@
 'use strict'
 
 const NoopTracer = require('./noop/tracer')
+const PluginManager = require('./plugin_manager')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
-const PluginManager = require('./plugin_manager')
 const metrics = require('./metrics')
 const log = require('./log')
 const { isFalse } = require('./util')
