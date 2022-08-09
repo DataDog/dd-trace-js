@@ -1,5 +1,6 @@
 const proxyquire = require('proxyquire')
 const { incomingHttpRequestEnd } = require('../../../src/appsec/gateway/channels')
+const Config = require('../../../src/config')
 
 describe('IAST Index', () => {
   let web
@@ -7,7 +8,13 @@ describe('IAST Index', () => {
   let IAST
   let datadogCore
   let overheadController
+  let config
   beforeEach(() => {
+    config = new Config({
+      experimental: {
+        iast: true
+      }
+    })
     web = {
       getContext: sinon.stub()
     }
@@ -42,11 +49,11 @@ describe('IAST Index', () => {
 
   describe('enable', () => {
     it('should subscribe', () => {
-      IAST.enable()
+      IAST.enable(config)
       expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(IAST.onIncomingHttpRequestEnd)
     })
     it('should start OCE global context', () => {
-      IAST.enable()
+      IAST.enable(config)
       expect(overheadController.startGlobalContextResetScheduler).to.have.been.calledOnce
     })
   })
@@ -54,7 +61,7 @@ describe('IAST Index', () => {
   describe('disable', () => {
     it('should unsubscribe', () => {
       incomingHttpRequestEnd.subscribe.restore()
-      IAST.enable()
+      IAST.enable(config)
       sinon.spy(incomingHttpRequestEnd, 'unsubscribe')
       IAST.disable()
       expect(incomingHttpRequestEnd.unsubscribe)
