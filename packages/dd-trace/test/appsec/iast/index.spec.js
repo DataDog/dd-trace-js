@@ -21,6 +21,7 @@ describe('IAST Index', () => {
     }
     overheadController = {
       acquireRequest: sinon.stub(),
+      releaseRequest: sinon.stub(),
       initializeRequestContext: sinon.stub(),
       startGlobalContextResetScheduler: sinon.stub(),
       stopGlobalContextResetScheduler: sinon.stub()
@@ -147,6 +148,23 @@ describe('IAST Index', () => {
       datadogCore.storage.getStore.returns(store)
       IAST.onIncomingHttpRequestEnd({ req: {} })
       expect(vulnerabilityReporter.sendVulnerabilities).to.be.calledOnceWith(iastContext, span)
+    })
+
+    it('should call releaseRequest with context with iast context', () => {
+      const span = { key: 'val' }
+      const iastContext = { vulnerabilities: [], rootSpan: span }
+      const store = { span }
+      store[IAST.IAST_CONTEXT_KEY] = iastContext
+      datadogCore.storage.getStore.returns(store)
+      IAST.onIncomingHttpRequestEnd({ req: {} })
+      expect(overheadController.releaseRequest).to.be.calledOnce
+    })
+
+    it('should not call releaseRequest without iast context', () => {
+      const store = {}
+      datadogCore.storage.getStore.returns(store)
+      IAST.onIncomingHttpRequestEnd({ req: {} })
+      expect(overheadController.releaseRequest).not.to.be.called
     })
   })
 })

@@ -40,6 +40,7 @@ function onIncomingHttpRequestEnd (data) {
     const store = storage.getStore()
     const iastContext = store && store[IAST_CONTEXT_KEY]
     if (iastContext && iastContext.rootSpan) {
+      overheadController.releaseRequest()
       sendVulnerabilities(iastContext, iastContext.rootSpan)
     }
   }

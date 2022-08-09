@@ -8,6 +8,7 @@ const REPORT_VULNERABILITY = 'REPORT_VULNERABILITY'
 
 const GLOBAL_OCE_CONTEXT = {}
 let oceConfig = {}
+let availableRequest = 0
 const OPERATIONS = {
   REPORT_VULNERABILITY: {
     hasQuota: (context) => {
@@ -54,9 +55,21 @@ const _globalContextResetScheduler = new Scheduler(_resetGlobalContext, GLOBAL_C
 _resetGlobalContext()
 
 function acquireRequest (rootSpan) {
-  const sampling = oceConfig && typeof oceConfig.requestSampling === 'number'
-    ? oceConfig.requestSampling : 30
-  return (rootSpan.context().toSpanId() % 100) <= sampling
+  if (availableRequest > 0) {
+    const sampling = oceConfig && typeof oceConfig.requestSampling === 'number'
+      ? oceConfig.requestSampling : 30
+    if ((rootSpan.context().toSpanId() % 100) <= sampling) {
+      availableRequest--
+      return true
+    }
+  }
+  return false
+}
+
+function releaseRequest () {
+  if (availableRequest < oceConfig.maxConcurrentRequest) {
+    availableRequest++
+  }
 }
 
 function hasQuota (operation, iastContext) {
@@ -78,6 +91,7 @@ function stopGlobalContextResetScheduler () {
 
 function configureOCE (cfg) {
   oceConfig = cfg
+  availableRequest = oceConfig.maxConcurrentRequest
 }
 
 module.exports = {
@@ -89,5 +103,6 @@ module.exports = {
   initializeRequestContext,
   hasQuota,
   acquireRequest,
+  releaseRequest,
   configureOCE
 }
