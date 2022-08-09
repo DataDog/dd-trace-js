@@ -58,7 +58,7 @@ function acquireRequest (rootSpan) {
   if (availableRequest > 0) {
     const sampling = oceConfig && typeof oceConfig.requestSampling === 'number'
       ? oceConfig.requestSampling : 30
-    if ((rootSpan.context().toSpanId() % 100) <= sampling) {
+    if (rootSpan.context().toSpanId().slice(-2) <= sampling) {
       availableRequest--
       return true
     }

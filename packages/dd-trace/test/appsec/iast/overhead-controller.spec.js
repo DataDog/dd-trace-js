@@ -1,6 +1,7 @@
 const overheadController = require('../../../src/appsec/iast/overhead-controller')
 const DatadogSpanContext = require('../../../src/opentracing/span_context')
 const Config = require('../../../src/config')
+const id = require('../../../src/id')
 describe('Overhead controller', () => {
   const oceContextKey = overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY
 
@@ -28,7 +29,7 @@ describe('Overhead controller', () => {
     it('should allow requests which span id ends with a smaller number than default 30', () => {
       const rootSpan = {
         context: sinon.stub().returns(new DatadogSpanContext({
-          spanId: 27
+          spanId: id('6004358438913972427', 10)
         }))
       }
 
@@ -39,7 +40,7 @@ describe('Overhead controller', () => {
     it('should allow requests which span id ends with a default 30', () => {
       const rootSpan = {
         context: sinon.stub().returns(new DatadogSpanContext({
-          spanId: 30
+          spanId: id('6004358438913972430', 10)
         }))
       }
 
@@ -50,7 +51,7 @@ describe('Overhead controller', () => {
     it('should not allow requests which span id ends with a bigger number than default 30', () => {
       const rootSpan = {
         context: sinon.stub().returns(new DatadogSpanContext({
-          spanId: 32
+          spanId: id('6004358438913972431', 10)
         }))
       }
 
@@ -61,17 +62,17 @@ describe('Overhead controller', () => {
     it('should allow a maximum of 2 request at same time', () => {
       const rootSpan1 = {
         context: sinon.stub().returns(new DatadogSpanContext({
-          spanId: 18
+          spanId: id('6004358438913972418', 10)
         }))
       }
       const rootSpan2 = {
         context: sinon.stub().returns(new DatadogSpanContext({
-          spanId: 17
+          spanId: id('6004358438913972417', 10)
         }))
       }
       const rootSpan3 = {
         context: sinon.stub().returns(new DatadogSpanContext({
-          spanId: 16
+          spanId: id('6004358438913972416', 10)
         }))
       }
 
@@ -86,22 +87,22 @@ describe('Overhead controller', () => {
     it('should release a request', () => {
       const rootSpan1 = {
         context: sinon.stub().returns(new DatadogSpanContext({
-          spanId: 18
+          spanId: id('6004358438913972418', 10)
         }))
       }
       const rootSpan2 = {
         context: sinon.stub().returns(new DatadogSpanContext({
-          spanId: 17
+          spanId: id('6004358438913972417', 10)
         }))
       }
       const rootSpan3 = {
         context: sinon.stub().returns(new DatadogSpanContext({
-          spanId: 16
+          spanId: id('6004358438913972416', 10)
         }))
       }
       const rootSpan4 = {
         context: sinon.stub().returns(new DatadogSpanContext({
-          spanId: 29
+          spanId: id('6004358438913972429', 10)
         }))
       }
 
