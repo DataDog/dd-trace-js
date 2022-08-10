@@ -21,7 +21,7 @@ class CIVisibilityCoverageEncoder extends AgentlessCiVisibilityEncoder {
       version: 1,
       trace_id: span.context()._traceId,
       span_id: span.context()._spanId,
-      files: coverage.map(filename => ({ filename }))
+      files: coverage
     })
   }
 
@@ -36,10 +36,10 @@ class CIVisibilityCoverageEncoder extends AgentlessCiVisibilityEncoder {
     this._encodeId(bytes, coverage.span_id)
     this._encodeString(bytes, 'files')
     this._encodeArrayPrefix(bytes, coverage.files)
-    for (const file of coverage.files) {
+    for (const filename of coverage.files) {
       this._encodeMapPrefix(bytes, 1)
       this._encodeString(bytes, 'filename')
-      this._encodeString(bytes, file.filename)
+      this._encodeString(bytes, filename)
     }
     const traceSize = bytes.length
     const buffer = Buffer.allocUnsafe(traceSize)
@@ -59,19 +59,21 @@ class CIVisibilityCoverageEncoder extends AgentlessCiVisibilityEncoder {
     const form = new FormData()
     const bytes = this._coverageBytes
 
-    let index = 1
+    let coverageFileIndex = 1
     for (const coverage of this.testCodeCoverages) {
+      const coverageFilename = `coverage${coverageFileIndex++}`
       const buffer = this.encodeCodeCoverage(bytes, coverage)
       form.append(
-        `coverage${index++}`,
+        coverageFilename,
         buffer,
         {
-          filename: `coverage${index++}.msgpack`,
+          filename: `${coverageFilename}.msgpack`,
           contentType: 'application/msgpack'
         }
       )
       this.reset()
     }
+    // 'event' is needed in the payload
     form.append('event', '', { filename: 'event', contentType: 'application/json' })
     return form
   }

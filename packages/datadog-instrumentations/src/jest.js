@@ -18,42 +18,22 @@ const {
 
 const { getFormattedJestTestParameters, getJestTestName } = require('../../datadog-plugin-jest/src/util')
 
-// resets the counters too
+// This function also resets the coverage counters
 function extractCoverageInformation (coverage, rootDir) {
-  if (!coverage) {
-    return []
-  }
-
   const coverageMap = istanbul.createCoverageMap(coverage)
 
   return coverageMap
     .files()
-    .map((filename) => {
+    .filter(filename => {
       const fileCoverage = coverageMap.fileCoverageFor(filename)
       const lineCoverage = fileCoverage.getLineCoverage()
-
-      const boundaries = Object.entries(lineCoverage).reduce(
-        (boundariesAcc, [lineNumber, numExecutions]) => {
-          if (!numExecutions) {
-            return boundariesAcc
-          }
-          const formattedLineNumber = Number(lineNumber)
-          boundariesAcc.push([formattedLineNumber, 1, numExecutions])
-          boundariesAcc.push([formattedLineNumber + 1, 0, -1])
-          return boundariesAcc
-        },
-        []
-      )
+      const isAnyLineExecuted = Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
 
       fileCoverage.resetHits()
 
-      return {
-        filename,
-        boundaries
-      }
+      return isAnyLineExecuted
     })
-    .filter(({ boundaries }) => boundaries.length)
-    .map(value => value.filename.replace(`${rootDir}/`, '')) // stick with filenames only for the moment
+    .map(filename => filename.replace(`${rootDir}/`, ''))
 }
 
 const specStatusToTestStatus = {
