@@ -1,5 +1,5 @@
 'use strict'
-
+const istanbul = require('istanbul-lib-coverage')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -9,12 +9,52 @@ const testRunFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 const testSuiteFinish = channel('ci:jest:test-suite:finish')
 
+const testCodeCoverageCh = channel('ci:jest:test:code-coverage')
+
 const {
   getTestSuitePath,
   getTestParametersString
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { getFormattedJestTestParameters, getJestTestName } = require('../../datadog-plugin-jest/src/util')
+
+// resets the counters too
+function extractCoverageInformation (coverage, rootDir) {
+  if (!coverage) {
+    return []
+  }
+
+  const coverageMap = istanbul.createCoverageMap(coverage)
+
+  return coverageMap
+    .files()
+    .map((filename) => {
+      const fileCoverage = coverageMap.fileCoverageFor(filename)
+      const lineCoverage = fileCoverage.getLineCoverage()
+
+      const boundaries = Object.entries(lineCoverage).reduce(
+        (boundariesAcc, [lineNumber, numExecutions]) => {
+          if (!numExecutions) {
+            return boundariesAcc
+          }
+          const formattedLineNumber = Number(lineNumber)
+          boundariesAcc.push([formattedLineNumber, 1, numExecutions])
+          boundariesAcc.push([formattedLineNumber + 1, 0, -1])
+          return boundariesAcc
+        },
+        []
+      )
+
+      fileCoverage.resetHits()
+
+      return {
+        filename,
+        boundaries
+      }
+    })
+    .filter(({ boundaries }) => boundaries.length)
+    .map(value => value.filename.replace(`${rootDir}/`, '')) // stick with filenames only for the moment
+}
 
 const specStatusToTestStatus = {
   'pending': 'skip',
@@ -49,6 +89,7 @@ function getWrappedEnvironment (BaseEnvironment) {
     constructor (config, context) {
       super(config, context)
       const rootDir = config.globalConfig ? config.globalConfig.rootDir : config.rootDir
+      this.rootDir = rootDir
       this.testSuite = getTestSuitePath(context.testPath, rootDir)
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
@@ -99,6 +140,10 @@ function getWrappedEnvironment (BaseEnvironment) {
       if (event.name === 'test_done') {
         const asyncResource = asyncResources.get(event.test)
         asyncResource.runInAsyncScope(() => {
+          if (this.global.__coverage__) {
+            const coverage = extractCoverageInformation(this.global.__coverage__, this.rootDir)
+            testCodeCoverageCh.publish(coverage)
+          }
           let status = 'pass'
           if (event.test.errors && event.test.errors.length) {
             status = 'fail'

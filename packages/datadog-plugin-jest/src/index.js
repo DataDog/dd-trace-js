@@ -41,6 +41,11 @@ class JestPlugin extends Plugin {
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
+    this.addSub('ci:jest:test:code-coverage', (coverage) => {
+      const span = storage.getStore().span
+      this.tracer._exporter.exportCoverage({ span, coverage })
+    })
+
     this.addSub('ci:jest:test:start', (test) => {
       const store = storage.getStore()
       const span = this.startTestSpan(test)

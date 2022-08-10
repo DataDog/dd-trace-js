@@ -2,6 +2,7 @@
 
 const URL = require('url').URL
 const Writer = require('./writer')
+const CoverageWriter = require('./coverage_writer')
 const Scheduler = require('../../../exporters/scheduler')
 
 class AgentlessCiVisibilityExporter {
@@ -10,10 +11,19 @@ class AgentlessCiVisibilityExporter {
     this._url = url || new URL(`https://citestcycle-intake.${site}`)
     this._writer = new Writer({ url: this._url, tags })
 
+    const coverageUrl = new URL(`https://event-platform-intake.${site}`)
+    this._coverageWriter = new CoverageWriter({ url: coverageUrl })
+
     if (flushInterval > 0) {
       this._scheduler = new Scheduler(() => this._writer.flush(), flushInterval)
+      this._coverageScheduler = new Scheduler(() => this._coverageWriter.flush(), flushInterval)
     }
     this._scheduler && this._scheduler.start()
+    this._coverageScheduler && this._coverageScheduler.start()
+  }
+
+  exportCoverage ({ coverage, span }) {
+    this._coverageWriter.append({ span, coverage })
   }
 
   export (trace) {
