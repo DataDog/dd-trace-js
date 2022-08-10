@@ -14,17 +14,17 @@ let batch = 0
 
 // Internal representation of a trace or span ID.
 class Identifier {
-  constructor (value, radix) {
+  constructor (value, radix = 16) {
     this._isUint64BE = true // msgpack-lite compatibility
-    this._buffer = typeof radix === 'number'
-      ? fromString(value, radix)
-      : createBuffer(value)
+    this._buffer = radix === 16
+      ? createBuffer(value)
+      : fromString(value, radix)
   }
 
-  toString (radix) {
-    return typeof radix === 'number'
-      ? toNumberString(this._buffer, radix)
-      : toHexString(this._buffer)
+  toString (radix = 16) {
+    return radix === 16
+      ? toHexString(this._buffer)
+      : toNumberString(this._buffer, radix)
   }
 
   toBuffer () {
@@ -49,10 +49,13 @@ function createBuffer (value) {
   if (value === '0') return zeroId
   if (!value) return pseudoRandom()
 
-  const size = Math.ceil(value.length / 2)
-  const buffer = new Array(size)
+  const size = Math.ceil(value.length / 16) * 16
+  const bytes = size / 2
+  const buffer = new Array(bytes)
 
-  for (let i = 0; i < size; i++) {
+  value = value.padStart(size, '0')
+
+  for (let i = 0; i < bytes; i++) {
     buffer[i] = parseInt(value.substring(i * 2, i * 2 + 2), 16)
   }
 
