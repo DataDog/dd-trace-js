@@ -1,7 +1,4 @@
 'use strict'
-
-const { storage } = require('../../../../../datadog-core')
-const { IAST_CONTEXT_KEY } = require('./../index')
 const Analyzer = require('./vulnerability-analyzer')
 
 const INSECURE_HASH_ALGORITHMS = [
@@ -13,14 +10,7 @@ const INSECURE_HASH_ALGORITHMS = [
 class WeakHashAnalyzer extends Analyzer {
   constructor () {
     super('WEAK_HASH_ANALYZER')
-    this.addSub('asm:crypto:hashing:start', (data) => this._handler(data))
-  }
-
-  _handler ({ algorithm }) {
-    const store = storage.getStore()
-    if (store && store[IAST_CONTEXT_KEY]) {
-      this.analyze(algorithm, store[IAST_CONTEXT_KEY])
-    }
+    this.addSub('asm:crypto:hashing:start', ({ algorithm }) => this.analyze(algorithm))
   }
 
   _isVulnerable (algorithm) {

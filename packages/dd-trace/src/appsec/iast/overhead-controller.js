@@ -78,7 +78,7 @@ function hasQuota (operation, iastContext) {
 }
 
 function initializeRequestContext (iastContext) {
-  iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY] = _getNewContext()
+  if (iastContext) iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY] = _getNewContext()
 }
 
 function startGlobalContextResetScheduler () {

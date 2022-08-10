@@ -1,7 +1,6 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const { IAST_CONTEXT_KEY } = require('../../../../src/appsec/iast')
 
 describe('weak-hash-analyzer', () => {
   const VULNERABLE_ALGORITHM = 'md4WithRSAEncryption'
@@ -26,18 +25,6 @@ describe('weak-hash-analyzer', () => {
   it('should subscribe to crypto hashing channel', () => {
     expect(weakHashAnalyzer._subscriptions).to.have.lengthOf(1)
     expect(weakHashAnalyzer._subscriptions[0]._channel.name).to.equals('asm:crypto:hashing:start')
-  })
-
-  it('should analyze hashing algorithm', () => {
-    const store = {
-      [IAST_CONTEXT_KEY]: { vulnerabilities: [], rootSpan: {} }
-    }
-    datadogCore.storage.getStore.returns(store)
-
-    sinon.stub(weakHashAnalyzer, 'analyze')
-
-    weakHashAnalyzer._handler({ algorithm: VULNERABLE_ALGORITHM })
-    expect(weakHashAnalyzer.analyze).to.have.been.calledOnceWithExactly(VULNERABLE_ALGORITHM, store[IAST_CONTEXT_KEY])
   })
 
   it('should not detect vulnerability when no algorithm', () => {

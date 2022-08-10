@@ -9,6 +9,7 @@ describe('IAST Index', () => {
   let web
   let vulnerabilityReporter
   let IAST
+  let iastContext
   let datadogCore
   let analyzers
   let overheadController
@@ -47,12 +48,18 @@ describe('IAST Index', () => {
       startGlobalContextResetScheduler: sinon.stub(),
       stopGlobalContextResetScheduler: sinon.stub()
     }
+    iastContext = {
+      getIastContext: sinon.stub(),
+      saveIastContext: sinon.stub(),
+      cleanIastContext: sinon.stub()
+    }
     IAST = proxyquire('../../../src/appsec/iast', {
       '../../plugins/util/web': web,
       './vulnerability-reporter': vulnerabilityReporter,
       '../../../../datadog-core': datadogCore,
       './analyzers': analyzers,
-      './overhead-controller': overheadController
+      './overhead-controller': overheadController,
+      './iast-context': iastContext
     })
   })
 
@@ -131,9 +138,8 @@ describe('IAST Index', () => {
       web.getContext.returns(topContext)
       overheadController.acquireRequest.returns(true)
       IAST.onIncomingHttpRequestStart(data)
-      expect(store[IAST.IAST_CONTEXT_KEY]).not.null
-      expect(store[IAST.IAST_CONTEXT_KEY].req).equals(data.req)
-      expect(store[IAST.IAST_CONTEXT_KEY].rootSpan).equals(topContext.span)
+      expect(iastContext.saveIastContext)
+        .to.have.been.calledOnceWith(store, topContext, { req: data.req, rootSpan: topContext.span })
     })
 
     it('should initialize OCE context when analyze request is acquired', () => {
@@ -175,19 +181,19 @@ describe('IAST Index', () => {
 
     it('should call send vulnerabilities with context with span and iast context', () => {
       const span = { key: 'val' }
-      const iastContext = { vulnerabilities: [], rootSpan: span }
+      const _iastContext = { vulnerabilities: [], rootSpan: span }
       const store = { span }
-      store[IAST.IAST_CONTEXT_KEY] = iastContext
       datadogCore.storage.getStore.returns(store)
+      iastContext.getIastContext.returns(_iastContext)
       IAST.onIncomingHttpRequestEnd({ req: {} })
-      expect(vulnerabilityReporter.sendVulnerabilities).to.be.calledOnceWith(iastContext, span)
+      expect(vulnerabilityReporter.sendVulnerabilities).to.be.calledOnceWith(_iastContext, span)
     })
 
     it('should call releaseRequest with context with iast context', () => {
       const span = { key: 'val' }
-      const iastContext = { vulnerabilities: [], rootSpan: span }
+      const _iastContext = { vulnerabilities: [], rootSpan: span }
       const store = { span }
-      store[IAST.IAST_CONTEXT_KEY] = iastContext
+      iastContext.getIastContext.returns(_iastContext)
       datadogCore.storage.getStore.returns(store)
       IAST.onIncomingHttpRequestEnd({ req: {} })
       expect(overheadController.releaseRequest).to.be.calledOnce
@@ -205,16 +211,20 @@ describe('IAST Index', () => {
     it('should clean the iast context', () => {
       const store = {}
       const req = {}
+      const topContext = { span: {} }
       IAST.enable(config)
-      web.getContext.returns({ span: {} })
+      web.getContext.returns(topContext)
       overheadController.acquireRequest.returns(true)
       datadogCore.storage.getStore.returns(store)
+      iastContext.cleanIastContext.returns(true)
       requestStart.publish({ req })
-      const iastContext = store[IAST.IAST_CONTEXT_KEY]
-      expect(iastContext.rootSpan).not.to.be.undefined
+      expect(iastContext.saveIastContext)
+        .to.have.been.calledOnceWith(store, topContext, { req: req, rootSpan: topContext.span })
       datadogCore.storage.getStore.returns({})
       requestClose.publish({ req })
-      expect(iastContext.rootSpan).to.be.undefined
+      expect(iastContext.cleanIastContext)
+        .to.have.been.calledOnceWith(store, topContext)
+      expect(overheadController.releaseRequest).to.have.been.calledOnce
     })
   })
 })
