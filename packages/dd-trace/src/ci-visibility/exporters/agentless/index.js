@@ -12,7 +12,7 @@ class AgentlessCiVisibilityExporter {
     this._writer = new Writer({ url: this._url, tags })
 
     const coverageUrl = new URL(`https://event-platform-intake.${site}`)
-    this._coverageWriter = new CoverageWriter({ url: coverageUrl })
+    this._coverageWriter = new CoverageWriter({ url: coverageUrl, tags })
 
     if (flushInterval > 0) {
       this._scheduler = new Scheduler(() => this._writer.flush(), flushInterval)
@@ -24,6 +24,10 @@ class AgentlessCiVisibilityExporter {
 
   exportCoverage ({ coverage, span }) {
     this._coverageWriter.append({ span, coverage })
+
+    if (!this._coverageScheduler) {
+      this._coverageWriter.flush()
+    }
   }
 
   export (trace) {

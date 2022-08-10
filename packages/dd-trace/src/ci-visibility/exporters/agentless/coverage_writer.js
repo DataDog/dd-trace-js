@@ -3,9 +3,10 @@ const https = require('https')
 const log = require('../../../log')
 
 class Writer {
-  constructor ({ url }) {
+  constructor ({ url, tags }) {
     this._url = url
-    this._encoder = new CIVisibilityCoverageEncoder()
+    const { 'runtime-id': runtimeId, env, service } = tags
+    this._encoder = new CIVisibilityCoverageEncoder({ runtimeId, env, service })
   }
 
   flush (done = () => {}) {
@@ -64,9 +65,7 @@ function makeRequest (form, url, cb) {
     })
   })
 
-  request.on('error', (err) => {
-    cb(err)
-  })
+  request.on('error', cb)
 
   form.pipe(request)
 }

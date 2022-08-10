@@ -51,7 +51,9 @@ class CIVisibilityCoverageEncoder extends AgentlessCiVisibilityEncoder {
 
   reset () {
     this._reset()
-    this._coverageBytes.length = 0
+    if (this._coverageBytes) {
+      this._coverageBytes.length = 0
+    }
     this.testCodeCoverages = []
   }
 

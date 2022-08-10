@@ -31,7 +31,7 @@ describe('Plugin', function () {
 
   this.timeout(20000)
 
-  withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
+  withVersions('jest', ['jest-environment-node'], (version, moduleName) => {
     afterEach(() => {
       const jestTestFile = fs.readdirSync(__dirname).filter(name => name.startsWith('jest-'))
       jestTestFile.forEach((testFile) => {
@@ -41,13 +41,20 @@ describe('Plugin', function () {
       delete global._ddtrace
       return agent.close({ ritmReset: false, wipe: true })
     })
-    beforeEach(() => {
+    beforeEach(function () {
       // for http integration tests
       nock('http://test:123')
         .get('/')
         .reply(200, 'OK')
 
-      return agent.load(['jest', 'http'], { service: 'test' }).then(() => {
+      const loadArguments = [['jest', 'http'], { service: 'test' }]
+
+      // we need the ci visibility init for the coverage test
+      if (this.currentTest.title === 'can report code coverage') {
+        loadArguments.push({ experimental: { exporter: 'datadog' } })
+      }
+
+      return agent.load(...loadArguments).then(() => {
         global.__libraryName__ = moduleName
         global.__libraryVersion__ = version
         jestExecutable = require(`../../../versions/jest@${version}`).get()
@@ -234,6 +241,29 @@ describe('Plugin', function () {
           options,
           options.projects
         )
+      })
+
+      it('can report code coverage', function (done) {
+        // TODO: check request header (it should have one file for the coverage)
+        const scope = nock('https://event-platform-intake.datad0g.com')
+          .post('/api/v2/citestcov')
+          .reply(202, 'OK')
+
+        const options = {
+          ...jestCommonOptions,
+          testRegex: 'jest-coverage.js',
+          coverage: true
+        }
+
+        jestExecutable.runCLI(
+          options,
+          options.projects
+        ).then(() => {
+          setTimeout(() => {
+            expect(scope.isDone()).to.be.true
+            done()
+          }, 1000)
+        })
       })
 
       // option available from 26.5.0:
