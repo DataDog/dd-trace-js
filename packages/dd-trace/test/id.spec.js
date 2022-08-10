@@ -56,7 +56,7 @@ describe('id', () => {
   it('should support small hex strings', () => {
     const spanId = id('abcd', 16)
 
-    expect(spanId.toString()).to.equal('abcd')
+    expect(spanId.toString()).to.equal('000000000000abcd')
   })
 
   it('should support large hex strings', () => {
@@ -69,7 +69,7 @@ describe('id', () => {
   it('should use hex strings by default', () => {
     const spanId = id('abcd')
 
-    expect(spanId.toString()).to.equal('abcd')
+    expect(spanId.toString()).to.equal('000000000000abcd')
   })
 
   it('should support number strings', () => {
