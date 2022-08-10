@@ -1,7 +1,10 @@
 const proxyquire = require('proxyquire')
-const { incomingHttpRequestEnd } = require('../../../src/appsec/gateway/channels')
 const Config = require('../../../src/config')
+const dc = require('diagnostics_channel')
 
+const requestStart = dc.channel('apm:http:server:request:start')
+const requestFinish = dc.channel('apm:http:server:request:finish')
+const requestClose = dc.channel('apm:http:server:request:close')
 describe('IAST Index', () => {
   let web
   let vulnerabilityReporter
@@ -12,7 +15,13 @@ describe('IAST Index', () => {
   beforeEach(() => {
     config = new Config({
       experimental: {
-        iast: true
+        iast: {
+          enabled: true,
+          oce: {
+            requestSampling: 100,
+            maxConcurrentRequest: 50
+          }
+        }
       }
     })
     web = {
@@ -39,7 +48,6 @@ describe('IAST Index', () => {
       '../../../../datadog-core': datadogCore,
       './overhead-controller': overheadController
     })
-    sinon.stub(incomingHttpRequestEnd, 'subscribe')
   })
 
   afterEach(() => {
@@ -49,8 +57,13 @@ describe('IAST Index', () => {
 
   describe('enable', () => {
     it('should subscribe', () => {
+      expect(requestStart.hasSubscribers).to.be.false
+      expect(requestFinish.hasSubscribers).to.be.false
+      expect(requestClose.hasSubscribers).to.be.false
       IAST.enable(config)
-      expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(IAST.onIncomingHttpRequestEnd)
+      expect(requestStart.hasSubscribers).to.be.true
+      expect(requestFinish.hasSubscribers).to.be.true
+      expect(requestClose.hasSubscribers).to.be.true
     })
     it('should start OCE global context', () => {
       IAST.enable(config)
@@ -60,12 +73,11 @@ describe('IAST Index', () => {
 
   describe('disable', () => {
     it('should unsubscribe', () => {
-      incomingHttpRequestEnd.subscribe.restore()
       IAST.enable(config)
-      sinon.spy(incomingHttpRequestEnd, 'unsubscribe')
       IAST.disable()
-      expect(incomingHttpRequestEnd.unsubscribe)
-        .to.have.been.calledOnceWithExactly(IAST.onIncomingHttpRequestEnd)
+      expect(requestStart.hasSubscribers).to.be.false
+      expect(requestFinish.hasSubscribers).to.be.false
+      expect(requestClose.hasSubscribers).to.be.false
     })
 
     it('should stop OCE global context', () => {
@@ -172,6 +184,23 @@ describe('IAST Index', () => {
       datadogCore.storage.getStore.returns(store)
       IAST.onIncomingHttpRequestEnd({ req: {} })
       expect(overheadController.releaseRequest).not.to.be.called
+    })
+  })
+
+  describe('cleanIastContext', () => {
+    it('should clean the iast context', () => {
+      const store = {}
+      const req = {}
+      IAST.enable(config)
+      web.getContext.returns({ span: {} })
+      overheadController.acquireRequest.returns(true)
+      datadogCore.storage.getStore.returns(store)
+      requestStart.publish({ req })
+      const iastContext = store[IAST.IAST_CONTEXT_KEY]
+      expect(iastContext.rootSpan).not.to.be.undefined
+      datadogCore.storage.getStore.returns({})
+      requestClose.publish({ req })
+      expect(iastContext.rootSpan).to.be.undefined
     })
   })
 })
