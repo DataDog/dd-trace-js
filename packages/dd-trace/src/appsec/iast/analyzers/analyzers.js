@@ -1,3 +1,3 @@
 module.exports = {
-  'weakHashAnalyzer': require('./weak-hash-analyzer')
+  'WEAK_HASH_ANALYZER': require('./weak-hash-analyzer')
 }

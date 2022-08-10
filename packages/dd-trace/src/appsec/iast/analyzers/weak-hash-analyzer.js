@@ -5,15 +5,15 @@ const { IAST_CONTEXT_KEY } = require('./../index')
 const Analyzer = require('./vulnerability-analyzer')
 
 const INSECURE_HASH_ALGORITHMS = [
-  'md4', 'md4withrsaencryption', 'rsa-md4',
-  'rsa-md5', 'md5', 'md5-sha1', 'ssl3-md5', 'md5withrsaencryption',
-  'rsa-sha1', 'rsa-sha1-2', 'sha1', 'md5-sha1', 'sha1withrsaencryption', 'ssl3-sha1'
-]
+  'md4', 'md4WithRSAEncryption', 'RSA-MD4',
+  'RSA-MD5', 'md5', 'md5-sha1', 'ssl3-md5', 'md5WithRSAEncryption',
+  'RSA-SHA1', 'RSA-SHA1-2', 'sha1', 'md5-sha1', 'sha1WithRSAEncryption', 'ssl3-sha1'
+].map(algorithm => algorithm.toLowerCase())
 
 class WeakHashAnalyzer extends Analyzer {
   constructor () {
     super('WEAK_HASH_ANALYZER')
-    this.addSub('asm:crypto:hashing:start', this._handler)
+    this.addSub('asm:crypto:hashing:start', (data) => this._handler(data))
   }
 
   _handler ({ algorithm }) {
