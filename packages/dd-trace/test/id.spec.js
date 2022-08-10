@@ -63,6 +63,7 @@ describe('id', () => {
     const spanId = id('12293a8527e70a7f27c8d624ace0f559', 16)
 
     expect(spanId.toString()).to.equal('12293a8527e70a7f27c8d624ace0f559')
+    expect(spanId.toString(10)).to.equal('2866776615828911449')
   })
 
   it('should use hex strings by default', () => {

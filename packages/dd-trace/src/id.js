@@ -103,8 +103,8 @@ function fromString (str, raddix) {
 
 // Convert a buffer to a numerical string.
 function toNumberString (buffer, radix) {
-  let high = readInt32(buffer, 0)
-  let low = readInt32(buffer, 4)
+  let high = readInt32(buffer, buffer.length - 8)
+  let low = readInt32(buffer, buffer.length - 4)
   let str = ''
 
   radix = radix || 10
