@@ -6,6 +6,14 @@ const pathLine = {
   ddBasePath: calculateDDBasePath(__dirname) // Only for test purposes
 }
 
+const EXCLUDED_PATHS = [
+  '/node_modules/diagnostics_channel'
+]
+const EXCLUDED_PATH_PREFIXES = [
+  'node:diagnostics_channel',
+  'diagnostics_channel'
+]
+
 function calculateDDBasePath (dirname) {
   const dirSteps = dirname.split(path.sep)
   const packagesIndex = dirSteps.indexOf('packages')
@@ -29,7 +37,7 @@ function getFirstNonDDPathAndLineFromCallsites (callsites) {
     for (let i = 0; i < callsites.length; i++) {
       const callsite = callsites[i]
       const path = callsite.getFileName()
-      if (path.indexOf(pathLine.ddBasePath) === -1) {
+      if (!isExcluded(callsite) && path.indexOf(pathLine.ddBasePath) === -1) {
         return {
           path,
           line: callsite.getLineNumber()
@@ -38,6 +46,22 @@ function getFirstNonDDPathAndLineFromCallsites (callsites) {
     }
   }
   return null
+}
+
+function isExcluded (callsite) {
+  if (callsite.isNative()) return true
+  const filename = callsite.getFileName()
+  for (let i = 0; i < EXCLUDED_PATHS.length; i++) {
+    if (filename.indexOf(EXCLUDED_PATHS[i]) > -1) {
+      return true
+    }
+  }
+  for (let i = 0; i < EXCLUDED_PATH_PREFIXES.length; i++) {
+    if (filename.indexOf(EXCLUDED_PATH_PREFIXES[i]) === 0) {
+      return true
+    }
+  }
+  return false
 }
 
 function getFirstNonDDPathAndLine () {
