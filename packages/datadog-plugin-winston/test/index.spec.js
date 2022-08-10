@@ -55,7 +55,7 @@ describe('Plugin', () => {
 
     spy = sinon.spy()
 
-    Transport = class extends winston.Transport {}
+    class Transport extends winston.Transport {}
 
     if (semver.intersects(version, '>=3')) {
       log = sinon.spy((meta) => spy(meta.dd))
