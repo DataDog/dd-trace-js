@@ -39,8 +39,8 @@ jobs:
         run: |
           npm pack
           cp dd-trace-*.tgz k8s/auto-inst/dd-trace.tgz
-          docker build k8s/auto-inst --build-arg npm_pkg=./dd-trace.tgz -t ghcr.io/datadog/dd-trace-js/dd-trace-js-init:${GITHUB_SHA}
-          docker push ghcr.io/datadog/dd-trace-js/dd-trace-js-init:${GITHUB_SHA}
+          docker build k8s/auto-inst --build-arg npm_pkg=./dd-trace.tgz -t ghcr.io/datadog/dd-trace-js/dd-lib-js-init:${GITHUB_SHA}
+          docker push ghcr.io/datadog/dd-trace-js/dd-lib-js-init:${GITHUB_SHA}
 
       - name: Build sample app image
         run: |
