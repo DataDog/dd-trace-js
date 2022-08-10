@@ -38,7 +38,6 @@ function createLogServer () {
 describe('Plugin', () => {
   let winston
   let tracer
-  let Transport
   let transport
   let httpTransport
   let log
