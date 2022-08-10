@@ -1,12 +1,16 @@
 'use strict'
 
 const { createHook, executionAsyncResource } = require('async_hooks')
+const { channel } = require('diagnostics_channel')
+
+const beforeCh = channel('dd-trace:storage:before')
+const afterCh = channel('dd-trace:storage:after')
 
 class AsyncResourceStorage {
   constructor () {
     this._ddResourceStore = Symbol('ddResourceStore')
     this._enabled = false
-    this._hook = this._createHook()
+    this._hook = createHook(this._createHook())
   }
 
   disable () {
@@ -48,9 +52,15 @@ class AsyncResourceStorage {
   }
 
   _createHook () {
-    return createHook({
-      init: this._init.bind(this)
-    })
+    return {
+      init: this._init.bind(this),
+      before () {
+        beforeCh.publish()
+      },
+      after () {
+        afterCh.publish()
+      }
+    }
   }
 
   _enable () {

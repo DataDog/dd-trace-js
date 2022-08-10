@@ -7,6 +7,7 @@ const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 
 function createWrapRouterMethod (name) {
   const enterChannel = channel(`apm:${name}:middleware:enter`)
+  const exitChannel = channel(`apm:${name}:middleware:exit`)
   const errorChannel = channel(`apm:${name}:middleware:error`)
   const nextChannel = channel(`apm:${name}:middleware:next`)
 
@@ -48,11 +49,12 @@ function createWrapRouterMethod (name) {
 
         try {
           return original.apply(this, arguments)
-        } catch (e) {
-          errorChannel.publish(e)
+        } catch (error) {
+          errorChannel.publish({ req, error })
           nextChannel.publish({ req })
+          exitChannel.publish({ req })
 
-          throw e
+          throw error
         }
       })
     })
@@ -89,12 +91,13 @@ function createWrapRouterMethod (name) {
   function wrapNext (req, next) {
     return function (error) {
       if (error) {
-        errorChannel.publish(error)
+        errorChannel.publish({ req, error })
       }
 
       nextChannel.publish({ req })
+      exitChannel.publish({ req })
 
-      next.apply(null, arguments)
+      next.apply(this, arguments)
     }
   }
 

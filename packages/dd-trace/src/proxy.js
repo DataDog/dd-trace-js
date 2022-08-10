@@ -1,6 +1,5 @@
 'use strict'
 
-const BaseTracer = require('opentracing').Tracer
 const NoopTracer = require('./noop/tracer')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
@@ -14,19 +13,12 @@ const telemetry = require('./telemetry')
 
 const noop = new NoopTracer()
 
-class Tracer extends BaseTracer {
+class Tracer {
   constructor () {
-    super()
-
     this._initialized = false
     this._tracer = noop
     this._instrumenter = new Instrumenter(this)
     this._pluginManager = new PluginManager(this)
-    this._deprecate = method => log.deprecate(`tracer.${method}`, [
-      `tracer.${method}() is deprecated.`,
-      'Please use tracer.startSpan() and tracer.scope() instead.',
-      'See: https://datadog.github.io/dd-trace-js/#manual-instrumentation.'
-    ].join(' '))
   }
 
   init (options) {
@@ -124,20 +116,6 @@ class Tracer extends BaseTracer {
 
   scope () {
     return this._tracer.scope.apply(this._tracer, arguments)
-  }
-
-  currentSpan () {
-    this._deprecate('currentSpan')
-    return this._tracer.currentSpan.apply(this._tracer, arguments)
-  }
-
-  bind (callback) {
-    this._deprecate('bind')
-    return callback
-  }
-
-  bindEmitter () {
-    this._deprecate('bindEmitter')
   }
 
   getRumData () {

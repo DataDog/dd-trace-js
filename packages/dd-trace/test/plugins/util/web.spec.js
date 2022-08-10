@@ -75,6 +75,7 @@ describe('plugins/util/web', () => {
       expect(config.hooks).to.be.an('object')
       expect(config.hooks).to.have.property('request')
       expect(config.hooks.request).to.be.a('function')
+      expect(config).to.have.property('queryStringObfuscation', true)
     })
 
     it('should use the shared config if set', () => {
@@ -118,6 +119,48 @@ describe('plugins/util/web', () => {
       })
 
       expect(config.headers).to.include('bar')
+    })
+
+    describe('queryStringObfuscation', () => {
+      it('should keep booleans as is', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: false
+        })
+
+        expect(config).to.have.property('queryStringObfuscation', false)
+      })
+
+      it('should change to false when passed empty string', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: ''
+        })
+
+        expect(config).to.have.property('queryStringObfuscation', false)
+      })
+
+      it('should change to true when passed ".*"', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: '.*'
+        })
+
+        expect(config).to.have.property('queryStringObfuscation', true)
+      })
+
+      it('should convert to regex when passed valid string', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: 'a*'
+        })
+
+        expect(config).to.have.deep.property('queryStringObfuscation', /a*/gi)
+      })
+
+      it('should default to true when passed a bad regex', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: '(?)'
+        })
+
+        expect(config).to.have.property('queryStringObfuscation', true)
+      })
     })
   })
 
@@ -247,9 +290,13 @@ describe('plugins/util/web', () => {
         })
       })
 
-      it('should remove the query string from the URL', () => {
+      it('should obfuscate the query string from the URL', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: 'secret=.*?(&|$)'
+        })
+
         req.method = 'GET'
-        req.url = '/user/123?foo=bar'
+        req.url = '/user/123?secret=password&foo=bar'
         res.statusCode = '200'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
@@ -258,7 +305,7 @@ describe('plugins/util/web', () => {
           res.end()
 
           expect(tags).to.include({
-            [HTTP_URL]: 'http://localhost/user/123'
+            [HTTP_URL]: 'http://localhost/user/123?<redacted>foo=bar'
           })
         })
       })
@@ -721,11 +768,11 @@ describe('plugins/util/web', () => {
       })
     })
 
-    it('should not override an existing error', () => {
+    it('should override an existing error', () => {
       const error = new Error('boom')
 
-      web.addError(req, error)
       web.addError(req, new Error('prrr'))
+      web.addError(req, error)
       web.addStatusError(req, 500)
 
       expect(tags).to.include({
@@ -825,6 +872,47 @@ describe('plugins/util/web', () => {
     it('should filter the url', () => {
       const filtered = config.filter('/_notokay')
       expect(filtered).to.equal(false)
+    })
+  })
+
+  describe('obfuscateQs', () => {
+    const url = 'http://perdu.com/path/'
+    const qs = '?data=secret'
+
+    let config
+
+    beforeEach(() => {
+      config = {
+        queryStringObfuscation: new RegExp('secret', 'gi')
+      }
+    })
+
+    it('should not obfuscate when passed false', () => {
+      config.queryStringObfuscation = false
+
+      const result = web.obfuscateQs(config, url + qs)
+
+      expect(result).to.equal(url + qs)
+    })
+
+    it('should not obfuscate when no querystring is found', () => {
+      const result = web.obfuscateQs(config, url)
+
+      expect(result).to.equal(url)
+    })
+
+    it('should remove the querystring if passed true', () => {
+      config.queryStringObfuscation = true
+
+      const result = web.obfuscateQs(config, url + qs)
+
+      expect(result).to.equal(url)
+    })
+
+    it('should obfuscate only the querystring part of the url', () => {
+      const result = web.obfuscateQs(config, url + 'secret/' + qs)
+
+      expect(result).to.equal(url + 'secret/?data=<redacted>')
     })
   })
 })

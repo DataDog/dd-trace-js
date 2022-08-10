@@ -343,6 +343,34 @@ describe('Plugin', () => {
             })
           })
 
+          it('should not lose the route with multiple middleware', done => {
+            const app = new Koa()
+            const router = new Router()
+
+            router.get('/user/:id', (ctx, next) => next(), (ctx, next) => {
+              ctx.body = ''
+            })
+
+            app
+              .use(router.routes())
+              .use(router.allowedMethods())
+
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /user/:id')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', (e) => {
+              axios
+                .get(`http://localhost:${port}/user/123`)
+                .catch(done)
+            })
+          })
+
           it('should not lose the route if next() is called in a previous router', done => {
             const app = new Koa()
             const router1 = new Router()
@@ -536,7 +564,7 @@ describe('Plugin', () => {
                 expect(spans[1].meta).to.include({
                   'error.type': error.name
                 })
-                expect(spans[0].error).to.equal(1)
+                expect(spans[1].error).to.equal(1)
               })
               .then(done)
               .catch(done)

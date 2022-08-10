@@ -52,7 +52,7 @@ describe('Plugin', () => {
       it('should do automatic instrumentation', done => {
         agent
           .use(traces => {
-            expect(traces[0][0]).to.have.property('name', 'http.request')
+            expect(traces[0][0]).to.have.property('name', 'web.request')
             expect(traces[0][0]).to.have.property('service', 'test')
             expect(traces[0][0]).to.have.property('type', 'web')
             expect(traces[0][0]).to.have.property('resource', 'GET')
@@ -130,6 +130,19 @@ describe('Plugin', () => {
         const res = new ServerResponse(req)
 
         expect(() => res.emit('finish')).to.not.throw()
+      })
+
+      it('should not cause `end` to be called multiple times', done => {
+        app = (req, res) => {
+          res.end = sinon.spy(res.end)
+
+          res.on('finish', () => {
+            expect(res.end).to.have.been.calledOnce
+            done()
+          })
+        }
+
+        axios.get(`http://localhost:${port}/user`).catch(done)
       })
     })
 

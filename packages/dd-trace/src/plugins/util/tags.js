@@ -20,6 +20,8 @@ const CI_JOB_URL = 'ci.job.url'
 const CI_JOB_NAME = 'ci.job.name'
 const CI_STAGE_NAME = 'ci.stage.name'
 
+const CI_ENV_VARS = '_dd.ci.env_vars'
+
 module.exports = {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
@@ -40,5 +42,6 @@ module.exports = {
   CI_WORKSPACE_PATH,
   CI_JOB_URL,
   CI_JOB_NAME,
-  CI_STAGE_NAME
+  CI_STAGE_NAME,
+  CI_ENV_VARS
 }

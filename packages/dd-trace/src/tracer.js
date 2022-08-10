@@ -128,10 +128,6 @@ class DatadogTracer extends Tracer {
     return this._scope
   }
 
-  currentSpan () {
-    return this.scope().active()
-  }
-
   getRumData () {
     if (!this._enableGetRumData) {
       return ''

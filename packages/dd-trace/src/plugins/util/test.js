@@ -36,6 +36,9 @@ const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
 const TEST_CODE_OWNERS = 'test.codeowners'
 const TEST_SOURCE_FILE = 'test.source.file'
 const LIBRARY_VERSION = 'library_version'
+const TEST_COMMAND = 'test.command'
+const TEST_SESSION_ID = 'test_session_id'
+const TEST_SUITE_ID = 'test_suite_id'
 
 const ERROR_TYPE = 'error.type'
 const ERROR_MESSAGE = 'error.msg'
@@ -70,7 +73,12 @@ module.exports = {
   getTestSuitePath,
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
-  getTestCommonTags
+  getTestCommonTags,
+  getTestSessionCommonTags,
+  getTestSuiteCommonTags,
+  TEST_COMMAND,
+  TEST_SESSION_ID,
+  TEST_SUITE_ID
 }
 
 function getTestEnvironmentMetadata (testFramework, config) {
@@ -224,4 +232,27 @@ function getCodeOwnersForFilename (filename, entries) {
     }
   }
   return null
+}
+
+function getTestSessionCommonTags (command, version) {
+  return {
+    [SPAN_TYPE]: 'test_session_end',
+    [TEST_TYPE]: 'test',
+    [RESOURCE_NAME]: `test_session.${command}`,
+    [TEST_FRAMEWORK_VERSION]: version,
+    [LIBRARY_VERSION]: ddTraceVersion,
+    [TEST_COMMAND]: command
+  }
+}
+
+function getTestSuiteCommonTags (command, version, testSuite) {
+  return {
+    [SPAN_TYPE]: 'test_suite_end',
+    [TEST_TYPE]: 'test',
+    [RESOURCE_NAME]: `test_suite.${testSuite}`,
+    [TEST_FRAMEWORK_VERSION]: version,
+    [LIBRARY_VERSION]: ddTraceVersion,
+    [TEST_SUITE]: testSuite,
+    [TEST_COMMAND]: command
+  }
 }

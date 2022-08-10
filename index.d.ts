@@ -313,10 +313,10 @@ export declare interface TracerOptions {
   };
 
   /**
-   * Experimental features can be enabled all at once by using true or individually using key / value pairs.
+   * Experimental features can be enabled individually using key / value pairs.
    * @default {}
    */
-  experimental?: boolean | {
+  experimental?: {
     b3?: boolean
     traceparent?: boolean
 
@@ -562,7 +562,6 @@ interface Plugins {
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
   "fastify": plugins.fastify;
-  "fs": plugins.fs;
   "generic-pool": plugins.generic_pool;
   "google-cloud-pubsub": plugins.google_cloud_pubsub;
   "graphql": plugins.graphql;
@@ -904,12 +903,6 @@ declare namespace plugins {
   interface fastify extends HttpServer {}
 
   /**
-   * This plugin automatically instruments the
-   * [fs](https://nodejs.org/api/fs.html) module.
-   */
-  interface fs extends Instrumentation {}
-
-  /**
    * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
    * module to bind the callbacks the the caller context.
    */
@@ -1216,7 +1209,7 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
-   * [mysql2](https://github.com/brianmario/mysql2) module.
+   * [mysql2](https://github.com/sidorares/node-mysql2) module.
    */
   interface mysql2 extends mysql {}
 

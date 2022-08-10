@@ -95,10 +95,17 @@ class FakeAgent extends EventEmitter {
 function spawnProc (filename, options = {}) {
   const proc = fork(filename, options)
   return new Promise((resolve, reject) => {
-    proc.on('message', ({ port }) => {
-      proc.url = `http://localhost:${port}`
-      resolve(proc)
-    }).on('error', reject)
+    proc
+      .on('message', ({ port }) => {
+        proc.url = `http://localhost:${port}`
+        resolve(proc)
+      })
+      .on('error', reject)
+      .on('exit', code => {
+        if (code !== 0) {
+          reject(new Error(`Process exited with status code ${code}.`))
+        }
+      })
   })
 }
 

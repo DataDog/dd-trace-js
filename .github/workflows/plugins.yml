@@ -1,7 +1,9 @@
 name: Plugins
 
 on:
+  pull_request:
   push:
+    branches: [master]
   schedule:
     - cron: '0 4 * * *'
 
@@ -174,7 +176,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       couchbase:
-        image: rishabhdev/couchbase-server-sandbox:latest
+        image: sabrenner/couchbase-server-sandbox:latest
         ports:
           - 8091-8095:8091-8095
           - 11210:11210
@@ -294,24 +296,6 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - uses: codecov/codecov-action@v2
-
-  fs:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: fs
-    steps:
-      - uses: actions/checkout@v2
-      - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - uses: ./.github/actions/node/12
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/14
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
@@ -874,7 +858,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/oldest
+      - uses: ./.github/actions/node/14
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest

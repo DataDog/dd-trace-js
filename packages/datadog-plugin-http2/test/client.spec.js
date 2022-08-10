@@ -40,12 +40,12 @@ describe('Plugin', () => {
         if (appListener) {
           appListener.close()
         }
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load('http2')
+          return agent.load('http2', { server: false })
             .then(() => {
               http2 = require('http2')
             })
@@ -62,7 +62,7 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('service', 'test-http-client')
+                expect(traces[0][0]).to.have.property('service', 'test')
                 expect(traces[0][0]).to.have.property('type', 'http')
                 expect(traces[0][0]).to.have.property('resource', 'GET')
                 expect(traces[0][0].meta).to.have.property('span.kind', 'client')

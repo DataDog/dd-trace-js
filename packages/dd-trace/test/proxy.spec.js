@@ -26,7 +26,6 @@ describe('TracerProxy', () => {
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
-      currentSpan: sinon.stub().returns('current'),
       setUrl: sinon.stub()
     }
 
@@ -37,7 +36,6 @@ describe('TracerProxy', () => {
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('noop'),
       extract: sinon.stub().returns('spanContext'),
-      currentSpan: sinon.stub().returns('current'),
       setUrl: sinon.stub()
     }
 
@@ -306,15 +304,6 @@ describe('TracerProxy', () => {
       })
     })
 
-    describe('currentSpan', () => {
-      it('should call the underlying NoopTracer', () => {
-        const returnValue = proxy.currentSpan('a', 'b', 'c')
-
-        expect(noop.currentSpan).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal('current')
-      })
-    })
-
     describe('setUrl', () => {
       it('should call the underlying DatadogTracer', () => {
         const returnValue = proxy.setUrl('http://example.com')
@@ -399,15 +388,6 @@ describe('TracerProxy', () => {
 
         expect(tracer.extract).to.have.been.calledWith('a', 'b', 'c')
         expect(returnValue).to.equal('spanContext')
-      })
-    })
-
-    describe('currentSpan', () => {
-      it('should call the underlying DatadogTracer', () => {
-        const returnValue = proxy.currentSpan('a', 'b', 'c')
-
-        expect(tracer.currentSpan).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal('current')
       })
     })
 

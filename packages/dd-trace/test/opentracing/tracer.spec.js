@@ -211,32 +211,6 @@ describe('Tracer', () => {
       })
     })
 
-    it('should ignore references that are not references', () => {
-      fields.references = [{}]
-
-      tracer = new Tracer(config)
-      tracer.startSpan('name', fields)
-
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
-        operationName: 'name',
-        parent: null
-      })
-    })
-
-    it('should ignore references to objects other than span contexts', () => {
-      fields.references = [
-        new Reference(opentracing.REFERENCE_CHILD_OF, {})
-      ]
-
-      tracer = new Tracer(config)
-      tracer.startSpan('name', fields)
-
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
-        operationName: 'name',
-        parent: null
-      })
-    })
-
     it('should merge default tracer tags with span tags', () => {
       config.tags = {
         'foo': 'tracer',

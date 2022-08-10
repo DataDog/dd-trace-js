@@ -17,12 +17,15 @@ const patchedTypes = new WeakSet()
 /** CHANNELS */
 
 // execute channels
-const startResolveCh = channel('apm:graphql:resolve:start')
 const startExecuteCh = channel('apm:graphql:execute:start')
 const finishExecuteCh = channel('apm:graphql:execute:finish')
+const executeErrorCh = channel('apm:graphql:execute:error')
+
+// resolve channels
+const startResolveCh = channel('apm:graphql:resolve:start')
 const finishResolveCh = channel('apm:graphql:resolve:finish')
 const updateFieldCh = channel('apm:graphql:resolve:updateField')
-const executeErrorCh = channel('apm:graphql:execute:error')
+const resolveErrorCh = channel('apm:graphql:resolve:error')
 
 // parse channels
 const parseStartCh = channel('apm:graphql:parser:start')
@@ -124,7 +127,9 @@ function wrapValidate (validate) {
       let errors
       try {
         errors = validate.apply(this, arguments)
-        validateErrorCh.publish(errors && errors[0])
+        if (errors && errors[0]) {
+          validateErrorCh.publish(errors && errors[0])
+        }
         return errors
       } catch (err) {
         err.stack
@@ -177,7 +182,12 @@ function wrapExecute (execute) {
         return callInAsyncScope(exe, asyncResource, this, arguments, (err, res) => {
           if (finishResolveCh.hasSubscribers) finishResolvers(context)
 
-          executeErrorCh.publish(err || (res && res.errors && res.errors[0]))
+          const error = err || (res && res.errors && res.errors[0])
+
+          if (error) {
+            executeErrorCh.publish(error)
+          }
+
           finishExecuteCh.publish({ res, args })
         })
       })
@@ -195,9 +205,7 @@ function wrapResolve (resolve) {
 
     if (!context) return resolve.apply(this, arguments)
 
-    const path = pathToArray(info && info.path)
-
-    const field = assertField(context, info, path)
+    const field = assertField(context, info)
 
     return callInAsyncScope(resolve, field.asyncResource, this, arguments, (err) => {
       updateFieldCh.publish({ field, info, err })
@@ -242,7 +250,11 @@ function pathToArray (path) {
   return flattened.reverse()
 }
 
-function assertField (context, info, path) {
+function assertField (context, info) {
+  const pathInfo = info && info.path
+
+  const path = pathToArray(pathInfo)
+
   const pathString = path.join('.')
   const fields = context.fields
 
@@ -329,7 +341,9 @@ function finishResolvers ({ fields }) {
     const field = fields[key]
     const asyncResource = field.asyncResource
     asyncResource.runInAsyncScope(() => {
-      executeErrorCh.publish(field.error)
+      if (field.error) {
+        resolveErrorCh.publish(field.error)
+      }
       finishResolveCh.publish(field.finishTime)
     })
   })

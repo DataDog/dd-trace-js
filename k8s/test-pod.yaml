@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sample-app
+  namespace: default
+spec:
+  initContainers:
+    - name: node-init
+      image: ghcr.io/datadog/dd-trace-js/dd-trace-js-init:LATEST
+      command: ["sh", "copy-lib.sh", "/autoinstrumentation"]
+      volumeMounts:
+        - name: autoinstrumentation
+          mountPath: /autoinstrumentation
+  containers:
+    - image: ghcr.io/datadog/dd-trace-js/sample-app:LATEST
+      env:
+        - name: NODE_OPTIONS
+          value: --require=/autoinstrumentation/node_modules/dd-trace/init
+        - name: DD_TRACE_DEBUG
+          value: "true"
+        - name: DD_AGENT_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: DD_TRACE_AGENT_PORT
+          value: "18126"
+      name: sample-app
+      readinessProbe:
+        initialDelaySeconds: 5
+        periodSeconds: 15
+        timeoutSeconds: 10
+        successThreshold: 1
+        failureThreshold: 10
+        httpGet:
+          host:
+          scheme: HTTP
+          path: /
+          port: 18080
+      ports:
+        - containerPort: 18080
+          hostPort: 18080
+          protocol: TCP
+      volumeMounts:
+        - name: autoinstrumentation
+          mountPath: /autoinstrumentation
+  volumes:
+    - name: autoinstrumentation
+      emptyDir: {}

@@ -16,11 +16,18 @@ class RouterPlugin extends WebPlugin {
     this._contexts = new WeakMap()
 
     this.addSub(`apm:${this.constructor.name}:middleware:enter`, ({ req, name, route }) => {
-      const store = storage.getStore()
-      const context = this._createContext(req, route)
-      const span = this._getMiddlewareSpan(context, store, name)
+      const childOf = this._getActive(req) || this._getStoreSpan()
 
-      this.enter(span, store)
+      if (!childOf) return
+
+      const span = this._getMiddlewareSpan(name, childOf)
+      const context = this._createContext(req, route, childOf)
+
+      if (childOf !== span) {
+        context.middleware.push(span)
+      }
+
+      this.enter(span)
 
       web.patch(req)
       web.setRoute(req, context.route)
@@ -32,13 +39,27 @@ class RouterPlugin extends WebPlugin {
       if (!context) return
 
       context.stack.pop()
-
-      if (context.middleware.length > 0) {
-        context.middleware.pop().finish()
-      }
     })
 
-    this.addSub(`apm:${this.constructor.name}:middleware:error`, this.addError)
+    this.addSub(`apm:${this.constructor.name}:middleware:exit`, ({ req }) => {
+      const context = this._contexts.get(req)
+
+      if (!context || context.middleware.length === 0) return
+
+      context.middleware.pop().finish()
+    })
+
+    this.addSub(`apm:${this.constructor.name}:middleware:error`, ({ req, error }) => {
+      web.addError(req, error)
+
+      if (!this.config.middleware) return
+
+      const span = this._getActive(req)
+
+      if (!span) return
+
+      span.setTag('error', error)
+    })
 
     this.addSub(`apm:http:server:request:finish`, ({ req }) => {
       const context = this._contexts.get(req)
@@ -53,9 +74,22 @@ class RouterPlugin extends WebPlugin {
     })
   }
 
-  _getMiddlewareSpan (context, store, name) {
-    const childOf = store && store.span
+  _getActive (req) {
+    const context = this._contexts.get(req)
 
+    if (!context) return
+    if (context.middleware.length === 0) return context.span
+
+    return context.middleware[context.middleware.length - 1]
+  }
+
+  _getStoreSpan () {
+    const store = storage.getStore()
+
+    return store && store.span
+  }
+
+  _getMiddlewareSpan (name, childOf) {
     if (this.config.middleware === false) {
       return childOf
     }
@@ -67,14 +101,12 @@ class RouterPlugin extends WebPlugin {
       }
     })
 
-    context.middleware.push(span)
-
     analyticsSampler.sample(span, this.config.measured)
 
     return span
   }
 
-  _createContext (req, route) {
+  _createContext (req, route, span) {
     let context = this._contexts.get(req)
 
     if (!route || route === '/' || route === '*') {
@@ -92,6 +124,7 @@ class RouterPlugin extends WebPlugin {
       }
     } else {
       context = {
+        span,
         stack: [route],
         route,
         middleware: []

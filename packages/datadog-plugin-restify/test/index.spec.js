@@ -1,5 +1,6 @@
 'use strict'
 
+const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
 const getPort = require('get-port')
 const semver = require('semver')
@@ -83,12 +84,22 @@ describe('Plugin', () => {
 
         it('should run handlers in the request scope', done => {
           const server = restify.createServer()
+          const interval = setInterval(() => {
+            next && next() && clearInterval(interval)
+          })
+
+          let next
 
           server.pre((req, res, next) => {
             expect(tracer.scope().active()).to.not.be.null
             next()
           })
 
+          // break the async context
+          server.use((req, res, _next) => {
+            next = _next
+          })
+
           server.use((req, res, next) => {
             expect(tracer.scope().active()).to.not.be.null
             next()
@@ -96,36 +107,6 @@ describe('Plugin', () => {
 
           server.get('/user', (req, res, next) => {
             expect(tracer.scope().active()).to.not.be.null
-            res.send(200)
-            done()
-            next()
-          })
-
-          getPort().then(port => {
-            appListener = server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
-          })
-        })
-
-        it('should reactivate the request span in middleware scopes', done => {
-          const server = restify.createServer()
-
-          let span
-
-          server.use((req, res, next) => {
-            span = tracer.scope().active()
-            tracer.scope().activate({}, () => next())
-          })
-
-          server.use((req, res, next) => {
-            expect(tracer.scope().active()).to.equal(span)
-            next()
-          })
-
-          server.get('/user', (req, res, next) => {
             res.send(200)
             done()
             next()
@@ -160,6 +141,35 @@ describe('Plugin', () => {
             appListener = server.listen(port, 'localhost', () => {
               axios
                 .get(`http://localhost:${port}/user/123`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should keep user stores untouched', done => {
+          const server = restify.createServer()
+          const storage = new AsyncLocalStorage()
+          const store = {}
+
+          server.use((req, res, next) => {
+            storage.run(store, () => next())
+          })
+
+          server.get('/user', (req, res, next) => {
+            try {
+              expect(storage.getStore()).to.equal(store)
+              done()
+            } catch (e) {
+              done(e)
+            }
+
+            res.end()
+          })
+
+          getPort().then(port => {
+            appListener = server.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`)
                 .catch(done)
             })
           })

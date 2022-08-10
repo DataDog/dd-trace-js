@@ -2,7 +2,7 @@
 
 const retry = require('retry')
 const { request } = require('http')
-const FormData = require('form-data')
+const FormData = require('./form-data')
 
 // TODO: avoid using dd-trace internals. Make this a separate module?
 const docker = require('../../exporters/common/docker')
@@ -22,7 +22,6 @@ function sendRequest (options, form, callback) {
   })
   req.on('error', callback)
   if (form) form.pipe(req)
-  req.end()
 }
 
 function getBody (stream, callback) {

@@ -1,11 +1,7 @@
 'use strict'
 
-const opentracing = require('opentracing')
 const os = require('os')
-const Tracer = opentracing.Tracer
-const Reference = opentracing.Reference
 const Span = require('./span')
-const SpanContext = require('./span_context')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
 const TextMapPropagator = require('./propagation/text_map')
@@ -17,14 +13,13 @@ const formats = require('../../../../ext/formats')
 const log = require('../log')
 const metrics = require('../metrics')
 const getExporter = require('../exporter')
+const SpanContext = require('./span_context')
 
-const REFERENCE_CHILD_OF = opentracing.REFERENCE_CHILD_OF
-const REFERENCE_FOLLOWS_FROM = opentracing.REFERENCE_FOLLOWS_FROM
+const REFERENCE_CHILD_OF = 'child_of'
+const REFERENCE_FOLLOWS_FROM = 'follows_from'
 
-class DatadogTracer extends Tracer {
+class DatadogTracer {
   constructor (config) {
-    super()
-
     const Exporter = getExporter(config.experimental.exporter)
 
     this._service = config.service
@@ -49,32 +44,34 @@ class DatadogTracer extends Tracer {
     }
   }
 
-  _startSpan (name, fields) {
-    const reference = getParent(fields.references)
-    const parent = reference && reference.referencedContext()
-    return this._startSpanInternal(name, fields, parent)
-  }
+  startSpan (name, options = {}) {
+    const parent = options.childOf
+      ? getContext(options.childOf)
+      : getParent(options.references)
 
-  _startSpanInternal (name, fields = {}, parent) {
     const tags = {
       'service.name': this._service
     }
 
     const span = new Span(this, this._processor, this._prioritySampler, {
-      operationName: fields.operationName || name,
+      operationName: options.operationName || name,
       parent,
       tags,
-      startTime: fields.startTime,
+      startTime: options.startTime,
       hostname: this._hostname
     }, this._debug)
 
     span.addTags(this._tags)
-    span.addTags(fields.tags)
+    span.addTags(options.tags)
 
     return span
   }
 
-  _inject (spanContext, format, carrier) {
+  inject (spanContext, format, carrier) {
+    if (spanContext instanceof Span) {
+      spanContext = spanContext.context()
+    }
+
     try {
       this._prioritySampler.sample(spanContext)
       this._propagators[format].inject(spanContext, carrier)
@@ -82,11 +79,9 @@ class DatadogTracer extends Tracer {
       log.error(e)
       metrics.increment('datadog.tracer.node.inject.errors', true)
     }
-
-    return this
   }
 
-  _extract (format, carrier) {
+  extract (format, carrier) {
     try {
       return this._propagators[format].extract(carrier)
     } catch (e) {
@@ -97,31 +92,31 @@ class DatadogTracer extends Tracer {
   }
 }
 
+function getContext (spanContext) {
+  if (spanContext instanceof Span) {
+    spanContext = spanContext.context()
+  }
+
+  if (!(spanContext instanceof SpanContext)) {
+    spanContext = null
+  }
+
+  return spanContext
+}
+
 function getParent (references = []) {
   let parent = null
 
   for (let i = 0; i < references.length; i++) {
     const ref = references[i]
-
-    if (!(ref instanceof Reference)) {
-      log.error(() => `Expected ${ref} to be an instance of opentracing.Reference`)
-      continue
-    }
-
-    const spanContext = ref.referencedContext()
     const type = ref.type()
 
-    if (spanContext && !(spanContext instanceof SpanContext)) {
-      log.error(() => `Expected ${spanContext} to be an instance of SpanContext`)
-      continue
-    }
-
     if (type === REFERENCE_CHILD_OF) {
-      parent = ref
+      parent = ref.referencedContext()
       break
     } else if (type === REFERENCE_FOLLOWS_FROM) {
       if (!parent) {
-        parent = ref
+        parent = ref.referencedContext()
       }
     }
   }
