@@ -6,8 +6,8 @@ const overheadController = require('./overhead-controller')
 const dc = require('diagnostics_channel')
 const { saveIastContext, getIastContext, cleanIastContext } = require('./iast-context')
 
-const requestStart = dc.channel('apm:http:server:request:start')
-const requestFinish = dc.channel('apm:http:server:request:finish')
+const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
+const requestFinish = dc.channel('dd-trace:incomingHttpRequestEnd')
 const requestClose = dc.channel('apm:http:server:request:close')
 
 function enable (config) {
