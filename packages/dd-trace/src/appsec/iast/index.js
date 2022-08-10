@@ -1,23 +1,32 @@
-const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../gateway/channels')
 const { sendVulnerabilities } = require('./vulnerability-reporter')
 const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
 const web = require('../../plugins/util/web')
-const IAST_CONTEXT_KEY = Symbol('_dd.iast.context')
 const { storage } = require('../../../../datadog-core')
 const overheadController = require('./overhead-controller')
+const dc = require('diagnostics_channel')
+
+const IAST_CONTEXT_KEY = Symbol('_dd.iast.context')
+const requestStart = dc.channel('apm:http:server:request:start')
+const requestFinish = dc.channel('apm:http:server:request:finish')
+const requestClose = dc.channel('apm:http:server:request:close')
 
 function enable (config) {
   enableAllAnalyzers()
-  incomingHttpRequestEnd.subscribe(onIncomingHttpRequestEnd)
-  incomingHttpRequestStart.subscribe(onIncomingHttpRequestStart)
+
+  requestStart.subscribe(onIncomingHttpRequestStart)
+  requestFinish.subscribe(onIncomingHttpRequestEnd)
+  requestClose.subscribe(onIncomingHttpRequestClose)
+
   overheadController.configureOCE(config.iast.oce)
   overheadController.startGlobalContextResetScheduler()
 }
 
 function disable () {
   disableAllAnalyzers()
-  if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(onIncomingHttpRequestEnd)
-  if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(onIncomingHttpRequestStart)
+
+  if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
+  if (requestFinish.hasSubscribers) requestFinish.unsubscribe(onIncomingHttpRequestEnd)
+  if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestClose)
   overheadController.stopGlobalContextResetScheduler()
 }
 
@@ -30,7 +39,9 @@ function onIncomingHttpRequestStart (data) {
         const rootSpan = topContext.span
         const isRequestAcquired = overheadController.acquireRequest(rootSpan)
         if (isRequestAcquired) {
-          store[IAST_CONTEXT_KEY] = { rootSpan, req: data.req }
+          const iastContext = { rootSpan, req: data.req }
+          topContext[IAST_CONTEXT_KEY] = iastContext
+          store[IAST_CONTEXT_KEY] = iastContext
           overheadController.initializeRequestContext(store[IAST_CONTEXT_KEY])
         }
       }
@@ -46,6 +57,30 @@ function onIncomingHttpRequestEnd (data) {
       overheadController.releaseRequest()
       sendVulnerabilities(iastContext, iastContext.rootSpan)
     }
+  }
+}
+
+function cleanIastContext (store, context) {
+  let iastContext
+  if (store) {
+    iastContext = store[IAST_CONTEXT_KEY]
+    store[IAST_CONTEXT_KEY] = null
+  }
+  if (context) {
+    if (!iastContext) {
+      iastContext = context[IAST_CONTEXT_KEY]
+    }
+    context[IAST_CONTEXT_KEY] = null
+  }
+  if (iastContext) {
+    overheadController.releaseRequest()
+    Object.keys(iastContext).forEach(key => delete iastContext[key])
+  }
+}
+
+function onIncomingHttpRequestClose (data) {
+  if (data && data.req) {
+    cleanIastContext(storage.getStore(), web.getContext(data.req))
   }
 }
 
