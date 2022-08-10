@@ -11,7 +11,7 @@ const cryptoCh = channel('asm:crypto:hashing:start')
 addHook({ name: 'crypto' }, crypto => {
   shimmer.massWrap(
     crypto,
-    [crypto.createHash, crypto.createHmac, crypto.createSign, crypto.createVerify, crypto.sign, crypto.verify],
+    ['createHash', 'createHmac', 'createSign', 'createVerify', 'sign', 'verify'],
     wrapMethod
   )
   return crypto
