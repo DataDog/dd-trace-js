@@ -64,5 +64,6 @@ module.exports = {
   'sharedb': () => require('../sharedb'),
   'tedious': () => require('../tedious'),
   'when': () => require('../when'),
-  'winston': () => require('../winston')
+  'winston': () => require('../winston'),
+  'crypto': () => require('../crypto')
 }

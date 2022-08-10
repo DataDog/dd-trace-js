@@ -17,6 +17,10 @@ describe('Overhead controller', () => {
 
   describe('Initialize OCE context', () => {
     describe('Request context', () => {
+      it('should not fail when no context is provided', () => {
+        overheadController.initializeRequestContext()
+      })
+
       it('should populate request context', () => {
         const iastContext = {}
         overheadController.initializeRequestContext(iastContext)
