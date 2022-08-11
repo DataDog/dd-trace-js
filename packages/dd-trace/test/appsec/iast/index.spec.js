@@ -44,9 +44,7 @@ describe('IAST Index', () => {
     overheadController = {
       acquireRequest: sinon.stub(),
       releaseRequest: sinon.stub(),
-      initializeRequestContext: sinon.stub(),
-      startGlobalContextResetScheduler: sinon.stub(),
-      stopGlobalContextResetScheduler: sinon.stub()
+      initializeRequestContext: sinon.stub()
     }
     iastContext = {
       getIastContext: sinon.stub(),
@@ -78,10 +76,6 @@ describe('IAST Index', () => {
       expect(requestFinish.hasSubscribers).to.be.true
       expect(requestClose.hasSubscribers).to.be.true
     })
-    it('should start OCE global context', () => {
-      IAST.enable(config)
-      expect(overheadController.startGlobalContextResetScheduler).to.have.been.calledOnce
-    })
     it('should enable all analyzers', () => {
       IAST.enable(config)
       expect(analyzers.enableAllAnalyzers).to.have.been.calledOnce
@@ -99,11 +93,6 @@ describe('IAST Index', () => {
     it('should disable all analyzers', () => {
       IAST.disable()
       expect(analyzers.disableAllAnalyzers).to.have.been.calledOnce
-    })
-
-    it('should stop OCE global context', () => {
-      IAST.disable()
-      expect(overheadController.stopGlobalContextResetScheduler).to.have.been.calledOnce
     })
   })
 
