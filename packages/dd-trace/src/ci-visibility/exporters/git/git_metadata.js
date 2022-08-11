@@ -3,8 +3,7 @@ const fs = require('fs')
 const https = require('https')
 const path = require('path')
 
-// TODO: move this to a common place
-const FormData = require('../../../profiling/exporters/form-data')
+const FormData = require('../../../exporters/common/form-data')
 
 const log = require('../../../log')
 const {
