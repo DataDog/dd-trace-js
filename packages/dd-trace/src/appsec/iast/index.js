@@ -18,7 +18,6 @@ function enable (config) {
   requestClose.subscribe(onIncomingHttpRequestClose)
 
   overheadController.configureOCE(config.iast.oce)
-  overheadController.startGlobalContextResetScheduler()
 }
 
 function disable () {
@@ -27,7 +26,6 @@ function disable () {
   if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
   if (requestFinish.hasSubscribers) requestFinish.unsubscribe(onIncomingHttpRequestEnd)
   if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestClose)
-  overheadController.stopGlobalContextResetScheduler()
 }
 
 function onIncomingHttpRequestStart (data) {

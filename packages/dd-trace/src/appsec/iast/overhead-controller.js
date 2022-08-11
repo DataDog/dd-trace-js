@@ -1,9 +1,6 @@
 'use strict'
-const Scheduler = require('../../exporters/scheduler')
 
 const OVERHEAD_CONTROLLER_CONTEXT_KEY = 'oce'
-const GLOBAL_CONTEXT_RESET_INTERVAL = 30000
-
 const REPORT_VULNERABILITY = 'REPORT_VULNERABILITY'
 
 const GLOBAL_OCE_CONTEXT = {}
@@ -51,9 +48,6 @@ function _resetGlobalContext () {
   Object.assign(GLOBAL_OCE_CONTEXT, _getNewContext())
 }
 
-const _globalContextResetScheduler = new Scheduler(_resetGlobalContext, GLOBAL_CONTEXT_RESET_INTERVAL)
-_resetGlobalContext()
-
 function acquireRequest (rootSpan) {
   if (availableRequest > 0) {
     const sampling = oceConfig && typeof oceConfig.requestSampling === 'number'
@@ -81,25 +75,17 @@ function initializeRequestContext (iastContext) {
   if (iastContext) iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY] = _getNewContext()
 }
 
-function startGlobalContextResetScheduler () {
-  _globalContextResetScheduler.start()
-}
-
-function stopGlobalContextResetScheduler () {
-  _globalContextResetScheduler.stop()
-}
-
 function configureOCE (cfg) {
   oceConfig = cfg
   availableRequest = oceConfig.maxConcurrentRequest
 }
 
+_resetGlobalContext()
+
 module.exports = {
   OVERHEAD_CONTROLLER_CONTEXT_KEY,
   OPERATIONS,
   _resetGlobalContext,
-  startGlobalContextResetScheduler,
-  stopGlobalContextResetScheduler,
   initializeRequestContext,
   hasQuota,
   acquireRequest,
