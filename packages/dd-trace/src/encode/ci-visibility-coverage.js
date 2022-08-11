@@ -25,11 +25,26 @@ class CIVisibilityCoverageEncoder extends AgentlessCiVisibilityEncoder {
     })
   }
 
+  _encodeVersion (bytes, version) {
+    const buffer = bytes.buffer
+    const offset = bytes.length
+
+    // uint 32
+    bytes.reserve(5)
+    bytes.length += 5
+
+    buffer[offset] = 0xce
+    buffer[offset + 1] = version >> 24
+    buffer[offset + 2] = version >> 16
+    buffer[offset + 3] = version >> 8
+    buffer[offset + 4] = version
+  }
+
   encodeCodeCoverage (bytes, coverage) {
     const keysLength = Object.keys(coverage).length
     this._encodeMapPrefix(bytes, keysLength)
     this._encodeString(bytes, 'version')
-    this._encodeNumber(bytes, coverage.version)
+    this._encodeVersion(bytes, coverage.version)
     this._encodeString(bytes, 'trace_id')
     this._encodeId(bytes, coverage.trace_id)
     this._encodeString(bytes, 'span_id')

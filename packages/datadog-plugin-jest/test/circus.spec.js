@@ -4,6 +4,7 @@ const path = require('path')
 
 const nock = require('nock')
 const semver = require('semver')
+const msgpack = require('msgpack-lite')
 
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -33,6 +34,7 @@ describe('Plugin', function () {
 
   withVersions('jest', ['jest-environment-node'], (version, moduleName) => {
     afterEach(() => {
+      delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       const jestTestFile = fs.readdirSync(__dirname).filter(name => name.startsWith('jest-'))
       jestTestFile.forEach((testFile) => {
         delete require.cache[require.resolve(path.join(__dirname, testFile))]
@@ -47,11 +49,15 @@ describe('Plugin', function () {
         .get('/')
         .reply(200, 'OK')
 
-      const loadArguments = [['jest', 'http'], { service: 'test' }]
+      const loadArguments = [['jest', 'http']]
 
       // we need the ci visibility init for the coverage test
       if (this.currentTest.title === 'can report code coverage') {
+        process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
+        loadArguments.push({ service: 'test', isAgentlessEnabled: true, isITREnabled: true })
         loadArguments.push({ experimental: { exporter: 'datadog' } })
+      } else {
+        loadArguments.push({ service: 'test' })
       }
 
       return agent.load(...loadArguments).then(() => {
@@ -244,10 +250,14 @@ describe('Plugin', function () {
       })
 
       it('can report code coverage', function (done) {
-        // TODO: check request header (it should have one file for the coverage)
+        let contentTypeHeader, coveragePayload
+
         const scope = nock('https://event-platform-intake.datad0g.com')
           .post('/api/v2/citestcov')
-          .reply(202, 'OK')
+          .reply(202, function () {
+            contentTypeHeader = this.req.headers['content-type']
+            coveragePayload = msgpack.decode(this.req.requestBodyBuffers[3])
+          })
 
         const options = {
           ...jestCommonOptions,
@@ -259,8 +269,13 @@ describe('Plugin', function () {
           options,
           options.projects
         ).then(() => {
+          // it takes a bit for the payload to be flushed
           setTimeout(() => {
             expect(scope.isDone()).to.be.true
+            expect(contentTypeHeader).to.contain('multipart/form-data')
+            expect(coveragePayload.version).to.equal(1)
+            expect(coveragePayload.files).to.have.length(1)
+            expect(coveragePayload.files[0].filename).to.equal('packages/datadog-plugin-jest/test/sum-coverage-test.js')
             done()
           }, 1000)
         })
