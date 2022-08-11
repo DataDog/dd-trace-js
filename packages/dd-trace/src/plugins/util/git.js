@@ -1,5 +1,7 @@
-const { sanitizedExec } = require('./exec')
+const { execSync } = require('child_process')
+const os = require('os')
 
+const { sanitizedExec } = require('./exec')
 const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
@@ -14,6 +16,48 @@ const {
   GIT_COMMIT_AUTHOR_NAME,
   CI_WORKSPACE_PATH
 } = require('./tags')
+
+function getRepositoryUrl () {
+  return sanitizedExec('git config --get remote.origin.url', { stdio: 'pipe' })
+}
+
+function getLatestCommits () {
+  return execSync('git log --format=%H -n 1000 --since="1 month ago"', { stdio: 'pipe' })
+    .toString()
+    .split('\n')
+    .filter(commit => !!commit)
+}
+
+function getCommitsToUpload (commitsToExclude) {
+  let gitCommandToGetCommitsToUpload =
+    'git rev-list --objects --no-object-names --filter=blob:none --since="1 month ago" HEAD'
+
+  commitsToExclude.forEach(commit => {
+    gitCommandToGetCommitsToUpload = `${gitCommandToGetCommitsToUpload} ^${commit}`
+  })
+
+  return execSync(gitCommandToGetCommitsToUpload, { stdio: 'pipe' })
+    .toString()
+    .split('\n')
+    .filter(commit => !!commit)
+}
+
+// Generates pack files to upload and
+// returns the ordered list of packfiles' paths
+function generatePackFilesForCommits (commitsToUpload) {
+  const tmpFolder = os.tmpdir()
+
+  const prefix = Math.floor(Math.random() * 10000)
+  const path = `${tmpFolder}/${prefix}`
+
+  const orderedCommits =
+    execSync(
+      `git pack-objects --compression=9 --max-pack-size=3m ${path}`,
+      { input: commitsToUpload.join('\n') }
+    ).toString().split('\n').filter(commit => !!commit)
+
+  return orderedCommits.map(commit => `${path}-${commit}.pack`)
+}
 
 // If there is ciMetadata, it takes precedence.
 function getGitMetadata (ciMetadata) {
@@ -57,4 +101,10 @@ function getGitMetadata (ciMetadata) {
   }
 }
 
-module.exports = { getGitMetadata }
+module.exports = {
+  getGitMetadata,
+  getLatestCommits,
+  getRepositoryUrl,
+  generatePackFilesForCommits,
+  getCommitsToUpload
+}
