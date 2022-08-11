@@ -20,8 +20,8 @@ class CoverageWriter {
     }
   }
 
-  append ({ span, coverage }) {
-    this._encoder.append({ span, coverage })
+  append (coveragePayload) {
+    this._encoder.append(coveragePayload)
   }
 
   _sendPayload (form, _, done) {
