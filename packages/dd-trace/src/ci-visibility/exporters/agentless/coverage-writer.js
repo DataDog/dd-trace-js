@@ -55,6 +55,7 @@ function makeRequest (form, url, cb) {
   const request = https.request(options, res => {
     res.on('data', () => {})
     res.on('end', () => {
+      console.log('res.statusCode', res.statusCode)
       if (res.statusCode === 202) {
         cb(null)
       } else {

@@ -120,7 +120,8 @@ module.exports = class PluginManager {
       logInjection,
       serviceMapping,
       experimental,
-      queryStringObfuscation
+      queryStringObfuscation,
+      isITREnabled
     } = this._tracerConfig
 
     const sharedConfig = {}
@@ -134,8 +135,11 @@ module.exports = class PluginManager {
     }
 
     // TODO: update so that it's available for every CI Visibility's plugin
-    if (name === 'mocha') {
+    if (name === 'mocha' || name === 'jest') {
       sharedConfig.isAgentlessEnabled = experimental && experimental.exporter === 'datadog'
+    }
+    if (name === 'jest') {
+      sharedConfig.isITREnabled = isITREnabled
     }
 
     if (serviceMapping && serviceMapping[name]) {

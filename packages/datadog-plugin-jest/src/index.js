@@ -42,6 +42,9 @@ class JestPlugin extends Plugin {
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
     this.addSub('ci:jest:test:code-coverage', (coverage) => {
+      if (!this.config.isAgentlessEnabled || !this.config.isITREnabled) {
+        return
+      }
       const span = storage.getStore().span
       this.tracer._exporter.exportCoverage({ span, coverage })
     })
