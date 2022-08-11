@@ -10,6 +10,7 @@ const log = require('./log')
 const { isFalse } = require('./util')
 const { setStartupLogInstrumenter } = require('./startup-log')
 const telemetry = require('./telemetry')
+const { sendGitMetadata } = require('./ci-visibility/exporters/git/git_metadata')
 
 const noop = new NoopTracer()
 
@@ -62,6 +63,16 @@ class Tracer {
         this._pluginManager.configure(config)
         setStartupLogInstrumenter(this._instrumenter)
         telemetry.start(config, this._instrumenter, this._pluginManager)
+      }
+
+      if (config.isGitUploadEnabled) {
+        sendGitMetadata(config.site, (err) => {
+          if (err) {
+            log.error(`Error uploading git metadata: ${err}`)
+          } else {
+            log.debug('Successfully uploaded git metadata')
+          }
+        })
       }
     } catch (e) {
       log.error(e)
