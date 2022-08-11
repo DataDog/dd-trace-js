@@ -10,8 +10,15 @@ describe('CI Visibility Exporter', () => {
   }
   const Writer = sinon.stub().returns(writer)
 
+  const coverageWriter = {
+    append: sinon.spy(),
+    flush: sinon.spy()
+  }
+  const CoverageWriter = sinon.stub().returns(coverageWriter)
+
   const Exporter = proxyquire('../../../../src/ci-visibility/exporters/agentless', {
-    './writer': Writer
+    './writer': Writer,
+    './coverage-writer': CoverageWriter
   })
 
   let exporter
@@ -47,6 +54,26 @@ describe('CI Visibility Exporter', () => {
       exporter = new Exporter({ url, flushInterval: 0 })
       exporter.export([span])
       expect(writer.flush).to.have.been.called
+    })
+  })
+
+  describe('when ITR is enabled', () => {
+    it('should append a code coverage payload when exportCodeverage is called', () => {
+      const span = {}
+      const payload = { span, coverage: ['file.js'] }
+
+      exporter = new Exporter({ url, flushInterval: 0, isITREnabled: true })
+
+      exporter.exportCoverage(payload)
+      expect(coverageWriter.append).to.have.been.called
+    })
+    it('should flush after the configured flush interval', function (done) {
+      this.timeout(5000)
+      exporter = new Exporter({ url, flushInterval, isITREnabled: true })
+      setTimeout(() => {
+        expect(coverageWriter.flush).to.have.been.called
+        done()
+      }, flushInterval)
     })
   })
 })

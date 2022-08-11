@@ -3,6 +3,8 @@
 const proxyquire = require('proxyquire')
 const { expect } = require('chai')
 
+const id = require('../../../../src/id')
+
 let CoverageWriter
 let coverageWriter
 let span
@@ -12,14 +14,14 @@ let encoder
 let url
 let log
 
-describe.only('CI Visibility Coverage Writer', () => {
+describe('CI Visibility Coverage Writer', () => {
   beforeEach(() => {
     span = {
       context: () => ({ _traceId: id('1'), _spanId: id('2') })
     }
     coverage = ['file.js']
 
-    request = sinon.stub().yieldsAsync({ on: () => {} }).returns({ on: () => {}})
+    request = sinon.stub().yieldsAsync({ on: () => {} }).returns({ on: () => {} })
 
     encoder = {
       append: sinon.stub(),
