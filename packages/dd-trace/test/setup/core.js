@@ -69,7 +69,31 @@ function withVersions (plugin, modules, range, cb) {
   names.forEach(name => {
     if (externals[name]) {
       [].concat(externals[name]).forEach(external => {
-        instrumentations.push(external)
+        const { nodeVersions } = external
+        let satisfies = true
+        if (nodeVersions) {
+          satisfies = false
+          for (const version of nodeVersions) {
+            if (semver.satisfies(process.version, version)) {
+              satisfies = true
+            }
+          }
+        }
+
+        if (satisfies) {
+          instrumentations.push(external)
+        } else {
+          // remove all versions with that don't satisfy node version based on externals
+          let idx = 0
+          while (idx < instrumentations.length) {
+            const inst = instrumentations[idx]
+            if (JSON.stringify(inst.versions) === JSON.stringify(external.versions)) {
+              instrumentations.splice(idx, 1)
+            } else {
+              idx++
+            }
+          }
+        }
       })
     }
   })

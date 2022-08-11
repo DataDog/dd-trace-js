@@ -1,4 +1,15 @@
 {
+  "couchbase": [
+    {
+      "name": "couchbase",
+      "versions": ["^2.6.5"],
+      "nodeVersions": ["<14.0.0"]
+    },
+    {
+      "name": "couchbase",
+      "versions": ["3.2.0 - 3.2.1", "3.2.2 - 3.2.4", "4.0.0", "^4.1.0"]
+    }
+  ],
   "cypress": [
     {
       "name": "cypress",
