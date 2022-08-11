@@ -2,11 +2,10 @@ const { CIVisibilityCoverageEncoder } = require('../../../encode/ci-visibility-c
 const https = require('https')
 const log = require('../../../log')
 
-class Writer {
-  constructor ({ url, tags }) {
+class CoverageWriter {
+  constructor ({ url }) {
     this._url = url
-    const { 'runtime-id': runtimeId, env, service } = tags
-    this._encoder = new CIVisibilityCoverageEncoder({ runtimeId, env, service })
+    this._encoder = new CIVisibilityCoverageEncoder()
   }
 
   flush (done = () => {}) {
@@ -55,7 +54,6 @@ function makeRequest (form, url, cb) {
   const request = https.request(options, res => {
     res.on('data', () => {})
     res.on('end', () => {
-      console.log('res.statusCode', res.statusCode)
       if (res.statusCode === 202) {
         cb(null)
       } else {
@@ -71,4 +69,4 @@ function makeRequest (form, url, cb) {
   form.pipe(request)
 }
 
-module.exports = Writer
+module.exports = CoverageWriter

@@ -126,6 +126,19 @@ class AgentEncoder {
     buffer[offset + 4] = length
   }
 
+  _encodeMapPrefix (bytes, keysLength) {
+    const buffer = bytes.buffer
+    const offset = bytes.length
+
+    bytes.reserve(5)
+    bytes.length += 5
+    buffer[offset] = 0xdf
+    buffer[offset + 1] = keysLength >> 24
+    buffer[offset + 2] = keysLength >> 16
+    buffer[offset + 3] = keysLength >> 8
+    buffer[offset + 4] = keysLength
+  }
+
   _encodeByte (bytes, value) {
     const buffer = bytes.buffer
 

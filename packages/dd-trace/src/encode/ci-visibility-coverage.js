@@ -1,28 +1,32 @@
 'use strict'
-const { AgentlessCiVisibilityEncoder } = require('./agentless-ci-visibility')
+const { AgentEncoder } = require('./0.4')
 const Chunk = require('./chunk')
 
 const FormData = require('../profiling/exporters/form-data')
 
-class CIVisibilityCoverageEncoder extends AgentlessCiVisibilityEncoder {
+class CIVisibilityCoverageEncoder extends AgentEncoder {
   constructor () {
     super(...arguments)
-    this.testCodeCoverages = []
+    this.codeCoverageBuffers = []
     this._coverageBytes = new Chunk()
     this.reset()
   }
 
   count () {
-    return this.testCodeCoverages.length
+    return this.codeCoverageBuffers.length
   }
 
   append ({ span, coverage }) {
-    this.testCodeCoverages.push({
+    const bytes = this._coverageBytes
+    const coveragePayload = {
       version: 1,
       trace_id: span.context()._traceId,
       span_id: span.context()._spanId,
       files: coverage
-    })
+    }
+    const coverageBuffer = this.encodeCodeCoverage(bytes, coveragePayload)
+    this.codeCoverageBuffers.push(coverageBuffer)
+    this.reset()
   }
 
   _encodeVersion (bytes, version) {
@@ -69,26 +73,22 @@ class CIVisibilityCoverageEncoder extends AgentlessCiVisibilityEncoder {
     if (this._coverageBytes) {
       this._coverageBytes.length = 0
     }
-    this.testCodeCoverages = []
   }
 
   makePayload () {
     const form = new FormData()
-    const bytes = this._coverageBytes
 
     let coverageFileIndex = 1
-    for (const coverage of this.testCodeCoverages) {
+    for (const coverageBuffer of this.codeCoverageBuffers) {
       const coverageFilename = `coverage${coverageFileIndex++}`
-      const buffer = this.encodeCodeCoverage(bytes, coverage)
       form.append(
         coverageFilename,
-        buffer,
+        coverageBuffer,
         {
           filename: `${coverageFilename}.msgpack`,
           contentType: 'application/msgpack'
         }
       )
-      this.reset()
     }
     // 'event' is needed in the payload
     form.append('event', '', { filename: 'event', contentType: 'application/json' })

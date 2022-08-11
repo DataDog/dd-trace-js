@@ -17,7 +17,7 @@ class AgentlessCiVisibilityExporter {
 
     if (isITREnabled) {
       const coverageUrl = new URL(`https://event-platform-intake.${site}`)
-      this._coverageWriter = new CoverageWriter({ url: coverageUrl, tags })
+      this._coverageWriter = new CoverageWriter({ url: coverageUrl })
       if (flushInterval > 0) {
         this._coverageScheduler = new Scheduler(() => this._coverageWriter.flush(), flushInterval)
       }

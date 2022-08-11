@@ -32,7 +32,7 @@ describe('Plugin', function () {
 
   this.timeout(20000)
 
-  withVersions('jest', ['jest-environment-node'], (version, moduleName) => {
+  withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       const jestTestFile = fs.readdirSync(__dirname).filter(name => name.startsWith('jest-'))

@@ -204,19 +204,6 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     buffer[offset + 8] = lo
   }
 
-  _encodeMapPrefix (bytes, keysLength) {
-    const buffer = bytes.buffer
-    const offset = bytes.length
-
-    bytes.reserve(5)
-    bytes.length += 5
-    buffer[offset] = 0xdf
-    buffer[offset + 1] = keysLength >> 24
-    buffer[offset + 2] = keysLength >> 16
-    buffer[offset + 3] = keysLength >> 8
-    buffer[offset + 4] = keysLength
-  }
-
   _encode (bytes, trace) {
     this._eventCount += trace.length
     const events = trace.map(formatSpan)
