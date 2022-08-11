@@ -211,6 +211,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       2
     )
 
+    const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
+      false
+    )
+
     const sampler = (options.experimental && options.experimental.sampler) || {}
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
@@ -294,6 +299,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
         maxContextOperations: DD_IAST_OCE_MAX_CONTEXT_OPERATIONS
       }
     }
+    this.isGitUploadEnabled = isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
 
     tagger.add(this.tags, {
       service: this.service,
