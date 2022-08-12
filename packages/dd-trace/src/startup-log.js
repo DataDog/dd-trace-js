@@ -5,38 +5,27 @@ const mainLogger = require('./log')
 const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
-const requirePackageJson = require('./require-package-json')
 
 const logger = Object.create(mainLogger)
 logger._enabled = true
 
 let config
-let instrumenter
+let pluginManager
 let samplingRules = []
-
 let alreadyRan = false
 
 function getIntegrationsAndAnalytics () {
   const integrations = new Set()
   const extras = {}
-  for (const plugin of instrumenter._instrumented.keys()) {
-    if (plugin.versions) {
-      try {
-        const version = requirePackageJson(plugin.name, module).version
-        integrations.add(`${plugin.name}@${version}`)
-      } catch (e) {
-        integrations.add(plugin.name)
-      }
-    } else {
-      integrations.add(plugin.name)
-    }
+  for (const pluginName in pluginManager._pluginsByName) {
+    integrations.add(pluginName)
   }
   extras.integrations_loaded = Array.from(integrations)
   return extras
 }
 
 function startupLog ({ agentError } = {}) {
-  if (!config || !instrumenter) {
+  if (!config || !pluginManager) {
     return
   }
 
@@ -106,7 +95,7 @@ function startupLog ({ agentError } = {}) {
   }
 
   config = undefined
-  instrumenter = undefined
+  pluginManager = undefined
   samplingRules = undefined
 }
 
@@ -114,8 +103,8 @@ function setStartupLogConfig (aConfig) {
   config = aConfig
 }
 
-function setStartupLogInstrumenter (theInstrumenter) {
-  instrumenter = theInstrumenter
+function setStartupLogPluginManager (thePluginManager) {
+  pluginManager = thePluginManager
 }
 
 function setSamplingRules (theRules) {
@@ -125,6 +114,6 @@ function setSamplingRules (theRules) {
 module.exports = {
   startupLog,
   setStartupLogConfig,
-  setStartupLogInstrumenter,
+  setStartupLogPluginManager,
   setSamplingRules
 }

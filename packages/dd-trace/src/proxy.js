@@ -3,13 +3,12 @@
 const NoopTracer = require('./noop/tracer')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
-const Instrumenter = require('./instrumenter')
-const PluginManager = require('./plugin_manager')
 const metrics = require('./metrics')
 const log = require('./log')
 const { isFalse } = require('./util')
-const { setStartupLogInstrumenter } = require('./startup-log')
+const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
+const PluginManager = require('./plugin_manager')
 const { sendGitMetadata } = require('./ci-visibility/exporters/git/git_metadata')
 
 const noop = new NoopTracer()
@@ -18,7 +17,6 @@ class Tracer {
   constructor () {
     this._initialized = false
     this._tracer = noop
-    this._instrumenter = new Instrumenter(this)
     this._pluginManager = new PluginManager(this)
   }
 
@@ -54,10 +52,9 @@ class Tracer {
         }
 
         this._tracer = new DatadogTracer(config)
-        this._instrumenter.enable(config)
         this._pluginManager.configure(config)
-        setStartupLogInstrumenter(this._instrumenter)
-        telemetry.start(config, this._instrumenter, this._pluginManager)
+        setStartupLogPluginManager(this._pluginManager)
+        telemetry.start(config, this._pluginManager)
       }
 
       if (config.isGitUploadEnabled) {
@@ -77,7 +74,6 @@ class Tracer {
   }
 
   use () {
-    this._instrumenter.use(...arguments)
     this._pluginManager.configurePlugin(...arguments)
     return this
   }

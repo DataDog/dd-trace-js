@@ -39,7 +39,7 @@ describe('Plugin', function () {
       })
       delete require.cache[require.resolve(path.join(__dirname, 'env.js'))]
       delete global._ddtrace
-      return agent.close({ ritmReset: false })
+      return agent.close({ ritmReset: false, wipe: true })
     })
     beforeEach(() => {
       // for http integration tests

@@ -12,7 +12,6 @@ let traceAgent
 describe('telemetry', () => {
   let origSetInterval
   let telemetry
-  let instrumentedMap
   let pluginsByName
 
   before(done => {
@@ -56,11 +55,6 @@ describe('telemetry', () => {
       }
     })
 
-    instrumentedMap = new Map([
-      [{ name: 'foo' }, {}],
-      [{ name: 'bar' }, {}]
-    ])
-
     pluginsByName = {
       foo2: { _enabled: true },
       bar2: { _enabled: false }
@@ -84,8 +78,6 @@ describe('telemetry', () => {
       },
       circularObject
     }, {
-      _instrumented: instrumentedMap
-    }, {
       _pluginsByName: pluginsByName
     })
   })
@@ -100,8 +92,6 @@ describe('telemetry', () => {
     return testSeq(1, 'app-started', payload => {
       expect(payload).to.deep.include({
         integrations: [
-          { name: 'foo', enabled: true, auto_enabled: true },
-          { name: 'bar', enabled: true, auto_enabled: true },
           { name: 'foo2', enabled: true, auto_enabled: true },
           { name: 'bar2', enabled: false, auto_enabled: true }
         ],
@@ -127,14 +117,12 @@ describe('telemetry', () => {
   })
 
   it('should send app-integrations-change', () => {
-    instrumentedMap.set({ name: 'baz' }, {})
     pluginsByName.baz2 = { _enabled: true }
     telemetry.updateIntegrations()
 
     return testSeq(3, 'app-integrations-change', payload => {
       expect(payload).to.deep.equal({
         integrations: [
-          { name: 'baz', enabled: true, auto_enabled: true },
           { name: 'baz2', enabled: true, auto_enabled: true }
         ]
       })
@@ -142,14 +130,12 @@ describe('telemetry', () => {
   })
 
   it('should send app-integrations-change', () => {
-    instrumentedMap.set({ name: 'boo' }, {})
     pluginsByName.boo2 = { _enabled: true }
     telemetry.updateIntegrations()
 
     return testSeq(4, 'app-integrations-change', payload => {
       expect(payload).to.deep.equal({
         integrations: [
-          { name: 'boo', enabled: true, auto_enabled: true },
           { name: 'boo2', enabled: true, auto_enabled: true }
         ]
       })

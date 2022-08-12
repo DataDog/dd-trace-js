@@ -57,7 +57,6 @@ module.exports = {
         config = [].concat(config)
 
         server.on('close', () => {
-          tracer._instrumenter.disable()
           tracer = null
         })
 
@@ -67,12 +66,23 @@ module.exports = {
           flushInterval: 0,
           plugins: false
         }, tracerConfig))
+        tracer.setUrl(`http://127.0.0.1:${port}`)
 
         for (let i = 0, l = pluginName.length; i < l; i++) {
           tracer.use(pluginName[i], config[i])
         }
       })
     })
+  },
+
+  reload (pluginName, config) {
+    pluginName = [].concat(pluginName)
+    plugins = pluginName
+    config = [].concat(config)
+
+    for (let i = 0, l = pluginName.length; i < l; i++) {
+      tracer.use(pluginName[i], config[i])
+    }
   },
 
   // Register a callback with expectations to be run on every agent call.
@@ -134,8 +144,7 @@ module.exports = {
 
   // Stop the mock agent, reset all expectations and wipe the require cache.
   close (opts = {}) {
-    const { ritmReset } = opts
-    this.wipe()
+    const { ritmReset, wipe } = opts
 
     listener.close()
     listener = null
@@ -143,15 +152,15 @@ module.exports = {
     sockets = []
     agent = null
     handlers.clear()
-    if (ritmReset !== false) {
-      ritm.reset()
-    }
-    delete require.cache[require.resolve('../..')]
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
-    delete global._ddtrace
-
+    if (ritmReset !== false) {
+      ritm.reset()
+    }
+    if (wipe) {
+      this.wipe()
+    }
     return new Promise((resolve, reject) => {
       this.server.on('close', () => {
         this.server = null
@@ -163,6 +172,11 @@ module.exports = {
 
   // Wipe the require cache.
   wipe () {
+    require('../..')._pluginManager.destroy()
+
+    delete require.cache[require.resolve('../..')]
+    delete global._ddtrace
+
     const basedir = path.join(__dirname, '..', '..', '..', '..', 'versions')
     const exceptions = ['/libpq/', '/grpc/', '/sqlite3/', '/couchbase/'] // wiping native modules results in errors
       .map(exception => new RegExp(exception))
