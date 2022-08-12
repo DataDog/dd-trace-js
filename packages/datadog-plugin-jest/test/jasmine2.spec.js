@@ -43,7 +43,7 @@ describe('Plugin', () => {
       jestTestFile.forEach((testFile) => {
         delete require.cache[require.resolve(path.join(__dirname, testFile))]
       })
-      return agent.close({ ritmReset: false })
+      return agent.close({ ritmReset: false, wipe: true })
     })
     beforeEach(() => {
       // for http integration tests

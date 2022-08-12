@@ -63,6 +63,7 @@ describe('Plugin', () => {
     }
 
     Transport.prototype.log = log
+    Transport.prototype.name = 'dd'
 
     transport = new Transport()
     httpTransport = new winston.transports.Http({
@@ -93,6 +94,14 @@ describe('Plugin', () => {
     withVersions('winston', 'winston', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
+      })
+
+      afterEach(() => {
+        if (!winston.configure) {
+          winston.remove('dd')
+          winston.remove('http')
+          winston.add(winston.transports.Console)
+        }
       })
 
       afterEach(() => {
