@@ -120,8 +120,8 @@ describe('TextMapPropagator', () => {
     it('should inject the traceparent header', () => {
       const carrier = {}
       const spanContext = new SpanContext({
-        traceId: id('123', 16),
-        spanId: id('456', 16),
+        traceId: id('1111aaaa2222bbbb3333cccc4444dddd', 16),
+        spanId: id('5555eeee6666ffff', 16),
         sampling: {
           priority: USER_KEEP
         }
@@ -131,7 +131,7 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      expect(carrier).to.have.property('traceparent', '01-00000000000000000000000000000123-0000000000000456-01')
+      expect(carrier).to.have.property('traceparent', '01-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01')
     })
 
     it('should skip injection of B3 headers without the feature flag', () => {
@@ -397,18 +397,14 @@ describe('TextMapPropagator', () => {
       })
 
       it('should extract the header', () => {
-        textMap['traceparent'] = '00-000000000000000000000000000004d2-000000000000162e-01'
+        textMap['traceparent'] = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
         config.experimental.traceparent = true
 
         const carrier = textMap
         const spanContext = propagator.extract(carrier)
-        expect(spanContext).to.deep.equal(new SpanContext({
-          traceId: id('4d2', 16),
-          spanId: id('162e', 16),
-          sampling: {
-            priority: AUTO_KEEP
-          }
-        }))
+        expect(spanContext._traceId.toString(16)).to.equal('1111aaaa2222bbbb3333cccc4444dddd')
+        expect(spanContext._spanId.toString(16)).to.equal('5555eeee6666ffff')
+        expect(spanContext._sampling.priority).to.equal(AUTO_KEEP)
       })
     })
   })
