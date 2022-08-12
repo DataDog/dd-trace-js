@@ -12,7 +12,10 @@ const config = {
   url: 'http://localhost:8126',
   flushInterval: 2000,
   flushMinSpans: 1000,
-  protocolVersion: process.env.ENCODER_VERSION
+  protocolVersion: process.env.ENCODER_VERSION,
+  stats: {
+    enabled: false
+  }
 }
 const prioritySampler = new PrioritySampler()
 const exporter = new Exporter(config, prioritySampler)

@@ -11,6 +11,8 @@ const metrics = require('../metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 
+const { TOP_LEVEL_KEY } = require('../constants')
+
 const {
   DD_TRACE_EXPERIMENTAL_STATE_TRACKING,
   DD_TRACE_EXPERIMENTAL_SPAN_COUNTS
@@ -23,7 +25,6 @@ class DatadogSpan {
   constructor (tracer, processor, prioritySampler, fields, debug) {
     const operationName = fields.operationName
     const parent = fields.parent || null
-    const tags = Object.assign({}, fields.tags)
     const hostname = fields.hostname
 
     this._parentTracer = tracer
@@ -34,8 +35,8 @@ class DatadogSpan {
     this._name = operationName
 
     this._spanContext = this._createContext(parent)
+    Object.assign(this._spanContext._tags, fields.tags)
     this._spanContext._name = operationName
-    this._spanContext._tags = tags
     this._spanContext._hostname = hostname
 
     this._startTime = fields.startTime || this._getTime()
@@ -150,6 +151,9 @@ class DatadogSpan {
       spanContext = new SpanContext({
         traceId: spanId,
         spanId
+      })
+      tagger.add(spanContext._tags, {
+        [TOP_LEVEL_KEY]: 1
       })
     }
 
