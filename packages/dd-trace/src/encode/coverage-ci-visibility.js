@@ -4,7 +4,7 @@ const Chunk = require('./chunk')
 
 const FormData = require('../exporters/common/form-data')
 
-class CIVisibilityCoverageEncoder extends AgentEncoder {
+class CoverageCIVisibilityEncoder extends AgentEncoder {
   constructor () {
     super(...arguments)
     this.codeCoverageBuffers = []
@@ -81,4 +81,4 @@ class CIVisibilityCoverageEncoder extends AgentEncoder {
   }
 }
 
-module.exports = { CIVisibilityCoverageEncoder }
+module.exports = { CoverageCIVisibilityEncoder }

@@ -3,6 +3,7 @@
 // TODO: Add test with slow or unresponsive agent.
 // TODO: Add telemetry for things like dropped requests, errors, etc.
 
+const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
 const docker = require('./docker')
@@ -15,6 +16,10 @@ const httpAgent = new http.Agent({ keepAlive, maxTotalSockets })
 const httpsAgent = new https.Agent({ keepAlive, maxTotalSockets })
 const containerId = docker.id()
 
+const isForm = (data) => {
+  return data instanceof Readable
+}
+
 let activeRequests = 0
 
 function request (data, options, keepAlive, callback) {
@@ -22,13 +27,17 @@ function request (data, options, keepAlive, callback) {
     options.headers = {}
   }
 
+  const isFormData = isForm(data)
+
   // The timeout should be kept low to avoid excessive queueing.
   const timeout = options.timeout || 2000
   const isSecure = options.protocol === 'https:'
   const client = isSecure ? https : http
   const dataArray = [].concat(data)
 
-  options.headers['Content-Length'] = byteLength(dataArray)
+  if (!isFormData) {
+    options.headers['Content-Length'] = byteLength(dataArray)
+  }
 
   if (containerId) {
     options.headers['Datadog-Container-ID'] = containerId
@@ -74,7 +83,11 @@ function request (data, options, keepAlive, callback) {
       onError(err)
     })
 
-    dataArray.forEach(buffer => req.write(buffer))
+    if (isFormData) {
+      data.pipe(req)
+    } else {
+      dataArray.forEach(buffer => req.write(buffer))
+    }
 
     req.setTimeout(timeout, req.abort)
     req.end()
