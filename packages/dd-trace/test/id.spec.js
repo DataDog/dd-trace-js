@@ -53,10 +53,23 @@ describe('id', () => {
     expect(json).to.equal('"7f00ff00ff00ff00"')
   })
 
-  it('should support hex strings', () => {
+  it('should support small hex strings', () => {
+    const spanId = id('abcd', 16)
+
+    expect(spanId.toString()).to.equal('000000000000abcd')
+  })
+
+  it('should support large hex strings', () => {
+    const spanId = id('12293a8527e70a7f27c8d624ace0f559', 16)
+
+    expect(spanId.toString()).to.equal('12293a8527e70a7f27c8d624ace0f559')
+    expect(spanId.toString(10)).to.equal('2866776615828911449')
+  })
+
+  it('should use hex strings by default', () => {
     const spanId = id('abcd')
 
-    expect(spanId.toString()).to.equal('abcd')
+    expect(spanId.toString()).to.equal('000000000000abcd')
   })
 
   it('should support number strings', () => {
