@@ -35,6 +35,7 @@ describe('Plugin', function () {
   withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
+      delete process.env.DD_API_KEY
       const jestTestFile = fs.readdirSync(__dirname).filter(name => name.startsWith('jest-'))
       jestTestFile.forEach((testFile) => {
         delete require.cache[require.resolve(path.join(__dirname, testFile))]
@@ -53,6 +54,7 @@ describe('Plugin', function () {
 
       // we need the ci visibility init for the coverage test
       if (this.currentTest.title === 'can report code coverage') {
+        process.env.DD_API_KEY = 'key'
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
         loadArguments.push({ service: 'test', isAgentlessEnabled: true, isITREnabled: true })
         loadArguments.push({ experimental: { exporter: 'datadog' } })
