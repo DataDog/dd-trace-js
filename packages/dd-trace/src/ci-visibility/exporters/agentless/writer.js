@@ -31,25 +31,17 @@ function getRequestOptions (url, path, extraHeaders) {
 }
 
 class Writer extends BaseWriter {
-  constructor ({ url, tags, coverageUrl }, isITREnabled) {
+  constructor ({ url, tags, coverageUrl }) {
     super(...arguments)
     const { 'runtime-id': runtimeId, env, service } = tags
     this._url = url
     this._coverageUrl = coverageUrl
     this._encoder = new AgentlessCiVisibilityEncoder({ runtimeId, env, service })
-    this._isITREnabled = isITREnabled
-    if (isITREnabled) {
-      this._coverageEncoder = new CoverageCIVisibilityEncoder()
-    }
+    this._coverageEncoder = new CoverageCIVisibilityEncoder()
   }
 
-  _sendPayload (data, _, done) {
-    const options = getRequestOptions(this._url, '/api/v2/citestcycle', {
-      'Content-Type': 'application/msgpack'
-    })
-
+  _sendPayloadBase (data, options, done) {
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
-
     request(data, options, false, (err, res) => {
       if (err) {
         log.error(err)
@@ -61,10 +53,20 @@ class Writer extends BaseWriter {
     })
   }
 
+  _sendPayload (data, _, done) {
+    const options = getRequestOptions(this._url, '/api/v2/citestcycle', {
+      'Content-Type': 'application/msgpack'
+    })
+    this._sendPayloadBase(data, options, done)
+  }
+
+  _sendCoverage (form, done) {
+    const options = getRequestOptions(this._coverageUrl, '/api/v2/citestcov', form.getHeaders())
+    this._sendPayloadBase(form, options, done)
+  }
+
   appendCoverage (coverage) {
-    if (this._isITREnabled) {
-      this._coverageEncoder.append(coverage)
-    }
+    this._coverageEncoder.append(coverage)
   }
 
   flushCoverage (done = () => {}) {
@@ -80,22 +82,6 @@ class Writer extends BaseWriter {
     } else {
       done()
     }
-  }
-
-  _sendCoverage (form, done) {
-    const options = getRequestOptions(this._coverageUrl, '/api/v2/citestcov', form.getHeaders())
-
-    log.debug(() => `Request to the coverage intake: ${safeJSONStringify(options)}`)
-
-    request(form, options, false, (err, res) => {
-      if (err) {
-        log.error(err)
-        done()
-        return
-      }
-      log.debug(`Response from the intake: ${res}`)
-      done()
-    })
   }
 }
 

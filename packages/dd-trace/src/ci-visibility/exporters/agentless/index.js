@@ -12,27 +12,36 @@ class AgentlessCiVisibilityExporter {
 
     const coverageUrl = new URL(`https://event-platform-intake.${site}`)
 
-    this._writer = new Writer({ url: this._url, tags, coverageUrl }, isITREnabled)
+    this._writer = new Writer({ url: this._url, tags, coverageUrl })
 
     if (flushInterval > 0) {
-      this._scheduler = new Scheduler(() => {
-        this._writer.flush()
-        if (this._isITREnabled) {
-          this._writer.flushCoverage()
-        }
-      }, flushInterval)
+      this._scheduler = new Scheduler(() => this._writer.flush(), flushInterval)
+
+      if (this._isITREnabled) {
+        this._coverageScheduler = new Scheduler(() => this._writer.flushCoverage())
+      }
     }
 
     this._scheduler && this._scheduler.start()
+
+    // Reduce likelihood of requests overlapping
+    if (this._coverageScheduler) {
+      setTimeout(() => {
+        this._coverageScheduler.start()
+      }, flushInterval / 2)
+    }
   }
 
-  exportCoverage ({ coverage, span }) {
-    if (this._isITREnabled) {
-      this._writer.appendCoverage({ coverage, span })
+  exportCoverage ({ testSpan, coverageFiles }) {
+    const formattedCoverage = {
+      traceId: testSpan.context()._traceId,
+      spanId: testSpan.context()._spanId,
+      files: coverageFiles
+    }
+    this._writer.appendCoverage(formattedCoverage)
 
-      if (!this._scheduler) {
-        this._writer.flush()
-      }
+    if (!this._coverageScheduler) {
+      this._writer.flushCoverage()
     }
   }
 

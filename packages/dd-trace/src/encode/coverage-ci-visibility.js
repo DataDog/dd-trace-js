@@ -4,6 +4,9 @@ const Chunk = require('./chunk')
 
 const FormData = require('../exporters/common/form-data')
 
+const COVERAGE_PAYLOAD_VERSION = 1
+const COVERAGE_KEYS_LENGTH = 4
+
 class CoverageCIVisibilityEncoder extends AgentEncoder {
   constructor () {
     super(...arguments)
@@ -16,28 +19,21 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     return this.codeCoverageBuffers.length
   }
 
-  append ({ span, coverage }) {
+  append (coverage) {
     const bytes = this._coverageBytes
-    const coveragePayload = {
-      version: 1,
-      trace_id: span.context()._traceId,
-      span_id: span.context()._spanId,
-      files: coverage
-    }
-    const coverageBuffer = this.encodeCodeCoverage(bytes, coveragePayload)
+    const coverageBuffer = this.encodeCodeCoverage(bytes, coverage)
     this.codeCoverageBuffers.push(coverageBuffer)
     this.reset()
   }
 
   encodeCodeCoverage (bytes, coverage) {
-    const keysLength = Object.keys(coverage).length
-    this._encodeMapPrefix(bytes, keysLength)
+    this._encodeMapPrefix(bytes, COVERAGE_KEYS_LENGTH)
     this._encodeString(bytes, 'version')
-    this._encodeInteger(bytes, coverage.version)
+    this._encodeInteger(bytes, COVERAGE_PAYLOAD_VERSION)
     this._encodeString(bytes, 'trace_id')
-    this._encodeId(bytes, coverage.trace_id)
+    this._encodeId(bytes, coverage.traceId)
     this._encodeString(bytes, 'span_id')
-    this._encodeId(bytes, coverage.span_id)
+    this._encodeId(bytes, coverage.spanId)
     this._encodeString(bytes, 'files')
     this._encodeArrayPrefix(bytes, coverage.files)
     for (const filename of coverage.files) {
@@ -75,8 +71,10 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
         }
       )
     }
-    // 'event' is needed in the payload
+    // 'event' is a backend requirement
     form.append('event', '', { filename: 'event', contentType: 'application/json' })
+    this.codeCoverageBuffers.length = 0
+
     return form
   }
 }

@@ -121,8 +121,8 @@ function getWrappedEnvironment (BaseEnvironment) {
         const asyncResource = asyncResources.get(event.test)
         asyncResource.runInAsyncScope(() => {
           if (this.global.__coverage__) {
-            const coverage = extractCoverageInformation(this.global.__coverage__, this.rootDir)
-            testCodeCoverageCh.publish(coverage)
+            const coverageFiles = extractCoverageInformation(this.global.__coverage__, this.rootDir)
+            testCodeCoverageCh.publish(coverageFiles)
           }
           let status = 'pass'
           if (event.test.errors && event.test.errors.length) {
