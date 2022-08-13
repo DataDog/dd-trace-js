@@ -1,7 +1,7 @@
 'use strict'
 const proxyquire = require('proxyquire')
 
-describe.only('CI Visibility Exporter', () => {
+describe('CI Visibility Exporter', () => {
   const url = 'www.example.com'
   const flushInterval = 1000
   const writer = {
