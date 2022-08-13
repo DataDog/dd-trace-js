@@ -54,19 +54,25 @@ class Writer extends BaseWriter {
   }
 
   _sendPayload (data, _, done) {
-    const options = getRequestOptions(this._url, '/api/v2/citestcycle', {
-      'Content-Type': 'application/msgpack'
-    })
+    const options = getRequestOptions(
+      this._url,
+      '/api/v2/citestcycle',
+      { 'Content-Type': 'application/msgpack' }
+    )
     this._sendPayloadBase(data, options, done)
   }
 
   _sendCoverage (form, done) {
-    const options = getRequestOptions(this._coverageUrl, '/api/v2/citestcov', form.getHeaders())
+    const options = getRequestOptions(
+      this._coverageUrl,
+      '/api/v2/citestcov',
+      form.getHeaders()
+    )
     this._sendPayloadBase(form, options, done)
   }
 
   appendCoverage (coverage) {
-    this._coverageEncoder.append(coverage)
+    this._coverageEncoder.encode(coverage)
   }
 
   flushCoverage (done = () => {}) {
