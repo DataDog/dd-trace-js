@@ -19,7 +19,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     return this.codeCoverageBuffers.length
   }
 
-  append (coverage) {
+  encode (coverage) {
     const bytes = this._coverageBytes
     const coverageBuffer = this.encodeCodeCoverage(bytes, coverage)
     this.codeCoverageBuffers.push(coverageBuffer)

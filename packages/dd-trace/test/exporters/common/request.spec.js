@@ -2,6 +2,8 @@
 
 const nock = require('nock')
 
+const FormData = require('../../../src/exporters/common/form-data')
+
 describe('request', function () {
   let request
   let log
@@ -155,6 +157,24 @@ describe('request', function () {
       method: 'PUT'
     }, true, (err, res) => {
       expect(err).to.equal(error)
+      done()
+    })
+  })
+
+  it('should be able to send form data', (done) => {
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(200, 'OK')
+
+    const form = new FormData()
+
+    form.append('event', '')
+
+    request(form, {
+      path: '/path',
+      method: 'PUT'
+    }, true, (err, res) => {
+      expect(res).to.equal('OK')
       done()
     })
   })
