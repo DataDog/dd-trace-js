@@ -8,8 +8,10 @@ let writer
 let span
 let request
 let encoder
+let coverageEncoder
 let url
 let log
+let form
 
 describe('CI Visibility Writer', () => {
   beforeEach(() => {
@@ -32,16 +34,31 @@ describe('CI Visibility Writer', () => {
       error: sinon.spy()
     }
 
+    form = {
+      getHeaders: () => ({})
+    }
+
     const AgentlessCiVisibilityEncoder = function () {
       return encoder
+    }
+
+    coverageEncoder = {
+      encode: sinon.stub(),
+      count: sinon.stub().returns(0),
+      makePayload: sinon.stub().returns([])
+    }
+
+    const CoverageCIVisibilityEncoder = function () {
+      return coverageEncoder
     }
 
     Writer = proxyquire('../../../../src/ci-visibility/exporters/agentless/writer', {
       '../../../exporters/common/request': request,
       '../../../encode/agentless-ci-visibility': { AgentlessCiVisibilityEncoder },
+      '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
       '../../../log': log
     })
-    writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' } })
+    writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' }, coverageUrl: url })
   })
 
   describe('append', () => {
@@ -101,6 +118,71 @@ describe('CI Visibility Writer', () => {
         encoder.count.returns(1)
 
         writer.flush(() => {
+          expect(log.error).to.have.been.calledWith(error)
+          done()
+        })
+      })
+    })
+  })
+
+  describe('appendCoverage', () => {
+    it('should encode a coverage payload', () => {
+      const coveragePayload = {
+        traceId: '1',
+        spanId: '2',
+        files: ['file.js']
+      }
+      writer.appendCoverage(coveragePayload)
+
+      expect(coverageEncoder.encode).to.have.been.calledWith(coveragePayload)
+    })
+  })
+  describe('flushCoverage', () => {
+    it('should skip flushing if empty', () => {
+      writer.flushCoverage()
+
+      expect(coverageEncoder.makePayload).to.not.have.been.called
+    })
+
+    it('should empty the internal queue', () => {
+      coverageEncoder.count.returns(1)
+      coverageEncoder.makePayload.returns(form)
+
+      writer.flushCoverage()
+
+      expect(coverageEncoder.makePayload).to.have.been.called
+    })
+
+    it('should call callback when empty', (done) => {
+      writer.flushCoverage(done)
+    })
+
+    it('should flush its coverage payloads to the intake, and call callback', (done) => {
+      coverageEncoder.count.returns(2)
+      coverageEncoder.makePayload.returns(form)
+
+      writer.flushCoverage(() => {
+        expect(request).to.have.been.calledWithMatch(form, {
+          protocol: url.protocol,
+          hostname: url.hostname,
+          path: '/api/v2/citestcov',
+          method: 'POST'
+        })
+        done()
+      })
+    })
+
+    describe('when request fails', function () {
+      this.timeout(100000)
+      it('should log request errors', done => {
+        const error = new Error('boom')
+
+        request.yields(error)
+
+        coverageEncoder.count.returns(1)
+        coverageEncoder.makePayload.returns(form)
+
+        writer.flushCoverage(() => {
           expect(log.error).to.have.been.calledWith(error)
           done()
         })

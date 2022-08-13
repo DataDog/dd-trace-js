@@ -85,7 +85,6 @@ describe('CI Visibility Exporter', () => {
         done()
       }, flushInterval)
       expect(writer.appendCoverage).to.have.been.called
-      expect(writer.flushCoverage).not.to.have.been.called
     })
   })
 })
