@@ -1,24 +1,19 @@
 'use strict'
 const proxyquire = require('proxyquire')
 
-describe('CI Visibility Exporter', () => {
+describe.only('CI Visibility Exporter', () => {
   const url = 'www.example.com'
   const flushInterval = 1000
   const writer = {
     append: sinon.spy(),
-    flush: sinon.spy()
+    flush: sinon.spy(),
+    appendCoverage: sinon.spy(),
+    flushCoverage: sinon.spy()
   }
   const Writer = sinon.stub().returns(writer)
 
-  const coverageWriter = {
-    append: sinon.spy(),
-    flush: sinon.spy()
-  }
-  const CoverageWriter = sinon.stub().returns(coverageWriter)
-
   const Exporter = proxyquire('../../../../src/ci-visibility/exporters/agentless', {
-    './writer': Writer,
-    './coverage-writer': CoverageWriter
+    './writer': Writer
   })
 
   let exporter
@@ -58,22 +53,39 @@ describe('CI Visibility Exporter', () => {
   })
 
   describe('when ITR is enabled', () => {
-    it('should append a code coverage payload when exportCodeverage is called', () => {
-      const span = {}
-      const payload = { span, coverage: ['file.js'] }
+    it('should append a code coverage payload when exportCoverage is called', () => {
+      const testSpan = {
+        context: () => ({ _traceId: '1', _spanId: '2' })
+      }
+      const payload = { testSpan, coverageFiles: ['file.js'] }
 
       exporter = new Exporter({ url, flushInterval: 0, isITREnabled: true })
 
       exporter.exportCoverage(payload)
-      expect(coverageWriter.append).to.have.been.called
+      expect(writer.appendCoverage).to.have.been.calledWith({
+        traceId: '1',
+        spanId: '2',
+        files: ['file.js']
+      })
+      expect(writer.flushCoverage).to.have.been.called
     })
     it('should flush after the configured flush interval', function (done) {
       this.timeout(5000)
       exporter = new Exporter({ url, flushInterval, isITREnabled: true })
+
+      const testSpan = {
+        context: () => ({ _traceId: '1', _spanId: '2' })
+      }
+      const payload = { testSpan, coverageFiles: ['file.js'] }
+
+      exporter.exportCoverage(payload)
+
       setTimeout(() => {
-        expect(coverageWriter.flush).to.have.been.called
+        expect(writer.flushCoverage).to.have.been.called
         done()
       }, flushInterval)
+      expect(writer.appendCoverage).to.have.been.called
+      expect(writer.flushCoverage).not.to.have.been.called
     })
   })
 })
