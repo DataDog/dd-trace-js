@@ -4,6 +4,8 @@ const URL = require('url').URL
 const Writer = require('./writer')
 const Scheduler = require('../../../exporters/scheduler')
 
+const log = require('../../../log')
+
 class AgentlessCiVisibilityExporter {
   constructor (config) {
     const { flushInterval, tags, site, url, isITREnabled } = config
@@ -50,6 +52,16 @@ class AgentlessCiVisibilityExporter {
 
     if (!this._scheduler) {
       this._writer.flush()
+    }
+  }
+
+  setUrl (url) {
+    try {
+      url = new URL(url)
+      this._url = url
+      this._writer.setUrl(url)
+    } catch (e) {
+      log.warn(e.stack)
     }
   }
 

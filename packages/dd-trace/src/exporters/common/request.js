@@ -90,7 +90,9 @@ function request (data, options, keepAlive, callback) {
     }
 
     req.setTimeout(timeout, req.abort)
-    req.end()
+    if (!isFormData) {
+      req.end()
+    }
 
     storage.enterWith(store)
   }
