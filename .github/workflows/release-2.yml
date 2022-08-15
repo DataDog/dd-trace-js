@@ -1,0 +1,30 @@
+name: Release (2.x)
+
+on:
+  push:
+    branches:
+      - v2.x
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v3
+        with:
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm publish --tag latest-node12
+      - id: pkg
+        run: |
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "::set-output name=json::$content"
+      - run: |
+          git tag v${{ fromJson(steps.pkg.outputs.json).version }}
+          git push origin v${{ fromJson(steps.pkg.outputs.json).version }}
