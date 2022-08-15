@@ -26,7 +26,7 @@ const {
 
 const { version: ddTraceVersion } = require('../../../package.json')
 
-describe.only('Plugin', function () {
+describe('Plugin', function () {
   let jestExecutable
   let jestCommonOptions
 
@@ -251,7 +251,7 @@ describe.only('Plugin', function () {
         )
       })
 
-      it.only('can report code coverage', function (done) {
+      it('can report code coverage', function (done) {
         let contentTypeHeader, coveragePayload
 
         const scope = nock(`http://127.0.0.1:${agent.server.address().port}`)
@@ -273,13 +273,11 @@ describe.only('Plugin', function () {
         ).then(() => {
           // it takes a bit for the payload to be flushed
           setTimeout(() => {
-            console.log(coveragePayload)
-            console.log(JSON.stringify(coveragePayload))
             expect(scope.isDone()).to.be.true
             expect(contentTypeHeader).to.contain('multipart/form-data')
             expect(coveragePayload.version).to.equal(1)
-            expect(coveragePayload.files).to.have.length(1)
-            expect(coveragePayload.files[0].filename).to.equal('packages/datadog-plugin-jest/test/sum-coverage-test.js')
+            expect(coveragePayload.files.map(file => file.filename))
+              .to.include('packages/datadog-plugin-jest/test/sum-coverage-test.js')
             done()
           }, 2000)
         })
