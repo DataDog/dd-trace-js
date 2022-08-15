@@ -1,9 +1,9 @@
-name: Release
+name: Release (latest)
 
 on:
   push:
     branches:
-      - v[0-9]+.x
+      - v3.x
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -31,7 +31,6 @@ jobs:
 
   docs:
     runs-on: ubuntu-latest
-    if: github.ref_name == 'v3.x'
     needs: ['publish']
     steps:
       - uses: actions/checkout@v3
