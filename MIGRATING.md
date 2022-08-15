@@ -19,7 +19,7 @@ This change is considered breaking only because there might be sensitive data
 in the query string. A default regular expression based obfuscator is provided
 for common use cases like API keys, but if your use case is not covered, the
 [DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP](https://datadoghq.dev/dd-trace-js/#tracer-settings)
-environmnet variable can be used to control what is obfuscated, and a value of
+environment variable can be used to control what is obfuscated, and a value of
 `.*` would redact the query string entirely.
 
 ### HTTP operation name change
