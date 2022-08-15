@@ -279,7 +279,7 @@ describe('Plugin', function () {
             expect(coveragePayload.files).to.have.length(1)
             expect(coveragePayload.files[0].filename).to.equal('packages/datadog-plugin-jest/test/sum-coverage-test.js')
             done()
-          }, 1000)
+          }, 2000)
         })
       })
 
