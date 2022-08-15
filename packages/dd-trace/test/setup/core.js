@@ -60,6 +60,18 @@ function loadInstFile (file, instrumentations) {
   })
 }
 
+function removeVersions (instrumentations, external) {
+  let idx = 0
+  while (idx < instrumentations.length) {
+    const inst = instrumentations[idx]
+    if (JSON.stringify(inst.versions) === JSON.stringify(external.versions)) {
+      instrumentations.splice(idx, 1)
+    } else {
+      idx++
+    }
+  }
+}
+
 function withVersions (plugin, modules, range, cb) {
   const instrumentations = typeof plugin === 'string' ? loadInst(plugin) : [].concat(plugin)
   const names = instrumentations.map(instrumentation => instrumentation.name)
@@ -76,6 +88,7 @@ function withVersions (plugin, modules, range, cb) {
           for (const version of nodeVersions) {
             if (semver.satisfies(process.version, version)) {
               satisfies = true
+              break
             }
           }
         }
@@ -84,15 +97,7 @@ function withVersions (plugin, modules, range, cb) {
           instrumentations.push(external)
         } else {
           // remove all versions with that don't satisfy node version based on externals
-          let idx = 0
-          while (idx < instrumentations.length) {
-            const inst = instrumentations[idx]
-            if (JSON.stringify(inst.versions) === JSON.stringify(external.versions)) {
-              instrumentations.splice(idx, 1)
-            } else {
-              idx++
-            }
-          }
+          removeVersions(instrumentations, external)
         }
       })
     }
@@ -113,8 +118,7 @@ function withVersions (plugin, modules, range, cb) {
           .forEach(version => {
             const min = semver.coerce(version).version
             const max = require(`../../../../versions/${moduleName}@${version}`).version()
-
-            testVersions.set(min, { range: version, test: min })
+            if (!instrumentation.ignoreMinVersion) testVersions.set(min, { range: version, test: min })
             testVersions.set(max, { range: version, test: version })
           })
       })
