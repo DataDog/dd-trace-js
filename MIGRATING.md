@@ -98,26 +98,30 @@ point, there should be no impact as no application is expected to be using them.
 ### CI Visibility new entrypoints
 
 #### Cypress
+
 `dd-trace/cypress/plugin` and `dd-trace/cypress/support` are removed, so you won't 
 be able to use them for your `cypress` instrumentation. Use `dd-trace/ci/cypress/plugin`
 and `dd-trace/ci/cypress/support` instead for your plugin and support configuration 
 respectively. 
 
 #### Jest
+
 The use of `'dd-trace/ci/jest/env'` in [`testEnvironment`](https://jestjs.io/docs/configuration#testenvironment-string)
 is no longer supported. 
-The way to instrument your `jest` tests now is by passing `NODE_OPTIONS='-r dd-trace/ci/init'`
-to the process running the tests.
+The way to instrument your `jest` tests now is by passing the `NODE_OPTIONS='-r dd-trace/ci/init'`
+environment variable to the process running the tests.
 
 #### Mocha
+
 The use of `--require dd-trace/ci/init` as a `mocha` flag is no longer supported. 
-The way to instrument your `mocha` tests now is by passing `NODE_OPTIONS='-r dd-trace/ci/init'`
-to the process running the tests.
+The way to instrument your `mocha` tests now is by passing the `NODE_OPTIONS='-r dd-trace/ci/init'`
+environment variable to the process running the tests.
 
 #### Cucumber
+
 The use of `--require-module dd-trace/ci/init` as a `cucumber-js` flag is no longer supported.
-The way to instrument your `cucumber-js` tests now is by passing `NODE_OPTIONS='-r dd-trace/ci/init'`
-to the process running the tests.
+The way to instrument your `cucumber-js` tests now is by passing the `NODE_OPTIONS='-r dd-trace/ci/init'`
+environment variable to the process running the tests.
 
 ## 1.0 to 2.0
 
