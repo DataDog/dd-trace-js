@@ -56,15 +56,21 @@ being captured, etc.
 If you had any use for file system instrumentation, please let us know so we can
 provide an alternative.
 
-### Event emitter binding
+### Scope binding for promises and event emitters
 
-It's no longer possible to bind event emitters using
-`tracer.scope().bind(emitter)`. This was historically added mostly for
-internal use, and changes to context propagation over the years made this
-unnecessary, both internally and externaly. If this is used anywhere, the call
-will simply be ignored and no binding will occur.
+It's no longer possible to bind promises using `tracer.scope().bind(promise)` or
+event emitters using `tracer.scope().bind(emitter)`. These were historically
+added mostly for internal use, and changes to context propagation over the years
+made them unnecessary, both internally and externaly. If one of these is used
+anywhere, the call will simply be ignored and no binding will occur.
 
-To bind all listeners for an event, instead wrap the call to `emit`:
+To bind the `then` handler of a promise, bind the function directly directly:
+
+```js
+promise.then(tracer.scope().bind(handler))
+```
+
+To bind all listeners for an event, wrap the call to `emit` directly instead:
 
 ```js
 tracer.scope().activate(span, () => {
@@ -72,15 +78,11 @@ tracer.scope().activate(span, () => {
 })
 ```
 
-To bind individual listeners, bind the listener function directly:
+To bind individual listeners, bind the listener function directly instead:
 
 ```js
 emitter.on('event', tracer.scope().bind(listener, span))
 ```
-
-Binding promises is still available but is deprecated with this release and will
-be removed as well in 4.0 since native promises are already bound properly in
-Node.
 
 ### Removed APIs
 
