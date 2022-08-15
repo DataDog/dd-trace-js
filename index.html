@@ -94,7 +94,6 @@ tracer.use(<span class="hljs-string">&#x27;pg&#x27;</span>, {
 				<h5 id="generic-pool"></h5>
 				<h5 id="google-cloud-pubsub"></h5>
 				<h5 id="fastify"></h5>
-				<h5 id="fs"></h5>
 				<h5 id="graphql"></h5>
 				<h5 id="graphql-tags"></h5>
 				<h5 id="graphql-config"></h5>
@@ -162,7 +161,6 @@ tracer.use(<span class="hljs-string">&#x27;pg&#x27;</span>, {
 					<li><a href="./interfaces/plugins.elasticsearch.html">elasticsearch</a></li>
 					<li><a href="./interfaces/plugins.express.html">express</a></li>
 					<li><a href="./interfaces/plugins.fastify.html">fastify</a></li>
-					<li><a href="./interfaces/plugins.fs.html">fs</a></li>
 					<li><a href="./interfaces/plugins.generic_pool.html">generic-pool</a></li>
 					<li><a href="./interfaces/plugins.google_cloud_pubsub.html">google-cloud-pubsub</a></li>
 					<li><a href="./interfaces/plugins.graphql.html">graphql</a></li>
@@ -292,23 +290,13 @@ log(scope.active()) <span class="hljs-comment">// null</span>
 
 someFunction() <span class="hljs-comment">// null because called outside the scope</span></code></pre>
 				<h4>scope.bind(target, [span])</h4>
-				<p>This method binds a target to the specified span, or to the active span if
-				unspecified. It supports binding functions, promises and event emitters.</p>
-				<p>When a span is provided, the target is always bound to that span. Explicitly
+				<p>This method binds a function to the specified span, or to the active span if
+				unspecified.</p>
+				<p>When a span is provided, the function is always bound to that span. Explicitly
 					passing <code>null</code> as the span will actually bind to <code>null</code> or no span. When a span
-				is not provided, the binding uses the following rules:</p>
-				<ul>
-					<li>Functions are bound to the span that is active when <code>scope.bind(fn)</code> is called.</li>
-					<li>Promise handlers are bound to the active span in the scope where <code>.then()</code> was
-					called. This also applies to any equivalent method such as <code>.catch()</code>.</li>
-					<li>Event emitter listeners are bound to the active span in the scope where
-						<code>.addEventListener()</code> was called. This also applies to any equivalent method
-					such as <code>.on()</code></li>
-				</ul>
-				<p><strong>Note</strong>: Native promises and promises from <code>bluebird</code>, <code>q</code> and <code>when</code> are
-				already bound by default and don&#39;t need to be explicitly bound.</p>
-				<h5>Examples</h5>
-				<h6>Function binding</h6>
+					is not provided, the function is bound to the span that is active when
+				<code>scope.bind(fn)</code> is called.</p>
+				<h5>Example</h5>
 				<pre><code class="language-javascript"><span class="hljs-keyword">const</span> tracer = <span class="hljs-built_in">require</span>(<span class="hljs-string">&#x27;dd-trace&#x27;</span>).init()
 <span class="hljs-keyword">const</span> scope = tracer.scope()
 <span class="hljs-keyword">const</span> log = <span class="hljs-built_in">console</span>.log
@@ -329,59 +317,6 @@ scope.activate(outerSpan, <span class="hljs-function">() =&gt;</span> {
   boundToInner() <span class="hljs-comment">// innerSpan because explicitly bound</span>
   boundToOuter() <span class="hljs-comment">// outerSpan because implicitly bound</span>
 })</code></pre>
-				<h6>Promise binding</h6>
-				<pre><code class="language-javascript"><span class="hljs-keyword">const</span> tracer = <span class="hljs-built_in">require</span>(<span class="hljs-string">&#x27;dd-trace&#x27;</span>).init()
-<span class="hljs-keyword">const</span> scope = tracer.scope()
-<span class="hljs-keyword">const</span> log = <span class="hljs-built_in">console</span>.log
-
-<span class="hljs-keyword">const</span> outerSpan = tracer.startSpan(<span class="hljs-string">&#x27;web.request&#x27;</span>)
-<span class="hljs-keyword">const</span> innerPromise = <span class="hljs-built_in">Promise</span>.resolve()
-<span class="hljs-keyword">const</span> outerPromise = <span class="hljs-built_in">Promise</span>.resolve()
-
-scope.activate(outerSpan, <span class="hljs-function">() =&gt;</span> {
-  <span class="hljs-keyword">const</span> innerSpan = tracer.startSpan(<span class="hljs-string">&#x27;web.middleware&#x27;</span>)
-
-  scope.bind(innerPromise, innerSpan)
-  scope.bind(outerPromise)
-
-  innerPromise.then(<span class="hljs-function">() =&gt;</span> {
-    log(scope.active()) <span class="hljs-comment">// innerSpan because explicitly bound</span>
-  })
-
-  outerPromise.then(<span class="hljs-function">() =&gt;</span> {
-    log(scope.active()) <span class="hljs-comment">// outerSpan because implicitly bound on `then()` call</span>
-  })
-})</code></pre>
-				<p><strong>Note</strong>: <code>async/await</code> cannot be bound and always execute in the scope where
-					<code>await</code> was called. If binding <code>async/await</code> is needed, the promise must be
-				wrapped by a function.</p>
-				<h6>Event emitter binding</h6>
-				<pre><code class="language-javascript"><span class="hljs-keyword">const</span> tracer = <span class="hljs-built_in">require</span>(<span class="hljs-string">&#x27;dd-trace&#x27;</span>).init()
-<span class="hljs-keyword">const</span> scope = tracer.scope()
-<span class="hljs-keyword">const</span> log = <span class="hljs-built_in">console</span>.log
-<span class="hljs-keyword">const</span> EventEmitter = <span class="hljs-built_in">require</span>(<span class="hljs-string">&#x27;events&#x27;</span>).EventEmitter
-
-<span class="hljs-keyword">const</span> outerSpan = tracer.startSpan(<span class="hljs-string">&#x27;web.request&#x27;</span>)
-<span class="hljs-keyword">const</span> innerEmitter = <span class="hljs-keyword">new</span> EventEmitter()
-<span class="hljs-keyword">const</span> outerEmitter = <span class="hljs-keyword">new</span> EventEmitter()
-
-scope.activate(outerSpan, <span class="hljs-keyword">async</span> () =&gt; {
-  <span class="hljs-keyword">const</span> innerSpan = tracer.startSpan(<span class="hljs-string">&#x27;web.middleware&#x27;</span>)
-
-  scope.bind(innerEmitter, innerSpan)
-  scope.bind(outerEmitter)
-
-  innerEmitter.on(<span class="hljs-string">&#x27;request&#x27;</span>, <span class="hljs-function">() =&gt;</span> {
-    log(scope.active()) <span class="hljs-comment">// innerSpan because explicitly bound</span>
-  })
-
-  outerEmitter.on(<span class="hljs-string">&#x27;request&#x27;</span>, <span class="hljs-function">() =&gt;</span> {
-    log(scope.active()) <span class="hljs-comment">// outerSpan because implicitly bound on `then()` call</span>
-  })
-})
-
-innerEmitter.emit(<span class="hljs-string">&#x27;request&#x27;</span>)
-outerEmitter.emit(<span class="hljs-string">&#x27;request&#x27;</span>)</code></pre>
 				<p>See the <a href="./interfaces/scope.html">API documentation</a> for more details.</p>
 				<h2 id="opentracing-api">OpenTracing Compatibility</h2>
 				<p>This library is OpenTracing compliant. Use the <a href="https://doc.esdoc.org/github.com/opentracing/opentracing-javascript/">OpenTracing API</a> and the Datadog Tracer (dd-trace) library to measure execution times for specific pieces of code. In the following example, a Datadog Tracer is initialized and used as a global tracer:</p>
@@ -496,6 +431,12 @@ opentracing.initGlobalTracer(tracer)</code></pre>
 							<td><code>DD_TRACE_PARTIAL_FLUSH_MIN_SPANS</code></td>
 							<td><code>1000</code></td>
 							<td>Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces.</td>
+						</tr>
+						<tr>
+							<td>-</td>
+							<td><code>DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP</code></td>
+							<td>-</td>
+							<td>A regex to redact sensitive data from incoming requests&#39; querystring reported in the <code>http.url</code> tag (matches will be replaced with <code>&lt;redacted&gt;</code>). Can be an empty string to disable redaction or <code>.*</code> to redact all querystring. <strong>WARNING: this regex will execute for every incoming request on an unsafe input (url), please make sure you use a safe regex.</strong></td>
 						</tr>
 						<tr>
 							<td>lookup</td>
