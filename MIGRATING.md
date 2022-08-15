@@ -49,7 +49,7 @@ service name suffixed with `-http-client`.
 ### Removal of `fs` integration
 
 The `fs` integration was removed as it was originally added without an actual
-use case, and it's been problematic ever since it's noisy, the output is
+use case, and it's been problematic ever since. It's noisy, the output is
 confusing when using streams, errors that are handled higher in the stack end up
 being captured, etc.
 
