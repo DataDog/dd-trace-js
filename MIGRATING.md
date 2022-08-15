@@ -25,7 +25,7 @@ environment variable can be used to control what is obfuscated, and a value of
 ### HTTP operation name change
 
 The HTTP integration now uses `web.request` for incoming requests and continues
-to use `http.request` for outgoing requests. When using a supported Web
+to use `http.request` for outgoing requests. When using a supported web
 framework like Express, this change will have no effect because the root span
 would already have an operation name override like `express.request`.
 Any [monitor](https://docs.datadoghq.com/monitors/create/types/apm/?tab=apmmetrics)
