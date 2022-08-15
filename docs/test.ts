@@ -315,11 +315,6 @@ const bindFunctionStringType: (arg1: string, arg2: number) => string = scope.bin
 const bindFunctionVoidType: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): void => {});
 const bindFunctionVoidTypeWithSpan: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): string => 'test', span);
 
-Promise.resolve();
-
-scope.bind(promise);
-scope.bind(promise, span);
-
 tracer.wrap('x', () => {
   const rumData: string = tracer.getRumData();
 })
