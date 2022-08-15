@@ -8,7 +8,7 @@ open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
 ### Node 12 is no longer supported
 
-Node 12 has been EOL since April 2022 and is no longer supported. Generally
+Node.js 12 has been EOL since April 2022 and is no longer supported. Generally
 speaking, we highly recommend always keeping Node up to date regardless of our
 support policy.
 
