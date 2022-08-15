@@ -89,6 +89,11 @@ class Writer extends BaseWriter {
       done()
     }
   }
+
+  setUrl (url) {
+    this._url = url
+    this._coverageUrl = url
+  }
 }
 
 module.exports = Writer
