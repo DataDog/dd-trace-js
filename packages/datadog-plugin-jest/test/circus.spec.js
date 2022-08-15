@@ -26,7 +26,7 @@ const {
 
 const { version: ddTraceVersion } = require('../../../package.json')
 
-describe('Plugin', function () {
+describe.only('Plugin', function () {
   let jestExecutable
   let jestCommonOptions
 
@@ -251,7 +251,7 @@ describe('Plugin', function () {
         )
       })
 
-      it('can report code coverage', function (done) {
+      it.only('can report code coverage', function (done) {
         let contentTypeHeader, coveragePayload
 
         const scope = nock(`http://127.0.0.1:${agent.server.address().port}`)
@@ -273,6 +273,8 @@ describe('Plugin', function () {
         ).then(() => {
           // it takes a bit for the payload to be flushed
           setTimeout(() => {
+            console.log(coveragePayload)
+            console.log(JSON.stringify(coveragePayload))
             expect(scope.isDone()).to.be.true
             expect(contentTypeHeader).to.contain('multipart/form-data')
             expect(coveragePayload.version).to.equal(1)
