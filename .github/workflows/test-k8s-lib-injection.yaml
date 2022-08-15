@@ -1,6 +1,11 @@
 name: "Lib Injection Test"
 
-on: push
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: '0 4 * * *'
 
 jobs:
   lib-injection-test:
