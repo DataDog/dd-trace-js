@@ -232,9 +232,9 @@ function patch (grpc) {
   return grpc
 }
 
-addHook({ name: 'grpc', versions: ['>=1.20.2'] }, patch)
+addHook({ name: 'grpc', versions: ['>=1.24.3'] }, patch)
 
-addHook({ name: 'grpc', versions: ['>=1.20.2'], file: 'src/client.js' }, client => {
+addHook({ name: 'grpc', versions: ['>=1.24.3'], file: 'src/client.js' }, client => {
   shimmer.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor())
 
   return client

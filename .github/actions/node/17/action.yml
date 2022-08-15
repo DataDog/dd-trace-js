@@ -1,7 +1,0 @@
-name: Node 17
-runs:
-  using: composite
-  steps:
-    - uses: actions/setup-node@v3
-      with:
-        node-version: '17'
