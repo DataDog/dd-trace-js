@@ -252,6 +252,7 @@ describe('Plugin', function () {
       })
 
       it('can report code coverage', function (done) {
+        this.timeout(10000)
         let contentTypeHeader, coveragePayload
 
         const scope = nock('https://event-platform-intake.datad0g.com')
@@ -279,7 +280,7 @@ describe('Plugin', function () {
             expect(coveragePayload.files).to.have.length(1)
             expect(coveragePayload.files[0].filename).to.equal('packages/datadog-plugin-jest/test/sum-coverage-test.js')
             done()
-          }, 2000)
+          }, 8000)
         })
       })
 
