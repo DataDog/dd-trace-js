@@ -42,11 +42,6 @@ class DatadogTracer extends Tracer {
 
       // const result = this.scope().activate(span, () => fn(span))
       const result = this.scope().activate(span, () => {
-        process.on('SIGUSR1', () => {
-          console.log("Caught interrupt signal");
-          this.crashFlush()
-        });
-
         if (process.env.DD_TRACE_MAX_DURATION) {
           setTimeout(() => {
             this.crashFlush()
