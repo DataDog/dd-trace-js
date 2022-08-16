@@ -11,7 +11,7 @@ const log = require('../../log')
 
 const keepAlive = true
 const maxTotalSockets = 1
-const maxActiveRequests = 8
+const maxActiveRequests = 16
 const httpAgent = new http.Agent({ keepAlive, maxTotalSockets })
 const httpsAgent = new https.Agent({ keepAlive, maxTotalSockets })
 const containerId = docker.id()
@@ -86,8 +86,8 @@ function request (data, options, keepAlive, callback) {
     storage.enterWith(store)
   }
 
-  makeRequest(() => {
-    log.error('Retrying request')
+  makeRequest((err) => {
+    log.error(`Retrying request, ${err}, ${err.message}`)
     return makeRequest(callback)
   })
 }

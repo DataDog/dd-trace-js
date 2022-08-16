@@ -33,8 +33,7 @@ function makeRequest (data, url, cb) {
     headers: {
       'Content-Type': 'application/msgpack',
       'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY
-    },
-    timeout: 15000
+    }
   }
 
   options.protocol = url.protocol
