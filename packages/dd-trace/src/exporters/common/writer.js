@@ -12,6 +12,7 @@ class Writer {
     const count = this._encoder.count()
 
     if (!request.writable) {
+      log.error('Not flushing')
       this._encoder.reset()
       done()
     } else if (count > 0) {
@@ -24,7 +25,10 @@ class Writer {
   }
 
   append (spans) {
-    if (!request.writable) return
+    if (!request.writable) {
+      log.error(`Discarded trace: ${JSON.stringify(spans)}`)
+      return
+    }
 
     log.debug(() => `Encoding trace: ${JSON.stringify(spans)}`)
 

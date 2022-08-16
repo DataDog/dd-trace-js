@@ -7,6 +7,7 @@ const http = require('http')
 const https = require('https')
 const docker = require('./docker')
 const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
 
 const keepAlive = true
 const maxTotalSockets = 1
@@ -59,7 +60,10 @@ function request (data, options, keepAlive, callback) {
   }
 
   const makeRequest = onError => {
-    if (!request.writable) return callback(null)
+    if (!request.writable) {
+      log.error('Payload discarded')
+      return callback(null)
+    }
 
     activeRequests++
 
