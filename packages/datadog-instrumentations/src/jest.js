@@ -7,7 +7,6 @@ const testStartCh = channel('ci:jest:test:start')
 const testSkippedCh = channel('ci:jest:test:skip')
 const testRunFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
-const testSuiteFinish = channel('ci:jest:test-suite:finish')
 
 const {
   getTestSuitePath,
@@ -52,11 +51,6 @@ function getWrappedEnvironment (BaseEnvironment) {
       this.testSuite = getTestSuitePath(context.testPath, rootDir)
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
-    }
-    async teardown () {
-      super.teardown().finally(() => {
-        testSuiteFinish.publish()
-      })
     }
 
     async handleTestEvent (event, state) {

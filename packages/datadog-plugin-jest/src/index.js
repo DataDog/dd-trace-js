@@ -15,6 +15,8 @@ const {
   TEST_CODE_OWNERS
 } = require('../../dd-trace/src/plugins/util/test')
 
+const JEST_END_MESSAGE = 2
+
 function getTestSpanMetadata (tracer, test) {
   const childOf = getTestParentSpan(tracer)
 
@@ -38,6 +40,15 @@ class JestPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
+    const handler = ([message]) => {
+      if (message === JEST_END_MESSAGE) {
+        this.tracer._exporter._writer.flush(() => {
+          process.removeListener('message', handler)
+        })
+      }
+    }
+    process.on('message', handler)
+
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
@@ -53,10 +64,6 @@ class JestPlugin extends Plugin {
       span.setTag(TEST_STATUS, status)
       span.finish()
       finishAllTraceSpans(span)
-    })
-
-    this.addSub('ci:jest:test-suite:finish', () => {
-      this.tracer._exporter._writer.flush()
     })
 
     this.addSub('ci:jest:test:err', (error) => {
