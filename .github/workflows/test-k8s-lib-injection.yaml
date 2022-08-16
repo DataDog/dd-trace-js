@@ -39,8 +39,10 @@ jobs:
         run: |
           npm pack
           cp dd-trace-*.tgz k8s/auto-inst/dd-trace.tgz
-          docker build k8s/auto-inst --build-arg npm_pkg=./dd-trace.tgz -t ghcr.io/datadog/dd-trace-js/dd-lib-js-init:${GITHUB_SHA}
-          docker push ghcr.io/datadog/dd-trace-js/dd-lib-js-init:${GITHUB_SHA}
+          docker buildx create --name lib-injection
+          docker buildx use lib-injection
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes # https://stackoverflow.com/questions/72167570/docker-buildx-nodejs-fail
+          docker buildx build --platform=linux/amd64,linux/arm/v7,linux/arm64/v8 --build-arg npm_pkg=./dd-trace.tgz -t ghcr.io/datadog/dd-trace-js/dd-lib-js-init:${GITHUB_SHA} --push k8s/auto-inst
 
       - name: Build sample app image
         run: |

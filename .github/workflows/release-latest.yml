@@ -39,11 +39,11 @@ jobs:
         run: |
           node scripts/set-version-for-init-image.js ${{ fromJson(steps.pkg.outputs.json).version }}
           npm pack dd-trace@${{ fromJson(steps.pkg.outputs.json).version }}
-          cp dd-trace-*.tgz k8s/auto-inst/dd-trace.tgz
+          cp dd-trace-${{ fromJson(steps.pkg.outputs.json).version }}.tgz k8s/auto-inst/dd-trace.tgz
           docker buildx create --name lib-injection
           docker buildx use lib-injection
-          BUILDX_PLATFORMS=linux/amd64,linux/arm/v7,linux/arm64/v8,linux/ppc64le
-          docker buildx build --platform ${BUILDX_PLATFORMS} --build-arg npm_pkg=./dd-trace.tgz -t ghcr.io/datadog/dd-trace-js/dd-lib-js-init:${{ fromJson(steps.pkg.outputs.json).version }} --push k8s/auto-inst
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes # https://stackoverflow.com/questions/72167570/docker-buildx-nodejs-fail
+          docker buildx build --platform=linux/amd64,linux/arm/v7,linux/arm64/v8 --build-arg npm_pkg=./dd-trace.tgz -t ghcr.io/datadog/dd-trace-js/dd-lib-js-init:${{ fromJson(steps.pkg.outputs.json).version }} --push k8s/auto-inst
 
   docs:
     runs-on: ubuntu-latest
