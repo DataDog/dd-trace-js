@@ -61,19 +61,19 @@ function loadInstFile (file, instrumentations) {
 }
 
 function removeVersions (instrumentations = [], external) {
-  instrumentations.forEach((instrumentation, index) => {
+  return instrumentations.filter(instrumentation => {
+    let keep = true
     instrumentation.versions.forEach(instVersion => {
-      external.versions.forEach(externalVersion => {
-        if (semver.intersects(instVersion, externalVersion)) {
-          delete instrumentations[index]
-        }
+      external.versions.forEach((extVersion) => {
+        if (semver.intersects(instVersion, extVersion)) keep = false
       })
     })
+    return keep
   })
 }
 
 function withVersions (plugin, modules, range, cb) {
-  const instrumentations = typeof plugin === 'string' ? loadInst(plugin) : [].concat(plugin)
+  let instrumentations = typeof plugin === 'string' ? loadInst(plugin) : [].concat(plugin)
   const names = instrumentations.map(instrumentation => instrumentation.name)
 
   modules = [].concat(modules)
@@ -97,7 +97,7 @@ function withVersions (plugin, modules, range, cb) {
           instrumentations.push(external)
         } else {
           // remove all versions with that don't satisfy node version based on externals
-          removeVersions(instrumentations, external)
+          instrumentations = removeVersions(instrumentations, external)
         }
       })
     }
@@ -112,13 +112,13 @@ function withVersions (plugin, modules, range, cb) {
     const testVersions = new Map()
 
     instrumentations
-      .filter(Boolean)
       .filter(instrumentation => instrumentation.name === moduleName)
       .forEach(instrumentation => {
         instrumentation.versions
           .forEach(version => {
             const min = semver.coerce(version).version
             const max = require(`../../../../versions/${moduleName}@${version}`).version()
+            // temporary work-around for issues with testing multiple versions within a range
             if (!instrumentation.ignoreMinVersion) testVersions.set(min, { range: version, test: min })
             testVersions.set(max, { range: version, test: version })
           })
