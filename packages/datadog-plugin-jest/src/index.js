@@ -42,7 +42,9 @@ class JestPlugin extends Plugin {
 
     const handler = ([message]) => {
       if (message === JEST_END_MESSAGE) {
+        console.log('flushing on end message')
         this.tracer._exporter._writer.flush(() => {
+          console.log('and flushed')
           process.removeListener('message', handler)
         })
       }

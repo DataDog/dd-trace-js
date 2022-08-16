@@ -86,7 +86,10 @@ function request (data, options, keepAlive, callback) {
     storage.enterWith(store)
   }
 
-  makeRequest(() => makeRequest(callback))
+  makeRequest(() => {
+    log.error('Retrying request')
+    return makeRequest(callback)
+  })
 }
 
 function byteLength (data) {
