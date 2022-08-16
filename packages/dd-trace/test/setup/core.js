@@ -60,16 +60,16 @@ function loadInstFile (file, instrumentations) {
   })
 }
 
-function removeVersions (instrumentations, external) {
-  let idx = 0
-  while (idx < instrumentations.length) {
-    const inst = instrumentations[idx]
-    if (JSON.stringify(inst.versions) === JSON.stringify(external.versions)) {
-      instrumentations.splice(idx, 1)
-    } else {
-      idx++
-    }
-  }
+function removeVersions (instrumentations = [], external) {
+  instrumentations.forEach((instrumentation, index) => {
+    instrumentation.versions.forEach(instVersion => {
+      external.versions.forEach(externalVersion => {
+        if (semver.intersects(instVersion, externalVersion)) {
+          delete instrumentations[index]
+        }
+      })
+    })
+  })
 }
 
 function withVersions (plugin, modules, range, cb) {
@@ -112,6 +112,7 @@ function withVersions (plugin, modules, range, cb) {
     const testVersions = new Map()
 
     instrumentations
+      .filter(Boolean)
       .filter(instrumentation => instrumentation.name === moduleName)
       .forEach(instrumentation => {
         instrumentation.versions
