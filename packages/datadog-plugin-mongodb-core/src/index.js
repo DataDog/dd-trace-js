@@ -14,7 +14,7 @@ class MongodbCorePlugin extends Plugin {
 
     this.addSub(`apm:mongodb:query:start`, ({ ns, ops, options, name }) => {
       const query = getQuery(ops)
-      const resource = getResource(ns, query, name)
+      const resource = truncate(getResource(ns, query, name))
       const store = storage.getStore()
       const childOf = store ? store.span : store
       const span = this.tracer.startSpan('mongodb.query', {
@@ -55,8 +55,8 @@ class MongodbCorePlugin extends Plugin {
 
 function getQuery (cmd) {
   if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) return
-  if (cmd.query) return JSON.stringify(sanitize(cmd.query))
-  if (cmd.filter) return JSON.stringify(sanitize(cmd.filter))
+  if (cmd.query) return JSON.stringify(limitDepth(cmd.query))
+  if (cmd.filter) return JSON.stringify(limitDepth(cmd.filter))
 }
 
 function getResource (ns, query, operationName) {
@@ -69,12 +69,25 @@ function getResource (ns, query, operationName) {
   return parts.join(' ')
 }
 
-function shouldHide (input) {
-  return !isObject(input) || Buffer.isBuffer(input) || isBSON(input)
+function truncate (input) {
+  return input.slice(0, Math.min(input.length, 10000))
 }
 
-function sanitize (input) {
+function simplify (input) {
+  return isBSON(input) ? input.toHexString() : input
+}
+
+function shouldSimplify (input) {
+  return !isObject(input) || isBSON(input)
+}
+
+function shouldHide (input) {
+  return Buffer.isBuffer(input) || typeof input === 'function'
+}
+
+function limitDepth (input) {
   if (shouldHide(input)) return '?'
+  if (shouldSimplify(input)) return simplify(input)
 
   const output = {}
   const queue = [{
@@ -92,8 +105,10 @@ function sanitize (input) {
       if (typeof input[key] === 'function') continue
 
       const child = input[key]
-      if (depth >= 20 || shouldHide(child)) {
+      if (depth >= 10 || shouldHide(child)) {
         output[key] = '?'
+      } else if (shouldSimplify(child)) {
+        output[key] = simplify(child)
       } else {
         queue.push({
           input: child,
