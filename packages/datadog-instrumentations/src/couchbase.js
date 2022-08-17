@@ -160,7 +160,6 @@ function wrapV3Query (query) {
 }
 
 // semver >=2 <3
-// couchbase v2 won't build on LTS node versions greater than 12
 addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Bucket => {
   const startCh = channel('apm:couchbase:query:start')
   const finishCh = channel('apm:couchbase:query:finish')

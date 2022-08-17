@@ -60,18 +60,6 @@ function loadInstFile (file, instrumentations) {
   })
 }
 
-function removeVersions (instrumentations = [], external) {
-  return instrumentations.filter(instrumentation => {
-    let keep = true
-    instrumentation.versions.forEach(instVersion => {
-      external.versions.forEach((extVersion) => {
-        if (semver.intersects(instVersion, extVersion)) keep = false
-      })
-    })
-    return keep
-  })
-}
-
 function withVersions (plugin, modules, range, cb) {
   let instrumentations = typeof plugin === 'string' ? loadInst(plugin) : [].concat(plugin)
   const names = instrumentations.map(instrumentation => instrumentation.name)
@@ -82,22 +70,29 @@ function withVersions (plugin, modules, range, cb) {
     if (externals[name]) {
       [].concat(externals[name]).forEach(external => {
         const { nodeVersions } = external
-        let satisfies = true
-        if (nodeVersions) {
-          satisfies = false
-          for (const version of nodeVersions) {
-            if (semver.satisfies(process.version, version)) {
-              satisfies = true
-              break
-            }
-          }
-        }
+        const satisfies = nodeVersions
+          ? nodeVersions
+            .reduce((satisfies, version) => satisfies || semver.satisfies(process.version, version), false)
+          : true
 
         if (satisfies) {
+          // use external in instrumentation
           instrumentations.push(external)
         } else {
-          // remove all versions with that don't satisfy node version based on externals
-          instrumentations = removeVersions(instrumentations, external)
+          // node version not satisifed
+          // don't add this external, and remove all other instrumentations from testing with overlapping versions
+          instrumentations = instrumentations.filter(instrumentation => {
+            return instrumentation.versions
+              .reduce((crossed, instVersion) => {
+                external.versions.forEach(extVersion => crossed.push([instVersion, extVersion]))
+                return crossed
+              }
+              , []) // cross instrumentation versions with externals versions
+              .reduce((matches, versions) => {
+                const [instVersion, extVersion] = versions
+                return matches && !semver.intersects(instVersion, extVersion)
+              }, true) // filter on matching overlaps
+          })
         }
       })
     }

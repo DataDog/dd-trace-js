@@ -7,13 +7,13 @@
     },
     {
       "name": "couchbase",
-      "versions": [">=3.0.0 <3.2.0", "3.2.0 - 3.2.1", "3.2.2 - 3.2.4"],
-      "nodeVersions": [">=14.0.0 <18.0.0"]
+      "versions": ["3.2.0 - 3.2.1", "3.2.2 - 3.2.4"],
+      "nodeVersions": [">=14.0.0"]
     },
     {
       "name": "couchbase",
       "versions": [">=4.0.0"],
-      "nodeVersions": [">=14.0.0 <18.0.0"],
+      "nodeVersions": [">=14.0.0"],
       "ignoreMinVersion": true
     }
   ],
