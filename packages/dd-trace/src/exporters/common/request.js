@@ -18,6 +18,8 @@ const containerId = docker.id()
 
 let activeRequests = 0
 
+const RECOVERABLE_HTTP_STATUS = [408]
+
 function request (data, options, callback) {
   if (!options.headers) {
     options.headers = {}
@@ -63,7 +65,11 @@ function request (data, options, callback) {
         } else {
           const error = new Error(`Error from the endpoint: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`)
           error.status = res.statusCode
-          onError(error, null, res.statusCode)
+          if (RECOVERABLE_HTTP_STATUS.includes(res.statusCode)) {
+            onError(error, null, res.statusCode)
+          } else {
+            callback(error, null, res.statusCode)
+          }
         }
       })
     })

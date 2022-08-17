@@ -30,6 +30,10 @@ class CucumberPlugin extends Plugin {
     const sourceRoot = process.cwd()
     const codeOwnersEntries = getCodeOwnersFileEntries(sourceRoot)
 
+    this.addSub('ci:cucumber:session:finish', () => {
+      this.tracer._exporter.flush()
+    })
+
     this.addSub('ci:cucumber:run:start', ({ pickleName, pickleUri }) => {
       const store = storage.getStore()
       const childOf = store ? store.span : store
