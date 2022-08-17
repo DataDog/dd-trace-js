@@ -17,7 +17,8 @@ const {
   CI_WORKSPACE_PATH,
   CI_JOB_URL,
   CI_JOB_NAME,
-  CI_STAGE_NAME
+  CI_STAGE_NAME,
+  CI_ENV_VARS
 } = require('./tags')
 
 // Receives a string with the form 'John Doe <john.doe@gmail.com>'
@@ -104,7 +105,8 @@ module.exports = {
         GIT_BRANCH: JENKINS_GIT_BRANCH,
         GIT_COMMIT: JENKINS_GIT_COMMIT,
         GIT_URL: JENKINS_GIT_REPOSITORY_URL,
-        GIT_URL_1: JENKINS_GIT_REPOSITORY_URL_1
+        GIT_URL_1: JENKINS_GIT_REPOSITORY_URL_1,
+        DD_CUSTOM_TRACE_ID
       } = env
 
       tags = {
@@ -114,7 +116,8 @@ module.exports = {
         [CI_PROVIDER_NAME]: 'jenkins',
         [GIT_COMMIT_SHA]: JENKINS_GIT_COMMIT,
         [GIT_REPOSITORY_URL]: JENKINS_GIT_REPOSITORY_URL || JENKINS_GIT_REPOSITORY_URL_1,
-        [CI_WORKSPACE_PATH]: WORKSPACE
+        [CI_WORKSPACE_PATH]: WORKSPACE,
+        [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID })
       }
 
       const isTag = JENKINS_GIT_BRANCH && JENKINS_GIT_BRANCH.includes('tags')
@@ -152,7 +155,9 @@ module.exports = {
         CI_JOB_NAME: GITLAB_CI_JOB_NAME,
         CI_COMMIT_MESSAGE,
         CI_COMMIT_TIMESTAMP,
-        CI_COMMIT_AUTHOR
+        CI_COMMIT_AUTHOR,
+        CI_PROJECT_URL: GITLAB_PROJECT_URL,
+        CI_JOB_ID: GITLAB_CI_JOB_ID
       } = env
 
       const { name, email } = parseEmailAndName(CI_COMMIT_AUTHOR)
@@ -174,7 +179,12 @@ module.exports = {
         [GIT_COMMIT_MESSAGE]: CI_COMMIT_MESSAGE,
         [GIT_COMMIT_AUTHOR_NAME]: name,
         [GIT_COMMIT_AUTHOR_EMAIL]: email,
-        [GIT_COMMIT_AUTHOR_DATE]: CI_COMMIT_TIMESTAMP
+        [GIT_COMMIT_AUTHOR_DATE]: CI_COMMIT_TIMESTAMP,
+        [CI_ENV_VARS]: JSON.stringify({
+          CI_PROJECT_URL: GITLAB_PROJECT_URL,
+          CI_PIPELINE_ID: GITLAB_PIPELINE_ID,
+          CI_JOB_ID: GITLAB_CI_JOB_ID
+        })
       }
     }
 
@@ -188,7 +198,8 @@ module.exports = {
         CIRCLE_TAG,
         CIRCLE_SHA1,
         CIRCLE_REPOSITORY_URL,
-        CIRCLE_JOB
+        CIRCLE_JOB,
+        CIRCLE_BUILD_NUM
       } = env
 
       const pipelineUrl = `https://app.circleci.com/pipelines/workflows/${CIRCLE_WORKFLOW_ID}`
@@ -203,7 +214,11 @@ module.exports = {
         [GIT_REPOSITORY_URL]: CIRCLE_REPOSITORY_URL,
         [CI_JOB_URL]: CIRCLE_BUILD_URL,
         [CI_WORKSPACE_PATH]: CIRCLE_WORKING_DIRECTORY,
-        [CIRCLE_TAG ? GIT_TAG : GIT_BRANCH]: CIRCLE_TAG || CIRCLE_BRANCH
+        [CIRCLE_TAG ? GIT_TAG : GIT_BRANCH]: CIRCLE_TAG || CIRCLE_BRANCH,
+        [CI_ENV_VARS]: JSON.stringify({
+          CIRCLE_WORKFLOW_ID,
+          CIRCLE_BUILD_NUM
+        })
       }
     }
 
@@ -243,7 +258,13 @@ module.exports = {
         [GIT_REPOSITORY_URL]: repositoryURL,
         [CI_JOB_URL]: jobUrl,
         [CI_WORKSPACE_PATH]: GITHUB_WORKSPACE,
-        [refKey]: ref
+        [refKey]: ref,
+        [CI_ENV_VARS]: JSON.stringify({
+          GITHUB_SERVER_URL,
+          GITHUB_REPOSITORY,
+          GITHUB_RUN_ID,
+          GITHUB_RUN_ATTEMPT
+        })
       }
     }
 
@@ -443,7 +464,11 @@ module.exports = {
         [refKey]: ref,
         [GIT_COMMIT_AUTHOR_NAME]: BUILDKITE_BUILD_AUTHOR,
         [GIT_COMMIT_AUTHOR_EMAIL]: BUILDKITE_BUILD_AUTHOR_EMAIL,
-        [GIT_COMMIT_MESSAGE]: BUILDKITE_MESSAGE
+        [GIT_COMMIT_MESSAGE]: BUILDKITE_MESSAGE,
+        [CI_ENV_VARS]: JSON.stringify({
+          BUILDKITE_BUILD_ID,
+          BUILDKITE_JOB_ID
+        })
       }
     }
 

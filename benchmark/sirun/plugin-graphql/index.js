@@ -16,7 +16,7 @@ if (Number(process.env.WITH_TRACER)) {
 }
 
 if (Number(process.env.WITH_ASYNC_HOOKS)) {
-  const hook = semver.satisfies(process.versions.node, '>=14.5 || ^12.19.0')
+  const hook = semver.satisfies(process.versions.node, '>=14.5')
     ? { init () {} }
     : { init () {}, before () {}, after () {}, destroy () {} }
 

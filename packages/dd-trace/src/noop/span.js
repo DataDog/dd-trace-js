@@ -1,26 +1,26 @@
 'use strict'
 
-const Span = require('opentracing').Span
-const NoopSpanContext = require('../noop/span_context')
+const NoopSpanContext = require('./span_context')
 const id = require('../id')
 const { storage } = require('../../../datadog-core') // TODO: noop storage?
 
-class NoopSpan extends Span {
+class NoopSpan {
   constructor (tracer, parent) {
-    super()
-
     this._store = storage.getStore()
     this._noopTracer = tracer
     this._noopContext = this._createContext(parent)
   }
 
-  _context () {
-    return this._noopContext
-  }
-
-  _tracer () {
-    return this._noopTracer
-  }
+  context () { return this._noopContext }
+  tracer () { return this._noopTracer }
+  setOperationName (name) { return this }
+  setBaggageItem (key, value) { return this }
+  getBaggageItem (key) {}
+  setTag (key, value) { return this }
+  addTags (keyValueMap) { return this }
+  log () { return this }
+  logEvent () {}
+  finish (finishTime) {}
 
   _createContext (parent) {
     const spanId = id()

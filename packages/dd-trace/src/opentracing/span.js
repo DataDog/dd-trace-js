@@ -1,11 +1,9 @@
 'use strict'
 
 // TODO (new internal tracer): use DC events for lifecycle metrics and test them
-
-const opentracing = require('opentracing')
-const now = require('performance-now')
+const now = require('perf_hooks').performance.now
+const dateNow = Date.now
 const semver = require('semver')
-const Span = opentracing.Span
 const SpanContext = require('./span_context')
 const id = require('../id')
 const tagger = require('../tagger')
@@ -21,10 +19,8 @@ const {
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
-class DatadogSpan extends Span {
+class DatadogSpan {
   constructor (tracer, processor, prioritySampler, fields, debug) {
-    super()
-
     const operationName = fields.operationName
     const parent = fields.parent || null
     const tags = Object.assign({}, fields.tags)
@@ -70,66 +66,45 @@ class DatadogSpan extends Span {
     return `Span${json}`
   }
 
-  _createContext (parent) {
-    let spanContext
-
-    if (parent) {
-      spanContext = new SpanContext({
-        traceId: parent._traceId,
-        spanId: id(),
-        parentId: parent._spanId,
-        sampling: parent._sampling,
-        baggageItems: Object.assign({}, parent._baggageItems),
-        trace: parent._trace
-      })
-    } else {
-      const spanId = id()
-      spanContext = new SpanContext({
-        traceId: spanId,
-        spanId
-      })
-    }
-
-    spanContext._trace.started.push(this)
-    spanContext._trace.startTime = spanContext._trace.startTime || Date.now()
-    spanContext._trace.ticks = spanContext._trace.ticks || now()
-
-    return spanContext
-  }
-
-  _getTime () {
-    const { startTime, ticks } = this._spanContext._trace
-
-    return startTime + now() - ticks
-  }
-
-  _context () {
+  context () {
     return this._spanContext
   }
 
-  _tracer () {
+  tracer () {
     return this._parentTracer
   }
 
-  _setOperationName (name) {
+  setOperationName (name) {
     this._spanContext._name = name
+    return this
   }
 
-  _setBaggageItem (key, value) {
+  setBaggageItem (key, value) {
     this._spanContext._baggageItems[key] = value
+    return this
   }
 
-  _getBaggageItem (key) {
+  getBaggageItem (key) {
     return this._spanContext._baggageItems[key]
   }
 
-  _addTags (keyValuePairs) {
-    tagger.add(this._spanContext._tags, keyValuePairs)
-
-    this._prioritySampler.sample(this, false)
+  setTag (key, value) {
+    this._addTags({ [key]: value })
+    return this
   }
 
-  _finish (finishTime) {
+  addTags (keyValueMap) {
+    this._addTags(keyValueMap)
+    return this
+  }
+
+  log () {
+    return this
+  }
+
+  logEvent () {}
+
+  finish (finishTime) {
     if (this._duration !== undefined) {
       return
     }
@@ -156,6 +131,45 @@ class DatadogSpan extends Span {
     this._spanContext._trace.finished.push(this)
     this._spanContext._isFinished = true
     this._processor.process(this)
+  }
+
+  _createContext (parent) {
+    let spanContext
+
+    if (parent) {
+      spanContext = new SpanContext({
+        traceId: parent._traceId,
+        spanId: id(),
+        parentId: parent._spanId,
+        sampling: parent._sampling,
+        baggageItems: Object.assign({}, parent._baggageItems),
+        trace: parent._trace
+      })
+    } else {
+      const spanId = id()
+      spanContext = new SpanContext({
+        traceId: spanId,
+        spanId
+      })
+    }
+
+    spanContext._trace.started.push(this)
+    spanContext._trace.startTime = spanContext._trace.startTime || dateNow()
+    spanContext._trace.ticks = spanContext._trace.ticks || now()
+
+    return spanContext
+  }
+
+  _getTime () {
+    const { startTime, ticks } = this._spanContext._trace
+
+    return startTime + now() - ticks
+  }
+
+  _addTags (keyValuePairs) {
+    tagger.add(this._spanContext._tags, keyValuePairs)
+
+    this._prioritySampler.sample(this, false)
   }
 }
 

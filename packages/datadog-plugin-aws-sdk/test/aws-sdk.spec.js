@@ -31,7 +31,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close({ ritmReset: false, wipe: true })
         })
 
         it('should instrument service methods with a callback', (done) => {
