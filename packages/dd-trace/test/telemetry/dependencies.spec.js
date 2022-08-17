@@ -104,18 +104,29 @@ describe('dependencies', () => {
       dependencies.start(config, application, host)
       const requestPrefix = 'custom-module'
       requirePackageJson.returns({ version: '1.0.0' })
+      const timeouts = []
+      let atLeastOneTimeout = false
       global.setTimeout = function (callback) {
-        return originalSetTimeout(callback)
+        atLeastOneTimeout = true
+        const timeout = originalSetTimeout(function () {
+          timeouts.splice(timeouts.indexOf(timeout), 1)
+          return callback.apply(this, arguments)
+        })
+        timeouts.push(timeout)
+        return timeout
       }
       for (let i = 0; i < 1200; i++) {
         const request = requestPrefix + i
         const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
         moduleLoadStartChannel.publish({ request, filename })
       }
-      originalSetTimeout(() => {
-        expect(sendData).to.have.been.calledTwice
-        done()
-      }, 5)
+      const interval = setInterval(() => {
+        if (atLeastOneTimeout && timeouts.length === 0) {
+          clearInterval(interval)
+          expect(sendData).to.have.been.calledTwice
+          done()
+        }
+      })
     })
   })
 })
