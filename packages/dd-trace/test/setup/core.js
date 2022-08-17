@@ -79,19 +79,14 @@ function withVersions (plugin, modules, range, cb) {
           // use external in instrumentation
           instrumentations.push(external)
         } else {
-          // node version not satisifed
           // don't add this external, and remove all other instrumentations from testing with overlapping versions
           instrumentations = instrumentations.filter(instrumentation => {
-            return instrumentation.versions
-              .reduce((crossed, instVersion) => {
-                external.versions.forEach(extVersion => crossed.push([instVersion, extVersion]))
-                return crossed
-              }
-              , []) // cross instrumentation versions with externals versions
-              .reduce((matches, versions) => {
-                const [instVersion, extVersion] = versions
-                return matches && !semver.intersects(instVersion, extVersion)
-              }, true) // filter on matching overlaps
+            return instrumentation.versions.reduce((matches, instVersion) => {
+              external.versions.forEach(extVersion => {
+                matches = matches && !semver.intersects(instVersion, extVersion)
+              })
+              return matches
+            }, true)
           })
         }
       })
