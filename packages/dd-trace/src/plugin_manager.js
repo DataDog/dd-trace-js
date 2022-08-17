@@ -134,13 +134,11 @@ module.exports = class PluginManager {
       sharedConfig.queryStringObfuscation = queryStringObfuscation
     }
 
-    // TODO: update so that it's available for every CI Visibility's plugin
-    if (name === 'mocha' || name === 'jest') {
-      sharedConfig.isAgentlessEnabled = experimental && experimental.exporter === 'datadog'
+    if (experimental) {
+      sharedConfig.isAgentlessEnabled = experimental.exporter === 'datadog'
     }
-    if (name === 'jest') {
-      sharedConfig.isITREnabled = isITREnabled
-    }
+
+    sharedConfig.isITREnabled = isITREnabled
 
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
