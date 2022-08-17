@@ -37,26 +37,6 @@ function request (data, options, callback) {
 
   options.agent = isSecure ? httpsAgent : httpAgent
 
-  const onResponse = res => {
-    let responseData = ''
-
-    res.setTimeout(timeout)
-
-    res.on('data', chunk => { responseData += chunk })
-    res.on('end', () => {
-      activeRequests--
-
-      if (res.statusCode >= 200 && res.statusCode <= 299) {
-        callback(null, responseData, res.statusCode)
-      } else {
-        const error = new Error(`Error from the endpoint: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`)
-        error.status = res.statusCode
-
-        callback(error, null, res.statusCode)
-      }
-    })
-  }
-
   const makeRequest = onError => {
     if (!request.writable) {
       log.error('Payload discarded')
@@ -69,7 +49,25 @@ function request (data, options, callback) {
 
     storage.enterWith({ noop: true })
 
-    const req = client.request(options, onResponse)
+    const req = client.request(options, res => {
+      let responseData = ''
+
+      res.setTimeout(timeout)
+
+      res.on('data', chunk => { responseData += chunk })
+      res.on('end', () => {
+        activeRequests--
+
+        if (res.statusCode >= 200 && res.statusCode <= 299) {
+          callback(null, responseData, res.statusCode)
+        } else {
+          const error = new Error(`Error from the endpoint: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`)
+          error.status = res.statusCode
+
+          onError(error)
+        }
+      })
+    })
 
     req.once('error', err => {
       activeRequests--
