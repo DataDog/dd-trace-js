@@ -2,6 +2,7 @@
 
 const URL = require('url').URL
 const Writer = require('./writer')
+const CoverageWriter = require('./coverage-writer')
 const Scheduler = require('../../../exporters/scheduler')
 
 const log = require('../../../log')
@@ -10,17 +11,18 @@ class AgentlessCiVisibilityExporter {
   constructor (config) {
     const { flushInterval, tags, site, url, isITREnabled } = config
     this._isITREnabled = isITREnabled
+
     this._url = url || new URL(`https://citestcycle-intake.${site}`)
+    this._writer = new Writer({ url: this._url, tags })
 
     const coverageUrl = new URL(`https://event-platform-intake.${site}`)
-
-    this._writer = new Writer({ url: this._url, tags, coverageUrl })
+    this._coverageWriter = new CoverageWriter({ url: coverageUrl })
 
     if (flushInterval > 0) {
       this._scheduler = new Scheduler(() => this._writer.flush(), flushInterval)
 
       if (this._isITREnabled) {
-        this._coverageScheduler = new Scheduler(() => this._writer.flushCoverage())
+        this._coverageScheduler = new Scheduler(() => this._coverageWriter.flush())
       }
     }
 
@@ -40,10 +42,10 @@ class AgentlessCiVisibilityExporter {
       spanId: testSpan.context()._spanId,
       files: coverageFiles
     }
-    this._writer.appendCoverage(formattedCoverage)
+    this._coverageWriter.append(formattedCoverage)
 
     if (!this._coverageScheduler) {
-      this._writer.flushCoverage()
+      this._coverageWriter.flush()
     }
   }
 
@@ -63,10 +65,6 @@ class AgentlessCiVisibilityExporter {
     } catch (e) {
       log.warn(e.stack)
     }
-  }
-
-  flush () {
-    this._writer.flush()
   }
 }
 

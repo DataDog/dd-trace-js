@@ -16,10 +16,6 @@ const httpAgent = new http.Agent({ keepAlive, maxTotalSockets })
 const httpsAgent = new https.Agent({ keepAlive, maxTotalSockets })
 const containerId = docker.id()
 
-const isForm = (data) => {
-  return data instanceof Readable
-}
-
 let activeRequests = 0
 
 function request (data, options, keepAlive, callback) {
@@ -27,7 +23,7 @@ function request (data, options, keepAlive, callback) {
     options.headers = {}
   }
 
-  const isFormData = isForm(data)
+  const isReadable = data instanceof Readable
 
   // The timeout should be kept low to avoid excessive queueing.
   const timeout = options.timeout || 2000
@@ -35,7 +31,7 @@ function request (data, options, keepAlive, callback) {
   const client = isSecure ? https : http
   const dataArray = [].concat(data)
 
-  if (!isFormData) {
+  if (!isReadable) {
     options.headers['Content-Length'] = byteLength(dataArray)
   }
 
@@ -83,14 +79,12 @@ function request (data, options, keepAlive, callback) {
       onError(err)
     })
 
-    if (isFormData) {
+    req.setTimeout(timeout, req.abort)
+
+    if (isReadable) {
       data.pipe(req)
     } else {
       dataArray.forEach(buffer => req.write(buffer))
-    }
-
-    req.setTimeout(timeout, req.abort)
-    if (!isFormData) {
       req.end()
     }
 

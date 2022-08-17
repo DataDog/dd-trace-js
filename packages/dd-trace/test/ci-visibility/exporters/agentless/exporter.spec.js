@@ -6,14 +6,20 @@ describe('CI Visibility Exporter', () => {
   const flushInterval = 1000
   const writer = {
     append: sinon.spy(),
-    flush: sinon.spy(),
-    appendCoverage: sinon.spy(),
-    flushCoverage: sinon.spy()
+    flush: sinon.spy()
   }
   const Writer = sinon.stub().returns(writer)
 
+  const coverageWriter = {
+    append: sinon.spy(),
+    flush: sinon.spy()
+  }
+
+  const CoverageWriter = sinon.stub().returns(coverageWriter)
+
   const Exporter = proxyquire('../../../../src/ci-visibility/exporters/agentless', {
-    './writer': Writer
+    './writer': Writer,
+    './coverage-writer': CoverageWriter
   })
 
   let exporter
@@ -62,12 +68,12 @@ describe('CI Visibility Exporter', () => {
       exporter = new Exporter({ url, flushInterval: 0, isITREnabled: true })
 
       exporter.exportCoverage(payload)
-      expect(writer.appendCoverage).to.have.been.calledWith({
+      expect(coverageWriter.append).to.have.been.calledWith({
         traceId: '1',
         spanId: '2',
         files: ['file.js']
       })
-      expect(writer.flushCoverage).to.have.been.called
+      expect(coverageWriter.flush).to.have.been.called
     })
     it('should flush after the configured flush interval', function (done) {
       this.timeout(5000)
@@ -81,10 +87,10 @@ describe('CI Visibility Exporter', () => {
       exporter.exportCoverage(payload)
 
       setTimeout(() => {
-        expect(writer.flushCoverage).to.have.been.called
+        expect(coverageWriter.flush).to.have.been.called
         done()
       }, flushInterval)
-      expect(writer.appendCoverage).to.have.been.called
+      expect(coverageWriter.append).to.have.been.called
     })
   })
 })
