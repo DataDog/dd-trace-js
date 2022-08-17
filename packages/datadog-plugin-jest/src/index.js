@@ -44,7 +44,7 @@ class JestPlugin extends Plugin {
     // Used to handle the end of a jest worker to be able to flush
     const handler = ([message]) => {
       if (message === CHILD_MESSAGE_END) {
-        this.tracer._exporter.flush(() => {
+        this.tracer._exporter._writer.flush(() => {
           // eslint-disable-next-line
           // https://github.com/facebook/jest/blob/24ed3b5ecb419c023ee6fdbc838f07cc028fc007/packages/jest-worker/src/workers/processChild.ts#L118-L133
           // Only after the flush is done we clean up open handles

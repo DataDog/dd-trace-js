@@ -31,7 +31,7 @@ class CucumberPlugin extends Plugin {
     const codeOwnersEntries = getCodeOwnersFileEntries(sourceRoot)
 
     this.addSub('ci:cucumber:session:finish', () => {
-      this.tracer._exporter.flush()
+      this.tracer._exporter._writer.flush()
     })
 
     this.addSub('ci:cucumber:run:start', ({ pickleName, pickleUri }) => {

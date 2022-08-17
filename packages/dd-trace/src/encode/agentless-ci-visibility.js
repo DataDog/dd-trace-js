@@ -12,8 +12,6 @@ const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_suite_end', 'test']
 const TEST_SUITE_KEYS_LENGTH = 11
 const TEST_SESSION_KEYS_LENGTH = 10
 
-const CHUNK_SIZE = 4 * 1024 * 1024 // 4MB
-
 function formatSpan (span) {
   let encodingVersion = ENCODING_VERSION
   if (span.type === 'test' && span.meta && span.meta.test_session_id) {
@@ -33,8 +31,8 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this.runtimeId = runtimeId
     this.service = service
     this.env = env
-    this._traceBytes = new Chunk(CHUNK_SIZE)
-    this._stringBytes = new Chunk(CHUNK_SIZE)
+    this._traceBytes = new Chunk()
+    this._stringBytes = new Chunk()
     this._stringCount = 0
     this._stringMap = {}
 
