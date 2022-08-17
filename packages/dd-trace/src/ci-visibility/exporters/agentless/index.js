@@ -15,8 +15,8 @@ class AgentlessCiVisibilityExporter {
     this._url = url || new URL(`https://citestcycle-intake.${site}`)
     this._writer = new Writer({ url: this._url, tags })
 
-    const coverageUrl = new URL(`https://event-platform-intake.${site}`)
-    this._coverageWriter = new CoverageWriter({ url: coverageUrl })
+    this._coverageUrl = new URL(`https://event-platform-intake.${site}`)
+    this._coverageWriter = new CoverageWriter({ url: this._coverageUrl })
 
     if (flushInterval > 0) {
       this._scheduler = new Scheduler(() => this._writer.flush(), flushInterval)
@@ -57,11 +57,14 @@ class AgentlessCiVisibilityExporter {
     }
   }
 
-  setUrl (url) {
+  setUrl (url, coverageUrl = url) {
     try {
       url = new URL(url)
+      coverageUrl = new URL(url)
       this._url = url
+      this._coverageUrl = coverageUrl
       this._writer.setUrl(url)
+      this._coverageWriter.setUrl(coverageUrl)
     } catch (e) {
       log.warn(e.stack)
     }

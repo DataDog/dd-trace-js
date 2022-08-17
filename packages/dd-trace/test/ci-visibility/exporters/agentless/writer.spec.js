@@ -11,7 +11,6 @@ let encoder
 let coverageEncoder
 let url
 let log
-let form
 
 describe('CI Visibility Writer', () => {
   beforeEach(() => {
@@ -32,10 +31,6 @@ describe('CI Visibility Writer', () => {
 
     log = {
       error: sinon.spy()
-    }
-
-    form = {
-      getHeaders: () => ({})
     }
 
     const AgentlessCiVisibilityEncoder = function () {
