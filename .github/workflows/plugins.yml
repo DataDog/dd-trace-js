@@ -501,29 +501,6 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
-  mariadb:
-    runs-on: ubuntu-latest
-    services:
-      mysql:
-        image: mariadb:10.4
-        env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-          MYSQL_DATABASE: 'db'
-        ports:
-          - 3306:3306
-    env:
-      PLUGINS: mariadb
-      SERVICES: mysql
-    steps:
-      - uses: actions/checkout@v2
-      - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - uses: codecov/codecov-action@v2
-
   memcached:
     runs-on: ubuntu-latest
     services:
@@ -637,7 +614,7 @@ jobs:
         ports:
           - 3306:3306
     env:
-      PLUGINS: mysql|mysql2 # TODO: move mysql2 to its own job
+      PLUGINS: mysql|mysql2|mariadb # TODO: move mysql2 to its own job
       SERVICES: mysql
     steps:
       - uses: actions/checkout@v2
