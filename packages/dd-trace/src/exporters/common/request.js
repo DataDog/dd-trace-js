@@ -39,7 +39,7 @@ function request (data, options, callback) {
 
   const makeRequest = onError => {
     if (!request.writable) {
-      log.error('Payload discarded')
+      log.debug('Payload discarded')
       return callback(null)
     }
 
@@ -63,8 +63,7 @@ function request (data, options, callback) {
         } else {
           const error = new Error(`Error from the endpoint: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`)
           error.status = res.statusCode
-
-          onError(error)
+          onError(error, null, res.statusCode)
         }
       })
     })
