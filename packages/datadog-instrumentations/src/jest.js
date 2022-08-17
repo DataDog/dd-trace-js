@@ -105,10 +105,13 @@ function getWrappedEnvironment (BaseEnvironment) {
         })
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
-        testSkippedCh.publish({
-          name: getJestTestName(event.test),
-          suite: this.testSuite,
-          runner: 'jest-circus'
+        const asyncResource = new AsyncResource('bound-anonymous-fn')
+        asyncResource.runInAsyncScope(() => {
+          testSkippedCh.publish({
+            name: getJestTestName(event.test),
+            suite: this.testSuite,
+            runner: 'jest-circus'
+          })
         })
       }
     }

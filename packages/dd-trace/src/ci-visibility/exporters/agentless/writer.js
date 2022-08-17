@@ -33,7 +33,8 @@ function makeRequest (data, url, cb) {
     headers: {
       'Content-Type': 'application/msgpack',
       'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY
-    }
+    },
+    timeout: 10000
   }
 
   options.protocol = url.protocol
@@ -42,7 +43,7 @@ function makeRequest (data, url, cb) {
 
   log.debug(() => `Request to the intake: ${JSON.stringify(options)}`)
 
-  request(data, options, false, (err, res) => {
+  request(data, options, (err, res) => {
     cb(err, res)
   })
 }

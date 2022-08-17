@@ -11,14 +11,14 @@ const log = require('../../log')
 
 const keepAlive = true
 const maxTotalSockets = 1
-const maxActiveRequests = 16
+const maxActiveRequests = 8
 const httpAgent = new http.Agent({ keepAlive, maxTotalSockets })
 const httpsAgent = new https.Agent({ keepAlive, maxTotalSockets })
 const containerId = docker.id()
 
 let activeRequests = 0
 
-function request (data, options, keepAlive, callback) {
+function request (data, options, callback) {
   if (!options.headers) {
     options.headers = {}
   }
@@ -35,9 +35,7 @@ function request (data, options, keepAlive, callback) {
     options.headers['Datadog-Container-ID'] = containerId
   }
 
-  if (keepAlive) {
-    options.agent = isSecure ? httpsAgent : httpAgent
-  }
+  options.agent = isSecure ? httpsAgent : httpAgent
 
   const onResponse = res => {
     let responseData = ''
@@ -80,16 +78,13 @@ function request (data, options, keepAlive, callback) {
 
     dataArray.forEach(buffer => req.write(buffer))
 
-    req.setTimeout(timeout, req.abort)
+    req.setTimeout(timeout, () => req.destroy(new Error('Request timed out')))
     req.end()
 
     storage.enterWith(store)
   }
 
-  makeRequest((err) => {
-    log.error(`Retrying request, ${err}, ${err.message}`)
-    return makeRequest(callback)
-  })
+  makeRequest(() => makeRequest(callback))
 }
 
 function byteLength (data) {

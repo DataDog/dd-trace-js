@@ -7,7 +7,8 @@ const options = {
   startupLogs: false,
   tags: {
     [ORIGIN_KEY]: 'ciapp-test'
-  }
+  },
+  flushInterval: 10000
 }
 
 let shouldInit = true

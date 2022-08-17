@@ -24,8 +24,8 @@ class AgentlessCiVisibilityExporter {
     }
   }
 
-  flush () {
-    this._writer.flush()
+  flush (done) {
+    this._writer.flush(done)
   }
 }
 
