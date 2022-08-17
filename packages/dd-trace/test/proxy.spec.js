@@ -7,8 +7,6 @@ describe('TracerProxy', () => {
   let NoopTracer
   let tracer
   let noop
-  let Instrumenter
-  let instrumenter
   let Config
   let config
   let metrics
@@ -45,15 +43,8 @@ describe('TracerProxy', () => {
       error: sinon.spy()
     }
 
-    instrumenter = {
-      enable: sinon.spy(),
-      patch: sinon.spy(),
-      use: sinon.spy()
-    }
-
     DatadogTracer = sinon.stub().returns(tracer)
     NoopTracer = sinon.stub().returns(noop)
-    Instrumenter = sinon.stub().returns(instrumenter)
 
     config = {
       tracing: true,
@@ -86,7 +77,6 @@ describe('TracerProxy', () => {
       './noop/tracer': NoopTracer,
       './config': Config,
       './metrics': metrics,
-      './instrumenter': Instrumenter,
       './log': log,
       './profiler': profiler,
       './appsec': appsec,
@@ -94,15 +84,6 @@ describe('TracerProxy', () => {
     })
 
     proxy = new Proxy()
-  })
-
-  describe('use', () => {
-    it('should call the underlying instrumenter', () => {
-      const returnValue = proxy.use('a', 'b', 'c')
-
-      expect(instrumenter.use).to.have.been.calledWith('a', 'b', 'c')
-      expect(returnValue).to.equal(proxy)
-    })
   })
 
   describe('uninitialized', () => {
@@ -140,18 +121,6 @@ describe('TracerProxy', () => {
 
         expect(log.use).to.have.been.calledWith(config.logger)
         expect(log.toggle).to.have.been.calledWith(config.debug)
-      })
-
-      it('should set up automatic instrumentation', () => {
-        proxy.init()
-
-        expect(instrumenter.enable).to.have.been.called
-      })
-
-      it('should update the delegate before setting up instrumentation', () => {
-        proxy.init()
-
-        expect(instrumenter.enable).to.have.been.calledAfter(DatadogTracer)
       })
 
       it('should not capture metrics by default', () => {
@@ -208,7 +177,6 @@ describe('TracerProxy', () => {
           './noop/tracer': NoopTracer,
           './config': Config,
           './metrics': metrics,
-          './instrumenter': Instrumenter,
           './log': log,
           './profiler': null, // this will cause the import failure error
           './appsec': appsec
@@ -317,15 +285,6 @@ describe('TracerProxy', () => {
   describe('initialized', () => {
     beforeEach(() => {
       proxy.init()
-    })
-
-    describe('use', () => {
-      it('should call the underlying Instrumenter', () => {
-        const returnValue = proxy.use('a', 'b', 'c')
-
-        expect(instrumenter.use).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal(proxy)
-      })
     })
 
     describe('trace', () => {

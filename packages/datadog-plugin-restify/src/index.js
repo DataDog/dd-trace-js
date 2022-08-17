@@ -19,6 +19,13 @@ class RestifyPlugin extends RouterPlugin {
       web.setRoute(req, route)
     })
   }
+
+  configure (config) {
+    return super.configure({
+      ...config,
+      middleware: false // not supported
+    })
+  }
 }
 
 module.exports = RestifyPlugin

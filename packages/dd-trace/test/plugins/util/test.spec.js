@@ -62,7 +62,7 @@ describe('getCodeOwnersFileEntries', () => {
     })
     expect(codeOwnersFileEntries[1]).to.eql({
       pattern: 'packages/dd-trace/test/plugins/util/*',
-      owners: ['@datadog-apm-js']
+      owners: ['@datadog-dd-trace-js']
     })
   })
   it('returns null if CODEOWNERS can not be found', () => {
@@ -88,7 +88,7 @@ describe('getCodeOwnersForFilename', () => {
       codeOwnersFileEntries
     )
 
-    expect(codeOwnersForGitSpec).to.equal(JSON.stringify(['@datadog-apm-js']))
+    expect(codeOwnersForGitSpec).to.equal(JSON.stringify(['@datadog-dd-trace-js']))
 
     const codeOwnersForTestSpec = getCodeOwnersForFilename(
       'packages/dd-trace/test/plugins/util/test.spec.js',

@@ -82,8 +82,8 @@ class TextMapPropagator {
   _injectB3 (spanContext, carrier) {
     if (!this._config.experimental.b3) return
 
-    carrier[b3TraceKey] = spanContext._traceId.toString('hex')
-    carrier[b3SpanKey] = spanContext._spanId.toString('hex')
+    carrier[b3TraceKey] = spanContext._traceId.toString(16)
+    carrier[b3SpanKey] = spanContext._spanId.toString(16)
     carrier[b3SampledKey] = spanContext._sampling.priority >= AUTO_KEEP ? '1' : '0'
 
     if (spanContext._sampling.priority > AUTO_KEEP) {
@@ -91,7 +91,7 @@ class TextMapPropagator {
     }
 
     if (spanContext._parentId) {
-      carrier[b3ParentKey] = spanContext._parentId.toString('hex')
+      carrier[b3ParentKey] = spanContext._parentId.toString(16)
     }
   }
 
@@ -99,8 +99,8 @@ class TextMapPropagator {
     if (!this._config.experimental.traceparent) return
 
     const sampling = spanContext._sampling.priority >= AUTO_KEEP ? '01' : '00'
-    const traceId = spanContext._traceId.toString('hex').padStart(32, '0')
-    const spanId = spanContext._spanId.toString('hex').padStart(16, '0')
+    const traceId = spanContext._traceId.toString(16).padStart(32, '0')
+    const spanId = spanContext._spanId.toString(16).padStart(16, '0')
     carrier[traceparentKey] = `01-${traceId}-${spanId}-${sampling}`
   }
 
@@ -129,7 +129,7 @@ class TextMapPropagator {
     const b3 = this._extractB3Headers(carrier)
     const debug = b3[b3FlagsKey] === '1'
     const priority = this._getPriority(b3[b3SampledKey], debug)
-    const spanContext = this._extractGenericContext(b3, b3TraceKey, b3SpanKey)
+    const spanContext = this._extractGenericContext(b3, b3TraceKey, b3SpanKey, 16)
 
     if (priority !== undefined) {
       if (!spanContext) {

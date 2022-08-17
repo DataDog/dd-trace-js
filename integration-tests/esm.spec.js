@@ -31,7 +31,7 @@ describe('esm', () => {
   })
 
   afterEach(async () => {
-    proc.kill()
+    proc && proc.kill()
     await agent.stop()
   })
 
@@ -40,7 +40,7 @@ describe('esm', () => {
       proc = await spawnProc(path.join(cwd, 'esm/http.mjs'), {
         cwd,
         env: {
-          NODE_OPTIONS: `--no-warnings --loader=${hookFile}`,
+          NODE_OPTIONS: `--loader=${hookFile}`,
           AGENT_PORT: agent.port
         }
       })
@@ -60,7 +60,7 @@ describe('esm', () => {
       proc = await spawnProc(path.join(cwd, 'esm/express.mjs'), {
         cwd,
         env: {
-          NODE_OPTIONS: `--no-warnings --loader=${hookFile}`,
+          NODE_OPTIONS: `--loader=${hookFile}`,
           AGENT_PORT: agent.port
         }
       })

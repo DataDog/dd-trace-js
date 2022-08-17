@@ -119,7 +119,7 @@ describe('Plugin', () => {
             expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
             expect(testSpan.meta[TEST_CODE_OWNERS]).to.equal(
-              JSON.stringify(['@DataDog/apm-js']) // reads from dd-trace-js
+              JSON.stringify(['@DataDog/dd-trace-js']) // reads from dd-trace-js
             )
             expect(testSpan.meta[LIBRARY_VERSION]).to.equal(ddTraceVersion)
           })
@@ -371,6 +371,10 @@ describe('Plugin', () => {
             name: 'mocha-fail-hook-async-other-second-after will run and be reported as failed',
             status: 'fail',
             errorMsg: '"after each" hook for "will run and be reported as failed": yeah error'
+          },
+          {
+            name: 'mocha-fail-test-after-each-passes will fail and be reported as failed',
+            status: 'fail'
           }
         ]
 

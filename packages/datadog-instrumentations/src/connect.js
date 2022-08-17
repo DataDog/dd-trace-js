@@ -78,12 +78,12 @@ function wrapLayerHandle (layer) {
 
       try {
         return original.apply(this, arguments)
-      } catch (e) {
-        errorChannel.publish(e)
+      } catch (error) {
+        errorChannel.publish({ req, error })
         nextChannel.publish({ req })
         exitChannel.publish({ req })
 
-        throw e
+        throw error
       }
     })
   })
@@ -92,13 +92,13 @@ function wrapLayerHandle (layer) {
 function wrapNext (req, next) {
   return function (error) {
     if (error) {
-      errorChannel.publish(error)
+      errorChannel.publish({ req, error })
     }
 
     nextChannel.publish({ req })
     exitChannel.publish({ req })
 
-    next.apply(null, arguments)
+    next.apply(this, arguments)
   }
 }
 

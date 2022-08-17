@@ -1,6 +1,5 @@
 'use strict'
 
-const Tags = require('opentracing').Tags
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')
@@ -25,7 +24,7 @@ class Sqs extends BaseAwsSdkPlugin {
           tags: Object.assign(
             {},
             this.requestTags.get(request) || {},
-            { [Tags.SPAN_KIND]: 'server' }
+            { 'span.kind': 'server' }
           )
         }
         const span = plugin.tracer.startSpan('aws.response', options)

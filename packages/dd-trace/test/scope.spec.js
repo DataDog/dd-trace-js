@@ -158,36 +158,6 @@ describe('Scope', () => {
       })
     })
 
-    describe('with a promise', () => {
-      let promise
-
-      beforeEach(() => {
-        promise = Promise.resolve()
-      })
-
-      it('should bind the promise to the active span', () => {
-        return scope.activate(span, () => {
-          scope.bind(promise)
-
-          return promise.then(() => {
-            expect(scope.active()).to.equal(span)
-          })
-        })
-      })
-
-      it('should bind the promise to the provided span', () => {
-        scope.bind(promise, span)
-
-        return promise.then(() => {
-          expect(scope.active()).to.equal(span)
-        })
-      })
-
-      it('should return the promise', () => {
-        expect(scope.bind(promise, span)).to.equal(promise)
-      })
-    })
-
     describe('with an unsupported target', () => {
       it('should return the target', () => {
         expect(scope.bind('test', span)).to.equal('test')

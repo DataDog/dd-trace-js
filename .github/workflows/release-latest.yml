@@ -1,9 +1,9 @@
-name: Release
+name: Release (latest)
 
 on:
   push:
     branches:
-      - v2.x
+      - v3.x
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
