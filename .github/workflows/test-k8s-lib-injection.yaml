@@ -35,12 +35,13 @@ jobs:
           kubectl wait $(kubectl get pods -l app=datadog-agent -o name) --for condition=ready
           sleep 5
 
-      - name: Build injection image
+      - name: Npm pack for injection image
         run: |
           npm pack
-          cp dd-trace-*.tgz k8s/auto-inst/dd-trace.tgz
-          docker build k8s/auto-inst --build-arg npm_pkg=./dd-trace.tgz -t ghcr.io/datadog/dd-trace-js/dd-trace-js-init:${GITHUB_SHA}
-          docker push ghcr.io/datadog/dd-trace-js/dd-trace-js-init:${GITHUB_SHA}
+
+      - uses: .github/actions/injection
+        with:
+          init-image-version: ${GITHUB_SHA}
 
       - name: Build sample app image
         run: |
