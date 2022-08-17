@@ -1,47 +1,47 @@
-'use strict';
+'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin');
-const { storage } = require('../../datadog-core');
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler');
+const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { storage } = require('../../datadog-core')
+const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 class MariadbPlugin extends Plugin {
-  static get name() {
-    return 'mariadb';
+  static get name () {
+    return 'mariadb'
   }
 
-  constructor(...args) {
-    super(...args);
+  constructor (...args) {
+    super(...args)
 
     this.addSub('apm:mariadb:query:start', ({ sql }) => {
-      const service = getServiceName(this.tracer, this.config);
-      const store = storage.getStore();
-      const childOf = store ? store.span : store;
+      const service = getServiceName(this.tracer, this.config)
+      const store = storage.getStore()
+      const childOf = store ? store.span : store
       const tags = {
         'service.name': service,
         'span.type': 'sql',
         'span.kind': 'client',
         'db.type': 'mysql',
-        'resource.name': sql,
-      };
+        'resource.name': sql
+      }
 
       const span = this.tracer.startSpan('mariadb.query', {
         childOf,
-        tags,
-      });
+        tags
+      })
 
-      analyticsSampler.sample(span, this.config.measured);
-      this.enter(span, store);
-    });
+      analyticsSampler.sample(span, this.config.measured)
+      this.enter(span, store)
+    })
 
     this.addSub('apm:mariadb:query:error', (err) => {
-      const span = storage.getStore().span;
-      span.setTag('error', err);
-    });
+      const span = storage.getStore().span
+      span.setTag('error', err)
+    })
 
     this.addSub('apm:mariadb:query:finish', () => {
-      const span = storage.getStore().span;
-      span.finish();
-    });
+      const span = storage.getStore().span
+      span.finish()
+    })
   }
 }
 
@@ -55,4 +55,4 @@ function getServiceName (tracer, config) {
   }
 }
 
-module.exports = MariadbPlugin;
+module.exports = MariadbPlugin
