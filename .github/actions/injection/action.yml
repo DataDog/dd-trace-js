@@ -1,0 +1,23 @@
+name: Build/Publish Injection Image
+inputs:
+  init-image-version:
+    description: Image version to use for publishing
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@dc7b9719a96d48369863986a06765841d7ea23f6 # 2.0.0
+      with:
+        install: true
+        config-inline: |
+          [worker.oci]
+            max-parallelism = 1
+    - name: Build injection image and push to github packages
+      run: |
+        mv dd-trace-*.tgz k8s/auto-inst/dd-trace.tgz
+        docker buildx create --name lib-injection
+        docker buildx use lib-injection
+        docker run --rm --privileged multiarch/qemu-user-static --reset -p yes # https://stackoverflow.com/questions/72167570/docker-buildx-nodejs-fail
+        docker buildx build --platform=linux/amd64,linux/arm/v7,linux/arm64/v8 --build-arg npm_pkg=./dd-trace.tgz -t ghcr.io/datadog/dd-trace-js/dd-lib-js-init:${{ inputs.init-image-version }} --push k8s/auto-inst
+
