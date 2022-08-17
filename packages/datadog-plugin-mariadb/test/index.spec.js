@@ -21,9 +21,9 @@ describe('Plugin', () => {
           })
         })
 
-        beforeEach(async () => {
+        beforeEach(async (done) => {
           await agent.load('mariadb')
-          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get()
+          mariadb = proxyquire(`../../../versions/mariadb@${version}/callback`, {}).get()
 
           connection = mariadb.createConnection({
             host: 'localhost',
@@ -31,7 +31,11 @@ describe('Plugin', () => {
             database: 'db'
           })
 
-          connection.connect()
+          connection.connect(err => {
+            if (err) {
+              done(err)
+            }
+          })
         })
 
         it('should propagate context to callbacks, with correct callback args', done => {
@@ -114,9 +118,9 @@ describe('Plugin', () => {
           })
         })
 
-        beforeEach(async () => {
+        beforeEach(async (done) => {
           await agent.load('mariadb', { service: 'custom' })
-          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get()
+          mariadb = proxyquire(`../../../versions/mariadb@${version}/callback`, {}).get()
 
           connection = mariadb.createConnection({
             host: 'localhost',
@@ -124,7 +128,11 @@ describe('Plugin', () => {
             database: 'db'
           })
 
-          connection.connect()
+          connection.connect(err => {
+            if (err) {
+              done(err)
+            }
+          })
         })
 
         it('should be configured with the correct values', done => {
@@ -147,9 +155,9 @@ describe('Plugin', () => {
           })
         })
 
-        beforeEach(async () => {
+        beforeEach(async (done) => {
           await agent.load('mariadb', { service: serviceSpy })
-          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get()
+          mariadb = proxyquire(`../../../versions/mariadb@${version}/callback`, {}).get()
 
           connection = mariadb.createConnection({
             host: 'localhost',
@@ -157,7 +165,11 @@ describe('Plugin', () => {
             database: 'db'
           })
 
-          connection.connect()
+          connection.connect(err => {
+            if (err) {
+              done(err)
+            }
+          })
         })
 
         it('should be configured with the correct values', done => {
@@ -186,7 +198,7 @@ describe('Plugin', () => {
 
         beforeEach(async () => {
           await agent.load('mariadb')
-          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get()
+          mariadb = proxyquire(`../../../versions/mariadb@${version}/callback`, {}).get()
 
           pool = mariadb.createPool({
             connectionLimit: 1,
