@@ -11,7 +11,7 @@ const detectedDependencyNames = new Set()
 const FILE_PATH_START = `file:${path.sep}${path.sep}`
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 
-let timeout
+let timeout, config, application, host
 
 function waitAndSend (config, application, host) {
   if (!timeout) {
@@ -29,28 +29,32 @@ function waitAndSend (config, application, host) {
   }
 }
 
-function start (config, application, host) {
-  moduleLoadStartChannel.subscribe((data) => {
-    if (data) {
-      const { filename, request } = data
-      if (filename && request && isDependency(filename, request) && !detectedDependencyNames.has(request)) {
-        detectedDependencyNames.add(data.request)
-        const parseResult = parse(filename)
-        if (parseResult) {
-          const { name, basedir } = parseResult
-          if (basedir) {
-            try {
-              const { version } = requirePackageJson(cleanPath(basedir), module)
-              savedDependencies.push({ name, version })
-              waitAndSend(config, application, host)
-            } catch (e) {
-              // can not read the package.json, do nothing
-            }
+function onModuleLoad (data) {
+  if (data) {
+    const { filename, request } = data
+    if (filename && request && isDependency(filename, request) && !detectedDependencyNames.has(request)) {
+      detectedDependencyNames.add(data.request)
+      const parseResult = parse(filename)
+      if (parseResult) {
+        const { name, basedir } = parseResult
+        if (basedir) {
+          try {
+            const { version } = requirePackageJson(cleanPath(basedir), module)
+            savedDependencies.push({ name, version })
+            waitAndSend(config, application, host)
+          } catch (e) {
+            // can not read the package.json, do nothing
           }
         }
       }
     }
-  })
+  }
+}
+function start (_config, _application, _host) {
+  config = _config
+  application = _application
+  host = _host
+  moduleLoadStartChannel.subscribe(onModuleLoad)
 }
 
 function cleanPath (path) {
@@ -64,4 +68,14 @@ function isDependency (filename, request) {
   return request.indexOf(`.${path.sep}`) !== 0 && request.indexOf(path.sep) !== 0
 }
 
-module.exports = { start }
+function stop () {
+  config = null
+  application = null
+  host = null
+  detectedDependencyNames.clear()
+  savedDependencies.splice(0, savedDependencies.length)
+  if (moduleLoadStartChannel.hasSubscribers) {
+    moduleLoadStartChannel.unsubscribe(onModuleLoad)
+  }
+}
+module.exports = { start, stop }
