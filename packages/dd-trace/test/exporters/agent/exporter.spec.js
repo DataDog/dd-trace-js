@@ -34,10 +34,21 @@ describe('Exporter', () => {
       exporter = new Exporter({ url, flushInterval }, prioritySampler)
     })
 
-    it('should schedule flushing after the configured interval', () => {
-      writer.length = 0
+    it('should not flush if export has not been called', (done) => {
       exporter = new Exporter({ url, flushInterval }, prioritySampler)
-      expect(writer.flush).to.have.been.called
+      setTimeout(() => {
+        expect(writer.flush).not.to.have.been.called
+        done()
+      }, flushInterval + 100)
+    })
+
+    it('should flush after the configured interval if a payload has been exported', (done) => {
+      exporter = new Exporter({ url, flushInterval }, prioritySampler)
+      exporter.export([{}])
+      setTimeout(() => {
+        expect(writer.flush).to.have.been.called
+        done()
+      }, flushInterval + 100)
     })
 
     describe('export', () => {
