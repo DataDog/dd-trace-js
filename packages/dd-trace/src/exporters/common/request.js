@@ -58,6 +58,9 @@ function request (data, options, callback) {
 
       res.on('data', chunk => { responseData += chunk })
       res.on('end', () => {
+        if (req.destroyed) {
+          return
+        }
         activeRequests--
 
         if (res.statusCode >= 200 && res.statusCode <= 299) {

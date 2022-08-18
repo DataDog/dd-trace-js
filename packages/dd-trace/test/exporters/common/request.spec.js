@@ -74,8 +74,10 @@ describe('request', function () {
     this.timeout(2001)
     nock('http://localhost:80')
       .put('/path')
-      .times(2)
-      .delay(15001)
+      .delay(10010)
+      .reply(200)
+      .put('/path')
+      .delay(10010)
       .reply(200)
 
     request(Buffer.from(''), {
@@ -91,8 +93,10 @@ describe('request', function () {
   it('should have a configurable timeout', done => {
     nock('http://localhost:80')
       .put('/path')
-      .times(2)
-      .delay(1001)
+      .delay(1010)
+      .reply(200)
+      .put('/path')
+      .delay(1010)
       .reply(200)
 
     request(Buffer.from(''), {
@@ -135,6 +139,25 @@ describe('request', function () {
       path: '/path',
       method: 'PUT'
     }, (err, res) => {
+      expect(res).to.equal('OK')
+      done()
+    })
+  })
+
+  it('should retry with timeouts', (done) => {
+    nock('http://localhost:80')
+      .put('/path')
+      .delay(1010)
+      .reply(200)
+      .put('/path')
+      .reply(200, 'OK')
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      timeout: 1000
+    }, (err, res) => {
+      expect(err).to.be.null
       expect(res).to.equal('OK')
       done()
     })
