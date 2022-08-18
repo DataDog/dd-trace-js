@@ -38,7 +38,6 @@ describe('encode', () => {
       start: 123,
       duration: 456
     }]
-    sinon.spy(encoder._traceBytes, '_resize')
   })
 
   it('should encode to msgpack', () => {
@@ -142,8 +141,6 @@ describe('encode', () => {
       duration: 456
     })
     encoder.encode(dataToEncode)
-
-    expect(encoder._traceBytes._resize).to.have.been.called
 
     const buffer = encoder.makePayload()
     const [decodedPayload] = msgpack.decode(buffer, { codec })
