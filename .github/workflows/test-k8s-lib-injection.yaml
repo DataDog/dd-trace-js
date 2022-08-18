@@ -39,7 +39,7 @@ jobs:
         run: |
           npm pack
 
-      - uses: .github/actions/injection
+      - uses: ./.github/actions/injection
         with:
           init-image-version: ${GITHUB_SHA}
 
