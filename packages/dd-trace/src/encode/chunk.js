@@ -1,6 +1,6 @@
 'use strict'
 
-const DEFAULT_MIN_SIZE = 8 * 1024 * 1024 // 8MB
+const DEFAULT_MIN_SIZE = 2 * 1024 * 1024 // 2MB
 
 /**
  * Represents a chunk of a Msgpack payload. Exposes a subset of Array and Buffer

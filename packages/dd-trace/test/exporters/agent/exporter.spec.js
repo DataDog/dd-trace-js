@@ -5,8 +5,6 @@ const URL = require('url').URL
 describe('Exporter', () => {
   let url
   let flushInterval
-  let Scheduler
-  let scheduler
   let Exporter
   let exporter
   let Writer
@@ -18,21 +16,15 @@ describe('Exporter', () => {
     url = 'www.example.com'
     flushInterval = 1000
     span = {}
-    scheduler = {
-      start: sinon.spy(),
-      reset: sinon.spy()
-    }
     writer = {
       append: sinon.spy(),
       flush: sinon.spy(),
       setUrl: sinon.spy()
     }
     prioritySampler = {}
-    Scheduler = sinon.stub().returns(scheduler)
     Writer = sinon.stub().returns(writer)
 
     Exporter = proxyquire('../src/exporters/agent', {
-      '../scheduler': Scheduler,
       './writer': Writer
     })
   })
@@ -45,9 +37,6 @@ describe('Exporter', () => {
     it('should schedule flushing after the configured interval', () => {
       writer.length = 0
       exporter = new Exporter({ url, flushInterval }, prioritySampler)
-      Scheduler.firstCall.args[0]()
-
-      expect(scheduler.start).to.have.been.called
       expect(writer.flush).to.have.been.called
     })
 
