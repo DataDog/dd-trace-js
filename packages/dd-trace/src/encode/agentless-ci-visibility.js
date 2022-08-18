@@ -186,35 +186,33 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     const lo = value >>> 0
     const flag = isPositive ? 0xcf : 0xd3
 
-    const buffer = bytes.buffer
     const offset = bytes.length
 
     // int 64
     bytes.reserve(9)
     bytes.length += 9
 
-    buffer[offset] = flag
-    buffer[offset + 1] = hi >> 24
-    buffer[offset + 2] = hi >> 16
-    buffer[offset + 3] = hi >> 8
-    buffer[offset + 4] = hi
-    buffer[offset + 5] = lo >> 24
-    buffer[offset + 6] = lo >> 16
-    buffer[offset + 7] = lo >> 8
-    buffer[offset + 8] = lo
+    bytes.buffer[offset] = flag
+    bytes.buffer[offset + 1] = hi >> 24
+    bytes.buffer[offset + 2] = hi >> 16
+    bytes.buffer[offset + 3] = hi >> 8
+    bytes.buffer[offset + 4] = hi
+    bytes.buffer[offset + 5] = lo >> 24
+    bytes.buffer[offset + 6] = lo >> 16
+    bytes.buffer[offset + 7] = lo >> 8
+    bytes.buffer[offset + 8] = lo
   }
 
   _encodeMapPrefix (bytes, keysLength) {
-    const buffer = bytes.buffer
     const offset = bytes.length
 
     bytes.reserve(5)
     bytes.length += 5
-    buffer[offset] = 0xdf
-    buffer[offset + 1] = keysLength >> 24
-    buffer[offset + 2] = keysLength >> 16
-    buffer[offset + 3] = keysLength >> 8
-    buffer[offset + 4] = keysLength
+    bytes.buffer[offset] = 0xdf
+    bytes.buffer[offset + 1] = keysLength >> 24
+    bytes.buffer[offset + 2] = keysLength >> 16
+    bytes.buffer[offset + 3] = keysLength >> 8
+    bytes.buffer[offset + 4] = keysLength
   }
 
   _encode (bytes, trace) {
