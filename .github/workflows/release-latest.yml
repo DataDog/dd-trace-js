@@ -36,7 +36,7 @@ jobs:
       - name: npm pack for injection image
         run: |
           npm pack dd-trace@${{ fromJson(steps.pkg.outputs.json).version }}
-      - uses: .github/actions/injection
+      - uses: ./.github/actions/injection
         with:
           init-image-version: ${{ fromJson(steps.pkg.outputs.json).version }}
 
