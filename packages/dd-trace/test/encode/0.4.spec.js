@@ -38,6 +38,7 @@ describe('encode', () => {
       start: 123,
       duration: 456
     }]
+    sinon.spy(encoder._traceBytes, '_resize')
   })
 
   it('should encode to msgpack', () => {
@@ -116,5 +117,55 @@ describe('encode', () => {
     const message = logger.debug.firstCall.args[0]()
 
     expect(message).to.match(/^Adding encoded trace to buffer:(\s[a-f\d]{2})+$/)
+  })
+
+  it('should work when the buffer is resized', () => {
+    // big enough to trigger a resize
+    const dataToEncode = Array(15000).fill({
+      trace_id: id('1234abcd1234abcd'),
+      span_id: id('1234abcd1234abcd'),
+      parent_id: id('1234abcd1234abcd'),
+      name: 'bigger name than expected',
+      resource: 'test-r',
+      service: 'test-s',
+      type: 'foo',
+      error: 0,
+      meta: {
+        bar: 'baz'
+      },
+      metrics: {
+        example: 1,
+        moreExample: 2
+      },
+      start: 123,
+      duration: 456
+    })
+    encoder.encode(dataToEncode)
+
+    expect(encoder._traceBytes._resize).to.have.been.called
+
+    const buffer = encoder.makePayload()
+    const [decodedPayload] = msgpack.decode(buffer, { codec })
+    decodedPayload.forEach(decodedData => {
+      expect(decodedData).to.include({
+        name: 'bigger name than expected',
+        resource: 'test-r',
+        service: 'test-s',
+        type: 'foo',
+        error: 0
+      })
+      expect(decodedData.start.toNumber()).to.equal(123)
+      expect(decodedData.duration.toNumber()).to.equal(456)
+      expect(decodedData.meta).to.eql({
+        bar: 'baz'
+      })
+      expect(decodedData.metrics).to.eql({
+        example: 1,
+        moreExample: 2
+      })
+      expect(decodedData.trace_id.toString(16)).to.equal('1234abcd1234abcd')
+      expect(decodedData.span_id.toString(16)).to.equal('1234abcd1234abcd')
+      expect(decodedData.parent_id.toString(16)).to.equal('1234abcd1234abcd')
+    })
   })
 })
