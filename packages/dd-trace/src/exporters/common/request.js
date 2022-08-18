@@ -58,6 +58,9 @@ function request (data, options, callback) {
 
       res.on('data', chunk => { responseData += chunk })
       res.on('end', () => {
+        if (req.isTimedOut) {
+          return
+        }
         activeRequests--
 
         if (res.statusCode >= 200 && res.statusCode <= 299) {
@@ -81,7 +84,10 @@ function request (data, options, callback) {
 
     dataArray.forEach(buffer => req.write(buffer))
 
-    req.setTimeout(timeout, () => req.destroy(new Error('Request timed out')))
+    req.setTimeout(timeout, () => {
+      req.isTimedOut = true
+      req.destroy(new Error('Request timed out'))
+    })
     req.end()
 
     storage.enterWith(store)
