@@ -97,7 +97,7 @@ class Context {
     this.newAddresses = new Set()
   }
 
-  needAddress (address) {
+  needsAddress (address) {
     return this.allAddresses.has(address)
   }
 

@@ -63,11 +63,18 @@ function incomingHttpStartTranslator (data) {
     [addresses.HTTP_INCOMING_REMOTE_PORT]: data.req.socket.remotePort
   }
 
-  if (context.needAddress(addresses.HTTP_CLIENT_IP)) {
+  if (context.needsAddress(addresses.HTTP_CLIENT_IP)) {
     payload[addresses.HTTP_CLIENT_IP] = web.extractIp({ req: data.req, config: data.config })
   }
 
   const results = Gateway.propagate(payload, context)
+  let block = false
+  for (const entry of results) {
+    block = block || (entry.actions && entry.actions.includes('block'))
+  }
+  if (block) {
+    data.abort()
+  }
 }
 
 function incomingHttpEndTranslator (data) {
