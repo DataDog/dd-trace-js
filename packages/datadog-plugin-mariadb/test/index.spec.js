@@ -1,5 +1,6 @@
 'use strict'
 
+const { resolve } = require('path');
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 
@@ -21,7 +22,7 @@ describe('Plugin', () => {
           })
         })
 
-        beforeEach(async (done) => {
+        beforeEach(async () => {
           await agent.load('mariadb')
           mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
@@ -31,12 +32,14 @@ describe('Plugin', () => {
             database: 'db'
           })
 
-          connection.connect(err => {
-            if (err) {
-              done(err)
-            } else {
-              done()
-            }
+          return new Promise((resolve, reject) => {
+            connection.connect(err => {
+              if (err) {
+                reject(err)
+              } else {
+                resolve(connection)
+              }
+            })
           })
         })
 
@@ -120,7 +123,7 @@ describe('Plugin', () => {
           })
         })
 
-        beforeEach(async (done) => {
+        beforeEach(async () => {
           await agent.load('mariadb', { service: 'custom' })
           mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
@@ -130,12 +133,14 @@ describe('Plugin', () => {
             database: 'db'
           })
 
-          connection.connect(err => {
-            if (err) {
-              done(err)
-            } else {
-              done()
-            }
+          return new Promise((resolve, reject) => {
+            connection.connect(err => {
+              if (err) {
+                reject(err)
+              } else {
+                resolve(connection)
+              }
+            })
           })
         })
 
@@ -159,7 +164,7 @@ describe('Plugin', () => {
           })
         })
 
-        beforeEach(async (done) => {
+        beforeEach(async () => {
           await agent.load('mariadb', { service: serviceSpy })
           mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
@@ -169,12 +174,14 @@ describe('Plugin', () => {
             database: 'db'
           })
 
-          connection.connect(err => {
-            if (err) {
-              done(err)
-            } else {
-              done()
-            }
+          return new Promise((resolve, reject) => {
+            connection.connect(err => {
+              if (err) {
+                reject(err)
+              } else {
+                resolve(connection)
+              }
+            })
           })
         })
 
