@@ -22,6 +22,79 @@ exports.addHook = function addHook ({ name, versions, file }, hook) {
   instrumentations[name].push({ name, versions, file, hook })
 }
 
+exports.TracingChannel = class TracingChannel {
+  constructor (name) {
+    this._name = name
+    this._channels = {
+      start: dc.channel(`${name}.start`),
+      end: dc.channel(`${name}.end`),
+      asyncEnd: dc.channel(`${name}.asyncEnd`),
+      error: dc.channel(`${name}.error`)
+    }
+  }
+
+  get hasSubscribers () {
+    return this._channels.start.hasSubscribers
+  }
+
+  publish (channelName, data) {
+    return dc.channel(`${this.name}.${channelName}`).publish(data)
+  }
+
+  trace (fn, ctx = {}) {
+    this._channels.start.publish(ctx)
+    try {
+      if (fn.length) {
+        const done = (...args) => {
+          const [e, val] = args
+          if (args.length > 1) {
+            ctx.result = val
+          }
+          if (e) {
+            ctx.error = e
+            this._channels.error.publish(ctx)
+          }
+          this._channels.asyncEnd.publish(ctx)
+        }
+        return fn(done)
+      } else {
+        const result = fn()
+        if ((typeof result === 'object' || typeof result === 'function') && typeof result.then === 'function') {
+          result.then(resolved => {
+            ctx.result = resolved
+            this._channels.asyncEnd.publish(ctx)
+          }, e => {
+            ctx.error = e
+            this._channels.error.publish(ctx)
+            this._channels.asyncEnd.publish(ctx)
+          })
+        } else {
+          ctx.result = result
+        }
+        return result
+      }
+    } catch (e) {
+      ctx.error = e
+      this._channels.error.publish(ctx)
+      throw e
+    } finally {
+      this._channels.end.publish(ctx)
+    }
+  }
+
+  subscribe (channelObj) {
+    for (const key in channelObj) {
+      this._channels[key].subscribe(channelObj[key])
+    }
+  }
+
+  unsubscribe (channelObj) {
+    for (const key in channelObj) {
+      this._channels[key].unsubscribe(channelObj[key])
+    }
+  }
+}
+
 // AsyncResource.bind exists and binds `this` properly only from 17.8.0 and up.
 // https://nodejs.org/api/async_context.html#asyncresourcebindfn-thisarg
 if (semver.satisfies(process.versions.node, '>=17.8.0')) {

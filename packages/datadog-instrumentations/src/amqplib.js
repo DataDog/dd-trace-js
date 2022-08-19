@@ -1,16 +1,13 @@
 'use strict'
 
 const {
-  channel,
   addHook,
-  AsyncResource
+  TracingChannel
 } = require('./helpers/instrument')
 const kebabCase = require('lodash.kebabcase')
 const shimmer = require('../../datadog-shimmer')
 
-const startCh = channel('apm:amqplib:command:start')
-const finishCh = channel('apm:amqplib:command:finish')
-const errorCh = channel('apm:amqplib:command:error')
+const tracingChannel = new TracingChannel('apm:amqplib:command')
 
 let methods = {}
 
@@ -38,24 +35,13 @@ addHook({ name: 'amqplib', file: 'lib/channel.js', versions: ['>=0.5'] }, channe
 })
 
 function instrument (send, channel, args, method, fields, message) {
-  if (!startCh.hasSubscribers) {
+  if (!tracingChannel.hasSubscribers) {
     return send.apply(channel, args)
   }
 
-  const asyncResource = new AsyncResource('bound-anonymous-fn')
-  return asyncResource.runInAsyncScope(() => {
-    startCh.publish({ channel, method, fields, message })
-
-    try {
-      return send.apply(channel, args)
-    } catch (err) {
-      errorCh.publish(err)
-
-      throw err
-    } finally {
-      finishCh.publish()
-    }
-  })
+  return tracingChannel.trace(() => {
+    return send.apply(channel, args)
+  }, { channel, method, fields, message })
 }
 
 function isCamelCase (str) {

@@ -1,7 +1,6 @@
 'use strict'
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { TEXT_MAP } = require('../../../ext/formats')
 
@@ -10,81 +9,78 @@ class AmqplibPlugin extends Plugin {
     return 'amqplib'
   }
 
-  constructor (...args) {
-    super(...args)
+  get prefix () {
+    return 'apm:amqplib:command'
+  }
 
-    this.addSub(`apm:amqplib:command:start`, ({ channel, method, fields, message }) => {
-      const store = storage.getStore()
-      let childOf
+  start ({ channel, method, fields, message }, store) {
+    let childOf
 
-      if (method === 'basic.deliver') {
-        childOf = extract(this.tracer, message)
-      } else {
-        fields.headers = fields.headers || {}
-        childOf = store ? store.span : store
+    if (method === 'basic.deliver') {
+      childOf = extract(this.tracer, message)
+    } else {
+      fields.headers = fields.headers || {}
+      childOf = store ? store.span : store
+    }
+
+    const span = this.tracer.startSpan('amqp.command', {
+      childOf,
+      tags: {
+        'service.name': this.config.service || `${this.tracer._service}-amqp`,
+        'resource.name': getResourceName(method, fields)
       }
+    })
 
-      const span = this.tracer.startSpan('amqp.command', {
-        childOf,
-        tags: {
-          'service.name': this.config.service || `${this.tracer._service}-amqp`,
-          'resource.name': getResourceName(method, fields)
-        }
+    if (channel && channel.connection && channel.connection.stream) {
+      span.addTags({
+        'out.host': channel.connection.stream._host,
+        'out.port': channel.connection.stream.remotePort
       })
+    }
+    const fieldNames = [
+      'queue',
+      'exchange',
+      'routingKey',
+      'consumerTag',
+      'source',
+      'destination'
+    ]
 
-      if (channel && channel.connection && channel.connection.stream) {
+    switch (method) {
+      case 'basic.publish':
+        span.setTag('span.kind', 'producer')
+        break
+      case 'basic.consume':
+      case 'basic.get':
+      case 'basic.deliver':
         span.addTags({
-          'out.host': channel.connection.stream._host,
-          'out.port': channel.connection.stream.remotePort
+          'span.kind': 'consumer',
+          'span.type': 'worker'
         })
-      }
-      const fieldNames = [
-        'queue',
-        'exchange',
-        'routingKey',
-        'consumerTag',
-        'source',
-        'destination'
-      ]
+        break
+      default:
+        span.setTag('span.kind', 'client')
+    }
 
-      switch (method) {
-        case 'basic.publish':
-          span.setTag('span.kind', 'producer')
-          break
-        case 'basic.consume':
-        case 'basic.get':
-        case 'basic.deliver':
-          span.addTags({
-            'span.kind': 'consumer',
-            'span.type': 'worker'
-          })
-          break
-        default:
-          span.setTag('span.kind', 'client')
-      }
-
-      fieldNames.forEach(field => {
-        fields[field] !== undefined && span.setTag(`amqp.${field}`, fields[field])
-      })
-      if (method === 'basic.deliver') {
-        analyticsSampler.sample(span, this.config.measured, true)
-      } else {
-        this.tracer.inject(span, TEXT_MAP, fields.headers)
-        analyticsSampler.sample(span, this.config.measured)
-      }
-
-      this.enter(span, store)
+    fieldNames.forEach(field => {
+      fields[field] !== undefined && span.setTag(`amqp.${field}`, fields[field])
     })
+    if (method === 'basic.deliver') {
+      analyticsSampler.sample(span, this.config.measured, true)
+    } else {
+      this.tracer.inject(span, TEXT_MAP, fields.headers)
+      analyticsSampler.sample(span, this.config.measured)
+    }
 
-    this.addSub(`apm:amqplib:command:finish`, () => {
-      const span = storage.getStore().span
-      span.finish()
-    })
+    return span
+  }
 
-    this.addSub(`apm:amqplib:command:error`, err => {
-      const span = storage.getStore().span
-      span.setTag('error', err)
-    })
+  end (_, store) {
+    store.span.finish()
+  }
+
+  error ({ error }, store) {
+    store.span.setTag('error', error)
   }
 }
 
