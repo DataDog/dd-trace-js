@@ -47,7 +47,19 @@ function wrapEmit (emit) {
 
       const asyncResource = new AsyncResource('bound-anonymous-fn')
       return asyncResource.runInAsyncScope(() => {
-        startServerCh.publish({ req, res })
+        let dropped = false
+        const abort = function () {
+          // TODO: set HTTP response content and code from here
+          dropped = true
+        }
+
+        startServerCh.publish({ req, res, abort })
+
+        if (dropped) {
+          // TODO block
+          return res.end('blocked')
+        }
+        // If abort() is called after the publish, it will just be ignored
 
         try {
           return emit.apply(this, arguments)

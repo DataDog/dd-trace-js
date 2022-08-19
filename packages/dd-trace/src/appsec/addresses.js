@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  HTTP_CLIENT_IP: 'http.client_ip',
   HTTP_INCOMING_BODY: 'server.request.body',
   HTTP_INCOMING_QUERY: 'server.request.query',
   HTTP_INCOMING_HEADERS: 'server.request.headers.no_cookies',

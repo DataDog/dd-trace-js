@@ -97,6 +97,10 @@ class Context {
     this.newAddresses = new Set()
   }
 
+  needAddress (address) {
+    return this.allAddresses.has(address)
+  }
+
   clear () {
     this.store = new Map()
     this.allAddresses = new Set()

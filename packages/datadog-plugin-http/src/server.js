@@ -13,7 +13,7 @@ class HttpServerPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub('apm:http:server:request:start', ({ req, res }) => {
+    this.addSub('apm:http:server:request:start', ({ req, res, abort }) => {
       const store = storage.getStore()
       const span = web.startSpan(this.tracer, this.config, req, res, 'web.request')
 
@@ -27,7 +27,7 @@ class HttpServerPlugin extends Plugin {
       }
 
       if (incomingHttpRequestStart.hasSubscribers) {
-        incomingHttpRequestStart.publish({ req, res })
+        incomingHttpRequestStart.publish({ req, res, abort, config: this.config })
       }
     })
 

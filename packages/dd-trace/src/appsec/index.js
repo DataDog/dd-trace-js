@@ -40,38 +40,46 @@ function enable (config) {
 
 function incomingHttpStartTranslator (data) {
   // TODO: get span from datadog-core storage instead
+  // TODO: run WAF and potentially block here
   const topSpan = web.root(data.req)
-  if (topSpan) {
-    topSpan.addTags({
-      '_dd.appsec.enabled': 1,
-      '_dd.runtime_family': 'nodejs'
-    })
+  if (!topSpan) {
+    return
   }
+  topSpan.addTags({
+    '_dd.appsec.enabled': 1,
+    '_dd.runtime_family': 'nodejs'
+  })
+  const store = Gateway.startContext()
+  store.set('req', data.req)
+  store.set('res', data.res)
+  const context = store.get('context')
+  const requestHeaders = Object.assign({}, data.req.headers)
+  delete requestHeaders.cookie // cookies will be parsed, let's do them at framework level
+  const payload = {
+    [addresses.HTTP_INCOMING_URL]: data.req.url,
+    [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
+    [addresses.HTTP_INCOMING_METHOD]: data.req.method,
+    [addresses.HTTP_INCOMING_REMOTE_IP]: data.req.socket.remoteAddress,
+    [addresses.HTTP_INCOMING_REMOTE_PORT]: data.req.socket.remotePort
+  }
+
+  if (context.needAddress(addresses.HTTP_CLIENT_IP)) {
+    payload[addresses.HTTP_CLIENT_IP] = web.extractIp({ req: data.req, config: data.config })
+  }
+
+  const results = Gateway.propagate(payload, context)
 }
 
 function incomingHttpEndTranslator (data) {
-  const store = Gateway.startContext()
-
-  store.set('req', data.req)
-  store.set('res', data.res)
-
-  const context = store.get('context')
+  const context = Gateway.getContext()
 
   if (!context) return
-
-  const requestHeaders = Object.assign({}, data.req.headers)
-  delete requestHeaders.cookie
 
   // TODO: this doesn't support headers sent with res.writeHead()
   const responseHeaders = Object.assign({}, data.res.getHeaders())
   delete responseHeaders['set-cookie']
 
   const payload = {
-    [addresses.HTTP_INCOMING_URL]: data.req.url,
-    [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
-    [addresses.HTTP_INCOMING_METHOD]: data.req.method,
-    [addresses.HTTP_INCOMING_REMOTE_IP]: data.req.socket.remoteAddress,
-    [addresses.HTTP_INCOMING_REMOTE_PORT]: data.req.socket.remotePort,
     [addresses.HTTP_INCOMING_RESPONSE_CODE]: data.res.statusCode,
     [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
   }
