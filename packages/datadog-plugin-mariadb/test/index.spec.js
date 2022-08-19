@@ -133,6 +133,8 @@ describe('Plugin', () => {
           connection.connect(err => {
             if (err) {
               done(err)
+            } else {
+              done()
             }
           })
         })
@@ -170,6 +172,8 @@ describe('Plugin', () => {
           connection.connect(err => {
             if (err) {
               done(err)
+            } else {
+              done()
             }
           })
         })
