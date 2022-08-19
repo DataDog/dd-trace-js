@@ -1,9 +1,14 @@
+const proxyquire = require('proxyquire')
 const pathLine = require('../../../src/appsec/iast/path-line')
 const path = require('path')
 class CallSiteMock {
-  constructor (fileName, lineNumber) {
+  constructor (fileName, lineNumber, columnNumber = 0) {
     this.fileName = fileName
     this.lineNumber = lineNumber
+    this.columnNumber = columnNumber
+  }
+  getColumnNumber () {
+    return this.columnNumber
   }
   getLineNumber () {
     return this.lineNumber
@@ -11,7 +16,6 @@ class CallSiteMock {
   getFileName () {
     return this.fileName
   }
-
   isNative () {
     return false
   }
@@ -99,6 +103,21 @@ describe('path-line', function () {
           expect(path).to.be.equals(firstFileOutOfDD)
           expect(line).to.be.equals(firstFileOutOfDDLineNumber)
         })
+
+      it('should try to get sourcemaps', () => {
+        const getSourcePathAndLineFromSourceMaps = sinon.stub().callsFake((path, line) => ({ path, line }))
+        const proxyPathLine = proxyquire('../../../src/appsec/iast/path-line', {
+          './source-map': {
+            getSourcePathAndLineFromSourceMaps
+          }
+        })
+        proxyPathLine.ddBasePath = DD_BASE_PATH
+        const callsites = []
+        callsites.push(new CallSiteMock(PATH_AND_LINE_PATH, PATH_AND_LINE_LINE))
+        callsites.push(new CallSiteMock(`${PROJECT_PATH}/first/file/out/of/dd.js`, 1))
+        proxyPathLine.getFirstNonDDPathAndLineFromCallsites(callsites)
+        expect(getSourcePathAndLineFromSourceMaps).to.be.calledOnce
+      })
 
       it('should return null when all stack is in dd trace', () => {
         const callsites = []

@@ -6,3 +6,4 @@ node_modules
 versions
 acmeair-nodejs
 vendor
+packages/dd-trace/test/appsec/iast/source-map/source-map-test-resources

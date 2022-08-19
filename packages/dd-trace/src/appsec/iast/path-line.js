@@ -1,4 +1,6 @@
 const path = require('path')
+const { getSourcePathAndLineFromSourceMaps } = require('./source-map')
+
 const pathLine = {
   getFirstNonDDPathAndLine,
   getFirstNonDDPathAndLineFromCallsites, // Exported only for test purposes
@@ -38,10 +40,7 @@ function getFirstNonDDPathAndLineFromCallsites (callsites) {
       const callsite = callsites[i]
       const path = callsite.getFileName()
       if (!isExcluded(callsite) && path.indexOf(pathLine.ddBasePath) === -1) {
-        return {
-          path,
-          line: callsite.getLineNumber()
-        }
+        return getSourcePathAndLineFromSourceMaps(path, callsite.getLineNumber(), callsite.getColumnNumber())
       }
     }
   }
