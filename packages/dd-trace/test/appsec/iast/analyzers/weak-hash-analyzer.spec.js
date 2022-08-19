@@ -1,26 +1,9 @@
 'use strict'
 
-const proxyquire = require('proxyquire')
-
+const weakHashAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-hash-analyzer')
 describe('weak-hash-analyzer', () => {
   const VULNERABLE_ALGORITHM = 'md4WithRSAEncryption'
   const NON_VULNERABLE_ALGORITHM = 'sha512'
-
-  let datadogCore
-  let weakHashAnalyzer
-  beforeEach(() => {
-    datadogCore = {
-      storage: {
-        getStore: sinon.stub()
-      }
-    }
-    weakHashAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/weak-hash-analyzer', {
-      '../../../../../datadog-core': datadogCore
-    })
-  })
-  afterEach(() => {
-    sinon.restore()
-  })
 
   it('should subscribe to crypto hashing channel', () => {
     expect(weakHashAnalyzer._subscriptions).to.have.lengthOf(1)

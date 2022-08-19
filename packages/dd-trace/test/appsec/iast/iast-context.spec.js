@@ -1,21 +1,9 @@
 'use strict'
 
-const proxyquire = require('proxyquire')
+const iastContextHandler = require('../../../src/appsec/iast/iast-context')
 
 describe('IAST context', () => {
   const iastContext = 'IAST_CONTEXT'
-  let datadogCore
-  let iastContextHandler
-  beforeEach(() => {
-    datadogCore = {
-      storage: {
-        getStore: sinon.stub()
-      }
-    }
-    iastContextHandler = proxyquire('../../../src/appsec/iast/iast-context', {
-      '../../../../datadog-core': datadogCore
-    })
-  })
 
   describe('getIastContext', () => {
     it('should obtain iast context from provided store', () => {
@@ -27,20 +15,8 @@ describe('IAST context', () => {
       expect(returnedIastContext).to.be.equal(iastContext)
     })
 
-    it('should obtain iast context from storage when store is not provided', () => {
-      const store = {
-        [iastContextHandler.IAST_CONTEXT_KEY]: iastContext
-      }
-      datadogCore.storage.getStore.returns(store)
-      const returnedIastContext = iastContextHandler.getIastContext()
-      expect(returnedIastContext).to.be.not.null
-      expect(returnedIastContext).to.be.equal(iastContext)
-    })
-
-    it('should return when no store is provided and no store is available in storage', () => {
-      datadogCore.storage.getStore.returns()
-      const returnedIastContext = iastContextHandler.getIastContext()
-      expect(returnedIastContext).to.be.undefined
+    it('should return undefined when no store is provided', () => {
+      expect(iastContextHandler.getIastContext()).to.be.undefined
     })
   })
 
