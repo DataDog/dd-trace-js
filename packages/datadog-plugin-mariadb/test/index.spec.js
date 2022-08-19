@@ -23,7 +23,7 @@ describe('Plugin', () => {
 
         beforeEach(async (done) => {
           await agent.load('mariadb')
-          mariadb = proxyquire(`../../../versions/mariadb@${version}`).get('mariadb/callback')
+          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
           connection = mariadb.createConnection({
             host: 'localhost',
@@ -120,7 +120,7 @@ describe('Plugin', () => {
 
         beforeEach(async (done) => {
           await agent.load('mariadb', { service: 'custom' })
-          mariadb = proxyquire(`../../../versions/mariadb@${version}`).get('mariadb/callback')
+          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
           connection = mariadb.createConnection({
             host: 'localhost',
@@ -157,7 +157,7 @@ describe('Plugin', () => {
 
         beforeEach(async (done) => {
           await agent.load('mariadb', { service: serviceSpy })
-          mariadb = proxyquire(`../../../versions/mariadb@${version}`).get('mariadb/callback')
+          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
           connection = mariadb.createConnection({
             host: 'localhost',
@@ -198,7 +198,7 @@ describe('Plugin', () => {
 
         beforeEach(async () => {
           await agent.load('mariadb')
-          mariadb = proxyquire(`../../../versions/mariadb@${version}`).get('mariadb/callback')
+          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
 
           pool = mariadb.createPool({
             connectionLimit: 1,
