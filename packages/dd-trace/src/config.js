@@ -181,32 +181,32 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
     )
 
+    const iastOptions = options.experimental && options.experimental.iast
+    const iastOptionsOce = iastOptions && iastOptions.oce
     const DD_IAST_ENABLED = coalesce(
-      options.experimental && options.experimental.iast &&
-      (options.experimental.iast === true || options.experimental.iast.enabled === true),
+      iastOptions &&
+      (iastOptions === true || iastOptions.enabled === true),
       process.env.DD_IAST_ENABLED,
       false
     )
-    const defaultSampling = 30
-    const requestSamplingPercentage = coalesce(
-      parseInt(options.experimental && options.experimental.iast && options.experimental.iast.oce &&
-      options.experimental.iast.oce && options.experimental.iast.oce.requestSampling),
+
+    const defaultIastOceRequestSampling = 30
+    const iastOceRequestSamplingPercentage = coalesce(
+      parseInt(iastOptionsOce && iastOptionsOce.requestSampling),
       parseInt(process.env.DD_IAST_OCE_REQUEST_SAMPLING_PERCENTAGE),
-      defaultSampling
+      defaultIastOceRequestSampling
     )
-    const DD_IAST_OCE_REQUEST_SAMPLING_PERCENTAGE = requestSamplingPercentage < 0 ||
-      requestSamplingPercentage > 100 ? defaultSampling : requestSamplingPercentage
+    const DD_IAST_OCE_REQUEST_SAMPLING_PERCENTAGE = iastOceRequestSamplingPercentage < 0 ||
+      iastOceRequestSamplingPercentage > 100 ? defaultIastOceRequestSampling : iastOceRequestSamplingPercentage
 
     const DD_IAST_OCE_MAX_CONCURRENT_REQUEST = coalesce(
-      parseInt(options.experimental && options.experimental.iast && options.experimental.iast.oce &&
-      options.experimental.iast.oce && options.experimental.iast.oce.maxConcurrentRequest),
+      parseInt(iastOptionsOce && iastOptionsOce.maxConcurrentRequest),
       parseInt(process.env.DD_IAST_OCE_MAX_CONCURRENT_REQUEST),
       2
     )
 
     const DD_IAST_OCE_MAX_CONTEXT_OPERATIONS = coalesce(
-      parseInt(options.experimental && options.experimental.iast && options.experimental.iast.oce &&
-      options.experimental.iast.oce && options.experimental.iast.oce.maxContextOperations),
+      parseInt(iastOptionsOce && iastOptionsOce.maxContextOperations),
       parseInt(process.env.DD_IAST_OCE_MAX_CONTEXT_OPERATIONS),
       2
     )

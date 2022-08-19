@@ -6,7 +6,7 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const cryptoCh = channel('asm:crypto:hashing:start')
+const cryptoCh = channel('datadog:crypto:hashing:start')
 
 addHook({ name: 'crypto' }, crypto => {
   shimmer.massWrap(

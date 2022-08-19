@@ -10,7 +10,7 @@ const INSECURE_HASH_ALGORITHMS = [
 class WeakHashAnalyzer extends Analyzer {
   constructor () {
     super('WEAK_HASH_ANALYZER')
-    this.addSub('asm:crypto:hashing:start', ({ algorithm }) => this.analyze(algorithm))
+    this.addSub('datadog:crypto:hashing:start', ({ algorithm }) => this.analyze(algorithm))
   }
 
   _isVulnerable (algorithm) {
