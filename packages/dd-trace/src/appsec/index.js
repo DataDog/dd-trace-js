@@ -8,6 +8,7 @@ const Gateway = require('./gateway/engine')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
+const tags = require('../../../../ext/tags')
 
 function enable (config) {
   try {
@@ -64,13 +65,13 @@ function incomingHttpStartTranslator (data) {
   }
 
   if (context.needsAddress(addresses.HTTP_CLIENT_IP)) {
-    payload[addresses.HTTP_CLIENT_IP] = web.extractIp({ req: data.req, config: data.config })
+    payload[addresses.HTTP_CLIENT_IP] = web.extractIp({ req: data.req, config: data.config })[tags.HTTP_CLIENT_IP]
   }
 
   const results = Gateway.propagate(payload, context)
   let block = false
   for (const entry of results) {
-    block = block || (entry.actions && entry.actions.includes('block'))
+    block = block || (entry && entry.actions && entry.actions.includes('block'))
   }
   if (block) {
     data.abort()

@@ -98,7 +98,7 @@ class Context {
   }
 
   needsAddress (address) {
-    return this.allAddresses.has(address)
+    return Context.manager.addresses.has(address)
   }
 
   clear () {

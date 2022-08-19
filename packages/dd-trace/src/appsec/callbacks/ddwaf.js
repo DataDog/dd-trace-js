@@ -121,6 +121,7 @@ class WAFCallback {
     if (result.data && result.data !== '[]') {
       Reporter.reportAttack(result.data, store)
     }
+    return result
   }
 
   clear () {
