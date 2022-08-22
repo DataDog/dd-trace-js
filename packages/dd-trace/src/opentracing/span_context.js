@@ -1,11 +1,7 @@
 'use strict'
 
-const SpanContext = require('opentracing').SpanContext
-
-class DatadogSpanContext extends SpanContext {
+class DatadogSpanContext {
   constructor (props) {
-    super()
-
     props = props || {}
 
     this._traceId = props.traceId

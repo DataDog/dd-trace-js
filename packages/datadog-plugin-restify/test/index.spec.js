@@ -84,10 +84,20 @@ describe('Plugin', () => {
 
         it('should run handlers in the request scope', done => {
           const server = restify.createServer()
+          const interval = setInterval(() => {
+            next && next() && clearInterval(interval)
+          })
+
+          let next
 
           server.pre((req, res, next) => {
             expect(tracer.scope().active()).to.not.be.null
             next()
+          })
+
+          // break the async context
+          server.use((req, res, _next) => {
+            next = _next
           })
 
           server.use((req, res, next) => {

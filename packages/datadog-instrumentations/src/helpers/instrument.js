@@ -1,16 +1,12 @@
 'use strict'
 
 const dc = require('diagnostics_channel')
-const path = require('path')
 const semver = require('semver')
-const Hook = require('./hook')
-const requirePackageJson = require('../../../dd-trace/src/require-package-json')
+const instrumentations = require('./instrumentations')
 const { AsyncResource } = require('async_hooks')
-const log = require('../../../dd-trace/src/log')
 
-const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const channelMap = {}
-exports.channel = function channel (name) {
+exports.channel = function (name) {
   const maybe = channelMap[name]
   if (maybe) return maybe
   const ch = dc.channel(name)
@@ -19,36 +15,11 @@ exports.channel = function channel (name) {
 }
 
 exports.addHook = function addHook ({ name, versions, file }, hook) {
-  const fullFilename = filename(name, file)
-
-  Hook([name], (moduleExports, moduleName, moduleBaseDir) => {
-    moduleName = moduleName.replace(pathSepExpr, '/')
-
-    if (moduleName !== fullFilename || !matchVersion(getVersion(moduleBaseDir), versions)) {
-      return moduleExports
-    }
-
-    try {
-      return hook(moduleExports)
-    } catch (e) {
-      log.error(e)
-      return moduleExports
-    }
-  })
-}
-
-function matchVersion (version, ranges) {
-  return !version || (ranges && ranges.some(range => semver.satisfies(semver.coerce(version), range)))
-}
-
-function getVersion (moduleBaseDir) {
-  if (moduleBaseDir) {
-    return requirePackageJson(moduleBaseDir, module).version
+  if (!instrumentations[name]) {
+    instrumentations[name] = []
   }
-}
 
-function filename (name, file) {
-  return [name, file].filter(val => val).join('/')
+  instrumentations[name].push({ name, versions, file, hook })
 }
 
 // AsyncResource.bind exists and binds `this` properly only from 17.8.0 and up.

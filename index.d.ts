@@ -492,15 +492,6 @@ export declare interface TracerOptions {
 }
 
 /** @hidden */
-interface EventEmitter {
-  emit(eventName: string | symbol, ...args: any[]): any;
-  on?(eventName: string | symbol, listener: (...args: any[]) => any): any;
-  off?(eventName: string | symbol, listener: (...args: any[]) => any): any;
-  addListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;
-  removeListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;
-}
-
-/** @hidden */
 declare type anyObject = {
   [key: string]: any;
 };
@@ -537,14 +528,13 @@ export declare interface Scope {
   /**
    * Binds a target to the provided span, or the active span if omitted.
    *
-   * @param {Function|Promise|EventEmitter} target Target that will have the span activated on its scope.
+   * @param {Function|Promise} target Target that will have the span activated on its scope.
    * @param {Span} [span=scope.active()] The span to activate.
    * @returns The bound target.
    */
   bind<T extends (...args: any[]) => void>(fn: T, span?: Span | null): T;
   bind<V, T extends (...args: any[]) => V>(fn: T, span?: Span | null): T;
   bind<T>(fn: Promise<T>, span?: Span | null): Promise<T>;
-  bind(emitter: EventEmitter, span?: Span | null): EventEmitter;
 }
 
 /** @hidden */

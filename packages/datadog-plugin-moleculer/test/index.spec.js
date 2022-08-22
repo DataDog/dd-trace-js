@@ -198,7 +198,8 @@ describe('Plugin', () => {
         before(() => startBroker())
 
         before(function () {
-          this.timeout(10000) // wait for discovery
+          const waitTimeout = 10000
+          this.timeout(waitTimeout) // wait for discovery
           const { ServiceBroker } = require(`../../../versions/moleculer@${version}`).get()
 
           clientBroker = new ServiceBroker({
@@ -217,7 +218,7 @@ describe('Plugin', () => {
           })
 
           return clientBroker.start()
-            .then(() => clientBroker.waitForServices('math'))
+            .then(() => clientBroker.waitForServices('math', waitTimeout))
         })
 
         after(() => clientBroker.stop())

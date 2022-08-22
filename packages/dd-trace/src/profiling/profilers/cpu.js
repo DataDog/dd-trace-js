@@ -20,7 +20,7 @@ function getStartedSpans (activeSpan) {
 }
 
 function getSpanContextTags (span) {
-  return span._context()._tags
+  return span.context()._tags
 }
 
 function isWebServerSpan (tags) {
@@ -55,13 +55,13 @@ class NativeCpuProfiler {
     const active = getActiveSpan()
     if (!active) return
 
-    const activeCtx = active._context()
+    const activeCtx = active.context()
     if (!activeCtx) return
 
     const spans = getStartedSpans(active)
     if (!spans || !spans.length) return
 
-    const firstCtx = spans[0]._context()
+    const firstCtx = spans[0].context()
     if (!firstCtx) return
 
     const labels = {

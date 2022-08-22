@@ -1,5 +1,14 @@
 const { expect } = require('chai')
 
+describe('mocha-fail-before-all', function () {
+  before((done) => {
+    done(new Error('this should not stop execution'))
+  })
+  it('will not be reported because it will not run', () => {
+    expect(true).to.equal(true)
+  })
+})
+
 describe('mocha-fail-hook-async', function () {
   afterEach((done) => {
     setTimeout(() => {

@@ -1,9 +1,9 @@
-name: Release
+name: Release (latest)
 
 on:
   push:
     branches:
-      - v2.x
+      - v3.x
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -28,6 +28,17 @@ jobs:
       - run: |
           git tag v${{ fromJson(steps.pkg.outputs.json).version }}
           git push origin v${{ fromJson(steps.pkg.outputs.json).version }}
+
+  injection-image-publish:
+    runs-on: ubuntu-latest
+    needs: ['publish']
+    steps:
+      - name: npm pack for injection image
+        run: |
+          npm pack dd-trace@${{ fromJson(steps.pkg.outputs.json).version }}
+      - uses: ./.github/actions/injection
+        with:
+          init-image-version: ${{ fromJson(steps.pkg.outputs.json).version }}
 
   docs:
     runs-on: ubuntu-latest

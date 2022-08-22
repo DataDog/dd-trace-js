@@ -107,35 +107,6 @@ describe('Plugin', () => {
             }, () => {})
           })
 
-          it('should sanitize the query', function (done) {
-            const queryObjectDepth = 200
-            const maxSupportedObjectDepth = 20
-
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                const query = (`{"foo":"?","bar":{"baz":"?"},"deep":${
-                  '{"x":'.repeat(maxSupportedObjectDepth) + '"?"' + '}'.repeat(maxSupportedObjectDepth)
-                }}`)
-                const resource = `find test.${collectionName} ${query}`
-
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
-              })
-              .then(done)
-              .catch(done)
-
-            collection.find({
-              foo: 1,
-              bar: {
-                baz: [1, 2, 3]
-              },
-              deep: Array(queryObjectDepth).fill('x').reduce((acc) => {
-                return { x: acc }
-              }, 'sanitize me')
-            }).toArray()
-          })
-
           it('should sanitize buffers as values and not as objects', done => {
             agent
               .use(traces => {
@@ -152,13 +123,14 @@ describe('Plugin', () => {
             }).toArray()
           })
 
-          it('should sanitize BSON as values and not as objects', done => {
+          it('should stringify BSON objects', done => {
             const BSON = require(`../../../versions/bson@4.0.0`).get()
+            const id = '123456781234567812345678'
 
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collectionName} {"_id":"?"}`
+                const resource = `find test.${collectionName} {"_id":"${id}"}`
 
                 expect(span).to.have.property('resource', resource)
               })
@@ -166,7 +138,7 @@ describe('Plugin', () => {
               .catch(done)
 
             collection.find({
-              _id: new BSON.ObjectID('123456781234567812345678')
+              _id: new BSON.ObjectID(id)
             }).toArray()
           })
 
@@ -174,7 +146,7 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collectionName} {"_id":"?"}`
+                const resource = `find test.${collectionName} {"_id":"1234"}`
 
                 expect(span).to.have.property('resource', resource)
               })

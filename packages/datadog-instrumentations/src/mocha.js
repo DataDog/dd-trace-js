@@ -153,7 +153,10 @@ function mochaHook (Runner) {
       if (isHook && testOrHook.ctx) {
         test = testOrHook.ctx.currentTest
       }
-      const asyncResource = getTestAsyncResource(test)
+      let asyncResource
+      if (test) {
+        asyncResource = getTestAsyncResource(test)
+      }
       if (asyncResource) {
         asyncResource.runInAsyncScope(() => {
           if (isHook) {

@@ -2,7 +2,7 @@
 
 const { expect } = require('chai')
 
-const FormData = require('../../../src/profiling/exporters/form-data')
+const FormData = require('../../../src/exporters/common/form-data')
 
 async function streamToString (stream) {
   const chunks = []
