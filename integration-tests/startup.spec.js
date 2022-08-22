@@ -139,5 +139,22 @@ describe('startup', () => {
         assert.propertyVal(payload[0][0], 'name', 'http.request')
       })
     })
+
+    it('works with stealthy-require', async () => {
+      proc = await spawnProc(startupTestFile, {
+        cwd,
+        env: {
+          STEALTHY_REQUIRE: 'true'
+        }
+      })
+      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+        assert.propertyVal(headers, 'host', '127.0.0.1:8126')
+        assert.isArray(payload)
+        assert.strictEqual(payload.length, 1)
+        assert.isArray(payload[0])
+        assert.strictEqual(payload[0].length, 1)
+        assert.propertyVal(payload[0][0], 'name', 'web.request')
+      })
+    })
   })
 })
