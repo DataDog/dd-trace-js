@@ -7,7 +7,7 @@ describe('iitm.js', () => {
   const iitm = () => true
   let iitmjs
 
-  if (semver.satisfies(process.versions.node, '^12.20.0 || >=14.13.1')) {
+  if (semver.satisfies(process.versions.node, '>=14.13.1')) {
     context('with a supported nodejs version', () => {
       before(() => {
         iitmjs = proxyquire('../src/iitm', {
