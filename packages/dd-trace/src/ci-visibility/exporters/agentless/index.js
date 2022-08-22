@@ -9,8 +9,8 @@ const log = require('../../../log')
 
 class AgentlessCiVisibilityExporter {
   constructor (config) {
-    const { flushInterval, tags, site, url, isITREnabled } = config
-    this._isITREnabled = isITREnabled
+    const { flushInterval, tags, site, url, isIntelligentTestRunnerEnabled } = config
+    this._isIntelligentTestRunnerEnabled = isIntelligentTestRunnerEnabled
 
     this._url = url || new URL(`https://citestcycle-intake.${site}`)
     this._writer = new Writer({ url: this._url, tags })
@@ -21,7 +21,7 @@ class AgentlessCiVisibilityExporter {
     if (flushInterval > 0) {
       this._scheduler = new Scheduler(() => this._writer.flush(), flushInterval)
 
-      if (this._isITREnabled) {
+      if (this._isIntelligentTestRunnerEnabled) {
         this._coverageScheduler = new Scheduler(() => this._coverageWriter.flush())
       }
     }

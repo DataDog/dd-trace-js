@@ -65,7 +65,7 @@ describe('CI Visibility Exporter', () => {
       }
       const payload = { testSpan, coverageFiles: ['file.js'] }
 
-      exporter = new Exporter({ url, flushInterval: 0, isITREnabled: true })
+      exporter = new Exporter({ url, flushInterval: 0, isIntelligentTestRunnerEnabled: true })
 
       exporter.exportCoverage(payload)
       expect(coverageWriter.append).to.have.been.calledWith({
@@ -77,7 +77,7 @@ describe('CI Visibility Exporter', () => {
     })
     it('should flush after the configured flush interval', function (done) {
       this.timeout(5000)
-      exporter = new Exporter({ url, flushInterval, isITREnabled: true })
+      exporter = new Exporter({ url, flushInterval, isIntelligentTestRunnerEnabled: true })
 
       const testSpan = {
         context: () => ({ _traceId: '1', _spanId: '2' })

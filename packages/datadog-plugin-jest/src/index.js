@@ -42,7 +42,7 @@ class JestPlugin extends Plugin {
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
     this.addSub('ci:jest:test:code-coverage', (coverageFiles) => {
-      if (!this.config.isAgentlessEnabled || !this.config.isITREnabled) {
+      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
         return
       }
       const testSpan = storage.getStore().span

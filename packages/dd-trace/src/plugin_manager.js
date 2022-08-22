@@ -121,7 +121,7 @@ module.exports = class PluginManager {
       serviceMapping,
       experimental,
       queryStringObfuscation,
-      isITREnabled
+      isIntelligentTestRunnerEnabled
     } = this._tracerConfig
 
     const sharedConfig = {}
@@ -138,7 +138,7 @@ module.exports = class PluginManager {
       sharedConfig.isAgentlessEnabled = experimental.exporter === 'datadog'
     }
 
-    sharedConfig.isITREnabled = isITREnabled
+    sharedConfig.isIntelligentTestRunnerEnabled = isIntelligentTestRunnerEnabled
 
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
