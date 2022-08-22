@@ -8,11 +8,12 @@ const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
 
 const hooks = require('./hooks')
-const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
+
+const instrumentations = global[Symbol.for('_ddtrace_instrumentations')] = {}
 
 // TODO: make this more efficient
 

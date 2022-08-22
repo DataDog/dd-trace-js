@@ -2,8 +2,9 @@
 
 const dc = require('diagnostics_channel')
 const semver = require('semver')
-const instrumentations = require('./instrumentations')
 const { AsyncResource } = require('async_hooks')
+
+const instrumentations = global[Symbol.for('_ddtrace_instrumentations')]
 
 const channelMap = {}
 exports.channel = function (name) {
