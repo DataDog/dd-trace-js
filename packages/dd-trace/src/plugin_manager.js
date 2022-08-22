@@ -134,14 +134,14 @@ module.exports = class PluginManager {
     if (queryStringObfuscation !== undefined) {
       sharedConfig.queryStringObfuscation = queryStringObfuscation
     }
-    
-      if (clientIpHeaderDisabled !== undefined) {
-        pluginConfig.clientIpHeaderDisabled = clientIpHeaderDisabled
-      }
 
-      if (clientIpHeader !== undefined) {
-        pluginConfig.clientIpHeader = clientIpHeader
-      }
+    if (clientIpHeaderDisabled !== undefined) {
+      sharedConfig.clientIpHeaderDisabled = clientIpHeaderDisabled
+    }
+
+    if (clientIpHeader !== undefined) {
+      sharedConfig.clientIpHeader = clientIpHeader
+    }
 
     // TODO: update so that it's available for every CI Visibility's plugin
     if (name === 'mocha') {
