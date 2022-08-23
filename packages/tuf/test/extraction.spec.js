@@ -2,7 +2,6 @@
 const { expect } = require('chai')
 const { extractSigned } = require('../src/extraction')
 
-
 describe('TUF', () => {
   describe('extractions', () => {
     it('should work on complex payloads', () => {
