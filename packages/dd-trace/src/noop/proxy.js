@@ -69,7 +69,8 @@ class Tracer {
   }
 
   setUser () {
-    return this._tracer.setUser.apply(this.tracer, arguments)
+    this._tracer.setUser.apply(this._tracer, arguments)
+    return this
   }
 }
 
