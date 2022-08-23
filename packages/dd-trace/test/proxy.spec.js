@@ -6,6 +6,7 @@ describe('TracerProxy', () => {
   let DatadogTracer
   let NoopTracer
   let tracer
+  let NoopProxy
   let noop
   let Config
   let config
@@ -74,9 +75,13 @@ describe('TracerProxy', () => {
       start: sinon.spy()
     }
 
+    NoopProxy = proxyquire('../src/noop/proxy', {
+      './tracer': NoopTracer
+    })
+
     Proxy = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
-      './noop/tracer': NoopTracer,
+      './noop/proxy': NoopProxy,
       './config': Config,
       './metrics': metrics,
       './log': log,
