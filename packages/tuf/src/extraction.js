@@ -15,6 +15,7 @@ function extractSigned (str) {
   if (parsed.signed === null) throw new TypeError('field \'signed\' is null')
   // let's find ${START} as a top level key
   let state = 0
+  let isInString = false
   let startPosition = -1
   let stopPosition = -1
   for (let i = 0; i < str.length; ++i) {
@@ -35,6 +36,16 @@ function extractSigned (str) {
   state = 0
   for (let i = startPosition; i < str.length; ++i) {
     const curr = str[i]
+    if (curr === '"') {
+      if (!isInString) {
+        isInString = true
+        continue
+      }
+      if (str[i - 1] === '\\') continue
+      isInString = false
+      continue
+    }
+    if (isInString) continue
     if (curr === '{') {
       ++state
       continue
