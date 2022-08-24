@@ -1,5 +1,5 @@
 'use strict'
-// TODO: remove these tests once system tests are updated
+
 describe('Scheduler', () => {
   let Scheduler
   let clock

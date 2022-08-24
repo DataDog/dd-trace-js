@@ -1,5 +1,5 @@
 'use strict'
-// TODO: remove this class once system tests are updated
+
 class Scheduler {
   constructor (callback, interval) {
     this._timer = null
