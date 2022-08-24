@@ -25,7 +25,7 @@ class Writer {
 
   append (spans) {
     if (!request.writable) {
-      log.debug(`Maximum number of active requests reached. Trace discarded: ${JSON.stringify(spans)}`)
+      log.debug(() => `Maximum number of active requests reached. Trace discarded: ${JSON.stringify(spans)}`)
       return
     }
 
