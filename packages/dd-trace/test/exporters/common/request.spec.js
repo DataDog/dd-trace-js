@@ -71,13 +71,11 @@ describe('request', function () {
   })
 
   it('should timeout after 2 seconds by default', function (done) {
-    this.timeout(5000)
+    this.timeout(2001)
     nock('http://localhost:80')
       .put('/path')
-      .delay(2010)
-      .reply(200)
-      .put('/path')
-      .delay(2010)
+      .times(2)
+      .delay(15001)
       .reply(200)
 
     request(Buffer.from(''), {
@@ -85,7 +83,7 @@ describe('request', function () {
       method: 'PUT'
     }, err => {
       expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('Request timed out')
+      expect(err.message).to.equal('socket hang up')
       done()
     })
   })
@@ -93,10 +91,8 @@ describe('request', function () {
   it('should have a configurable timeout', done => {
     nock('http://localhost:80')
       .put('/path')
-      .delay(1010)
-      .reply(200)
-      .put('/path')
-      .delay(1010)
+      .times(2)
+      .delay(1001)
       .reply(200)
 
     request(Buffer.from(''), {
@@ -105,7 +101,7 @@ describe('request', function () {
       timeout: 1000
     }, err => {
       expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('Request timed out')
+      expect(err.message).to.equal('socket hang up')
       done()
     })
   })
@@ -132,41 +128,6 @@ describe('request', function () {
     nock('http://localhost:80')
       .put('/path')
       .replyWithError({ code: 'ECONNRESET' })
-      .put('/path')
-      .reply(200, 'OK')
-
-    request(Buffer.from(''), {
-      path: '/path',
-      method: 'PUT'
-    }, (err, res) => {
-      expect(res).to.equal('OK')
-      done()
-    })
-  })
-
-  it('should retry with a single timeout', (done) => {
-    nock('http://localhost:80')
-      .put('/path')
-      .delay(1010)
-      .reply(200)
-      .put('/path')
-      .reply(200, 'OK')
-
-    request(Buffer.from(''), {
-      path: '/path',
-      method: 'PUT',
-      timeout: 1000
-    }, (err, res) => {
-      expect(err).to.be.null
-      expect(res).to.equal('OK')
-      done()
-    })
-  })
-
-  it('should retry recoverable http statuses', (done) => {
-    nock('http://localhost:80')
-      .put('/path')
-      .reply(408, '')
       .put('/path')
       .reply(200, 'OK')
 

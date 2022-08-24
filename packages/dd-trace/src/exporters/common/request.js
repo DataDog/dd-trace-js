@@ -37,6 +37,26 @@ function request (data, options, callback) {
 
   options.agent = isSecure ? httpsAgent : httpAgent
 
+  const onResponse = res => {
+    let responseData = ''
+
+    res.setTimeout(timeout)
+
+    res.on('data', chunk => { responseData += chunk })
+    res.on('end', () => {
+      activeRequests--
+
+      if (res.statusCode >= 200 && res.statusCode <= 299) {
+        callback(null, responseData, res.statusCode)
+      } else {
+        const error = new Error(`Error from the endpoint: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`)
+        error.status = res.statusCode
+
+        callback(error, null, res.statusCode)
+      }
+    })
+  }
+
   const makeRequest = onError => {
     if (!request.writable) {
       log.debug('Maximum number of active requests reached: payload is discarded.')
@@ -49,24 +69,7 @@ function request (data, options, callback) {
 
     storage.enterWith({ noop: true })
 
-    const req = client.request(options, res => {
-      let responseData = ''
-
-      res.setTimeout(timeout)
-
-      res.on('data', chunk => { responseData += chunk })
-      res.on('end', () => {
-        activeRequests--
-
-        if (res.statusCode >= 200 && res.statusCode <= 299) {
-          callback(null, responseData, res.statusCode)
-        } else {
-          const error = new Error(`Error from the endpoint: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`)
-          error.status = res.statusCode
-          callback(error, null, res.statusCode)
-        }
-      })
-    })
+    const req = client.request(options, onResponse)
 
     req.once('error', err => {
       activeRequests--
@@ -75,7 +78,7 @@ function request (data, options, callback) {
 
     dataArray.forEach(buffer => req.write(buffer))
 
-    req.setTimeout(timeout, req.destroy)
+    req.setTimeout(timeout, req.abort)
     req.end()
 
     storage.enterWith(store)
