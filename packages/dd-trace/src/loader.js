@@ -6,7 +6,7 @@ const parse = require('module-details-from-path')
 const path = require('path')
 const uniq = require('lodash.uniq')
 const log = require('./log')
-const requirePackageJson = require('./require-package-json')
+const { requirePackageJson, requirePackageVersion } = require('./require-package-json')
 
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
@@ -120,7 +120,7 @@ function matchVersion (version, ranges) {
 
 function getVersion (moduleBaseDir) {
   if (moduleBaseDir) {
-    return requirePackageJson(moduleBaseDir, module).version
+    return requirePackageVersion(moduleBaseDir, module)
   }
 }
 

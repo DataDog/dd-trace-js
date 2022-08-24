@@ -11,7 +11,7 @@ const npmArgv = (() => {
 })()
 
 const path = require('path')
-const requirePackageJson = require('../packages/dd-trace/src/require-package-json.js')
+const { requirePackageJson } = require('../packages/dd-trace/src/require-package-json.js')
 
 const nodeMajor = Number(process.versions.node.split('.')[0])
 

@@ -22,14 +22,14 @@ describe('dependencies', () => {
     const basepathWithoutNodeModules = process.cwd().replace(/node_modules/g, 'nop')
     let dependencies
     let sendData
-    let requirePackageJson
+    let requirePackageVersion
 
     beforeEach(() => {
-      requirePackageJson = sinon.stub()
+      requirePackageVersion = sinon.stub()
       sendData = sinon.stub()
       dependencies = proxyquire('../../src/telemetry/dependencies', {
         './send-data': { sendData },
-        '../require-package-json': requirePackageJson
+        '../require-package-json': { requirePackageVersion }
       })
       global.setTimeout = function (callback) { callback() }
     })
@@ -64,7 +64,7 @@ describe('dependencies', () => {
 
     it('should not call to sendData without package.json', () => {
       const request = 'custom-module'
-      requirePackageJson.callsFake(function () { throw new Error() })
+      requirePackageVersion.callsFake(function () { throw new Error() })
       const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
       dependencies.start(config, application, host)
       moduleLoadStartChannel.publish({ request, filename })
@@ -73,7 +73,7 @@ describe('dependencies', () => {
 
     it('should call sendData', () => {
       const request = 'custom-module'
-      requirePackageJson.returns({ version: '1.0.0' })
+      requirePackageVersion.returns('1.0.0')
       const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
       dependencies.start(config, application, host)
       moduleLoadStartChannel.publish({ request, filename })
@@ -82,7 +82,7 @@ describe('dependencies', () => {
 
     it('should call sendData with file:// format', () => {
       const request = 'custom-module'
-      requirePackageJson.returns({ version: '1.0.0' })
+      requirePackageVersion.returns('1.0.0')
       const filename = 'file:' + path.sep + path.sep +
         path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
       dependencies.start(config, application, host)
@@ -92,7 +92,7 @@ describe('dependencies', () => {
 
     it('should call sendData only once with duplicated dependency', () => {
       const request = 'custom-module'
-      requirePackageJson.returns({ version: '1.0.0' })
+      requirePackageVersion.returns('1.0.0')
       const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
       dependencies.start(config, application, host)
       moduleLoadStartChannel.publish({ request, filename })
@@ -104,7 +104,7 @@ describe('dependencies', () => {
     it('should call sendData twice with more than 1000 dependencies', (done) => {
       dependencies.start(config, application, host)
       const requestPrefix = 'custom-module'
-      requirePackageJson.returns({ version: '1.0.0' })
+      requirePackageVersion.returns('1.0.0')
       const timeouts = []
       let atLeastOneTimeout = false
       global.setTimeout = function (callback) {
