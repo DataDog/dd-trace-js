@@ -18,8 +18,6 @@ const containerId = docker.id()
 
 let activeRequests = 0
 
-const RECOVERABLE_HTTP_STATUS = [408]
-
 function request (data, options, callback) {
   if (!options.headers) {
     options.headers = {}
@@ -58,9 +56,6 @@ function request (data, options, callback) {
 
       res.on('data', chunk => { responseData += chunk })
       res.on('end', () => {
-        if (req.isTimedOut) {
-          return
-        }
         activeRequests--
 
         if (res.statusCode >= 200 && res.statusCode <= 299) {
@@ -68,11 +63,7 @@ function request (data, options, callback) {
         } else {
           const error = new Error(`Error from the endpoint: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`)
           error.status = res.statusCode
-          if (RECOVERABLE_HTTP_STATUS.includes(res.statusCode)) {
-            onError(error, null, res.statusCode)
-          } else {
-            callback(error, null, res.statusCode)
-          }
+          callback(error, null, res.statusCode)
         }
       })
     })
@@ -84,10 +75,7 @@ function request (data, options, callback) {
 
     dataArray.forEach(buffer => req.write(buffer))
 
-    req.setTimeout(timeout, () => {
-      req.isTimedOut = true
-      req.destroy(new Error('Request timed out'))
-    })
+    req.setTimeout(timeout, req.destroy)
     req.end()
 
     storage.enterWith(store)
