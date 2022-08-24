@@ -33,7 +33,10 @@ class AgentExporter {
     if (flushInterval === 0) {
       this._writer.flush()
     } else if (flushInterval > 0 && !this._timer) {
-      this._timer = setTimeout(() => this._writer.flush(), flushInterval).unref()
+      this._timer = setTimeout(() => {
+        this._writer.flush()
+        this._timer = clearTimeout(this._timer)
+      }, flushInterval).unref()
     }
   }
 }
