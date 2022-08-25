@@ -129,7 +129,7 @@ function sendData (reqType, payload = {}) {
     host
   })
 
-  request(data, options, true, () => {
+  request(data, options, () => {
     // ignore errors
   })
 }

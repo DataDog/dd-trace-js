@@ -10,7 +10,7 @@ class Writer extends BaseWriter {
     super(...arguments)
     const { 'runtime-id': runtimeId, env, service } = tags
     this._url = url
-    this._encoder = new AgentlessCiVisibilityEncoder({ runtimeId, env, service })
+    this._encoder = new AgentlessCiVisibilityEncoder(this, { runtimeId, env, service })
   }
 
   _sendPayload (data, _, done) {
@@ -43,7 +43,7 @@ function makeRequest (data, url, cb) {
 
   log.debug(() => `Request to the intake: ${JSON.stringify(options)}`)
 
-  request(data, options, false, (err, res) => {
+  request(data, options, (err, res) => {
     cb(err, res)
   })
 }
