@@ -3,37 +3,26 @@
 const URL = require('url').URL
 const Writer = require('./writer')
 const CoverageWriter = require('./coverage-writer')
-const Scheduler = require('../../../exporters/scheduler')
 
 const log = require('../../../log')
 
 class AgentlessCiVisibilityExporter {
   constructor (config) {
-    const { flushInterval, tags, site, url, isIntelligentTestRunnerEnabled } = config
+    this._config = config
+    const { tags, site, url, isIntelligentTestRunnerEnabled } = config
     this._isIntelligentTestRunnerEnabled = isIntelligentTestRunnerEnabled
-
     this._url = url || new URL(`https://citestcycle-intake.${site}`)
     this._writer = new Writer({ url: this._url, tags })
+    this._timer = undefined
+    this._coverageTimer = undefined
 
     this._coverageUrl = new URL(`https://event-platform-intake.${site}`)
     this._coverageWriter = new CoverageWriter({ url: this._coverageUrl })
 
-    if (flushInterval > 0) {
-      this._scheduler = new Scheduler(() => this._writer.flush(), flushInterval)
-
-      if (this._isIntelligentTestRunnerEnabled) {
-        this._coverageScheduler = new Scheduler(() => this._coverageWriter.flush())
-      }
-    }
-
-    this._scheduler && this._scheduler.start()
-
-    // Reduce likelihood of requests overlapping
-    if (this._coverageScheduler) {
-      setTimeout(() => {
-        this._coverageScheduler.start()
-      }, flushInterval / 2)
-    }
+    process.once('beforeExit', () => {
+      this._writer.flush()
+      this._coverageWriter.flush()
+    })
   }
 
   exportCoverage ({ testSpan, coverageFiles }) {
@@ -44,16 +33,30 @@ class AgentlessCiVisibilityExporter {
     }
     this._coverageWriter.append(formattedCoverage)
 
-    if (!this._coverageScheduler) {
+    const { flushInterval } = this._config
+
+    if (flushInterval === 0) {
       this._coverageWriter.flush()
+    } else if (flushInterval > 0 && !this._coverageTimer) {
+      this._coverageTimer = setTimeout(() => {
+        this._coverageWriter.flush()
+        this._coverageTimer = clearTimeout(this._coverageTimer)
+      }, flushInterval).unref()
     }
   }
 
   export (trace) {
     this._writer.append(trace)
 
-    if (!this._scheduler) {
+    const { flushInterval } = this._config
+
+    if (flushInterval === 0) {
       this._writer.flush()
+    } else if (flushInterval > 0 && !this._timer) {
+      this._timer = setTimeout(() => {
+        this._writer.flush()
+        this._timer = clearTimeout(this._timer)
+      }, flushInterval).unref()
     }
   }
 

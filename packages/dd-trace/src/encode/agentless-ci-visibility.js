@@ -1,10 +1,8 @@
 'use strict'
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
-const Chunk = require('./chunk')
 const { AgentEncoder } = require('./0.4')
 const { version: ddTraceVersion } = require('../../../../package.json')
 const id = require('../../../dd-trace/src/id')
-
 const ENCODING_VERSION = 1
 
 const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_suite_end', 'test']
@@ -12,7 +10,7 @@ const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_suite_end', 'test']
 const TEST_SUITE_KEYS_LENGTH = 11
 const TEST_SESSION_KEYS_LENGTH = 10
 
-const CHUNK_SIZE = 4 * 1024 * 1024 // 4MB
+const INTAKE_SOFT_LIMIT = 2 * 1024 * 1024 // 2MB
 
 function formatSpan (span) {
   let encodingVersion = ENCODING_VERSION
@@ -27,15 +25,11 @@ function formatSpan (span) {
 }
 
 class AgentlessCiVisibilityEncoder extends AgentEncoder {
-  constructor ({ runtimeId, service, env }) {
-    super(...arguments)
+  constructor (writer, { runtimeId, service, env }) {
+    super(writer, INTAKE_SOFT_LIMIT)
     this.runtimeId = runtimeId
     this.service = service
     this.env = env
-    this._traceBytes = new Chunk(CHUNK_SIZE)
-    this._stringBytes = new Chunk(CHUNK_SIZE)
-    this._stringCount = 0
-    this._stringMap = {}
 
     // Used to keep track of the number of encoded events to update the
     // length of `payload.events` when calling `makePayload`
@@ -225,7 +219,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     const traceSize = bytes.length
     const buffer = Buffer.allocUnsafe(traceSize)
 
-    bytes.buffer.copy(buffer, 0, 0, bytes.length)
+    bytes.buffer.copy(buffer, 0, 0, traceSize)
 
     this.reset()
 

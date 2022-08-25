@@ -16,7 +16,7 @@ class Writer extends BaseWriter {
     super(...arguments)
     const { 'runtime-id': runtimeId, env, service } = tags
     this._url = url
-    this._encoder = new AgentlessCiVisibilityEncoder({ runtimeId, env, service })
+    this._encoder = new AgentlessCiVisibilityEncoder(this, { runtimeId, env, service })
   }
 
   _sendPayload (data, _, done) {
@@ -35,7 +35,7 @@ class Writer extends BaseWriter {
     options.port = this._url.port
 
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
-    request(data, options, false, (err, res) => {
+    request(data, options, (err, res) => {
       if (err) {
         log.error(err)
         done()

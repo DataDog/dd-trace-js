@@ -7,7 +7,6 @@ const testStartCh = channel('ci:jest:test:start')
 const testSkippedCh = channel('ci:jest:test:skip')
 const testRunFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
-const testSuiteFinish = channel('ci:jest:test-suite:finish')
 
 const testCodeCoverageCh = channel('ci:jest:test:code-coverage')
 
@@ -74,11 +73,6 @@ function getWrappedEnvironment (BaseEnvironment) {
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
     }
-    async teardown () {
-      super.teardown().finally(() => {
-        testSuiteFinish.publish()
-      })
-    }
 
     async handleTestEvent (event, state) {
       if (super.handleTestEvent) {
@@ -136,10 +130,13 @@ function getWrappedEnvironment (BaseEnvironment) {
         })
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
-        testSkippedCh.publish({
-          name: getJestTestName(event.test),
-          suite: this.testSuite,
-          runner: 'jest-circus'
+        const asyncResource = new AsyncResource('bound-anonymous-fn')
+        asyncResource.runInAsyncScope(() => {
+          testSkippedCh.publish({
+            name: getJestTestName(event.test),
+            suite: this.testSuite,
+            runner: 'jest-circus'
+          })
         })
       }
     }

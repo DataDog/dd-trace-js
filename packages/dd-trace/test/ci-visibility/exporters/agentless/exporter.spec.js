@@ -30,8 +30,17 @@ describe('CI Visibility Exporter', () => {
 
   describe('when interval is set to a positive number', function () {
     this.timeout(5000)
-    it('should flush after the configured interval', (done) => {
+    it('should not flush if export has not been called', (done) => {
       exporter = new Exporter({ url, flushInterval })
+      setTimeout(() => {
+        expect(writer.flush).not.to.have.been.called
+        done()
+      }, flushInterval)
+    })
+
+    it('should flush after the configured interval if a payload has been exported', (done) => {
+      exporter = new Exporter({ url, flushInterval })
+      exporter.export([{}])
       setTimeout(() => {
         expect(writer.flush).to.have.been.called
         done()

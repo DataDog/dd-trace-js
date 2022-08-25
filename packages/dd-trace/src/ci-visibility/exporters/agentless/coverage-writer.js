@@ -35,7 +35,7 @@ class Writer extends BaseWriter {
 
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
 
-    request(form, options, false, (err, res) => {
+    request(form, options, (err, res) => {
       if (err) {
         log.error(err)
         done()
