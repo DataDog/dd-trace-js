@@ -6,26 +6,24 @@ const overheadController = require('./overhead-controller')
 const dc = require('diagnostics_channel')
 const { saveIastContext, getIastContext, cleanIastContext } = require('./iast-context')
 
-const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
-const requestFinish = dc.channel('dd-trace:incomingHttpRequestEnd')
+const requestStart = dc.channel('apm:http:server:request:start')
 const requestClose = dc.channel('apm:http:server:request:close')
 
 function enable (config) {
   enableAllAnalyzers()
-
-  requestStart.subscribe(onIncomingHttpRequestStart)
-  requestFinish.subscribe(onIncomingHttpRequestEnd)
-  requestClose.subscribe(onIncomingHttpRequestClose)
-
+  requestClose.subscribe(onIncomingHttpRequestEnd)
+  setImmediate(() => {
+    requestStart.subscribe(onIncomingHttpRequestStart)
+  })
   overheadController.configureOCE(config.iast.oce)
 }
 
 function disable () {
   disableAllAnalyzers()
-
-  if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
-  if (requestFinish.hasSubscribers) requestFinish.unsubscribe(onIncomingHttpRequestEnd)
-  if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestClose)
+  setImmediate(() => {
+    if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
+    if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestEnd)
+  })
 }
 
 function onIncomingHttpRequestStart (data) {
@@ -52,12 +50,8 @@ function onIncomingHttpRequestEnd (data) {
       overheadController.releaseRequest()
       sendVulnerabilities(iastContext, iastContext.rootSpan)
     }
-  }
-}
-
-function onIncomingHttpRequestClose (data) {
-  if (data && data.req) {
-    if (cleanIastContext(storage.getStore(), web.getContext(data.req))) {
+    // TODO web.getContext(data.req) is required when the request is aborted
+    if (cleanIastContext(iastContext, web.getContext(data.req))) {
       overheadController.releaseRequest()
     }
   }
