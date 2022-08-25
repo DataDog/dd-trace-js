@@ -45,6 +45,7 @@ describe('Plugin', function () {
 
     describe('cypress', function () {
       this.timeout(120000)
+      let passingTraceId, failingTraceId
       it('instruments tests', function (done) {
         process.env.DD_TRACE_AGENT_PORT = agentListenPort
         cypressExecutable.run({
@@ -79,6 +80,8 @@ describe('Plugin', function () {
               [TEST_CODE_OWNERS]: JSON.stringify(['@datadog']),
               [LIBRARY_VERSION]: ddTraceVersion
             })
+            passingTraceId = testSpan.meta.traceId
+            expect(passingTraceId).to.be.a('string')
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
         const failingTestPromise = agent
@@ -104,6 +107,8 @@ describe('Plugin', function () {
               [ERROR_TYPE]: 'AssertionError',
               [TEST_IS_RUM_ACTIVE]: 'true'
             })
+            failingTraceId = testSpan.meta.traceId
+            expect(failingTraceId).to.be.a('string')
             expect(testSpan.meta).to.not.contain({
               addTagsAfterFailure: 'custom'
             })
@@ -111,7 +116,10 @@ describe('Plugin', function () {
               "expected '<div.hello-world>' to have text 'Bye World', but the text was 'Hello World'"
             )
           })
-        Promise.all([passingTestPromise, failingTestPromise]).then(() => done()).catch(done)
+        Promise.all([passingTestPromise, failingTestPromise]).then(() => {
+          expect(passingTraceId).not.to.equal(failingTraceId)
+          done()
+        }).catch(done)
       })
     })
   })
