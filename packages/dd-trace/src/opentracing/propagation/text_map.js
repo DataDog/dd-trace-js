@@ -107,7 +107,7 @@ class TextMapPropagator {
 
     if (header.length > this._config.tagsHeaderMaxLength) {
       log.error('Trace tags from span are too large, skipping injection.')
-    } else {
+    } else if (header) {
       carrier[tagsKey] = header
     }
   }
