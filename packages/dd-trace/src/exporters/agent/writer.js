@@ -99,7 +99,7 @@ function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
 
   log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
 
-  request(data, options, true, (err, res, status) => {
+  request(data, options, (err, res, status) => {
     if (needsStartupLog) {
       // Note that logging will only happen once, regardless of how many times this is called.
       startupLog({
