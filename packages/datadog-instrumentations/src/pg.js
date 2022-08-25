@@ -11,12 +11,12 @@ const startCh = channel('apm:pg:query:start')
 const finishCh = channel('apm:pg:query:finish')
 const errorCh = channel('apm:pg:query:error')
 
-addHook({ name: 'pg', versions: ['>=4.5.5'] }, pg => {
+addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
   shimmer.wrap(pg.Client.prototype, 'query', query => wrapQuery(query))
   return pg
 })
 
-addHook({ name: 'pg', file: 'lib/native/index.js', versions: ['>=4.5.5'] }, Client => {
+addHook({ name: 'pg', file: 'lib/native/index.js', versions: ['>=8.0.3'] }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
   return Client
 })

@@ -5,7 +5,7 @@
 const semver = require('semver')
 
 // https://github.com/nodejs/node/pull/33801
-const hasJavaScriptAsyncHooks = semver.satisfies(process.versions.node, '>=14.5 || ^12.19.0')
+const hasJavaScriptAsyncHooks = semver.satisfies(process.versions.node, '>=14.5')
 
 if (hasJavaScriptAsyncHooks) {
   module.exports = require('./async_resource')

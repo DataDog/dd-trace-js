@@ -1,7 +1,7 @@
-name: Node 17
+name: Node 18
 runs:
   using: composite
   steps:
     - uses: actions/setup-node@v3
       with:
-        node-version: '17'
+        node-version: '18'

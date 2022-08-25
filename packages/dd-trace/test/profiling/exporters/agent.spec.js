@@ -50,7 +50,9 @@ async function createProfile (periodType) {
 
 const describeOnUnix = os.platform() === 'win32' ? describe.skip : describe
 
-describe('exporters/agent', () => {
+describe('exporters/agent', function () {
+  this.timeout(10000)
+
   let AgentExporter
   let sockets
   let url
@@ -133,9 +135,7 @@ describe('exporters/agent', () => {
       sockets.forEach(socket => socket.end())
     })
 
-    it('should send profiles as pprof to the intake', async function () {
-      this.timeout(10000)
-
+    it('should send profiles as pprof to the intake', async () => {
       const exporter = new AgentExporter({ url, logger, uploadTimeout: 100 })
       const start = new Date()
       const end = new Date()

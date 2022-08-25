@@ -11,14 +11,30 @@ on:
 jobs:
   system-tests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        weblog-variant: ['']
+        lib-injection-enabled: ['lib-injection-enabled']
+        lib-injection-connection: ['network']
+        lib-injection-use-admission-controller: ['', 'use-admission-controller']
+        include:
+          - weblog-variant: express4
+          - weblog-variant: express4-typescript
     env:
       TEST_LIBRARY: nodejs
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      LIBRARY_INJECTION_ENABLED: ${{ matrix.lib-injection-enabled }}
+      LIBRARY_INJECTION_CONNECTION: ${{ matrix.lib-injection-connection }}
+      LIBRARY_INJECTION_ADMISSION_CONTROLLER: ${{ matrix.lib-injection-admission-controller }}
+      LIBRARY_INJECTION_INIT_IMAGE: ghcr.io/datadog/dd-trace-js/dd-lib-js-init:e1043d06c7b25f5494a80d3c95e43029ac5cefff
+      LIBRARY_INJECTION_TEST_APP_IMAGE: ghcr.io/datadog/dd-trace-js/sample-app:a6ea653a6d63c3824831276347d95827d037c54f
+
     steps:
       - name: Checkout system tests
         uses: actions/checkout@v2
         with:
           repository: 'DataDog/system-tests'
+          ref: 'injection-tests'  # TODO: update when https://github.com/DataDog/system-tests/pull/453 merged
 
       - name: Checkout dd-trace-js
         uses: actions/checkout@v2
@@ -33,7 +49,7 @@ jobs:
 
       - name: Compress artifact
         if: ${{ always() }}
-        run: tar -czvf artifact.tar.gz $(ls | grep logs)
+        run: tar -czvf artifact.tar.gz $(ls | grep logs) || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v2

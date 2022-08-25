@@ -329,29 +329,6 @@ const bindFunctionStringType: (arg1: string, arg2: number) => string = scope.bin
 const bindFunctionVoidType: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): void => {});
 const bindFunctionVoidTypeWithSpan: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): string => 'test', span);
 
-Promise.resolve();
-
-scope.bind(promise);
-scope.bind(promise, span);
-
-const simpleEmitter = {
-  emit (eventName: string, arg1: boolean, arg2: number): void {}
-};
-
-scope.bind(simpleEmitter);
-scope.bind(simpleEmitter, span);
-
-const emitter = {
-  emit (eventName: string, arg1: boolean, arg2: number): void {},
-  on (eventName: string, listener: (arg1: boolean, arg2: number) => void) {},
-  off (eventName: string, listener: (arg1: boolean, arg2: number) => void) {},
-  addListener (eventName: string, listener: (arg1: boolean, arg2: number) => void) {},
-  removeListener (eventName: string, listener: (arg1: boolean, arg2: number) => void) {}
-};
-
-scope.bind(emitter);
-scope.bind(emitter, span);
-
 tracer.wrap('x', () => {
   const rumData: string = tracer.getRumData();
 })
