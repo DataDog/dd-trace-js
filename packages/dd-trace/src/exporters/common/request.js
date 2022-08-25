@@ -7,6 +7,7 @@ const http = require('http')
 const https = require('https')
 const docker = require('./docker')
 const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
 
 const keepAlive = true
 const maxTotalSockets = 1
@@ -17,7 +18,7 @@ const containerId = docker.id()
 
 let activeRequests = 0
 
-function request (data, options, keepAlive, callback) {
+function request (data, options, callback) {
   if (!options.headers) {
     options.headers = {}
   }
@@ -34,9 +35,7 @@ function request (data, options, keepAlive, callback) {
     options.headers['Datadog-Container-ID'] = containerId
   }
 
-  if (keepAlive) {
-    options.agent = isSecure ? httpsAgent : httpAgent
-  }
+  options.agent = isSecure ? httpsAgent : httpAgent
 
   const onResponse = res => {
     let responseData = ''
@@ -59,7 +58,10 @@ function request (data, options, keepAlive, callback) {
   }
 
   const makeRequest = onError => {
-    if (!request.writable) return callback(null)
+    if (!request.writable) {
+      log.debug('Maximum number of active requests reached: payload is discarded.')
+      return callback(null)
+    }
 
     activeRequests++
 
