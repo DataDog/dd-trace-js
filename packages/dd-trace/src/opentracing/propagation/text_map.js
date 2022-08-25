@@ -24,7 +24,8 @@ const b3HeaderKey = 'b3'
 const sqsdHeaderHey = 'x-aws-sqsd-attr-_datadog'
 const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)?|[01d])$/i
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
-const tagsExpr = /^[\x21-\x2b\x2d-\x7e]+=[\x20-\x2b\x2d-\x7e]+(,[\x21-\x2b\x2d-\x7e]+=[\x20-\x2b\x2d-\x7e]+)*$/
+const tagKeyExpr = /^_dd.p.[\x21-\x2b\x2d-\x7e]+$/ // ASCII minus spaces and commas
+const tagValueExpr = /^[\x20-\x2b\x2d-\x7e]*$/ // ASCII minus commas
 const ddKeys = [traceKey, spanKey, samplingKey, originKey]
 const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
 const logKeys = ddKeys.concat(b3Keys)
@@ -93,7 +94,11 @@ class TextMapPropagator {
     const tags = []
 
     for (const key in trace.tags) {
-      if (!key.startsWith('_dd.p.')) continue
+      if (!trace.tags[key] || !key.startsWith('_dd.p.')) continue
+      if (!this._validateTagKey(key) || !this._validateTagValue(trace.tags[key])) {
+        log.error('Trace tags from span are invalid, skipping injection.')
+        return
+      }
 
       tags.push(`${key}=${trace.tags[key]}`)
     }
@@ -102,8 +107,6 @@ class TextMapPropagator {
 
     if (header.length > this._config.tagsHeaderMaxLength) {
       log.error('Trace tags from span are too large, skipping injection.')
-    } else if (!tagsExpr.test(header)) {
-      log.error('Trace tags from span are invalid, skipping injection.')
     } else {
       carrier[tagsKey] = header
     }
@@ -313,17 +316,32 @@ class TextMapPropagator {
       log.debug('Trace tag propagation is disabled, skipping extraction.')
     } else if (carrier[tagsKey].length > this._config.tagsHeaderMaxLength) {
       log.error('Trace tags from carrier are too large, skipping extraction.')
-    } else if (!tagsExpr.test(carrier[tagsKey])) {
-      log.error('Trace tags from carrier are invalid, skipping extraction.')
     } else {
       const pairs = carrier[tagsKey].split(',')
+      const tags = {}
 
       for (const pair of pairs) {
-        const [key, value] = pair.split('=')
+        const [key, ...rest] = pair.split('=')
+        const value = rest.join('=')
 
-        trace.tags[key] = value
+        if (!this._validateTagKey(key) || !this._validateTagValue(value)) {
+          log.error('Trace tags from carrier are invalid, skipping extraction.')
+          return
+        }
+
+        tags[key] = value
       }
+
+      Object.assign(trace.tags, tags)
     }
+  }
+
+  _validateTagKey (key) {
+    return tagKeyExpr.test(key)
+  }
+
+  _validateTagValue (value) {
+    return tagValueExpr.test(value)
   }
 
   _getPriority (sampled, debug) {

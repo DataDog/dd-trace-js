@@ -5,7 +5,7 @@ const SpanContext = require('../../../src/opentracing/span_context')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 
-describe('TextMapPropagator', () => {
+describe.only('TextMapPropagator', () => {
   let TextMapPropagator
   let propagator
   let textMap
@@ -254,14 +254,14 @@ describe('TextMapPropagator', () => {
     })
 
     it('should extract trace tags', () => {
-      textMap['x-datadog-tags'] = 'foo=bar,baz=qux'
+      textMap['x-datadog-tags'] = '_dd.p.foo=bar,_dd.p.baz=qux'
 
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext._trace.tags).to.include({
-        foo: 'bar',
-        baz: 'qux'
+        '_dd.p.foo': 'bar',
+        '_dd.p.baz': 'qux'
       })
     })
 
