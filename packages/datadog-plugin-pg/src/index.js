@@ -1,7 +1,6 @@
 'use strict'
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 class PGPlugin extends Plugin {
@@ -9,46 +8,44 @@ class PGPlugin extends Plugin {
     return 'pg'
   }
 
-  constructor (...args) {
-    super(...args)
+  get prefix () {
+    return 'apm:pg:query'
+  }
 
-    this.addSub(`apm:pg:query:start`, ({ params, statement }) => {
-      const service = getServiceName(this.tracer, this.config, params)
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const span = this.tracer.startSpan('pg.query', {
-        childOf,
-        tags: {
-          'service.name': service,
-          'span.type': 'sql',
-          'span.kind': 'client',
-          'db.type': 'postgres',
-          'resource.name': statement
-        }
-      })
-
-      if (params) {
-        span.addTags({
-          'db.name': params.database,
-          'db.user': params.user,
-          'out.host': params.host,
-          'out.port': params.port
-        })
+  start ({ params, statement }, store) {
+    const service = getServiceName(this.tracer, this.config, params)
+    const childOf = store ? store.span : store
+    const span = this.tracer.startSpan('pg.query', {
+      childOf,
+      tags: {
+        'service.name': service,
+        'span.type': 'sql',
+        'span.kind': 'client',
+        'db.type': 'postgres',
+        'resource.name': statement
       }
-
-      analyticsSampler.sample(span, this.config.measured)
-      this.enter(span, store)
     })
 
-    this.addSub(`apm:pg:query:error`, err => {
-      const span = storage.getStore().span
-      span.setTag('error', err)
-    })
+    if (params) {
+      span.addTags({
+        'db.name': params.database,
+        'db.user': params.user,
+        'out.host': params.host,
+        'out.port': params.port
+      })
+    }
 
-    this.addSub(`apm:pg:query:finish`, () => {
-      const span = storage.getStore().span
-      span.finish()
-    })
+    analyticsSampler.sample(span, this.config.measured)
+    return span
+  }
+
+  asyncEnd (ctx) {
+    ctx.span.finish()
+    this.exit(ctx)
+  }
+
+  error ({ error, span }) {
+    span.setTag('error', error)
   }
 }
 

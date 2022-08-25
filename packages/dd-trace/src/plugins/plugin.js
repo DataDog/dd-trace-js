@@ -29,34 +29,43 @@ class TracingSubscription {
     this._channel = new TracingChannel(name)
     this._handlers = {}
     for (const name of events) {
-      if (plugin[name]) {
-        let fn
-        if (name === 'start') {
-          fn = (obj) => {
+      if (!plugin[name]) continue
+      switch (name) {
+        case 'start':
+          this._handlers[name] = (ctx) => {
             const store = storage.getStore()
             if (store && store.noop) return
-            const span = plugin.start(obj, store)
+            const span = plugin.start(ctx, store)
             if (!span) {
               throw new TypeError('plugin.start() must return a span')
             }
+            ctx.span = span
+            ctx.parentStore = store
             plugin.enter(span, store)
           }
-        } else if (name == 'end') {
-          fn = (obj) => {
+          break
+        case 'end':
+          this._handlers[name] = (ctx) => {
             const store = storage.getStore()
             if (store && store.noop) return
-            plugin.end(obj, store)
-            plugin.exit()
+            plugin.end(ctx, store)
+            plugin.exit(ctx)
           }
-        } else {
-          fn = (obj) => {
+          break
+        case 'asyncEnd':
+          this._handlers[name] = (ctx) => {
             const store = storage.getStore()
             if (store && store.noop) return
-            plugin[name](obj, store)
+            plugin.asyncEnd(ctx, store)
+            // plugin.exit(ctx)
           }
-        }
-
-        this._handlers[name] = fn
+          break
+        default:
+          this._handlers[name] = (ctx) => {
+            const store = storage.getStore()
+            if (store && store.noop) return
+            plugin[name](ctx, store)
+          }
       }
     }
   }
@@ -87,11 +96,19 @@ module.exports = class Plugin {
 
   enter (span, store) {
     store = store || storage.getStore()
-    storage.enterWith({ ...store, span, parent: store })
+    storage.enterWith({ ...store, span })
   }
 
-  exit () {
-    storage.enterWith(storage.getStore().parent)
+  exit (ctx) {
+    storage.enterWith(ctx.parentStore)
+  }
+
+  end () {
+    // This stub means we always have an implicit end event handler when a prefix is used.
+  }
+
+  asyncEnd () {
+    // This stub means we always have an implicit asyncEnd event handler when a prefix is used.
   }
 
   /** Prevents creation of spans here and for all async descendants. */

@@ -82,15 +82,15 @@ exports.TracingChannel = class TracingChannel {
     }
   }
 
-  subscribe (channelObj) {
-    for (const key in channelObj) {
-      this._channels[key].subscribe(channelObj[key])
+  subscribe (handlerObj) {
+    for (const key in handlerObj) {
+      this._channels[key].subscribe(handlerObj[key])
     }
   }
 
-  unsubscribe (channelObj) {
-    for (const key in channelObj) {
-      this._channels[key].unsubscribe(channelObj[key])
+  unsubscribe (handlerObj) {
+    for (const key in handlerObj) {
+      this._channels[key].unsubscribe(handlerObj[key])
     }
   }
 }
