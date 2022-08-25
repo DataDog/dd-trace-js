@@ -7,7 +7,6 @@ module.exports = {
   '@google-cloud/pubsub': () => require('../google-cloud-pubsub'),
   '@grpc/grpc-js': () => require('../grpc'),
   '@hapi/hapi': () => require('../hapi'),
-  '@jest/core': () => require('../jest'),
   '@koa/router': () => require('../koa'),
   '@node-redis/client': () => require('../redis'),
   'amqp10': () => require('../amqp10'),

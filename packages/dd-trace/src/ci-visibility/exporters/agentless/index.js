@@ -66,7 +66,7 @@ class AgentlessCiVisibilityExporter {
       this._writer.setUrl(url)
       this._coverageWriter.setUrl(coverageUrl)
     } catch (e) {
-      log.warn(e.stack)
+      log.error(e)
     }
   }
 }

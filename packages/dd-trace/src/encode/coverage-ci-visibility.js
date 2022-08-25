@@ -6,6 +6,7 @@ const FormData = require('../exporters/common/form-data')
 
 const COVERAGE_PAYLOAD_VERSION = 1
 const COVERAGE_KEYS_LENGTH = 4
+const MAXIMUM_NUM_COVERAGE_FILES = 100
 
 class CoverageCIVisibilityEncoder extends AgentEncoder {
   constructor () {
@@ -60,7 +61,8 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     const form = new FormData()
 
     let coverageFileIndex = 1
-    for (const coverageBuffer of this.codeCoverageBuffers) {
+
+    for (const coverageBuffer of this.codeCoverageBuffers.slice(0, MAXIMUM_NUM_COVERAGE_FILES)) {
       const coverageFilename = `coverage${coverageFileIndex++}`
       form.append(
         coverageFilename,
@@ -72,8 +74,8 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
       )
     }
     // 'event' is a backend requirement
-    form.append('event', '', { filename: 'event', contentType: 'application/json' })
-    this.codeCoverageBuffers.length = 0
+    form.append('event', JSON.stringify({}), { filename: 'event.json', contentType: 'application/json' })
+    this.codeCoverageBuffers = this.codeCoverageBuffers.slice(MAXIMUM_NUM_COVERAGE_FILES)
 
     return form
   }

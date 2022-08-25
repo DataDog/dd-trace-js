@@ -7,7 +7,6 @@ module.exports = {
   get '@google-cloud/pubsub' () { return require('../../../datadog-plugin-google-cloud-pubsub/src') },
   get '@grpc/grpc-js' () { return require('../../../datadog-plugin-grpc/src') },
   get '@hapi/hapi' () { return require('../../../datadog-plugin-hapi/src') },
-  get '@jest/core' () { return require('../../../datadog-plugin-jest/src') },
   get '@koa/router' () { return require('../../../datadog-plugin-koa/src') },
   get '@node-redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get 'amqp10' () { return require('../../../datadog-plugin-amqp10/src') },

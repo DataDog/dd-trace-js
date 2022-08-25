@@ -56,7 +56,7 @@ describe('Plugin', function () {
       if (this.currentTest.title === 'can report code coverage') {
         process.env.DD_API_KEY = 'key'
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
-        loadArguments.push({ service: 'test', isAgentlessEnabled: true, isITREnabled: true })
+        loadArguments.push({ service: 'test', isAgentlessEnabled: true, isIntelligentTestRunnerEnabled: true })
         loadArguments.push({ experimental: { exporter: 'datadog' } })
       } else {
         loadArguments.push({ service: 'test' })
@@ -252,12 +252,19 @@ describe('Plugin', function () {
       })
 
       it('can report code coverage', function (done) {
-        let contentTypeHeader, coveragePayload
+        let contentTypeHeader,
+          coveragePayload,
+          contentDisposition,
+          eventContentDisposition,
+          eventPayload
 
         const scope = nock(`http://127.0.0.1:${agent.server.address().port}`)
           .post('/api/v2/citestcov')
           .reply(202, function () {
             contentTypeHeader = this.req.headers['content-type']
+            contentDisposition = this.req.requestBodyBuffers[1].toString()
+            eventContentDisposition = this.req.requestBodyBuffers[6].toString()
+            eventPayload = this.req.requestBodyBuffers[8].toString()
             coveragePayload = msgpack.decode(this.req.requestBodyBuffers[3])
           })
 
@@ -278,6 +285,13 @@ describe('Plugin', function () {
             expect(coveragePayload.version).to.equal(1)
             expect(coveragePayload.files.map(file => file.filename))
               .to.include('packages/datadog-plugin-jest/test/sum-coverage-test.js')
+            expect(contentDisposition).to.contain(
+              'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"'
+            )
+            expect(eventContentDisposition).to.contain(
+              'Content-Disposition: form-data; name="event"; filename="event.json"'
+            )
+            expect(eventPayload).to.equal('{}')
             done()
           }, 2000)
         })
