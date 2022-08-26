@@ -20,7 +20,7 @@ describe('Plugin', () => {
     let fs
     let tmpdir
     let tracer
-    afterEach(() => agent.close())
+    afterEach(() => agent.close({ ritmReset: false }))
     beforeEach(() => agent.load('fs').then(() => {
       tracer = require('../../dd-trace')
       fs = require('fs')

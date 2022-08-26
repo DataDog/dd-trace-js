@@ -22,6 +22,7 @@ module.exports = {
   get 'express' () { return require('../../../datadog-plugin-express/src') },
   get 'fastify' () { return require('../../../datadog-plugin-fastify/src') },
   get 'find-my-way' () { return require('../../../datadog-plugin-find-my-way/src') },
+  get 'fs' () { return require('../../../datadog-plugin-fs/src') },
   get 'graphql' () { return require('../../../datadog-plugin-graphql/src') },
   get 'grpc' () { return require('../../../datadog-plugin-grpc/src') },
   get 'hapi' () { return require('../../../datadog-plugin-hapi/src') },
