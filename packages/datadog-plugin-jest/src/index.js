@@ -15,6 +15,8 @@ const {
   TEST_CODE_OWNERS
 } = require('../../dd-trace/src/plugins/util/test')
 
+const { getSkippableTests } = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-skippable-tests')
+
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
 
@@ -92,6 +94,39 @@ class JestPlugin extends Plugin {
       const span = this.startTestSpan(test)
       span.setTag(TEST_STATUS, 'skip')
       span.finish()
+    })
+
+    this.addSub('ci:jest:test:skippable', ({ onResponse, onError }) => {
+      // we only request after git upload has happened
+      this.tracer._gitMetadataPromise.then(() => {
+        const {
+          'git.repository_url': repositoryUrl,
+          'git.commit.sha': sha,
+          'os.version': osVersion,
+          'os.platform': osPlatform,
+          'os.architecture': osArchitecture,
+          'runtime.name': runtimeName,
+          'runtime.version': runtimeVersion
+        } = this.testEnvironmentMetadata
+
+        getSkippableTests({
+          env: this.tracer._env,
+          service: this.config.service || this.tracer._service,
+          repositoryUrl,
+          sha,
+          osVersion,
+          osPlatform,
+          osArchitecture,
+          runtimeName,
+          runtimeVersion
+        }, (err, res) => {
+          if (err) {
+            onError(err)
+          } else {
+            onResponse(res)
+          }
+        })
+      })
     })
   }
 

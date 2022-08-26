@@ -10,6 +10,10 @@ const testErrCh = channel('ci:jest:test:err')
 
 const testCodeCoverageCh = channel('ci:jest:test:code-coverage')
 
+const testCodeCoverageCh = channel('ci:jest:test:code-coverage')
+
+const skippableTestsCh = channel('ci:jest:test:skippable')
+
 const {
   getTestSuitePath,
   getTestParametersString
@@ -46,6 +50,27 @@ const specStatusToTestStatus = {
 const asyncResources = new WeakMap()
 const originalTestFns = new WeakMap()
 
+let skippableTests = []
+
+function getAllTests (root) {
+  let tests = []
+
+  function getTestSuiteFromSuite (suite) {
+    if (suite.tests) {
+      tests = tests.concat(suite.tests)
+    }
+    if (suite.children) {
+      suite.children.forEach(child => {
+        getTestSuiteFromSuite(child)
+      })
+    }
+  }
+
+  getTestSuiteFromSuite(root)
+
+  return tests
+}
+
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
   let error
@@ -72,9 +97,29 @@ function getWrappedEnvironment (BaseEnvironment) {
       this.testSuite = getTestSuitePath(context.testPath, rootDir)
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
+
+      if (config.projectConfig && config.projectConfig.testEnvironmentOptions) { // newer versions
+        this._ddTestsToSkip = config.projectConfig.testEnvironmentOptions._ddTestsToSkip
+      } else if (config.testEnvironmentOptions) {
+        this._ddTestsToSkip = config.testEnvironmentOptions._ddTestsToSkip
+      }
+      if (this._ddTestsToSkip) {
+        this._ddTestsToSkip = this._ddTestsToSkip.filter(test => test.suite === this.testSuite)
+      }
     }
 
     async handleTestEvent (event, state) {
+      if (event.name === 'run_start') { // all tests are there. We can mark the skippable tests with test.mode = "skip"
+        const allTests = getAllTests(state.currentDescribeBlock)
+        allTests.forEach(test => {
+          const fullName = getJestTestName(test)
+          const shouldSkip = !!this._ddTestsToSkip.find(test => test.name === fullName)
+          if (shouldSkip) {
+            test.mode = 'skip'
+          }
+        })
+      }
+
       if (super.handleTestEvent) {
         await super.handleTestEvent(event, state)
       }
@@ -162,6 +207,73 @@ addHook({
   name: 'jest-environment-jsdom',
   versions: ['>=24.8.0']
 }, getTestEnvironment)
+
+addHook({
+  name: 'jest-config',
+  versions: ['>=24.8.0']
+}, (jestConfig) => {
+  // readConfigs changes signature for newer versions (it becomes "async"): do I need to take this into account?
+  shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function () {
+    const results = readConfigs.apply(this, arguments)
+    if (results.then) {
+      results.then((res) => {
+        const { configs } = res
+        configs.forEach(config => {
+          config.testEnvironmentOptions._ddTestsToSkip = skippableTests
+        })
+        return res
+      })
+    } else {
+      const { configs } = results
+      configs.forEach(config => {
+        config.testEnvironmentOptions._ddTestsToSkip = skippableTests
+      })
+    }
+    return results
+  })
+  return jestConfig
+})
+
+addHook({
+  name: '@jest/core',
+  file: 'build/cli/index.js',
+  versions: ['>=24.8.0']
+}, cli => {
+  // TODO: is it always async??
+  const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+    let onResponse
+    let onError
+
+    const skippableTestsRequestPromise = new Promise((resolve, reject) => {
+      onResponse = resolve
+      onError = reject
+    })
+
+    asyncResource.runInAsyncScope(() => {
+      skippableTestsCh.publish({ onResponse, onError })
+    })
+
+    try {
+      skippableTests = await skippableTestsRequestPromise
+      skippableTests = skippableTests.map(({ attributes: { name, suite } }) => {
+        return {
+          name,
+          suite
+        }
+      })
+    } catch (e) {
+      // ignore error
+    }
+
+    return runCLI.apply(this, arguments)
+  })
+
+  cli.runCLI = wrapped.runCLI
+
+  return cli
+})
 
 addHook({
   name: 'jest-jasmine2',
