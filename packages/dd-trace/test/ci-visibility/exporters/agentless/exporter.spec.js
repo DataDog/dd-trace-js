@@ -4,20 +4,26 @@ const proxyquire = require('proxyquire')
 describe('CI Visibility Exporter', () => {
   const url = 'www.example.com'
   const flushInterval = 1000
-  const writer = {
-    append: sinon.spy(),
-    flush: sinon.spy()
-  }
-  const Writer = sinon.stub().returns(writer)
-
-  const Exporter = proxyquire('../../../../src/ci-visibility/exporters/agentless', {
-    './writer': Writer
-  })
-
-  let exporter
+  let writer, Writer, coverageWriter, CoverageWriter, Exporter, exporter
 
   beforeEach(() => {
-    sinon.resetHistory()
+    writer = {
+      append: sinon.spy(),
+      flush: sinon.spy()
+    }
+    Writer = sinon.stub().returns(writer)
+
+    coverageWriter = {
+      append: sinon.spy(),
+      flush: sinon.spy()
+    }
+
+    CoverageWriter = sinon.stub().returns(coverageWriter)
+
+    Exporter = proxyquire('../../../../src/ci-visibility/exporters/agentless', {
+      './writer': Writer,
+      './coverage-writer': CoverageWriter
+    })
   })
 
   describe('when interval is set to a positive number', function () {
@@ -37,6 +43,7 @@ describe('CI Visibility Exporter', () => {
         expect(writer.flush).to.have.been.called
         done()
       }, flushInterval)
+      expect(writer.flush).not.to.have.been.called
     })
   })
 
@@ -56,6 +63,43 @@ describe('CI Visibility Exporter', () => {
       exporter = new Exporter({ url, flushInterval: 0 })
       exporter.export([span])
       expect(writer.flush).to.have.been.called
+    })
+  })
+
+  describe('when ITR is enabled', () => {
+    it('should append a code coverage payload when exportCoverage is called', () => {
+      const testSpan = {
+        context: () => ({ _traceId: '1', _spanId: '2' })
+      }
+      const payload = { testSpan, coverageFiles: ['file.js'] }
+
+      exporter = new Exporter({ url, flushInterval: 0, isIntelligentTestRunnerEnabled: true })
+
+      exporter.exportCoverage(payload)
+      expect(coverageWriter.append).to.have.been.calledWith({
+        traceId: '1',
+        spanId: '2',
+        files: ['file.js']
+      })
+      expect(coverageWriter.flush).to.have.been.called
+    })
+    it('should flush after the configured flush interval', function (done) {
+      this.timeout(3000)
+      exporter = new Exporter({ url, flushInterval, isIntelligentTestRunnerEnabled: true })
+
+      const testSpan = {
+        context: () => ({ _traceId: '1', _spanId: '2' })
+      }
+      const payload = { testSpan, coverageFiles: ['file.js'] }
+
+      exporter.exportCoverage(payload)
+
+      setTimeout(() => {
+        expect(coverageWriter.flush).to.have.been.called
+        done()
+      }, flushInterval)
+      expect(coverageWriter.append).to.have.been.called
+      expect(coverageWriter.flush).not.to.have.been.called
     })
   })
 })
