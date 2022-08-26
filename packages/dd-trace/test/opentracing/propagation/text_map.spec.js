@@ -5,7 +5,7 @@ const SpanContext = require('../../../src/opentracing/span_context')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 
-describe.only('TextMapPropagator', () => {
+describe('TextMapPropagator', () => {
   let TextMapPropagator
   let propagator
   let textMap
