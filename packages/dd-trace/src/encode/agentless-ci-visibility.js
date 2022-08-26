@@ -27,7 +27,6 @@ function formatSpan (span) {
 class AgentlessCiVisibilityEncoder extends AgentEncoder {
   constructor (writer, { runtimeId, service, env }) {
     super(writer, INTAKE_SOFT_LIMIT)
-    this._events = []
     this.runtimeId = runtimeId
     this.service = service
     this.env = env
@@ -195,18 +194,6 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     bytes.buffer[offset + 6] = lo >> 16
     bytes.buffer[offset + 7] = lo >> 8
     bytes.buffer[offset + 8] = lo
-  }
-
-  _encodeMapPrefix (bytes, keysLength) {
-    const offset = bytes.length
-
-    bytes.reserve(5)
-    bytes.length += 5
-    bytes.buffer[offset] = 0xdf
-    bytes.buffer[offset + 1] = keysLength >> 24
-    bytes.buffer[offset + 2] = keysLength >> 16
-    bytes.buffer[offset + 3] = keysLength >> 8
-    bytes.buffer[offset + 4] = keysLength
   }
 
   _encode (bytes, trace) {
