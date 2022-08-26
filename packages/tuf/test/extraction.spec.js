@@ -5,7 +5,7 @@ const { extractSigned } = require('../src/extraction')
 describe('TUF', () => {
   describe('extractions', () => {
     it('should work on complex payloads', () => {
-      const res = extractSigned(`{"signed":{"hello":{"world":"{\\""}}}`)
+      const res = extractSigned(`{"signed":{"hello":{"world":"{\\""}}}`) // FIXME: the string parts MUST be detected with JSON.parse
       expect(res).to.equal(`{"hello":{"world":"{\\""}}`)
     })
     it('should work on simple payloads', () => {

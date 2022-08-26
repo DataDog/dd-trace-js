@@ -37,6 +37,7 @@ function extractSigned (str) {
   for (let i = startPosition; i < str.length; ++i) {
     const curr = str[i]
     if (curr === '"') {
+      // TODO(@vdeturckheim): parse the string with JSON.parse to make sur we don't miss anything
       if (!isInString) {
         isInString = true
         continue
