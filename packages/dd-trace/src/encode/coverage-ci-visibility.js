@@ -1,6 +1,7 @@
 'use strict'
 const { AgentEncoder } = require('./0.4')
 const Chunk = require('./chunk')
+const log = require('../log')
 
 const FormData = require('../exporters/common/form-data')
 
@@ -11,19 +12,35 @@ const MAXIMUM_NUM_COVERAGE_FILES = 100
 class CoverageCIVisibilityEncoder extends AgentEncoder {
   constructor () {
     super(...arguments)
-    this.codeCoverageBuffers = []
     this._coverageBytes = new Chunk()
+    this.form = new FormData()
+    this.fileIndex = 1
     this.reset()
   }
 
   count () {
-    return this.codeCoverageBuffers.length
+    return this.fileIndex > 1
   }
 
   encode (coverage) {
     const bytes = this._coverageBytes
     const coverageBuffer = this.encodeCodeCoverage(bytes, coverage)
-    this.codeCoverageBuffers.push(coverageBuffer)
+
+    const coverageFilename = `coverage${this.fileIndex++}`
+
+    this.form.append(
+      coverageFilename,
+      coverageBuffer,
+      {
+        filename: `${coverageFilename}.msgpack`,
+        contentType: 'application/msgpack'
+      }
+    )
+
+    if (this.fileIndex === MAXIMUM_NUM_COVERAGE_FILES) {
+      log.debug('Coverage buffer reached the limit, flushing')
+      this._writer.flush()
+    }
     this.reset()
   }
 
@@ -58,24 +75,17 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   }
 
   makePayload () {
-    const form = new FormData()
-
-    let coverageFileIndex = 1
-
-    for (const coverageBuffer of this.codeCoverageBuffers.slice(0, MAXIMUM_NUM_COVERAGE_FILES)) {
-      const coverageFilename = `coverage${coverageFileIndex++}`
-      form.append(
-        coverageFilename,
-        coverageBuffer,
-        {
-          filename: `${coverageFilename}.msgpack`,
-          contentType: 'application/msgpack'
-        }
-      )
-    }
     // 'event' is a backend requirement
-    form.append('event', JSON.stringify({}), { filename: 'event.json', contentType: 'application/json' })
-    this.codeCoverageBuffers = this.codeCoverageBuffers.slice(MAXIMUM_NUM_COVERAGE_FILES)
+    this.form.append(
+      'event',
+      JSON.stringify({ dummy: true }),
+      { filename: 'event.json', contentType: 'application/json' }
+    )
+
+    const form = this.form
+
+    this.form = new FormData()
+    this.fileIndex = 1
 
     return form
   }
