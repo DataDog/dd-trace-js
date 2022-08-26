@@ -3,8 +3,7 @@
 const {
   FakeAgent,
   spawnProc,
-  createSandbox,
-  curlAndAssertMessage
+  createSandbox
 } = require('../helpers')
 const path = require('path')
 const { assert } = require('chai')

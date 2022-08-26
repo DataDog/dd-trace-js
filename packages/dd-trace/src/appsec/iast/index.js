@@ -20,10 +20,8 @@ function enable (config) {
 
 function disable () {
   disableAllAnalyzers()
-  setImmediate(() => {
-    if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
-    if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestEnd)
-  })
+  if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
+  if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestEnd)
 }
 
 function onIncomingHttpRequestStart (data) {
@@ -45,13 +43,14 @@ function onIncomingHttpRequestStart (data) {
 
 function onIncomingHttpRequestEnd (data) {
   if (data && data.req) {
+    const store = storage.getStore()
     const iastContext = getIastContext(storage.getStore())
     if (iastContext && iastContext.rootSpan) {
       overheadController.releaseRequest()
       sendVulnerabilities(iastContext, iastContext.rootSpan)
     }
     // TODO web.getContext(data.req) is required when the request is aborted
-    if (cleanIastContext(iastContext, web.getContext(data.req))) {
+    if (cleanIastContext(store, web.getContext(data.req), iastContext)) {
       overheadController.releaseRequest()
     }
   }

@@ -12,10 +12,11 @@ function saveIastContext (store, topContext, context) {
   }
 }
 
-function cleanIastContext (store, context) {
-  let iastContext
+function cleanIastContext (store, context, iastContext) {
   if (store) {
-    iastContext = store[IAST_CONTEXT_KEY]
+    if (!iastContext) {
+      iastContext = store[IAST_CONTEXT_KEY]
+    }
     store[IAST_CONTEXT_KEY] = null
   }
   if (context) {

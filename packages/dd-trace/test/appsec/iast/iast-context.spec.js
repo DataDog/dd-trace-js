@@ -65,7 +65,7 @@ describe('IAST context', () => {
       const topContext = {
         [iastContextHandler.IAST_CONTEXT_KEY]: iastContext
       }
-      iastContextHandler.cleanIastContext(store, topContext)
+      iastContextHandler.cleanIastContext(store, topContext, iastContext)
       expect(store[iastContextHandler.IAST_CONTEXT_KEY]).to.be.null
       expect(topContext[iastContextHandler.IAST_CONTEXT_KEY]).to.be.null
     })
