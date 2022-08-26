@@ -9,11 +9,17 @@ const {
   getTestEnvironmentMetadata,
   getTestParentSpan,
   getTestCommonTags,
+  getTestSessionCommonTags,
+  getTestSuiteCommonTags,
   TEST_PARAMETERS,
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  TEST_SESSION_ID,
+  TEST_SUITE_ID,
+  TEST_COMMAND
 } = require('../../dd-trace/src/plugins/util/test')
+const id = require('../../dd-trace/src/id')
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
@@ -58,6 +64,67 @@ class JestPlugin extends Plugin {
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
+    this.addSub('ci:jest:session:start', (command) => {
+      const childOf = getTestParentSpan(this.tracer)
+      const testSessionSpanMetadata = getTestSessionCommonTags(command, this.tracer._version)
+
+      this.command = command
+      this.testSessionSpan = this.tracer.startSpan('jest.test_session', {
+        childOf,
+        tags: {
+          ...this.testEnvironmentMetadata,
+          ...testSessionSpanMetadata
+        }
+      })
+    })
+
+    this.addSub('ci:jest:session:finish', (status) => {
+      this.testSessionSpan.setTag(TEST_STATUS, status)
+      this.testSessionSpan.finish()
+      finishAllTraceSpans(this.testSessionSpan)
+      this.tracer._exporter._writer.flush()
+    })
+
+    // Test suites can be run in a different process from jest's main one.
+    // This subscriber changes the configuration objects from jest to inject the trace id
+    // of the test session to the processes that run the test suites.
+    this.addSub('ci:jest:session:configuration', configs => {
+      configs.forEach(config => {
+        config._ddTestSessionId = this.testSessionSpan.context()._traceId.toString('hex')
+        config._ddTestCommand = this.command
+      })
+    })
+
+    this.addSub('ci:jest:test-suite:start', ({ testSuite, testSessionId, testCommand }) => {
+      const testSessionSpanContext = this.tracer.extract('text_map', {
+        'x-datadog-trace-id': id(testSessionId).toString(10),
+        'x-datadog-span-id': id(testSessionId).toString(10),
+        'x-datadog-parent-id': '0000000000000000'
+      })
+
+      this.testSessionId = testSessionId
+      this.command = testCommand
+
+      const testSuiteMetadata = getTestSuiteCommonTags(testCommand, this.tracer._version, testSuite)
+
+      this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
+        childOf: testSessionSpanContext,
+        tags: {
+          ...this.testEnvironmentMetadata,
+          ...testSuiteMetadata
+        }
+      })
+    })
+
+    this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage }) => {
+      this.testSuiteSpan.setTag(TEST_STATUS, status)
+      if (errorMessage) {
+        this.testSuiteSpan.setTag('error', new Error(errorMessage))
+      }
+      this.testSuiteSpan.finish()
+      this.tracer._exporter._writer.flush()
+    })
+
     this.addSub('ci:jest:test:code-coverage', (coverageFiles) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
         return
@@ -96,7 +163,12 @@ class JestPlugin extends Plugin {
   }
 
   startTestSpan (test) {
-    const { childOf, ...testSpanMetadata } = getTestSpanMetadata(this.tracer, test)
+    const testSuiteId = this.testSuiteSpan.context()._spanId.toString('hex')
+
+    const {
+      childOf,
+      ...testSpanMetadata
+    } = getTestSpanMetadata(this.tracer, test)
 
     const codeOwners = getCodeOwnersForFilename(test.suite, this.codeOwnersEntries)
 
@@ -109,7 +181,10 @@ class JestPlugin extends Plugin {
         childOf,
         tags: {
           ...this.testEnvironmentMetadata,
-          ...testSpanMetadata
+          ...testSpanMetadata,
+          [TEST_SUITE_ID]: testSuiteId,
+          [TEST_SESSION_ID]: this.testSessionId,
+          [TEST_COMMAND]: this.command
         }
       })
 

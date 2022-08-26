@@ -3,6 +3,14 @@ const istanbul = require('istanbul-lib-coverage')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
+const testSessionStartCh = channel('ci:jest:session:start')
+const testSessionFinishCh = channel('ci:jest:session:finish')
+
+const testSessionConfigurationCh = channel('ci:jest:session:configuration')
+
+const testSuiteStartCh = channel('ci:jest:test-suite:start')
+const testSuiteFinish = channel('ci:jest:test-suite:finish')
+
 const testStartCh = channel('ci:jest:test:start')
 const testSkippedCh = channel('ci:jest:test:skip')
 const testRunFinishCh = channel('ci:jest:test:finish')
@@ -72,6 +80,14 @@ function getWrappedEnvironment (BaseEnvironment) {
       this.testSuite = getTestSuitePath(context.testPath, rootDir)
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
+
+      if (config.projectConfig && config.projectConfig.testEnvironmentOptions) { // newer versions
+        this._ddTestSessionId = config.projectConfig.testEnvironmentOptions._ddTestSessionId
+        this._ddTestCommand = config.projectConfig.testEnvironmentOptions._ddTestCommand
+      } else if (config.testEnvironmentOptions) {
+        this._ddTestSessionId = config.testEnvironmentOptions._ddTestSessionId
+        this._ddTestCommand = config.testEnvironmentOptions._ddTestCommand
+      }
     }
 
     async handleTestEvent (event, state) {
@@ -154,6 +170,92 @@ function getTestEnvironment (pkg) {
 }
 
 addHook({
+  name: '@jest/core',
+  file: 'build/cli/index.js',
+  versions: ['>=24.8.0']
+}, cli => {
+  const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => function () {
+    const processArgv = process.argv.slice(2).join(' ')
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    asyncResource.runInAsyncScope(() => {
+      testSessionStartCh.publish(`jest ${processArgv}`)
+    })
+    return runCLI.apply(this, arguments).then(result => {
+      const { results: { success } } = result
+      asyncResource.runInAsyncScope(() => {
+        testSessionFinishCh.publish(success ? 'pass' : 'fail')
+      })
+      return result
+    })
+  })
+
+  cli.runCLI = wrapped.runCLI
+
+  return cli
+})
+
+addHook({
+  name: 'jest-circus',
+  file: 'build/legacy-code-todo-rewrite/jestAdapter.js',
+  versions: ['>=24.8.0']
+}, jestAdapter => {
+  const adapter = jestAdapter.default ? jestAdapter.default : jestAdapter
+  const newAdapter = shimmer.wrap(adapter, function () {
+    const environment = arguments[2]
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    asyncResource.runInAsyncScope(() => {
+      testSuiteStartCh.publish({
+        testSuite: environment.testSuite,
+        testSessionId: environment._ddTestSessionId,
+        testCommand: environment._ddTestCommand
+      })
+    })
+    return adapter.apply(this, arguments).then(suiteResults => {
+      const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults
+      let status = 'pass'
+      if (skipped) {
+        status = 'skipped'
+      } else if (numFailingTests !== 0) {
+        status = 'fail'
+      }
+      asyncResource.runInAsyncScope(() => {
+        testSuiteFinish.publish({ status, errorMessage })
+      })
+      return suiteResults
+    })
+  })
+  if (jestAdapter.default) {
+    jestAdapter.default = newAdapter
+  } else {
+    jestAdapter = newAdapter
+  }
+
+  return jestAdapter
+})
+
+addHook({
+  name: 'jest-config',
+  versions: ['>=24.8.0']
+}, (jestConfig) => {
+  // readConfigs changes signature for newer versions (it becomes "async"): do I need to take this into account?
+  shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function () {
+    const results = readConfigs.apply(this, arguments)
+    if (results.then) {
+      results.then((res) => {
+        const { configs } = res
+        testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
+        return res
+      })
+    } else {
+      const { configs } = results
+      testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
+    }
+    return results
+  })
+  return jestConfig
+})
+
+addHook({
   name: 'jest-environment-node',
   versions: ['>=24.8.0']
 }, getTestEnvironment)
@@ -163,6 +265,7 @@ addHook({
   versions: ['>=24.8.0']
 }, getTestEnvironment)
 
+// TODO: support for jest-jasmine's test suites
 addHook({
   name: 'jest-jasmine2',
   versions: ['>=24.8.0'],
