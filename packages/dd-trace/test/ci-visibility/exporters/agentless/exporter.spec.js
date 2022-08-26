@@ -2,20 +2,22 @@
 const proxyquire = require('proxyquire')
 
 describe('CI Visibility Exporter', () => {
-  const url = 'www.example.com'
+  const url = new URL('http://www.example.com')
   const flushInterval = 1000
   let writer, Writer, coverageWriter, CoverageWriter, Exporter, exporter
 
   beforeEach(() => {
     writer = {
       append: sinon.spy(),
-      flush: sinon.spy()
+      flush: sinon.spy(),
+      setUrl: sinon.spy()
     }
     Writer = sinon.stub().returns(writer)
 
     coverageWriter = {
       append: sinon.spy(),
-      flush: sinon.spy()
+      flush: sinon.spy(),
+      setUrl: sinon.spy()
     }
 
     CoverageWriter = sinon.stub().returns(coverageWriter)
@@ -100,6 +102,31 @@ describe('CI Visibility Exporter', () => {
       }, flushInterval)
       expect(coverageWriter.append).to.have.been.called
       expect(coverageWriter.flush).not.to.have.been.called
+    })
+  })
+
+  describe('url', () => {
+    it('sets the default if URL param is not specified', () => {
+      const site = 'd4tad0g.com'
+      exporter = new Exporter({ site })
+      expect(exporter._url.href).to.equal(`https://citestcycle-intake.${site}/`)
+      expect(exporter._coverageUrl.href).to.equal(`https://event-platform-intake.${site}/`)
+    })
+    it('should set the input URL', () => {
+      exporter = new Exporter({ url })
+      expect(exporter._url).to.deep.equal(url)
+      expect(exporter._coverageUrl).to.deep.equal(url)
+    })
+    describe('setUrl', () => {
+      it('should update the URL on self and writer', () => {
+        exporter = new Exporter({ url })
+        const newUrl = new URL('http://www.real.com')
+        exporter.setUrl(newUrl)
+        expect(exporter._url).to.deep.equal(newUrl)
+        expect(exporter._coverageUrl).to.deep.equal(newUrl)
+        expect(writer.setUrl).to.have.been.calledWith(newUrl)
+        expect(coverageWriter.setUrl).to.have.been.calledWith(newUrl)
+      })
     })
   })
 })
