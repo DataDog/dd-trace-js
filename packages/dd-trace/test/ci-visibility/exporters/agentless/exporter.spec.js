@@ -85,7 +85,8 @@ describe('CI Visibility Exporter', () => {
       expect(coverageWriter.flush).to.have.been.called
     })
     it('should flush after the configured flush interval', function (done) {
-      this.timeout(5000)
+      this.timeout(4000)
+      const flushInterval = 3000
       exporter = new Exporter({ url, flushInterval, isIntelligentTestRunnerEnabled: true })
 
       const testSpan = {
