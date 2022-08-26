@@ -97,6 +97,11 @@ class JestPlugin extends Plugin {
     })
 
     this.addSub('ci:jest:test:skippable', ({ onResponse, onError }) => {
+      // This means that the git metadata hasn't been sent
+      if (!this.tracer._gitMetadataPromise) {
+        onError()
+        return
+      }
       // we only request after git upload has happened
       this.tracer._gitMetadataPromise.then(() => {
         const {

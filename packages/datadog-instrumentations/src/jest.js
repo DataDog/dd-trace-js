@@ -10,8 +10,6 @@ const testErrCh = channel('ci:jest:test:err')
 
 const testCodeCoverageCh = channel('ci:jest:test:code-coverage')
 
-const testCodeCoverageCh = channel('ci:jest:test:code-coverage')
-
 const skippableTestsCh = channel('ci:jest:test:skippable')
 
 const {
