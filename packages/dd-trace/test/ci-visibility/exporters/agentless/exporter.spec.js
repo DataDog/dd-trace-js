@@ -4,28 +4,26 @@ const proxyquire = require('proxyquire')
 describe('CI Visibility Exporter', () => {
   const url = 'www.example.com'
   const flushInterval = 1000
-  const writer = {
-    append: sinon.spy(),
-    flush: sinon.spy()
-  }
-  const Writer = sinon.stub().returns(writer)
-
-  const coverageWriter = {
-    append: sinon.spy(),
-    flush: sinon.spy()
-  }
-
-  const CoverageWriter = sinon.stub().returns(coverageWriter)
-
-  const Exporter = proxyquire('../../../../src/ci-visibility/exporters/agentless', {
-    './writer': Writer,
-    './coverage-writer': CoverageWriter
-  })
-
-  let exporter
+  let writer, Writer, coverageWriter, CoverageWriter, Exporter, exporter
 
   beforeEach(() => {
-    sinon.resetHistory()
+    writer = {
+      append: sinon.spy(),
+      flush: sinon.spy()
+    }
+    Writer = sinon.stub().returns(writer)
+
+    coverageWriter = {
+      append: sinon.spy(),
+      flush: sinon.spy()
+    }
+
+    CoverageWriter = sinon.stub().returns(coverageWriter)
+
+    Exporter = proxyquire('../../../../src/ci-visibility/exporters/agentless', {
+      './writer': Writer,
+      './coverage-writer': CoverageWriter
+    })
   })
 
   describe('when interval is set to a positive number', function () {
@@ -45,6 +43,7 @@ describe('CI Visibility Exporter', () => {
         expect(writer.flush).to.have.been.called
         done()
       }, flushInterval)
+      expect(writer.flush).not.to.have.been.called
     })
   })
 
@@ -85,8 +84,7 @@ describe('CI Visibility Exporter', () => {
       expect(coverageWriter.flush).to.have.been.called
     })
     it('should flush after the configured flush interval', function (done) {
-      this.timeout(4000)
-      const flushInterval = 3000
+      this.timeout(3000)
       exporter = new Exporter({ url, flushInterval, isIntelligentTestRunnerEnabled: true })
 
       const testSpan = {
