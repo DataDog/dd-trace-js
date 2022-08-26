@@ -16,7 +16,7 @@ class AgentlessCiVisibilityExporter {
     this._timer = undefined
     this._coverageTimer = undefined
 
-    this._coverageUrl = new URL(`https://event-platform-intake.${site}`)
+    this._coverageUrl = url || new URL(`https://event-platform-intake.${site}`)
     this._coverageWriter = new CoverageWriter({ url: this._coverageUrl })
 
     process.once('beforeExit', () => {
