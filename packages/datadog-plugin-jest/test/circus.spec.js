@@ -4,6 +4,7 @@ const path = require('path')
 
 const nock = require('nock')
 const semver = require('semver')
+const msgpack = require('msgpack-lite')
 
 const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -33,6 +34,8 @@ describe('Plugin', function () {
 
   withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {
+      delete process.env.DD_CIVISIBILITY_ITR_ENABLED
+      delete process.env.DD_API_KEY
       const jestTestFile = fs.readdirSync(__dirname).filter(name => name.startsWith('jest-'))
       jestTestFile.forEach((testFile) => {
         delete require.cache[require.resolve(path.join(__dirname, testFile))]
@@ -41,13 +44,25 @@ describe('Plugin', function () {
       delete global._ddtrace
       return agent.close({ ritmReset: false, wipe: true })
     })
-    beforeEach(() => {
+    beforeEach(function () {
       // for http integration tests
       nock('http://test:123')
         .get('/')
         .reply(200, 'OK')
 
-      return agent.load(['jest', 'http'], { service: 'test' }).then(() => {
+      const loadArguments = [['jest', 'http']]
+
+      // we need the ci visibility init for the coverage test
+      if (this.currentTest.title === 'can report code coverage') {
+        process.env.DD_API_KEY = 'key'
+        process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
+        loadArguments.push({ service: 'test', isAgentlessEnabled: true, isIntelligentTestRunnerEnabled: true })
+        loadArguments.push({ experimental: { exporter: 'datadog' } })
+      } else {
+        loadArguments.push({ service: 'test' })
+      }
+
+      return agent.load(...loadArguments).then(() => {
         global.__libraryName__ = moduleName
         global.__libraryVersion__ = version
         jestExecutable = require(`../../../versions/jest@${version}`).get()
@@ -228,6 +243,42 @@ describe('Plugin', function () {
         const options = {
           ...jestCommonOptions,
           testRegex: 'jest-focus.js'
+        }
+
+        jestExecutable.runCLI(
+          options,
+          options.projects
+        )
+      })
+
+      it('can report code coverage', function (done) {
+        nock(`http://127.0.0.1:${agent.server.address().port}`)
+          .post('/api/v2/citestcov')
+          .reply(202, function () {
+            const contentTypeHeader = this.req.headers['content-type']
+            const contentDisposition = this.req.requestBodyBuffers[1].toString()
+            const eventContentDisposition = this.req.requestBodyBuffers[6].toString()
+            const eventPayload = this.req.requestBodyBuffers[8].toString()
+            const coveragePayload = msgpack.decode(this.req.requestBodyBuffers[3])
+
+            expect(contentTypeHeader).to.contain('multipart/form-data')
+            expect(coveragePayload.version).to.equal(1)
+            expect(coveragePayload.files.map(file => file.filename))
+              .to.include('packages/datadog-plugin-jest/test/sum-coverage-test.js')
+            expect(contentDisposition).to.contain(
+              'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"'
+            )
+            expect(eventContentDisposition).to.contain(
+              'Content-Disposition: form-data; name="event"; filename="event.json"'
+            )
+            expect(eventPayload).to.equal('{}')
+            done()
+          })
+
+        const options = {
+          ...jestCommonOptions,
+          testRegex: 'jest-coverage.js',
+          coverage: true
         }
 
         jestExecutable.runCLI(
