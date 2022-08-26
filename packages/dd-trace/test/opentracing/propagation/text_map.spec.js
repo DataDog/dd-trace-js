@@ -5,7 +5,7 @@ const SpanContext = require('../../../src/opentracing/span_context')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 
-describe('TextMapPropagator', () => {
+describe.only('TextMapPropagator', () => {
   let TextMapPropagator
   let propagator
   let textMap
@@ -136,12 +136,27 @@ describe('TextMapPropagator', () => {
       expect(carrier).to.not.have.property('x-datadog-tags')
     })
 
-    it('should drop trace tags if invalid', () => {
+    it('should drop trace tags if value is invalid', () => {
       const carrier = {}
       const spanContext = createContext({
         trace: {
           tags: {
             '_dd.p.foo': 'hélicoptère'
+          }
+        }
+      })
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.not.have.property('x-datadog-tags')
+    })
+
+    it('should drop trace tags if key is invalid', () => {
+      const carrier = {}
+      const spanContext = createContext({
+        trace: {
+          tags: {
+            '_ddupefoo': 'value'
           }
         }
       })
@@ -266,31 +281,50 @@ describe('TextMapPropagator', () => {
     })
 
     it('should not extract trace tags if the value is too long', () => {
-      textMap['x-datadog-tags'] = `foo=${'a'.repeat(512)}`
+      textMap['x-datadog-tags'] = `_dd.p.foo=${'a'.repeat(512)}`
 
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
 
-      expect(spanContext._trace.tags).to.not.have.property('foo')
+      expect(spanContext._trace.tags).to.not.have.property('_dd.p.foo')
     })
 
     it('should not extract invalid trace tags', () => {
-      textMap['x-datadog-tags'] = 'foo=bar,baz,=,qux'
+      textMap['x-datadog-tags'] = '_dd.p.foo=bar,_dd.p.baz,=,_dd.p.qux'
 
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
 
-      expect(spanContext._trace.tags).to.not.have.property('foo')
+      expect(spanContext._trace.tags).to.not.have.property('_dd.p.foo')
+    })
+
+    it('should not extract trace tags with invalid values', () => {
+      textMap['x-datadog-tags'] = '_dd.p.foo=hélicoptère'
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._trace.tags).to.not.have.property('_dd.p.foo')
+    })
+
+    it('should not extract trace tags with invalid keys', () => {
+      textMap['x-datadog-tags'] = '_ddupefoo=value'
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._trace.tags).to.not.have.property('_ddupefoo')
     })
 
     it('should not extract trace tags when disabled', () => {
       config.tagsHeaderMaxLength = 0
-      textMap['x-datadog-tags'] = 'foo=bar,baz,=,qux'
+      textMap['x-datadog-tags'] = '_dd.p.foo=bar,_dd.p.baz=qux'
 
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
 
-      expect(spanContext._trace.tags).to.not.have.property('foo')
+      expect(spanContext._trace.tags).to.not.have.property('_dd.p.foo')
+      expect(spanContext._trace.tags).to.not.have.property('_dd.p.baz')
     })
 
     it('should extract from an aws-sqsd header', () => {
