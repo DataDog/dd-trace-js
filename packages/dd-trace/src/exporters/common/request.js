@@ -3,6 +3,7 @@
 // TODO: Add test with slow or unresponsive agent.
 // TODO: Add telemetry for things like dropped requests, errors, etc.
 
+const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
 const docker = require('./docker')
@@ -23,13 +24,17 @@ function request (data, options, callback) {
     options.headers = {}
   }
 
+  const isReadable = data instanceof Readable
+
   // The timeout should be kept low to avoid excessive queueing.
   const timeout = options.timeout || 2000
   const isSecure = options.protocol === 'https:'
   const client = isSecure ? https : http
   const dataArray = [].concat(data)
 
-  options.headers['Content-Length'] = byteLength(dataArray)
+  if (!isReadable) {
+    options.headers['Content-Length'] = byteLength(dataArray)
+  }
 
   if (containerId) {
     options.headers['Datadog-Container-ID'] = containerId
@@ -76,10 +81,14 @@ function request (data, options, callback) {
       onError(err)
     })
 
-    dataArray.forEach(buffer => req.write(buffer))
-
     req.setTimeout(timeout, req.abort)
-    req.end()
+
+    if (isReadable) {
+      data.pipe(req)
+    } else {
+      dataArray.forEach(buffer => req.write(buffer))
+      req.end()
+    }
 
     storage.enterWith(store)
   }

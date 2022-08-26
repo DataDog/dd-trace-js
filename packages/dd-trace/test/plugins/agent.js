@@ -38,6 +38,12 @@ module.exports = {
       handlers.forEach(handler => handler(req.body))
     })
 
+    // CI Visibility Agentless intake
+    agent.post('/api/v2/citestcycle', (req, res) => {
+      res.status(200).send('OK')
+      handlers.forEach(handler => handler(req.body))
+    })
+
     return getPort().then(port => {
       return new Promise((resolve, reject) => {
         const server = this.server = http.createServer(agent)

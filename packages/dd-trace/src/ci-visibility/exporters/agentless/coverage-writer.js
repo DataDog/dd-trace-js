@@ -2,7 +2,7 @@
 const request = require('../../../exporters/common/request')
 const log = require('../../../log')
 
-const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
+const { CoverageCIVisibilityEncoder } = require('../../../encode/coverage-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')
 
 function safeJSONStringify (value) {
@@ -12,20 +12,19 @@ function safeJSONStringify (value) {
 }
 
 class Writer extends BaseWriter {
-  constructor ({ url, tags }) {
+  constructor ({ url }) {
     super(...arguments)
-    const { 'runtime-id': runtimeId, env, service } = tags
     this._url = url
-    this._encoder = new AgentlessCiVisibilityEncoder(this, { runtimeId, env, service })
+    this._encoder = new CoverageCIVisibilityEncoder()
   }
 
-  _sendPayload (data, _, done) {
+  _sendPayload (form, _, done) {
     const options = {
-      path: '/api/v2/citestcycle',
+      path: '/api/v2/citestcov',
       method: 'POST',
       headers: {
         'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
-        'Content-Type': 'application/msgpack'
+        ...form.getHeaders()
       },
       timeout: 15000
     }
@@ -35,7 +34,8 @@ class Writer extends BaseWriter {
     options.port = this._url.port
 
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
-    request(data, options, (err, res) => {
+
+    request(form, options, (err, res) => {
       if (err) {
         log.error(err)
         done()
