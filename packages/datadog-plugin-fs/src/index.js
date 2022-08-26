@@ -1,10 +1,18 @@
 'use strict'
 
+// The `fs` plugin is an old style plugin that has not been updated for the new
+// plugin system and was hacked in for backward compatibility with 2.x.
+
 const { storage } = require('../../datadog-core')
+const { channel } = require('../../datadog-instrumentations/src/helpers/instrument')
+const shimmer = require('../../datadog-shimmer')
+const Plugin = require('../../dd-trace/src/plugins/plugin')
 
 let kDirReadPromisified
 let kDirClosePromisified
 let kHandle
+let fsConfig
+let fsInstance
 
 const ddFhSym = Symbol('ddFileHandle')
 
@@ -144,8 +152,8 @@ function createWrapDirAsyncIterator (config, tracer, instrumenter) {
           }
         }
       }
-      instrumenter.wrap(this, kDirReadPromisified, createWrapDirRead(config, tracer))
-      instrumenter.wrap(this, kDirClosePromisified, createWrapKDirClose(config, tracer, instrumenter))
+      shimmer.wrap(this, kDirReadPromisified, createWrapDirRead(config, tracer))
+      shimmer.wrap(this, kDirClosePromisified, createWrapKDirClose(config, tracer, instrumenter))
       return asyncIterator.apply(this, arguments)
     }
   }
@@ -158,8 +166,8 @@ function createWrapKDirClose (config, tracer, instrumenter) {
       return tracer.trace('fs.operation', { tags, orphanable }, (span) => {
         const p = kDirClose.apply(this, arguments)
         const unwrapBoth = () => {
-          instrumenter.unwrap(this, kDirReadPromisified)
-          instrumenter.unwrap(this, kDirClosePromisified)
+          shimmer.unwrap(this, kDirReadPromisified)
+          shimmer.unwrap(this, kDirClosePromisified)
         }
         p.then(unwrapBoth, unwrapBoth)
         return p
@@ -339,7 +347,7 @@ function makeFSTags (resourceName, path, options, config, tracer) {
     'component': 'fs',
     'span.kind': 'internal',
     'resource.name': resourceName,
-    'service.name': config.service || tracer._service
+    'service.name': fsConfig.service || tracer._service
   }
 
   switch (typeof path) {
@@ -399,9 +407,9 @@ function patchClassicFunctions (fs, tracer, config) {
     if (tagMakerName in tagMakers) {
       const tagMaker = tagMakers[tagMakerName]
       if (name.endsWith('Sync')) {
-        this.wrap(fs, name, createWrap(tracer, config, name, tagMaker))
+        shimmer.wrap(fs, name, createWrap(tracer, config, name, tagMaker))
       } else {
-        this.wrap(fs, name, createWrapCb(tracer, config, name, tagMaker))
+        shimmer.wrap(fs, name, createWrapCb(tracer, config, name, tagMaker))
       }
       if (name in promisifiable) {
         copySymbols(original, fs[name])
@@ -424,8 +432,6 @@ function patchFileHandle (fs, tracer, config) {
         tagMaker = createFDTags
       }
 
-      const instrumenter = this
-
       const desc = Reflect.getOwnPropertyDescriptor(fileHandlePrototype, kHandle)
       if (!desc || !desc.get) {
         Reflect.defineProperty(fileHandlePrototype, kHandle, {
@@ -434,13 +440,13 @@ function patchFileHandle (fs, tracer, config) {
           },
           set (h) {
             this[ddFhSym] = h
-            instrumenter.wrap(this, 'close', createWrap(tracer, config, 'filehandle.close', tagMakers.close))
+            shimmer.wrap(this, 'close', createWrap(tracer, config, 'filehandle.close', tagMakers.close))
           },
           configurable: true
         })
       }
 
-      this.wrap(fileHandlePrototype, name, createWrap(tracer, config, 'filehandle.' + name, tagMaker))
+      shimmer.wrap(fileHandlePrototype, name, createWrap(tracer, config, 'filehandle.' + name, tagMaker))
     }
   })
 }
@@ -449,17 +455,17 @@ function patchPromiseFunctions (fs, tracer, config) {
   for (const name in fs.promises) {
     if (name in tagMakers) {
       const tagMaker = tagMakers[name]
-      this.wrap(fs.promises, name, createWrap(tracer, config, 'promises.' + name, tagMaker))
+      shimmer.wrap(fs.promises, name, createWrap(tracer, config, 'promises.' + name, tagMaker))
     }
   }
 }
 
 function patchDirFunctions (fs, tracer, config) {
-  this.wrap(fs.Dir.prototype, 'close', createWrapDirClose(config, tracer))
-  this.wrap(fs.Dir.prototype, 'closeSync', createWrapDirClose(config, tracer, true))
-  this.wrap(fs.Dir.prototype, 'read', createWrapDirRead(config, tracer))
-  this.wrap(fs.Dir.prototype, 'readSync', createWrapDirRead(config, tracer, true))
-  this.wrap(fs.Dir.prototype, Symbol.asyncIterator, createWrapDirAsyncIterator(config, tracer, this))
+  shimmer.wrap(fs.Dir.prototype, 'close', createWrapDirClose(config, tracer))
+  shimmer.wrap(fs.Dir.prototype, 'closeSync', createWrapDirClose(config, tracer, true))
+  shimmer.wrap(fs.Dir.prototype, 'read', createWrapDirRead(config, tracer))
+  shimmer.wrap(fs.Dir.prototype, 'readSync', createWrapDirRead(config, tracer, true))
+  shimmer.wrap(fs.Dir.prototype, Symbol.asyncIterator, createWrapDirAsyncIterator(config, tracer, this))
 }
 
 function unpatchClassicFunctions (fs) {
@@ -467,7 +473,7 @@ function unpatchClassicFunctions (fs) {
     if (!fs[name]) continue
     const tagMakerName = name.endsWith('Sync') ? name.substr(0, name.length - 4) : name
     if (tagMakerName in tagMakers) {
-      this.unwrap(fs, name)
+      shimmer.unwrap(fs, name)
     }
   }
 }
@@ -478,7 +484,7 @@ function unpatchFileHandle (fs) {
       if (typeof name !== 'string' || name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
         continue
       }
-      this.unwrap(fileHandlePrototype, name)
+      shimmer.unwrap(fileHandlePrototype, name)
     }
     delete fileHandlePrototype[kHandle]
   })
@@ -487,22 +493,46 @@ function unpatchFileHandle (fs) {
 function unpatchPromiseFunctions (fs) {
   for (const name in fs.promises) {
     if (name in tagMakers) {
-      this.unwrap(fs.promises, name)
+      shimmer.unwrap(fs.promises, name)
     }
   }
 }
 
 function unpatchDirFunctions (fs) {
-  this.unwrap(fs.Dir.prototype, 'close')
-  this.unwrap(fs.Dir.prototype, 'closeSync')
-  this.unwrap(fs.Dir.prototype, 'read')
-  this.unwrap(fs.Dir.prototype, 'readSync')
-  this.unwrap(fs.Dir.prototype, Symbol.asyncIterator)
+  shimmer.unwrap(fs.Dir.prototype, 'close')
+  shimmer.unwrap(fs.Dir.prototype, 'closeSync')
+  shimmer.unwrap(fs.Dir.prototype, 'read')
+  shimmer.unwrap(fs.Dir.prototype, 'readSync')
+  shimmer.unwrap(fs.Dir.prototype, Symbol.asyncIterator)
 }
 
-module.exports = {
-  name: 'fs',
-  patch (fs, tracer, config) {
+const hookChannel = channel('apm:fs:hook')
+
+hookChannel.subscribe(fs => {
+  fsInstance = fs
+})
+
+class FsPlugin extends Plugin {
+  static get name () {
+    return 'fs'
+  }
+
+  configure (config) {
+    fsConfig = config
+
+    super.configure(config)
+
+    this._unpatch()
+
+    if (this._enabled) {
+      this._patch()
+    }
+  }
+
+  _patch () {
+    const fs = fsInstance
+    const tracer = this.tracer
+    const config = this.config
     const realpathNative = fs.realpath.native
     const realpathSyncNative = fs.realpathSync.native
     patchClassicFunctions.call(this, fs, tracer, config)
@@ -513,18 +543,20 @@ module.exports = {
     if (fs.Dir) {
       patchDirFunctions.call(this, fs, tracer, config)
     }
-    this.wrap(fs, 'createReadStream', createWrapCreateReadStream(config, tracer))
-    this.wrap(fs, 'createWriteStream', createWrapCreateWriteStream(config, tracer))
-    this.wrap(fs, 'existsSync', createWrap(tracer, config, 'existsSync', createPathTags))
-    this.wrap(fs, 'exists', createWrapExists(config, tracer))
+    shimmer.wrap(fs, 'createReadStream', createWrapCreateReadStream(config, tracer))
+    shimmer.wrap(fs, 'createWriteStream', createWrapCreateWriteStream(config, tracer))
+    shimmer.wrap(fs, 'existsSync', createWrap(tracer, config, 'existsSync', createPathTags))
+    shimmer.wrap(fs, 'exists', createWrapExists(config, tracer))
     if (realpathNative) {
       fs.realpath.native = createWrapCb(tracer, config, 'realpath.native', createPathTags)(realpathNative)
     }
     if (realpathSyncNative) {
       fs.realpathSync.native = createWrap(tracer, config, 'realpath.native', createPathTags)(realpathSyncNative)
     }
-  },
-  unpatch (fs) {
+  }
+
+  _unpatch () {
+    const fs = fsInstance
     unpatchClassicFunctions.call(this, fs)
     if (fs.promises) {
       unpatchFileHandle.call(this, fs)
@@ -533,12 +565,14 @@ module.exports = {
     if (fs.Dir) {
       unpatchDirFunctions.call(this, fs)
     }
-    this.unwrap(fs, 'createReadStream')
-    this.unwrap(fs, 'createWriteStream')
-    this.unwrap(fs, 'existsSync')
-    this.unwrap(fs, 'exists')
+    shimmer.unwrap(fs, 'createReadStream')
+    shimmer.unwrap(fs, 'createWriteStream')
+    shimmer.unwrap(fs, 'existsSync')
+    shimmer.unwrap(fs, 'exists')
   }
 }
+
+module.exports = FsPlugin
 
 /** TODO fs functions:
 
