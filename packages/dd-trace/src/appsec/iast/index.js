@@ -15,7 +15,7 @@ function enable (config) {
   setImmediate(() => {
     requestStart.subscribe(onIncomingHttpRequestStart)
   })
-  overheadController.configureOCE(config.iast.oce)
+  overheadController.configure(config.iast)
 }
 
 function disable () {

@@ -11,7 +11,7 @@ describe('Overhead controller', () => {
         iast: true
       }
     })
-    overheadController.configureOCE(config.iast.oce)
+    overheadController.configure(config.iast)
     overheadController._resetGlobalContext()
   })
 

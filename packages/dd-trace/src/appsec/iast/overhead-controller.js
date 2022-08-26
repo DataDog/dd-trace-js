@@ -4,7 +4,7 @@ const OVERHEAD_CONTROLLER_CONTEXT_KEY = 'oce'
 const REPORT_VULNERABILITY = 'REPORT_VULNERABILITY'
 
 const GLOBAL_OCE_CONTEXT = {}
-let oceConfig = {}
+let config = {}
 let availableRequest = 0
 const OPERATIONS = {
   REPORT_VULNERABILITY: {
@@ -17,7 +17,7 @@ const OPERATIONS = {
     },
     name: REPORT_VULNERABILITY,
     initialTokenBucketSize () {
-      return typeof oceConfig.maxContextOperations === 'number' ? oceConfig.maxContextOperations : 2
+      return typeof config.maxContextOperations === 'number' ? config.maxContextOperations : 2
     },
     initContext: function (context) {
       context.tokens[REPORT_VULNERABILITY] = this.initialTokenBucketSize()
@@ -50,8 +50,8 @@ function _resetGlobalContext () {
 
 function acquireRequest (rootSpan) {
   if (availableRequest > 0) {
-    const sampling = oceConfig && typeof oceConfig.requestSampling === 'number'
-      ? oceConfig.requestSampling : 30
+    const sampling = config && typeof config.requestSampling === 'number'
+      ? config.requestSampling : 30
     if (rootSpan.context().toSpanId().slice(-2) <= sampling) {
       availableRequest--
       return true
@@ -61,7 +61,7 @@ function acquireRequest (rootSpan) {
 }
 
 function releaseRequest () {
-  if (availableRequest < oceConfig.maxConcurrentRequest) {
+  if (availableRequest < config.maxConcurrentRequest) {
     availableRequest++
   }
 }
@@ -75,9 +75,9 @@ function initializeRequestContext (iastContext) {
   if (iastContext) iastContext[OVERHEAD_CONTROLLER_CONTEXT_KEY] = _getNewContext()
 }
 
-function configureOCE (cfg) {
-  oceConfig = cfg
-  availableRequest = oceConfig.maxConcurrentRequest
+function configure (cfg) {
+  config = cfg
+  availableRequest = config.maxConcurrentRequest
 }
 
 _resetGlobalContext()
@@ -90,5 +90,5 @@ module.exports = {
   hasQuota,
   acquireRequest,
   releaseRequest,
-  configureOCE
+  configure
 }

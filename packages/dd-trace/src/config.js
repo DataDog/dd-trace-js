@@ -182,7 +182,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     )
 
     const iastOptions = options.experimental && options.experimental.iast
-    const iastOptionsOce = iastOptions && iastOptions.oce
     const DD_IAST_ENABLED = coalesce(
       iastOptions &&
       (iastOptions === true || iastOptions.enabled === true),
@@ -190,24 +189,24 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       false
     )
 
-    const defaultIastOceRequestSampling = 30
-    const iastOceRequestSamplingPercentage = coalesce(
-      parseInt(iastOptionsOce && iastOptionsOce.requestSampling),
-      parseInt(process.env.DD_IAST_OCE_REQUEST_SAMPLING_PERCENTAGE),
-      defaultIastOceRequestSampling
+    const defaultIastRequestSampling = 30
+    const iastRequestSampling = coalesce(
+      parseInt(iastOptions && iastOptions.requestSampling),
+      parseInt(process.env.DD_IAST_REQUEST_SAMPLING),
+      defaultIastRequestSampling
     )
-    const DD_IAST_OCE_REQUEST_SAMPLING_PERCENTAGE = iastOceRequestSamplingPercentage < 0 ||
-      iastOceRequestSamplingPercentage > 100 ? defaultIastOceRequestSampling : iastOceRequestSamplingPercentage
+    const DD_IAST_REQUEST_SAMPLING = iastRequestSampling < 0 ||
+      iastRequestSampling > 100 ? defaultIastRequestSampling : iastRequestSampling
 
-    const DD_IAST_OCE_MAX_CONCURRENT_REQUEST = coalesce(
-      parseInt(iastOptionsOce && iastOptionsOce.maxConcurrentRequest),
-      parseInt(process.env.DD_IAST_OCE_MAX_CONCURRENT_REQUEST),
+    const DD_IAST_MAX_CONCURRENT_REQUEST = coalesce(
+      parseInt(iastOptions && iastOptions.maxConcurrentRequest),
+      parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUEST),
       2
     )
 
-    const DD_IAST_OCE_MAX_CONTEXT_OPERATIONS = coalesce(
-      parseInt(iastOptionsOce && iastOptionsOce.maxContextOperations),
-      parseInt(process.env.DD_IAST_OCE_MAX_CONTEXT_OPERATIONS),
+    const DD_IAST_MAX_CONTEXT_OPERATIONS = coalesce(
+      parseInt(iastOptions && iastOptions.maxContextOperations),
+      parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS),
       2
     )
 
@@ -293,11 +292,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     }
     this.iast = {
       enabled: isTrue(DD_IAST_ENABLED),
-      oce: {
-        requestSampling: DD_IAST_OCE_REQUEST_SAMPLING_PERCENTAGE,
-        maxConcurrentRequest: DD_IAST_OCE_MAX_CONCURRENT_REQUEST,
-        maxContextOperations: DD_IAST_OCE_MAX_CONTEXT_OPERATIONS
-      }
+      requestSampling: DD_IAST_REQUEST_SAMPLING,
+      maxConcurrentRequest: DD_IAST_MAX_CONCURRENT_REQUEST,
+      maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS
     }
     this.isGitUploadEnabled = isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
 

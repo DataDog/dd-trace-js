@@ -98,11 +98,9 @@ tracer.init({
   experimental: {
     iast: {
       enabled: true,
-      oce: {
-        requestSampling: 50,
-        maxConcurrentRequest: 4,
-        maxContextOperations: 30
-      }
+      requestSampling: 50,
+      maxConcurrentRequest: 4,
+      maxContextOperations: 30
     }
   }
 })

@@ -130,9 +130,9 @@ describe('Config', () => {
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '.*'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
     process.env.DD_IAST_ENABLED = 'true'
-    process.env.DD_IAST_OCE_REQUEST_SAMPLING_PERCENTAGE = '40'
-    process.env.DD_IAST_OCE_MAX_CONCURRENT_REQUEST = '3'
-    process.env.DD_IAST_OCE_MAX_CONTEXT_OPERATIONS = '4'
+    process.env.DD_IAST_REQUEST_SAMPLING = '40'
+    process.env.DD_IAST_MAX_CONCURRENT_REQUEST = '3'
+    process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
 
     const config = new Config()
 
@@ -164,9 +164,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
     expect(config).to.have.nested.property('iast.enabled', true)
-    expect(config).to.have.nested.property('iast.oce.requestSampling', 40)
-    expect(config).to.have.nested.property('iast.oce.maxConcurrentRequest', 3)
-    expect(config).to.have.nested.property('iast.oce.maxContextOperations', 4)
+    expect(config).to.have.nested.property('iast.requestSampling', 40)
+    expect(config).to.have.nested.property('iast.maxConcurrentRequest', 3)
+    expect(config).to.have.nested.property('iast.maxContextOperations', 4)
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -245,11 +245,9 @@ describe('Config', () => {
         },
         iast: {
           enabled: true,
-          oce: {
-            requestSampling: 50,
-            maxConcurrentRequest: 4,
-            maxContextOperations: 5
-          }
+          requestSampling: 50,
+          maxConcurrentRequest: 4,
+          maxContextOperations: 5
         }
       },
       appsec: true
@@ -287,9 +285,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('iast.enabled', true)
-    expect(config).to.have.nested.property('iast.oce.requestSampling', 50)
-    expect(config).to.have.nested.property('iast.oce.maxConcurrentRequest', 4)
-    expect(config).to.have.nested.property('iast.oce.maxContextOperations', 5)
+    expect(config).to.have.nested.property('iast.requestSampling', 50)
+    expect(config).to.have.nested.property('iast.maxConcurrentRequest', 4)
+    expect(config).to.have.nested.property('iast.maxContextOperations', 5)
     expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: 0.5, rateLimit: 1000 })
   })
 
@@ -432,9 +430,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
     expect(config).to.have.nested.property('iast.enabled', true)
-    expect(config).to.have.nested.property('iast.oce.requestSampling', 30)
-    expect(config).to.have.nested.property('iast.oce.maxConcurrentRequest', 2)
-    expect(config).to.have.nested.property('iast.oce.maxContextOperations', 2)
+    expect(config).to.have.nested.property('iast.requestSampling', 30)
+    expect(config).to.have.nested.property('iast.maxConcurrentRequest', 2)
+    expect(config).to.have.nested.property('iast.maxContextOperations', 2)
   })
 
   it('should give priority to non-experimental options', () => {
@@ -588,17 +586,15 @@ describe('Config', () => {
     expect(config.telemetryEnabled).to.be.false
   })
 
-  it('should ignore invalid iast.oce.requestSampling', () => {
+  it('should ignore invalid iast.requestSampling', () => {
     const config = new Config({
       experimental: {
         iast: {
-          oce: {
-            requestSampling: 105
-          }
+          requestSampling: 105
         }
       }
     })
-    expect(config.iast.oce.requestSampling).to.be.equals(30)
+    expect(config.iast.requestSampling).to.be.equals(30)
   })
 
   context('auto configuration w/ unix domain sockets', () => {

@@ -18,10 +18,8 @@ describe('IAST Index', () => {
       experimental: {
         iast: {
           enabled: true,
-          oce: {
-            requestSampling: 100,
-            maxConcurrentRequest: 50
-          }
+          requestSampling: 100,
+          maxConcurrentRequest: 50
         }
       }
     })
