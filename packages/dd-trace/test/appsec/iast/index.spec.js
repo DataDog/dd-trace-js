@@ -19,7 +19,7 @@ describe('IAST Index', () => {
         iast: {
           enabled: true,
           requestSampling: 100,
-          maxConcurrentRequest: 50
+          maxConcurrentRequests: 50
         }
       }
     })

@@ -99,7 +99,7 @@ tracer.init({
     iast: {
       enabled: true,
       requestSampling: 50,
-      maxConcurrentRequest: 4,
+      maxConcurrentRequests: 4,
       maxContextOperations: 30
     }
   }

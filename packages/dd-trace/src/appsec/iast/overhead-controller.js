@@ -61,7 +61,7 @@ function acquireRequest (rootSpan) {
 }
 
 function releaseRequest () {
-  if (availableRequest < config.maxConcurrentRequest) {
+  if (availableRequest < config.maxConcurrentRequests) {
     availableRequest++
   }
 }
@@ -77,7 +77,7 @@ function initializeRequestContext (iastContext) {
 
 function configure (cfg) {
   config = cfg
-  availableRequest = config.maxConcurrentRequest
+  availableRequest = config.maxConcurrentRequests
 }
 
 _resetGlobalContext()

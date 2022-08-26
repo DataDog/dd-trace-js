@@ -131,7 +131,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
     process.env.DD_IAST_ENABLED = 'true'
     process.env.DD_IAST_REQUEST_SAMPLING = '40'
-    process.env.DD_IAST_MAX_CONCURRENT_REQUEST = '3'
+    process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
 
     const config = new Config()
@@ -165,7 +165,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 40)
-    expect(config).to.have.nested.property('iast.maxConcurrentRequest', 3)
+    expect(config).to.have.nested.property('iast.maxConcurrentRequests', 3)
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
   })
 
@@ -246,7 +246,7 @@ describe('Config', () => {
         iast: {
           enabled: true,
           requestSampling: 50,
-          maxConcurrentRequest: 4,
+          maxConcurrentRequests: 4,
           maxContextOperations: 5
         }
       },
@@ -286,7 +286,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 50)
-    expect(config).to.have.nested.property('iast.maxConcurrentRequest', 4)
+    expect(config).to.have.nested.property('iast.maxConcurrentRequests', 4)
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
     expect(config).to.have.deep.nested.property('experimental.sampler', { sampleRate: 0.5, rateLimit: 1000 })
   })
@@ -431,7 +431,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
-    expect(config).to.have.nested.property('iast.maxConcurrentRequest', 2)
+    expect(config).to.have.nested.property('iast.maxConcurrentRequests', 2)
     expect(config).to.have.nested.property('iast.maxContextOperations', 2)
   })
 

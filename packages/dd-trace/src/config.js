@@ -198,9 +198,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     const DD_IAST_REQUEST_SAMPLING = iastRequestSampling < 0 ||
       iastRequestSampling > 100 ? defaultIastRequestSampling : iastRequestSampling
 
-    const DD_IAST_MAX_CONCURRENT_REQUEST = coalesce(
-      parseInt(iastOptions && iastOptions.maxConcurrentRequest),
-      parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUEST),
+    const DD_IAST_MAX_CONCURRENT_REQUESTS = coalesce(
+      parseInt(iastOptions && iastOptions.maxConcurrentRequests),
+      parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS),
       2
     )
 
@@ -293,7 +293,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.iast = {
       enabled: isTrue(DD_IAST_ENABLED),
       requestSampling: DD_IAST_REQUEST_SAMPLING,
-      maxConcurrentRequest: DD_IAST_MAX_CONCURRENT_REQUEST,
+      maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS
     }
     this.isGitUploadEnabled = isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
