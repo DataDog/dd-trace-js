@@ -63,7 +63,7 @@ class AgentlessCiVisibilityExporter {
   setUrl (url, coverageUrl = url) {
     try {
       url = new URL(url)
-      coverageUrl = new URL(url)
+      coverageUrl = new URL(coverageUrl)
       this._url = url
       this._coverageUrl = coverageUrl
       this._writer.setUrl(url)
