@@ -55,10 +55,17 @@ describe('dependencies', () => {
       expect(sendData).not.to.have.been.called
     })
 
-    it('should not call to sendData node_modules in path', () => {
+    it('should not call to sendData without node_modules in path', () => {
       const filename = path.join(basepathWithoutNodeModules, 'custom.js')
       dependencies.start(config, application, host)
       moduleLoadStartChannel.publish({ request: 'custom-module', filename })
+      expect(sendData).not.to.have.been.called
+    })
+
+    it('should not call to sendData without node_modules in path when request does not come in message', () => {
+      const filename = path.join(basepathWithoutNodeModules, 'custom.js')
+      dependencies.start(config, application, host)
+      moduleLoadStartChannel.publish({ filename })
       expect(sendData).not.to.have.been.called
     })
 
@@ -88,6 +95,40 @@ describe('dependencies', () => {
       dependencies.start(config, application, host)
       moduleLoadStartChannel.publish({ request, filename })
       expect(sendData).to.have.been.calledOnce
+    })
+
+    it('should call sendData with computed request from filename when it does not come in message', () => {
+      const request = 'custom-module'
+      const packageVersion = '1.0.0'
+      requirePackageVersion.returns(packageVersion)
+      const filename = 'file:' + path.sep + path.sep +
+        path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
+      dependencies.start(config, application, host)
+      moduleLoadStartChannel.publish({ filename })
+      const expectedDependencies = {
+        dependencies: [
+          { name: request, version: packageVersion }
+        ]
+      }
+      expect(sendData)
+        .to.have.been.calledOnceWith(config, application, host, 'app-dependencies-loaded', expectedDependencies)
+    })
+
+    it('should call sendData with computed request from filename with scope when it does not come in message', () => {
+      const request = '@scope/custom-module'
+      const packageVersion = '1.0.0'
+      requirePackageVersion.returns(packageVersion)
+      const filename = 'file:' + path.sep + path.sep +
+        path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
+      dependencies.start(config, application, host)
+      moduleLoadStartChannel.publish({ filename })
+      const expectedDependencies = {
+        dependencies: [
+          { name: request, version: packageVersion }
+        ]
+      }
+      expect(sendData)
+        .to.have.been.calledOnceWith(config, application, host, 'app-dependencies-loaded', expectedDependencies)
     })
 
     it('should call sendData only once with duplicated dependency', () => {

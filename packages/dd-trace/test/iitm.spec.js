@@ -5,9 +5,11 @@ const semver = require('semver')
 const dc = require('diagnostics_channel')
 
 describe('iitm.js', () => {
-  const iitm = () => true
-  const iitmRegister = {
-    register: sinon.stub()
+  let hookFn
+  const iitm = {
+    addHook: (fn) => {
+      hookFn = fn
+    }
   }
   let iitmjs
 
@@ -18,19 +20,17 @@ describe('iitm.js', () => {
       before(() => {
         listener = sinon.stub()
         iitmjs = proxyquire('../src/iitm', {
-          'import-in-the-middle': iitm,
-          'import-in-the-middle/lib/register.js': iitmRegister
+          'import-in-the-middle': iitm
         })
       })
 
       it('should export iitm', () => {
         expect(iitmjs).to.equal(iitm)
-        expect(iitmjs()).to.be.true
       })
 
-      it('should publish in channel on register', () => {
+      it('should publish in channel hook trigger', () => {
         moduleLoadStartChannel.subscribe(listener)
-        iitmRegister.register('name', 'ns', {}, 'specifier')
+        hookFn('moduleName', 'moduleNs')
         expect(listener).to.have.been.calledOnce
       })
 

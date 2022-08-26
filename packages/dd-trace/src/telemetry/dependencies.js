@@ -31,9 +31,10 @@ function waitAndSend (config, application, host) {
 
 function onModuleLoad (data) {
   if (data) {
-    const { filename, request } = data
+    const { filename } = data
+    const request = data.request || getRequestFromFileName(filename)
     if (filename && request && isDependency(filename, request) && !detectedDependencyNames.has(request)) {
-      detectedDependencyNames.add(data.request)
+      detectedDependencyNames.add(request)
       const parseResult = parse(filename)
       if (parseResult) {
         const { name, basedir } = parseResult
@@ -55,6 +56,14 @@ function start (_config, _application, _host) {
   application = _application
   host = _host
   moduleLoadStartChannel.subscribe(onModuleLoad)
+}
+
+function getRequestFromFileName (filename) {
+  if (!filename || filename.indexOf('node_modules') === -1) return
+  const modulePath = filename.split('node_modules/').pop()
+  return modulePath.charAt(0) === '@'
+    ? modulePath.split(path.sep).slice(0, 2).join(path.sep)
+    : modulePath.split(path.sep)[0]
 }
 
 function cleanPath (path) {
