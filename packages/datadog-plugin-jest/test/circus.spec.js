@@ -252,35 +252,15 @@ describe('Plugin', function () {
       })
 
       it('can report code coverage', function (done) {
-        let contentTypeHeader,
-          coveragePayload,
-          contentDisposition,
-          eventContentDisposition,
-          eventPayload
-
-        const scope = nock(`http://127.0.0.1:${agent.server.address().port}`)
+        nock(`http://127.0.0.1:${agent.server.address().port}`)
           .post('/api/v2/citestcov')
           .reply(202, function () {
-            contentTypeHeader = this.req.headers['content-type']
-            contentDisposition = this.req.requestBodyBuffers[1].toString()
-            eventContentDisposition = this.req.requestBodyBuffers[6].toString()
-            eventPayload = this.req.requestBodyBuffers[8].toString()
-            coveragePayload = msgpack.decode(this.req.requestBodyBuffers[3])
-          })
+            const contentTypeHeader = this.req.headers['content-type']
+            const contentDisposition = this.req.requestBodyBuffers[1].toString()
+            const eventContentDisposition = this.req.requestBodyBuffers[6].toString()
+            const eventPayload = this.req.requestBodyBuffers[8].toString()
+            const coveragePayload = msgpack.decode(this.req.requestBodyBuffers[3])
 
-        const options = {
-          ...jestCommonOptions,
-          testRegex: 'jest-coverage.js',
-          coverage: true
-        }
-
-        jestExecutable.runCLI(
-          options,
-          options.projects
-        ).then(() => {
-          // it takes a bit for the payload to be flushed
-          setTimeout(() => {
-            expect(scope.isDone()).to.be.true
             expect(contentTypeHeader).to.contain('multipart/form-data')
             expect(coveragePayload.version).to.equal(1)
             expect(coveragePayload.files.map(file => file.filename))
@@ -293,8 +273,18 @@ describe('Plugin', function () {
             )
             expect(eventPayload).to.equal('{}')
             done()
-          }, 2000)
-        })
+          })
+
+        const options = {
+          ...jestCommonOptions,
+          testRegex: 'jest-coverage.js',
+          coverage: true
+        }
+
+        jestExecutable.runCLI(
+          options,
+          options.projects
+        )
       })
 
       // option available from 26.5.0:
