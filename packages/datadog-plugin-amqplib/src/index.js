@@ -1,14 +1,10 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { Plugin, TracingSubscription } = require('../../dd-trace/src/plugins/plugin')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { TEXT_MAP } = require('../../../ext/formats')
 
-class AmqplibPlugin extends Plugin {
-  static get name () {
-    return 'amqplib'
-  }
-
+class AmqplibCommandSubscription extends TracingSubscription {
   get prefix () {
     return 'apm:amqplib:command'
   }
@@ -17,16 +13,16 @@ class AmqplibPlugin extends Plugin {
     let childOf
 
     if (method === 'basic.deliver') {
-      childOf = extract(this.tracer, message)
+      childOf = extract(this.plugin.tracer, message)
     } else {
       fields.headers = fields.headers || {}
       childOf = store ? store.span : store
     }
 
-    const span = this.tracer.startSpan('amqp.command', {
+    const span = this.plugin.tracer.startSpan('amqp.command', {
       childOf,
       tags: {
-        'service.name': this.config.service || `${this.tracer._service}-amqp`,
+        'service.name': this.plugin.config.service || `${this.plugin.tracer._service}-amqp`,
         'resource.name': getResourceName(method, fields)
       }
     })
@@ -66,21 +62,27 @@ class AmqplibPlugin extends Plugin {
       fields[field] !== undefined && span.setTag(`amqp.${field}`, fields[field])
     })
     if (method === 'basic.deliver') {
-      analyticsSampler.sample(span, this.config.measured, true)
+      analyticsSampler.sample(span, this.plugin.config.measured, true)
     } else {
-      this.tracer.inject(span, TEXT_MAP, fields.headers)
-      analyticsSampler.sample(span, this.config.measured)
+      this.plugin.tracer.inject(span, TEXT_MAP, fields.headers)
+      analyticsSampler.sample(span, this.plugin.config.measured)
     }
 
     return span
   }
 
-  end (_, store) {
-    store.span.finish()
+  end (ctx) {
+    ctx.span.finish()
+  }
+}
+
+class AmqplibPlugin extends Plugin {
+  static get name () {
+    return 'amqplib'
   }
 
-  error ({ error }, store) {
-    store.span.setTag('error', error)
+  get tracingSubscriptions () {
+    return [AmqplibCommandSubscription]
   }
 }
 

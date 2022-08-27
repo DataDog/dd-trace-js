@@ -25,19 +25,21 @@ class Subscription {
 }
 
 class TracingSubscription {
-  constructor (name, plugin, events = ['start', 'end', 'asyncEnd', 'error']) {
-    this._channel = new TracingChannel(name)
+  constructor (plugin) {
+    const events = this.events || ['start', 'end', 'asyncEnd', 'error']
+    this.plugin = plugin
+    this._channel = new TracingChannel(this.prefix)
     this._handlers = {}
     for (const name of events) {
-      if (!plugin[name]) continue
+      if (!this[name]) continue
       switch (name) {
         case 'start':
           this._handlers[name] = (ctx) => {
             const store = storage.getStore()
             if (store && store.noop) return
-            const span = plugin.start(ctx, store)
+            const span = this.start(ctx, store)
             if (!span) {
-              throw new TypeError('plugin.start() must return a span')
+              throw new TypeError(`${this.constructor.name}#start() must return a span`)
             }
             ctx.span = span
             ctx.parentStore = store
@@ -48,7 +50,7 @@ class TracingSubscription {
           this._handlers[name] = (ctx) => {
             const store = storage.getStore()
             if (store && store.noop) return
-            plugin.end(ctx, store)
+            this.end(ctx, store)
             plugin.exit(ctx)
           }
           break
@@ -56,7 +58,7 @@ class TracingSubscription {
           this._handlers[name] = (ctx) => {
             const store = storage.getStore()
             if (store && store.noop) return
-            plugin.asyncEnd(ctx, store)
+            this.asyncEnd(ctx, store)
             // plugin.exit(ctx)
           }
           break
@@ -64,10 +66,22 @@ class TracingSubscription {
           this._handlers[name] = (ctx) => {
             const store = storage.getStore()
             if (store && store.noop) return
-            plugin[name](ctx, store)
+            this[name](ctx, store)
           }
       }
     }
+  }
+
+  end () {
+    // This stub means we always have an implicit end event handler when a prefix is used.
+  }
+
+  asyncEnd () {
+    // This stub means we always have an implicit asyncEnd event handler when a prefix is used.
+  }
+
+  error ({ span, error }) {
+    span.setTag('error', error)
   }
 
   enable () {
@@ -79,14 +93,17 @@ class TracingSubscription {
   }
 }
 
-module.exports = class Plugin {
+class Plugin {
   constructor (tracer) {
     this._subscriptions = []
     this._enabled = false
     this._tracer = tracer
 
-    if (this.prefix) {
-      this._subscriptions.push(new TracingSubscription(this.prefix, this, this.events))
+    if (this.tracingSubscriptions) {
+
+      for (const Sub of this.tracingSubscriptions) {
+        this._subscriptions.push(new Sub(this))
+      }
     }
   }
 
@@ -101,14 +118,6 @@ module.exports = class Plugin {
 
   exit (ctx) {
     storage.enterWith(ctx.parentStore)
-  }
-
-  end () {
-    // This stub means we always have an implicit end event handler when a prefix is used.
-  }
-
-  asyncEnd () {
-    // This stub means we always have an implicit asyncEnd event handler when a prefix is used.
   }
 
   /** Prevents creation of spans here and for all async descendants. */
@@ -145,3 +154,6 @@ module.exports = class Plugin {
     }
   }
 }
+
+Plugin.TracingSubscription = TracingSubscription
+module.exports = Plugin.Plugin = Plugin

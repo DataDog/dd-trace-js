@@ -1,21 +1,17 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { Plugin, TracingSubscription } = require('../../dd-trace/src/plugins/plugin')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-class PGPlugin extends Plugin {
-  static get name () {
-    return 'pg'
-  }
-
+class PGQuerySubscription extends TracingSubscription {
   get prefix () {
     return 'apm:pg:query'
   }
 
   start ({ params, statement }, store) {
-    const service = getServiceName(this.tracer, this.config, params)
+    const service = getServiceName(this.plugin.tracer, this.plugin.config, params)
     const childOf = store ? store.span : store
-    const span = this.tracer.startSpan('pg.query', {
+    const span = this.plugin.tracer.startSpan('pg.query', {
       childOf,
       tags: {
         'service.name': service,
@@ -35,17 +31,23 @@ class PGPlugin extends Plugin {
       })
     }
 
-    analyticsSampler.sample(span, this.config.measured)
+    analyticsSampler.sample(span, this.plugin.config.measured)
     return span
   }
 
   asyncEnd (ctx) {
     ctx.span.finish()
-    this.exit(ctx)
+    this.plugin.exit(ctx)
+  }
+}
+
+class PGPlugin extends Plugin {
+  static get name () {
+    return 'pg'
   }
 
-  error ({ error, span }) {
-    span.setTag('error', error)
+  get tracingSubscriptions () {
+    return [PGQuerySubscription]
   }
 }
 
