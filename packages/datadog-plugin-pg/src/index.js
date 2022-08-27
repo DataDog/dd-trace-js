@@ -4,9 +4,7 @@ const { Plugin, TracingSubscription } = require('../../dd-trace/src/plugins/plug
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 class PGQuerySubscription extends TracingSubscription {
-  get prefix () {
-    return 'apm:pg:query'
-  }
+  prefix = 'apm:pg:query'
 
   start ({ params, statement }, store) {
     const service = getServiceName(this.plugin.tracer, this.plugin.config, params)
@@ -42,12 +40,10 @@ class PGQuerySubscription extends TracingSubscription {
 }
 
 class PGPlugin extends Plugin {
+  tracingSubscriptions = [PGQuerySubscription]
+
   static get name () {
     return 'pg'
-  }
-
-  get tracingSubscriptions () {
-    return [PGQuerySubscription]
   }
 }
 

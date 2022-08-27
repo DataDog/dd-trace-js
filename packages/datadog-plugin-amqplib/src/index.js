@@ -5,9 +5,7 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { TEXT_MAP } = require('../../../ext/formats')
 
 class AmqplibCommandSubscription extends TracingSubscription {
-  get prefix () {
-    return 'apm:amqplib:command'
-  }
+  prefix = 'apm:amqplib:command'
 
   start ({ channel, method, fields, message }, store) {
     let childOf
@@ -77,12 +75,10 @@ class AmqplibCommandSubscription extends TracingSubscription {
 }
 
 class AmqplibPlugin extends Plugin {
+  tracingSubscriptions = [AmqplibCommandSubscription]
+
   static get name () {
     return 'amqplib'
-  }
-
-  get tracingSubscriptions () {
-    return [AmqplibCommandSubscription]
   }
 }
 

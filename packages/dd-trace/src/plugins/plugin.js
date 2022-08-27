@@ -26,8 +26,13 @@ class Subscription {
 
 class TracingSubscription {
   constructor (plugin) {
-    const events = this.events || ['start', 'end', 'asyncEnd', 'error']
     this.plugin = plugin
+    // We do the initialization in a separate function so that public class
+    // fields can be used for the `prefix` value.
+  }
+
+  init () {
+    const events = this.events || ['start', 'end', 'asyncEnd', 'error']
     this._channel = new TracingChannel(this.prefix)
     this._handlers = {}
     for (const name of events) {
@@ -43,7 +48,7 @@ class TracingSubscription {
             }
             ctx.span = span
             ctx.parentStore = store
-            plugin.enter(span, store)
+            this.plugin.enter(span, store)
           }
           break
         case 'end':
@@ -51,7 +56,7 @@ class TracingSubscription {
             const store = storage.getStore()
             if (store && store.noop) return
             this.end(ctx, store)
-            plugin.exit(ctx)
+            this.plugin.exit(ctx)
           }
           break
         case 'asyncEnd':
@@ -70,6 +75,7 @@ class TracingSubscription {
           }
       }
     }
+    return this
   }
 
   end () {
@@ -97,14 +103,8 @@ class Plugin {
   constructor (tracer) {
     this._subscriptions = []
     this._enabled = false
+    this._loadedTracingSubscriptions = false
     this._tracer = tracer
-
-    if (this.tracingSubscriptions) {
-
-      for (const Sub of this.tracingSubscriptions) {
-        this._subscriptions.push(new Sub(this))
-      }
-    }
   }
 
   get tracer () {
@@ -141,6 +141,19 @@ class Plugin {
   }
 
   configure (config) {
+    if (!this._loadedTracingSubscriptions) {
+      // We have to do this bit outside the constructor because otherwise we
+      // won't have access to this property if it's defined as a class field.
+      // We might as well do it here, the first time it's configured, since
+      // p0lugins are unusable unless enabled through `configure()`.
+      if (this.tracingSubscriptions) {
+        for (const Sub of this.tracingSubscriptions) {
+          this._subscriptions.push(new Sub(this).init())
+        }
+      }
+      this._loadedTracingSubscriptions = true
+    }
+
     if (typeof config === 'boolean') {
       config = { enabled: config }
     }
