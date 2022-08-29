@@ -234,7 +234,7 @@ addHook({
 
 addHook({
   name: 'jest-config',
-  versions: ['>=24.8.0']
+  versions: ['24.8.0 - 24.9.0']
 }, (jestConfig) => {
   shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function () {
     const results = readConfigs.apply(this, arguments)
