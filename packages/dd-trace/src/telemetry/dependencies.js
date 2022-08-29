@@ -15,7 +15,7 @@ let timeout, config, application, host
 
 function waitAndSend (config, application, host) {
   if (!timeout) {
-    timeout = setTimeout(() => {
+    timeout = setImmediate(() => {
       timeout = null
       if (savedDependencies.length > 0) {
         const dependencies = savedDependencies.splice(0, 1000)
@@ -24,7 +24,7 @@ function waitAndSend (config, application, host) {
           waitAndSend(config, application, host)
         }
       }
-    }, 1000)
+    })
     timeout.unref()
   }
 }

@@ -2,7 +2,7 @@ const proxyquire = require('proxyquire')
 const path = require('path')
 const dc = require('diagnostics_channel')
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
-const originalSetTimeout = global.setTimeout
+const originalSetImmediate = global.setImmediate
 describe('dependencies', () => {
   describe('start', () => {
     it('should subscribe', () => {
@@ -31,12 +31,12 @@ describe('dependencies', () => {
         './send-data': { sendData },
         '../require-package-json': requirePackageJson
       })
-      global.setTimeout = function (callback) { callback() }
+      global.setImmediate = function (callback) { callback() }
     })
 
     afterEach(() => {
       dependencies.stop()
-      global.setTimeout = originalSetTimeout
+      global.setImmediate = originalSetImmediate
     })
 
     it('should not fail with invalid data', () => {
@@ -148,9 +148,9 @@ describe('dependencies', () => {
       requirePackageJson.returns({ version: '1.0.0' })
       const timeouts = []
       let atLeastOneTimeout = false
-      global.setTimeout = function (callback) {
+      global.setImmediate = function (callback) {
         atLeastOneTimeout = true
-        const timeout = originalSetTimeout(function () {
+        const timeout = originalSetImmediate(function () {
           const cbResult = callback.apply(this, arguments)
           timeouts.splice(timeouts.indexOf(timeout), 1)
           return cbResult
