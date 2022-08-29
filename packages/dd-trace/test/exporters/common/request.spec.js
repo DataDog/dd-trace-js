@@ -2,6 +2,8 @@
 
 const nock = require('nock')
 
+const FormData = require('../../../src/exporters/common/form-data')
+
 describe('request', function () {
   let request
   let log
@@ -49,7 +51,6 @@ describe('request', function () {
           'Content-Type': 'application/octet-stream'
         }
       },
-      true,
       (err, res) => {
         expect(res).to.equal('OK')
         done(err)
@@ -64,7 +65,7 @@ describe('request', function () {
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT'
-    }, true, err => {
+    }, err => {
       expect(err).to.be.instanceof(Error)
       expect(err.message).to.equal('Error from the endpoint: 400 Bad Request')
       done()
@@ -82,7 +83,7 @@ describe('request', function () {
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT'
-    }, true, err => {
+    }, err => {
       expect(err).to.be.instanceof(Error)
       expect(err.message).to.equal('socket hang up')
       done()
@@ -100,7 +101,7 @@ describe('request', function () {
       path: '/path',
       method: 'PUT',
       timeout: 1000
-    }, true, err => {
+    }, err => {
       expect(err).to.be.instanceof(Error)
       expect(err.message).to.equal('socket hang up')
       done()
@@ -120,7 +121,7 @@ describe('request', function () {
       hostname: 'test',
       port: 123,
       path: '/'
-    }, true, (err, res) => {
+    }, (err, res) => {
       expect(res).to.equal('OK')
     })
   })
@@ -135,7 +136,7 @@ describe('request', function () {
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT'
-    }, true, (err, res) => {
+    }, (err, res) => {
       expect(res).to.equal('OK')
       done()
     })
@@ -153,8 +154,26 @@ describe('request', function () {
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT'
-    }, true, (err, res) => {
+    }, (err, res) => {
       expect(err).to.equal(error)
+      done()
+    })
+  })
+
+  it('should be able to send form data', (done) => {
+    nock('http://localhost:80')
+      .put('/path')
+      .reply(200, 'OK')
+
+    const form = new FormData()
+
+    form.append('event', '')
+
+    request(form, {
+      path: '/path',
+      method: 'PUT'
+    }, (err, res) => {
+      expect(res).to.equal('OK')
       done()
     })
   })

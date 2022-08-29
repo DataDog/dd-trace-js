@@ -70,6 +70,12 @@ class Config {
       null
     )
     const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
+
+    const DD_CIVISIBILITY_ITR_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_ITR_ENABLED,
+      false
+    )
+
     const DD_SERVICE = options.service ||
       process.env.DD_SERVICE ||
       process.env.DD_SERVICE_NAME ||
@@ -297,6 +303,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS
     }
     this.isGitUploadEnabled = isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
+    this.isIntelligentTestRunnerEnabled = isTrue(DD_CIVISIBILITY_ITR_ENABLED)
 
     tagger.add(this.tags, {
       service: this.service,

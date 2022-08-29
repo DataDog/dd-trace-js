@@ -23,16 +23,19 @@ class Writer {
     }
   }
 
-  append (spans) {
-    if (!request.writable) return
+  append (payload) {
+    if (!request.writable) {
+      log.debug(() => `Maximum number of active requests reached. Payload discarded: ${JSON.stringify(payload)}`)
+      return
+    }
 
-    log.debug(() => `Encoding trace: ${JSON.stringify(spans)}`)
+    log.debug(() => `Encoding payload: ${JSON.stringify(payload)}`)
 
-    this._encode(spans)
+    this._encode(payload)
   }
 
-  _encode (trace) {
-    this._encoder.encode(trace)
+  _encode (payload) {
+    this._encoder.encode(payload)
   }
 
   setUrl (url) {

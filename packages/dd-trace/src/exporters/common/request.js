@@ -3,10 +3,12 @@
 // TODO: Add test with slow or unresponsive agent.
 // TODO: Add telemetry for things like dropped requests, errors, etc.
 
+const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
 const docker = require('./docker')
 const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
 
 const keepAlive = true
 const maxTotalSockets = 1
@@ -17,10 +19,12 @@ const containerId = docker.id()
 
 let activeRequests = 0
 
-function request (data, options, keepAlive, callback) {
+function request (data, options, callback) {
   if (!options.headers) {
     options.headers = {}
   }
+
+  const isReadable = data instanceof Readable
 
   // The timeout should be kept low to avoid excessive queueing.
   const timeout = options.timeout || 2000
@@ -28,15 +32,15 @@ function request (data, options, keepAlive, callback) {
   const client = isSecure ? https : http
   const dataArray = [].concat(data)
 
-  options.headers['Content-Length'] = byteLength(dataArray)
+  if (!isReadable) {
+    options.headers['Content-Length'] = byteLength(dataArray)
+  }
 
   if (containerId) {
     options.headers['Datadog-Container-ID'] = containerId
   }
 
-  if (keepAlive) {
-    options.agent = isSecure ? httpsAgent : httpAgent
-  }
+  options.agent = isSecure ? httpsAgent : httpAgent
 
   const onResponse = res => {
     let responseData = ''
@@ -59,7 +63,10 @@ function request (data, options, keepAlive, callback) {
   }
 
   const makeRequest = onError => {
-    if (!request.writable) return callback(null)
+    if (!request.writable) {
+      log.debug('Maximum number of active requests reached: payload is discarded.')
+      return callback(null)
+    }
 
     activeRequests++
 
@@ -74,10 +81,14 @@ function request (data, options, keepAlive, callback) {
       onError(err)
     })
 
-    dataArray.forEach(buffer => req.write(buffer))
-
     req.setTimeout(timeout, req.abort)
-    req.end()
+
+    if (isReadable) {
+      data.pipe(req)
+    } else {
+      dataArray.forEach(buffer => req.write(buffer))
+      req.end()
+    }
 
     storage.enterWith(store)
   }

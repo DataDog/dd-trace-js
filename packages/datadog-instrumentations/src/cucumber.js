@@ -7,6 +7,7 @@ const runStartCh = channel('ci:cucumber:run:start')
 const runFinishCh = channel('ci:cucumber:run:finish')
 const runStepStartCh = channel('ci:cucumber:run-step:start')
 const errorCh = channel('ci:cucumber:error')
+const sessionFinishCh = channel('ci:cucumber:session:finish')
 
 // TODO: remove in a later major version
 const patched = new WeakSet()
@@ -127,5 +128,19 @@ addHook({
   versions: ['>=7.3.0'],
   file: 'lib/runtime/test_case_runner.js'
 }, testCaseHook)
+
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=7.0.0'],
+  file: 'lib/runtime/index.js'
+}, (Runtime) => {
+  shimmer.wrap(Runtime.default.prototype, 'start', start => async function () {
+    const result = await start.apply(this, arguments)
+    sessionFinishCh.publish(undefined)
+    return result
+  })
+
+  return Runtime
+})
 
 module.exports = { pickleHook, testCaseHook }
