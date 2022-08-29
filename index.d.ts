@@ -542,6 +542,7 @@ interface Plugins {
   "amqp10": plugins.amqp10;
   "amqplib": plugins.amqplib;
   "aws-sdk": plugins.aws_sdk;
+  "bluebird": plugins.bluebird;
   "bunyan": plugins.bunyan;
   "cassandra-driver": plugins.cassandra_driver;
   "connect": plugins.connect;
