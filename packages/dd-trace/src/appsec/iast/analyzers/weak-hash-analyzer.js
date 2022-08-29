@@ -9,7 +9,7 @@ const INSECURE_HASH_ALGORITHMS = new Set([
 
 class WeakHashAnalyzer extends Analyzer {
   constructor () {
-    super('WEAK_HASH_ANALYZER')
+    super('WEAK_HASH')
     this.addSub('datadog:crypto:hashing:start', ({ algorithm }) => this.analyze(algorithm))
   }
 
