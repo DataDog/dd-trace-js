@@ -50,21 +50,21 @@ const originalTestFns = new WeakMap()
 
 let skippableTests = []
 
-function getAllTests (root) {
+function getTestsFromSuite (root) {
   let tests = []
 
-  function getTestSuiteFromSuite (suite) {
+  function getTests (suite) {
     if (suite.tests) {
       tests = tests.concat(suite.tests)
     }
     if (suite.children) {
       suite.children.forEach(child => {
-        getTestSuiteFromSuite(child)
+        getTests(child)
       })
     }
   }
 
-  getTestSuiteFromSuite(root)
+  getTests(root)
 
   return tests
 }
@@ -86,6 +86,17 @@ function formatJestError (errors) {
   return error
 }
 
+function getTestEnvironmentOptions (config) {
+  // config in newer jest versions has this structure
+  if (config.projectConfig && config.projectConfig.testEnvironmentOptions) {
+    return config.projectConfig.testEnvironmentOptions
+  }
+  if (config.testEnvironmentOptions) {
+    return config.testEnvironmentOptions
+  }
+  return {}
+}
+
 function getWrappedEnvironment (BaseEnvironment) {
   return class DatadogEnvironment extends BaseEnvironment {
     constructor (config, context) {
@@ -96,23 +107,22 @@ function getWrappedEnvironment (BaseEnvironment) {
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
 
-      if (config.projectConfig && config.projectConfig.testEnvironmentOptions) { // newer versions
-        this._ddTestsToSkip = config.projectConfig.testEnvironmentOptions._ddTestsToSkip
-      } else if (config.testEnvironmentOptions) {
-        this._ddTestsToSkip = config.testEnvironmentOptions._ddTestsToSkip
-      }
-      if (this._ddTestsToSkip) {
-        this._ddTestsToSkip = this._ddTestsToSkip.filter(test => test.suite === this.testSuite)
+      const { _ddTestsToSkip } = getTestEnvironmentOptions(config)
+
+      if (_ddTestsToSkip && _ddTestsToSkip.length) {
+        this._ddTestsToSkip = _ddTestsToSkip.filter(({ suite }) => suite === this.testSuite)
       }
     }
 
     async handleTestEvent (event, state) {
-      if (event.name === 'run_start') { // all tests are there. We can mark the skippable tests with test.mode = "skip"
-        const allTests = getAllTests(state.currentDescribeBlock)
-        allTests.forEach(test => {
-          const fullName = getJestTestName(test)
-          const shouldSkip = !!this._ddTestsToSkip.find(test => test.name === fullName)
-          if (shouldSkip) {
+      if (event.name === 'run_start' && this._ddTestsToSkip && this._ddTestsToSkip.length) {
+        // In `run_start` every test in the suite is available
+        const testsInSuite = getTestsFromSuite(state.currentDescribeBlock)
+        testsInSuite.forEach(test => {
+          const testFullName = getJestTestName(test)
+          const shouldSkipTest = !!this._ddTestsToSkip.find(test => test.name === testFullName)
+          if (shouldSkipTest) {
+            // We mark them for skipping
             test.mode = 'skip'
           }
         })
@@ -206,27 +216,32 @@ addHook({
   versions: ['>=24.8.0']
 }, getTestEnvironment)
 
+// from 25.1.0 on, readConfigs becomes async
+addHook({
+  name: 'jest-config',
+  versions: ['>=25.1.0']
+}, jestConfig => {
+  shimmer.wrap(jestConfig, 'readConfigs', readConfigs => async function () {
+    const result = await readConfigs.apply(this, arguments)
+    const { configs } = result
+    configs.forEach(config => {
+      config.testEnvironmentOptions._ddTestsToSkip = skippableTests
+    })
+    return result
+  })
+  return jestConfig
+})
+
 addHook({
   name: 'jest-config',
   versions: ['>=24.8.0']
 }, (jestConfig) => {
-  // readConfigs changes signature for newer versions (it becomes "async"): do I need to take this into account?
   shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function () {
     const results = readConfigs.apply(this, arguments)
-    if (results.then) {
-      results.then((res) => {
-        const { configs } = res
-        configs.forEach(config => {
-          config.testEnvironmentOptions._ddTestsToSkip = skippableTests
-        })
-        return res
-      })
-    } else {
-      const { configs } = results
-      configs.forEach(config => {
-        config.testEnvironmentOptions._ddTestsToSkip = skippableTests
-      })
-    }
+    const { configs } = results
+    configs.forEach(config => {
+      config.testEnvironmentOptions._ddTestsToSkip = skippableTests
+    })
     return results
   })
   return jestConfig
@@ -237,30 +252,20 @@ addHook({
   file: 'build/cli/index.js',
   versions: ['>=24.8.0']
 }, cli => {
-  // TODO: is it always async??
   const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    let onResponse
-    let onError
-
+    let onResponse, onError
     const skippableTestsRequestPromise = new Promise((resolve, reject) => {
       onResponse = resolve
       onError = reject
     })
 
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
     asyncResource.runInAsyncScope(() => {
       skippableTestsCh.publish({ onResponse, onError })
     })
 
     try {
       skippableTests = await skippableTestsRequestPromise
-      skippableTests = skippableTests.map(({ attributes: { name, suite } }) => {
-        return {
-          name,
-          suite
-        }
-      })
     } catch (e) {
       // ignore error
     }

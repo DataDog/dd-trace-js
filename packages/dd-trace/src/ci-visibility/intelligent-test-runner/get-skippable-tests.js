@@ -1,6 +1,7 @@
 const request = require('../../exporters/common/request')
 
 function getSkippableTests ({
+  site,
   env,
   service,
   repositoryUrl,
@@ -11,8 +12,7 @@ function getSkippableTests ({
   runtimeName,
   runtimeVersion
 }, done) {
-  // TODO: get from config (at least site)
-  const url = new URL('https://api.datad0g.com')
+  const url = new URL(`https://api.${site}`)
 
   const options = {
     path: `/api/v2/ci/environment/${env}/service/${service}/tests/skippable`,
@@ -54,10 +54,14 @@ function getSkippableTests ({
     } else {
       let skippableTests = []
       try {
-        skippableTests = JSON.parse(res).data
+        skippableTests = JSON.parse(res)
+          .data
+          .map(({ attributes: { name, suite } }) => ({
+            name,
+            suite
+          }))
         done(null, skippableTests)
       } catch (e) {
-        // ignore errors
         done(e)
       }
     }

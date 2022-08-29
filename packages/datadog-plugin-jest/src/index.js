@@ -97,6 +97,10 @@ class JestPlugin extends Plugin {
     })
 
     this.addSub('ci:jest:test:skippable', ({ onResponse, onError }) => {
+      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
+        onResponse([])
+        return
+      }
       // This means that the git metadata hasn't been sent
       if (!this.tracer._gitMetadataPromise) {
         onError()
@@ -115,6 +119,7 @@ class JestPlugin extends Plugin {
         } = this.testEnvironmentMetadata
 
         getSkippableTests({
+          site: this.config.site,
           env: this.tracer._env,
           service: this.config.service || this.tracer._service,
           repositoryUrl,
@@ -124,14 +129,14 @@ class JestPlugin extends Plugin {
           osArchitecture,
           runtimeName,
           runtimeVersion
-        }, (err, res) => {
+        }, (err, skippableTests) => {
           if (err) {
             onError(err)
           } else {
-            onResponse(res)
+            onResponse(skippableTests)
           }
         })
-      })
+      }).catch(onError)
     })
   }
 

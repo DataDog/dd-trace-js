@@ -121,7 +121,8 @@ module.exports = class PluginManager {
       serviceMapping,
       experimental,
       queryStringObfuscation,
-      isIntelligentTestRunnerEnabled
+      isIntelligentTestRunnerEnabled,
+      site
     } = this._tracerConfig
 
     const sharedConfig = {}
@@ -143,6 +144,8 @@ module.exports = class PluginManager {
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
     }
+
+    sharedConfig.site = site
 
     return sharedConfig
   }

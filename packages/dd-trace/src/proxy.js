@@ -56,17 +56,19 @@ class Tracer extends NoopProxy {
       }
 
       if (config.isGitUploadEnabled) {
-        let resolveCallback
-        this._tracer._gitMetadataPromise = new Promise(resolve => {
-          resolveCallback = resolve
+        let onResponse, onError
+        this._tracer._gitMetadataPromise = new Promise((resolve, reject) => {
+          onResponse = resolve
+          onError = reject
         })
         sendGitMetadata(config.site, (err) => {
           if (err) {
             log.error(`Error uploading git metadata: ${err}`)
+            onError()
           } else {
             log.debug('Successfully uploaded git metadata')
+            onResponse()
           }
-          resolveCallback()
         })
       }
     } catch (e) {
