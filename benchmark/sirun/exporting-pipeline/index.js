@@ -14,7 +14,7 @@ const config = {
   flushMinSpans: 1000,
   protocolVersion: process.env.ENCODER_VERSION,
   stats: {
-    enabled: false
+    enabled: process.env.WITH_STATS === '1'
   }
 }
 const prioritySampler = new PrioritySampler()

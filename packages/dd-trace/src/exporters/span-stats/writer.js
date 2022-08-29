@@ -45,7 +45,7 @@ function makeRequest (data, url, cb) {
 
   log.debug(() => `Request to the intake: ${JSON.stringify(options)}`)
 
-  request(data, options, false, (err, res) => {
+  request(data, options, (err, res) => {
     cb(err, res)
   })
 }

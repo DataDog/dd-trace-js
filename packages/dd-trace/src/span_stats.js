@@ -128,8 +128,8 @@ class TimeBuckets extends Map {
 class SpanStatsProcessor {
   constructor ({
     stats: {
-      enabled,
-      interval
+      enabled = false,
+      interval = 10
     },
     hostname,
     port,
@@ -148,7 +148,7 @@ class SpanStatsProcessor {
     this.hostname = os.hostname()
     this.enabled = enabled
     this.env = env
-    this.tags = tags
+    this.tags = tags || {}
     this.sequence = 0
 
     if (enabled) {
