@@ -6,15 +6,15 @@ const overheadController = require('./overhead-controller')
 const dc = require('diagnostics_channel')
 const { saveIastContext, getIastContext, cleanIastContext } = require('./iast-context')
 
-const requestStart = dc.channel('apm:http:server:request:start')
-const requestClose = dc.channel('apm:http:server:request:close')
+// TODO Change to `apm:http:server:request:[start|close]` when the subscription
+//  order of the callbacks can be enforce
+const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
+const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 
 function enable (config) {
   enableAllAnalyzers()
+  requestStart.subscribe(onIncomingHttpRequestStart)
   requestClose.subscribe(onIncomingHttpRequestEnd)
-  setImmediate(() => {
-    requestStart.subscribe(onIncomingHttpRequestStart)
-  })
   overheadController.configure(config.iast)
 }
 

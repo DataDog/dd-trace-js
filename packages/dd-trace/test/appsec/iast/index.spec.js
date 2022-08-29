@@ -2,8 +2,8 @@ const proxyquire = require('proxyquire')
 const Config = require('../../../src/config')
 const dc = require('diagnostics_channel')
 
-const requestStart = dc.channel('apm:http:server:request:start')
-const requestClose = dc.channel('apm:http:server:request:close')
+const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
+const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 describe('IAST Index', () => {
   let web
   let vulnerabilityReporter
@@ -64,17 +64,14 @@ describe('IAST Index', () => {
   })
 
   describe('enable', () => {
-    it('should subscribe', (done) => {
+    it('should subscribe', () => {
       expect(requestStart.hasSubscribers).to.be.false
       expect(requestClose.hasSubscribers).to.be.false
       IAST.enable(config)
       expect(requestClose.hasSubscribers).to.be.true
-      expect(requestStart.hasSubscribers).to.be.false
-      setImmediate(() => {
-        expect(requestStart.hasSubscribers).to.be.true
-        done()
-      })
+      expect(requestStart.hasSubscribers).to.be.true
     })
+
     it('should enable all analyzers', () => {
       IAST.enable(config)
       expect(analyzers.enableAllAnalyzers).to.have.been.calledOnce
@@ -82,14 +79,11 @@ describe('IAST Index', () => {
   })
 
   describe('disable', () => {
-    it('should unsubscribe', (done) => {
+    it('should unsubscribe', () => {
       IAST.enable(config)
-      setImmediate(() => {
-        IAST.disable()
-        expect(requestStart.hasSubscribers).to.be.false
-        expect(requestClose.hasSubscribers).to.be.false
-        done()
-      })
+      IAST.disable()
+      expect(requestStart.hasSubscribers).to.be.false
+      expect(requestClose.hasSubscribers).to.be.false
     })
     it('should disable all analyzers', () => {
       IAST.disable()
@@ -198,26 +192,23 @@ describe('IAST Index', () => {
   })
 
   describe('cleanIastContext', () => {
-    it('should clean the iast context', (done) => {
+    it('should clean the iast context', () => {
       const store = {}
       const req = {}
       const topContext = { span: {} }
       IAST.enable(config)
-      setImmediate(() => {
-        web.getContext.returns(topContext)
-        overheadController.acquireRequest.returns(true)
-        datadogCore.storage.getStore.returns(store)
-        iastContext.cleanIastContext.returns(true)
-        requestStart.publish({ req })
-        expect(iastContext.saveIastContext)
-          .to.have.been.calledOnceWith(store, topContext, { req: req, rootSpan: topContext.span })
-        datadogCore.storage.getStore.returns({})
-        requestClose.publish({ req })
-        expect(iastContext.cleanIastContext)
-          .to.have.been.calledOnceWith(store, topContext, undefined)
-        expect(overheadController.releaseRequest).to.have.been.calledOnce
-        done()
-      })
+      web.getContext.returns(topContext)
+      overheadController.acquireRequest.returns(true)
+      datadogCore.storage.getStore.returns(store)
+      iastContext.cleanIastContext.returns(true)
+      requestStart.publish({ req })
+      expect(iastContext.saveIastContext)
+        .to.have.been.calledOnceWith(store, topContext, { req: req, rootSpan: topContext.span })
+      datadogCore.storage.getStore.returns({})
+      requestClose.publish({ req })
+      expect(iastContext.cleanIastContext)
+        .to.have.been.calledOnceWith(store, topContext, undefined)
+      expect(overheadController.releaseRequest).to.have.been.calledOnce
     })
   })
 })
