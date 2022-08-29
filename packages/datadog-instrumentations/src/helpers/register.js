@@ -4,7 +4,7 @@ const { channel } = require('diagnostics_channel')
 const path = require('path')
 const semver = require('semver')
 const Hook = require('./hook')
-const { requirePackageVersion } = require('../../../dd-trace/src/require-package-json')
+const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
 
 const hooks = require('./hooks')
@@ -50,7 +50,7 @@ function matchVersion (version, ranges) {
 
 function getVersion (moduleBaseDir) {
   if (moduleBaseDir) {
-    return requirePackageVersion(moduleBaseDir, module)
+    return requirePackageJson(moduleBaseDir, module).version
   }
 }
 

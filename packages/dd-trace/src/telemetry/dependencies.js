@@ -2,7 +2,7 @@
 
 const path = require('path')
 const parse = require('module-details-from-path')
-const { requirePackageVersion } = require('../require-package-json')
+const requirePackageJson = require('../require-package-json')
 const { sendData } = require('./send-data')
 const dc = require('diagnostics_channel')
 
@@ -40,7 +40,7 @@ function onModuleLoad (data) {
         const { name, basedir } = parseResult
         if (basedir) {
           try {
-            const version = requirePackageVersion(cleanPath(basedir), module)
+            const { version } = requirePackageJson(cleanPath(basedir), module)
             savedDependencies.push({ name, version })
             waitAndSend(config, application, host)
           } catch (e) {

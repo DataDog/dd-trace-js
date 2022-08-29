@@ -168,12 +168,12 @@ function npmView (input) {
 function assertIndex (name, version) {
   const index = `'use strict'
 
-const { requirePackageVersion } = require('${requirePackageJsonPath}')
+const requirePackageJson = require('${requirePackageJsonPath}')
 
 module.exports = {
   get (id) { return require(id || '${name}') },
   getPath (id) { return require.resolve(id || '${name}' ) },
-  version () { return requirePackageVersion('${name}', module) }
+  version () { return requirePackageJson('${name}', module).version }
 }
 `
   fs.writeFileSync(filename(name, version, 'index.js'), index)

@@ -30,20 +30,4 @@ function requirePackageJson (name, module) {
   throw new Error(`could not find ${name}/package.json`)
 }
 
-/**
- * Given a package name and a module to start from, find a package's
- * package.json file, parses it, and returns the version on it.
- *
- * Equivalent to require(`${name}/package.json`).version prior to Node 12.
- *
- * @typedef { import('module').Module } Module
- * @param {string} name
- * @param {Module} module
- * @return {string} Version in the parsed package.json
- */
-function requirePackageVersion (name, module) {
-  const pkg = requirePackageJson(name, module)
-  return pkg && pkg.version
-}
-
-module.exports = { requirePackageJson, requirePackageVersion }
+module.exports = requirePackageJson
