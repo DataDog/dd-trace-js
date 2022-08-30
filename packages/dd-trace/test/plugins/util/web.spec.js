@@ -316,7 +316,8 @@ describe('plugins/util/web', () => {
           'x-datadog-parent-id',
           'x-datadog-sampled',
           'x-datadog-sampling-priority',
-          'x-datadog-trace-id'
+          'x-datadog-trace-id',
+          'x-datadog-tags'
         ].join(',')
 
         req.method = 'OPTIONS'
