@@ -227,6 +227,7 @@ addHook({
     configs.forEach(config => {
       config.testEnvironmentOptions._ddTestsToSkip = skippableTests
     })
+    skippableTests = []
     return result
   })
   return jestConfig
@@ -242,6 +243,7 @@ addHook({
     configs.forEach(config => {
       config.testEnvironmentOptions._ddTestsToSkip = skippableTests
     })
+    skippableTests = []
     return results
   })
   return jestConfig

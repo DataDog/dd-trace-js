@@ -29,6 +29,7 @@ const { version: ddTraceVersion } = require('../../../package.json')
 describe('Plugin', function () {
   let jestExecutable
   let jestCommonOptions
+  let tracer
 
   this.timeout(20000)
 
@@ -42,6 +43,7 @@ describe('Plugin', function () {
       })
       delete require.cache[require.resolve(path.join(__dirname, 'env.js'))]
       delete global._ddtrace
+      nock.cleanAll()
       return agent.close({ ritmReset: false, wipe: true })
     })
     beforeEach(function () {
@@ -52,9 +54,9 @@ describe('Plugin', function () {
 
       const loadArguments = [['jest', 'http']]
 
-      // we need the ci visibility init for the coverage test
-      if (this.currentTest.title === 'can report code coverage') {
-        process.env.DD_API_KEY = 'key'
+      if (this.currentTest.parent.title === 'intelligent test runner') {
+        process.env.DD_API_KEY = 'api-key'
+        process.env.DD_APP_KEY = 'app-key'
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
         loadArguments.push({ service: 'test', isAgentlessEnabled: true, isIntelligentTestRunnerEnabled: true })
         loadArguments.push({ experimental: { exporter: 'datadog' } })
@@ -63,6 +65,11 @@ describe('Plugin', function () {
       }
 
       return agent.load(...loadArguments).then(() => {
+        tracer = require('../../dd-trace')
+        // Necessary for ITR calls
+        tracer._tracer._gitMetadataPromise = Promise.resolve()
+        tracer._tracer._env = 'ci'
+
         global.__libraryName__ = moduleName
         global.__libraryVersion__ = version
         jestExecutable = require(`../../../versions/jest@${version}`).get()
@@ -251,42 +258,6 @@ describe('Plugin', function () {
         )
       })
 
-      it('can report code coverage', function (done) {
-        nock(`http://127.0.0.1:${agent.server.address().port}`)
-          .post('/api/v2/citestcov')
-          .reply(202, function () {
-            const contentTypeHeader = this.req.headers['content-type']
-            const contentDisposition = this.req.requestBodyBuffers[1].toString()
-            const eventContentDisposition = this.req.requestBodyBuffers[6].toString()
-            const eventPayload = this.req.requestBodyBuffers[8].toString()
-            const coveragePayload = msgpack.decode(this.req.requestBodyBuffers[3])
-
-            expect(contentTypeHeader).to.contain('multipart/form-data')
-            expect(coveragePayload.version).to.equal(1)
-            expect(coveragePayload.files.map(file => file.filename))
-              .to.include('packages/datadog-plugin-jest/test/sum-coverage-test.js')
-            expect(contentDisposition).to.contain(
-              'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"'
-            )
-            expect(eventContentDisposition).to.contain(
-              'Content-Disposition: form-data; name="event"; filename="event.json"'
-            )
-            expect(eventPayload).to.equal('{}')
-            done()
-          })
-
-        const options = {
-          ...jestCommonOptions,
-          testRegex: 'jest-coverage.js',
-          coverage: true
-        }
-
-        jestExecutable.runCLI(
-          options,
-          options.projects
-        )
-      })
-
       // option available from 26.5.0:
       // https://github.com/facebook/jest/blob/7f2731ef8bebac7f226cfc0d2446854603a557a9/CHANGELOG.md#2650
       if (semver.intersects(version, '>=26.5.0')) {
@@ -312,6 +283,120 @@ describe('Plugin', function () {
           )
         })
       }
+
+      describe('intelligent test runner', () => {
+        it('can report code coverage', function (done) {
+          nock(`http://127.0.0.1:${agent.server.address().port}`)
+            .post('/api/v2/citestcov')
+            .reply(202, function () {
+              const contentTypeHeader = this.req.headers['content-type']
+              const contentDisposition = this.req.requestBodyBuffers[1].toString()
+              const eventContentDisposition = this.req.requestBodyBuffers[6].toString()
+              const eventPayload = this.req.requestBodyBuffers[8].toString()
+              const coveragePayload = msgpack.decode(this.req.requestBodyBuffers[3])
+
+              expect(contentTypeHeader).to.contain('multipart/form-data')
+              expect(coveragePayload.version).to.equal(1)
+              expect(coveragePayload.files.map(file => file.filename))
+                .to.include('packages/datadog-plugin-jest/test/sum-coverage-test.js')
+              expect(contentDisposition).to.contain(
+                'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"'
+              )
+              expect(eventContentDisposition).to.contain(
+                'Content-Disposition: form-data; name="event"; filename="event.json"'
+              )
+              expect(eventPayload).to.equal('{}')
+              done()
+            })
+
+          const options = {
+            ...jestCommonOptions,
+            testRegex: 'jest-coverage.js',
+            coverage: true
+          }
+
+          jestExecutable.runCLI(
+            options,
+            options.projects
+          )
+        })
+
+        it('can skip tests through ITR', (done) => {
+          const scope = nock('https://api.datadoghq.com/')
+            .post('/api/v2/ci/environment/ci/service/test/tests/skippable')
+            .reply(200, JSON.stringify({
+              data: [{
+                attributes: {
+                  name: 'jest-itr will be skipped through ITR',
+                  suite: 'packages/datadog-plugin-jest/test/jest-itr.js'
+                }
+              }]
+            }))
+
+          const tests = [
+            { name: 'jest-itr will be skipped through ITR', status: 'skip' },
+            { name: 'jest-itr will run', status: 'pass' }
+          ]
+
+          const assertionPromises = tests.map(({ name, status }) => {
+            return agent.use(agentlessPayload => {
+              const { events: [{ content: testSpan }] } = agentlessPayload
+              expect(testSpan.meta).to.contain({
+                [TEST_NAME]: name,
+                [TEST_STATUS]: status,
+                [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-itr.js'
+              })
+            })
+          })
+
+          Promise.all(assertionPromises).then(() => {
+            expect(scope.isDone()).to.be.true
+            done()
+          }).catch(done)
+
+          const options = {
+            ...jestCommonOptions,
+            testRegex: 'jest-itr.js'
+          }
+
+          jestExecutable.runCLI(
+            options,
+            options.projects
+          )
+        })
+
+        it('does not skip tests if git metadata is not uploaded', (done) => {
+          tracer._tracer._gitMetadataPromise = Promise.reject(new Error())
+
+          const tests = [
+            { name: 'jest-itr will be skipped through ITR', status: 'pass' },
+            { name: 'jest-itr will run', status: 'pass' }
+          ]
+
+          const assertionPromises = tests.map(({ name, status }) => {
+            return agent.use(agentlessPayload => {
+              const { events: [{ content: testSpan }] } = agentlessPayload
+              expect(testSpan.meta).to.contain({
+                [TEST_NAME]: name,
+                [TEST_STATUS]: status,
+                [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-itr.js'
+              })
+            })
+          })
+
+          Promise.all(assertionPromises).then(() => done()).catch(done)
+
+          const options = {
+            ...jestCommonOptions,
+            testRegex: 'jest-itr.js'
+          }
+
+          jestExecutable.runCLI(
+            options,
+            options.projects
+          )
+        })
+      })
     })
   })
 })

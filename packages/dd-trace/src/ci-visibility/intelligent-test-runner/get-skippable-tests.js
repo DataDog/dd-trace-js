@@ -48,7 +48,7 @@ function getSkippableTests ({
     }
   })
 
-  request(data, options, false, (err, res) => {
+  request(data, options, (err, res) => {
     if (err) {
       done(err)
     } else {
