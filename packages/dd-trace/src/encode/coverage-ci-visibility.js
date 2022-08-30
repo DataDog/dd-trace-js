@@ -19,7 +19,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   }
 
   count () {
-    return this.fileIndex > 1
+    return this.fileIndex - 1
   }
 
   encode (coverage) {
