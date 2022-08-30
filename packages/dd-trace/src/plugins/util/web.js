@@ -373,7 +373,8 @@ function addAllowHeaders (req, res, headers) {
     'x-datadog-parent-id',
     'x-datadog-sampled', // Deprecated, but still accept it in case it's sent.
     'x-datadog-sampling-priority',
-    'x-datadog-trace-id'
+    'x-datadog-trace-id',
+    'x-datadog-tags'
   ]
 
   for (const header of contextHeaders) {
