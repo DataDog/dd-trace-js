@@ -3,6 +3,7 @@
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const log = require('../../dd-trace/src/log')
 
 class OracledbPlugin extends Plugin {
   static get name () {
@@ -14,17 +15,24 @@ class OracledbPlugin extends Plugin {
 
     this.addSub('apm:oracledb:execute:start', ({ query, connAttrs }) => {
       const service = getServiceName(this.tracer, this.config, connAttrs)
-      const connectStringObj = new URL('http://' + connAttrs.connectString)
+      let connectStringObj
+      try {
+        connectStringObj = new URL(`http://${connAttrs.connectString}`)
+      } catch (e) {
+        log.error(e)
+      }
       const tags = {
         'span.kind': 'client',
         'span.type': 'sql',
         'sql.query': query,
-        'db.instance': connectStringObj.pathname.substring(1),
-        'db.hostname': connectStringObj.hostname,
         'db.user': this.config.user,
-        'db.port': connectStringObj.port,
         'resource.name': query,
         'service.name': service
+      }
+      if (typeof connectStringObj !== 'undefined') {
+        tags['db.instance'] = connectStringObj.pathname.substring(1)
+        tags['db.hostname'] = connectStringObj.hostname
+        tags['db.port'] = connectStringObj.port
       }
       const store = storage.getStore()
       const childOf = store ? store.span : store

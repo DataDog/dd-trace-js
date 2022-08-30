@@ -49,6 +49,19 @@ addHook({ name: 'net' }, net => {
         setupListeners(this, 'tcp', asyncResource)
       }
 
+      const emit = this.emit
+      this.emit = function (eventName) {
+        switch (eventName) {
+          case 'ready':
+          case 'connect':
+            return callbackResource.runInAsyncScope(() => {
+              return emit.apply(this, arguments)
+            })
+          default:
+            return emit.apply(this, arguments)
+        }
+      }
+
       try {
         return connect.apply(this, arguments)
       } catch (err) {

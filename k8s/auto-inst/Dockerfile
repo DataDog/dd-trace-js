@@ -5,6 +5,6 @@ ARG npm_pkg
 WORKDIR /operator-build
 COPY . .
 
-RUN npm install ${npm_pkg}
+RUN npm install ./dd-trace.tgz
 
 ADD copy-lib.sh /operator-build/copy-lib.sh

@@ -6,7 +6,7 @@ metadata:
 spec:
   initContainers:
     - name: node-init
-      image: ghcr.io/datadog/dd-trace-js/dd-trace-js-init:LATEST
+      image: ghcr.io/datadog/dd-trace-js/dd-lib-js-init:LATEST
       command: ["sh", "copy-lib.sh", "/autoinstrumentation"]
       volumeMounts:
         - name: autoinstrumentation
