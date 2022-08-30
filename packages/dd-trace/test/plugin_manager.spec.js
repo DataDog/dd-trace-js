@@ -90,7 +90,7 @@ describe('Plugin Manager', () => {
         pm.configurePlugin('two', { foo: 'bar' })
         pm.configure()
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWith({
+        expect(Two.prototype.configure).to.have.been.calledWithMatch({
           enabled: true,
           foo: 'bar'
         })
@@ -101,32 +101,32 @@ describe('Plugin Manager', () => {
       it('works with no config param', () => {
         pm.configurePlugin('two')
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true })
+        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
       })
       it('works with empty object config', () => {
         pm.configurePlugin('two', {})
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true })
+        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
       })
       it('works with "enabled: false" object config', () => {
         pm.configurePlugin('two', { enabled: false })
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWith({ enabled: false })
+        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
       })
       it('works with "enabled: true" object config', () => {
         pm.configurePlugin('two', { enabled: true })
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true })
+        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
       })
       it('works with boolean false', () => {
         pm.configurePlugin('two', false)
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWith({ enabled: false })
+        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
       })
       it('works with boolean true', () => {
         pm.configurePlugin('two', true)
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true })
+        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
       })
     })
     describe('with disabled plugins', () => {
@@ -154,32 +154,32 @@ describe('Plugin Manager', () => {
       it('works with no config param', () => {
         pm.configurePlugin('two')
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true })
+        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
       })
       it('works with empty object config', () => {
         pm.configurePlugin('two', {})
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true })
+        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
       })
       it('works with "enabled: false" object config', () => {
         pm.configurePlugin('two', { enabled: false })
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWith({ enabled: false })
+        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
       })
       it('works with "enabled: true" object config', () => {
         pm.configurePlugin('two', { enabled: true })
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true })
+        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
       })
       it('works with boolean false', () => {
         pm.configurePlugin('two', false)
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWith({ enabled: false })
+        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
       })
       it('works with boolean true', () => {
         pm.configurePlugin('two', true)
         loadChannel.publish({ name: 'two' })
-        expect(Two.prototype.configure).to.have.been.calledWith({ enabled: true })
+        expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: true })
       })
     })
     describe('with env var false', () => {
@@ -253,7 +253,7 @@ describe('Plugin Manager', () => {
       })
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
-      expect(Two.prototype.configure).to.have.been.calledWith({
+      expect(Two.prototype.configure).to.have.been.calledWithMatch({
         enabled: true,
         service: 'deux',
         logInjection: true,
@@ -261,7 +261,7 @@ describe('Plugin Manager', () => {
         clientIpHeaderDisabled: true,
         clientIpHeader: 'x-true-client-ip'
       })
-      expect(Four.prototype.configure).to.have.been.calledWith({
+      expect(Four.prototype.configure).to.have.been.calledWithMatch({
         enabled: true,
         logInjection: true,
         queryStringObfuscation: '.*',
@@ -277,8 +277,8 @@ describe('Plugin Manager', () => {
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
       pm.destroy()
-      expect(Two.prototype.configure).to.have.been.calledWith({ enabled: false })
-      expect(Four.prototype.configure).to.have.been.calledWith({ enabled: false })
+      expect(Two.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
+      expect(Four.prototype.configure).to.have.been.calledWithMatch({ enabled: false })
     })
   })
 })

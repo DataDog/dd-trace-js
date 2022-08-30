@@ -1,7 +1,7 @@
 'use strict'
 
 if (!global._ddtrace) {
-  const TracerProxy = require('./src/proxy')
+  const TracerProxy = require('./src')
 
   Object.defineProperty(global, '_ddtrace', {
     value: new TracerProxy(),

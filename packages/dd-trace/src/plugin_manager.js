@@ -122,6 +122,7 @@ module.exports = class PluginManager {
       queryStringObfuscation,
       clientIpHeaderDisabled,
       clientIpHeader,
+      isIntelligentTestRunnerEnabled,
       experimental
     } = this._tracerConfig
 
@@ -143,10 +144,11 @@ module.exports = class PluginManager {
       sharedConfig.clientIpHeader = clientIpHeader
     }
 
-    // TODO: update so that it's available for every CI Visibility's plugin
-    if (name === 'mocha') {
-      sharedConfig.isAgentlessEnabled = experimental && experimental.exporter === 'datadog'
+    if (experimental) {
+      sharedConfig.isAgentlessEnabled = experimental.exporter === 'datadog'
     }
+
+    sharedConfig.isIntelligentTestRunnerEnabled = isIntelligentTestRunnerEnabled
 
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]

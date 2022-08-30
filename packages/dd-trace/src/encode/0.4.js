@@ -13,7 +13,8 @@ float64Array[0] = -1
 const bigEndian = uInt8Float64Array[7] === 0
 
 class AgentEncoder {
-  constructor (writer) {
+  constructor (writer, limit = SOFT_LIMIT) {
+    this._limit = limit
     this._traceBytes = new Chunk()
     this._stringBytes = new Chunk()
     this._writer = writer
@@ -41,7 +42,8 @@ class AgentEncoder {
     })
 
     // we can go over the soft limit since the agent has a 50MB hard limit
-    if (this._traceBytes.length > SOFT_LIMIT || this._stringBytes.length > SOFT_LIMIT) {
+    if (this._traceBytes.length > this._limit || this._stringBytes.length > this._limit) {
+      log.debug('Buffer went over soft limit, flushing')
       this._writer.flush()
     }
   }
@@ -125,6 +127,18 @@ class AgentEncoder {
     bytes.buffer[offset + 4] = length
   }
 
+  _encodeMapPrefix (bytes, keysLength) {
+    const offset = bytes.length
+
+    bytes.reserve(5)
+    bytes.length += 5
+    bytes.buffer[offset] = 0xdf
+    bytes.buffer[offset + 1] = keysLength >> 24
+    bytes.buffer[offset + 2] = keysLength >> 16
+    bytes.buffer[offset + 3] = keysLength >> 8
+    bytes.buffer[offset + 4] = keysLength
+  }
+
   _encodeByte (bytes, value) {
     bytes.reserve(1)
 
@@ -184,26 +198,14 @@ class AgentEncoder {
 
   _encodeMap (bytes, value) {
     const keys = Object.keys(value)
-    const offset = bytes.length
+    const validKeys = keys.filter(key => typeof value[key] === 'string' || typeof value[key] === 'number')
 
-    bytes.reserve(5)
-    bytes.length += 5
+    this._encodeMapPrefix(bytes, validKeys.length)
 
-    let length = 0
-
-    for (const key of keys) {
-      if (typeof value[key] !== 'string' && typeof value[key] !== 'number') return
-      length++
-
+    for (const key of validKeys) {
       this._encodeString(bytes, key)
       this._encodeValue(bytes, value[key])
     }
-
-    bytes.buffer[offset] = 0xdf
-    bytes.buffer[offset + 1] = length >> 24
-    bytes.buffer[offset + 2] = length >> 16
-    bytes.buffer[offset + 3] = length >> 8
-    bytes.buffer[offset + 4] = length
   }
 
   _encodeValue (bytes, value) {

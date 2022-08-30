@@ -70,6 +70,12 @@ class Config {
       null
     )
     const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
+
+    const DD_CIVISIBILITY_ITR_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_ITR_ENABLED,
+      false
+    )
+
     const DD_SERVICE = options.service ||
       process.env.DD_SERVICE ||
       process.env.DD_SERVICE_NAME ||
@@ -147,6 +153,11 @@ class Config {
       options.experimental && options.experimental.enableGetRumData,
       process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       false
+    )
+
+    const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
+      process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
+      '512'
     )
 
     let appsec = options.appsec || (options.experimental && options.experimental.appsec)
@@ -263,6 +274,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     // Disabled for CI Visibility's agentless
     this.telemetryEnabled = DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED)
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
+    this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
     this.appsec = {
       enabled: isTrue(DD_APPSEC_ENABLED),
       rules: DD_APPSEC_RULES,
@@ -272,6 +284,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP
     }
     this.isGitUploadEnabled = isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
+    this.isIntelligentTestRunnerEnabled = isTrue(DD_CIVISIBILITY_ITR_ENABLED)
 
     tagger.add(this.tags, {
       service: this.service,
