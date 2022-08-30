@@ -1,5 +1,7 @@
 'use strict'
 
+const { expect } = require('chai')
+
 const URL = require('url').URL
 
 describe('Exporter', () => {
@@ -26,6 +28,16 @@ describe('Exporter', () => {
 
     Exporter = proxyquire('../src/exporters/agent', {
       './writer': Writer
+    })
+  })
+
+  it('should pass computed stats header through to writer', () => {
+    const stats = { enabled: true }
+    exporter = new Exporter({ url, flushInterval, stats }, prioritySampler)
+    expect(Writer).to.have.been.calledWithMatch({
+      headers: {
+        'Datadog-Client-Computed-Stats': 'yes'
+      }
     })
   })
 
