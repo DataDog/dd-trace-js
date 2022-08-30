@@ -4,19 +4,10 @@ const pkg = require('../../../package.json')
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('./constants')
-const { ERROR } = require('../../../ext/tags')
 const {
   MEASURED,
-  HTTP_STATUS_CODE,
-  SPAN_TYPE,
-  RESOURCE_NAME,
-  SERVICE_NAME
+  HTTP_STATUS_CODE
 } = require('../../../ext/tags')
-
-function getTag (span, key) {
-  if (!span || !span._spanContext || !span._spanContext._tags) return
-  return span._spanContext._tags[key]
-}
 
 const { SpanStatsExporter } = require('./exporters/span-stats')
 
@@ -41,11 +32,11 @@ class SpanAggStats {
     this.hits++
     this.duration += durationNs
 
-    if (getTag(span, TOP_LEVEL_KEY)) {
+    if (span.metrics[TOP_LEVEL_KEY]) {
       this.topLevelHits++
     }
 
-    if (getTag(span, ERROR)) {
+    if (span.error) {
       this.errors++
       this.errorDistribution.accept(durationNs)
     } else {
@@ -82,12 +73,12 @@ class SpanAggStats {
 
 class SpanAggKey {
   constructor (span) {
-    this.name = ((span || {})._spanContext || {})._name || DEFAULT_SPAN_NAME
-    this.service = getTag(span, SERVICE_NAME) || DEFAULT_SERVICE_NAME
-    this.resource = getTag(span, RESOURCE_NAME) || ''
-    this.type = getTag(span, SPAN_TYPE) || ''
-    this.statusCode = getTag(span, HTTP_STATUS_CODE) || 0
-    this.synthetics = getTag(span, ORIGIN_KEY) === 'synthetics'
+    this.name = span.name || DEFAULT_SPAN_NAME
+    this.service = span.service || DEFAULT_SERVICE_NAME
+    this.resource = span.resource || ''
+    this.type = span.type || ''
+    this.statusCode = span.meta[HTTP_STATUS_CODE] || 0
+    this.synthetics = span.meta[ORIGIN_KEY] === 'synthetics'
   }
 
   toString () {
@@ -144,6 +135,7 @@ class SpanStatsProcessor {
       url
     })
     this.interval = interval
+    this.bucketSizeNs = interval * 1e9
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
     this.enabled = enabled
@@ -175,10 +167,10 @@ class SpanStatsProcessor {
 
   onSpanFinished (span) {
     if (!this.enabled) return
-    if (!getTag(span, TOP_LEVEL_KEY) && !getTag(span, MEASURED)) return
+    if (!span.metrics[TOP_LEVEL_KEY] && !span.metrics[MEASURED]) return
 
-    const spanEnd = span._startTime + span._duration
-    const bucketTime = spanEnd - (spanEnd % (this.interval * 1e3))
+    const spanEndNs = span.startTime + span.duration
+    const bucketTime = spanEndNs - (spanEndNs % this.bucketSizeNs)
 
     this.buckets.forTime(bucketTime)
       .forSpan(span)
@@ -186,7 +178,7 @@ class SpanStatsProcessor {
   }
 
   _serializeBuckets () {
-    const bucketSizeNs = this.interval * 1e9
+    const { bucketSizeNs } = this
     const serializedBuckets = []
 
     for (const [ timeNs, bucket ] of this.buckets.entries()) {
@@ -197,7 +189,7 @@ class SpanStatsProcessor {
       }
 
       serializedBuckets.push({
-        Start: timeNs * 1e6,
+        Start: timeNs,
         Duration: bucketSizeNs,
         Stats: bucketAggStats
       })

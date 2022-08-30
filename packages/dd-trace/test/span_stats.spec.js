@@ -6,14 +6,10 @@ const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 
 const { version } = require('../src/pkg')
 const pkg = require('../../../package.json')
-const { ERROR } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('../src/constants')
 const {
   MEASURED,
-  HTTP_STATUS_CODE,
-  SPAN_TYPE,
-  RESOURCE_NAME,
-  SERVICE_NAME
+  HTTP_STATUS_CODE
 } = require('../../../ext/tags')
 const {
   DEFAULT_SPAN_NAME,
@@ -22,53 +18,48 @@ const {
 
 // Mock spans
 const basicSpan = {
-  _startTime: 14 * 1e9,
-  _duration: 1234,
-  error: false,
-  _spanContext: {
-    _name: 'basic-span',
-    _tags: {
-      [MEASURED]: 0,
-      [HTTP_STATUS_CODE]: 200,
-      [SPAN_TYPE]: 'span-type',
-      [RESOURCE_NAME]: 'resource-name',
-      [SERVICE_NAME]: 'service-name'
-    }
-  }
+  startTime: 12345 * 1e9,
+  duration: 1234,
+  error: 0,
+  name: 'basic-span',
+  service: 'service-name',
+  resource: 'resource-name',
+  type: 'span-type',
+  meta: {
+    [HTTP_STATUS_CODE]: 200
+  },
+  metrics: {}
 }
 
 const topLevelSpan = {
   ...basicSpan,
-  _spanContext: {
-    _name: 'top-level-span',
-    _tags: {
-      ...basicSpan._spanContext._tags,
-      [TOP_LEVEL_KEY]: 1
-    }
+  name: 'top-level-span',
+  metrics: {
+    ...basicSpan.metrics,
+    [TOP_LEVEL_KEY]: 1
   }
 }
 
 const errorSpan = {
   ...basicSpan,
-  _spanContext: {
-    _name: 'error-span',
-    _tags: {
-      ...basicSpan._spanContext._tags,
-      [HTTP_STATUS_CODE]: 500,
-      [MEASURED]: 1,
-      [ERROR]: true
-    }
+  name: 'error-span',
+  error: 1,
+  meta: {
+    ...basicSpan.meta,
+    [HTTP_STATUS_CODE]: 500,
+  },
+  metrics: {
+    ...basicSpan.metrics,
+    [MEASURED]: 1,
   }
 }
 
 const syntheticSpan = {
   ...basicSpan,
-  _spanContext: {
-    _name: 'synthetic-span',
-    _tags: {
-      ...basicSpan._spanContext._tags,
-      [ORIGIN_KEY]: 'synthetics'
-    }
+  name: 'synthetic-span',
+  meta: {
+    ...basicSpan.meta,
+    [ORIGIN_KEY]: 'synthetics'
   }
 }
 
@@ -107,7 +98,7 @@ describe('SpanAggKey', () => {
   })
 
   it('should use sensible defaults', () => {
-    const key = new SpanAggKey({})
+    const key = new SpanAggKey({ meta: {}, metrics: {} })
     expect(key.toString()).to.equal(`${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false`)
   })
 })
@@ -307,7 +298,7 @@ describe('SpanStatsProcessor', () => {
       Env: config.env,
       Version: version,
       Stats: [{
-        Start: 14000000000000000,
+        Start: 12340000000000,
         Duration: 10000000000,
         Stats: [{
           Name: 'top-level-span',

@@ -30,8 +30,9 @@ class SpanProcessor {
 
       for (const span of started) {
         if (span._duration !== undefined) {
-          this._stats.onSpanFinished(span)
-          formatted.push(format(span))
+          const formattedSpan = format(span)
+          this._stats.onSpanFinished(formattedSpan)
+          formatted.push(formattedSpan)
         } else {
           active.push(span)
         }
