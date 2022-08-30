@@ -983,7 +983,8 @@ describe('plugins/util/web', () => {
       const result = web.extractIp(context)
 
       expect(result).to.equal(undefined)
-      expect(log.error).to.have.been.calledOnceWithExactly('Cannot find client IP: multiple IP headers detected x-forwarded-for,forwarded-for')
+      expect(log.error).to.have.been
+        .calledOnceWithExactly('Cannot find client IP: multiple IP headers detected x-forwarded-for,forwarded-for')
     })
 
     it('should return undefined when no socket ip is found', () => {
