@@ -1,5 +1,6 @@
 'use strict'
 
+const log = require('../../../src/log')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const tags = require('../../../../../ext/tags')
