@@ -355,53 +355,36 @@ const web = {
   extractIp (context) {
     const { req, config } = context
 
-    if (config.clientIpHeaderDisabled) return null
+    if (config.clientIpHeaderDisabled) return
 
     const headers = req.headers
-    let foundIp
 
     if (config.clientIpHeader) {
       const header = headers[config.clientIpHeader]
-      if (!header) return null
+      if (!header) return
 
-      foundIp = findFirstIp(header)
-    } else {
-      const foundHeaders = []
-
-      for (let i = 0; i < ipHeaderList.length; i++) {
-        if (headers[ipHeaderList[i]]) {
-          foundHeaders.push(ipHeaderList[i])
-        }
-      }
-
-      if (foundHeaders.length === 0) {
-        foundIp = req.socket && req.socket.remoteAddress
-      } else if (foundHeaders.length === 1) {
-        const header = headers[foundHeaders[0]]
-        const firstIp = findFirstIp(header)
-
-        foundIp = firstIp || (req.socket && req.socket.remoteAddress)
-      } else if (foundHeaders.length > 1) {
-        const tags = {}
-        let headersList = ''
-
-        for (let i = 0; i < foundHeaders.length; i++) {
-          const headerName = foundHeaders[i]
-
-          headersList = headersList ? `${headersList},${headerName}` : headerName
-
-          tags[`${HTTP_REQUEST_HEADERS}.${headerName}`] = headers[headerName]
-        }
-
-        tags['_dd.multiple-ip-headers'] = headersList
-
-        return tags
-      }
+      return findFirstIp(header)
     }
 
-    if (!foundIp) return null
+    const foundHeaders = []
 
-    return { [HTTP_CLIENT_IP]: foundIp }
+    for (let i = 0; i < ipHeaderList.length; i++) {
+      if (headers[ipHeaderList[i]]) {
+        foundHeaders.push(ipHeaderList[i])
+      }
+    }
+    
+    if (foundHeaders.length === 1) {
+      const header = headers[foundHeaders[0]]
+      const firstIp = findFirstIp(header)
+
+      if (firstIp) return firstIp
+    } else if (foundHeaders.length > 1) {
+      log.error(`Cannot find client IP: multiple IP headers detected ${foundHeaders}`)
+      return
+    }
+
+    return req.socket && req.socket.remoteAddress
   },
 
   wrapWriteHead (context) {
@@ -496,13 +479,14 @@ function addRequestTags (context) {
   const { req, span, config } = context
   const url = extractURL(req)
 
-  span.addTags(Object.assign({
+  span.addTags({
     [HTTP_URL]: web.obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
     [SPAN_TYPE]: WEB,
-    [HTTP_USERAGENT]: req.headers['user-agent']
-  }, web.extractIp(context)))
+    [HTTP_USERAGENT]: req.headers['user-agent'],
+    [HTTP_CLIENT_IP]: web.extractIp(context)
+  })
 
   addHeaders(context)
 }
@@ -569,15 +553,12 @@ function getProtocol (req) {
   return 'http'
 }
 
-const v4PrivateCidrs = [
+const privateCidrs = [
   '127.0.0.0/8',
   '10.0.0.0/8',
   '172.16.0.0/12',
   '192.168.0.0/16',
-  '169.254.0.0/16'
-].map(cidr => ip6addr.createCIDR(cidr)).map(cidr => [ cidr.address().toLong(), cidr.broadcast().toLong() ])
-
-const v6PrivateCidrs = [
+  '169.254.0.0/16',
   '::1/128',
   'fec0::/10',
   'fe80::/10',
@@ -603,34 +584,22 @@ function findFirstIp (str) {
       continue
     }
 
-    let isPrivate = false
+    let isPublic = true
 
-    if (ip._attrs.ipv4Mapped || ip._attrs.ipv4Bare) {
-      // optimization to compare ipv4s numerically
-      const numericIp = ((ip._fields[6] << 16) >>> 0) + ip._fields[7]
-
-      for (let j = 0; j < v4PrivateCidrs.length; j++) {
-        if (numericIp >= v4PrivateCidrs[j][0] && numericIp <= v4PrivateCidrs[j][1]) {
-          isPrivate = true
-          break
-        }
-      }
-    } else {
-      for (let j = 0; j < v6PrivateCidrs.length; j++) {
-        if (v6PrivateCidrs[j].contains(ip)) {
-          isPrivate = true
-          break
-        }
+    for (let j = 0; j < privateCidrs.length; j++) {
+      if (privateCidrs[j].contains(ip)) {
+        isPublic = false
+        break
       }
     }
 
-    if (isPrivate) {
-      // it's private, only save the first one found
-      if (!firstPrivateIp) firstPrivateIp = chunk
-    } else {
+    if (isPublic) {
       // it's public, return it immediately
       return chunk
     }
+
+    // it's private, only save the first one found
+    if (!firstPrivateIp) firstPrivateIp = chunk
   }
 
   return firstPrivateIp
