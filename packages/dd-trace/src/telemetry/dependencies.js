@@ -11,12 +11,12 @@ const detectedDependencyNames = new Set()
 const FILE_PATH_START = `file:${path.sep}${path.sep}`
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 
-let timeout, config, application, host
+let immediate, config, application, host
 
 function waitAndSend (config, application, host) {
-  if (!timeout) {
-    timeout = setImmediate(() => {
-      timeout = null
+  if (!immediate) {
+    immediate = setImmediate(() => {
+      immediate = null
       if (savedDependencies.length > 0) {
         const dependencies = savedDependencies.splice(0, 1000)
         sendData(config, application, host, 'app-dependencies-loaded', { dependencies })
@@ -25,7 +25,7 @@ function waitAndSend (config, application, host) {
         }
       }
     })
-    timeout.unref()
+    immediate.unref()
   }
 }
 
