@@ -373,7 +373,7 @@ const web = {
         foundHeaders.push(ipHeaderList[i])
       }
     }
-    
+
     if (foundHeaders.length === 1) {
       const header = headers[foundHeaders[0]]
       const firstIp = findFirstIp(header)
