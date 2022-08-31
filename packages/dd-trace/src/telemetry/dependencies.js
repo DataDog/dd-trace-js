@@ -33,7 +33,7 @@ function waitAndSend (config, application, host) {
 function onModuleLoad (data) {
   if (data) {
     let filename = data.filename
-    if (filename && filename.substring(0, FILE_URI_START.length) === FILE_URI_START) {
+    if (filename && filename.startsWith(FILE_URI_START)) {
       try {
         filename = fileURLToPath(filename)
       } catch (e) {
