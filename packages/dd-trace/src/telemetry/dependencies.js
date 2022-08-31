@@ -9,7 +9,7 @@ const { fileURLToPath } = require('url')
 
 const savedDependencies = []
 const detectedDependencyNames = new Set()
-const FILE_PATH_START = `file://`
+const FILE_URI_START = `file://`
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 
 let immediate, config, application, host
@@ -33,7 +33,7 @@ function waitAndSend (config, application, host) {
 function onModuleLoad (data) {
   if (data) {
     let filename = data.filename
-    if (filename && filename.substring(0, 7) === FILE_PATH_START) {
+    if (filename && filename.substring(0, FILE_URI_START.length) === FILE_URI_START) {
       try {
         filename = fileURLToPath(filename)
       } catch (e) {
@@ -48,7 +48,7 @@ function onModuleLoad (data) {
         const { name, basedir } = parseResult
         if (basedir) {
           try {
-            const { version } = requirePackageJson(cleanPath(basedir), module)
+            const { version } = requirePackageJson(basedir, module)
             savedDependencies.push({ name, version })
             waitAndSend(config, application, host)
           } catch (e) {
@@ -64,13 +64,6 @@ function start (_config, _application, _host) {
   application = _application
   host = _host
   moduleLoadStartChannel.subscribe(onModuleLoad)
-}
-
-function cleanPath (path) {
-  if (path.indexOf(FILE_PATH_START) === 0) {
-    return path.substring(FILE_PATH_START.length)
-  }
-  return path
 }
 
 function isDependency (filename, request) {

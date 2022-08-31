@@ -20,7 +20,7 @@ describe('dependencies', () => {
     const application = 'test'
     const host = 'host'
     const basepathWithoutNodeModules = process.cwd().replace(/node_modules/g, 'nop')
-    const fileURIWithoutNodeModules = 'file:///c/Users/user/project'
+    const fileURIWithoutNodeModules = 'file://c/Users/user/project'
     let dependencies
     let sendData
     let requirePackageJson
