@@ -5,10 +5,11 @@ const parse = require('module-details-from-path')
 const requirePackageJson = require('../require-package-json')
 const { sendData } = require('./send-data')
 const dc = require('diagnostics_channel')
+const { fileURLToPath } = require('url')
 
 const savedDependencies = []
 const detectedDependencyNames = new Set()
-const FILE_PATH_START = `file:${path.sep}${path.sep}`
+const FILE_PATH_START = `file://`
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 
 let immediate, config, application, host
@@ -31,11 +32,18 @@ function waitAndSend (config, application, host) {
 
 function onModuleLoad (data) {
   if (data) {
-    const { filename } = data
-    const request = data.request || getRequestFromFileName(filename)
+    let filename = data.filename
+    if (filename && filename.substring(0, 7) === FILE_PATH_START) {
+      try {
+        filename = fileURLToPath(filename)
+      } catch (e) {
+        // cannot transform url to path
+      }
+    }
+    const parseResult = filename && parse(filename)
+    const request = data.request || (parseResult && parseResult.name)
     if (filename && request && isDependency(filename, request) && !detectedDependencyNames.has(request)) {
       detectedDependencyNames.add(request)
-      const parseResult = parse(filename)
       if (parseResult) {
         const { name, basedir } = parseResult
         if (basedir) {
@@ -56,14 +64,6 @@ function start (_config, _application, _host) {
   application = _application
   host = _host
   moduleLoadStartChannel.subscribe(onModuleLoad)
-}
-
-function getRequestFromFileName (filename) {
-  if (!filename || filename.indexOf('node_modules') === -1) return
-  const modulePath = filename.split('node_modules/').pop()
-  return modulePath.charAt(0) === '@'
-    ? modulePath.split(path.sep).slice(0, 2).join(path.sep)
-    : modulePath.split(path.sep)[0]
 }
 
 function cleanPath (path) {
