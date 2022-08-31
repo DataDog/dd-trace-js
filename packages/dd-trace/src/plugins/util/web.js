@@ -1,7 +1,7 @@
 'use strict'
 
+const net = require('net')
 const uniq = require('lodash.uniq')
-const ip6addr = require('ip6addr')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = 'http_headers'
 const log = require('../../log')
@@ -9,6 +9,7 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
+const CIDRMatcher = require('./cidr_matcher')
 const { incomingHttpRequestEnd } = require('../../appsec/gateway/channels')
 
 const WEB = types.WEB
@@ -554,7 +555,7 @@ function getProtocol (req) {
   return 'http'
 }
 
-const privateCidrs = [
+const privateIPMatcher = new CIDRMatcher([
   '127.0.0.0/8',
   '10.0.0.0/8',
   '172.16.0.0/12',
@@ -565,7 +566,7 @@ const privateCidrs = [
   'fe80::/10',
   'fc00::/7',
   'fd00::/8'
-].map(cidr => ip6addr.createCIDR(cidr))
+])
 
 function findFirstIp (str) {
   let firstPrivateIp
@@ -576,25 +577,9 @@ function findFirstIp (str) {
 
     // TODO: strip port and interface data ?
 
-    let ip
+    if (!net.isIP(chunk)) continue
 
-    try {
-      ip = ip6addr.parse(chunk)
-    } catch {
-      // not a valid ip, skip to next chunk
-      continue
-    }
-
-    let isPublic = true
-
-    for (let j = 0; j < privateCidrs.length; j++) {
-      if (privateCidrs[j].contains(ip)) {
-        isPublic = false
-        break
-      }
-    }
-
-    if (isPublic) {
+    if (!privateIPMatcher.contains(chunk)) {
       // it's public, return it immediately
       return chunk
     }
