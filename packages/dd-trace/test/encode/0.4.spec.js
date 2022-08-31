@@ -119,7 +119,7 @@ describe('encode', () => {
   })
 
   it('should work when the buffer is resized', function () {
-    this.timeout(6000)
+    this.timeout(30000)
     // big enough to trigger a resize
     const dataToEncode = Array(15000).fill({
       trace_id: id('1234abcd1234abcd'),
