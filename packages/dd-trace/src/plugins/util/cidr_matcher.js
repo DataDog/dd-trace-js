@@ -11,13 +11,13 @@ if (semver.satisfies(process.version, '>=14.18.0')) {
 
       for (const cidr of cidrs) {
         const [ address, prefix ] = cidr.split('/')
-        
+
         this.matcher.addSubnet(address, parseInt(prefix), net.isIPv6(address) ? 'ipv6' : 'ipv4')
       }
     }
 
     contains (ip) {
-      this.matcher.check(ip, net.isIPv6(ip) ? 'ipv6' : 'ipv4')
+      return this.matcher.check(ip, net.isIPv6(ip) ? 'ipv6' : 'ipv4')
     }
   }
 } else {
