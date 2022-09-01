@@ -9,23 +9,30 @@ const hasOwn = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop)
 function messageProxy (message, holder) {
   return new Proxy(message, {
     get (target, p, receiver) {
-      switch (p) {
-        case Symbol.toStringTag:
-          return Object.prototype.toString.call(target).slice(8, -1)
-        case 'dd':
-          return holder.dd
-        default:
-          return Reflect.get(target, p, receiver)
+      if (p === Symbol.toStringTag) {
+        return Object.prototype.toString.call(target).slice(8, -1)
       }
+
+      if (shouldOverride(target, p)) {
+        return holder.dd
+      }
+
+      return Reflect.get(target, p, receiver)
     },
     ownKeys (target) {
       const ownKeys = Reflect.ownKeys(target)
-      return hasOwn(target, 'dd') ? ownKeys : ['dd', ...ownKeys]
+      return hasOwn(target, 'dd') || !Reflect.isExtensible(target)
+        ? ownKeys
+        : ['dd', ...ownKeys]
     },
     getOwnPropertyDescriptor (target, p) {
-      return Reflect.getOwnPropertyDescriptor(p === 'dd' ? holder : target, p)
+      return Reflect.getOwnPropertyDescriptor(shouldOverride(target, p) ? holder : target, p)
     }
   })
+}
+
+function shouldOverride (target, p) {
+  return p === 'dd' && !Reflect.has(target, p) && Reflect.isExtensible(target)
 }
 
 module.exports = class LogPlugin extends Plugin {
