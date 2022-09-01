@@ -30,6 +30,6 @@ deploy_to_docker_registries:
     branch: main
     strategy: depend
   variables:
-    IMG_SOURCES: ghcr.io/datadog/dd-trace-js/dd-lib-js-init:$CI_COMMIT_SHA
+    IMG_SOURCES: ghcr.io/datadog/dd-trace-js/dd-lib-js-init:$CI_COMMIT_TAG
     IMG_DESTINATIONS: dd-lib-js-init:$CI_COMMIT_TAG
     IMG_SIGNING: "false"
