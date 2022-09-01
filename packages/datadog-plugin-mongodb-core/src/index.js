@@ -132,11 +132,7 @@ function isObject (val) {
 }
 
 function isBSON (val) {
-  return val && val._bsontype && !isBinary(val)
-}
-
-function isBinary (val) {
-  return val && val._bsontype === 'Binary'
+  return val && val._bsontype && val._bsontype === 'Binary'
 }
 
 module.exports = MongodbCorePlugin
