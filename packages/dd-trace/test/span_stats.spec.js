@@ -46,11 +46,11 @@ const errorSpan = {
   error: 1,
   meta: {
     ...basicSpan.meta,
-    [HTTP_STATUS_CODE]: 500,
+    [HTTP_STATUS_CODE]: 500
   },
   metrics: {
     ...basicSpan.metrics,
-    [MEASURED]: 1,
+    [MEASURED]: 1
   }
 }
 
