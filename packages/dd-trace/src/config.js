@@ -200,6 +200,35 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
     )
 
+    const iastOptions = options.experimental && options.experimental.iast
+    const DD_IAST_ENABLED = coalesce(
+      iastOptions &&
+      (iastOptions === true || iastOptions.enabled === true),
+      process.env.DD_IAST_ENABLED,
+      false
+    )
+
+    const defaultIastRequestSampling = 30
+    const iastRequestSampling = coalesce(
+      parseInt(iastOptions && iastOptions.requestSampling),
+      parseInt(process.env.DD_IAST_REQUEST_SAMPLING),
+      defaultIastRequestSampling
+    )
+    const DD_IAST_REQUEST_SAMPLING = iastRequestSampling < 0 ||
+      iastRequestSampling > 100 ? defaultIastRequestSampling : iastRequestSampling
+
+    const DD_IAST_MAX_CONCURRENT_REQUESTS = coalesce(
+      parseInt(iastOptions && iastOptions.maxConcurrentRequests),
+      parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS),
+      2
+    )
+
+    const DD_IAST_MAX_CONTEXT_OPERATIONS = coalesce(
+      parseInt(iastOptions && iastOptions.maxContextOperations),
+      parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS),
+      2
+    )
+
     const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
       false
@@ -282,6 +311,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       wafTimeout: DD_APPSEC_WAF_TIMEOUT,
       obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP
+    }
+    this.iast = {
+      enabled: isTrue(DD_IAST_ENABLED),
+      requestSampling: DD_IAST_REQUEST_SAMPLING,
+      maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
+      maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS
     }
     this.isGitUploadEnabled = isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
     this.isIntelligentTestRunnerEnabled = isTrue(DD_CIVISIBILITY_ITR_ENABLED)
