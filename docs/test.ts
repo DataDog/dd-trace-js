@@ -45,6 +45,7 @@ tracer.init({
     rateLimit: 500
   },
   experimental: {
+    iast: true,
     b3: true,
     runtimeId: true,
     exporter: 'log',
@@ -93,6 +94,17 @@ tracer.init({
     obfuscatorValueRegex: '.*'
   }
 });
+
+tracer.init({
+  experimental: {
+    iast: {
+      enabled: true,
+      requestSampling: 50,
+      maxConcurrentRequests: 4,
+      maxContextOperations: 30
+    }
+  }
+})
 
 const httpOptions = {
   service: 'test',
