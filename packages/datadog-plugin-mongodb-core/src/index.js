@@ -73,21 +73,21 @@ function truncate (input) {
   return input.slice(0, Math.min(input.length, 10000))
 }
 
-function simplify (input) {
-  return isBSON(input) ? input.toHexString() : input
-}
-
 function shouldSimplify (input) {
-  return !isObject(input) || isBSON(input)
+  return !isObject(input)
 }
 
 function shouldHide (input) {
-  return Buffer.isBuffer(input) || typeof input === 'function'
+  return Buffer.isBuffer(input) || typeof input === 'function' || isBinary(input)
 }
 
 function limitDepth (input) {
+  if (isBSON(input)) {
+    input = input.toJSON()
+  }
+
   if (shouldHide(input)) return '?'
-  if (shouldSimplify(input)) return simplify(input)
+  if (shouldSimplify(input)) return input
 
   const output = {}
   const queue = [{
@@ -104,11 +104,16 @@ function limitDepth (input) {
     for (const key in input) {
       if (typeof input[key] === 'function') continue
 
-      const child = input[key]
+      let child = input[key]
+
+      if (isBSON(child)) {
+        child = child.toJSON()
+      }
+
       if (depth >= 10 || shouldHide(child)) {
         output[key] = '?'
       } else if (shouldSimplify(child)) {
-        output[key] = simplify(child)
+        output[key] = child
       } else {
         queue.push({
           input: child,
@@ -127,7 +132,11 @@ function isObject (val) {
 }
 
 function isBSON (val) {
-  return val && val._bsontype
+  return val && val._bsontype && !isBinary(val)
+}
+
+function isBinary (val) {
+  return val && val._bsontype === 'Binary'
 }
 
 module.exports = MongodbCorePlugin
