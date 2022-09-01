@@ -63,6 +63,7 @@
     "@datadog/pprof": "^1.0.2",
     "@datadog/sketches-js": "^2.0.0",
     "@types/node": ">=12",
+    "cidr-matcher": "^2.1.1",
     "crypto-randomuuid": "^1.0.0",
     "diagnostics_channel": "^1.1.0",
     "ignore": "^5.2.0",

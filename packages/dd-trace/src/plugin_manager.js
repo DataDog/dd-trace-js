@@ -119,14 +119,24 @@ module.exports = class PluginManager {
     const {
       logInjection,
       serviceMapping,
-      experimental,
-      isIntelligentTestRunnerEnabled
+      clientIpHeaderDisabled,
+      clientIpHeader,
+      isIntelligentTestRunnerEnabled,
+      experimental
     } = this._tracerConfig
 
     const sharedConfig = {}
 
     if (logInjection !== undefined) {
       sharedConfig.logInjection = logInjection
+    }
+
+    if (clientIpHeaderDisabled !== undefined) {
+      sharedConfig.clientIpHeaderDisabled = clientIpHeaderDisabled
+    }
+
+    if (clientIpHeader !== undefined) {
+      sharedConfig.clientIpHeader = clientIpHeader
     }
 
     if (experimental) {

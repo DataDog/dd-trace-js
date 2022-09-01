@@ -439,6 +439,8 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | sampleRate      | `DD_TRACE_SAMPLE_RATE`             | -              | Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent. |
 | flushInterval   | -                                  | `2000`         | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | flushMinSpans   | `DD_TRACE_PARTIAL_FLUSH_MIN_SPANS` | `1000`         | Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces. |
+| -               | `DD_TRACE_CLIENT_IP_HEADER_DISABLED` | `false`      | Whether to enable HTTP client IP reporting. Setting this to `true` will disable collection of the `http.client_ip` tag. |
+| -               | `DD_TRACE_CLIENT_IP_HEADER`        | -              | Custom header name to source the `http.client_ip` tag from. |
 | lookup          | -                                  | `dns.lookup()` | Custom function for DNS lookups when sending requests to the agent. |
 | protocolVersion | `DD_TRACE_AGENT_PROTOCOL_VERSION`  | `0.4`          | Protocol version to use for requests to the agent. The version configured must be supported by the agent version installed or all traces will be dropped. |
 | runtimeMetrics  | `DD_RUNTIME_METRICS_EN ABLED`      | `false`        | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
