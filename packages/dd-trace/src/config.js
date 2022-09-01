@@ -160,6 +160,12 @@ class Config {
       '512'
     )
 
+    const DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
+      options.stats,
+      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
+      false
+    )
+
     let appsec = options.appsec || (options.experimental && options.experimental.appsec)
 
     const DD_APPSEC_ENABLED = coalesce(
@@ -320,6 +326,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     }
     this.isGitUploadEnabled = isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
     this.isIntelligentTestRunnerEnabled = isTrue(DD_CIVISIBILITY_ITR_ENABLED)
+    this.stats = {
+      enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
+    }
 
     tagger.add(this.tags, {
       service: this.service,
