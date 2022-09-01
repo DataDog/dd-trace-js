@@ -195,7 +195,7 @@ describe('PrioritySampler', () => {
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
     })
 
-    it('should support a sample rate from a rule on service as string as regex', () => {
+    it('should support a sample rate from a rule on service as regex', () => {
       context._tags['service.name'] = 'test'
 
       prioritySampler = new PrioritySampler('test', {
@@ -240,6 +240,37 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling).to.have.property('priority', USER_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
+    })
+
+    it('should validate JSON rule into an array', () => {
+      context._name = 'test'
+      context._tags['service.name'] = 'test'
+
+      prioritySampler = new PrioritySampler('test', {
+        rules: {
+          name: 'test',
+          sampleRate: 0
+        }
+      })
+
+      expect(prioritySampler.sample(context)).to.not.throw
+      expect(context._sampling).to.have.property('priority', USER_REJECT)
+    })
+
+    it('should validate and ignore non-JSON sampling rules', () => {
+      prioritySampler = new PrioritySampler('test', {
+        rules: 5
+      })
+
+      expect(prioritySampler.sample(context)).to.not.throw
+      expect(context._sampling).to.have.property('priority', AUTO_KEEP)
+    })
+
+    it('should default to no rules if rules are set to null', () => {
+      prioritySampler = new PrioritySampler('test', { rules: null })
+
+      prioritySampler.sample(context)
+      expect(context._sampling).to.have.property('priority', AUTO_KEEP)
     })
 
     it('should fallback to the global sample rate', () => {

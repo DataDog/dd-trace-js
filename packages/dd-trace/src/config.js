@@ -13,6 +13,14 @@ const uuid = require('crypto-randomuuid')
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
 
+function safeJsonParse (input) {
+  try {
+    return JSON.parse(input)
+  } catch (err) {
+    return undefined
+  }
+}
+
 class Config {
   constructor (options) {
     options = options || {}
@@ -233,19 +241,17 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       false
     )
 
-    const sampler = (options.experimental && options.experimental.sampler) || {}
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
-
-    Object.assign(sampler, {
+    const sampler = {
       sampleRate: coalesce(
         options.sampleRate,
-        ingestion.sampleRate,
-        sampler.sampleRate,
-        process.env.DD_TRACE_SAMPLE_RATE
+        process.env.DD_TRACE_SAMPLE_RATE,
+        ingestion.sampleRate
       ),
-      rateLimit: coalesce(ingestion.rateLimit, sampler.rateLimit, process.env.DD_TRACE_RATE_LIMIT)
-    })
+      rateLimit: coalesce(options.rateLimit, process.env.DD_TRACE_RATE_LIMIT, ingestion.rateLimit),
+      rules: coalesce(options.samplingRules, safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES), [])
+    }
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
@@ -281,9 +287,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       traceparent: isTrue(DD_TRACE_TRACEPARENT_ENABLED),
       runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
       exporter: DD_TRACE_EXPORTER,
-      enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED),
-      sampler
+      enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED)
     }
+    this.sampler = sampler
     this.reportHostname = isTrue(coalesce(options.reportHostname, process.env.DD_TRACE_REPORT_HOSTNAME, false))
     this.scope = process.env.DD_TRACE_SCOPE
     this.logLevel = coalesce(

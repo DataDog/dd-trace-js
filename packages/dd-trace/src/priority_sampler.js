@@ -170,6 +170,8 @@ class PrioritySampler {
   }
 
   _normalizeRules (rules, sampleRate) {
+    rules = [].concat(rules || [])
+
     return rules
       .concat({ sampleRate })
       .map(rule => ({ ...rule, sampleRate: parseFloat(rule.sampleRate) }))

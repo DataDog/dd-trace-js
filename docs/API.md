@@ -437,6 +437,8 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | logInjection    | `DD_LOGS_INJECTION`                | `false`        | Enable automatic injection of trace IDs in logs for supported logging libraries. |
 | tags            | `DD_TAGS`                          | `{}`           | Set global tags that should be applied to all spans and metrics. When passed as an environment variable, the format is `key:value,key:value` |
 | sampleRate      | `DD_TRACE_SAMPLE_RATE`             | -              | Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent. |
+| rateLimit       | `DD_TRACE_RATE_LIMIT`              | -              | Global rate limit that is applied on the global sample rate and all rules, and controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent. |
+| samplingRules   | `DD_TRACE_SAMPLING_RULES`          | `[]`           | Sampling rules to apply to priority samplin. Each rule is a JSON, consisting of `service` and `name`, which are regexes to match against a trace's `service` and `name`, and a corresponding `sampleRate`. If not specified, will defer to global sampling rate for all spans. |
 | flushInterval   | -                                  | `2000`         | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | flushMinSpans   | `DD_TRACE_PARTIAL_FLUSH_MIN_SPANS` | `1000`         | Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces. |
 | -               | `DD_TRACE_CLIENT_IP_HEADER_DISABLED` | `false`      | Whether to enable HTTP client IP reporting. Setting this to `true` will disable collection of the `http.client_ip` tag. |
@@ -446,8 +448,6 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | runtimeMetrics  | `DD_RUNTIME_METRICS_EN ABLED`      | `false`        | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
 | profiling       | `DD_PROFILING_ENABLED`             | `false`        | Whether to enable profiling. |
 | reportHostname  | `DD_TRACE_REPORT_HOSTNAME`         | `false`        | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
-| ingestion.sampleRate | `DD_TRACE_SAMPLE_RATE`        | `-`            | Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent. |
-| ingestion.rateLimit  | `DD_TRACE_RATE_LIMIT`         | `-`            | Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent. |
 | experimental    | -                                  | `{}`           | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Please contact us to learn more about the available experimental features. |
 | plugins         | -                                  | `true`         | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
 | -               | `DD_TRACE_DISABLED_PLUGINS`        | -              | A comma-separated string of integration names automatically disabled when tracer is initialized. Environment variable only e.g. `DD_TRACE_DISABLED_PLUGINS=express,dns`. |

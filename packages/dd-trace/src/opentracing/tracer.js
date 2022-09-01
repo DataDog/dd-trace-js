@@ -28,7 +28,7 @@ class DatadogTracer {
     this._tags = config.tags
     this._logInjection = config.logInjection
     this._debug = config.debug
-    this._prioritySampler = new PrioritySampler(config.env, config.experimental.sampler)
+    this._prioritySampler = new PrioritySampler(config.env, config.sampler)
     this._exporter = new Exporter(config, this._prioritySampler)
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config)
     this._url = this._exporter._url
