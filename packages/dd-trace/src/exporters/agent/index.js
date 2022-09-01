@@ -7,9 +7,21 @@ const Writer = require('./writer')
 class AgentExporter {
   constructor (config, prioritySampler) {
     this._config = config
-    const { url, hostname, port, lookup, protocolVersion } = config
+    const { url, hostname, port, lookup, protocolVersion, stats = {} } = config
     this._url = url || new URL(`http://${hostname || 'localhost'}:${port}`)
-    this._writer = new Writer({ url: this._url, prioritySampler, lookup, protocolVersion })
+
+    const headers = {}
+    if (stats.enabled) {
+      headers['Datadog-Client-Computed-Stats'] = 'yes'
+    }
+
+    this._writer = new Writer({
+      url: this._url,
+      prioritySampler,
+      lookup,
+      protocolVersion,
+      headers
+    })
 
     this._timer = undefined
     process.once('beforeExit', () => this._writer.flush())
