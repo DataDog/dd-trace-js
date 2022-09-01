@@ -84,7 +84,7 @@ function request (data, options, callback) {
     req.setTimeout(timeout, req.abort)
 
     if (isReadable) {
-      data.pipe(req)
+      data.pipe(req) // TODO: Validate whether this is actually retriable.
     } else {
       dataArray.forEach(buffer => req.write(buffer))
       req.end()
@@ -93,7 +93,11 @@ function request (data, options, callback) {
     storage.enterWith(store)
   }
 
-  makeRequest(() => makeRequest(callback))
+  // TODO: Figure out why setTimeout is needed to avoid losing the async context
+  // in the retry request before socket.connect() is called.
+  // TODO: Test that this doesn't trace itself on retry when the diagnostics
+  // channel events are available in the agent exporter.
+  makeRequest(() => setTimeout(() => makeRequest(callback)))
 }
 
 function byteLength (data) {
