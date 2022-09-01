@@ -35,8 +35,7 @@ function makeRequest (data, url, cb) {
       'Datadog-Meta-Lang': 'javascript',
       'Datadog-Meta-Tracer-Version': pkg.version,
       'Content-Type': 'application/msgpack'
-    },
-    timeout: 15000
+    }
   }
 
   options.protocol = url.protocol
