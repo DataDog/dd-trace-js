@@ -178,18 +178,6 @@ jobs:
       - store_artifacts:
           path: /tmp/artifacts
 
-  node-ci-visibility-performance-benchmark:
-    docker:
-      - image: node
-    resource_class: medium
-    working_directory: ~/dd-trace-js
-
-    steps:
-      - checkout-and-yarn-install
-      - run:
-          name: CI Visibility Performance Overhead Test
-          command: yarn bench:e2e:ci-visibility
-
   # Node upstream tests
 
   node-upstream-node:
@@ -251,7 +239,6 @@ workflows:
             - node-bench-sirun-plugin-dns
             - node-bench-sirun-plugin-graphql
             - node-bench-sirun-appsec
-      - node-ci-visibility-performance-benchmark
 
   nightly-bench:
     triggers:
