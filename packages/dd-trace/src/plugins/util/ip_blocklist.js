@@ -19,7 +19,7 @@ if (semver.satisfies(process.version, '>=14.18.0')) {
     }
 
     check (address, type) {
-      this.matcher.contains(address)
+      return this.matcher.contains(address)
     }
   }
 }
