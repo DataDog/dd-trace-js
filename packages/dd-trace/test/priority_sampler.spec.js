@@ -184,7 +184,7 @@ describe('PrioritySampler', () => {
       context._tags['service.name'] = 'test'
 
       prioritySampler = new PrioritySampler('test', {
-        samplingRules: [
+        rules: [
           { sampleRate: 0, service: 'foo' },
           { sampleRate: 1, service: 'test' }
         ]
@@ -199,7 +199,7 @@ describe('PrioritySampler', () => {
       context._tags['service.name'] = 'test'
 
       prioritySampler = new PrioritySampler('test', {
-        samplingRules: [
+        rules: [
           { sampleRate: 0, service: /fo/ },
           { sampleRate: 1, service: /tes/ }
         ]
@@ -215,7 +215,7 @@ describe('PrioritySampler', () => {
       context._tags['service.name'] = 'test'
 
       prioritySampler = new PrioritySampler('test', {
-        samplingRules: [
+        rules: [
           { sampleRate: 0, name: 'bar' },
           { sampleRate: 1, name: 'foo' }
         ]
@@ -231,7 +231,7 @@ describe('PrioritySampler', () => {
       context._tags['service.name'] = 'test'
 
       prioritySampler = new PrioritySampler('test', {
-        samplingRules: [
+        rules: [
           { sampleRate: 0, name: /ba/ },
           { sampleRate: 1, name: /fo/ }
         ]
@@ -247,7 +247,7 @@ describe('PrioritySampler', () => {
       context._tags['service.name'] = 'test'
 
       prioritySampler = new PrioritySampler('test', {
-        samplingRules: {
+        rules: {
           name: 'test',
           sampleRate: 0
         }
@@ -259,7 +259,7 @@ describe('PrioritySampler', () => {
 
     it('should validate and ignore non-JSON sampling rules', () => {
       prioritySampler = new PrioritySampler('test', {
-        samplingRules: 5
+        rules: 5
       })
 
       expect(prioritySampler.sample(context)).to.not.throw
@@ -267,7 +267,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should default to no rules if rules are set to null', () => {
-      prioritySampler = new PrioritySampler('test', { samplingRules: null })
+      prioritySampler = new PrioritySampler('test', { rules: null })
 
       prioritySampler.sample(context)
       expect(context._sampling).to.have.property('priority', AUTO_KEEP)
@@ -278,7 +278,7 @@ describe('PrioritySampler', () => {
 
       prioritySampler = new PrioritySampler('test', {
         sampleRate: 1,
-        samplingRules: [
+        rules: [
           { sampleRate: 0, name: 'bar' }
         ]
       })

@@ -20,7 +20,7 @@ function safeJsonParse (input) {
   try {
     return JSON.parse(input)
   } catch (err) {
-    return []
+    return undefined
   }
 }
 
@@ -257,7 +257,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
         ingestion.sampleRate
       ),
       rateLimit: coalesce(options.rateLimit, process.env.DD_TRACE_RATE_LIMIT, ingestion.rateLimit),
-      samplingRules: coalesce(options.samplingRules, safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES || '[]'))
+      rules: coalesce(options.samplingRules, safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES), [])
     }
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
