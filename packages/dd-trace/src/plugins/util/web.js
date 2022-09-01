@@ -569,7 +569,7 @@ const privateCIDRs = [
 ]
 
 const privateIPMatcher = new BlockList()
-  
+
 for (const cidr of privateCIDRs) {
   const [ address, prefix ] = cidr.split('/')
 
