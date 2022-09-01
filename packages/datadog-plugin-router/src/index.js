@@ -61,7 +61,7 @@ class RouterPlugin extends WebPlugin {
       span.setTag('error', error)
     })
 
-    this.addSub(`apm:http:server:request:close`, ({ req }) => {
+    this.addSub(`apm:http:server:request:finish`, ({ req }) => {
       const context = this._contexts.get(req)
 
       if (!context) return

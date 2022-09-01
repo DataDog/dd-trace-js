@@ -9,7 +9,7 @@ const shimmer = require('../../../datadog-shimmer')
 
 const startServerCh = channel('apm:http:server:request:start')
 const errorServerCh = channel('apm:http:server:request:error')
-const closeServerCh = channel('apm:http:server:request:close')
+const finishServerCh = channel('apm:http:server:request:finish')
 
 addHook({ name: 'https' }, http => {
   // http.ServerResponse not present on https
@@ -30,7 +30,7 @@ function wrapResponseEmit (emit) {
     }
 
     if (eventName === 'close') {
-      closeServerCh.publish({ req: this.req })
+      finishServerCh.publish({ req: this.req })
     }
 
     return emit.apply(this, arguments)

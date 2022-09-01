@@ -35,7 +35,7 @@ class HttpServerPlugin extends Plugin {
       web.addError(error)
     })
 
-    this.addSub('apm:http:server:request:close', ({ req }) => {
+    this.addSub('apm:http:server:request:finish', ({ req }) => {
       const context = web.getContext(req)
 
       if (!context || !context.res) return // Not created by a http.Server instance.
