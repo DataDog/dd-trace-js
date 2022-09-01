@@ -132,6 +132,27 @@ function describeWriter (protocolVersion) {
       })
     })
 
+    it('should pass through headers', (done) => {
+      const headers = {
+        'My-Header': 'bar'
+      }
+      writer = new Writer({ url, prioritySampler, protocolVersion, headers })
+      encoder.count.returns(2)
+      encoder.makePayload.returns([Buffer.from('data')])
+      writer.flush(() => {
+        expect(request.getCall(0).args[1].headers).to.eql({
+          ...headers,
+          'Content-Type': 'application/msgpack',
+          'Datadog-Meta-Lang': 'nodejs',
+          'Datadog-Meta-Lang-Version': process.version,
+          'Datadog-Meta-Lang-Interpreter': 'v8',
+          'Datadog-Meta-Tracer-Version': 'tracerVersion',
+          'X-Datadog-Trace-Count': '2'
+        })
+        done()
+      })
+    })
+
     it('should log request errors', done => {
       const error = new Error('boom')
 

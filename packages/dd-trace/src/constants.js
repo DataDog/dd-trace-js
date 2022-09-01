@@ -5,6 +5,7 @@ module.exports = {
   ANALYTICS_KEY: '_dd1.sr.eausr',
   ORIGIN_KEY: '_dd.origin',
   HOSTNAME_KEY: '_dd.hostname',
+  TOP_LEVEL_KEY: '_dd.top_level',
   SAMPLING_RULE_DECISION: '_dd.rule_psr',
   SAMPLING_LIMIT_DECISION: '_dd.limit_psr',
   SAMPLING_AGENT_DECISION: '_dd.agent_psr',

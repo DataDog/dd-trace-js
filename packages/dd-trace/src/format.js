@@ -12,6 +12,7 @@ const SAMPLING_AGENT_DECISION = constants.SAMPLING_AGENT_DECISION
 const MEASURED = tags.MEASURED
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
+const TOP_LEVEL_KEY = constants.TOP_LEVEL_KEY
 
 const map = {
   'service.name': 'service',
@@ -110,6 +111,7 @@ function extractRootTags (trace, span) {
   addTag({}, trace.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
   addTag({}, trace.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
   addTag({}, trace.metrics, SAMPLING_AGENT_DECISION, context._trace[SAMPLING_AGENT_DECISION])
+  addTag({}, trace.metrics, TOP_LEVEL_KEY, 1)
 }
 
 function extractChunkTags (trace, span) {
