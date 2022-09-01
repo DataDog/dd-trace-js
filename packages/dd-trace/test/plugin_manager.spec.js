@@ -246,18 +246,24 @@ describe('Plugin Manager', () => {
     it('observes configuration options', () => {
       pm.configure({
         serviceMapping: { two: 'deux' },
-        logInjection: true
+        logInjection: true,
+        clientIpHeaderDisabled: true,
+        clientIpHeader: 'x-true-client-ip'
       })
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
       expect(Two.prototype.configure).to.have.been.calledWithMatch({
         enabled: true,
         service: 'deux',
-        logInjection: true
+        logInjection: true,
+        clientIpHeaderDisabled: true,
+        clientIpHeader: 'x-true-client-ip'
       })
       expect(Four.prototype.configure).to.have.been.calledWithMatch({
         enabled: true,
-        logInjection: true
+        logInjection: true,
+        clientIpHeaderDisabled: true,
+        clientIpHeader: 'x-true-client-ip'
       })
     })
   })
