@@ -29,7 +29,7 @@ function wrapResponseEmit (emit) {
       return emit.apply(this, arguments)
     }
 
-    if (eventName === 'finish') {
+    if (eventName === 'close') {
       finishServerCh.publish({ req: this.req })
     }
 

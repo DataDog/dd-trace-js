@@ -359,6 +359,32 @@ export declare interface TracerOptions {
      * @default false
      */
     enableGetRumData?: boolean
+
+    /**
+     * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
+     */
+    iast?: boolean  | {
+      /**
+       * Whether to enable IAST.
+       * @default false
+       */
+      enabled?: boolean,
+      /**
+       * Controls the percentage of requests that iast will analyze
+       * @default 30
+       */
+      requestSampling?: number,
+      /**
+       * Controls how many request can be analyzing code vulnerabilities at the same time
+       * @default 2
+       */
+      maxConcurrentRequests?: number,
+      /**
+       * Controls how many code vulnerabilities can be detected in the same request
+       * @default 2
+       */
+      maxContextOperations?: number
+    }
   };
 
   /**
