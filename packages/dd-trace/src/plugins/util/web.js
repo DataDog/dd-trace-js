@@ -9,7 +9,7 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
-const CIDRMatcher = require('./cidr_matcher')
+const BlockList = require('./ip_blocklist')
 const { incomingHttpRequestEnd } = require('../../appsec/gateway/channels')
 
 const WEB = types.WEB
@@ -555,7 +555,7 @@ function getProtocol (req) {
   return 'http'
 }
 
-const privateIPMatcher = new CIDRMatcher([
+const privateCIDRs = [
   '127.0.0.0/8',
   '10.0.0.0/8',
   '172.16.0.0/12',
@@ -566,7 +566,15 @@ const privateIPMatcher = new CIDRMatcher([
   'fe80::/10',
   'fc00::/7',
   'fd00::/8'
-])
+]
+
+const privateIPMatcher = new BlockList()
+  
+for (const cidr of privateCIDRs) {
+  const [ address, prefix ] = cidr.split('/')
+
+  privateIPMatcher.addSubnet(address, parseInt(prefix), net.isIPv6(address) ? 'ipv6' : 'ipv4')
+}
 
 function findFirstIp (str) {
   let firstPrivateIp
@@ -577,9 +585,10 @@ function findFirstIp (str) {
 
     // TODO: strip port and interface data ?
 
-    if (!net.isIP(chunk)) continue
+    const type = net.isIP(chunk)
+    if (!type) continue
 
-    if (!privateIPMatcher.contains(chunk)) {
+    if (!privateIPMatcher.check(chunk, type === 6 ? 'ipv6' : 'ipv4')) {
       // it's public, return it immediately
       return chunk
     }
