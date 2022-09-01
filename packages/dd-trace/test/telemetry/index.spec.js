@@ -1,11 +1,10 @@
 'use strict'
 
-const tracerVersion = require('../../../package.json').version
+const tracerVersion = require('../../../../package.json').version
 const proxyquire = require('proxyquire')
-const requirePackageJson = require('../src/require-package-json')
 const http = require('http')
 const { once } = require('events')
-const { storage } = require('../../datadog-core')
+const { storage } = require('../../../datadog-core')
 
 let traceAgent
 
@@ -42,8 +41,8 @@ describe('telemetry', () => {
 
     traceAgent.reqs = []
 
-    telemetry = proxyquire('../src/telemetry', {
-      './exporters/common/docker': {
+    telemetry = proxyquire('../../src/telemetry', {
+      '../exporters/common/docker': {
         id () {
           return 'test docker id'
         }
@@ -95,7 +94,7 @@ describe('telemetry', () => {
           { name: 'foo2', enabled: true, auto_enabled: true },
           { name: 'bar2', enabled: false, auto_enabled: true }
         ],
-        dependencies: getMochaDeps()
+        dependencies: []
       }).and.to.have.property('configuration').that.include.members([
         { name: 'telemetryEnabled', value: true },
         { name: 'hostname', value: 'localhost' },
@@ -202,16 +201,4 @@ async function testSeq (seqId, reqType, validatePayload) {
   expect([1, 0, -1].includes(Math.floor(Date.now() / 1000) - req.body.tracer_time)).to.be.true
 
   validatePayload(req.body.payload)
-}
-
-// Since the entrypoint file is actually a mocha script, the deps will be mocha's deps
-function getMochaDeps () {
-  const mochaPkgJsonFile = require.resolve('mocha/package.json')
-  require('mocha')
-  const mochaModule = require.cache[require.resolve('mocha')]
-  const mochaDeps = require(mochaPkgJsonFile).dependencies
-  return Object.keys(mochaDeps).map((name) => ({
-    name,
-    version: requirePackageJson(name, mochaModule).version
-  }))
 }
