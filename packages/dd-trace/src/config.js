@@ -327,7 +327,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.isGitUploadEnabled = isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
     this.isIntelligentTestRunnerEnabled = isTrue(DD_CIVISIBILITY_ITR_ENABLED)
     this.stats = {
-      enabled: DD_TRACE_STATS_COMPUTATION_ENABLED
+      enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
     }
 
     tagger.add(this.tags, {
