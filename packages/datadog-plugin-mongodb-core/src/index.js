@@ -78,7 +78,7 @@ function shouldSimplify (input) {
 }
 
 function shouldHide (input) {
-  return Buffer.isBuffer(input) || typeof input === 'function'
+  return Buffer.isBuffer(input) || typeof input === 'function' || isBinary(input)
 }
 
 function limitDepth (input) {
@@ -132,7 +132,11 @@ function isObject (val) {
 }
 
 function isBSON (val) {
-  return val && val._bsontype && val._bsontype === 'Binary'
+  return val && val._bsontype && !isBinary(val)
+}
+
+function isBinary (val) {
+  return val && val._bsontype === 'Binary'
 }
 
 module.exports = MongodbCorePlugin
