@@ -421,6 +421,18 @@ opentracing.initGlobalTracer(tracer)</code></pre>
 							<td>Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent.</td>
 						</tr>
 						<tr>
+							<td>rateLimit</td>
+							<td><code>DD_TRACE_RATE_LIMIT</code></td>
+							<td>-</td>
+							<td>Global rate limit that is applied on the global sample rate and all rules, and controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent.</td>
+						</tr>
+						<tr>
+							<td>samplingRules</td>
+							<td><code>DD_TRACE_SAMPLING_RULES</code></td>
+							<td><code>[]</code></td>
+							<td>Sampling rules to apply to priority samplin. Each rule is a JSON, consisting of <code>service</code> and <code>name</code>, which are regexes to match against a trace&#39;s <code>service</code> and <code>name</code>, and a corresponding <code>sampleRate</code>. If not specified, will defer to global sampling rate for all spans.</td>
+						</tr>
+						<tr>
 							<td>flushInterval</td>
 							<td>-</td>
 							<td><code>2000</code></td>
@@ -437,6 +449,18 @@ opentracing.initGlobalTracer(tracer)</code></pre>
 							<td><code>DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP</code></td>
 							<td>-</td>
 							<td>A regex to redact sensitive data from incoming requests&#39; querystring reported in the <code>http.url</code> tag (matches will be replaced with <code>&lt;redacted&gt;</code>). Can be an empty string to disable redaction or <code>.*</code> to redact all querystring. <strong>WARNING: this regex will execute for every incoming request on an unsafe input (url), please make sure you use a safe regex.</strong></td>
+						</tr>
+						<tr>
+							<td>-</td>
+							<td><code>DD_TRACE_CLIENT_IP_HEADER_DISABLED</code></td>
+							<td><code>false</code></td>
+							<td>Whether to enable HTTP client IP reporting. Setting this to <code>true</code> will disable collection of the <code>http.client_ip</code> tag.</td>
+						</tr>
+						<tr>
+							<td>-</td>
+							<td><code>DD_TRACE_CLIENT_IP_HEADER</code></td>
+							<td>-</td>
+							<td>Custom header name to source the <code>http.client_ip</code> tag from.</td>
 						</tr>
 						<tr>
 							<td>lookup</td>
@@ -467,18 +491,6 @@ opentracing.initGlobalTracer(tracer)</code></pre>
 							<td><code>DD_TRACE_REPORT_HOSTNAME</code></td>
 							<td><code>false</code></td>
 							<td>Whether to report the system&#39;s hostname for each trace. When disabled, the hostname of the agent will be used instead.</td>
-						</tr>
-						<tr>
-							<td>ingestion.sampleRate</td>
-							<td><code>DD_TRACE_SAMPLE_RATE</code></td>
-							<td><code>-</code></td>
-							<td>Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent.</td>
-						</tr>
-						<tr>
-							<td>ingestion.rateLimit</td>
-							<td><code>DD_TRACE_RATE_LIMIT</code></td>
-							<td><code>-</code></td>
-							<td>Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent.</td>
 						</tr>
 						<tr>
 							<td>experimental</td>
