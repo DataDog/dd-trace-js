@@ -64,7 +64,7 @@ describe('Plugin', () => {
         agent
           .use(traces => {
             expect(app).not.to.have.been.called // request should be cancelled before call to app
-            expect(traces[0][0]).to.have.property('name', 'web.request')
+            expect(traces[0][0]).to.have.property('name', 'http.request')
             expect(traces[0][0]).to.have.property('service', 'test')
             expect(traces[0][0]).to.have.property('type', 'web')
             expect(traces[0][0]).to.have.property('resource', 'GET')
