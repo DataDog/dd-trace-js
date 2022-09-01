@@ -1,5 +1,6 @@
 'use strict'
 
+const log = require('../../../src/log')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const tags = require('../../../../../ext/tags')
@@ -20,6 +21,7 @@ const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
+const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 
 describe('plugins/util/web', () => {
   let web
@@ -205,6 +207,7 @@ describe('plugins/util/web', () => {
         req.method = 'GET'
         req.url = '/user/123'
         req.headers['user-agent'] = 'curl'
+        req.headers['x-forwarded-for'] = '8.8.8.8'
         res.statusCode = '200'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
@@ -217,7 +220,8 @@ describe('plugins/util/web', () => {
             [HTTP_URL]: 'http://localhost/user/123',
             [HTTP_METHOD]: 'GET',
             [SPAN_KIND]: SERVER,
-            [HTTP_USERAGENT]: 'curl'
+            [HTTP_USERAGENT]: 'curl',
+            [HTTP_CLIENT_IP]: '8.8.8.8'
           })
         })
       })
@@ -388,6 +392,7 @@ describe('plugins/util/web', () => {
       it('should support https', () => {
         req.url = '/user/123'
         req.headers['user-agent'] = 'curl'
+        req.headers['x-forwarded-for'] = '8.8.8.8'
         req.socket = { encrypted: true }
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
@@ -400,7 +405,8 @@ describe('plugins/util/web', () => {
             [HTTP_URL]: 'https://localhost/user/123',
             [HTTP_METHOD]: 'GET',
             [SPAN_KIND]: SERVER,
-            [HTTP_USERAGENT]: 'curl'
+            [HTTP_USERAGENT]: 'curl',
+            [HTTP_CLIENT_IP]: '8.8.8.8'
           })
         })
       })
@@ -413,7 +419,8 @@ describe('plugins/util/web', () => {
           ':authority': 'localhost',
           ':method': 'GET',
           ':path': '/user/123',
-          'user-agent': 'curl'
+          'user-agent': 'curl',
+          'x-forwarded-for': '8.8.8.8'
         }
         res.statusCode = '200'
 
@@ -427,7 +434,8 @@ describe('plugins/util/web', () => {
             [HTTP_URL]: 'https://localhost/user/123',
             [HTTP_METHOD]: 'GET',
             [SPAN_KIND]: SERVER,
-            [HTTP_USERAGENT]: 'curl'
+            [HTTP_USERAGENT]: 'curl',
+            [HTTP_CLIENT_IP]: '8.8.8.8'
           })
         })
       })
@@ -914,6 +922,91 @@ describe('plugins/util/web', () => {
       const result = web.obfuscateQs(config, url + 'secret/' + qs)
 
       expect(result).to.equal(url + 'secret/?data=<redacted>')
+    })
+  })
+
+  describe('extractIp', () => {
+    let context
+
+    beforeEach(() => {
+      context = { req, config }
+    })
+
+    it('should return undefined when disabled by config', () => {
+      config.clientIpHeaderDisabled = true
+
+      const result = web.extractIp(context)
+
+      expect(result).to.equal(undefined)
+    })
+
+    it('should return undefined when custom config header is not found in request', () => {
+      config.clientIpHeader = 'custom-ip'
+
+      const result = web.extractIp(context)
+
+      expect(result).to.equal(undefined)
+    })
+
+    it('should source ip from custom config header', () => {
+      config.clientIpHeader = 'custom-ip'
+      req.headers['custom-ip'] = '8.8.8.8'
+
+      const result = web.extractIp(context)
+
+      expect(result).to.equal('8.8.8.8')
+    })
+
+    it('should source ip from one proxy header', () => {
+      req.headers['true-client-ip'] = '8.8.8.8'
+
+      const result = web.extractIp(context)
+
+      expect(result).to.equal('8.8.8.8')
+    })
+
+    it('should return socket ip when no valid ip is found in one proxy header', () => {
+      req.headers['via'] = 'notanip'
+      req.socket = { remoteAddress: '127.0.0.1' }
+
+      const result = web.extractIp(context)
+
+      expect(result).to.equal('127.0.0.1')
+    })
+
+    it('should return metric tags when multiple proxy headers are found', () => {
+      sinon.stub(log, 'error')
+
+      req.headers['x-forwarded-for'] = '8.8.8.8'
+      req.headers['forwarded-for'] = '7.7.7.7'
+
+      const result = web.extractIp(context)
+
+      expect(result).to.equal(undefined)
+      expect(log.error).to.have.been
+        .calledOnceWithExactly('Cannot find client IP: multiple IP headers detected x-forwarded-for,forwarded-for')
+    })
+
+    it('should return undefined when no socket ip is found', () => {
+      const result = web.extractIp(context)
+
+      expect(result).to.equal(undefined)
+    })
+
+    it('should return the first public ip in a list', () => {
+      req.headers['x-forwarded-for'] = '::ffff:127.0.0.1,  2001:0db8:85a3:0000:0000:8a2e:0370:7334 ,10.0.0.1,7.7.7.7'
+
+      const result = web.extractIp(context)
+
+      expect(result).to.equal('2001:0db8:85a3:0000:0000:8a2e:0370:7334')
+    })
+
+    it('should return the first private ip ina list if no public ip is found', () => {
+      req.headers['x-forwarded-for'] = 'notanip,::1,10.0.0.1,'
+
+      const result = web.extractIp(context)
+
+      expect(result).to.equal('::1')
     })
   })
 })
