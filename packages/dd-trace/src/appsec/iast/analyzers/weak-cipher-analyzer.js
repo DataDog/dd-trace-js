@@ -18,7 +18,7 @@ class WeakCipherAnalyzer extends Analyzer {
 
   _isVulnerable (algorithm) {
     if (algorithm && typeof algorithm === 'string') {
-      return INSECURE_CIPHERS.indexOf(algorithm.toLowerCase()) !== -1
+      return INSECURE_CIPHERS.has(algorithm.toLowerCase())
     }
     return false
   }
