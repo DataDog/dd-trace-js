@@ -56,7 +56,7 @@ describe('Plugin', function () {
       const loadArguments = [['jest', 'http']]
 
       // we need the ci visibility init for the coverage test
-      if (this.currentTest.title === 'can report code coverage') {
+      if (this.currentTest.parent.title === 'agentless') {
         process.env.DD_API_KEY = 'key'
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
         loadArguments.push({ service: 'test', isAgentlessEnabled: true, isIntelligentTestRunnerEnabled: true })
@@ -254,42 +254,6 @@ describe('Plugin', function () {
         )
       })
 
-      it('can report code coverage', function (done) {
-        nock(`http://127.0.0.1:${agent.server.address().port}`)
-          .post('/api/v2/citestcov')
-          .reply(202, function () {
-            const contentTypeHeader = this.req.headers['content-type']
-            const contentDisposition = this.req.requestBodyBuffers[1].toString()
-            const eventContentDisposition = this.req.requestBodyBuffers[6].toString()
-            const eventPayload = this.req.requestBodyBuffers[8].toString()
-            const coveragePayload = msgpack.decode(this.req.requestBodyBuffers[3])
-
-            expect(contentTypeHeader).to.contain('multipart/form-data')
-            expect(coveragePayload.version).to.equal(1)
-            expect(coveragePayload.files.map(file => file.filename))
-              .to.include('packages/datadog-plugin-jest/test/sum-coverage-test.js')
-            expect(contentDisposition).to.contain(
-              'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"'
-            )
-            expect(eventContentDisposition).to.contain(
-              'Content-Disposition: form-data; name="event"; filename="event.json"'
-            )
-            expect(eventPayload).to.equal('{}')
-            done()
-          })
-
-        const options = {
-          ...jestCommonOptions,
-          testRegex: 'jest-coverage.js',
-          coverage: true
-        }
-
-        jestExecutable.runCLI(
-          options,
-          options.projects
-        )
-      })
-
       // option available from 26.5.0:
       // https://github.com/facebook/jest/blob/7f2731ef8bebac7f226cfc0d2446854603a557a9/CHANGELOG.md#2650
       if (semver.intersects(version, '>=26.5.0')) {
@@ -316,54 +280,96 @@ describe('Plugin', function () {
         })
       }
 
-      it('should create spans for the test session and test suite', (done) => {
-        const events = [
-          { type: 'test_session_end', status: 'pass' },
-          {
-            type: 'test_suite_end',
-            status: 'pass',
-            suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js'
-          },
-          {
-            name: 'jest-test-suite-visibility works',
-            suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js',
-            status: 'pass',
-            type: 'test'
+      describe('agentless', () => {
+        it('can report code coverage', function (done) {
+          nock(`http://127.0.0.1:${agent.server.address().port}`)
+            .post('/api/v2/citestcov')
+            .reply(202, function () {
+              const contentTypeHeader = this.req.headers['content-type']
+              const contentDisposition = this.req.requestBodyBuffers[1].toString()
+              const eventContentDisposition = this.req.requestBodyBuffers[6].toString()
+              const eventPayload = this.req.requestBodyBuffers[8].toString()
+              const coveragePayload = msgpack.decode(this.req.requestBodyBuffers[3])
+
+              expect(contentTypeHeader).to.contain('multipart/form-data')
+              expect(coveragePayload.version).to.equal(1)
+              expect(coveragePayload.files.map(file => file.filename))
+                .to.include('packages/datadog-plugin-jest/test/sum-coverage-test.js')
+              expect(contentDisposition).to.contain(
+                'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"'
+              )
+              expect(eventContentDisposition).to.contain(
+                'Content-Disposition: form-data; name="event"; filename="event.json"'
+              )
+              expect(eventPayload).to.equal('{}')
+              done()
+            })
+
+          const options = {
+            ...jestCommonOptions,
+            testRegex: 'jest-coverage.js',
+            coverage: true
           }
-        ]
 
-        const assertionPromises = events.map(({ name, suite, status, type }) => {
-          return agent.use(trace => {
-            const span = trace[0].find(span => span.type === type)
-            expect(span.meta[TEST_STATUS]).to.equal(status)
-            if (type === 'test_session_end') {
-              expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
-            }
-            if (type === 'test_suite_end') {
-              expect(span.meta[TEST_SUITE]).to.equal(suite)
-              expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
-            }
-            if (type === 'test') {
-              expect(span.meta[TEST_SUITE]).to.equal(suite)
-              expect(span.meta[TEST_NAME]).to.equal(name)
-              expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
-              expect(span.meta[TEST_SUITE_ID]).not.to.equal(undefined)
-              expect(span.meta[TEST_SESSION_ID]).not.to.equal(undefined)
-            }
-          })
+          jestExecutable.runCLI(
+            options,
+            options.projects
+          )
         })
+        it('should create spans for the test session and test suite', (done) => {
+          const events = [
+            { type: 'test_session_end', status: 'pass' },
+            {
+              type: 'test_suite_end',
+              status: 'pass',
+              suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js'
+            },
+            {
+              name: 'jest-test-suite-visibility works',
+              suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js',
+              status: 'pass',
+              type: 'test'
+            }
+          ]
 
-        Promise.all(assertionPromises).then(() => done()).catch(done)
+          const assertionPromises = events.map(({ name, suite, status, type }) => {
+            return agent.use(agentlessPayload => {
+              const { events } = agentlessPayload
+              const span = events.find(event => event.type === type).content
+              expect(span.meta[TEST_STATUS]).to.equal(status)
+              if (type === 'test_session_end') {
+                expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
+                expect(span[TEST_SUITE_ID]).to.equal(undefined)
+                expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+              }
+              if (type === 'test_suite_end') {
+                expect(span.meta[TEST_SUITE]).to.equal(suite)
+                expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
+                expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
+                expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+              }
+              if (type === 'test') {
+                expect(span.meta[TEST_SUITE]).to.equal(suite)
+                expect(span.meta[TEST_NAME]).to.equal(name)
+                expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
+                expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
+                expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+              }
+            })
+          })
 
-        const options = {
-          ...jestCommonOptions,
-          testRegex: 'jest-test-suite.js'
-        }
+          Promise.all(assertionPromises).then(() => done()).catch(done)
 
-        jestExecutable.runCLI(
-          options,
-          options.projects
-        )
+          const options = {
+            ...jestCommonOptions,
+            testRegex: 'jest-test-suite.js'
+          }
+
+          jestExecutable.runCLI(
+            options,
+            options.projects
+          )
+        })
       })
     })
   })

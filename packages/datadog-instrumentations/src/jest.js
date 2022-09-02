@@ -25,6 +25,8 @@ const {
 
 const { getFormattedJestTestParameters, getJestTestName } = require('../../datadog-plugin-jest/src/util')
 
+const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
+
 // This function also resets the coverage counters
 function extractCoverageInformation (coverage, rootDir) {
   const coverageMap = istanbul.createCoverageMap(coverage)
@@ -174,15 +176,14 @@ addHook({
   file: 'build/cli/index.js',
   versions: ['>=24.8.0']
 }, cli => {
-  const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => function () {
+  const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
     const processArgv = process.argv.slice(2).join(' ')
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    asyncResource.runInAsyncScope(() => {
+    sessionAsyncResource.runInAsyncScope(() => {
       testSessionStartCh.publish(`jest ${processArgv}`)
     })
     return runCLI.apply(this, arguments).then(result => {
       const { results: { success } } = result
-      asyncResource.runInAsyncScope(() => {
+      sessionAsyncResource.runInAsyncScope(() => {
         testSessionFinishCh.publish(success ? 'pass' : 'fail')
       })
       return result
@@ -203,25 +204,23 @@ addHook({
   const newAdapter = shimmer.wrap(adapter, function () {
     const environment = arguments[2]
     const asyncResource = new AsyncResource('bound-anonymous-fn')
-    asyncResource.runInAsyncScope(() => {
+    return asyncResource.runInAsyncScope(() => {
       testSuiteStartCh.publish({
         testSuite: environment.testSuite,
         testSessionId: environment._ddTestSessionId,
         testCommand: environment._ddTestCommand
       })
-    })
-    return adapter.apply(this, arguments).then(suiteResults => {
-      const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults
-      let status = 'pass'
-      if (skipped) {
-        status = 'skipped'
-      } else if (numFailingTests !== 0) {
-        status = 'fail'
-      }
-      asyncResource.runInAsyncScope(() => {
+      return adapter.apply(this, arguments).then(suiteResults => {
+        const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults
+        let status = 'pass'
+        if (skipped) {
+          status = 'skipped'
+        } else if (numFailingTests !== 0) {
+          status = 'fail'
+        }
         testSuiteFinish.publish({ status, errorMessage })
+        return suiteResults
       })
-      return suiteResults
     })
   })
   if (jestAdapter.default) {
@@ -233,23 +232,32 @@ addHook({
   return jestAdapter
 })
 
+// from 25.1.0 on, readConfigs becomes async
 addHook({
   name: 'jest-config',
-  versions: ['>=24.8.0']
-}, (jestConfig) => {
-  // readConfigs changes signature for newer versions (it becomes "async"): do I need to take this into account?
+  versions: ['>=25.1.0']
+}, jestConfig => {
+  shimmer.wrap(jestConfig, 'readConfigs', readConfigs => async function () {
+    const result = await readConfigs.apply(this, arguments)
+    const { configs } = result
+    sessionAsyncResource.runInAsyncScope(() => {
+      testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
+    })
+    return result
+  })
+  return jestConfig
+})
+
+addHook({
+  name: 'jest-config',
+  versions: ['24.8.0 - 24.9.0']
+}, jestConfig => {
   shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function () {
     const results = readConfigs.apply(this, arguments)
-    if (results.then) {
-      results.then((res) => {
-        const { configs } = res
-        testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
-        return res
-      })
-    } else {
-      const { configs } = results
+    const { configs } = results
+    sessionAsyncResource.runInAsyncScope(() => {
       testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
-    }
+    })
     return results
   })
   return jestConfig
@@ -265,7 +273,6 @@ addHook({
   versions: ['>=24.8.0']
 }, getTestEnvironment)
 
-// TODO: support for jest-jasmine's test suites
 addHook({
   name: 'jest-jasmine2',
   versions: ['>=24.8.0'],

@@ -8,8 +8,6 @@ describe('jest-test-suite', () => {
     expect(testSpan).not.toEqual(null)
     testSpan.setTag('test.add.stuff', 'stuff')
   })
-  // eslint-disable-next-line
-  jest.setTimeout(200)
   it('done', (done) => {
     setTimeout(() => {
       expect(100).toEqual(100)
@@ -62,6 +60,8 @@ describe('jest-test-suite', () => {
       }, 100)
     )
   })
+  // eslint-disable-next-line
+  jest.setTimeout(200)
   it('timeout', () => {
     return new Promise((resolve) =>
       setTimeout(() => {
@@ -69,7 +69,7 @@ describe('jest-test-suite', () => {
         resolve()
       }, 300)
     )
-  })
+  }, 200)
   it('passes', () => {
     expect(true).toEqual(true)
   })
