@@ -224,6 +224,12 @@ describe('Plugin', () => {
 
               error.code = grpc.status.NOT_FOUND
 
+              const childOf = tracer.scope().active()
+              const child = tracer.startSpan('child', { childOf })
+
+              // Delay trace to ensure auto-cancellation doesn't override the status code.
+              setTimeout(() => child.finish())
+
               callback(error, {}, metadata)
             }
           })
