@@ -21,11 +21,9 @@ addHook({ name: 'crypto' }, crypto => {
 function wrapCryptoMethod (channel) {
   function wrapMethod (cryptoMethod) {
     return function () {
-      if (channel.hasSubscribers) {
-        if (arguments.length > 0) {
-          const algorithm = arguments[0]
-          channel.publish({ algorithm })
-        }
+      if (channel.hasSubscribers && arguments.length > 0) {
+        const algorithm = arguments[0]
+        channel.publish({ algorithm })
       }
       return cryptoMethod.apply(this, arguments)
     }
