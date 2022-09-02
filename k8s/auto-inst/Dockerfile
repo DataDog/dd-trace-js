@@ -1,4 +1,4 @@
-FROM node:16 AS build
+FROM node:16-alpine AS build
 
 ARG npm_pkg
 
