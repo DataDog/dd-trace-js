@@ -19,7 +19,24 @@ const patched = new WeakSet()
 
 const testToAr = new WeakMap()
 const originalFns = new WeakMap()
-const testSuiteToAr = new WeakMap()
+const testFileToAr = new Map()
+
+function getSuitesByTestFile (root) {
+  const suitesByTestFile = {}
+  function getSuites (suite) {
+    if (suitesByTestFile[suite.file]) {
+      suitesByTestFile[suite.file].push(suite)
+    } else {
+      suitesByTestFile[suite.file] = [suite]
+    }
+    suite.suites.forEach(suite => {
+      getSuites(suite)
+    })
+  }
+  getSuites(root)
+
+  return suitesByTestFile
+}
 
 function getTestStatus (test) {
   if (test.pending) {
@@ -56,6 +73,8 @@ function mochaHook (Runner) {
       return run.apply(this, arguments)
     }
 
+    const suitesByTestFile = getSuitesByTestFile(this.suite)
+
     const testRunAsyncResource = new AsyncResource('bound-anonymous-fn')
 
     this.once('end', testRunAsyncResource.bind(function () {
@@ -75,22 +94,31 @@ function mochaHook (Runner) {
     }))
 
     this.on('suite', function (suite) {
-      if (suite.root) {
+      if (suite.root || !suite.tests.length) {
         return
       }
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-      testSuiteToAr.set(suite, asyncResource)
-
-      asyncResource.runInAsyncScope(() => {
-        testSuiteStartCh.publish(suite)
-      })
+      let asyncResource = testFileToAr.get(suite.file)
+      if (!asyncResource) {
+        asyncResource = new AsyncResource('bound-anonymous-fn')
+        testFileToAr.set(suite.file, asyncResource)
+        asyncResource.runInAsyncScope(() => {
+          testSuiteStartCh.publish(suite)
+        })
+      }
     })
 
     this.on('suite end', function (suite) {
       if (suite.root) {
         return
       }
+      const suitesInTestFile = suitesByTestFile[suite.file]
+
+      const isLastSuite = suitesInTestFile.filter(suite => suite._ddFinished).length === suitesInTestFile.length - 1
+      suite._ddFinished = true
+      if (!isLastSuite) {
+        return
+      }
+
       let status = 'pass'
       if (suite.pending) {
         status = 'skip'
@@ -102,7 +130,7 @@ function mochaHook (Runner) {
         })
       }
 
-      const asyncResource = testSuiteToAr.get(suite)
+      const asyncResource = testFileToAr.get(suite.file)
       asyncResource.runInAsyncScope(() => {
         // get suite status
         testSuiteFinishCh.publish(status)
@@ -168,7 +196,7 @@ function mochaHook (Runner) {
             errorCh.publish(err)
           }
           // we propagate the error to the suite
-          const testSuiteAsyncResource = testSuiteToAr.get(test.parent)
+          const testSuiteAsyncResource = testFileToAr.get(test.parent.file)
           if (testSuiteAsyncResource) {
             const testSuiteError = new Error(`Test "${test.fullTitle()}" failed with message "${err.message}"`)
             testSuiteError.stack = err.stack

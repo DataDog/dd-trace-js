@@ -47,7 +47,7 @@ class MochaPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this._testSuites = new WeakMap()
+    this._testSuites = new Map()
     this._testNameToParams = {}
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('mocha', this.config)
     this.sourceRoot = process.cwd()
@@ -75,7 +75,11 @@ class MochaPlugin extends Plugin {
         return
       }
       const store = storage.getStore()
-      const testSuiteMetadata = getTestSuiteCommonTags(this.command, this.tracer._version, suite.fullTitle())
+      const testSuiteMetadata = getTestSuiteCommonTags(
+        this.command,
+        this.tracer._version,
+        getTestSuitePath(suite.file, this.sourceRoot)
+      )
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testSessionSpan,
         tags: {
@@ -84,7 +88,7 @@ class MochaPlugin extends Plugin {
         }
       })
       this.enter(testSuiteSpan, store)
-      this._testSuites.set(suite, testSuiteSpan)
+      this._testSuites.set(suite.file, testSuiteSpan)
     })
 
     this.addSub('ci:mocha:test-suite:finish', (status) => {
@@ -158,7 +162,7 @@ class MochaPlugin extends Plugin {
 
   startTestSpan (test) {
     const testSuiteTags = {}
-    const testSuiteSpan = this._testSuites.get(test.parent)
+    const testSuiteSpan = this._testSuites.get(test.parent.file)
 
     if (testSuiteSpan) {
       const testSuiteId = testSuiteSpan.context()._spanId.toString(16)
