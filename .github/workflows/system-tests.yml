@@ -13,16 +13,49 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        weblog-variant: ['']
-        lib-injection-enabled: ['lib-injection-enabled']
-        lib-injection-connection: ['network']
-        lib-injection-use-admission-controller: ['', 'use-admission-controller']
         include:
           - weblog-variant: express4
           - weblog-variant: express4-typescript
     env:
       TEST_LIBRARY: nodejs
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
+
+    steps:
+      - name: Checkout system tests
+        uses: actions/checkout@v2
+        with:
+          repository: 'DataDog/system-tests'
+
+      - name: Checkout dd-trace-js
+        uses: actions/checkout@v2
+        with:
+          path: 'binaries/dd-trace-js'
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Run
+        run: ./run.sh
+
+      - name: Compress artifact
+        if: ${{ always() }}
+        run: tar -czvf artifact.tar.gz $(ls | grep logs)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: logs_express-poc
+          path: artifact.tar.gz
+
+  lib-injection:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        lib-injection-connection: ['network']
+        lib-injection-use-admission-controller: ['', 'use-admission-controller']
+    env:
+      TEST_LIBRARY: nodejs
       LIBRARY_INJECTION_ENABLED: ${{ matrix.lib-injection-enabled }}
       LIBRARY_INJECTION_CONNECTION: ${{ matrix.lib-injection-connection }}
       LIBRARY_INJECTION_ADMISSION_CONTROLLER: ${{ matrix.lib-injection-admission-controller }}
@@ -42,18 +75,8 @@ jobs:
           path: 'binaries/dd-trace-js'
 
       - name: Build
-        run: ./build.sh
+        run: ./lib-injection/build.sh
 
       - name: Run
-        run: ./run.sh
+        run: ./lib-injection/run-lib-injection.sh
 
-      - name: Compress artifact
-        if: ${{ always() }}
-        run: tar -czvf artifact.tar.gz $(ls | grep logs) || true
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v2
-        if: ${{ always() }}
-        with:
-          name: logs_express-poc
-          path: artifact.tar.gz
