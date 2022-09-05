@@ -19,7 +19,7 @@ const patched = new WeakSet()
 
 const testToAr = new WeakMap()
 const originalFns = new WeakMap()
-const testFileToAr = new Map()
+const testFileToSuiteAr = new Map()
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -84,6 +84,7 @@ function mochaHook (Runner) {
       } else if (this.failures !== 0) {
         status = 'fail'
       }
+      testFileToSuiteAr.clear()
       testRunFinishCh.publish(status)
     }))
 
@@ -97,10 +98,10 @@ function mochaHook (Runner) {
       if (suite.root || !suite.tests.length) {
         return
       }
-      let asyncResource = testFileToAr.get(suite.file)
+      let asyncResource = testFileToSuiteAr.get(suite.file)
       if (!asyncResource) {
         asyncResource = new AsyncResource('bound-anonymous-fn')
-        testFileToAr.set(suite.file, asyncResource)
+        testFileToSuiteAr.set(suite.file, asyncResource)
         asyncResource.runInAsyncScope(() => {
           testSuiteStartCh.publish(suite)
         })
@@ -120,17 +121,20 @@ function mochaHook (Runner) {
       }
 
       let status = 'pass'
-      if (suite.pending) {
+      if (suitesInTestFile.every(suite => suite.pending)) {
         status = 'skip'
       } else {
-        suite.eachTest(test => {
-          if (test.state === 'failed' || test.timedOut) {
-            status = 'fail'
-          }
+        // has to check every test in the test file
+        suitesInTestFile.forEach(suite => {
+          suite.eachTest(test => {
+            if (test.state === 'failed' || test.timedOut) {
+              status = 'fail'
+            }
+          })
         })
       }
 
-      const asyncResource = testFileToAr.get(suite.file)
+      const asyncResource = testFileToSuiteAr.get(suite.file)
       asyncResource.runInAsyncScope(() => {
         // get suite status
         testSuiteFinishCh.publish(status)
@@ -176,34 +180,38 @@ function mochaHook (Runner) {
     })
 
     this.on('fail', (testOrHook, err) => {
+      const testFile = testOrHook.file
       let test = testOrHook
       const isHook = testOrHook.type === 'hook'
       if (isHook && testOrHook.ctx) {
         test = testOrHook.ctx.currentTest
       }
-      let asyncResource
+      let testAsyncResource
       if (test) {
-        asyncResource = getTestAsyncResource(test)
+        testAsyncResource = getTestAsyncResource(test)
       }
-      if (asyncResource) {
-        asyncResource.runInAsyncScope(() => {
+      if (testAsyncResource) {
+        testAsyncResource.runInAsyncScope(() => {
           if (isHook) {
-            err.message = `${testOrHook.title}: ${err.message}`
+            err.message = `${testOrHook.fullTitle()}: ${err.message}`
             errorCh.publish(err)
             // if it's a hook and it has failed, 'test end' will not be called
             testFinishCh.publish('fail')
           } else {
             errorCh.publish(err)
           }
-          // we propagate the error to the suite
-          const testSuiteAsyncResource = testFileToAr.get(test.parent.file)
-          if (testSuiteAsyncResource) {
-            const testSuiteError = new Error(`Test "${test.fullTitle()}" failed with message "${err.message}"`)
-            testSuiteError.stack = err.stack
-            testSuiteAsyncResource.runInAsyncScope(() => {
-              testSuiteErrorCh.publish(testSuiteError)
-            })
-          }
+        })
+      }
+      const testSuiteAsyncResource = testFileToSuiteAr.get(testFile)
+
+      if (testSuiteAsyncResource) {
+        // we propagate the error to the suite
+        const testSuiteError = new Error(
+          `"${testOrHook.parent.fullTitle()}" failed with message "${err.message}"`
+        )
+        testSuiteError.stack = err.stack
+        testSuiteAsyncResource.runInAsyncScope(() => {
+          testSuiteErrorCh.publish(testSuiteError)
         })
       }
     })

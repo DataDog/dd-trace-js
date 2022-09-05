@@ -96,7 +96,10 @@ class MochaPlugin extends Plugin {
         return
       }
       const span = storage.getStore().span
-      span.setTag(TEST_STATUS, status)
+      // the test status of the suite may have been set in ci:mocha:test-suite:error already
+      if (!span.context()._tags[TEST_STATUS]) {
+        span.setTag(TEST_STATUS, status)
+      }
       span.finish()
     })
 
@@ -106,6 +109,7 @@ class MochaPlugin extends Plugin {
       }
       const span = storage.getStore().span
       span.setTag('error', err)
+      span.setTag(TEST_STATUS, 'fail')
     })
 
     this.addSub('ci:mocha:test:start', (test) => {
