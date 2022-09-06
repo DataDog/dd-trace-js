@@ -21,6 +21,16 @@ function safeJsonParse (input) {
   }
 }
 
+// Shallow clone with property name remapping
+function remapify (input, mappings) {
+  if (!input) return
+  const output = {}
+  for (const [key, value] of Object.entries(input)) {
+    output[key in mappings ? mappings[key] : key] = value
+  }
+  return output
+}
+
 class Config {
   constructor (options) {
     options = options || {}
@@ -250,7 +260,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
         ingestion.sampleRate
       ),
       rateLimit: coalesce(options.rateLimit, process.env.DD_TRACE_RATE_LIMIT, ingestion.rateLimit),
-      rules: coalesce(options.samplingRules, safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES), [])
+      rules: coalesce(options.samplingRules, safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES), []).map(rule => {
+        return remapify(rule, {
+          sample_rate: 'sampleRate'
+        })
+      })
     }
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined

@@ -121,10 +121,10 @@ describe('Config', () => {
     process.env.DD_TRACE_RATE_LIMIT = '-1'
     /* eslint-disable-next-line */
     process.env.DD_TRACE_SAMPLING_RULES = '[ \
-      {"service":"usersvc","name":"healthcheck","sampleRate":0.0 }, \
-      {"service":"usersvc","sampleRate":0.5}, \
-      {"service":"authsvc","sampleRate":1.0}, \
-      {"sampleRate":0.1}]'
+      {"service":"usersvc","name":"healthcheck","sample_rate":0.0 }, \
+      {"service":"usersvc","sample_rate":0.5}, \
+      {"service":"authsvc","sample_rate":1.0}, \
+      {"sample_rate":0.1}]'
     process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_TRACEPARENT_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
