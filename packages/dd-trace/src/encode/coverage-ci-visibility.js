@@ -78,6 +78,8 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   makePayload () {
     this.form.append(
       'event',
+      // The intake requires a populated dictionary here. Simply having {} is not valid.
+      // We use dummy: true but any other key/value pair would be valid.
       JSON.stringify({ dummy: true }),
       { filename: 'event.json', contentType: 'application/json' }
     )
