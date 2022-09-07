@@ -2,9 +2,14 @@
 
 const proxyquire = require('proxyquire')
 const weakCipherAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-cipher-analyzer')
+const getPort = require('get-port')
+const agent = require('../../../plugins/agent')
+const axios = require('axios')
+const crypto = require('crypto')
+const { testThatRequestHasVulnerability } = require('../utils')
 
 describe('weak-cipher-analyzer', () => {
-  const VULNERABLE_CIPHER = 'rc2'
+  const VULNERABLE_CIPHER = 'des-ede-cbc'
   const NON_VULNERABLE_CIPHER = 'sha512'
 
   it('should subscribe to crypto hashing channel', () => {
@@ -59,4 +64,12 @@ describe('weak-cipher-analyzer', () => {
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'WEAK_CIPHER' })
   })
+
+  testThatRequestHasVulnerability(function () {
+    const crypto = require('crypto')
+    const key = '1111111111111111'
+    const iv = 'abcdefgh'
+    crypto.createCipheriv(VULNERABLE_CIPHER, key, iv)
+  }, 'WEAK_CIPHER')
+
 })
