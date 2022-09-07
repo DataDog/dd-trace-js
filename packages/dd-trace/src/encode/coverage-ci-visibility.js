@@ -25,7 +25,6 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   encode (coverage) {
     const bytes = this._coverageBytes
     const coverageBuffer = this.encodeCodeCoverage(bytes, coverage)
-
     const coverageFilename = `coverage${this.fileIndex++}`
 
     this.form.append(
@@ -75,9 +74,10 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   }
 
   makePayload () {
-    // 'event' is a backend requirement
     this.form.append(
       'event',
+      // The intake requires a populated dictionary here. Simply having {} is not valid.
+      // We use dummy: true but any other key/value pair would be valid.
       JSON.stringify({ dummy: true }),
       { filename: 'event.json', contentType: 'application/json' }
     )

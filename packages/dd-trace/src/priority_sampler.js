@@ -6,9 +6,14 @@ const ext = require('../../../ext')
 const { setSamplingRules } = require('./startup-log')
 
 const {
+  SAMPLING_MECHANISM_DEFAULT,
+  SAMPLING_MECHANISM_AGENT,
+  SAMPLING_MECHANISM_RULE,
+  SAMPLING_MECHANISM_MANUAL,
   SAMPLING_RULE_DECISION,
   SAMPLING_LIMIT_DECISION,
-  SAMPLING_AGENT_DECISION
+  SAMPLING_AGENT_DECISION,
+  DECISION_MAKER_KEY
 } = require('./constants')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
@@ -45,6 +50,7 @@ class PrioritySampler {
     const context = this._getContext(span)
     const root = context._trace.started[0]
 
+    // TODO: remove the decision maker tag when priority is less than AUTO_KEEP
     if (context._sampling.priority !== undefined) return
     if (!root) return // noop span
 
@@ -52,9 +58,14 @@ class PrioritySampler {
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
+      context._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
     } else if (auto) {
       context._sampling.priority = this._getPriorityFromAuto(root)
+    } else {
+      return
     }
+
+    this._addDecisionMaker(root)
   }
 
   update (rates) {
@@ -115,6 +126,7 @@ class PrioritySampler {
 
   _getPriorityByRule (context, rule) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
+    context._sampling.mechanism = SAMPLING_MECHANISM_RULE
 
     return rule.sampler.isSampled(context) && this._isSampledByRateLimit(context) ? USER_KEEP : USER_REJECT
   }
@@ -133,10 +145,33 @@ class PrioritySampler {
 
     context._trace[SAMPLING_AGENT_DECISION] = sampler.rate()
 
+    if (sampler === defaultSampler) {
+      context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
+    } else {
+      context._sampling.mechanism = SAMPLING_MECHANISM_AGENT
+    }
+
     return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT
   }
 
+  _addDecisionMaker (span) {
+    const context = span.context()
+    const trace = context._trace
+    const priority = context._sampling.priority
+    const mechanism = context._sampling.mechanism
+
+    if (priority >= AUTO_KEEP) {
+      if (!trace.tags[DECISION_MAKER_KEY]) {
+        trace.tags[DECISION_MAKER_KEY] = `-${mechanism}`
+      }
+    } else {
+      delete trace.tags[DECISION_MAKER_KEY]
+    }
+  }
+
   _normalizeRules (rules, sampleRate) {
+    rules = [].concat(rules || [])
+
     return rules
       .concat({ sampleRate })
       .map(rule => ({ ...rule, sampleRate: parseFloat(rule.sampleRate) }))

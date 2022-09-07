@@ -38,7 +38,10 @@ describe('SpanProcessor', () => {
       sample: sinon.stub()
     }
     config = {
-      flushMinSpans: 3
+      flushMinSpans: 3,
+      stats: {
+        enabled: false
+      }
     }
     format = sinon.stub().returns({ formatted: true })
 

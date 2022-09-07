@@ -268,6 +268,22 @@ export declare interface TracerOptions {
   sampleRate?: number;
 
   /**
+   * Global rate limit that is applied on the global sample rate and all rules,
+   * and controls the ingestion rate limit between the agent and the backend.
+   * Defaults to deferring the decision to the agent.
+   */
+  rateLimit?: Number,
+
+  /**
+   * Sampling rules to apply to priority samplin. Each rule is a JSON,
+   * consisting of `service` and `name`, which are regexes to match against
+   * a trace's `service` and `name`, and a corresponding `sampleRate`. If not
+   * specified, will defer to global sampling rate for all spans.
+   * @default []
+   */
+  samplingRules?: SamplingRule[]
+
+  /**
    * Interval in milliseconds at which the tracer will submit traces to the agent.
    * @default 2000
    */
@@ -298,7 +314,10 @@ export declare interface TracerOptions {
   protocolVersion?: string
 
   /**
-   * Configuration of the ingestion between the agent and the backend.
+   * Deprecated in favor of the global versions of the variables provided under this option
+   *
+   * @deprecated
+   * @hidden
    */
   ingestion?: {
     /**
@@ -307,7 +326,7 @@ export declare interface TracerOptions {
     sampleRate?: number
 
     /**
-     * Controls the ingestion rate limit between the agent and the backend.
+     * Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent.
      */
     rateLimit?: number
   };
@@ -333,32 +352,36 @@ export declare interface TracerOptions {
     exporter?: 'log' | 'agent'
 
     /**
-     * Configuration of the priority sampler. Supports a global config and rules by span name or service name. The first matching rule is applied, and if no rule matches it falls back to the global config or on the rates provided by the agent if there is no global config.
-     */
-    sampler?: {
-      /**
-       * Sample rate to apply globally when no other rule is matched. Omit to fallback on the dynamic rates returned by the agent instead.
-       */
-      sampleRate?: Number,
-
-      /**
-       * Global rate limit that is applied on the global sample rate and all rules.
-       * @default 100
-       */
-      rateLimit?: Number,
-
-      /**
-       * Sampling rules to apply to priority sampling.
-       * @default []
-       */
-      rules?: SamplingRule[]
-    }
-
-    /**
      * Whether to enable the experimental `getRumData` method.
      * @default false
      */
     enableGetRumData?: boolean
+
+    /**
+     * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
+     */
+    iast?: boolean  | {
+      /**
+       * Whether to enable IAST.
+       * @default false
+       */
+      enabled?: boolean,
+      /**
+       * Controls the percentage of requests that iast will analyze
+       * @default 30
+       */
+      requestSampling?: number,
+      /**
+       * Controls how many request can be analyzing code vulnerabilities at the same time
+       * @default 2
+       */
+      maxConcurrentRequests?: number,
+      /**
+       * Controls how many code vulnerabilities can be detected in the same request
+       * @default 2
+       */
+      maxContextOperations?: number
+    }
   };
 
   /**

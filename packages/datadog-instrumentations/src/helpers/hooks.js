@@ -18,6 +18,7 @@ module.exports = {
   'cassandra-driver': () => require('../cassandra-driver'),
   'connect': () => require('../connect'),
   'couchbase': () => require('../couchbase'),
+  'crypto': () => require('../crypto'),
   'cypress': () => require('../cypress'),
   'dns': () => require('../dns'),
   'elasticsearch': () => require('../elasticsearch'),

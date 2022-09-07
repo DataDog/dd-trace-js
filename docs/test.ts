@@ -12,6 +12,7 @@ import {
   HTTP_STATUS_CODE,
   HTTP_URL,
   HTTP_USERAGENT,
+  HTTP_CLIENT_IP,
   MANUAL_DROP,
   MANUAL_KEEP,
   RESOURCE_NAME,
@@ -44,17 +45,10 @@ tracer.init({
     rateLimit: 500
   },
   experimental: {
+    iast: true,
     b3: true,
     runtimeId: true,
-    exporter: 'log',
-    sampler: {
-      sampleRate: 1,
-      rateLimit: 1000,
-      rules: [
-        { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
-        { sampleRate: 0.1, service: /foo/, name: /foo\.request/ }
-      ]
-    }
+    exporter: 'log'
   },
   hostname: 'agent',
   logger: {
@@ -73,6 +67,11 @@ tracer.init({
   flushMinSpans: 500,
   lookup: () => {},
   sampleRate: 0.1,
+  rateLimit: 1000,
+  samplingRules: [
+    { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
+    { sampleRate: 0.1, service: /foo/, name: /foo\.request/ }
+  ],
   service: 'test',
   tags: {
     foo: 'bar'
@@ -92,6 +91,17 @@ tracer.init({
     obfuscatorValueRegex: '.*'
   }
 });
+
+tracer.init({
+  experimental: {
+    iast: {
+      enabled: true,
+      requestSampling: 50,
+      maxConcurrentRequests: 4,
+      maxContextOperations: 30
+    }
+  }
+})
 
 const httpOptions = {
   service: 'test',

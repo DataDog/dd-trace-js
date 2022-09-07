@@ -15,6 +15,8 @@ jobs:
     environment: npm
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    outputs:
+      pkgjson: ${{ steps.pkg.outputs.json }}
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v3
@@ -33,12 +35,24 @@ jobs:
     runs-on: ubuntu-latest
     needs: ['publish']
     steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+      - name: Log in to the Container registry
+        uses: docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: pkg
+        run: |
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "::set-output name=json::$content"
       - name: npm pack for injection image
         run: |
           npm pack dd-trace@${{ fromJson(steps.pkg.outputs.json).version }}
       - uses: ./.github/actions/injection
         with:
-          init-image-version: ${{ fromJson(steps.pkg.outputs.json).version }}
+          init-image-version: v${{ fromJson(steps.pkg.outputs.json).version }}
 
   docs:
     runs-on: ubuntu-latest
