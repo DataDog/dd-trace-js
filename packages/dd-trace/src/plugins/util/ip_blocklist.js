@@ -7,19 +7,38 @@ if (semver.satisfies(process.version, '>=14.18.0')) {
 
   module.exports = net.BlockList
 } else {
-  const CIDRMatcher = require('cidr-matcher')
+  const ipaddr = require('ipaddr.js');
 
   module.exports = class BlockList {
     constructor () {
-      this.matcher = new CIDRMatcher()
+      this.v4Ranges = []
+      this.v6Ranges = []
     }
 
     addSubnet (net, prefix, type) {
-      this.matcher.addNetworkClass(`${net}/${prefix}`)
+      this[type === 'ipv4' ? 'v4Ranges' : 'v6Ranges'].push(ipaddr.parseCIDR(`${net}/${prefix}`))
     }
 
     check (address, type) {
-      return this.matcher.contains(address)
+      try {
+        const ip = ipaddr.process(address)
+
+        if (type === 'ipv4' || ip.isIPv4MappedAddress()) {
+          for (const range of this.v4Ranges) {
+            if (ip.match(range)) return true
+          }
+        }
+
+        if (type === 'ipv6') {
+          for (const range of this.v6Ranges) {
+            if (ip.match(range)) return true
+          }
+        }
+
+        return false
+      } catch {
+        return false
+      }
     }
   }
 }
