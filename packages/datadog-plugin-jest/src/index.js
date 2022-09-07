@@ -72,7 +72,6 @@ class JestPlugin extends Plugin {
       const childOf = getTestParentSpan(this.tracer)
       const testSessionSpanMetadata = getTestSessionCommonTags(command, this.tracer._version)
 
-      this.command = command
       const testSessionSpan = this.tracer.startSpan('jest.test_session', {
         childOf,
         tags: {
@@ -104,7 +103,7 @@ class JestPlugin extends Plugin {
       const testSessionSpan = storage.getStore().span
       configs.forEach(config => {
         config._ddTestSessionId = testSessionSpan.context()._traceId.toString(16)
-        config._ddTestCommand = this.command
+        config._ddTestCommand = testSessionSpan.context()._tags[TEST_COMMAND]
       })
     })
 

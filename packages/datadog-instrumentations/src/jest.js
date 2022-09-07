@@ -232,36 +232,41 @@ addHook({
   return jestAdapter
 })
 
+function configureTestEnvironment (readConfigsResult) {
+  const { configs } = readConfigsResult
+  sessionAsyncResource.runInAsyncScope(() => {
+    testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
+  })
+}
+
+function jestConfigAsyncWrapper (jestConfig) {
+  shimmer.wrap(jestConfig, 'readConfigs', readConfigs => async function () {
+    const readConfigsResult = await readConfigs.apply(this, arguments)
+    configureTestEnvironment(readConfigsResult)
+    return readConfigsResult
+  })
+  return jestConfig
+}
+
+function jestConfigSyncWrapper (jestConfig) {
+  shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function () {
+    const readConfigsResult = readConfigs.apply(this, arguments)
+    configureTestEnvironment(readConfigsResult)
+    return readConfigsResult
+  })
+  return jestConfig
+}
+
 // from 25.1.0 on, readConfigs becomes async
 addHook({
   name: 'jest-config',
   versions: ['>=25.1.0']
-}, jestConfig => {
-  shimmer.wrap(jestConfig, 'readConfigs', readConfigs => async function () {
-    const result = await readConfigs.apply(this, arguments)
-    const { configs } = result
-    sessionAsyncResource.runInAsyncScope(() => {
-      testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
-    })
-    return result
-  })
-  return jestConfig
-})
+}, jestConfigAsyncWrapper)
 
 addHook({
   name: 'jest-config',
   versions: ['24.8.0 - 24.9.0']
-}, jestConfig => {
-  shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function () {
-    const results = readConfigs.apply(this, arguments)
-    const { configs } = results
-    sessionAsyncResource.runInAsyncScope(() => {
-      testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
-    })
-    return results
-  })
-  return jestConfig
-})
+}, jestConfigSyncWrapper)
 
 addHook({
   name: 'jest-environment-node',
@@ -273,11 +278,7 @@ addHook({
   versions: ['>=24.8.0']
 }, getTestEnvironment)
 
-addHook({
-  name: 'jest-jasmine2',
-  versions: ['>=24.8.0'],
-  file: 'build/jasmineAsyncInstall.js'
-}, (jasmineAsyncInstallExport) => {
+function jasmineAsyncInstallWraper (jasmineAsyncInstallExport) {
   return function (globalConfig, globalInput) {
     globalInput._ddtrace = global._ddtrace
     shimmer.wrap(globalInput.jasmine.Spec.prototype, 'execute', execute => function (onComplete) {
@@ -304,4 +305,10 @@ addHook({
     })
     return jasmineAsyncInstallExport.default(globalConfig, globalInput)
   }
-})
+}
+
+addHook({
+  name: 'jest-jasmine2',
+  versions: ['>=24.8.0'],
+  file: 'build/jasmineAsyncInstall.js'
+}, jasmineAsyncInstallWraper)
