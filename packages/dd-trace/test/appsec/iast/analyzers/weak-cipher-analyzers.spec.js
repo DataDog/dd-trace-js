@@ -9,7 +9,7 @@ describe('weak-cipher-analyzer', () => {
 
   it('should subscribe to crypto hashing channel', () => {
     expect(weakCipherAnalyzer._subscriptions).to.have.lengthOf(1)
-    expect(weakCipherAnalyzer._subscriptions[0]._channel.name).to.equals('asm:crypto:cipher:start')
+    expect(weakCipherAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:crypto:cipher:start')
   })
 
   it('should not detect vulnerability when no algorithm', () => {

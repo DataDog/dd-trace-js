@@ -13,7 +13,7 @@ const INSECURE_CIPHERS = new Set([
 class WeakCipherAnalyzer extends Analyzer {
   constructor () {
     super('WEAK_CIPHER')
-    this.addSub('asm:crypto:cipher:start', ({ algorithm }) => this.analyze(algorithm))
+    this.addSub('datadog:crypto:cipher:start', ({ algorithm }) => this.analyze(algorithm))
   }
 
   _isVulnerable (algorithm) {
