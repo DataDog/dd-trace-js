@@ -61,10 +61,12 @@ describe('weak-cipher-analyzer', () => {
     expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'WEAK_CIPHER' })
   })
 
-  testThatRequestHasVulnerability(function () {
-    const crypto = require('crypto')
-    const key = '1111111111111111'
-    const iv = 'abcdefgh'
-    crypto.createCipheriv(VULNERABLE_CIPHER, key, iv)
-  }, 'WEAK_CIPHER')
+  describe('full feature', () => {
+    testThatRequestHasVulnerability(function () {
+      const crypto = require('crypto')
+      const key = '1111111111111111'
+      const iv = 'abcdefgh'
+      crypto.createCipheriv(VULNERABLE_CIPHER, key, iv)
+    }, 'WEAK_CIPHER')
+  })
 })
