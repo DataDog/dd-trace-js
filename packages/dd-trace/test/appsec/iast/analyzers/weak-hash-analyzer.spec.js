@@ -2,14 +2,7 @@
 
 const weakHashAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-hash-analyzer')
 const proxyquire = require('proxyquire')
-
-const getPort = require('get-port')
-// const agent = require('../../dd-trace/test/plugins/agent')
-const agent = require('../../../plugins/agent')
-const axios = require('axios')
 const { testThatRequestHasVulnerability } = require('../utils')
-const crypto = require('crypto')
-
 
 describe('weak-hash-analyzer', () => {
   const VULNERABLE_ALGORITHM = 'sha1'

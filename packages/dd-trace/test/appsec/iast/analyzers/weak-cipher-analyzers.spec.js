@@ -2,10 +2,6 @@
 
 const proxyquire = require('proxyquire')
 const weakCipherAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-cipher-analyzer')
-const getPort = require('get-port')
-const agent = require('../../../plugins/agent')
-const axios = require('axios')
-const crypto = require('crypto')
 const { testThatRequestHasVulnerability } = require('../utils')
 
 describe('weak-cipher-analyzer', () => {
@@ -71,5 +67,4 @@ describe('weak-cipher-analyzer', () => {
     const iv = 'abcdefgh'
     crypto.createCipheriv(VULNERABLE_CIPHER, key, iv)
   }, 'WEAK_CIPHER')
-
 })

@@ -1,6 +1,5 @@
 const getPort = require('get-port')
 const agent = require('../../plugins/agent')
-const crypto = require('crypto')
 const axios = require('axios')
 
 function testThatRequestHasVulnerability (app, vulnerability) {
