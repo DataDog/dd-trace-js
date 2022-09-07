@@ -7,7 +7,7 @@ if (semver.satisfies(process.version, '>=14.18.0')) {
 
   module.exports = net.BlockList
 } else {
-  const ipaddr = require('ipaddr.js');
+  const ipaddr = require('ipaddr.js')
 
   module.exports = class BlockList {
     constructor () {
