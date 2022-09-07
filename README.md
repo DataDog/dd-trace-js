@@ -21,6 +21,10 @@ For descriptions of terminology used in APM, take a look at the [official docume
 
 Before contributing to this open source project, read our [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/master/CONTRIBUTING.md).
 
+## Security Vulnerabilities
+
+If you have found a security issue, please contact the security team directly at [security@datadoghq.com](mailto:security@datadoghq.com).
+
 ### Requirements
 
 Since this project supports multiple Node versions, using a version
