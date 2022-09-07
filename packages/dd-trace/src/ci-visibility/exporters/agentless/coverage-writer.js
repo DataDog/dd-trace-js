@@ -15,7 +15,7 @@ class Writer extends BaseWriter {
   constructor ({ url }) {
     super(...arguments)
     this._url = url
-    this._encoder = new CoverageCIVisibilityEncoder()
+    this._encoder = new CoverageCIVisibilityEncoder(this)
   }
 
   _sendPayload (form, _, done) {

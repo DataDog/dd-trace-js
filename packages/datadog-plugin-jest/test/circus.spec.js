@@ -271,7 +271,7 @@ describe('Plugin', function () {
             expect(eventContentDisposition).to.contain(
               'Content-Disposition: form-data; name="event"; filename="event.json"'
             )
-            expect(eventPayload).to.equal('{}')
+            expect(eventPayload).to.equal('{"dummy":true}')
             done()
           })
 
