@@ -14,6 +14,7 @@ function testThatRequestHasVulnerability (app, vulnerability) {
     beforeEach(() => {
       tracer = require('../../../../dd-trace')
       tracer.init({
+        flushInterval: 100,
         experimental: {
           iast: {
             enabled: true,
@@ -57,7 +58,6 @@ function testThatRequestHasVulnerability (app, vulnerability) {
     })
 
     it(`should have ${vulnerability} vulnerability`, function (done) {
-      this.timeout(4000)
       agent
         .use(traces => {
           expect(traces[1][0].meta['_dd.iast.json']).to.include(`"${vulnerability}"`)

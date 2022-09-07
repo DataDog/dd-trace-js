@@ -71,5 +71,5 @@ describe('weak-hash-analyzer', () => {
   testThatRequestHasVulnerability(function () {
     const crypto = require('crypto')
     crypto.createHash(VULNERABLE_ALGORITHM)
-  }, 'WEAK_CIPHER')
+  }, 'WEAK_HASH')
 })
