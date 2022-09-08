@@ -19,7 +19,6 @@ const {
   TEST_SUITE_ID,
   TEST_COMMAND
 } = require('../../dd-trace/src/plugins/util/test')
-const id = require('../../dd-trace/src/id')
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
@@ -102,7 +101,7 @@ class JestPlugin extends Plugin {
       }
       const testSessionSpan = storage.getStore().span
       configs.forEach(config => {
-        config._ddTestSessionId = testSessionSpan.context()._traceId.toString(16)
+        config._ddTestSessionId = testSessionSpan.context()._traceId.toString(10)
         config._ddTestCommand = testSessionSpan.context()._tags[TEST_COMMAND]
       })
     })
@@ -117,8 +116,7 @@ class JestPlugin extends Plugin {
       const store = storage.getStore()
 
       const testSessionSpanContext = this.tracer.extract('text_map', {
-        'x-datadog-trace-id': id(testSessionId).toString(10),
-        'x-datadog-span-id': id(testSessionId).toString(10),
+        'x-datadog-trace-id': testSessionId,
         'x-datadog-parent-id': '0000000000000000'
       })
 
@@ -188,9 +186,9 @@ class JestPlugin extends Plugin {
     const store = storage.getStore()
     const testSuiteSpan = store ? store.span : undefined
     if (testSuiteSpan) {
-      const testSuiteId = testSuiteSpan.context()._spanId.toString(16)
+      const testSuiteId = testSuiteSpan.context()._spanId.toString(10)
       suiteTags[TEST_SUITE_ID] = testSuiteId
-      suiteTags[TEST_SESSION_ID] = testSuiteSpan.context()._traceId.toString(16)
+      suiteTags[TEST_SESSION_ID] = testSuiteSpan.context()._traceId.toString(10)
       suiteTags[TEST_COMMAND] = testSuiteSpan.context()._tags[TEST_COMMAND]
     }
 

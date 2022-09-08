@@ -161,12 +161,12 @@ class MochaPlugin extends Plugin {
     const testSuiteSpan = this._testSuites.get(test.parent)
 
     if (testSuiteSpan) {
-      const testSuiteId = testSuiteSpan.context()._spanId.toString(16)
+      const testSuiteId = testSuiteSpan.context()._spanId.toString(10)
       testSuiteTags[TEST_SUITE_ID] = testSuiteId
     }
 
     if (this.testSessionSpan) {
-      const testSessionId = this.testSessionSpan.context()._traceId.toString(16)
+      const testSessionId = this.testSessionSpan.context()._traceId.toString(10)
       testSuiteTags[TEST_SESSION_ID] = testSessionId
       testSuiteTags[TEST_COMMAND] = this.command
     }
