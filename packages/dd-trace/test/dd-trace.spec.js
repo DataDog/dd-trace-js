@@ -35,7 +35,7 @@ describe('dd-trace', () => {
       expect(payload[0][0].start).to.be.instanceof(Uint64BE)
       expect(payload[0][0].duration).to.be.instanceof(Uint64BE)
       expect(payload[0][0].metrics).to.have.property(SAMPLING_PRIORITY_KEY)
-      expect(payload[0][0].meta).to.have.property(DECISION_MAKER_KEY, '-0')
+      expect(payload[0][0].meta).to.have.property(DECISION_MAKER_KEY)
     })
   })
 })

@@ -2,14 +2,15 @@
 
 const proxyquire = require('proxyquire')
 const weakCipherAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-cipher-analyzer')
+const { testThatRequestHasVulnerability } = require('../utils')
 
 describe('weak-cipher-analyzer', () => {
-  const VULNERABLE_CIPHER = 'rc2'
+  const VULNERABLE_CIPHER = 'des-ede-cbc'
   const NON_VULNERABLE_CIPHER = 'sha512'
 
   it('should subscribe to crypto hashing channel', () => {
     expect(weakCipherAnalyzer._subscriptions).to.have.lengthOf(1)
-    expect(weakCipherAnalyzer._subscriptions[0]._channel.name).to.equals('asm:crypto:cipher:start')
+    expect(weakCipherAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:crypto:cipher:start')
   })
 
   it('should not detect vulnerability when no algorithm', () => {
@@ -58,5 +59,14 @@ describe('weak-cipher-analyzer', () => {
     proxiedWeakCipherAnalyzer.analyze(VULNERABLE_CIPHER)
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'WEAK_CIPHER' })
+  })
+
+  describe('full feature', () => {
+    testThatRequestHasVulnerability(function () {
+      const crypto = require('crypto')
+      const key = '1111111111111111'
+      const iv = 'abcdefgh'
+      crypto.createCipheriv(VULNERABLE_CIPHER, key, iv)
+    }, 'WEAK_CIPHER')
   })
 })
