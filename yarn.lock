@@ -224,10 +224,10 @@
     source-map "^0.7.3"
     split "^1.0.1"
 
-"@datadog/sketches-js@^2.0.0":
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/@datadog/sketches-js/-/sketches-js-2.0.0.tgz#621a83b1e0b7d5a4c2e496d6d0194aac0ddd5cd1"
-  integrity sha512-cR9r5sGYU64HLUe7vRvWuZO8qFrCPWanB/a2nrPPW5E7JVwt5j9QCEjhtPZo6LoImfVr3SajcbmyGwZfFLsHjw==
+"@datadog/sketches-js@^2.1.0":
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/@datadog/sketches-js/-/sketches-js-2.1.0.tgz#8c7e8028a5fc22ad102fa542b0a446c956830455"
+  integrity sha512-smLocSfrt3s53H/XSVP3/1kP42oqvrkjUPtyaFd1F79ux24oE31BKt+q0c6lsa6hOYrFzsIwyc5GXAI5JmfOew==
 
 "@eslint/eslintrc@^0.4.3":
   version "0.4.3"
