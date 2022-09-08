@@ -67,7 +67,6 @@ jobs:
         uses: actions/checkout@v2
         with:
           repository: 'DataDog/system-tests'
-          ref: 'injection-tests'  # TODO: update when https://github.com/DataDog/system-tests/pull/453 merged
 
       - name: Checkout dd-trace-js
         uses: actions/checkout@v2

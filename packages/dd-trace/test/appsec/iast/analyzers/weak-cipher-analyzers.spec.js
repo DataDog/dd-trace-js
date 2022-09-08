@@ -1,38 +1,38 @@
 'use strict'
 
-const weakHashAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-hash-analyzer')
 const proxyquire = require('proxyquire')
+const weakCipherAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-cipher-analyzer')
 const { testThatRequestHasVulnerability } = require('../utils')
 
-describe('weak-hash-analyzer', () => {
-  const VULNERABLE_ALGORITHM = 'sha1'
-  const NON_VULNERABLE_ALGORITHM = 'sha512'
+describe('weak-cipher-analyzer', () => {
+  const VULNERABLE_CIPHER = 'des-ede-cbc'
+  const NON_VULNERABLE_CIPHER = 'sha512'
 
   it('should subscribe to crypto hashing channel', () => {
-    expect(weakHashAnalyzer._subscriptions).to.have.lengthOf(1)
-    expect(weakHashAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:crypto:hashing:start')
+    expect(weakCipherAnalyzer._subscriptions).to.have.lengthOf(1)
+    expect(weakCipherAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:crypto:cipher:start')
   })
 
   it('should not detect vulnerability when no algorithm', () => {
-    const isVulnerable = weakHashAnalyzer._isVulnerable()
+    const isVulnerable = weakCipherAnalyzer._isVulnerable()
     expect(isVulnerable).to.be.false
   })
 
   it('should not detect vulnerability when no vulnerable algorithm', () => {
-    const isVulnerable = weakHashAnalyzer._isVulnerable(NON_VULNERABLE_ALGORITHM)
+    const isVulnerable = weakCipherAnalyzer._isVulnerable(NON_VULNERABLE_CIPHER)
     expect(isVulnerable).to.be.false
   })
 
   it('should detect vulnerability with different casing in algorithm word', () => {
-    const isVulnerable = weakHashAnalyzer._isVulnerable(VULNERABLE_ALGORITHM)
-    const isVulnerableInLowerCase = weakHashAnalyzer._isVulnerable(VULNERABLE_ALGORITHM.toLowerCase())
-    const isVulnerableInUpperCase = weakHashAnalyzer._isVulnerable(VULNERABLE_ALGORITHM.toUpperCase())
+    const isVulnerable = weakCipherAnalyzer._isVulnerable(VULNERABLE_CIPHER)
+    const isVulnerableInLowerCase = weakCipherAnalyzer._isVulnerable(VULNERABLE_CIPHER.toLowerCase())
+    const isVulnerableInUpperCase = weakCipherAnalyzer._isVulnerable(VULNERABLE_CIPHER.toUpperCase())
     expect(isVulnerable).to.be.true
     expect(isVulnerableInLowerCase).to.be.true
     expect(isVulnerableInUpperCase).to.be.true
   })
 
-  it('should report "WEAK_HASH" vulnerability', () => {
+  it('should report "WEAK_CIPHER" vulnerability', () => {
     const addVulnerability = sinon.stub()
     const iastContext = {
       rootSpan: {
@@ -52,19 +52,21 @@ describe('weak-hash-analyzer', () => {
       '../overhead-controller': { hasQuota: () => true },
       '../vulnerability-reporter': { addVulnerability }
     })
-    const proxiedWeakHashAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/weak-hash-analyzer',
+    const proxiedWeakCipherAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/weak-cipher-analyzer',
       {
         './vulnerability-analyzer': ProxyAnalyzer
       })
-    proxiedWeakHashAnalyzer.analyze(VULNERABLE_ALGORITHM)
+    proxiedWeakCipherAnalyzer.analyze(VULNERABLE_CIPHER)
     expect(addVulnerability).to.have.been.calledOnce
-    expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'WEAK_HASH' })
+    expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'WEAK_CIPHER' })
   })
 
   describe('full feature', () => {
     testThatRequestHasVulnerability(function () {
       const crypto = require('crypto')
-      crypto.createHash(VULNERABLE_ALGORITHM)
-    }, 'WEAK_HASH')
+      const key = '1111111111111111'
+      const iv = 'abcdefgh'
+      crypto.createCipheriv(VULNERABLE_CIPHER, key, iv)
+    }, 'WEAK_CIPHER')
   })
 })
