@@ -1,10 +1,11 @@
 'use strict'
 
-const proxyquire = require('proxyquire')
 const weakHashAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-hash-analyzer')
+const proxyquire = require('proxyquire')
+const { testThatRequestHasVulnerability } = require('../utils')
 
 describe('weak-hash-analyzer', () => {
-  const VULNERABLE_ALGORITHM = 'md4WithRSAEncryption'
+  const VULNERABLE_ALGORITHM = 'sha1'
   const NON_VULNERABLE_ALGORITHM = 'sha512'
 
   it('should subscribe to crypto hashing channel', () => {
@@ -58,5 +59,12 @@ describe('weak-hash-analyzer', () => {
     proxiedWeakHashAnalyzer.analyze(VULNERABLE_ALGORITHM)
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'WEAK_HASH' })
+  })
+
+  describe('full feature', () => {
+    testThatRequestHasVulnerability(function () {
+      const crypto = require('crypto')
+      crypto.createHash(VULNERABLE_ALGORITHM)
+    }, 'WEAK_HASH')
   })
 })
