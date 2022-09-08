@@ -24,10 +24,12 @@ const testFileToSuiteAr = new Map()
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
   function getSuites (suite) {
-    if (suitesByTestFile[suite.file]) {
-      suitesByTestFile[suite.file].push(suite)
-    } else {
-      suitesByTestFile[suite.file] = [suite]
+    if (suite.file) {
+      if (suitesByTestFile[suite.file]) {
+        suitesByTestFile[suite.file].push(suite)
+      } else {
+        suitesByTestFile[suite.file] = [suite]
+      }
     }
     suite.suites.forEach(suite => {
       getSuites(suite)
@@ -35,7 +37,12 @@ function getSuitesByTestFile (root) {
   }
   getSuites(root)
 
-  return suitesByTestFile
+  const numSuitesByTestFile = Object.keys(suitesByTestFile).reduce((acc, testFile) => {
+    acc[testFile] = suitesByTestFile[testFile].length
+    return acc
+  }, {})
+
+  return { suitesByTestFile, numSuitesByTestFile }
 }
 
 function getTestStatus (test) {
@@ -73,7 +80,7 @@ function mochaHook (Runner) {
       return run.apply(this, arguments)
     }
 
-    const suitesByTestFile = getSuitesByTestFile(this.suite)
+    const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
 
     const testRunAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -114,8 +121,7 @@ function mochaHook (Runner) {
       }
       const suitesInTestFile = suitesByTestFile[suite.file]
 
-      const isLastSuite = suitesInTestFile.filter(suite => suite._ddFinished).length === suitesInTestFile.length - 1
-      suite._ddFinished = true
+      const isLastSuite = --numSuitesByTestFile[suite.file] === 0
       if (!isLastSuite) {
         return
       }
