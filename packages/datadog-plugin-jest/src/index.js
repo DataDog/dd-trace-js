@@ -119,9 +119,6 @@ class JestPlugin extends Plugin {
         'x-datadog-parent-id': '0000000000000000'
       })
 
-      this.testSessionId = testSessionId
-      this.command = testCommand
-
       const testSuiteMetadata = getTestSuiteCommonTags(testCommand, this.tracer._version, testSuite)
 
       const testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
@@ -190,8 +187,8 @@ class JestPlugin extends Plugin {
     if (testSuiteSpan) {
       const testSuiteId = testSuiteSpan.context()._spanId.toString(16)
       suiteTags[TEST_SUITE_ID] = testSuiteId
-      suiteTags[TEST_SESSION_ID] = this.testSessionId
-      suiteTags[TEST_COMMAND] = this.command
+      suiteTags[TEST_SESSION_ID] = testSuiteSpan.context()._traceId.toString(16)
+      suiteTags[TEST_COMMAND] = testSuiteSpan.context()._tags[TEST_COMMAND]
     }
 
     const {
