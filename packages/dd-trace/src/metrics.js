@@ -49,6 +49,7 @@ module.exports = {
     }
 
     client = new Client({
+      tracingUrl: config.url || new URL(`http://${config.hostname || 'localhost'}:${config.port}`),
       host: config.dogstatsd.hostname,
       port: config.dogstatsd.port,
       tags

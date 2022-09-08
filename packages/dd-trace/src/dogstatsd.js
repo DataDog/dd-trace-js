@@ -1,7 +1,9 @@
 'use strict'
 
 const lookup = require('dns').lookup // cache to avoid instrumentation
+const request = require('./exporters/common/request')
 const dgram = require('dgram')
+const url = require('url')
 const isIP = require('net').isIP
 const log = require('./log')
 
@@ -10,6 +12,16 @@ const MAX_BUFFER_SIZE = 1024 // limit from the agent
 class Client {
   constructor (options) {
     options = options || {}
+
+    if (options.tracingUrl) {
+      this._httpOptions = url.parse(options.tracingUrl)
+      this._httpOptions.agent = null
+      if (this._httpOptions.protocol === 'unix:') {
+        this._httpOptions.socketPath = this._httpOptions.pathname
+        delete this._httpOptions.protocol
+      }
+      this._httpOptions.path = '/dogstatsd/v1/proxy'
+    }
 
     this._host = options.host || 'localhost'
     this._family = isIP(this._host)
@@ -31,14 +43,26 @@ class Client {
     this._add(stat, value, 'c', tags)
   }
 
-  flush () {
+  flush (cb) {
     const queue = this._enqueue()
 
     if (this._queue.length === 0) return
 
     this._queue = []
 
-    if (this._family !== 0) {
+    if (this._httpOptions) {
+      requestQueue(queue, this._httpOptions, err => {
+        if (err) {
+          log.debug('HTTP error from agent: ' + err.stack)
+          this._httpOptions = null
+          this._queue = queue
+          this.flush()
+        }
+        if (cb) {
+          cb(err)
+        }
+      })
+    } else if (this._family !== 0) {
       this._sendAll(queue, this._host, this._family)
     } else {
       lookup(this._host, (err, address, family) => {
@@ -104,3 +128,23 @@ class Client {
 }
 
 module.exports = Client
+
+function requestQueue (queue, options, callback) {
+  if (!queue.length) {
+    callback()
+    return
+  }
+
+  const [data, ...newQueue] = queue
+  request(data, options, (err, _, code) => {
+    if (err) {
+      callback(err)
+      return
+    }
+    if (code !== 200) {
+      callback(new Error('response code from the trace agent: ' + code))
+      return
+    }
+    requestQueue(newQueue, options, callback)
+  })
+}
