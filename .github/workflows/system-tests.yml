@@ -4,6 +4,8 @@ on:
   pull_request:
     branches:
       - "**"
+  push:
+    branches: [master]
   workflow_dispatch: {}
   schedule:
     - cron:  '00 04 * * 2-6'
