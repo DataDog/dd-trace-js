@@ -172,10 +172,16 @@ function getTestEnvironment (pkg) {
 }
 
 addHook({
-  name: '@jest/core',
-  file: 'build/cli/index.js',
+  name: 'jest-environment-node',
   versions: ['>=24.8.0']
-}, cli => {
+}, getTestEnvironment)
+
+addHook({
+  name: 'jest-environment-jsdom',
+  versions: ['>=24.8.0']
+}, getTestEnvironment)
+
+function cliWrapper (cli) {
   const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
     const processArgv = process.argv.slice(2).join(' ')
     sessionAsyncResource.runInAsyncScope(() => {
@@ -193,13 +199,15 @@ addHook({
   cli.runCLI = wrapped.runCLI
 
   return cli
-})
+}
 
 addHook({
-  name: 'jest-circus',
-  file: 'build/legacy-code-todo-rewrite/jestAdapter.js',
+  name: '@jest/core',
+  file: 'build/cli/index.js',
   versions: ['>=24.8.0']
-}, jestAdapter => {
+}, cliWrapper)
+
+function jestAdapterWrapper (jestAdapter) {
   const adapter = jestAdapter.default ? jestAdapter.default : jestAdapter
   const newAdapter = shimmer.wrap(adapter, function () {
     const environment = arguments[2]
@@ -230,7 +238,13 @@ addHook({
   }
 
   return jestAdapter
-})
+}
+
+addHook({
+  name: 'jest-circus',
+  file: 'build/legacy-code-todo-rewrite/jestAdapter.js',
+  versions: ['>=24.8.0']
+}, jestAdapterWrapper)
 
 function configureTestEnvironment (readConfigsResult) {
   const { configs } = readConfigsResult
@@ -267,16 +281,6 @@ addHook({
   name: 'jest-config',
   versions: ['24.8.0 - 24.9.0']
 }, jestConfigSyncWrapper)
-
-addHook({
-  name: 'jest-environment-node',
-  versions: ['>=24.8.0']
-}, getTestEnvironment)
-
-addHook({
-  name: 'jest-environment-jsdom',
-  versions: ['>=24.8.0']
-}, getTestEnvironment)
 
 function jasmineAsyncInstallWraper (jasmineAsyncInstallExport) {
   return function (globalConfig, globalInput) {
