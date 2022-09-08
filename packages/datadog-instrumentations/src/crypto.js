@@ -6,8 +6,8 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const cryptoHashCh = channel('asm:crypto:hashing:start')
-const cryptoCipherCh = channel('asm:crypto:cipher:start')
+const cryptoHashCh = channel('datadog:crypto:hashing:start')
+const cryptoCipherCh = channel('datadog:crypto:cipher:start')
 
 const hashMethods = ['createHash', 'createHmac', 'createSign', 'createVerify', 'sign', 'verify']
 const cipherMethods = ['createCipheriv', 'createDecipheriv']
