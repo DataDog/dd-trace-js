@@ -73,6 +73,16 @@ function formatJestError (errors) {
   return error
 }
 
+function getTestEnvironmentOptions (config) {
+  if (config.projectConfig && config.projectConfig.testEnvironmentOptions) { // newer versions
+    return config.projectConfig.testEnvironmentOptions
+  }
+  if (config.testEnvironmentOptions) {
+    return config.testEnvironmentOptions
+  }
+  return {}
+}
+
 function getWrappedEnvironment (BaseEnvironment) {
   return class DatadogEnvironment extends BaseEnvironment {
     constructor (config, context) {
@@ -83,13 +93,7 @@ function getWrappedEnvironment (BaseEnvironment) {
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
 
-      if (config.projectConfig && config.projectConfig.testEnvironmentOptions) { // newer versions
-        this._ddTestSessionId = config.projectConfig.testEnvironmentOptions._ddTestSessionId
-        this._ddTestCommand = config.projectConfig.testEnvironmentOptions._ddTestCommand
-      } else if (config.testEnvironmentOptions) {
-        this._ddTestSessionId = config.testEnvironmentOptions._ddTestSessionId
-        this._ddTestCommand = config.testEnvironmentOptions._ddTestCommand
-      }
+      this.testEnvironmentOptions = getTestEnvironmentOptions(config)
     }
 
     async handleTestEvent (event, state) {
@@ -215,8 +219,7 @@ function jestAdapterWrapper (jestAdapter) {
     return asyncResource.runInAsyncScope(() => {
       testSuiteStartCh.publish({
         testSuite: environment.testSuite,
-        testSessionId: environment._ddTestSessionId,
-        testCommand: environment._ddTestCommand
+        testEnvironmentOptions: environment.testEnvironmentOptions
       })
       return adapter.apply(this, arguments).then(suiteResults => {
         const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults

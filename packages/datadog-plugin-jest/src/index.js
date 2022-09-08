@@ -107,10 +107,13 @@ class JestPlugin extends Plugin {
       })
     })
 
-    this.addSub('ci:jest:test-suite:start', ({ testSuite, testSessionId, testCommand }) => {
+    this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions }) => {
       if (!this.config.isAgentlessEnabled) {
         return
       }
+
+      const { _ddTestSessionId: testSessionId, _ddTestCommand: testCommand } = testEnvironmentOptions
+
       const store = storage.getStore()
 
       const testSessionSpanContext = this.tracer.extract('text_map', {
