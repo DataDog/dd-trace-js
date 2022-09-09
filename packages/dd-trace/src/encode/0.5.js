@@ -1,9 +1,14 @@
 'use strict'
 
+const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const { AgentEncoder: BaseEncoder } = require('./0.4')
 
 const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9c
+
+function formatSpan (span) {
+  return normalizeSpan(truncateSpan(span))
+}
 
 class AgentEncoder extends BaseEncoder {
   makePayload () {
@@ -27,7 +32,8 @@ class AgentEncoder extends BaseEncoder {
   _encode (bytes, trace) {
     this._encodeArrayPrefix(bytes, trace)
 
-    for (const span of trace) {
+    const events = trace.map(formatSpan)
+    for (const span of events) {
       this._encodeByte(bytes, ARRAY_OF_TWELVE)
       this._encodeString(bytes, span.service)
       this._encodeString(bytes, span.name)
