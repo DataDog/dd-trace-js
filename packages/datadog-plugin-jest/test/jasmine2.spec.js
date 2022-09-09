@@ -31,13 +31,12 @@ describe('Plugin', () => {
     testPathIgnorePatterns: ['/node_modules/'],
     coverageReporters: [],
     reporters: [],
-    testRunner: 'jest-jasmine2',
     silent: true,
     cache: false,
     maxWorkers: '50%'
   }
 
-  withVersions('jest', ['jest-jasmine2'], (version, moduleName) => {
+  withVersions('jest', ['jest-jasmine2'], (version) => {
     afterEach(() => {
       const jestTestFile = fs.readdirSync(__dirname).filter(name => name.startsWith('jest-'))
       jestTestFile.forEach((testFile) => {
@@ -52,6 +51,9 @@ describe('Plugin', () => {
         .reply(200, 'OK')
 
       return agent.load(['jest', 'http'], { service: 'test' }).then(() => {
+        jestCommonOptions.testRunner =
+          require(`../../../versions/jest@${version}`).getPath('jest-jasmine2')
+
         jestExecutable = require(`../../../versions/jest@${version}`).get()
       })
     })
