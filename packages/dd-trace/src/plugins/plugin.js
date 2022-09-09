@@ -1,5 +1,7 @@
 'use strict'
 
+// TODO: move anything related to tracing to TracingPlugin instead
+
 const dc = require('diagnostics_channel')
 const { storage } = require('../../../datadog-core')
 
