@@ -3,6 +3,14 @@ const istanbul = require('istanbul-lib-coverage')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
+const testSessionStartCh = channel('ci:jest:session:start')
+const testSessionFinishCh = channel('ci:jest:session:finish')
+
+const testSessionConfigurationCh = channel('ci:jest:session:configuration')
+
+const testSuiteStartCh = channel('ci:jest:test-suite:start')
+const testSuiteFinish = channel('ci:jest:test-suite:finish')
+
 const testStartCh = channel('ci:jest:test:start')
 const testSkippedCh = channel('ci:jest:test:skip')
 const testRunFinishCh = channel('ci:jest:test:finish')
@@ -16,6 +24,8 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { getFormattedJestTestParameters, getJestTestName } = require('../../datadog-plugin-jest/src/util')
+
+const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 // This function also resets the coverage counters
 function extractCoverageInformation (coverage, rootDir) {
@@ -63,6 +73,16 @@ function formatJestError (errors) {
   return error
 }
 
+function getTestEnvironmentOptions (config) {
+  if (config.projectConfig && config.projectConfig.testEnvironmentOptions) { // newer versions
+    return config.projectConfig.testEnvironmentOptions
+  }
+  if (config.testEnvironmentOptions) {
+    return config.testEnvironmentOptions
+  }
+  return {}
+}
+
 function getWrappedEnvironment (BaseEnvironment) {
   return class DatadogEnvironment extends BaseEnvironment {
     constructor (config, context) {
@@ -72,6 +92,8 @@ function getWrappedEnvironment (BaseEnvironment) {
       this.testSuite = getTestSuitePath(context.testPath, rootDir)
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
+
+      this.testEnvironmentOptions = getTestEnvironmentOptions(config)
     }
 
     async handleTestEvent (event, state) {
@@ -163,11 +185,107 @@ addHook({
   versions: ['>=24.8.0']
 }, getTestEnvironment)
 
+function cliWrapper (cli) {
+  const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
+    const processArgv = process.argv.slice(2).join(' ')
+    sessionAsyncResource.runInAsyncScope(() => {
+      testSessionStartCh.publish(`jest ${processArgv}`)
+    })
+    return runCLI.apply(this, arguments).then(result => {
+      const { results: { success } } = result
+      sessionAsyncResource.runInAsyncScope(() => {
+        testSessionFinishCh.publish(success ? 'pass' : 'fail')
+      })
+      return result
+    })
+  })
+
+  cli.runCLI = wrapped.runCLI
+
+  return cli
+}
+
 addHook({
-  name: 'jest-jasmine2',
-  versions: ['>=24.8.0'],
-  file: 'build/jasmineAsyncInstall.js'
-}, (jasmineAsyncInstallExport) => {
+  name: '@jest/core',
+  file: 'build/cli/index.js',
+  versions: ['>=24.8.0']
+}, cliWrapper)
+
+function jestAdapterWrapper (jestAdapter) {
+  const adapter = jestAdapter.default ? jestAdapter.default : jestAdapter
+  const newAdapter = shimmer.wrap(adapter, function () {
+    const environment = arguments[2]
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    return asyncResource.runInAsyncScope(() => {
+      testSuiteStartCh.publish({
+        testSuite: environment.testSuite,
+        testEnvironmentOptions: environment.testEnvironmentOptions
+      })
+      return adapter.apply(this, arguments).then(suiteResults => {
+        const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults
+        let status = 'pass'
+        if (skipped) {
+          status = 'skipped'
+        } else if (numFailingTests !== 0) {
+          status = 'fail'
+        }
+        testSuiteFinish.publish({ status, errorMessage })
+        return suiteResults
+      })
+    })
+  })
+  if (jestAdapter.default) {
+    jestAdapter.default = newAdapter
+  } else {
+    jestAdapter = newAdapter
+  }
+
+  return jestAdapter
+}
+
+addHook({
+  name: 'jest-circus',
+  file: 'build/legacy-code-todo-rewrite/jestAdapter.js',
+  versions: ['>=24.8.0']
+}, jestAdapterWrapper)
+
+function configureTestEnvironment (readConfigsResult) {
+  const { configs } = readConfigsResult
+  sessionAsyncResource.runInAsyncScope(() => {
+    testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
+  })
+}
+
+function jestConfigAsyncWrapper (jestConfig) {
+  shimmer.wrap(jestConfig, 'readConfigs', readConfigs => async function () {
+    const readConfigsResult = await readConfigs.apply(this, arguments)
+    configureTestEnvironment(readConfigsResult)
+    return readConfigsResult
+  })
+  return jestConfig
+}
+
+function jestConfigSyncWrapper (jestConfig) {
+  shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function () {
+    const readConfigsResult = readConfigs.apply(this, arguments)
+    configureTestEnvironment(readConfigsResult)
+    return readConfigsResult
+  })
+  return jestConfig
+}
+
+// from 25.1.0 on, readConfigs becomes async
+addHook({
+  name: 'jest-config',
+  versions: ['>=25.1.0']
+}, jestConfigAsyncWrapper)
+
+addHook({
+  name: 'jest-config',
+  versions: ['24.8.0 - 24.9.0']
+}, jestConfigSyncWrapper)
+
+function jasmineAsyncInstallWraper (jasmineAsyncInstallExport) {
   return function (globalConfig, globalInput) {
     globalInput._ddtrace = global._ddtrace
     shimmer.wrap(globalInput.jasmine.Spec.prototype, 'execute', execute => function (onComplete) {
@@ -194,4 +312,10 @@ addHook({
     })
     return jasmineAsyncInstallExport.default(globalConfig, globalInput)
   }
-})
+}
+
+addHook({
+  name: 'jest-jasmine2',
+  versions: ['>=24.8.0'],
+  file: 'build/jasmineAsyncInstall.js'
+}, jasmineAsyncInstallWraper)
