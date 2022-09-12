@@ -163,7 +163,7 @@ function mochaHook (Runner) {
       const status = getTestStatus(test)
 
       // if there are afterEach to be run, we don't finish the test yet
-      if (!test.parent._afterEach.length) {
+      if (asyncResource && !test.parent._afterEach.length) {
         asyncResource.runInAsyncScope(() => {
           testFinishCh.publish(status)
         })
@@ -231,7 +231,11 @@ function mochaHook (Runner) {
       } else {
         // if there is no async resource, the test has been skipped through `test.skip``
         const skippedTestAsyncResource = new AsyncResource('bound-anonymous-fn')
-        testToAr.set(test, skippedTestAsyncResource)
+        if (test.fn) {
+          testToAr.set(test.fn, skippedTestAsyncResource)
+        } else {
+          testToAr.set(test, skippedTestAsyncResource)
+        }
         skippedTestAsyncResource.runInAsyncScope(() => {
           skipCh.publish(test)
         })
