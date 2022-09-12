@@ -10,34 +10,34 @@ class TracingPlugin extends Plugin {
 
     const prefix = this.constructor.prefix
 
-    this.addSub(`${prefix}:start`, ctx => {
-      this.start(ctx)
+    this.addSub(`${prefix}:start`, message => {
+      this.start(message)
     })
 
     this.addSub(`${prefix}:error`, err => {
       this.error(err)
-      this.addError(err)
     })
 
-    this.addSub(`${prefix}:finish`, ctx => {
-      this.finish(ctx)
-      storage.getStore().span.finish()
+    this.addSub(`${prefix}:finish`, message => {
+      this.finish(message)
     })
   }
 
   start () {} // implemented by individual plugins
 
-  finish () {} // implemented by individual plugins
+  finish () {
+    this.activeSpan().finish()
+  }
 
-  error () {} // implemented by individual plugins
+  error (error) {
+    this.addError(error)
+  }
 
   addError (error) {
-    const store = storage.getStore()
+    const span = this.activeSpan()
 
-    if (!store || !store.span) return
-
-    if (!store.span._spanContext._tags['error']) {
-      store.span.setTag('error', error || 1)
+    if (!span._spanContext._tags['error']) {
+      span.setTag('error', error || 1)
     }
   }
 
@@ -64,6 +64,12 @@ class TracingPlugin extends Plugin {
     storage.enterWith({ ...store, span })
 
     return span
+  }
+
+  activeSpan () {
+    const store = storage.getStore()
+
+    return store && store.span
   }
 }
 

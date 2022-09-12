@@ -115,7 +115,7 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.3'], file: 'lib/request-exec
     if (!startCh.hasSubscribers) {
       return _sendOnConnection.apply(this, arguments)
     }
-    addConnectionCh.publish({ address: this._connection.address, port: this._connection.port })
+    addConnectionCh.publish({ hostname: this._connection.address, port: this._connection.port })
     return _sendOnConnection.apply(this, arguments)
   })
   return RequestExecution
@@ -136,7 +136,7 @@ addHook({ name: 'cassandra-driver', versions: ['3.3 - 4.3'], file: 'lib/request-
     getHostCallback = asyncResource.bind(getHostCallback)
 
     arguments[0] = AsyncResource.bind(function () {
-      addConnectionCh.publish({ address: execution._connection.address, port: execution._connection.port })
+      addConnectionCh.publish({ hostname: execution._connection.address, port: execution._connection.port })
       return getHostCallback.apply(this, arguments)
     })
 
@@ -160,7 +160,7 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 3.2'], file: 'lib/request-ha
     callback = asyncResource.bind(callback)
 
     arguments[2] = AsyncResource.bind(function () {
-      addConnectionCh.publish({ address: handler.connection.address, port: handler.connection.port })
+      addConnectionCh.publish({ hostname: handler.connection.address, port: handler.connection.port })
       return callback.apply(this, arguments)
     })
 
