@@ -507,6 +507,33 @@ describe('Plugin', () => {
         })
         mocha.run()
       })
+
+      it('works when skipping suites', function (done) {
+        const testFilePath = path.join(__dirname, 'mocha-test-skip-describe.js')
+
+        const testNames = [
+          ['mocha-test-skip-describe will be skipped', 'skip'],
+          ['mocha-test-skip-describe-pass will pass', 'pass']
+        ]
+
+        const assertionPromises = testNames.map(([testName, status]) => {
+          return agent.use(trace => {
+            const testSpan = trace[0][0]
+            expect(testSpan.meta[TEST_STATUS]).to.equal(status)
+            expect(testSpan.meta[TEST_NAME]).to.equal(testName)
+          })
+        })
+
+        Promise.all(assertionPromises)
+          .then(() => done())
+          .catch(done)
+
+        const mocha = new Mocha({
+          reporter: function () {} // silent on internal tests
+        })
+        mocha.addFile(testFilePath)
+        mocha.run()
+      })
     })
   })
 })
