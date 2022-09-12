@@ -1,8 +1,32 @@
 'use strict'
 
 const nock = require('nock')
+const getPort = require('get-port')
+const http = require('http')
 
 const FormData = require('../../../src/exporters/common/form-data')
+
+const initHTTPServer = (port) => {
+  return new Promise(resolve => {
+    const sockets = []
+    const requestListener = function (req, res) {
+      setTimeout(() => {
+        res.writeHead(200)
+        res.end('OK')
+      }, 1000)
+    }
+
+    const server = http.createServer(requestListener)
+
+    server.on('connection', socket => sockets.push(socket))
+
+    server.listen(port, () => {
+      resolve(() => {
+        sockets.forEach(socket => socket.end())
+      })
+    })
+  })
+}
 
 describe('request', function () {
   let request
@@ -10,8 +34,6 @@ describe('request', function () {
   let docker
 
   beforeEach(() => {
-    nock.disableNetConnect()
-
     log = {
       error: sinon.spy(),
       debug: sinon.spy()
@@ -27,7 +49,6 @@ describe('request', function () {
 
   afterEach(() => {
     nock.cleanAll()
-    nock.enableNetConnect()
   })
 
   it('should send an http request with a buffer', (done) => {
@@ -175,6 +196,42 @@ describe('request', function () {
     }, (err, res) => {
       expect(res).to.equal('OK')
       done()
+    })
+  })
+
+  it('should be able to send concurrent requests to different hosts', function (done) {
+    this.timeout(10000)
+    // TODO: try to simplify the setup here. I haven't been able to reproduce the
+    // concurrent socket issue using nock
+    Promise.all([getPort(), getPort()]).then(([port1, port2]) => {
+      Promise.all([initHTTPServer(port1), initHTTPServer(port2)]).then(([shutdownFirst, shutdownSecond]) => {
+        // this interval is blocking a socket for the other request
+        const intervalId = setInterval(() => {
+          request(Buffer.from(''), {
+            path: '/',
+            method: 'POST',
+            hostname: 'localhost',
+            protocol: 'http:',
+            port: port1
+          }, () => {})
+        }, 1000)
+
+        setTimeout(() => {
+          request(Buffer.from(''), {
+            path: '/',
+            method: 'POST',
+            hostname: 'localhost',
+            protocol: 'http:',
+            port: port2
+          }, (err, res) => {
+            expect(res).to.equal('OK')
+            shutdownFirst()
+            shutdownSecond()
+            clearInterval(intervalId)
+            done()
+          })
+        }, 2000)
+      })
     })
   })
 })
