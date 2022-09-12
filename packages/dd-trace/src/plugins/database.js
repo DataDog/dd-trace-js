@@ -1,9 +1,7 @@
 'use strict'
 
-const TracingPlugin = require('./tracing')
+const ClientPlugin = require('./client')
 
-class DatabasePlugin extends TracingPlugin {
-  // TODO: exit span when AsyncResource instances are removed.
-}
+class DatabasePlugin extends ClientPlugin {}
 
 module.exports = DatabasePlugin
