@@ -4,7 +4,7 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class CassandraDriverPlugin extends DatabasePlugin {
   static name = 'cassandra-driver'
-  static prefix = 'apm:cassandra:query'
+  static operation = 'query'
 
   start ({ keyspace, query, connectionOptions = {} }) {
     if (Array.isArray(query)) {

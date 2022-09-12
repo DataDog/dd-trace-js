@@ -4,7 +4,7 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class MySQLPlugin extends DatabasePlugin {
   static name = 'mysql'
-  static prefix = 'apm:mysql:query'
+  static operation = 'query'
 
   start ({ sql, conf: dbConfig }) {
     const service = getServiceName(this.tracer, this.config, dbConfig)

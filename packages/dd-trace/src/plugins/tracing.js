@@ -8,17 +8,15 @@ class TracingPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    const prefix = this.constructor.prefix
-
-    this.addSub(`${prefix}:start`, message => {
+    this.addTraceSub('start', message => {
       this.start(message)
     })
 
-    this.addSub(`${prefix}:error`, err => {
+    this.addTraceSub('error', err => {
       this.error(err)
     })
 
-    this.addSub(`${prefix}:finish`, message => {
+    this.addTraceSub('finish', message => {
       this.finish(message)
     })
   }
@@ -31,6 +29,12 @@ class TracingPlugin extends Plugin {
 
   error (error) {
     this.addError(error)
+  }
+
+  addTraceSub (eventName, handler) {
+    const { name, operation } = this.constructor
+
+    this.addSub(`apm:${name}:${operation}:${eventName}`, handler)
   }
 
   addError (error) {

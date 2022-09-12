@@ -2,12 +2,13 @@
 
 const TracingPlugin = require('./tracing')
 
+// TODO: Add system property for the service name of databases and caches.
 // TODO: Exit span on finish when AsyncResource instances are removed.
 class ClientPlugin extends TracingPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub(`${this.prefix}:connect`, message => {
+    this.addTraceSub('connect', message => {
       this.connect(message)
     })
   }
