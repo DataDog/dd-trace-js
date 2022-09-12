@@ -32,9 +32,9 @@ class TracingPlugin extends Plugin {
   }
 
   addTraceSub (eventName, handler) {
-    const { name, operation } = this.constructor
+    const { component, name, operation } = this.constructor
 
-    this.addSub(`apm:${name}:${operation}:${eventName}`, handler)
+    this.addSub(`apm:${component || name}:${operation}:${eventName}`, handler)
   }
 
   addError (error) {
