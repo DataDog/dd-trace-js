@@ -5,12 +5,13 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 class ElasticsearchPlugin extends DatabasePlugin {
   static name = 'elasticsearch'
   static operation = 'query'
+  static system = 'elasticsearch'
 
   start ({ params }) {
     const body = getBody(params.body || params.bulkBody)
 
     this.startSpan('elasticsearch.query', {
-      service: this.config.service || `${this.tracer._service}-elasticsearch`,
+      service: this.config.service,
       resource: `${params.method} ${quantizePath(params.path)}`,
       type: 'elasticsearch',
       kind: 'client',

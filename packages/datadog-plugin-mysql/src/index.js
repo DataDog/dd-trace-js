@@ -5,9 +5,10 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 class MySQLPlugin extends DatabasePlugin {
   static name = 'mysql'
   static operation = 'query'
+  static system = 'mysql'
 
   start ({ sql, conf: dbConfig }) {
-    const service = getServiceName(this.tracer, this.config, dbConfig)
+    const service = getServiceName(this.config, dbConfig)
 
     this.startSpan('mysql.query', {
       service,
@@ -25,14 +26,12 @@ class MySQLPlugin extends DatabasePlugin {
   }
 }
 
-function getServiceName (tracer, config, dbConfig) {
+function getServiceName (config, dbConfig) {
   if (typeof config.service === 'function') {
     return config.service(dbConfig)
-  } else if (config.service) {
-    return config.service
-  } else {
-    return `${tracer._service}-mysql`
   }
+
+  return config.service
 }
 
 module.exports = MySQLPlugin

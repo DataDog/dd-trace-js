@@ -5,6 +5,7 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 class CassandraDriverPlugin extends DatabasePlugin {
   static name = 'cassandra-driver'
   static operation = 'query'
+  static system = 'cassandra'
 
   start ({ keyspace, query, connectionOptions = {} }) {
     if (Array.isArray(query)) {
@@ -12,7 +13,7 @@ class CassandraDriverPlugin extends DatabasePlugin {
     }
 
     this.startSpan('cassandra.query', {
-      service: this.config.service || `${this.tracer._service}-cassandra`,
+      service: this.config.service,
       resource: trim(query, 5000),
       type: 'cassandra',
       kind: 'client',

@@ -17,6 +17,14 @@ class ClientPlugin extends TracingPlugin {
     this.addOutgoingHost(url.hostname, url.port)
   }
 
+  startSpan (name, options) {
+    if (!options.service && this.constructor.system) {
+      options.service = `${this.tracer._service}-${this.constructor.system}`
+    }
+
+    return super.startSpan(name, options)
+  }
+
   addOutgoingHost (hostname, port) {
     this.activeSpan().addTags({
       'out.host': hostname,
