@@ -71,8 +71,8 @@ class AgentEncoder {
   _encode (bytes, trace) {
     this._encodeArrayPrefix(bytes, trace)
 
-    const events = trace.map(formatSpan)
-    for (const span of events) {
+    for (let span of trace) {
+      span = formatSpan(span)
       bytes.reserve(1)
 
       if (span.type) {

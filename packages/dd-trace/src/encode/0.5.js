@@ -32,8 +32,8 @@ class AgentEncoder extends BaseEncoder {
   _encode (bytes, trace) {
     this._encodeArrayPrefix(bytes, trace)
 
-    const events = trace.map(formatSpan)
-    for (const span of events) {
+    for (let span of trace) {
+      span = formatSpan(span)
       this._encodeByte(bytes, ARRAY_OF_TWELVE)
       this._encodeString(bytes, span.service)
       this._encodeString(bytes, span.name)
