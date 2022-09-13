@@ -65,21 +65,25 @@ function wrapFindPageComponents (findPageComponents) {
     const result = findPageComponents.apply(this, arguments)
 
     if (result) {
-      pageLoadChannel.publish({ page: pathname })
+      pageLoadChannel.publish({ page: getPagePath(pathname) })
     }
 
     return result
   }
 }
 
+function getPagePath (page) {
+  return typeof page === 'object' ? page.pathname : page
+}
+
 function getPageFromPath (page, dynamicRoutes = []) {
   for (const dynamicRoute of dynamicRoutes) {
     if (dynamicRoute.page.startsWith('/api') && dynamicRoute.match(page)) {
-      return dynamicRoute.page
+      return getPagePath(dynamicRoute.page)
     }
   }
 
-  return page
+  return getPagePath(page)
 }
 
 function instrument (req, res, handler) {
