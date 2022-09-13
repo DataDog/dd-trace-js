@@ -4,8 +4,9 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class PGPlugin extends DatabasePlugin {
   static name = 'pg'
-  static operation = 'query'
-  static system = 'postgres'
+
+  operation = 'query'
+  system = 'postgres'
 
   start ({ params = {}, statement }) {
     const service = getServiceName(this.config, params)

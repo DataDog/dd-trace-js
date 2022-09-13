@@ -8,6 +8,8 @@ class TracingPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
+    this.component = this.component || this.constructor.name
+
     this.addTraceSub('start', message => {
       this.start(message)
     })

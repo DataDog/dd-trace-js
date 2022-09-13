@@ -4,9 +4,10 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class MongodbCorePlugin extends DatabasePlugin {
   static name = 'mongodb-core'
-  static component = 'mongodb'
-  static operation = 'query'
-  static system = 'mongodb'
+
+  component = 'mongodb'
+  operation = 'query'
+  system = 'mongodb'
 
   start ({ ns, ops, options = {}, name }) {
     const query = getQuery(ops)
