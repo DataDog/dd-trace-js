@@ -26,7 +26,11 @@ class ClientPlugin extends TracingPlugin {
   }
 
   addOutgoingHost (hostname, port) {
-    this.activeSpan().addTags({
+    const span = this.activeSpan()
+
+    if (!span) return
+
+    span.addTags({
       'out.host': hostname,
       'out.port': port
     })
