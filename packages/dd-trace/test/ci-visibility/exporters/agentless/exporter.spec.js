@@ -70,10 +70,10 @@ describe('CI Visibility Exporter', () => {
 
   describe('when ITR is enabled', () => {
     it('should append a code coverage payload when exportCoverage is called', () => {
-      const testSpan = {
+      const span = {
         context: () => ({ _traceId: '1', _spanId: '2' })
       }
-      const payload = { testSpan, coverageFiles: ['file.js'] }
+      const payload = { span, coverageFiles: ['file.js'] }
 
       exporter = new Exporter({ url, flushInterval: 0, isIntelligentTestRunnerEnabled: true })
 
@@ -89,10 +89,10 @@ describe('CI Visibility Exporter', () => {
       this.timeout(3000)
       exporter = new Exporter({ url, flushInterval, isIntelligentTestRunnerEnabled: true })
 
-      const testSpan = {
+      const span = {
         context: () => ({ _traceId: '1', _spanId: '2' })
       }
-      const payload = { testSpan, coverageFiles: ['file.js'] }
+      const payload = { span, coverageFiles: ['file.js'] }
 
       exporter.exportCoverage(payload)
 
