@@ -4,7 +4,7 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class TediousPlugin extends DatabasePlugin {
   static name = 'tedious'
-  static operation = 'query'
+  static operation = 'request'
   static system = 'mssql'
 
   start ({ queryOrProcedure, connectionConfig }) {
