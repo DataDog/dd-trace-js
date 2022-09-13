@@ -293,8 +293,12 @@ describe('Plugin', function () {
 
               expect(contentTypeHeader).to.contain('multipart/form-data')
               expect(coveragePayload.version).to.equal(1)
-              expect(coveragePayload.files.map(file => file.filename))
+              const coverageFiles = coveragePayload.files.map(file => file.filename)
+
+              expect(coverageFiles)
                 .to.include('packages/datadog-plugin-jest/test/sum-coverage-test.js')
+              expect(coverageFiles)
+                .to.include('packages/datadog-plugin-jest/test/jest-coverage.js')
               expect(contentDisposition).to.contain(
                 'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"'
               )

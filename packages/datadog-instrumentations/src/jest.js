@@ -9,14 +9,13 @@ const testSessionFinishCh = channel('ci:jest:session:finish')
 const testSessionConfigurationCh = channel('ci:jest:session:configuration')
 
 const testSuiteStartCh = channel('ci:jest:test-suite:start')
-const testSuiteFinish = channel('ci:jest:test-suite:finish')
+const testSuiteFinishCh = channel('ci:jest:test-suite:finish')
+const testSuiteCodeCoverageCh = channel('ci:jest:test-suite:code-coverage')
 
 const testStartCh = channel('ci:jest:test:start')
 const testSkippedCh = channel('ci:jest:test:skip')
 const testRunFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
-
-const testCodeCoverageCh = channel('ci:jest:test:code-coverage')
 
 const {
   getTestSuitePath,
@@ -27,7 +26,6 @@ const { getFormattedJestTestParameters, getJestTestName } = require('../../datad
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
-// This function also resets the coverage counters
 function extractCoverageInformation (coverage, rootDir) {
   const coverageMap = istanbul.createCoverageMap(coverage)
 
@@ -37,8 +35,6 @@ function extractCoverageInformation (coverage, rootDir) {
       const fileCoverage = coverageMap.fileCoverageFor(filename)
       const lineCoverage = fileCoverage.getLineCoverage()
       const isAnyLineExecuted = Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
-
-      fileCoverage.resetHits()
 
       return isAnyLineExecuted
     })
@@ -136,10 +132,6 @@ function getWrappedEnvironment (BaseEnvironment) {
       if (event.name === 'test_done') {
         const asyncResource = asyncResources.get(event.test)
         asyncResource.runInAsyncScope(() => {
-          if (this.global.__coverage__) {
-            const coverageFiles = extractCoverageInformation(this.global.__coverage__, this.rootDir)
-            testCodeCoverageCh.publish(coverageFiles)
-          }
           let status = 'pass'
           if (event.test.errors && event.test.errors.length) {
             status = 'fail'
@@ -229,7 +221,13 @@ function jestAdapterWrapper (jestAdapter) {
         } else if (numFailingTests !== 0) {
           status = 'fail'
         }
-        testSuiteFinish.publish({ status, errorMessage })
+        testSuiteFinishCh.publish({ status, errorMessage })
+        if (environment.global.__coverage__) {
+          const coverageFiles = extractCoverageInformation(environment.global.__coverage__, environment.rootDir)
+          if (coverageFiles.length) {
+            testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
+          }
+        }
         return suiteResults
       })
     })
