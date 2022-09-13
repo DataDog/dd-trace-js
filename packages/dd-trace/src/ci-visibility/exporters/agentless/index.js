@@ -25,10 +25,10 @@ class AgentlessCiVisibilityExporter {
     })
   }
 
-  exportCoverage ({ testSpan, coverageFiles }) {
+  exportCoverage ({ span, coverageFiles }) {
     const formattedCoverage = {
-      traceId: testSpan.context()._traceId,
-      spanId: testSpan.context()._spanId,
+      traceId: span.context()._traceId,
+      spanId: span.context()._spanId,
       files: coverageFiles
     }
     this._coverageWriter.append(formattedCoverage)
