@@ -18,8 +18,8 @@ class ClientPlugin extends TracingPlugin {
   }
 
   startSpan (name, options) {
-    if (!options.service && this.constructor.system) {
-      options.service = `${this.tracer._service}-${this.constructor.system}`
+    if (!options.service && this.system) {
+      options.service = `${this.tracer._service}-${this.system}`
     }
 
     return super.startSpan(name, options)
