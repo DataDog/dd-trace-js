@@ -41,7 +41,8 @@ describe('Plugin', function () {
           server.stdout.on('data', chunk => process.stdout.write(chunk))
         })
 
-        after(async () => {
+        after(async function () {
+          this.timeout(5000)
           server.kill()
           await axios.get(`http://localhost:${port}/api/hello/world`).catch(() => {})
           await agent.close({ ritmReset: false })
@@ -71,11 +72,16 @@ describe('Plugin', function () {
         })
       })
 
-      after(() => {
-        execSync(`rm ${__dirname}/package.json`)
-        execSync(`rm ${__dirname}/package-lock.json`)
-        execSync(`rm -rf ${__dirname}/node_modules`)
-        execSync(`rm -rf ${__dirname}/.next`)
+      after(function () {
+        this.timeout(5000)
+        const files = [
+          'package.json',
+          'package-lock.json',
+          'node_modules',
+          '.next'
+        ]
+        const paths = files.map(file => `${__dirname}/${file}`)
+        execSync(`rm -rf ${paths.join(' ')}`)
       })
 
       describe('without configuration', () => {
