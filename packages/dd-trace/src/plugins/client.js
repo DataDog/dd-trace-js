@@ -1,31 +1,7 @@
 'use strict'
 
-const TracingPlugin = require('./tracing')
+const OutgoingPlugin = require('./outgoing')
 
-// TODO: Exit span on finish when AsyncResource instances are removed.
-class ClientPlugin extends TracingPlugin {
-  constructor (...args) {
-    super(...args)
-
-    this.addTraceSub('connect', message => {
-      this.connect(message)
-    })
-  }
-
-  connect (url) {
-    this.addOutgoingHost(url.hostname, url.port)
-  }
-
-  addOutgoingHost (hostname, port) {
-    const span = this.activeSpan()
-
-    if (!span) return
-
-    span.addTags({
-      'out.host': hostname,
-      'out.port': port
-    })
-  }
-}
+class ClientPlugin extends OutgoingPlugin {}
 
 module.exports = ClientPlugin
