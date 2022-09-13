@@ -15,6 +15,7 @@ require,lodash.kebabcase,MIT,Copyright JS Foundation and other contributors
 require,lodash.pick,MIT,Copyright JS Foundation and other contributors
 require,lodash.sortby,MIT,Copyright JS Foundation and other contributors
 require,lodash.uniq,MIT,Copyright JS Foundation and other contributors
+require,lru-cache,ISC,Copyright (c) 2010-2022 Isaac Z. Schlueter and Contributors
 require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk
 require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
