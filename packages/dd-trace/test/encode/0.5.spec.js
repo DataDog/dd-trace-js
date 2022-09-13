@@ -4,6 +4,12 @@ const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const id = require('../../src/id')
 
+function randString (length) {
+  return Array.from({ length }, () => {
+    return String.fromCharCode(Math.floor(Math.random() * 256))
+  }).join('')
+}
+
 describe('encode 0.5', () => {
   let encoder
   let writer
@@ -72,6 +78,23 @@ describe('encode 0.5', () => {
     expect(trace[0][5].toString(16)).to.equal('1234abcd1234abcd')
   })
 
+  it('should truncate long fields', function () {
+    this.timeout(5000)
+    const flushSize = 8 * 1024 * 1024
+    const tooLongString = randString(flushSize)
+
+    data[0].service = tooLongString
+    data[0].name = tooLongString
+    data[0].type = tooLongString
+    data[0].resource = tooLongString
+    data[0].meta.foo = tooLongString
+    data[0].metrics.foo = tooLongString
+
+    encoder.encode(data)
+
+    expect(writer.flush).to.not.have.been.called
+  })
+
   it('should report its count', () => {
     expect(encoder.count()).to.equal(0)
 
@@ -84,8 +107,12 @@ describe('encode 0.5', () => {
     expect(encoder.count()).to.equal(2)
   })
 
-  it('should flush when the payload size limit is reached', () => {
-    data[0].meta.foo = new Array(8 * 1024 * 1024).join('a')
+  it('should flush when the payload size limit is reached', function () {
+    this.timeout(5000)
+    // Make 8mb of data
+    for (let i = 0; i < 8 * 1024; i++) {
+      data[0].meta[`foo${i}`] = randString(1024)
+    }
 
     encoder.encode(data)
 
