@@ -10,6 +10,7 @@ const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
 const { sendGitMetadata } = require('./ci-visibility/exporters/git/git_metadata')
+const RemoteConfigManager = require('./remote_config')
 
 const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
 
@@ -70,6 +71,14 @@ class Tracer extends NoopProxy {
           }
           gitMetadataUploadFinishCh.publish(err)
         })
+      }
+
+      if (true) {
+        const rc = new RemoteConfigManager(config, this)
+        rc.start()
+
+        rc.on('FEATURES', console.log)
+        rc.on('ASM_DATA', console.log)
       }
     } catch (e) {
       log.error(e)
