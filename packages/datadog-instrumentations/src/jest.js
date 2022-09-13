@@ -224,7 +224,9 @@ function jestAdapterWrapper (jestAdapter) {
         testSuiteFinishCh.publish({ status, errorMessage })
         if (environment.global.__coverage__) {
           const coverageFiles = extractCoverageInformation(environment.global.__coverage__, environment.rootDir)
-          testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
+          if (coverageFiles.length) {
+            testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
+          }
         }
         return suiteResults
       })
