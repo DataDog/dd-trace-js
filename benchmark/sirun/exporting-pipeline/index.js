@@ -62,7 +62,7 @@ function processSpans () {
   sp.process(finished[0])
   trace.finished = finished
   trace.started = finished
-  if (++iterations < 25000) {
+  if (++iterations < 2500) {
     setImmediate(processSpans)
   }
 }

@@ -1,5 +1,6 @@
 'use strict'
 
+const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const Chunk = require('./chunk')
 const log = require('../log')
 
@@ -11,6 +12,10 @@ const uInt8Float64Array = new Uint8Array(float64Array.buffer)
 float64Array[0] = -1
 
 const bigEndian = uInt8Float64Array[7] === 0
+
+function formatSpan (span) {
+  return normalizeSpan(truncateSpan(span))
+}
 
 class AgentEncoder {
   constructor (writer, limit = SOFT_LIMIT) {
@@ -66,7 +71,8 @@ class AgentEncoder {
   _encode (bytes, trace) {
     this._encodeArrayPrefix(bytes, trace)
 
-    for (const span of trace) {
+    for (let span of trace) {
+      span = formatSpan(span)
       bytes.reserve(1)
 
       if (span.type) {
