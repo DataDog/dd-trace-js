@@ -5,9 +5,7 @@ const log = require('../../dd-trace/src/log')
 
 class OracledbPlugin extends DatabasePlugin {
   static name = 'oracledb'
-
-  operation = 'query'
-  system = 'oracle'
+  static system = 'oracle'
 
   start ({ query, connAttrs }) {
     const service = getServiceName(this.config, connAttrs)

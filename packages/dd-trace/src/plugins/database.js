@@ -1,7 +1,9 @@
 'use strict'
 
-const ClientPlugin = require('./client')
+const StoragePlugin = require('./storage')
 
-class DatabasePlugin extends ClientPlugin {}
+class DatabasePlugin extends StoragePlugin {
+  static operation = 'query'
+}
 
 module.exports = DatabasePlugin
