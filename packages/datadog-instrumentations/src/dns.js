@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel, addHook, AsyncResource } = require('./helpers/instrument')
+const { TracingChannel, addHook, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 const rrtypes = {
@@ -47,14 +47,12 @@ function patchResolveShorthands (prototype) {
 }
 
 function wrap (prefix, fn, expectedArgs, rrtype) {
-  const startCh = channel(prefix + ':start')
-  const finishCh = channel(prefix + ':finish')
-  const errorCh = channel(prefix + ':error')
+  const tracingChannel = new TracingChannel(prefix)
 
   const wrapped = function () {
     const cb = AsyncResource.bind(arguments[arguments.length - 1])
     if (
-      !startCh.hasSubscribers ||
+      !tracingChannel.hasSubscribers ||
       arguments.length < expectedArgs ||
       typeof cb !== 'function'
     ) {
@@ -68,27 +66,15 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
     }
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      startCh.publish(startArgs)
-
+    return tracingChannel.trace((done) => {
       arguments[arguments.length - 1] = asyncResource.bind(function (error, result) {
-        if (error) {
-          errorCh.publish(error)
-        }
-        finishCh.publish(result)
+        done(error, result)
         cb.apply(this, arguments)
       })
 
-      try {
-        return fn.apply(this, arguments)
       // TODO deal with promise versions when we support `dns/promises`
-      } catch (error) {
-        error.stack // trigger getting the stack at the original throwing point
-        errorCh.publish(error)
-
-        throw error
-      }
-    })
+      return fn.apply(this, arguments)
+    }, { startArgs })
   }
 
   return shimmer.wrap(fn, wrapped)

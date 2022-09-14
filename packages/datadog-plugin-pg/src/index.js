@@ -1,54 +1,49 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
+const { Plugin, TracingSubscription } = require('../../dd-trace/src/plugins/plugin')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-class PGPlugin extends Plugin {
-  static get name () {
-    return 'pg'
+class PGQuerySubscription extends TracingSubscription {
+  prefix = 'apm:pg:query'
+
+  start ({ params, statement }, store) {
+    const service = getServiceName(this.plugin.tracer, this.plugin.config, params)
+    const childOf = store ? store.span : store
+    const span = this.plugin.tracer.startSpan('pg.query', {
+      childOf,
+      tags: {
+        'service.name': service,
+        'span.type': 'sql',
+        'span.kind': 'client',
+        'db.type': 'postgres',
+        'resource.name': statement
+      }
+    })
+
+    if (params) {
+      span.addTags({
+        'db.name': params.database,
+        'db.user': params.user,
+        'out.host': params.host,
+        'out.port': params.port
+      })
+    }
+
+    analyticsSampler.sample(span, this.plugin.config.measured)
+    return span
   }
 
-  constructor (...args) {
-    super(...args)
+  asyncEnd (ctx) {
+    ctx.span.finish()
+    this.plugin.exit(ctx)
+  }
+}
 
-    this.addSub(`apm:pg:query:start`, ({ params, statement }) => {
-      const service = getServiceName(this.tracer, this.config, params)
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const span = this.tracer.startSpan('pg.query', {
-        childOf,
-        tags: {
-          'service.name': service,
-          'span.type': 'sql',
-          'span.kind': 'client',
-          'db.type': 'postgres',
-          'resource.name': statement
-        }
-      })
+class PGPlugin extends Plugin {
+  tracingSubscriptions = [PGQuerySubscription]
 
-      if (params) {
-        span.addTags({
-          'db.name': params.database,
-          'db.user': params.user,
-          'out.host': params.host,
-          'out.port': params.port
-        })
-      }
-
-      analyticsSampler.sample(span, this.config.measured)
-      this.enter(span, store)
-    })
-
-    this.addSub(`apm:pg:query:error`, err => {
-      const span = storage.getStore().span
-      span.setTag('error', err)
-    })
-
-    this.addSub(`apm:pg:query:finish`, () => {
-      const span = storage.getStore().span
-      span.finish()
-    })
+  static get name () {
+    return 'pg'
   }
 }
 

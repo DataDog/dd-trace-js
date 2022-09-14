@@ -1,15 +1,12 @@
 'use strict'
 
 const {
-  channel,
   addHook,
-  AsyncResource
+  TracingChannel
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const startCh = channel('apm:pg:query:start')
-const finishCh = channel('apm:pg:query:finish')
-const errorCh = channel('apm:pg:query:error')
+const tracingChannel = new TracingChannel('apm:pg:query')
 
 addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
   shimmer.wrap(pg.Client.prototype, 'query', query => wrapQuery(query))
@@ -23,7 +20,7 @@ addHook({ name: 'pg', file: 'lib/native/index.js', versions: ['>=8.0.3'] }, Clie
 
 function wrapQuery (query) {
   return function () {
-    if (!startCh.hasSubscribers) {
+    if (!tracingChannel.hasSubscribers) {
       return query.apply(this, arguments)
     }
 
@@ -38,38 +35,23 @@ function wrapQuery (query) {
     }
 
     const statement = pgQuery.text
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    return asyncResource.runInAsyncScope(() => {
-      startCh.publish({ params: this.connectionParameters, statement })
-
-      const finish = asyncResource.bind(function (error) {
-        if (error) {
-          errorCh.publish(error)
-        }
-        finishCh.publish()
-      })
-
+    return tracingChannel.trace((done) => {
       if (pgQuery.callback) {
-        const originalCallback = callbackResource.bind(pgQuery.callback)
+        const originalCallback = pgQuery.callback
         pgQuery.callback = function (err, res) {
-          finish(err)
+          done(err)
           return originalCallback.apply(this, arguments)
         }
       } else if (pgQuery.once) {
         pgQuery
-          .once('error', finish)
-          .once('end', () => finish())
+          .once('error', done)
+          .once('end', () => done())
       } else {
-        pgQuery.then(() => finish(), finish)
+        pgQuery.then(() => done(), done)
       }
 
-      try {
-        return retval
-      } catch (err) {
-        errorCh.publish(err)
-      }
-    })
+      return retval
+    }, { params: this.connectionParameters, statement })
   }
 }
