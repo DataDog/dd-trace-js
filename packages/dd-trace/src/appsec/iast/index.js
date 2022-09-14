@@ -4,8 +4,7 @@ const web = require('../../plugins/util/web')
 const { storage } = require('../../../../datadog-core')
 const overheadController = require('./overhead-controller')
 const dc = require('diagnostics_channel')
-const { saveIastContext, getIastContext, cleanIastContext } = require('./iast-context')
-
+const iastContextFunctions = require('./iast-context')
 // TODO Change to `apm:http:server:request:[start|close]` when the subscription
 //  order of the callbacks can be enforce
 const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
@@ -33,7 +32,7 @@ function onIncomingHttpRequestStart (data) {
         const rootSpan = topContext.span
         const isRequestAcquired = overheadController.acquireRequest(rootSpan)
         if (isRequestAcquired) {
-          const iastContext = saveIastContext(store, topContext, { rootSpan, req: data.req })
+          const iastContext = iastContextFunctions.saveIastContext(store, topContext, { rootSpan, req: data.req })
           overheadController.initializeRequestContext(iastContext)
         }
       }
@@ -44,13 +43,12 @@ function onIncomingHttpRequestStart (data) {
 function onIncomingHttpRequestEnd (data) {
   if (data && data.req) {
     const store = storage.getStore()
-    const iastContext = getIastContext(storage.getStore())
+    const iastContext = iastContextFunctions.getIastContext(storage.getStore())
     if (iastContext && iastContext.rootSpan) {
-      overheadController.releaseRequest()
       sendVulnerabilities(iastContext, iastContext.rootSpan)
     }
     // TODO web.getContext(data.req) is required when the request is aborted
-    if (cleanIastContext(store, web.getContext(data.req), iastContext)) {
+    if (iastContextFunctions.cleanIastContext(store, web.getContext(data.req), iastContext)) {
       overheadController.releaseRequest()
     }
   }
