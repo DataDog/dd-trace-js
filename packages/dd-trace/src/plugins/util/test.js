@@ -48,7 +48,7 @@ const CI_APP_ORIGIN = 'ciapp-test'
 
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
 
-const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.skipped_tests'
+const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.tests_skipped'
 
 module.exports = {
   TEST_CODE_OWNERS,
