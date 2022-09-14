@@ -17,6 +17,10 @@ const testSkippedCh = channel('ci:jest:test:skip')
 const testRunFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 
+const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
+
+let skippableSuites = []
+
 const {
   getTestSuitePath,
   getTestParametersString
@@ -179,17 +183,33 @@ addHook({
 
 function cliWrapper (cli) {
   const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
+    let onResponse, onError
+    const skippableSuitesPromise = new Promise((resolve, reject) => {
+      onResponse = resolve
+      onError = reject
+    })
+
     const processArgv = process.argv.slice(2).join(' ')
     sessionAsyncResource.runInAsyncScope(() => {
       testSessionStartCh.publish(`jest ${processArgv}`)
+      skippableSuitesCh.publish({ onResponse, onError })
     })
-    return runCLI.apply(this, arguments).then(result => {
-      const { results: { success } } = result
-      sessionAsyncResource.runInAsyncScope(() => {
-        testSessionFinishCh.publish(success ? 'pass' : 'fail')
-      })
-      return result
+
+    try {
+      skippableSuites = await skippableSuitesPromise
+    } catch (e) {
+      // ignore errors
+    }
+
+    const result = await runCLI.apply(this, arguments)
+
+    const { results: { success } } = result
+
+    sessionAsyncResource.runInAsyncScope(() => {
+      testSessionFinishCh.publish(success ? 'pass' : 'fail')
     })
+
+    return result
   })
 
   cli.runCLI = wrapped.runCLI
@@ -249,6 +269,11 @@ addHook({
 
 function configureTestEnvironment (readConfigsResult) {
   const { configs } = readConfigsResult
+  configs.forEach(config => {
+    skippableSuites.forEach((suite) => {
+      config.testMatch.push(`!**/${suite}`)
+    })
+  })
   sessionAsyncResource.runInAsyncScope(() => {
     testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
   })
