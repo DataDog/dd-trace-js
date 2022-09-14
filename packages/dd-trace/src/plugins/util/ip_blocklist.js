@@ -21,16 +21,23 @@ if (semver.satisfies(process.version, '>=14.18.0')) {
 
     check (address, type) {
       try {
-        const ip = ipaddr.process(address)
+        let ip = ipaddr.parse(address)
 
-        if (type === 'ipv4' || ip.isIPv4MappedAddress()) {
-          for (const range of this.v4Ranges) {
-            if (ip.match(range)) return true
-          }
-        }
+        type = ip.kind()
 
         if (type === 'ipv6') {
           for (const range of this.v6Ranges) {
+            if (ip.match(range)) return true
+          }
+
+          if (ip.isIPv4MappedAddress()) {
+            ip = ip.toIPv4Address()
+            type = ip.kind()
+          }
+        }
+
+        if (type === 'ipv4') {
+          for (const range of this.v4Ranges) {
             if (ip.match(range)) return true
           }
         }
