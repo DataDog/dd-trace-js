@@ -189,6 +189,7 @@ function cliWrapper (cli) {
       onError = reject
     })
 
+    // TODO: consider starting the session after this request
     const processArgv = process.argv.slice(2).join(' ')
     sessionAsyncResource.runInAsyncScope(() => {
       testSessionStartCh.publish(`jest ${processArgv}`)
@@ -200,13 +201,14 @@ function cliWrapper (cli) {
     } catch (e) {
       // ignore errors
     }
+    const isTestsSkipped = !!skippableSuites.length
 
     const result = await runCLI.apply(this, arguments)
 
     const { results: { success } } = result
 
     sessionAsyncResource.runInAsyncScope(() => {
-      testSessionFinishCh.publish(success ? 'pass' : 'fail')
+      testSessionFinishCh.publish({ status: success ? 'pass' : 'fail', isTestsSkipped })
     })
 
     return result
@@ -273,6 +275,7 @@ function configureTestEnvironment (readConfigsResult) {
     skippableSuites.forEach((suite) => {
       config.testMatch.push(`!**/${suite}`)
     })
+    skippableSuites = []
   })
   sessionAsyncResource.runInAsyncScope(() => {
     testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))

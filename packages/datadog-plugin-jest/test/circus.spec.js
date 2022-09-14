@@ -384,40 +384,31 @@ describe('Plugin', function () {
         })
         it('can skip tests through ITR', (done) => {
           const scope = nock('https://api.datadoghq.com/')
-            .post('/api/v2/ci/environment/ci/service/test/tests/skippable')
+            .post('/api/v2/ci/tests/skippable')
             .reply(200, JSON.stringify({
               data: [{
+                type: 'suite',
                 attributes: {
-                  name: 'jest-itr will be skipped through ITR',
-                  suite: 'packages/datadog-plugin-jest/test/jest-itr.js'
+                  suite: 'packages/datadog-plugin-jest/test/jest-itr-skip.js'
                 }
               }]
             }))
 
-          const tests = [
-            { name: 'jest-itr will be skipped through ITR', status: 'skip' },
-            { name: 'jest-itr will run', status: 'pass' }
-          ]
-
-          const assertionPromises = tests.map(({ name, status }) => {
-            return agent.use(agentlessPayload => {
-              const { events: [{ content: testSpan }] } = agentlessPayload
-              expect(testSpan.meta).to.contain({
-                [TEST_NAME]: name,
-                [TEST_STATUS]: status,
-                [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-itr.js'
-              })
+          agent.use(agentlessPayload => {
+            const { events: [{ content: testSpan }] } = agentlessPayload
+            expect(testSpan.meta).to.contain({
+              [TEST_NAME]: 'jest-itr-pass will be run',
+              [TEST_STATUS]: 'pass',
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-itr-pass.js'
             })
-          })
-
-          Promise.all(assertionPromises).then(() => {
+          }).then(() => {
             expect(scope.isDone()).to.be.true
             done()
           }).catch(done)
 
           const options = {
             ...jestCommonOptions,
-            testRegex: 'jest-itr.js'
+            testRegex: /jest-itr-/
           }
 
           jestExecutable.runCLI(
@@ -425,21 +416,29 @@ describe('Plugin', function () {
             options.projects
           )
         })
-        it('does not skip tests if git metadata is not uploaded', (done) => {
+        it('does not skip tests if git metadata is not uploaded', function (done) {
           tracer._tracer._gitMetadataPromise = Promise.reject(new Error())
 
           const tests = [
-            { name: 'jest-itr will be skipped through ITR', status: 'pass' },
-            { name: 'jest-itr will run', status: 'pass' }
+            {
+              name: 'jest-itr-skip will be skipped through ITR',
+              status: 'pass',
+              suite: 'packages/datadog-plugin-jest/test/jest-itr-skip.js'
+            },
+            {
+              name: 'jest-itr-pass will be run',
+              status: 'pass',
+              suite: 'packages/datadog-plugin-jest/test/jest-itr-pass.js'
+            }
           ]
 
-          const assertionPromises = tests.map(({ name, status }) => {
+          const assertionPromises = tests.map(({ name, status, suite }) => {
             return agent.use(agentlessPayload => {
               const { events: [{ content: testSpan }] } = agentlessPayload
               expect(testSpan.meta).to.contain({
                 [TEST_NAME]: name,
                 [TEST_STATUS]: status,
-                [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-itr.js'
+                [TEST_SUITE]: suite
               })
             })
           })
@@ -448,7 +447,8 @@ describe('Plugin', function () {
 
           const options = {
             ...jestCommonOptions,
-            testRegex: 'jest-itr.js'
+            testRegex: /jest-itr-/,
+            runInBand: true
           }
 
           jestExecutable.runCLI(
@@ -456,7 +456,6 @@ describe('Plugin', function () {
             options.projects
           )
         })
-      })
       })
     })
   })

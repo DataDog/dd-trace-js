@@ -17,7 +17,8 @@ const {
   TEST_CODE_OWNERS,
   TEST_SESSION_ID,
   TEST_SUITE_ID,
-  TEST_COMMAND
+  TEST_COMMAND,
+  TEST_ITR_TESTS_SKIPPED
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { getSkippableSuites } = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-skippable-suites')
@@ -126,12 +127,15 @@ class JestPlugin extends Plugin {
       this.enter(testSessionSpan, store)
     })
 
-    this.addSub('ci:jest:session:finish', (status) => {
+    this.addSub('ci:jest:session:finish', ({ status, isTestsSkipped }) => {
       if (!this.config.isAgentlessEnabled) {
         return
       }
       const testSessionSpan = storage.getStore().span
       testSessionSpan.setTag(TEST_STATUS, status)
+      if (isTestsSkipped) {
+        testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
+      }
       testSessionSpan.finish()
       finishAllTraceSpans(testSessionSpan)
       this.tracer._exporter._writer.flush()
