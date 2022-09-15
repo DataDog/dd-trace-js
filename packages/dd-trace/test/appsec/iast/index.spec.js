@@ -1,214 +1,161 @@
 const proxyquire = require('proxyquire')
 const Config = require('../../../src/config')
-const dc = require('diagnostics_channel')
+const agent = require('../../plugins/agent')
+const axios = require('axios')
+const iast = require('../../../src/appsec/iast')
+const iastContextFunctions = require('../../../src/appsec/iast/iast-context')
+const overheadController = require('../../../src/appsec/iast/overhead-controller')
+const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
+const { testInRequest } = require('./utils')
 
-const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
-const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 describe('IAST Index', () => {
-  let web
-  let vulnerabilityReporter
-  let IAST
-  let iastContext
-  let datadogCore
-  let analyzers
-  let overheadController
-  let config
   beforeEach(() => {
-    config = new Config({
-      experimental: {
-        iast: {
-          enabled: true,
-          requestSampling: 100,
-          maxConcurrentRequests: 50
-        }
+    vulnerabilityReporter.clearCache()
+  })
+
+  describe('full feature', () => {
+    function app () {
+      const crypto = require('crypto')
+      crypto.createHash('sha1')
+    }
+
+    function tests (config) {
+      describe('with disabled iast', () => {
+        beforeEach(() => {
+          iast.disable()
+        })
+
+        it('should not have any vulnerability', (done) => {
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta['_dd.iast.json']).to.be.undefined
+            })
+            .then(done)
+            .catch(done)
+          axios.get(`http://localhost:${config.port}/`).catch(done)
+        })
+      })
+
+      describe('with enabled iast', () => {
+        const originalCleanIastContext = iastContextFunctions.cleanIastContext
+        const originalReleaseRequest = overheadController.releaseRequest
+
+        beforeEach(() => {
+          iast.enable(new Config({
+            experimental: {
+              iast: {
+                enabled: true,
+                requestSampling: 100
+              }
+            }
+          }))
+        })
+
+        afterEach(() => {
+          iastContextFunctions.cleanIastContext = originalCleanIastContext
+          overheadController.releaseRequest = originalReleaseRequest
+          iast.disable()
+        })
+
+        it('should detect vulnerability', (done) => {
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
+            })
+            .then(done)
+            .catch(done)
+          axios.get(`http://localhost:${config.port}/`).catch(done)
+        })
+
+        it('should call to cleanIastContext', (done) => {
+          const mockedCleanIastContext = sinon.stub()
+          iastContextFunctions.cleanIastContext = mockedCleanIastContext
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
+              expect(mockedCleanIastContext).to.have.been.calledOnce
+            })
+            .then(done)
+            .catch(done)
+          axios.get(`http://localhost:${config.port}/`).catch(done)
+        })
+
+        it('should call to overhead controller release', (done) => {
+          const releaseRequest = sinon.stub().callsFake(originalReleaseRequest)
+          overheadController.releaseRequest = releaseRequest
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
+              expect(releaseRequest).to.have.been.calledOnce
+            })
+            .then(done)
+            .catch(done)
+          axios.get(`http://localhost:${config.port}/`).catch(done)
+        })
+      })
+    }
+
+    testInRequest(app, tests)
+  })
+
+  describe('unit test', () => {
+    let mockVulnerabilityReporter
+    let mockIast
+    let mockOverheadController
+
+    beforeEach(() => {
+      mockVulnerabilityReporter = {
+        sendVulnerabilities: sinon.stub()
       }
-    })
-    web = {
-      getContext: sinon.stub()
-    }
-    vulnerabilityReporter = {
-      sendVulnerabilities: sinon.stub()
-    }
-    datadogCore = {
-      storage: {
-        getStore: sinon.stub()
+      mockOverheadController = {
+        acquireRequest: sinon.stub(),
+        releaseRequest: sinon.stub(),
+        initializeRequestContext: sinon.stub()
       }
-    }
-    analyzers = {
-      enableAllAnalyzers: sinon.stub(),
-      disableAllAnalyzers: sinon.stub()
-    }
-    overheadController = {
-      acquireRequest: sinon.stub(),
-      releaseRequest: sinon.stub(),
-      initializeRequestContext: sinon.stub()
-    }
-    iastContext = {
-      getIastContext: sinon.stub(),
-      saveIastContext: sinon.stub(),
-      cleanIastContext: sinon.stub()
-    }
-    IAST = proxyquire('../../../src/appsec/iast', {
-      '../../plugins/util/web': web,
-      './vulnerability-reporter': vulnerabilityReporter,
-      '../../../../datadog-core': datadogCore,
-      './analyzers': analyzers,
-      './overhead-controller': overheadController,
-      './iast-context': iastContext
-    })
-  })
-
-  afterEach(() => {
-    sinon.restore()
-    IAST.disable()
-  })
-
-  describe('enable', () => {
-    it('should subscribe', () => {
-      expect(requestStart.hasSubscribers).to.be.false
-      expect(requestClose.hasSubscribers).to.be.false
-      IAST.enable(config)
-      expect(requestClose.hasSubscribers).to.be.true
-      expect(requestStart.hasSubscribers).to.be.true
+      mockIast = proxyquire('../../../src/appsec/iast', {
+        './vulnerability-reporter': mockVulnerabilityReporter,
+        './overhead-controller': mockOverheadController
+      })
     })
 
-    it('should enable all analyzers', () => {
-      IAST.enable(config)
-      expect(analyzers.enableAllAnalyzers).to.have.been.calledOnce
-    })
-  })
-
-  describe('disable', () => {
-    it('should unsubscribe', () => {
-      IAST.enable(config)
-      IAST.disable()
-      expect(requestStart.hasSubscribers).to.be.false
-      expect(requestClose.hasSubscribers).to.be.false
-    })
-    it('should disable all analyzers', () => {
-      IAST.disable()
-      expect(analyzers.disableAllAnalyzers).to.have.been.calledOnce
-    })
-  })
-
-  describe('onIncomingHttpRequestStart', () => {
-    it('should not fail with unexpected data', () => {
-      IAST.onIncomingHttpRequestStart()
-      IAST.onIncomingHttpRequestStart(null)
-      IAST.onIncomingHttpRequestStart({})
+    afterEach(() => {
+      sinon.restore()
+      mockIast.disable()
     })
 
-    it('should not fail with unexpected context', () => {
-      datadogCore.storage.getStore.returns({})
-      web.getContext.returns(null)
-      overheadController.acquireRequest.returns(true)
-      IAST.onIncomingHttpRequestStart({ req: {} })
-      expect(web.getContext).to.be.calledOnce
+    describe('onIncomingHttpRequestStart', () => {
+      it('should not fail with unexpected data', () => {
+        iast.onIncomingHttpRequestStart()
+        iast.onIncomingHttpRequestStart(null)
+        iast.onIncomingHttpRequestStart({})
+      })
+
+      it('should not fail with unexpected store', () => {
+        iast.onIncomingHttpRequestStart({ req: {} })
+      })
     })
 
-    it('should not fail with unexpected store', () => {
-      web.getContext.returns({})
-      datadogCore.storage.getStore.returns(null)
-      overheadController.acquireRequest.returns(true)
-      IAST.onIncomingHttpRequestStart({ req: {} })
-      expect(datadogCore.storage.getStore).to.be.calledOnce
-    })
+    describe('onIncomingHttpRequestEnd', () => {
+      it('should not fail without unexpected data', () => {
+        mockIast.onIncomingHttpRequestEnd()
+        mockIast.onIncomingHttpRequestEnd(null)
+        mockIast.onIncomingHttpRequestEnd({})
+      })
 
-    it('should add IAST context to store', () => {
-      const store = {}
-      const topContext = { span: {} }
-      const data = { req: {} }
-      datadogCore.storage.getStore.returns(store)
-      web.getContext.returns(topContext)
-      overheadController.acquireRequest.returns(true)
-      IAST.onIncomingHttpRequestStart(data)
-      expect(iastContext.saveIastContext)
-        .to.have.been.calledOnceWith(store, topContext, { req: data.req, rootSpan: topContext.span })
-    })
+      it('should not call send vulnerabilities without context', () => {
+        mockIast.onIncomingHttpRequestEnd({ req: {} })
+        expect(mockVulnerabilityReporter.sendVulnerabilities).not.to.be.called
+      })
 
-    it('should initialize OCE context when analyze request is acquired', () => {
-      const store = {}
-      const topContext = { span: {} }
-      const data = { req: {} }
-      datadogCore.storage.getStore.returns(store)
-      web.getContext.returns(topContext)
-      overheadController.acquireRequest.returns(true)
-      IAST.onIncomingHttpRequestStart(data)
-      expect(overheadController.initializeRequestContext).to.be.calledOnce
-    })
-  })
+      it('should not call send vulnerabilities with context but without iast context', () => {
+        mockIast.onIncomingHttpRequestEnd({ req: {} })
+        expect(mockVulnerabilityReporter.sendVulnerabilities).not.to.be.called
+      })
 
-  describe('onIncomingHttpRequestEnd', () => {
-    it('should not fail without unexpected data', () => {
-      IAST.onIncomingHttpRequestEnd()
-      IAST.onIncomingHttpRequestEnd(null)
-      IAST.onIncomingHttpRequestEnd({})
-    })
-
-    it('should not call send vulnerabilities without context', () => {
-      web.getContext.returns(null)
-      IAST.onIncomingHttpRequestEnd({ req: {} })
-      expect(vulnerabilityReporter.sendVulnerabilities).not.to.be.called
-    })
-
-    it('should not call send vulnerabilities with empty context', () => {
-      web.getContext.returns({})
-      IAST.onIncomingHttpRequestEnd({ req: {} })
-      expect(vulnerabilityReporter.sendVulnerabilities).not.to.be.called
-    })
-
-    it('should not call send vulnerabilities with context but without iast context', () => {
-      web.getContext.returns({ span: {} })
-      IAST.onIncomingHttpRequestEnd({ req: {} })
-      expect(vulnerabilityReporter.sendVulnerabilities).not.to.be.called
-    })
-
-    it('should call send vulnerabilities with context with span and iast context', () => {
-      const span = { key: 'val' }
-      const _iastContext = { vulnerabilities: [], rootSpan: span }
-      const store = { span }
-      datadogCore.storage.getStore.returns(store)
-      iastContext.getIastContext.returns(_iastContext)
-      IAST.onIncomingHttpRequestEnd({ req: {} })
-      expect(vulnerabilityReporter.sendVulnerabilities).to.be.calledOnceWith(_iastContext, span)
-    })
-
-    it('should call releaseRequest with context with iast context', () => {
-      const span = { key: 'val' }
-      const _iastContext = { vulnerabilities: [], rootSpan: span }
-      const store = { span }
-      iastContext.getIastContext.returns(_iastContext)
-      datadogCore.storage.getStore.returns(store)
-      IAST.onIncomingHttpRequestEnd({ req: {} })
-      expect(overheadController.releaseRequest).to.be.calledOnce
-    })
-
-    it('should not call releaseRequest without iast context', () => {
-      const store = {}
-      datadogCore.storage.getStore.returns(store)
-      IAST.onIncomingHttpRequestEnd({ req: {} })
-      expect(overheadController.releaseRequest).not.to.be.called
-    })
-  })
-
-  describe('cleanIastContext', () => {
-    it('should clean the iast context', () => {
-      const store = {}
-      const req = {}
-      const topContext = { span: {} }
-      IAST.enable(config)
-      web.getContext.returns(topContext)
-      overheadController.acquireRequest.returns(true)
-      datadogCore.storage.getStore.returns(store)
-      iastContext.cleanIastContext.returns(true)
-      requestStart.publish({ req })
-      expect(iastContext.saveIastContext)
-        .to.have.been.calledOnceWith(store, topContext, { req: req, rootSpan: topContext.span })
-      datadogCore.storage.getStore.returns({})
-      requestClose.publish({ req })
-      expect(iastContext.cleanIastContext)
-        .to.have.been.calledOnceWith(store, topContext, undefined)
-      expect(overheadController.releaseRequest).to.have.been.calledOnce
+      it('should not call releaseRequest without iast context', () => {
+        mockIast.onIncomingHttpRequestEnd({ req: {} })
+        expect(mockOverheadController.releaseRequest).not.to.be.called
+      })
     })
   })
 })
