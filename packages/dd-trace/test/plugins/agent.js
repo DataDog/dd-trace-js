@@ -91,6 +91,16 @@ module.exports = {
     }
   },
 
+  // Register handler to be executed each agent call, multiple times
+  subscribe (handler) {
+    handlers.add(handler)
+  },
+
+  // Remove a handler
+  unsubscribe (handler) {
+    handlers.delete(handler)
+  },
+
   // Register a callback with expectations to be run on every agent call.
   use (callback, options) {
     const deferred = {}
