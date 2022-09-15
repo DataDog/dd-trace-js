@@ -43,6 +43,7 @@ class DatadogSpan {
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       metrics.increment('runtime.node.spans.unfinished')
       metrics.increment('runtime.node.spans.unfinished.by.name', `span_name:${operationName}`)
+
       metrics.increment('runtime.node.spans.open') // unfinished for real
       metrics.increment('runtime.node.spans.open.by.name', `span_name:${operationName}`)
 
@@ -122,6 +123,7 @@ class DatadogSpan {
       metrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
       metrics.increment('runtime.node.spans.finished')
       metrics.increment('runtime.node.spans.finished.by.name', `span_name:${this._name}`)
+
       metrics.decrement('runtime.node.spans.open') // unfinished for real
       metrics.decrement('runtime.node.spans.open.by.name', `span_name:${this._name}`)
 
