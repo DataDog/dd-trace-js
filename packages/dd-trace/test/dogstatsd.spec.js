@@ -2,7 +2,7 @@
 
 const http = require('http')
 
-describe('dogstatsd', () => {
+describe.only('dogstatsd', () => {
   let client
   let Client
   let dgram
@@ -14,6 +14,7 @@ describe('dogstatsd', () => {
   let httpData
   let httpUdsServer
   let udsPath
+  let statusCode
 
   beforeEach((done) => {
     udp6 = {
@@ -60,10 +61,12 @@ describe('dogstatsd', () => {
     })
 
     httpData = []
+    statusCode = 200
     httpServer = http.createServer((req, res) => {
       expect(req.url).to.equal('/dogstatsd/v1/proxy')
       req.on('data', d => httpData.push(d))
       req.on('end', () => {
+        res.statusCode = statusCode
         res.end()
       })
     }).listen(0, () => {
@@ -243,6 +246,23 @@ describe('dogstatsd', () => {
         return
       }
       expect(Buffer.concat(httpData).toString()).to.equal('test.avg:1|g\ntest.avg2:2|g\n')
+      done()
+    })
+  })
+
+  it('should fail over to UDP', (done) => {
+    statusCode = 404
+
+    client = new Client({
+      tracingUrl: `http://localhost:${httpPort}`
+    })
+
+    client.increment('test.count', 10)
+
+    client.flush(() => {
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:10|c\n')
+      expect(udp4.send.firstCall.args[2]).to.equal(16)
       done()
     })
   })
