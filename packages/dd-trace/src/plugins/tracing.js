@@ -24,6 +24,16 @@ class TracingPlugin extends Plugin {
     })
   }
 
+  configure (config) {
+    return super.configure({
+      ...config,
+      hooks: {
+        [this.operation]: () => {},
+        ...config.hooks
+      }
+    })
+  }
+
   start () {} // implemented by individual plugins
 
   finish () {

@@ -28,25 +28,6 @@ class ElasticsearchPlugin extends DatabasePlugin {
     this.config.hooks.query(span, params)
     super.finish({ params })
   }
-
-  configure (config) {
-    return super.configure(normalizeConfig(config))
-  }
-}
-
-function normalizeConfig (config) {
-  const hooks = getHooks(config)
-
-  return Object.assign({}, config, {
-    hooks
-  })
-}
-
-function getHooks (config) {
-  const noop = () => {}
-  const query = (config.hooks && config.hooks.query) || noop
-
-  return { query }
 }
 
 function getBody (body) {
