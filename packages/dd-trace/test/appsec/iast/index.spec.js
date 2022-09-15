@@ -1,12 +1,12 @@
 const proxyquire = require('proxyquire')
 const Config = require('../../../src/config')
-const getPort = require('get-port')
 const agent = require('../../plugins/agent')
 const axios = require('axios')
 const iast = require('../../../src/appsec/iast')
 const iastContextFunctions = require('../../../src/appsec/iast/iast-context')
 const overheadController = require('../../../src/appsec/iast/overhead-controller')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
+const { testInRequest } = require('./utils')
 
 describe('IAST Index', () => {
   beforeEach(() => {
@@ -14,123 +14,91 @@ describe('IAST Index', () => {
   })
 
   describe('full feature', () => {
-    let http
-    let listener
-    let appListener
-    let port
-
     function app () {
       const crypto = require('crypto')
       crypto.createHash('sha1')
     }
-    beforeEach(() => {
-      return getPort().then(newPort => {
-        port = newPort
-      })
-    })
 
-    beforeEach(() => {
-      listener = (req, res) => {
-        app && app(req, res)
-        res.writeHead(200)
-        res.end()
-      }
-    })
-
-    beforeEach(() => {
-      return agent.load('http')
-        .then(() => {
-          http = require('http')
+    function tests (config) {
+      describe('with disabled iast', () => {
+        beforeEach(() => {
+          iast.disable()
         })
-    })
 
-    beforeEach(done => {
-      const server = new http.Server(listener)
-      appListener = server
-        .listen(port, 'localhost', () => done())
-    })
-
-    afterEach(() => {
-      appListener && appListener.close()
-      return agent.close({ ritmReset: false })
-    })
-
-    describe('with disabled iast', () => {
-      beforeEach(() => {
-        iast.disable()
+        it('should not have any vulnerability', (done) => {
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta['_dd.iast.json']).to.be.undefined
+            })
+            .then(done)
+            .catch(done)
+          axios.get(`http://localhost:${config.port}/`).catch(done)
+        })
       })
 
-      it('should not have any vulnerability', (done) => {
-        agent
-          .use(traces => {
-            expect(traces[0][0].meta['_dd.iast.json']).to.be.undefined
-          })
-          .then(done)
-          .catch(done)
-        axios.get(`http://localhost:${port}/`).catch(done)
-      })
-    })
+      describe('with enabled iast', () => {
+        const originalCleanIastContext = iastContextFunctions.cleanIastContext
+        const originalReleaseRequest = overheadController.releaseRequest
 
-    describe('with enabled iast', () => {
-      const originalCleanIastContext = iastContextFunctions.cleanIastContext
-      const originalReleaseRequest = overheadController.releaseRequest
-
-      beforeEach(() => {
-        iast.enable(new Config({
-          experimental: {
-            iast: {
-              enabled: true,
-              requestSampling: 100
+        beforeEach(() => {
+          iast.enable(new Config({
+            experimental: {
+              iast: {
+                enabled: true,
+                requestSampling: 100
+              }
             }
-          }
-        }))
-      })
+          }))
+        })
 
-      afterEach(() => {
-        iastContextFunctions.cleanIastContext = originalCleanIastContext
-        overheadController.releaseRequest = originalReleaseRequest
-        iast.disable()
-      })
+        afterEach(() => {
+          iastContextFunctions.cleanIastContext = originalCleanIastContext
+          overheadController.releaseRequest = originalReleaseRequest
+          iast.disable()
+        })
 
-      it('should detect vulnerability', (done) => {
-        agent
-          .use(traces => {
-            expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
-          })
-          .then(done)
-          .catch(done)
-        axios.get(`http://localhost:${port}/`).catch(done)
-      })
+        it('should detect vulnerability', (done) => {
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
+            })
+            .then(done)
+            .catch(done)
+          axios.get(`http://localhost:${config.port}/`).catch(done)
+        })
 
-      it('should call to cleanIastContext', (done) => {
-        const mockedCleanIastContext = sinon.stub()
-        iastContextFunctions.cleanIastContext = mockedCleanIastContext
-        agent
-          .use(traces => {
-            expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
-            expect(mockedCleanIastContext).to.have.been.calledOnce
-          })
-          .then(done)
-          .catch(done)
-        axios.get(`http://localhost:${port}/`).catch(done)
-      })
+        it('should call to cleanIastContext', (done) => {
+          const mockedCleanIastContext = sinon.stub()
+          iastContextFunctions.cleanIastContext = mockedCleanIastContext
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
+              expect(mockedCleanIastContext).to.have.been.calledOnce
+            })
+            .then(done)
+            .catch(done)
+          axios.get(`http://localhost:${config.port}/`).catch(done)
+        })
 
-      it('should call to overhead controller release', (done) => {
-        const releaseRequest = sinon.stub().callsFake(originalReleaseRequest)
-        overheadController.releaseRequest = releaseRequest
-        agent
-          .use(traces => {
-            expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
-            expect(releaseRequest).to.have.been.calledOnce
-          })
-          .then(done)
-          .catch(done)
-        axios.get(`http://localhost:${port}/`).catch(done)
+        it('should call to overhead controller release', (done) => {
+          const releaseRequest = sinon.stub().callsFake(originalReleaseRequest)
+          overheadController.releaseRequest = releaseRequest
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
+              expect(releaseRequest).to.have.been.calledOnce
+            })
+            .then(done)
+            .catch(done)
+          axios.get(`http://localhost:${config.port}/`).catch(done)
+        })
       })
-    })
+    }
+
+    testInRequest(app, tests)
   })
 
-  describe('other test', () => {
+  describe('unit test', () => {
     let mockVulnerabilityReporter
     let mockIast
     let mockOverheadController

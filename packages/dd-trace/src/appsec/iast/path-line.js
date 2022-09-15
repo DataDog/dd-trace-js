@@ -51,6 +51,9 @@ function getFirstNonDDPathAndLineFromCallsites (callsites) {
 function isExcluded (callsite) {
   if (callsite.isNative()) return true
   const filename = callsite.getFileName()
+  if (!filename) {
+    return true
+  }
   for (let i = 0; i < EXCLUDED_PATHS.length; i++) {
     if (filename.indexOf(EXCLUDED_PATHS[i]) > -1) {
       return true
