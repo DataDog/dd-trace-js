@@ -63,7 +63,7 @@ describe('Plugin', () => {
                 const span = traces[0][0]
 
                 expect(span).to.have.property('name', 'amqp.send')
-                expect(span).to.have.property('service', 'test-amqp')
+                expect(span).to.have.property('service', 'test')
                 expect(span).to.have.property('resource', 'send amq.topic')
                 expect(span).to.not.have.property('type')
                 expect(span.meta).to.have.property('span.kind', 'producer')
@@ -128,7 +128,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', 'amqp.receive')
-                expect(span).to.have.property('service', 'test-amqp')
+                expect(span).to.have.property('service', 'test')
                 expect(span).to.have.property('resource', 'receive amq.topic')
                 expect(span).to.have.property('type', 'worker')
                 expect(span.meta).to.have.property('span.kind', 'consumer')
