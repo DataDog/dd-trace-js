@@ -2,7 +2,7 @@
 
 const http = require('http')
 
-describe.only('dogstatsd', () => {
+describe('dogstatsd', () => {
   let client
   let Client
   let dgram
