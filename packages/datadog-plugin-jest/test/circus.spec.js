@@ -2,6 +2,7 @@
 const fs = require('fs')
 const path = require('path')
 
+const { channel } = require('diagnostics_channel')
 const nock = require('nock')
 const semver = require('semver')
 const msgpack = require('msgpack-lite')
@@ -29,10 +30,11 @@ const {
 
 const { version: ddTraceVersion } = require('../../../package.json')
 
+const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
+
 describe('Plugin', function () {
   let jestExecutable
   let jestCommonOptions
-  let tracer
 
   this.timeout(20000)
 
@@ -57,10 +59,13 @@ describe('Plugin', function () {
 
       const loadArguments = [['jest', 'http']]
 
+      const isAgentlessTest = this.currentTest.parent.title === 'agentless'
+
       // we need the ci visibility init for the coverage test
-      if (this.currentTest.parent.title === 'agentless') {
+      if (isAgentlessTest) {
         process.env.DD_API_KEY = 'key'
         process.env.DD_APP_KEY = 'app-key'
+        process.env.DD_ENV = 'ci'
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
         loadArguments.push({ service: 'test', isAgentlessEnabled: true, isIntelligentTestRunnerEnabled: true })
         loadArguments.push({ experimental: { exporter: 'datadog' } })
@@ -69,11 +74,6 @@ describe('Plugin', function () {
       }
 
       return agent.load(...loadArguments).then(() => {
-        tracer = require('../../dd-trace')
-        // Necessary for ITR calls
-        tracer._tracer._gitMetadataPromise = Promise.resolve()
-        tracer._tracer._env = 'ci'
-
         global.__libraryName__ = moduleName
         global.__libraryVersion__ = version
         jestExecutable = require(`../../../versions/jest@${version}`).get()
@@ -290,6 +290,7 @@ describe('Plugin', function () {
 
       describe('agentless', () => {
         it('can report code coverage', function (done) {
+          gitMetadataUploadFinishCh.publish()
           nock(`http://127.0.0.1:${agent.server.address().port}`)
             .post('/api/v2/citestcov')
             .reply(202, function () {
@@ -329,6 +330,7 @@ describe('Plugin', function () {
           )
         })
         it('should create spans for the test session and test suite', (done) => {
+          gitMetadataUploadFinishCh.publish()
           const events = [
             { type: 'test_session_end', status: 'pass' },
             {
@@ -383,6 +385,7 @@ describe('Plugin', function () {
           )
         })
         it('can skip tests through ITR', (done) => {
+          gitMetadataUploadFinishCh.publish()
           const scope = nock('https://api.datadoghq.com/')
             .post('/api/v2/ci/tests/skippable')
             .reply(200, JSON.stringify({
@@ -417,7 +420,17 @@ describe('Plugin', function () {
           )
         })
         it('does not skip tests if git metadata is not uploaded', function (done) {
-          tracer._tracer._gitMetadataPromise = Promise.reject(new Error())
+          gitMetadataUploadFinishCh.publish(new Error('error uploading'))
+          nock('https://api.datadoghq.com/')
+            .post('/api/v2/ci/tests/skippable')
+            .reply(200, JSON.stringify({
+              data: [{
+                type: 'suite',
+                attributes: {
+                  suite: 'packages/datadog-plugin-jest/test/jest-itr-skip.js'
+                }
+              }]
+            }))
 
           const tests = [
             {

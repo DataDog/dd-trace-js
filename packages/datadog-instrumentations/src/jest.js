@@ -205,10 +205,17 @@ function cliWrapper (cli) {
 
     const result = await runCLI.apply(this, arguments)
 
-    const { results: { success } } = result
+    const { results: { success, coverageMap } } = result
+
+    let totalCodeCoverage
+    try {
+      totalCodeCoverage = coverageMap.getCoverageSummary().lines.pct
+    } catch (e) {
+      // ignore errors
+    }
 
     sessionAsyncResource.runInAsyncScope(() => {
-      testSessionFinishCh.publish({ status: success ? 'pass' : 'fail', isTestsSkipped })
+      testSessionFinishCh.publish({ status: success ? 'pass' : 'fail', isTestsSkipped, totalCodeCoverage })
     })
 
     return result

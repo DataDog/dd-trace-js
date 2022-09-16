@@ -18,7 +18,8 @@ const {
   TEST_SESSION_ID,
   TEST_SUITE_ID,
   TEST_COMMAND,
-  TEST_ITR_TESTS_SKIPPED
+  TEST_ITR_TESTS_SKIPPED,
+  TEST_TOTAL_CODE_COVERAGE
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { getSkippableSuites } = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-skippable-suites')
@@ -66,18 +67,24 @@ class JestPlugin extends Plugin {
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
+    // TODO: set a timeout after which the promise is rejected
+    const gitMetadataPromise = new Promise((resolve, reject) => {
+      this.addSub('ci:git-metadata-upload:finish', err => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve()
+        }
+      })
+    })
+
     this.addSub('ci:jest:test-suite:skippable', ({ onResponse, onError }) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
         onResponse([])
         return
       }
-      // This means that the git metadata hasn't been sent
-      if (!this.tracer._gitMetadataPromise) {
-        onError()
-        return
-      }
       // we only request after git upload has happened
-      this.tracer._gitMetadataPromise.then(() => {
+      gitMetadataPromise.then(() => {
         const {
           'git.repository_url': repositoryUrl,
           'git.commit.sha': sha,
@@ -127,7 +134,7 @@ class JestPlugin extends Plugin {
       this.enter(testSessionSpan, store)
     })
 
-    this.addSub('ci:jest:session:finish', ({ status, isTestsSkipped }) => {
+    this.addSub('ci:jest:session:finish', ({ status, isTestsSkipped, totalCodeCoverage }) => {
       if (!this.config.isAgentlessEnabled) {
         return
       }
@@ -135,6 +142,9 @@ class JestPlugin extends Plugin {
       testSessionSpan.setTag(TEST_STATUS, status)
       if (isTestsSkipped) {
         testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
+      }
+      if (totalCodeCoverage !== undefined) {
+        testSessionSpan.setTag(TEST_TOTAL_CODE_COVERAGE, totalCodeCoverage)
       }
       testSessionSpan.finish()
       finishAllTraceSpans(testSessionSpan)

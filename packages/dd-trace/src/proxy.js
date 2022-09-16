@@ -1,4 +1,5 @@
 'use strict'
+const { channel } = require('diagnostics_channel')
 
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
@@ -9,6 +10,8 @@ const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
 const { sendGitMetadata } = require('./ci-visibility/exporters/git/git_metadata')
+
+const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
 
 class Tracer extends NoopProxy {
   constructor () {
@@ -59,19 +62,13 @@ class Tracer extends NoopProxy {
       }
 
       if (config.isGitUploadEnabled) {
-        let onResponse, onError
-        this._tracer._gitMetadataPromise = new Promise((resolve, reject) => {
-          onResponse = resolve
-          onError = reject
-        })
         sendGitMetadata(config.site, (err) => {
           if (err) {
             log.error(`Error uploading git metadata: ${err}`)
-            onError()
           } else {
             log.debug('Successfully uploaded git metadata')
-            onResponse()
           }
+          gitMetadataUploadFinishCh.publish(err)
         })
       }
     } catch (e) {
