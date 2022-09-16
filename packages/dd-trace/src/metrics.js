@@ -48,12 +48,19 @@ module.exports = {
       nativeMetrics = null
     }
 
-    client = new Client({
-      tracingUrl: config.url || new URL(`http://${config.hostname || 'localhost'}:${config.port}`),
+    const clientConfig = {
       host: config.dogstatsd.hostname,
       port: config.dogstatsd.port,
       tags
-    })
+    }
+
+    if (config.url) {
+      clientConfig.tracingUrl = config.url
+    } else if (config.port) {
+      clientConfig.tracingUrl = new URL(`http://${config.hostname || 'localhost'}:${config.port}`)
+    }
+
+    client = new Client(clientConfig)
 
     time = process.hrtime()
 
