@@ -48,9 +48,20 @@ class RemoteConfigManager extends EventEmitter {
 
     this.appliedConfig = new Map()
     this.confCache = new Map()
+
+    this.on('newListener', this.updateProducts)
+    this.on('removeListener', this.updateProducts)
+  }
+
+  updateProducts() {
+    // this is needed because newListener fires before eventNames() is updated
+    process.nextTick(() => {
+      this.state.client.products = this.eventNames().slice(2) // omit newListener and removeListener
+    })
   }
 
   start () {
+    process.nextTick(() => this.poll()) // first poll at startup or wait for scheduler ?
     this.scheduler.start()
   }
 
