@@ -1,13 +1,14 @@
 'use strict'
 
-const Scheduler = require('../exporters/scheduler')
-const request = require('../exporters/common/request')
 const uuid = require('crypto-randomuuid')
 const { EventEmitter } = require('events')
+const Scheduler = require('../exporters/scheduler')
+const tracerVersion = require('../../../../package.json').version
+const request = require('../exporters/common/request')
 
 const clientId = uuid()
 
-const pollInterval = 5e3
+const POLL_INTERVAL = 5e3
 
 // The Client.ClientState field in  ClientGetConfigsRequest MUST contain the global state of RC in the tracer.
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest with their own separated Client.ClientState.
@@ -18,39 +19,31 @@ class RemoteConfigManager extends EventEmitter {
 
     this.config = config
     this.tracer = tracer
-    this.scheduler = new Scheduler(() => this.poll(), pollInterval)
+    this.scheduler = new Scheduler(() => this.poll(), POLL_INTERVAL)
 
     this.state = {
       client: {
-        state: {
+        state: { // updated by parseConfig()
           root_version: 1,
-          targets_version: 0, // MUST be set to the latest applied version of the targets field in ClientGetConfigsResponse. See step 2 and 3 of the update procedure.
-          config_states: [
-            // MUST include all the configurations applied by the tracer. Configurations that are ignored because they are expired or don’t target that specific tracer MUST NOT be included.
-          ],
+          targets_version: 0,
+          config_states: [],
           has_error: false,
           error: '',
           backend_client_state: ''
         },
         id: clientId,
-        products: ['FEATURES', 'ASM', 'ASM_DD', 'ASM_DATA'],
+        products: [], // updated by updateProducts()
         is_tracer: true,
         client_tracer: {
           runtime_id: this.config.tags['runtime-id'],
           language: 'node',
-          tracer_version: '3.0.0',
+          tracer_version: tracerVersion,
           service: this.config.service,
           env: this.config.env,
           app_version: this.config.version
         }
       },
-      cached_target_files: [
-        {
-          path: '',
-          length: '',
-          hashes: ''
-        }
-      ]
+      cached_target_files: [] // updated by parseConfig()
     }
 
     this.appliedConfig = new Map()
