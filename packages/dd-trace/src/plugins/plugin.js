@@ -41,6 +41,7 @@ module.exports = class Plugin {
     storage.enterWith({ ...store, span })
   }
 
+  // TODO: Implement filters on resource name for all plugins.
   /** Prevents creation of spans here and for all async descendants. */
   skip () {
     storage.enterWith({ noop: true })
