@@ -13,10 +13,10 @@ class OutgoingPlugin extends TracingPlugin {
   }
 
   connect (url) {
-    this.addOutgoingHost(url.hostname, url.port)
+    this.addHost(url.hostname, url.port)
   }
 
-  addOutgoingHost (hostname, port) {
+  addHost (hostname, port) {
     const span = this.activeSpan()
 
     if (!span) return
