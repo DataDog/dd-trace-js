@@ -1,33 +1,41 @@
 {
   "name": "plugin-http",
-  "cachegrind": true,
-  "iterations": 10,
+  "cachegrind": false,
+  "iterations": 20,
   "variants": {
     "client-control": {
       "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node server.js >/dev/null 2>&1 &\"",
       "run": "node client.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node client.js\"",
       "env": {
         "CLIENT_USE_TRACER": "0"
       }
     },
     "client-with-tracer": {
       "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node server.js >/dev/null 2>&1 &\"",
       "run": "node client.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node client.js\"",
       "baseline": "client-control",
       "env": {
         "CLIENT_USE_TRACER": "1"
       }
     },
     "server-control": {
-      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
-      "run": "node server.js",
+      "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node server.js >/dev/null 2>&1 &\"",
+      "run": "node client.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node client.js\"",
       "env": {
         "SERVER_USE_TRACER": "0"
       }
     },
     "server-with-tracer": {
-      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
-      "run": "node server.js",
+      "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node server.js >/dev/null 2>&1 &\"",
+      "run": "node client.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node client.js\"",
       "baseline": "server-control",
       "env": {
         "SERVER_USE_TRACER": "1"

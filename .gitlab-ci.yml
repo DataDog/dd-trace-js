@@ -1,5 +1,8 @@
 stages:
+  - benchmarks
   - deploy
+
+include: ".gitlab/benchmarks.yml"
 
 .common: &common
   tags: [ "runner:main", "size:large" ]
