@@ -7,7 +7,7 @@ if (Number(process.env.USE_TRACER)) {
 const dns = require('dns')
 
 function testRun (count) {
-  if (++count === 10000) return
+  if (++count === 1000) return
   dns.lookup('localhost', () => testRun(count))
 }
 
