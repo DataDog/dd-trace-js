@@ -10,14 +10,12 @@ const clientId = uuid()
 
 const POLL_INTERVAL = 5e3
 
-// The Client.ClientState field in  ClientGetConfigsRequest MUST contain the global state of RC in the tracer.
-// There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest with their own separated Client.ClientState.
+// TODO: There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest with their own separated Client.ClientState.
 
 class RemoteConfigManager extends EventEmitter {
   constructor (config, tracer) {
     super()
 
-    this.config = config
     this.tracer = tracer
     this.scheduler = new Scheduler(() => this.poll(), POLL_INTERVAL)
 
@@ -35,18 +33,18 @@ class RemoteConfigManager extends EventEmitter {
         products: [], // updated by updateProducts()
         is_tracer: true,
         client_tracer: {
-          runtime_id: this.config.tags['runtime-id'],
+          runtime_id: config.tags['runtime-id'],
           language: 'node',
           tracer_version: tracerVersion,
-          service: this.config.service,
-          env: this.config.env,
-          app_version: this.config.version
+          service: config.service,
+          env: config.env,
+          app_version: config.version
         }
       },
       cached_target_files: [] // updated by parseConfig()
     }
 
-    this.appliedConfig = new Map()
+    this.appliedConfigs = new Map()
     this.confCache = new Map()
 
     this.on('newListener', this.updateProducts)
@@ -87,11 +85,7 @@ class RemoteConfigManager extends EventEmitter {
       options.port = url.port
     }
 
-    request(data, options, true, (err, data, statusCode) => {
-      statusCode = 200
-      err = null
-      data = '{"targets": "eyJzaWduZWQiOnsiX3R5cGUiOiJ0YXJnZXRzIiwiY3VzdG9tIjp7Im9wYXF1ZV9iYWNrZW5kX3N0YXRlIjoiZXlKbWIyOGlPaUFpWW1GeUluMD0ifSwiZXhwaXJlcyI6IjIwMjItMTEtMDNUMTg6MDE6MzJaIiwic3BlY192ZXJzaW9uIjoiMS4wIiwidGFyZ2V0cyI6eyJkYXRhZG9nLzIvRkVBVFVSRVMvRkVBVFVSRVMtYmFzZS9jb25maWciOnsiY3VzdG9tIjp7InYiOjF9LCJoYXNoZXMiOnsic2hhMjU2IjoiOTIyMWRmZDlmNjA4NDE1MTMxM2UzZTQ5MjAxMjFhZTg0MzYxNGMzMjhlNDYzMGVhMzcxYmE2NmUyZjE1YTBhNiJ9LCJsZW5ndGgiOjQ3fX0sInZlcnNpb24iOjJ9LCJzaWduYXR1cmVzIjpbeyJrZXlpZCI6ImVkNzY3MmM5YTI0YWJkYTc4ODcyZWUzMmVlNzFjN2NiMWQ1MjM1ZThkYjRlY2JmMWNhMjhiOWM1MGViNzVkOWUiLCJzaWciOiIyMzMwOWE3YjdlMzExOTFiMjk0MGEzYzlhNGE4ZmE2ODIxNWI1Y2I1OGEwYjc5NDcxN2ZmOWMxYzgyZjI3NDcwMmM1NzRmYWI5MjZjMzI1MDI4MjE4OTNlM2IyMGY1ZGE4NjU1OGE1YjNmNmJkMTYxMzQ1ZDYyNWI1Nzg0OTQwZCJ9XX0=", "target_files": [{"path": "datadog/2/FEATURES/FEATURES-base/config", "raw": "ewogICAgImFzbSI6IHsKICAgICAgICAiZW5hYmxlZCI6IHRydWUKICAgIH0KfQo="}], "client_configs": ["datadog/2/FEATURES/FEATURES-base/config"]}'
-
+    request(data, options, (err, data, statusCode) => {
       if (statusCode === 404) {
         // feature is disabled, ignore it...
         return
@@ -108,22 +102,28 @@ class RemoteConfigManager extends EventEmitter {
   }
 
   parseConfig (data) {
+    // `client_configs` is the list of config paths to apply
+    // `targets` is the signed index with metadata for config files
+    // `target_files` is the list of config files containing the actual config data
     let { client_configs, targets, target_files } = data
 
     targets = fromBase64(targets)
 
-    const toUnapply = Array.from(this.appliedConfig.keys()).filter((path) => !client_configs.includes(path))
+    const toUnapply = Array.from(this.appliedConfigs.keys()).filter((path) => !client_configs.includes(path))
     const toApply = []
     const toModify = []
 
     client_configs = client_configs || []
+
+    // TODO: verify signatures
+    // TODO: meta.signed.expires ?
 
     for (const path of client_configs) {
       const meta = targets.signed.targets[path]
 
       if (!meta) throw new Error('No target found')
 
-      const current = this.appliedConfig.get(path)
+      const current = this.appliedConfigs.get(path)
 
       if (!current) toApply.push(path)
       else if (current.hashes.sha256 !== meta.hashes.sha256) toModify.push(path)
