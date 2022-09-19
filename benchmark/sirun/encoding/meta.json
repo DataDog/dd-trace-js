@@ -1,8 +1,9 @@
 {
   "name": "encoders",
   "run": "node index.js",
-  "cachegrind": true,
-  "iterations": 10,
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 22,
   "variants": {
     "0.4": { "env": { "ENCODER_VERSION": "0.4" } },
     "0.5": { "env": { "ENCODER_VERSION": "0.5" } }
