@@ -47,14 +47,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
-      // TODO: Figure out how to do this without re-encoding in instrumentation.
-      if (Buffer.isBuffer(msg) && format !== undefined) {
-        msg = this.connection.container.message.decode(msg)
-        startSendCh.publish({ targetAddress, host, port, msg })
-        arguments[0] = this.connection.container.message.encode(msg)
-      } else {
-        startSendCh.publish({ targetAddress, host, port, msg })
-      }
+      startSendCh.publish({ targetAddress, host, port, msg })
 
       const delivery = send.apply(this, arguments)
       const context = {
