@@ -14,13 +14,11 @@ class Client {
     options = options || {}
 
     if (options.tracingUrl) {
-      this._httpOptions = url.parse(options.tracingUrl)
-      this._httpOptions.agent = null
-      if (this._httpOptions.protocol === 'unix:') {
-        this._httpOptions.socketPath = this._httpOptions.pathname
-        delete this._httpOptions.protocol
+      this._httpOptions = {
+        url: options.tracingUrl,
+        agent: null,
+        path: '/dogstatsd/v1/proxy'
       }
-      this._httpOptions.path = '/dogstatsd/v1/proxy'
     }
 
     this._host = options.host || 'localhost'
@@ -54,7 +52,7 @@ class Client {
       requestQueue(queue, this._httpOptions, err => {
         if (err) {
           log.debug('HTTP error from agent: ' + err.stack)
-          if (error.status) {
+          if (err.status) {
             // Inside this if-block, we have connectivity to the agent, but
             // we're not getting a 200 from the proxy endpoint. Fall back to
             // UDP and try again.

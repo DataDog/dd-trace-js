@@ -32,11 +32,7 @@ function describeWriter (protocolVersion) {
       makePayload: sinon.stub().returns([])
     }
 
-    url = {
-      protocol: 'http:',
-      hostname: 'localhost',
-      port: 8126
-    }
+    url = 'http://localhost:8126'
 
     prioritySampler = {
       update: sinon.spy()
@@ -79,9 +75,7 @@ function describeWriter (protocolVersion) {
       encoder.makePayload.returns([Buffer.alloc(0)])
       writer.flush()
       expect(request.getCall(0).args[1]).to.contain({
-        protocol: url.protocol,
-        hostname: url.hostname,
-        port: url.port
+        url: 'http://example.com:1234/'
       })
     })
   })
@@ -113,9 +107,7 @@ function describeWriter (protocolVersion) {
       writer.flush(() => {
         expect(request.getCall(0).args[0]).to.eql([expectedData])
         expect(request.getCall(0).args[1]).to.eql({
-          protocol: url.protocol,
-          hostname: url.hostname,
-          port: url.port,
+          url,
           path: `/v${protocolVersion}/traces`,
           method: 'PUT',
           headers: {
@@ -188,7 +180,7 @@ function describeWriter (protocolVersion) {
         writer.flush()
         setImmediate(() => {
           expect(request.getCall(0).args[1]).to.contain({
-            socketPath: url.pathname
+            url: url.toString()
           })
         })
       })

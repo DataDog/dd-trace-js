@@ -85,20 +85,14 @@ function makeRequest (version, data, count, url, headers, lookup, needsStartupLo
       'Datadog-Meta-Tracer-Version': tracerVersion,
       'X-Datadog-Trace-Count': String(count)
     },
-    lookup
+    lookup,
+    url: url.toString()
   }
 
   setHeader(options.headers, 'Datadog-Meta-Lang', 'nodejs')
   setHeader(options.headers, 'Datadog-Meta-Lang-Version', process.version)
   setHeader(options.headers, 'Datadog-Meta-Lang-Interpreter', process.jsEngine || 'v8')
 
-  if (url.protocol === 'unix:') {
-    options.socketPath = url.pathname
-  } else {
-    options.protocol = url.protocol
-    options.hostname = url.hostname
-    options.port = url.port
-  }
 
   log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
 

@@ -6,6 +6,7 @@
 const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
+const { parse: urlParse } = require('url')
 const docker = require('./docker')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
@@ -22,6 +23,17 @@ let activeRequests = 0
 function request (data, options, callback) {
   if (!options.headers) {
     options.headers = {}
+  }
+
+  if (options.url) {
+    const url = urlParse(options.url)
+    if (url.protocol === 'unix:') {
+      options.socketPath = url.pathname
+    } else {
+      options.protocol = url.protocol
+      options.hostname = url.hostname
+      options.port = url.port
+    }
   }
 
   const isReadable = data instanceof Readable
