@@ -192,9 +192,6 @@ describe('Overhead controller', () => {
             }
           }
           finishRequestChannel.subscribe(resolvePromise)
-          // setTimeout(() => {
-          //   resolve()
-          // }, 500)
         })
       }
 
