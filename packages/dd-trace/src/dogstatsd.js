@@ -54,9 +54,14 @@ class Client {
       requestQueue(queue, this._httpOptions, err => {
         if (err) {
           log.debug('HTTP error from agent: ' + err.stack)
-          this._httpOptions = null
-          this._queue = queue
-          this.flush()
+          if (error.status) {
+            // Inside this if-block, we have connectivity to the agent, but
+            // we're not getting a 200 from the proxy endpoint. Fall back to
+            // UDP and try again.
+            this._httpOptions = null
+            this._queue = queue
+            this.flush()
+          }
         }
         if (cb) {
           cb(err)
