@@ -1,7 +1,12 @@
 #!/bin/bash
 
-source ~/.nvm/nvm.sh
-# source /usr/local/nvm/nvm.sh
+if test -f ~/.nvm/nvm.sh; then
+    source ~/.nvm/nvm.sh
+else
+    source /usr/local/nvm/nvm.sh
+fi
+
+export PLUGINS="bluebird yarn versions"
 
 for MAJOR_VERSION in 14 16 18; do
     nvm use $MAJOR_VERSION
@@ -12,7 +17,8 @@ for MAJOR_VERSION in 14 16 18; do
         if [ -d "${D}" ]; then
             echo "benchmarking ${D}..."
             cd "${D}"
-            sirun meta.json | jq -c --arg ver $VERSION '. + {version: $ver}' >> ../results.ndjson
+            ../run-all-variants.js >> ../results.ndjson
+            # sirun meta.json | jq -c --arg ver $VERSION '. + {version: $ver}' >> ../results.ndjson
             echo "done with ${D}."
             cd ..
         fi
