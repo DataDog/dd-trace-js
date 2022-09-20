@@ -48,7 +48,6 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
       startSendCh.publish({ targetAddress, host, port, msg })
-
       const delivery = send.apply(this, arguments)
       const context = {
         asyncResource
