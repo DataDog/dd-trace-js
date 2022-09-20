@@ -55,9 +55,9 @@ module.exports = {
     }
 
     if (config.url) {
-      clientConfig.tracingUrl = config.url
+      clientConfig.metricsProxyUrl = config.url
     } else if (config.port) {
-      clientConfig.tracingUrl = new URL(`http://${config.hostname || 'localhost'}:${config.port}`)
+      clientConfig.metricsProxyUrl = new URL(`http://${config.hostname || 'localhost'}:${config.port}`)
     }
 
     client = new Client(clientConfig)

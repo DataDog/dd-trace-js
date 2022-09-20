@@ -13,9 +13,9 @@ class Client {
   constructor (options) {
     options = options || {}
 
-    if (options.tracingUrl) {
+    if (options.metricsProxyUrl) {
       this._httpOptions = {
-        url: options.tracingUrl,
+        url: options.metricsProxyUrl,
         agent: null,
         path: '/dogstatsd/v1/proxy'
       }

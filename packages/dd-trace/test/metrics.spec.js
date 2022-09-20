@@ -52,7 +52,7 @@ describe('metrics', () => {
       this.timeout(10000)
 
       expect(Client).to.have.been.calledWithMatch({
-        tracingUrl: new URL('http://localhost:8126'),
+        metricsProxyUrl: new URL('http://localhost:8126'),
         host: 'localhost',
         tags: [
           'str:bar',

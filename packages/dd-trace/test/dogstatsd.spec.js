@@ -218,7 +218,7 @@ describe('dogstatsd', () => {
 
   it('should support HTTP via unix domain socket', (done) => {
     client = new Client({
-      tracingUrl: `unix://${udsPath}`
+      metricsProxyUrl: `unix://${udsPath}`
     })
 
     client.gauge('test.avg', 0)
@@ -235,7 +235,7 @@ describe('dogstatsd', () => {
 
   it('should support HTTP via port', (done) => {
     client = new Client({
-      tracingUrl: `http://localhost:${httpPort}`
+      metricsProxyUrl: `http://localhost:${httpPort}`
     })
 
     client.gauge('test.avg', 1)
@@ -254,7 +254,7 @@ describe('dogstatsd', () => {
     statusCode = 404
 
     client = new Client({
-      tracingUrl: `http://localhost:${httpPort}`
+      metricsProxyUrl: `http://localhost:${httpPort}`
     })
 
     client.increment('test.count', 10)
