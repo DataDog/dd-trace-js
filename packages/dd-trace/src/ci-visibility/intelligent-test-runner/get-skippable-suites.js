@@ -14,15 +14,22 @@ function getSkippableSuites ({
 }, done) {
   const url = new URL(`https://api.${site}`)
 
+  const apiKey = process.env.DATADOG_API_KEY || process.env.DD_API_KEY
+  const appKey = process.env.DATADOG_APP_KEY ||
+    process.env.DD_APP_KEY ||
+    process.env.DATADOG_APPLICATION_KEY ||
+    process.env.DD_APPLICATION_KEY
+
+  if (!apiKey || !appKey) {
+    return done(new Error('API key or Application key are undefined.'))
+  }
+
   const options = {
     path: '/api/v2/ci/tests/skippable',
     method: 'POST',
     headers: {
-      'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
-      'dd-application-key': process.env.DATADOG_APP_KEY ||
-        process.env.DD_APP_KEY ||
-        process.env.DATADOG_APPLICATION_KEY ||
-        process.env.DD_APPLICATION_KEY,
+      'dd-api-key': apiKey,
+      'dd-application-key': appKey,
       'Content-Type': 'application/json'
     },
     timeout: 15000,

@@ -19,7 +19,7 @@ const {
   TEST_SUITE_ID,
   TEST_COMMAND,
   TEST_ITR_TESTS_SKIPPED,
-  TEST_TOTAL_CODE_COVERAGE
+  TEST_CODE_COVERAGE_LINES_TOTAL
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { getSkippableSuites } = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-skippable-suites')
@@ -67,7 +67,7 @@ class JestPlugin extends Plugin {
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
-    // TODO: set a timeout after which the promise is rejected
+    // TODO: add timeout for git metadata upload
     const gitMetadataPromise = new Promise((resolve, reject) => {
       this.addSub('ci:git-metadata-upload:finish', err => {
         if (err) {
@@ -83,7 +83,7 @@ class JestPlugin extends Plugin {
         onResponse([])
         return
       }
-      // we only request after git upload has happened
+      // The request to the skippable API needs to happen *after* uploading git metadata
       gitMetadataPromise.then(() => {
         const {
           'git.repository_url': repositoryUrl,
@@ -134,7 +134,7 @@ class JestPlugin extends Plugin {
       this.enter(testSessionSpan, store)
     })
 
-    this.addSub('ci:jest:session:finish', ({ status, isTestsSkipped, totalCodeCoverage }) => {
+    this.addSub('ci:jest:session:finish', ({ status, isTestsSkipped, testCodeCoverageLinesTotal }) => {
       if (!this.config.isAgentlessEnabled) {
         return
       }
@@ -143,8 +143,8 @@ class JestPlugin extends Plugin {
       if (isTestsSkipped) {
         testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
       }
-      if (totalCodeCoverage !== undefined) {
-        testSessionSpan.setTag(TEST_TOTAL_CODE_COVERAGE, totalCodeCoverage)
+      if (testCodeCoverageLinesTotal !== undefined) {
+        testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
       }
       testSessionSpan.finish()
       finishAllTraceSpans(testSessionSpan)

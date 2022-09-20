@@ -2,6 +2,7 @@
 const istanbul = require('istanbul-lib-coverage')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -189,33 +190,35 @@ function cliWrapper (cli) {
       onError = reject
     })
 
-    // TODO: consider starting the session after this request
-    const processArgv = process.argv.slice(2).join(' ')
     sessionAsyncResource.runInAsyncScope(() => {
-      testSessionStartCh.publish(`jest ${processArgv}`)
       skippableSuitesCh.publish({ onResponse, onError })
     })
 
     try {
       skippableSuites = await skippableSuitesPromise
     } catch (e) {
-      // ignore errors
+      log.error(e)
     }
     const isTestsSkipped = !!skippableSuites.length
+
+    const processArgv = process.argv.slice(2).join(' ')
+    sessionAsyncResource.runInAsyncScope(() => {
+      testSessionStartCh.publish(`jest ${processArgv}`)
+    })
 
     const result = await runCLI.apply(this, arguments)
 
     const { results: { success, coverageMap } } = result
 
-    let totalCodeCoverage
+    let testCodeCoverageLinesTotal
     try {
-      totalCodeCoverage = coverageMap.getCoverageSummary().lines.pct
+      testCodeCoverageLinesTotal = coverageMap.getCoverageSummary().lines.pct
     } catch (e) {
       // ignore errors
     }
 
     sessionAsyncResource.runInAsyncScope(() => {
-      testSessionFinishCh.publish({ status: success ? 'pass' : 'fail', isTestsSkipped, totalCodeCoverage })
+      testSessionFinishCh.publish({ status: success ? 'pass' : 'fail', isTestsSkipped, testCodeCoverageLinesTotal })
     })
 
     return result
