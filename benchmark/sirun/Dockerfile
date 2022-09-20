@@ -1,7 +1,7 @@
 FROM --platform=linux/amd64 debian:buster-slim
 
 RUN apt-get update && apt-get install --no-install-recommends -y \
-	wget ca-certificates jq
+	wget ca-certificates valgrind
 
 # nvm works much better with bash than sh
 SHELL ["/bin/bash", "--login", "-c"]
@@ -27,4 +27,5 @@ RUN mkdir -p /usr/local/nvm \
 COPY . /app
 
 # using the Node.js v18 for the global yarn package
-RUN npm install --global yarn && yarn
+RUN npm install --global yarn \
+	&& yarn install --ignore-engines
