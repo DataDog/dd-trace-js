@@ -182,6 +182,7 @@ function parseConfigPath (configPath) {
   if (match) {
     if (match[1]) result.product = match[1]
     if (match[2]) result.id = match[2]
+  }
 
   return result
 }
