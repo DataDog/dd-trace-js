@@ -10,7 +10,7 @@ const clientId = uuid()
 
 const POLL_INTERVAL = 5e3
 
-// TODO: There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest with their own separated Client.ClientState.
+// There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest with their own separated Client.ClientState.
 
 class RemoteConfigManager extends EventEmitter {
   constructor (config, tracer) {
