@@ -179,9 +179,9 @@ function parseConfigPath (configPath) {
 
   const match = configPathRegex.exec(configPath)
 
-  if (!match) return result
-  if (match[1]) result.product = match[1]
-  if (match[2]) result.id = match[2]
+  if (match) {
+    if (match[1]) result.product = match[1]
+    if (match[2]) result.id = match[2]
 
   return result
 }
