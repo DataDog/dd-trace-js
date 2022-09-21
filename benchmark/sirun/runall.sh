@@ -6,7 +6,7 @@ else
     source /usr/local/nvm/nvm.sh
 fi
 
-export PLUGINS="bluebird yarn versions"
+# PLUGINS=bluebird yarn services
 
 for MAJOR_VERSION in 14 16 18; do
     nvm use $MAJOR_VERSION
