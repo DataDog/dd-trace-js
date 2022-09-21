@@ -6,7 +6,7 @@ const os = require('os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
 
-const HB_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
+const HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
   ? Number(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000
   : 60000
 
@@ -92,7 +92,9 @@ function start (aConfig, thePluginManager) {
   host = createHostObject()
   dependencies.start(config, application, host)
   sendData(config, application, host, 'app-started', appStarted())
-  interval = setInterval(() => sendData(config, application, host, 'app-heartbeat'), HB_INTERVAL)
+  interval = setInterval(() => {
+    sendData(config, application, host, 'app-heartbeat')
+  }, HEARTBEAT_INTERVAL)
   interval.unref()
   process.on('beforeExit', onBeforeExit)
 }
