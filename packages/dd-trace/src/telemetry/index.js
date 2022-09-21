@@ -6,9 +6,9 @@ const os = require('os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
 
-const HB_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL ?
-  Number(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000 :
-  60000
+const HB_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
+  ? Number(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000
+  : 60000
 
 let config
 let pluginManager
