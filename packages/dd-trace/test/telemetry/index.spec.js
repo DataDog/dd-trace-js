@@ -168,6 +168,55 @@ describe('telemetry', () => {
   })
 })
 
+describe('telemetry with interval change', () => {
+  it('should set the interval correctly', (done) => {
+    process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL = 12345
+
+    const telemetry = proxyquire('../../src/telemetry', {
+      '../exporters/common/docker': {
+        id () {
+          return 'test docker id'
+        }
+      },
+      os: {
+        hostname () {
+          return 'test hostname'
+        }
+      },
+      './send-data': {
+        sendData: () => {}
+      }
+    })
+
+    let intervalSetCorrectly
+    global.setInterval = (fn, interval) => {
+      expect(interval).to.equal(12345000)
+      intervalSetCorrectly = true
+      return setTimeout(fn, 1)
+    }
+
+    telemetry.start({
+      telemetryEnabled: true,
+      hostname: 'localhost',
+      port: 8126,
+      service: 'test service',
+      version: '1.2.3-beta4',
+      env: 'preprod',
+      tags: {
+        'runtime-id': '1a2b3c'
+      }
+    }, {
+      _pluginsByName: {}
+    })
+
+    process.nextTick(() => {
+      expect(intervalSetCorrectly).to.be.true
+      delete process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
+      done()
+    })
+  })
+})
+
 async function testSeq (seqId, reqType, validatePayload) {
   while (traceAgent.reqs.length < seqId) {
     await once(traceAgent, 'handled-req')
