@@ -21,7 +21,7 @@ class RemoteConfigManager extends EventEmitter {
 
     this.state = {
       client: {
-        state: { // updated by parseConfig()
+        state: { // updated by `parseConfig()`
           root_version: 1,
           targets_version: 0,
           config_states: [],
@@ -30,7 +30,7 @@ class RemoteConfigManager extends EventEmitter {
           backend_client_state: ''
         },
         id: clientId,
-        products: [], // updated by updateProducts()
+        products: [], // updated by `updateProducts()`
         is_tracer: true,
         client_tracer: {
           runtime_id: config.tags['runtime-id'],
@@ -40,9 +40,9 @@ class RemoteConfigManager extends EventEmitter {
           env: config.env,
           app_version: config.version
         },
-        capabilities: [0, 0, 0, 0]
+        capabilities: [0, 0, 0, 0] // updated by `updateCapabilities()`
       },
-      cached_target_files: [] // updated by parseConfig()
+      cached_target_files: [] // updated by `parseConfig()`
     }
 
     this.appliedConfigs = new Map()
