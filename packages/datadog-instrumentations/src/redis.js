@@ -11,8 +11,8 @@ const startCh = channel('apm:redis:command:start')
 const finishCh = channel('apm:redis:command:finish')
 const errorCh = channel('apm:redis:command:error')
 
-addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1'] }, redis => {
-  shimmer.wrap(redis.default.prototype, 'addCommand', addCommand => function (command) {
+function wrapAddCommand (addCommand) {
+  return function (command) {
     if (!startCh.hasSubscribers) {
       return addCommand.apply(this, arguments)
     }
@@ -32,7 +32,16 @@ addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js',
 
       return res
     })
-  })
+  }
+}
+
+addHook({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1.1'] }, redis => {
+  shimmer.wrap(redis.default.prototype, 'addCommand', wrapAddCommand)
+  return redis
+})
+
+addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1'] }, redis => {
+  shimmer.wrap(redis.default.prototype, 'addCommand', wrapAddCommand)
   return redis
 })
 
