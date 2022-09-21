@@ -75,10 +75,15 @@ class Tracer extends NoopProxy {
 
       if (true) {
         const rc = new RemoteConfigManager(config, this)
-        rc.start()
 
-        rc.on('FEATURES', console.log)
+        rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+
+        rc.on('ASM_FEATURES', console.log)
+        rc.on('ASM', console.log)
         rc.on('ASM_DATA', console.log)
+        rc.on('ASM_DD', console.log)
+
+        rc.start()
       }
     } catch (e) {
       log.error(e)
