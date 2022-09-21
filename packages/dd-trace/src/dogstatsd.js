@@ -15,7 +15,7 @@ class Client {
 
     if (options.metricsProxyUrl) {
       this._httpOptions = {
-        url: options.metricsProxyUrl,
+        url: options.metricsProxyUrl.toString(),
         agent: null,
         path: '/dogstatsd/v1/proxy'
       }

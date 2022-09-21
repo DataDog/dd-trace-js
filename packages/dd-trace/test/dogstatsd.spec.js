@@ -2,7 +2,7 @@
 
 const http = require('http')
 
-describe('dogstatsd', () => {
+describe.only('dogstatsd', () => {
   let client
   let Client
   let dgram
@@ -236,6 +236,23 @@ describe('dogstatsd', () => {
   it('should support HTTP via port', (done) => {
     client = new Client({
       metricsProxyUrl: `http://localhost:${httpPort}`
+    })
+
+    client.gauge('test.avg', 1)
+    client.gauge('test.avg2', 2)
+    client.flush((err) => {
+      if (err) {
+        done(err)
+        return
+      }
+      expect(Buffer.concat(httpData).toString()).to.equal('test.avg:1|g\ntest.avg2:2|g\n')
+      done()
+    })
+  })
+
+  it('should support HTTP via URL object', (done) => {
+    client = new Client({
+      metricsProxyUrl: new URL(`http://localhost:${httpPort}`)
     })
 
     client.gauge('test.avg', 1)
