@@ -28,4 +28,5 @@ COPY . /app
 
 # using the Node.js v18 for the global yarn package
 RUN npm install --global yarn \
-	&& yarn install --ignore-engines
+	&& yarn install --ignore-engines \
+	&& PLUGINS=bluebird yarn services
