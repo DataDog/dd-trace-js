@@ -172,7 +172,7 @@ function fromBase64 (str) {
   return JSON.parse(Buffer.from(str, 'base64').toString())
 }
 
-const configPathRegex = new RegExp('^(?:datadog\\/\\d+|employee)\\/([^/]+)\\/([^/]+)\\/[^/]+$')
+const configPathRegex = /^(?:datadog\/\d+|employee)\/([^/]+)\/([^/]+)\/[^/]+$/
 
 function parseConfigPath (configPath) {
   const result = {}
