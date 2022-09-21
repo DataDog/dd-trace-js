@@ -39,7 +39,8 @@ class RemoteConfigManager extends EventEmitter {
           service: config.service,
           env: config.env,
           app_version: config.version
-        }
+        },
+        capabilities: [0, 0, 0, 0]
       },
       cached_target_files: [] // updated by parseConfig()
     }
@@ -49,6 +50,21 @@ class RemoteConfigManager extends EventEmitter {
 
     this.on('newListener', this.updateProducts)
     this.on('removeListener', this.updateProducts)
+  }
+
+  updateCapabilities(mask, value) {
+    const arr = new Uint8Array(this.state.client.capabilities)
+
+    const view = new DataView(arr.buffer)
+
+    let num = view.getUint32()
+
+    // set the bit in `num` at `mask` to `value`
+    num ^= (-value ^ num) & mask
+
+    view.setUint32(0, num)
+
+    this.state.client.capabilities = Array.from(arr)
   }
 
   updateProducts() {
