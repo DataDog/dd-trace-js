@@ -11,6 +11,7 @@ const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
 const { sendGitMetadata } = require('./ci-visibility/exporters/git/git_metadata')
 const RemoteConfigManager = require('./remote_config')
+const RemoteConfigCapabilities = require('./remote_config/capabilities')
 
 const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
 
