@@ -5,24 +5,32 @@ class Scheduler {
     this._timer = null
     this._callback = callback
     this._interval = interval
+    this._running = false
+  }
+
+  func () {
+    if (this._running) return
+    this._running = true
+
+    this._callback(() => {
+      this._running = false
+    })
   }
 
   start () {
-    this._timer = setInterval(this._callback, this._interval)
-    this._timer.unref && this._timer.unref()
+    if (this._timer) return
 
-    process.once('beforeExit', this._callback)
+    process.nextTick(() => this.func())
+
+    this._timer = setInterval(() => this.func(), this._interval)
+
+    this._timer.unref && this._timer.unref()
   }
 
   stop () {
     clearInterval(this._timer)
 
-    process.removeListener('beforeExit', this._callback)
-  }
-
-  reset () {
-    this.stop()
-    this.start()
+    this._timer = null
   }
 }
 

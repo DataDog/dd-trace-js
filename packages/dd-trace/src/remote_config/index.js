@@ -5,6 +5,7 @@ const { EventEmitter } = require('events')
 const Scheduler = require('../exporters/scheduler')
 const tracerVersion = require('../../../../package.json').version
 const request = require('../exporters/common/request')
+const log = require('../log')
 
 const clientId = uuid()
 
@@ -75,7 +76,6 @@ class RemoteConfigManager extends EventEmitter {
   }
 
   start () {
-    process.nextTick(() => this.poll()) // first poll at startup or wait for scheduler ?
     this.scheduler.start()
   }
 
@@ -83,7 +83,7 @@ class RemoteConfigManager extends EventEmitter {
     this.scheduler.stop()
   }
 
-  poll () {
+  poll (cb) {
     const data = JSON.stringify(this.state)
 
     const options = {
@@ -102,18 +102,29 @@ class RemoteConfigManager extends EventEmitter {
     }
 
     request(data, options, (err, data, statusCode) => {
-      if (statusCode === 404) {
-        // feature is disabled, ignore it...
-        return
-      }
-
+      if (statusCode !== 404) { // 404 means RC is disabled, ignore it
       if (err) {
-        return
+          log.error(err)
+        } else {
+          if (this.state.client.has_error) {
+            this.state.client.has_error = false
+            this.state.client.error = ''
       }
 
-      if (data) {
+          if (data && data !== '{}') { // '{}' means the tracer is up to date
+            try {
         this.parseConfig(JSON.parse(data))
+            } catch (err) {
+              log.error(`Could not parse remote config response: ${err}`)
+
+              this.state.client.has_error = true
+              this.state.client.error = err.toString()
       }
+          }
+        }
+      }
+
+      cb && cb()
     })
   }
 
