@@ -41,7 +41,7 @@ class RemoteConfigManager extends EventEmitter {
           env: config.env,
           app_version: config.version
         },
-        capabilities: [0, 0, 0, 0] // updated by `updateCapabilities()`
+        capabilities: 'AA==' // updated by `updateCapabilities()`
       },
       cached_target_files: [] // updated by `parseConfig()`
     }
@@ -54,18 +54,21 @@ class RemoteConfigManager extends EventEmitter {
   }
 
   updateCapabilities(mask, value) {
-    const arr = new Uint8Array(this.state.client.capabilities)
+    const hex = Buffer.from(this.state.client.capabilities, 'base64').toString('hex')
 
-    const view = new DataView(arr.buffer)
+    let num = BigInt(`0x${hex}`)
 
-    let num = view.getUint32()
+    if (value) {
+      num |= mask
+    } else {
+      num &= ~mask
+    }
 
-    // set the bit in `num` at `mask` to `value`
-    num ^= (-value ^ num) & mask
+    let str = num.toString(16)
 
-    view.setUint32(0, num)
+    if (str.length % 2) str = `0${str}`
 
-    this.state.client.capabilities = Array.from(arr)
+    this.state.client.capabilities = Buffer.from(str, 'hex').toString('base64')
   }
 
   updateProducts() {
