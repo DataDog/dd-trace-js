@@ -48,6 +48,10 @@ const CI_APP_ORIGIN = 'ciapp-test'
 
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
 
+const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.tests_skipped'
+
+const TEST_CODE_COVERAGE_LINES_TOTAL = 'test.codecov_lines_total'
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_FRAMEWORK,
@@ -78,7 +82,9 @@ module.exports = {
   getTestSuiteCommonTags,
   TEST_COMMAND,
   TEST_SESSION_ID,
-  TEST_SUITE_ID
+  TEST_SUITE_ID,
+  TEST_ITR_TESTS_SKIPPED,
+  TEST_CODE_COVERAGE_LINES_TOTAL
 }
 
 function getTestEnvironmentMetadata (testFramework, config) {
