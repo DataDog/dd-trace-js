@@ -12,7 +12,6 @@ const MAXIMUM_NUM_COVERAGE_FILES = 100
 class CoverageCIVisibilityEncoder extends AgentEncoder {
   constructor () {
     super(...arguments)
-    this.codeCoverageBuffers = []
     this._coverageBytes = new Chunk()
     this.form = new FormData()
     this.fileIndex = 1
