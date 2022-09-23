@@ -1,7 +1,7 @@
 {
   "name": "startup",
   "run": "node startup-test.js",
-  "cachegrind": true,
+  "cachegrind": false,
   "iterations": 10,
   "variants": {
     "control": {

@@ -3,7 +3,7 @@
   "setup": "bash -c \"nohup node ../../e2e/fake-agent.js >/dev/null 2>&1 &\"",
   "run": "node index.js",
   "iterations": 10,
-  "cachegrind": true,
+  "cachegrind": false,
   "variants": {
     "0.4": {
       "env": {

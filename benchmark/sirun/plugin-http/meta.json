@@ -1,6 +1,6 @@
 {
   "name": "plugin-http",
-  "cachegrind": true,
+  "cachegrind": false,
   "iterations": 10,
   "variants": {
     "client-control": {
