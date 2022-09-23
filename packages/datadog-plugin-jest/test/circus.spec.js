@@ -2,6 +2,7 @@
 const fs = require('fs')
 const path = require('path')
 
+const { channel } = require('diagnostics_channel')
 const nock = require('nock')
 const semver = require('semver')
 const msgpack = require('msgpack-lite')
@@ -29,6 +30,8 @@ const {
 
 const { version: ddTraceVersion } = require('../../../package.json')
 
+const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
+
 describe('Plugin', function () {
   let jestExecutable
   let jestCommonOptions
@@ -45,6 +48,7 @@ describe('Plugin', function () {
       })
       delete require.cache[require.resolve(path.join(__dirname, 'env.js'))]
       delete global._ddtrace
+      nock.cleanAll()
       return agent.close({ ritmReset: false, wipe: true })
     })
     beforeEach(function () {
@@ -55,9 +59,13 @@ describe('Plugin', function () {
 
       const loadArguments = [['jest', 'http']]
 
+      const isAgentlessTest = this.currentTest.parent.title === 'agentless'
+
       // we need the ci visibility init for the coverage test
-      if (this.currentTest.parent.title === 'agentless') {
+      if (isAgentlessTest) {
         process.env.DD_API_KEY = 'key'
+        process.env.DD_APP_KEY = 'app-key'
+        process.env.DD_ENV = 'ci'
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
         loadArguments.push({ service: 'test', isAgentlessEnabled: true, isIntelligentTestRunnerEnabled: true })
         loadArguments.push({ experimental: { exporter: 'datadog' } })
@@ -282,6 +290,7 @@ describe('Plugin', function () {
 
       describe('agentless', () => {
         it('can report code coverage', function (done) {
+          gitMetadataUploadFinishCh.publish()
           nock(`http://127.0.0.1:${agent.server.address().port}`)
             .post('/api/v2/citestcov')
             .reply(202, function () {
@@ -305,7 +314,7 @@ describe('Plugin', function () {
               expect(eventContentDisposition).to.contain(
                 'Content-Disposition: form-data; name="event"; filename="event.json"'
               )
-              expect(eventPayload).to.equal('{"dummy":true}')
+              expect(eventPayload).to.equal(JSON.stringify({ dummy: true }))
               done()
             })
 
@@ -321,6 +330,7 @@ describe('Plugin', function () {
           )
         })
         it('should create spans for the test session and test suite', (done) => {
+          gitMetadataUploadFinishCh.publish()
           const events = [
             { type: 'test_session_end', status: 'pass' },
             {
@@ -367,6 +377,91 @@ describe('Plugin', function () {
           const options = {
             ...jestCommonOptions,
             testRegex: 'jest-test-suite.js'
+          }
+
+          jestExecutable.runCLI(
+            options,
+            options.projects
+          )
+        })
+        it('can skip tests through ITR', (done) => {
+          gitMetadataUploadFinishCh.publish()
+          const scope = nock('https://api.datadoghq.com/')
+            .post('/api/v2/ci/tests/skippable')
+            .reply(200, JSON.stringify({
+              data: [{
+                type: 'suite',
+                attributes: {
+                  suite: 'packages/datadog-plugin-jest/test/jest-itr-skip.js'
+                }
+              }]
+            }))
+
+          agent.use(agentlessPayload => {
+            const { events: [{ content: testSpan }] } = agentlessPayload
+            expect(testSpan.meta).to.contain({
+              [TEST_NAME]: 'jest-itr-pass will be run',
+              [TEST_STATUS]: 'pass',
+              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-itr-pass.js'
+            })
+          }).then(() => {
+            expect(scope.isDone()).to.be.true
+            done()
+          }).catch(done)
+
+          const options = {
+            ...jestCommonOptions,
+            testRegex: /jest-itr-/
+          }
+
+          jestExecutable.runCLI(
+            options,
+            options.projects
+          )
+        })
+        it('does not skip tests if git metadata is not uploaded', function (done) {
+          gitMetadataUploadFinishCh.publish(new Error('error uploading'))
+          nock('https://api.datadoghq.com/')
+            .post('/api/v2/ci/tests/skippable')
+            .reply(200, JSON.stringify({
+              data: [{
+                type: 'suite',
+                attributes: {
+                  suite: 'packages/datadog-plugin-jest/test/jest-itr-skip.js'
+                }
+              }]
+            }))
+
+          const tests = [
+            {
+              name: 'jest-itr-skip will be skipped through ITR',
+              status: 'pass',
+              suite: 'packages/datadog-plugin-jest/test/jest-itr-skip.js'
+            },
+            {
+              name: 'jest-itr-pass will be run',
+              status: 'pass',
+              suite: 'packages/datadog-plugin-jest/test/jest-itr-pass.js'
+            }
+          ]
+
+          const assertionPromises = tests.map(({ name, status, suite }) => {
+            return agent.use(agentlessPayload => {
+              const { events: [{ content: testSpan }] } = agentlessPayload
+              expect(testSpan.meta).to.contain({
+                [TEST_NAME]: name,
+                [TEST_STATUS]: status,
+                [TEST_SUITE]: suite
+              })
+            })
+          })
+
+          Promise.all(assertionPromises).then(() => done()).catch(done)
+
+          const options = {
+            ...jestCommonOptions,
+            testRegex: /jest-itr-/,
+            runInBand: true
           }
 
           jestExecutable.runCLI(

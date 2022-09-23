@@ -123,6 +123,7 @@ module.exports = class PluginManager {
       clientIpHeaderDisabled,
       clientIpHeader,
       isIntelligentTestRunnerEnabled,
+      site,
       experimental
     } = this._tracerConfig
 
@@ -153,6 +154,8 @@ module.exports = class PluginManager {
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
     }
+
+    sharedConfig.site = site
 
     return sharedConfig
   }
