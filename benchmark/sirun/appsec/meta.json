@@ -1,6 +1,6 @@
 {
   "name": "appsec",
-  "cachegrind": true,
+  "cachegrind": false,
   "iterations": 10,
   "variants": {
     "control": {

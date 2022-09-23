@@ -1,7 +1,7 @@
 {
   "name": "log",
   "run": "node index.js",
-  "cachegrind": true,
+  "cachegrind": false,
   "iterations": 10,
   "variants": {
     "without-log": { "env": { "DD_TRACE_DEBUG": "false" } },

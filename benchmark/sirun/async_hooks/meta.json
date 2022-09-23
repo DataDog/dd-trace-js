@@ -1,7 +1,7 @@
 {
   "name": "async_hooks",
   "run": "node -r ../monitor .",
-  "cachegrind": true,
+  "cachegrind": false,
   "iterations": 5,
   "variants": {
     "no-hooks": { "env": { "ASYNC_HOOKS": "" } },

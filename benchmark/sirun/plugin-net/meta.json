@@ -1,6 +1,6 @@
 {
   "name": "net",
-  "cachegrind": true,
+  "cachegrind": false,
   "iterations": 10,
   "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
   "variants": {
