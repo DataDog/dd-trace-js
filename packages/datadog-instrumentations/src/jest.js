@@ -2,6 +2,7 @@
 const istanbul = require('istanbul-lib-coverage')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -16,6 +17,10 @@ const testStartCh = channel('ci:jest:test:start')
 const testSkippedCh = channel('ci:jest:test:skip')
 const testRunFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
+
+const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
+
+let skippableSuites = []
 
 const {
   getTestSuitePath,
@@ -179,17 +184,44 @@ addHook({
 
 function cliWrapper (cli) {
   const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
+    let onResponse, onError
+    const skippableSuitesPromise = new Promise((resolve, reject) => {
+      onResponse = resolve
+      onError = reject
+    })
+
+    sessionAsyncResource.runInAsyncScope(() => {
+      skippableSuitesCh.publish({ onResponse, onError })
+    })
+
+    try {
+      skippableSuites = await skippableSuitesPromise
+    } catch (e) {
+      log.error(e)
+    }
+    const isTestsSkipped = !!skippableSuites.length
+
     const processArgv = process.argv.slice(2).join(' ')
     sessionAsyncResource.runInAsyncScope(() => {
       testSessionStartCh.publish(`jest ${processArgv}`)
     })
-    return runCLI.apply(this, arguments).then(result => {
-      const { results: { success } } = result
-      sessionAsyncResource.runInAsyncScope(() => {
-        testSessionFinishCh.publish(success ? 'pass' : 'fail')
-      })
-      return result
+
+    const result = await runCLI.apply(this, arguments)
+
+    const { results: { success, coverageMap } } = result
+
+    let testCodeCoverageLinesTotal
+    try {
+      testCodeCoverageLinesTotal = coverageMap.getCoverageSummary().lines.pct
+    } catch (e) {
+      // ignore errors
+    }
+
+    sessionAsyncResource.runInAsyncScope(() => {
+      testSessionFinishCh.publish({ status: success ? 'pass' : 'fail', isTestsSkipped, testCodeCoverageLinesTotal })
     })
+
+    return result
   })
 
   cli.runCLI = wrapped.runCLI
@@ -249,6 +281,12 @@ addHook({
 
 function configureTestEnvironment (readConfigsResult) {
   const { configs } = readConfigsResult
+  configs.forEach(config => {
+    skippableSuites.forEach((suite) => {
+      config.testMatch.push(`!**/${suite}`)
+    })
+    skippableSuites = []
+  })
   sessionAsyncResource.runInAsyncScope(() => {
     testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
   })
