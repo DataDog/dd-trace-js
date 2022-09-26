@@ -23,6 +23,9 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { getSkippableSuites } = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-skippable-suites')
+const {
+  getItrConfiguration
+} = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-itr-configuration')
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
@@ -67,7 +70,18 @@ class JestPlugin extends Plugin {
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
-    // TODO: add timeout for git metadata upload
+    const {
+      'git.repository_url': repositoryUrl,
+      'git.commit.sha': sha,
+      'os.version': osVersion,
+      'os.platform': osPlatform,
+      'os.architecture': osArchitecture,
+      'runtime.name': runtimeName,
+      'runtime.version': runtimeVersion,
+      'git.branch': gitBranch
+    } = this.testEnvironmentMetadata
+
+    // TODO: set a timeout after which the promise is rejected
     const gitMetadataPromise = new Promise((resolve, reject) => {
       this.addSub('ci:git-metadata-upload:finish', err => {
         if (err) {
@@ -78,35 +92,54 @@ class JestPlugin extends Plugin {
       })
     })
 
+    this.addSub('ci:library:configuration', ({ onResponse, onError }) => {
+      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
+        onResponse({})
+        return
+      }
+      const testConfiguration = {
+        site: this.config.site,
+        env: this.tracer._env,
+        service: this.config.service || this.tracer._service,
+        repositoryUrl,
+        sha,
+        osVersion,
+        osPlatform,
+        osArchitecture,
+        runtimeName,
+        runtimeVersion,
+        branch: gitBranch
+      }
+      getItrConfiguration(testConfiguration, (err, config) => {
+        if (err) {
+          onError(err)
+        } else {
+          onResponse(config)
+        }
+      })
+    })
+
     this.addSub('ci:jest:test-suite:skippable', ({ onResponse, onError }) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
         onResponse([])
         return
       }
-      // The request to the skippable API needs to happen *after* uploading git metadata
+      const testConfiguration = {
+        site: this.config.site,
+        env: this.tracer._env,
+        service: this.config.service || this.tracer._service,
+        repositoryUrl,
+        sha,
+        osVersion,
+        osPlatform,
+        osArchitecture,
+        runtimeName,
+        runtimeVersion,
+        branch: gitBranch
+      }
+      // we only request after git upload has happened
       gitMetadataPromise.then(() => {
-        const {
-          'git.repository_url': repositoryUrl,
-          'git.commit.sha': sha,
-          'os.version': osVersion,
-          'os.platform': osPlatform,
-          'os.architecture': osArchitecture,
-          'runtime.name': runtimeName,
-          'runtime.version': runtimeVersion
-        } = this.testEnvironmentMetadata
-
-        getSkippableSuites({
-          site: this.config.site,
-          env: this.tracer._env,
-          service: this.config.service || this.tracer._service,
-          repositoryUrl,
-          sha,
-          osVersion,
-          osPlatform,
-          osArchitecture,
-          runtimeName,
-          runtimeVersion
-        }, (err, skippableTests) => {
+        getSkippableSuites(testConfiguration, (err, skippableTests) => {
           if (err) {
             onError(err)
           } else {
