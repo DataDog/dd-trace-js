@@ -81,6 +81,7 @@ class JestPlugin extends Plugin {
       'git.branch': gitBranch
     } = this.testEnvironmentMetadata
 
+    let isGitUploadFailed = false
     // TODO: set a timeout after which the promise is rejected
     const gitMetadataPromise = new Promise((resolve, reject) => {
       this.addSub('ci:git-metadata-upload:finish', err => {
@@ -90,6 +91,8 @@ class JestPlugin extends Plugin {
           resolve()
         }
       })
+    }).catch(() => {
+      isGitUploadFailed = true
     })
 
     this.addSub('ci:library:configuration', ({ onResponse, onError }) => {
@@ -121,8 +124,7 @@ class JestPlugin extends Plugin {
 
     this.addSub('ci:jest:test-suite:skippable', ({ onResponse, onError }) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
-        onResponse([])
-        return
+        return onResponse([])
       }
       const testConfiguration = {
         site: this.config.site,
@@ -137,7 +139,10 @@ class JestPlugin extends Plugin {
         runtimeVersion,
         branch: gitBranch
       }
-      // we only request after git upload has happened
+      // we only request after git upload has happened, if it didn't fail
+      if (isGitUploadFailed) {
+        return onError()
+      }
       gitMetadataPromise.then(() => {
         getSkippableSuites(testConfiguration, (err, skippableTests) => {
           if (err) {
