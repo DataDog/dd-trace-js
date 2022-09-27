@@ -15,7 +15,18 @@ const dispatchCh = channel('apm:rhea:dispatch')
 const errorCh = channel('apm:rhea:error')
 const finishCh = channel('apm:rhea:finish')
 
+const encodeCh = channel('apm:rhea:encode')
+
 const contexts = new WeakMap()
+
+addHook({ name: 'rhea', versions: ['>=1'] }, rhea => {
+  shimmer.wrap(rhea.message, 'encode', encode => function (msg) {
+    encodeCh.publish(msg)
+    return encode.apply(this, arguments)
+  })
+
+  return rhea
+})
 
 addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
   const startSendCh = channel('apm:rhea:send:start')
