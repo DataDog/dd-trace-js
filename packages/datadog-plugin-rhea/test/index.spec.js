@@ -79,6 +79,19 @@ describe('Plugin', () => {
               })
               context.sender.send({ body: 'Hello World!' })
             })
+
+            it('should inject span context with encoded messages', (done) => {
+              container.once('message', msg => {
+                const keys = Object.keys(msg.message.delivery_annotations)
+                expect(keys).to.include('x-datadog-trace-id')
+                expect(keys).to.include('x-datadog-parent-id')
+                done()
+              })
+              tracer.trace('web.request', () => {
+                const encodedMessage = container.message.encode({ body: 'Hello World!' })
+                context.sender.send(encodedMessage, undefined, 0)
+              })
+            })
           })
 
           describe('receiving a message', () => {
