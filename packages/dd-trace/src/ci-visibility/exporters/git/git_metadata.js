@@ -172,25 +172,28 @@ function sendGitMetadata (site, callback) {
 
   getCommitsToExclude({ url, repositoryUrl }, (err, commitsToExclude, headCommit) => {
     if (err) {
-      callback(err)
-      return
+      return callback(err)
     }
     const commitsToUpload = getCommitsToUpload(commitsToExclude)
 
     if (!commitsToUpload.length) {
       log.debug('No commits to upload')
-      callback(null)
-      return
+      return callback(null)
     }
+    let packFilesToUpload = []
 
-    const packFilesToUpload = generatePackFilesForCommits(commitsToUpload)
+    try {
+      packFilesToUpload = generatePackFilesForCommits(commitsToUpload)
+    } catch (err) {
+      log.error('generatePackFilesForCommits failed')
+      return callback(err)
+    }
 
     let packFileIndex = 0
     // This uploads packfiles sequentially
     const uploadPackFileCallback = (err) => {
       if (err || packFileIndex === packFilesToUpload.length) {
-        callback(err)
-        return
+        return callback(err)
       }
       return uploadPackFile(
         {

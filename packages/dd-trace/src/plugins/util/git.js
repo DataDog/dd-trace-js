@@ -1,5 +1,6 @@
 const { execSync } = require('child_process')
 const os = require('os')
+const path = require('path')
 
 const { sanitizedExec } = require('./exec')
 const {
@@ -47,16 +48,16 @@ function getCommitsToUpload (commitsToExclude) {
 function generatePackFilesForCommits (commitsToUpload) {
   const tmpFolder = os.tmpdir()
 
-  const prefix = Math.floor(Math.random() * 10000)
-  const path = `${tmpFolder}/${prefix}`
+  const randomPrefix = Math.floor(Math.random() * 10000)
+  const temporaryPath = path.join(tmpFolder, randomPrefix)
 
   const orderedCommits =
     execSync(
-      `git pack-objects --compression=9 --max-pack-size=3m ${path}`,
+      `git pack-objects --compression=9 --max-pack-size=3m ${temporaryPath}`,
       { input: commitsToUpload.join('\n') }
     ).toString().split('\n').filter(commit => !!commit)
 
-  return orderedCommits.map(commit => `${path}-${commit}.pack`)
+  return orderedCommits.map(commit => `${temporaryPath}-${commit}.pack`)
 }
 
 // If there is ciMetadata, it takes precedence.
