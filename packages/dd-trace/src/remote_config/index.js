@@ -155,8 +155,7 @@ class RemoteConfigManager extends EventEmitter {
 
     for (const path of client_configs) {
       const meta = targets.signed.targets[path]
-
-      if (!meta) throw new Error('No target found')
+      if (!meta) throw new Error(`Unable to find target for path ${path}`)
 
       const current = this.appliedConfigs.get(path)
 
@@ -210,16 +209,16 @@ function fromBase64 (str) {
 const configPathRegex = /^(?:datadog\/\d+|employee)\/([^/]+)\/([^/]+)\/[^/]+$/
 
 function parseConfigPath (configPath) {
-  const result = {}
-
   const match = configPathRegex.exec(configPath)
 
-  if (match) {
-    if (match[1]) result.product = match[1]
-    if (match[2]) result.id = match[2]
+  if (!match || !match[1] || !match[2]) {
+    throw new Error('Cant parse path')
   }
 
-  return result
+  return {
+    product: match[1],
+    id: match[2]
+  }
 }
 
 module.exports = RemoteConfigManager
