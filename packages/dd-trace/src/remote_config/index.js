@@ -89,6 +89,7 @@ class RemoteConfigManager extends EventEmitter {
     const data = JSON.stringify(this.state)
 
     const options = {
+      // TODO: url: this.tracer._tracer._exporter._url
       path: '/v0.7/config',
       method: 'POST'
     }
@@ -96,6 +97,7 @@ class RemoteConfigManager extends EventEmitter {
     // TODO: we need a better way to get the agent URL
     const url = this.tracer._tracer._exporter._url
 
+    // TODO: this can be removed once #2387 is merged
     if (url.protocol === 'unix:') {
       options.socketPath = url.pathname
     } else {
@@ -105,29 +107,32 @@ class RemoteConfigManager extends EventEmitter {
     }
 
     request(data, options, (err, data, statusCode) => {
-      if (statusCode !== 404) { // 404 means RC is disabled, ignore it
+      // 404 means RC is disabled, ignore it
+      if (statusCode === 404) return cb()
+      
       if (err) {
-          log.error(err)
-        } else {
-          if (this.state.client.has_error) {
-            this.state.client.has_error = false
-            this.state.client.error = ''
+        log.error(err)
+        return cb()
       }
 
-          if (data && data !== '{}') { // '{}' means the tracer is up to date
-            try {
-        this.parseConfig(JSON.parse(data))
-            } catch (err) {
-              log.error(`Could not parse remote config response: ${err}`)
-
-              this.state.client.has_error = true
-              this.state.client.error = err.toString()
+      // if error was just sent, reset the state
+      if (this.state.client.state.has_error) {
+        this.state.client.state.has_error = false
+        this.state.client.state.error = ''
       }
-          }
+
+      if (data && data !== '{}') { // '{}' means the tracer is up to date
+        try {
+          this.parseConfig(JSON.parse(data))
+        } catch (err) {
+          log.error(`Could not parse remote config response: ${err}`)
+
+          this.state.client.state.has_error = true
+          this.state.client.state.error = err.toString()
         }
       }
 
-      cb && cb()
+      cb()
     })
   }
 
