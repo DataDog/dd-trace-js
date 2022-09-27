@@ -1,6 +1,6 @@
 {
   "name": "startup",
-  "run": "node startup-test.js",
+  "run": "taskset -c 14 node startup-test.js",
   "cachegrind": false,
   "iterations": 10,
   "variants": {

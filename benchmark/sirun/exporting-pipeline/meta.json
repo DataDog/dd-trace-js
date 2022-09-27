@@ -1,7 +1,7 @@
 {
   "name": "exporting-pipeline",
   "setup": "bash -c \"nohup node ../../e2e/fake-agent.js >/dev/null 2>&1 &\"",
-  "run": "node index.js",
+  "run": "taskset -c 3 node index.js",
   "iterations": 10,
   "cachegrind": false,
   "variants": {

@@ -1,6 +1,6 @@
 {
   "name": "plugin-bluebird",
-  "run": "node index.js",
+  "run": "taskset -c 5 node index.js",
   "cachegrind": false,
   "iterations": 10,
   "variants": {

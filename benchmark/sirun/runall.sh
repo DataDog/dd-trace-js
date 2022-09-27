@@ -6,7 +6,8 @@ else
     source /usr/local/nvm/nvm.sh
 fi
 
-# PLUGINS=bluebird yarn services
+# run each test in parallel for a given version of Node.js
+# once all of the tests have complete move on to the next version
 
 for MAJOR_VERSION in 14 16 18; do
     nvm use $MAJOR_VERSION
@@ -15,12 +16,16 @@ for MAJOR_VERSION in 14 16 18; do
 
     for D in *; do
         if [ -d "${D}" ]; then
-            echo "benchmarking ${D}..."
+            echo "kicking off ${D}..."
             cd "${D}"
-            ../run-all-variants.js >> ../results.ndjson
+            (../run-all-variants.js >> ../results.ndjson) &
             # sirun meta.json | jq -c --arg ver $VERSION '. + {version: $ver}' >> ../results.ndjson
-            echo "done with ${D}."
+            echo "test ${D} is now running in background."
             cd ..
         fi
     done
+
+    wait
+
+    echo "all tests for ${VERSION} have now completed."
 done
