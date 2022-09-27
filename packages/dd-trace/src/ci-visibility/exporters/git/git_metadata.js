@@ -168,7 +168,12 @@ function uploadPackFile ({ url, packFileToUpload, repositoryUrl, headCommit }, c
 function sendGitMetadata (site, callback) {
   const url = new URL(`https://api.${site}`)
 
-  const repositoryUrl = getRepositoryUrl()
+  let repositoryUrl = ''
+  try {
+    repositoryUrl = getRepositoryUrl()
+  } catch (err) {
+    return callback(err)
+  }
 
   getCommitsToExclude({ url, repositoryUrl }, (err, commitsToExclude, headCommit) => {
     if (err) {

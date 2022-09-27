@@ -189,4 +189,20 @@ describe('git_metadata', () => {
       done()
     })
   })
+
+  it('should not crash if git is missing', (done) => {
+    const scope = nock('https://api.test.com')
+      .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({ data: [] }))
+      .post('/api/v2/git/repository/packfile')
+      .reply(204)
+
+    getRepositoryUrlStub.throws(new Error('git: command not found'))
+
+    gitMetadata.sendGitMetadata('test.com', (err) => {
+      expect(err.message).to.contain('git: command not found')
+      expect(scope.isDone()).to.be.false
+      done()
+    })
+  })
 })
