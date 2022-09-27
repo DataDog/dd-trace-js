@@ -12,13 +12,12 @@ const clientId = uuid()
 const POLL_INTERVAL = 5e3
 
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest with their own separated Client.ClientState.
-
 class RemoteConfigManager extends EventEmitter {
   constructor (config, tracer) {
     super()
 
     this.tracer = tracer
-    this.scheduler = new Scheduler(() => this.poll(), POLL_INTERVAL)
+    this.scheduler = new Scheduler((cb) => this.poll(cb), POLL_INTERVAL)
 
     this.state = {
       client: {
@@ -94,6 +93,7 @@ class RemoteConfigManager extends EventEmitter {
       method: 'POST'
     }
 
+    // TODO: we need a better way to get the agent URL
     const url = this.tracer._tracer._exporter._url
 
     if (url.protocol === 'unix:') {
