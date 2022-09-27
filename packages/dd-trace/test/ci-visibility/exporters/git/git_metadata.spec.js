@@ -173,4 +173,20 @@ describe('git_metadata', () => {
       done()
     })
   })
+
+  it('should not crash if generatePackFiles throws an error', (done) => {
+    const scope = nock('https://api.test.com')
+      .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({ data: [] }))
+      .post('/api/v2/git/repository/packfile')
+      .reply(204)
+
+    generatePackFilesForCommitsStub.throws(new Error('Failed to generate packfiles'))
+
+    gitMetadata.sendGitMetadata('test.com', (err) => {
+      expect(err.message).to.contain('Failed to generate packfiles')
+      expect(scope.isDone()).to.be.false
+      done()
+    })
+  })
 })
