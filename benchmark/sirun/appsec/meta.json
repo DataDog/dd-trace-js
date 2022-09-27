@@ -5,14 +5,14 @@
   "variants": {
     "control": {
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
-      "run": "node server.js",
+      "run": "tasket -c 0 node server.js",
       "env": {
         "DD_APPSEC_ENABLED": "0"
       }
     },
     "appsec-enabled": {
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
-      "run": "node server.js",
+      "run": "tasket -c 0 node server.js",
       "baseline": "control",
       "env": {
         "DD_APPSEC_ENABLED": "1"
@@ -20,7 +20,7 @@
     },
     "control-with-attacks": {
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
-      "run": "node server.js",
+      "run": "tasket -c 0 node server.js",
       "env": {
         "DD_APPSEC_ENABLED": "0",
         "ATTACK_UA": "1",
@@ -30,7 +30,7 @@
     },
     "appsec-enabled-with-attacks": {
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
-      "run": "node server.js",
+      "run": "tasket -c 0 node server.js",
       "baseline": "control-with-attacks",
       "env": {
         "DD_APPSEC_ENABLED": "1",

@@ -1,6 +1,6 @@
 {
   "name": "plugin-q",
-  "run": "node index.js",
+  "run": "taskset -c 10 node index.js",
   "cachegrind": false,
   "iterations": 10,
   "variants": {

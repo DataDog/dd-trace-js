@@ -4,38 +4,38 @@
   "iterations": 10,
   "variants": {
     "client-control": {
-      "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
-      "run": "node client.js",
+      "setup": "bash -c \"nohup taskset -c 8 node server.js >/dev/null 2>&1 &\"",
+      "run": "taskset -c 8 node client.js",
       "env": {
         "CLIENT_USE_TRACER": "0"
       }
     },
     "client-with-tracer": {
-      "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
-      "run": "node client.js",
+      "setup": "bash -c \"nohup taskset -c 8 node server.js >/dev/null 2>&1 &\"",
+      "run": "taskset -c 8 node client.js",
       "baseline": "client-control",
       "env": {
         "CLIENT_USE_TRACER": "1"
       }
     },
     "server-control": {
-      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
-      "run": "node server.js",
+      "setup": "bash -c \"nohup taskset -c 8 node client.js >/dev/null 2>&1 &\"",
+      "run": "taskset -c 8 node server.js",
       "env": {
         "SERVER_USE_TRACER": "0"
       }
     },
     "server-with-tracer": {
-      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
-      "run": "node server.js",
+      "setup": "bash -c \"nohup taskset -c 8 node client.js >/dev/null 2>&1 &\"",
+      "run": "taskset -c 8 node server.js",
       "baseline": "server-control",
       "env": {
         "SERVER_USE_TRACER": "1"
       }
     },
     "server-querystring-obfuscation": {
-      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
-      "run": "node server.js",
+      "setup": "bash -c \"nohup taskset -c 8 node client.js >/dev/null 2>&1 &\"",
+      "run": "taskset -c 8 node server.js",
       "baseline": "server-with-tracer",
       "env": {
         "SERVER_USE_TRACER": "1",

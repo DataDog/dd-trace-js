@@ -1,6 +1,6 @@
 {
   "name": "scope-manager",
-  "run": "node index.js",
+  "run": "taskset -c 12 node index.js",
   "cachegrind": false,
   "iterations": 10,
   "variants": {

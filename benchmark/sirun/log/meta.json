@@ -1,6 +1,6 @@
 {
   "name": "log",
-  "run": "node index.js",
+  "run": "taskset -c 4 node index.js",
   "cachegrind": false,
   "iterations": 10,
   "variants": {
