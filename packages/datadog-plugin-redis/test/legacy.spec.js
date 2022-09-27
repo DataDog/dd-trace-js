@@ -116,16 +116,16 @@ describe('Plugin', () => {
           let error
           let span
 
+          agent.use(traces => {
+            expect(traces[0][0]).to.have.property('resource', 'set')
+            span = traces[0][0]
+            assertError()
+          })
+
           client.on('error', done)
 
           client.set('foo', 123, 'bar', (err, res) => {
             error = err
-            assertError()
-          })
-
-          agent.use(traces => {
-            expect(traces[0][0]).to.have.property('resource', 'set')
-            span = traces[0][0]
             assertError()
           })
         })
