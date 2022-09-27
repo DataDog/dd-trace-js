@@ -34,6 +34,10 @@ class Tracer extends NoopProxy {
       log.use(config.logger)
       log.toggle(config.debug, config.logLevel, this)
 
+      const rc = new RemoteConfigManager(config, this)
+
+      rc.start()
+
       if (config.profiling.enabled) {
         // do not stop tracer initialization if the profiler fails to be imported
         try {
@@ -53,6 +57,23 @@ class Tracer extends NoopProxy {
         if (config.appsec.enabled) {
           require('./appsec').enable(config)
         }
+
+        rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+        
+        // TODO: rename to ASM_FEATURES
+        rc.on('FEATURES', (action, conf) => {
+          if (typeof conf?.asm?.enabled === 'boolean') {
+            if (action === 'enabled' || action === 'modify') action = conf.asm.enabled
+            else if (action === 'remove') action = config.appsec.enabled
+
+            if (action) {
+              require('./appsec').enable(config)
+            } else {
+              require('./appsec').disable()
+            }
+          }
+        })
+
         if (config.iast.enabled) {
           require('./appsec/iast').enable(config)
         }
@@ -72,19 +93,6 @@ class Tracer extends NoopProxy {
           }
           gitMetadataUploadFinishCh.publish(err)
         })
-      }
-
-      if (true) {
-        const rc = new RemoteConfigManager(config, this)
-
-        rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
-
-        rc.on('ASM_FEATURES', console.log)
-        rc.on('ASM', console.log)
-        rc.on('ASM_DATA', console.log)
-        rc.on('ASM_DD', console.log)
-
-        rc.start()
       }
     } catch (e) {
       log.error(e)
