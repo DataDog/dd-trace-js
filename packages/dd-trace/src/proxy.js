@@ -63,7 +63,7 @@ class Tracer extends NoopProxy {
         // TODO: rename to ASM_FEATURES
         rc.on('FEATURES', (action, conf) => {
           if (typeof conf?.asm?.enabled === 'boolean') {
-            if (action === 'enabled' || action === 'modify') action = conf.asm.enabled
+            if (action === 'apply' || action === 'modify') action = conf.asm.enabled
             else if (action === 'remove') action = config.appsec.enabled
 
             if (action) {
