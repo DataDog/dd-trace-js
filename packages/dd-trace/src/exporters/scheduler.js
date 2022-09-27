@@ -20,7 +20,7 @@ class Scheduler {
   start () {
     if (this._timer) return
 
-    process.nextTick(() => this.func())
+    setImmediate(() => this.func())
 
     this._timer = setInterval(() => this.func(), this._interval)
 
