@@ -196,9 +196,9 @@ class Config {
     let appsec = options.appsec || (options.experimental && options.experimental.appsec)
 
     const DD_APPSEC_ENABLED = coalesce(
-      appsec && (appsec === true || appsec.enabled === true), // TODO: remove when enabled by default
-      process.env.DD_APPSEC_ENABLED,
-      false
+      isTrue(appsec && (appsec === true || appsec.enabled === true)), // TODO: remove when enabled by default
+      isTrue(process.env.DD_APPSEC_ENABLED),
+      undefined // represent the default "false"
     )
 
     appsec = appsec || {}
@@ -355,7 +355,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
     this.appsec = {
-      enabled: isTrue(DD_APPSEC_ENABLED),
+      enabled: DD_APPSEC_ENABLED,
       rules: DD_APPSEC_RULES,
       rateLimit: DD_APPSEC_TRACE_RATE_LIMIT,
       wafTimeout: DD_APPSEC_WAF_TIMEOUT,
