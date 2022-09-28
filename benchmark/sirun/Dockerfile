@@ -4,10 +4,8 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 	wget ca-certificates valgrind \
 	    git hwinfo jq procps awscli \
 		procps python3 python3-pip python3-venv \
-	&& pip3 install \
-		setuptools
-	&& pip3 install \
-		awscli poetry virtualenv ez_setup
+	&& pip3 install setuptools \
+	&& pip3 install awscli poetry virtualenv ez_setup
 
 # nvm works much better with bash than sh
 SHELL ["/bin/bash", "--login", "-c"]
