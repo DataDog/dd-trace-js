@@ -18,7 +18,7 @@ for MAJOR_VERSION in 14 16 18; do
         if [ -d "${D}" ]; then
             echo "running ${D} in background..."
             cd "${D}"
-            (../run-all-variants.js >> ../results.ndjson && echo "${D} finished.") &
+            (time node ../run-all-variants.js >> ../results.ndjson && echo "${D} finished.") &
             cd ..
         fi
     done
