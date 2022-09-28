@@ -2,7 +2,7 @@
   "name": "plugin-graphql",
   "run": "taskset -c 31 node index.js",
   "cachegrind": false,
-  "iterations": 3,
+  "iterations": 1,
   "variants": {
     "control": {},
     "with-async-hooks": {
@@ -12,7 +12,8 @@
     "with-depth-off": {
       "baseline": "control",
       "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0"}
-    },"with-depth-on-max": {
+    },
+    "with-depth-on-max": {
       "baseline": "control",
       "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4"}
     },
