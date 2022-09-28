@@ -1,69 +1,33 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
-class ElasticsearchPlugin extends Plugin {
-  static get name () {
-    return 'elasticsearch'
-  }
+class ElasticsearchPlugin extends DatabasePlugin {
+  static get name () { return 'elasticsearch' }
 
-  constructor (...args) {
-    super(...args)
+  start ({ params }) {
+    const body = getBody(params.body || params.bulkBody)
 
-    this.addSub('apm:elasticsearch:query:start', ({ params }) => {
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const body = getBody(params.body || params.bulkBody)
-      const span = this.tracer.startSpan('elasticsearch.query', {
-        childOf,
-        tags: {
-          'db.type': 'elasticsearch',
-          'span.kind': 'client',
-          'service.name': this.config.service || `${this.tracer._service}-elasticsearch`,
-          'resource.name': `${params.method} ${quantizePath(params.path)}`,
-          'span.type': 'elasticsearch',
-          'elasticsearch.url': params.path,
-          'elasticsearch.method': params.method,
-          'elasticsearch.body': body,
-          'elasticsearch.params': JSON.stringify(params.querystring || params.query)
-        }
-      })
-      analyticsSampler.sample(span, this.config.measured)
-      this.enter(span, store)
-    })
-
-    this.addSub('apm:elasticsearch:query:error', err => {
-      const span = storage.getStore().span
-      span.setTag('error', err)
-    })
-
-    this.addSub('apm:elasticsearch:query:finish', ({ params }) => {
-      const span = storage.getStore().span
-      this.config.hooks.query(span, params)
-      span.finish()
+    this.startSpan('elasticsearch.query', {
+      service: this.config.service,
+      resource: `${params.method} ${quantizePath(params.path)}`,
+      type: 'elasticsearch',
+      kind: 'client',
+      meta: {
+        'db.type': 'elasticsearch',
+        'elasticsearch.url': params.path,
+        'elasticsearch.method': params.method,
+        'elasticsearch.body': body,
+        'elasticsearch.params': JSON.stringify(params.querystring || params.query)
+      }
     })
   }
 
-  configure (config) {
-    return super.configure(normalizeConfig(config))
+  finish ({ params }) {
+    const span = this.activeSpan()
+    this.config.hooks.query(span, params)
+    super.finish({ params })
   }
-}
-
-function normalizeConfig (config) {
-  const hooks = getHooks(config)
-
-  return Object.assign({}, config, {
-    hooks
-  })
-}
-
-function getHooks (config) {
-  const noop = () => {}
-  const query = (config.hooks && config.hooks.query) || noop
-
-  return { query }
 }
 
 function getBody (body) {
