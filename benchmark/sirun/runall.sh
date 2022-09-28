@@ -16,11 +16,9 @@ for MAJOR_VERSION in 14 16 18; do
 
     for D in *; do
         if [ -d "${D}" ]; then
-            echo "kicking off ${D}..."
+            echo "running ${D} in background..."
             cd "${D}"
-            (../run-all-variants.js >> ../results.ndjson) &
-            # sirun meta.json | jq -c --arg ver $VERSION '. + {version: $ver}' >> ../results.ndjson
-            echo "test ${D} is now running in background."
+            (../run-all-variants.js >> ../results.ndjson && echo "${D} finished.") &
             cd ..
         fi
     done
