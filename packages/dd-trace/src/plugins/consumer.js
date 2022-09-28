@@ -3,7 +3,7 @@
 const OutgoingPlugin = require('./outgoing')
 
 class ConsumerPlugin extends OutgoingPlugin {
-  static operation = 'receive'
+  static get operation () { return 'consumer' }
 }
 
 module.exports = ConsumerPlugin

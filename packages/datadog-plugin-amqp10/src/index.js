@@ -5,9 +5,7 @@ const ProducerPlugin = require('./producer')
 const ConsumerPlugin = require('./consumer')
 
 class Amqp10Plugin extends Plugin {
-  static get name () {
-    return 'amqp10'
-  }
+  static get name () { return 'amqp10' }
 
   constructor (...args) {
     super(...args)

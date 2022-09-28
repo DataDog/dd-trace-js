@@ -4,7 +4,7 @@ const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getAddress, getShortName } = require('./util')
 
 class Amqp10ConsumerPlugin extends ConsumerPlugin {
-  static name = 'amqp10'
+  static get name () { return 'amqp10' }
 
   start ({ link }) {
     const source = getShortName(link)

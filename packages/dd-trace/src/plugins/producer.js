@@ -3,7 +3,7 @@
 const OutgoingPlugin = require('./outgoing')
 
 class ProducerPlugin extends OutgoingPlugin {
-  static operation = 'publish'
+  static get operation () { return 'publish' }
 }
 
 module.exports = ProducerPlugin

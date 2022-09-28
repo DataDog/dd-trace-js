@@ -52,7 +52,7 @@ describe('Plugin', () => {
                   name: 'amqp.send',
                   resource: 'amq.topic',
                   error: 0,
-                  service: 'test-amqp-producer'
+                  service: 'test'
                 })
                 expect(span).to.not.have.property('type')
                 expect(span.meta).to.include({
@@ -475,7 +475,7 @@ describe('Plugin', () => {
                 name: 'amqp.send',
                 resource: 'amq.topic',
                 error: 1,
-                service: 'test-amqp-producer'
+                service: 'test'
               })
               expect(span.meta).to.include({
                 'span.kind': 'producer',
@@ -561,7 +561,7 @@ function expectSending (agent, deliveryState, topic) {
       name: 'amqp.send',
       resource: topic,
       error: 0,
-      service: 'test-amqp-producer'
+      service: 'test'
     })
     expect(span).to.not.have.property('type')
     const expectedMeta = {

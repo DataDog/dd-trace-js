@@ -4,8 +4,8 @@ const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { getAddress, getShortName } = require('./util')
 
 class Amqp10ProducerPlugin extends ProducerPlugin {
-  static name = 'amqp10'
-  static operation = 'send'
+  static get name () { return 'amqp10' }
+  static get operation () { return 'send' }
 
   start ({ link }) {
     const address = getAddress(link)

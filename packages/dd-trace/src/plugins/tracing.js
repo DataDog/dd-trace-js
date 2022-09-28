@@ -64,6 +64,7 @@ class TracingPlugin extends Plugin {
     }
 
     const span = this.tracer.startSpan(name, {
+      childOf,
       tags: {
         'service.name': service || this.tracer._service,
         'resource.name': resource,
