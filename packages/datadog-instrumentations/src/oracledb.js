@@ -10,21 +10,21 @@ const shimmer = require('../../datadog-shimmer')
 const connectionAttributes = new WeakMap()
 const poolAttributes = new WeakMap()
 
-const executeStartChannel = channel('apm:oracledb:execute:start')
-const executeErrorChannel = channel('apm:oracledb:execute:error')
-const executeFinishChannel = channel('apm:oracledb:execute:finish')
+const startChannel = channel('apm:oracledb:query:start')
+const errorChannel = channel('apm:oracledb:query:error')
+const finishChannel = channel('apm:oracledb:query:finish')
 
 function finish (err) {
   if (err) {
-    executeErrorChannel.publish(err)
+    errorChannel.publish(err)
   }
-  executeFinishChannel.publish(undefined)
+  finishChannel.publish(undefined)
 }
 
 addHook({ name: 'oracledb', versions: ['5'] }, oracledb => {
   shimmer.wrap(oracledb.Connection.prototype, 'execute', execute => {
     return function wrappedExecute (dbQuery, ...args) {
-      if (!executeStartChannel.hasSubscribers) {
+      if (!startChannel.hasSubscribers) {
         return execute.apply(this, arguments)
       }
 
@@ -39,7 +39,7 @@ addHook({ name: 'oracledb', versions: ['5'] }, oracledb => {
 
       return new AsyncResource('apm:oracledb:inner-scope').runInAsyncScope(() => {
         const connAttrs = connectionAttributes.get(this)
-        executeStartChannel.publish({ query: dbQuery, connAttrs })
+        startChannel.publish({ query: dbQuery, connAttrs })
         try {
           let result = execute.apply(this, arguments)
 
@@ -58,7 +58,7 @@ addHook({ name: 'oracledb', versions: ['5'] }, oracledb => {
 
           return result
         } catch (err) {
-          executeErrorChannel.publish(err)
+          errorChannel.publish(err)
           throw err
         }
       })
