@@ -2,7 +2,7 @@
   "name": "scope-manager",
   "run": "taskset -c 36 node index.js",
   "cachegrind": false,
-  "iterations": 10,
+  "iterations": 3,
   "variants": {
     "base": {
       "env": {

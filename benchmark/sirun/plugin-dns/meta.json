@@ -2,7 +2,7 @@
   "name": "plugin-dns",
   "run": "taskset -c 30 node index.js",
   "cachegrind": false,
-  "iterations": 10,
+  "iterations": 3,
   "variants": {
     "control": {
       "env": { "USE_TRACER": "0" }
