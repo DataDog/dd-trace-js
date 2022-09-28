@@ -30,9 +30,12 @@ class RheaPlugin extends Plugin {
         }
       })
       analyticsSampler.sample(span, this.config.measured)
-      addDeliveryAnnotations(msg, this.tracer, span)
 
       this.enter(span, store)
+    })
+
+    this.addSub('apm:rhea:encode', msg => {
+      addDeliveryAnnotations(msg, this.tracer, this.tracer.scope().active())
     })
 
     this.addSub(`apm:rhea:receive:start`, ({ msgObj, connection }) => {

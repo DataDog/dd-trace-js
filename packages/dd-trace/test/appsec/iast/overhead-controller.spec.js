@@ -7,6 +7,7 @@ const iast = require('../../../src/appsec/iast')
 const { testInRequest } = require('./utils')
 const agent = require('../../plugins/agent')
 const axios = require('axios')
+const { EventEmitter } = require('events')
 
 describe('Overhead controller', () => {
   const oceContextKey = overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY
@@ -177,18 +178,39 @@ describe('Overhead controller', () => {
   })
   describe('full feature', () => {
     describe('multiple request at same time', () => {
-      function app () {
+      const TEST_REQUEST_STARTED = 'test-request-started'
+      const TEST_REQUEST_FINISHED = 'test-request-finished'
+
+      const FIRST_REQUEST = '/first'
+      const SECOND_REQUEST = '/second'
+      const THIRD_REQUEST = '/third'
+      const FOURTH_REQUEST = '/fourth'
+      const FIFTH_REQUEST = '/fifth'
+
+      const testRequestEventEmitter = new EventEmitter()
+      let requestResolvers = {}
+
+      function app (req) {
         return new Promise((resolve) => {
           const crypto = require('crypto')
           crypto.createHash('sha1')
-          setTimeout(() => {
+          requestResolvers[req.url] = () => {
             resolve()
-          }, 500)
+            testRequestEventEmitter.emit(TEST_REQUEST_FINISHED, req.url)
+          }
+          testRequestEventEmitter.emit(TEST_REQUEST_STARTED, req.url)
         })
       }
 
       function tests (serverConfig) {
         const handlers = []
+
+        beforeEach(() => {
+          testRequestEventEmitter
+            .removeAllListeners(TEST_REQUEST_STARTED)
+            .removeAllListeners(TEST_REQUEST_FINISHED)
+          requestResolvers = {}
+        })
 
         afterEach(() => {
           handlers.forEach(agent.unsubscribe)
@@ -211,18 +233,22 @@ describe('Overhead controller', () => {
             }
           })
           iast.enable(config)
-          let isFirst = true
+          let urlCounter = 0
           const handler = function (traces) {
             try {
               for (let i = 0; i < traces.length; i++) {
                 for (let j = 0; j < traces[i].length; j++) {
                   const trace = traces[i][j]
                   if (trace.name === 'web.request') {
-                    if (isFirst) {
-                      isFirst = false
+                    const url = trace.meta['http.url']
+                    if (url.includes(FIRST_REQUEST)) {
                       expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                    } else {
+                      urlCounter++
+                    } else if (url.includes(SECOND_REQUEST)) {
                       expect(trace.meta['_dd.iast.json']).to.be.undefined
+                      urlCounter++
+                    }
+                    if (urlCounter === 2) {
                       done()
                     }
                   }
@@ -235,10 +261,15 @@ describe('Overhead controller', () => {
           }
           handlers.push(handler)
           agent.subscribe(handler)
-          axios.get(`http://localhost:${serverConfig.port}/`).then(() => vulnerabilityReporter.clearCache()).catch(done)
-          setTimeout(() => {
-            axios.get(`http://localhost:${serverConfig.port}/`).catch(done)
-          }, 50)
+          testRequestEventEmitter.on(TEST_REQUEST_STARTED, (url) => {
+            if (url === FIRST_REQUEST) {
+              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).then().catch(done)
+            } else if (url === SECOND_REQUEST) {
+              requestResolvers[FIRST_REQUEST]()
+              requestResolvers[SECOND_REQUEST]()
+            }
+          })
+          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).then().catch(done)
         })
 
         it('should detect vulnerabilities in both if max concurrent is 2', (done) => {
@@ -252,18 +283,16 @@ describe('Overhead controller', () => {
             }
           })
           iast.enable(config)
-          let isFirst = true
+          let urlCounter = 0
           const handler = function (traces) {
             try {
               for (let i = 0; i < traces.length; i++) {
                 for (let j = 0; j < traces[i].length; j++) {
                   const trace = traces[i][j]
                   if (trace.name === 'web.request') {
-                    if (isFirst) {
-                      isFirst = false
-                      expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                    } else {
-                      expect(trace.meta['_dd.iast.json']).not.to.be.undefined
+                    urlCounter++
+                    expect(trace.meta['_dd.iast.json']).not.to.be.undefined
+                    if (urlCounter === 2) {
                       done()
                     }
                   }
@@ -276,14 +305,28 @@ describe('Overhead controller', () => {
           }
           handlers.push(handler)
           agent.subscribe(handler)
-          axios.get(`http://localhost:${serverConfig.port}/`).then(() => vulnerabilityReporter.clearCache()).catch(done)
-          setTimeout(() => {
-            axios.get(`http://localhost:${serverConfig.port}/`).catch(done)
-          }, 50)
+          testRequestEventEmitter.on(TEST_REQUEST_STARTED, (url) => {
+            if (url === FIRST_REQUEST) {
+              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).then().catch(done)
+            } else if (url === SECOND_REQUEST) {
+              setImmediate(() => {
+                requestResolvers[FIRST_REQUEST]()
+                vulnerabilityReporter.clearCache()
+              })
+            }
+          })
+          testRequestEventEmitter.on(TEST_REQUEST_FINISHED, (url) => {
+            if (url === FIRST_REQUEST) {
+              setImmediate(() => {
+                requestResolvers[SECOND_REQUEST]()
+                vulnerabilityReporter.clearCache()
+              })
+            }
+          })
+          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).then().catch(done)
         })
 
         it('should recovery requests budget', function (done) {
-          this.timeout(5000)
           // 3 in parallel => 2 detects - 1 not detects
           // on finish the first => launch 2 - should detect 1 more
           const config = new Config({
@@ -306,15 +349,15 @@ describe('Overhead controller', () => {
                   if (trace.name === 'web.request') {
                     counter++
                     const url = trace.meta['http.url']
-                    if (url.includes('/one')) {
+                    if (url.includes(FIRST_REQUEST)) {
                       expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                    } else if (url.includes('/two')) {
+                    } else if (url.includes(SECOND_REQUEST)) {
                       expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                    } else if (url.includes('/three')) {
+                    } else if (url.includes(THIRD_REQUEST)) {
                       expect(trace.meta['_dd.iast.json']).to.be.undefined
-                    } else if (url.includes('/four')) {
+                    } else if (url.includes(FOURTH_REQUEST)) {
                       expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                    } else if (url.includes('/five')) {
+                    } else if (url.includes(FIFTH_REQUEST)) {
                       expect(trace.meta['_dd.iast.json']).to.be.undefined
                     }
                     counter === 5 && done()
@@ -328,34 +371,37 @@ describe('Overhead controller', () => {
           }
           handlers.push(handler)
           agent.subscribe(handler)
-          // must detect, first request, nothing in parallel
-          axios.get(`http://localhost:${serverConfig.port}/one`).then(() => {
-            vulnerabilityReporter.clearCache()
-            // must detect, second request in parallel with iast active (/three is not detecting)
-            axios.get(`http://localhost:${serverConfig.port}/four`)
-              .then(() => vulnerabilityReporter.clearCache())
-              .catch(done)
-            setTimeout(() => {
-              // can't detect, third request in parallel with iast active (/two and /four)
-              axios.get(`http://localhost:${serverConfig.port}/five`)
-                .then(() => vulnerabilityReporter.clearCache())
-                .catch(done)
-            }, 25)
-          }).catch(done)
-          setTimeout(() => {
-            // must detect, second request, has budgets
-            axios.get(`http://localhost:${serverConfig.port}/two`)
-              .then(() => vulnerabilityReporter.clearCache())
-              .catch(done)
-          }, 200)
-          setTimeout(() => {
-            // can't detect, third request in parallel, max 2
-            axios.get(`http://localhost:${serverConfig.port}/three`)
-              .then(() => vulnerabilityReporter.clearCache())
-              .catch(done)
-          }, 250)
+
+          testRequestEventEmitter.on(TEST_REQUEST_STARTED, (url) => {
+            if (url === FIRST_REQUEST) {
+              axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).then().catch(done)
+            } else if (url === SECOND_REQUEST) {
+              axios.get(`http://localhost:${serverConfig.port}${THIRD_REQUEST}`).then().catch(done)
+            } else if (url === THIRD_REQUEST) {
+              requestResolvers[FIRST_REQUEST]()
+            } else if (url === FIFTH_REQUEST) {
+              requestResolvers[SECOND_REQUEST]()
+              vulnerabilityReporter.clearCache()
+            }
+          })
+          testRequestEventEmitter.on(TEST_REQUEST_FINISHED, (url) => {
+            if (url === FIRST_REQUEST) {
+              axios.get(`http://localhost:${serverConfig.port}${FOURTH_REQUEST}`).then().catch(done)
+              axios.get(`http://localhost:${serverConfig.port}${FIFTH_REQUEST}`).then().catch(done)
+            } else if (url === SECOND_REQUEST) {
+              setImmediate(() => {
+                vulnerabilityReporter.clearCache()
+                requestResolvers[THIRD_REQUEST]()
+                requestResolvers[FOURTH_REQUEST]()
+                requestResolvers[FIFTH_REQUEST]()
+              })
+            }
+          })
+
+          axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).then().catch(done)
         })
       }
+
       testInRequest(app, tests)
     })
   })
