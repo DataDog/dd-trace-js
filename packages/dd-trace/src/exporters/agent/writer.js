@@ -86,7 +86,7 @@ function makeRequest (version, data, count, url, headers, lookup, needsStartupLo
       'X-Datadog-Trace-Count': String(count)
     },
     lookup,
-    url: url.toString()
+    url
   }
 
   setHeader(options.headers, 'Datadog-Meta-Lang', 'nodejs')

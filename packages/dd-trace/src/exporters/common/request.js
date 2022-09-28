@@ -26,7 +26,7 @@ function request (data, options, callback) {
   }
 
   if (options.url) {
-    const url = urlParse(options.url)
+    const url = typeof options.url === 'object' ? options.url : urlParse(options.url)
     if (url.protocol === 'unix:') {
       options.socketPath = url.pathname
     } else {
