@@ -17,6 +17,8 @@ const {
   CI_WORKSPACE_PATH
 } = require('./tags')
 
+const GIT_REV_LIST_MAX_BUFFER = 8 * 1024 * 1024 // 8MB
+
 function getRepositoryUrl () {
   return sanitizedExec('git config --get remote.origin.url', { stdio: 'pipe' })
 }
@@ -36,7 +38,7 @@ function getCommitsToUpload (commitsToExclude) {
     gitCommandToGetCommitsToUpload = `${gitCommandToGetCommitsToUpload} ^${commit}`
   })
 
-  return execSync(gitCommandToGetCommitsToUpload, { stdio: 'pipe' })
+  return execSync(gitCommandToGetCommitsToUpload, { stdio: 'pipe', maxBuffer: GIT_REV_LIST_MAX_BUFFER })
     .toString()
     .split('\n')
     .filter(commit => !!commit)
