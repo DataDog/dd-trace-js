@@ -5,11 +5,11 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 	    git hwinfo jq procps awscli \
 		procps python3 python3-pip python3-venv python3-dev
 
-RUN pip3 install setuptools
-RUN pip3 install awscli
-RUN pip3 install poetry
-RUN pip3 install virtualenv
-RUN pip3 install ez_setup
+# RUN pip3 install setuptools
+# RUN pip3 install awscli
+# RUN pip3 install poetry
+# RUN pip3 install virtualenv
+# RUN pip3 install ez_setup
 
 # nvm works much better with bash than sh
 SHELL ["/bin/bash", "--login", "-c"]
