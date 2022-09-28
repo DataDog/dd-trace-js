@@ -14,6 +14,8 @@ function applyRules (rules, config) {
 }
 
 function clearAllRules () {
+  Gateway.manager.clear()
+
   for (const [key, callback] of appliedCallbacks) {
     callback.clear()
 
