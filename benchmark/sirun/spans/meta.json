@@ -1,6 +1,6 @@
 {
   "name": "spans",
-  "run": "taskset -c 13 node spans.js",
+  "run": "taskset -c 37 node spans.js",
   "cachegrind": false,
   "iterations": 10,
   "variants": {

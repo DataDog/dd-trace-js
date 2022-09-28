@@ -1,6 +1,6 @@
 {
   "name": "encoders",
-  "run": "taskset -c 2 node index.js",
+  "run": "taskset -c 26 node index.js",
   "cachegrind": false,
   "iterations": 10,
   "variants": {
