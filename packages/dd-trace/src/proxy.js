@@ -53,26 +53,29 @@ class Tracer extends NoopProxy {
       }
 
       if (config.tracing) {
-        // dirty require for now so zero appsec code is executed unless explicitly enabled
-        if (config.appsec.enabled) {
-          require('./appsec').enable(config)
-        }
-
-        rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
-        
-        // TODO: rename to ASM_FEATURES
-        rc.on('FEATURES', (action, conf) => {
-          if (typeof conf?.asm?.enabled === 'boolean') {
-            if (action === 'apply' || action === 'modify') action = conf.asm.enabled
-            else action = config.appsec.enabled
-
-            if (action) {
-              require('./appsec').enable(config)
-            } else {
-              require('./appsec').disable()
-            }
+        if (config.appsec.enabled === undefined || config.appsec.enabled === true) {
+          if (config.appsec.enabled) {
+            // dirty require for now so zero appsec code is executed unless explicitly enabled
+            require('./appsec').enable(config)
           }
-        })
+
+          rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+
+          // TODO: rename to ASM_FEATURES
+          rc.on('FEATURES', (action, conf) => {
+            if (typeof conf?.asm?.enabled === 'boolean') {
+              if (action === 'apply' || action === 'modify') action = conf.asm.enabled
+              else action = config.appsec.enabled
+
+              // TODO: protect against double enable
+              if (action) {
+                require('./appsec').enable(config)
+              } else {
+                require('./appsec').disable()
+              }
+            }
+          })
+        }
 
         if (config.iast.enabled) {
           require('./appsec/iast').enable(config)
