@@ -174,14 +174,14 @@ describe('git_metadata', () => {
     })
   })
 
-  it('should not crash if generatePackFiles throws an error', (done) => {
+  it('should not crash if generatePackFiles returns an empty array', (done) => {
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')
       .reply(200, JSON.stringify({ data: [] }))
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    generatePackFilesForCommitsStub.throws(new Error('Failed to generate packfiles'))
+    generatePackFilesForCommitsStub.returns([])
 
     gitMetadata.sendGitMetadata('test.com', (err) => {
       expect(err.message).to.contain('Failed to generate packfiles')
@@ -197,10 +197,10 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    getRepositoryUrlStub.throws(new Error('git: command not found'))
+    getRepositoryUrlStub.returns('')
 
     gitMetadata.sendGitMetadata('test.com', (err) => {
-      expect(err.message).to.contain('git: command not found')
+      expect(err.message).to.contain('Repository URL is empty')
       expect(scope.isDone()).to.be.false
       done()
     })

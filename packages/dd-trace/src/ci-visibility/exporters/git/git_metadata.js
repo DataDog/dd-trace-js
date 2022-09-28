@@ -168,11 +168,10 @@ function uploadPackFile ({ url, packFileToUpload, repositoryUrl, headCommit }, c
 function sendGitMetadata (site, callback) {
   const url = new URL(`https://api.${site}`)
 
-  let repositoryUrl = ''
-  try {
-    repositoryUrl = getRepositoryUrl()
-  } catch (err) {
-    return callback(err)
+  const repositoryUrl = getRepositoryUrl()
+
+  if (!repositoryUrl) {
+    return callback(new Error('Repository URL is empty'))
   }
 
   getCommitsToExclude({ url, repositoryUrl }, (err, commitsToExclude, headCommit) => {
@@ -185,13 +184,10 @@ function sendGitMetadata (site, callback) {
       log.debug('No commits to upload')
       return callback(null)
     }
-    let packFilesToUpload = []
+    const packFilesToUpload = generatePackFilesForCommits(commitsToUpload)
 
-    try {
-      packFilesToUpload = generatePackFilesForCommits(commitsToUpload)
-    } catch (err) {
-      log.error('generatePackFilesForCommits failed')
-      return callback(err)
+    if (!packFilesToUpload.length) {
+      return callback(new Error('Failed to generate packfiles'))
     }
 
     let packFileIndex = 0
