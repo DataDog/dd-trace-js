@@ -2,13 +2,13 @@
   "name": "net",
   "cachegrind": false,
   "iterations": 10,
-  "setup": "bash -c \"nohup taskset -c 9 node server.js >/dev/null 2>&1 &\"",
+  "setup": "bash -c \"nohup taskset -c 33 node server.js >/dev/null 2>&1 &\"",
   "variants": {
     "control": {
-      "run": "taskset -c 9 node client.js"
+      "run": "taskset -c 33 node client.js"
     },
     "with-tracer": {
-      "run": "taskset -c 9 node -r ../../../init.js client.js",
+      "run": "taskset -c 33 node -r ../../../init.js client.js",
       "baseline": "control"
     }
   }

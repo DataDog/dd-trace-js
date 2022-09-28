@@ -1,6 +1,6 @@
 {
   "name": "plugin-graphql",
-  "run": "taskset -c 7 node index.js",
+  "run": "taskset -c 31 node index.js",
   "cachegrind": false,
   "iterations": 3,
   "variants": {

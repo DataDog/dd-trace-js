@@ -1,6 +1,6 @@
 {
   "name": "profiler",
-  "run": "taskset -c 11 node -r ../monitor index.js",
+  "run": "taskset -c 35 node -r ../monitor index.js",
   "cachegrind": false,
   "iterations": 10,
   "variants": {

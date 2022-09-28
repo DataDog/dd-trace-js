@@ -1,6 +1,6 @@
 {
   "name": "async_hooks",
-  "run": "tasket -c 1 node -r ../monitor .",
+  "run": "taskset -c 25 node -r ../monitor .",
   "cachegrind": false,
   "iterations": 5,
   "variants": {

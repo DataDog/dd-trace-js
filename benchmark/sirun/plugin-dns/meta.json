@@ -1,6 +1,6 @@
 {
   "name": "plugin-dns",
-  "run": "taskset -c 6 node index.js",
+  "run": "taskset -c 30 node index.js",
   "cachegrind": false,
   "iterations": 10,
   "variants": {
