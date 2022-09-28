@@ -55,7 +55,7 @@ describe('Plugin', () => {
                 .use(traces => {
                   const span = traces[0][0]
                   expect(span).to.have.property('name', 'amqp.command')
-                  expect(span).to.have.property('service', 'test-amqp')
+                  expect(span).to.have.property('service', 'test')
                   expect(span).to.have.property('resource', 'queue.declare test')
                   expect(span).to.not.have.property('type')
                   expect(span.meta).to.have.property('span.kind', 'client')
@@ -74,7 +74,7 @@ describe('Plugin', () => {
                   const span = traces[0][0]
 
                   expect(span).to.have.property('name', 'amqp.command')
-                  expect(span).to.have.property('service', 'test-amqp')
+                  expect(span).to.have.property('service', 'test')
                   expect(span).to.have.property('resource', 'queue.delete test')
                   expect(span).to.not.have.property('type')
                   expect(span.meta).to.have.property('span.kind', 'client')
@@ -118,7 +118,7 @@ describe('Plugin', () => {
                   const span = traces[0][0]
 
                   expect(span).to.have.property('name', 'amqp.command')
-                  expect(span).to.have.property('service', 'test-amqp')
+                  expect(span).to.have.property('service', 'test')
                   expect(span).to.have.property('resource', 'basic.publish exchange routingKey')
                   expect(span).to.not.have.property('type')
                   expect(span.meta).to.have.property('out.host', 'localhost')
@@ -165,13 +165,11 @@ describe('Plugin', () => {
                 .use(traces => {
                   const span = traces[0][0]
                   expect(span).to.have.property('name', 'amqp.command')
-                  expect(span).to.have.property('service', 'test-amqp')
+                  expect(span).to.have.property('service', 'test')
                   expect(span).to.have.property('resource', `basic.deliver ${queue}`)
                   expect(span).to.have.property('type', 'worker')
-                  expect(span.meta).to.have.property('out.host', 'localhost')
                   expect(span.meta).to.have.property('span.kind', 'consumer')
                   expect(span.meta).to.have.property('amqp.consumerTag', consumerTag)
-                  expect(span.metrics).to.have.property('out.port', 5672)
                 }, 5)
                 .then(done)
                 .catch(done)
