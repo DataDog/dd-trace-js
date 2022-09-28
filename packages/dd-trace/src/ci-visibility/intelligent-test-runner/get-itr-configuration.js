@@ -35,7 +35,6 @@ function getItrConfiguration ({
       'dd-application-key': appKey,
       'Content-Type': 'application/json'
     },
-    timeout: 15000,
     protocol: url.protocol,
     hostname: url.hostname,
     port: url.port
