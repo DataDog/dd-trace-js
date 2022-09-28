@@ -3,9 +3,9 @@ FROM --platform=linux/amd64 debian:buster-slim
 RUN apt-get update && apt-get install --no-install-recommends -y \
 	wget ca-certificates valgrind \
 	    git hwinfo jq procps awscli \
-		procps python3 python3-pip python3-venv python3-setuptools \
+		procps python3 python3-pip python3-venv \
 	&& pip3 install \
-		awscli poetry virtualenv setuptools
+		awscli poetry virtualenv
 
 # nvm works much better with bash than sh
 SHELL ["/bin/bash", "--login", "-c"]
