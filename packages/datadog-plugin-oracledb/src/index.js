@@ -1,72 +1,47 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const log = require('../../dd-trace/src/log')
 
-class OracledbPlugin extends Plugin {
-  static get name () {
-    return 'oracledb'
-  }
+class OracledbPlugin extends DatabasePlugin {
+  static get name () { return 'oracledb' }
+  static get system () { return 'oracle' }
 
-  constructor (...args) {
-    super(...args)
+  start ({ query, connAttrs }) {
+    const service = getServiceName(this.config, connAttrs)
+    const url = getUrl(connAttrs.connectString)
 
-    this.addSub('apm:oracledb:execute:start', ({ query, connAttrs }) => {
-      const service = getServiceName(this.tracer, this.config, connAttrs)
-      let connectStringObj
-      try {
-        connectStringObj = new URL(`http://${connAttrs.connectString}`)
-      } catch (e) {
-        log.error(e)
-      }
-      const tags = {
-        'span.kind': 'client',
-        'span.type': 'sql',
+    this.startSpan('oracle.query', {
+      service,
+      resource: query,
+      type: 'sql',
+      kind: 'client',
+      meta: {
         'sql.query': query,
         'db.user': this.config.user,
-        'resource.name': query,
-        'service.name': service
-      }
-      if (typeof connectStringObj !== 'undefined') {
-        tags['db.instance'] = connectStringObj.pathname.substring(1)
-        tags['db.hostname'] = connectStringObj.hostname
-        tags['db.port'] = connectStringObj.port
-      }
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const span = this.tracer.startSpan('oracle.query', {
-        childOf,
-        tags
-      })
-      analyticsSampler.sample(span, this.config.measured)
-      this.enter(span, store)
-    })
-
-    this.addSub('apm:oracledb:execute:error', err => {
-      const store = storage.getStore()
-      if (store && store.span) {
-        store.span.setTag('error', err)
-      }
-    })
-
-    this.addSub('apm:oracledb:execute:finish', () => {
-      const store = storage.getStore()
-      if (store && store.span) {
-        store.span.finish()
+        'db.instance': url.pathname && url.pathname.substring(1),
+        'db.hostname': url.hostname,
+        'db.port': url.port
       }
     })
   }
 }
 
-function getServiceName (tracer, config, connAttrs) {
+function getServiceName (config, connAttrs) {
   if (typeof config.service === 'function') {
     return config.service(connAttrs)
-  } else if (config.service) {
-    return config.service
-  } else {
-    return `${tracer._service}-oracle`
+  }
+
+  return config.service
+}
+
+// TODO: Avoid creating an error since it's a heavy operation.
+function getUrl (connectString) {
+  try {
+    return new URL(`http://${connectString}`)
+  } catch (e) {
+    log.error(e)
+    return {}
   }
 }
 

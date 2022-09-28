@@ -9,7 +9,6 @@ const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
   const startCh = channel('apm:memcached:command:start')
-  const startWithArgsCh = channel('apm:memcached:command:start:with-args')
   const finishCh = channel('apm:memcached:command:finish')
   const errorCh = channel('apm:memcached:command:error')
 
@@ -35,14 +34,12 @@ addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {
 
         return callback.apply(this, arguments)
       })
-      startWithArgsCh.publish({ client, server, query })
+      startCh.publish({ client, server, query })
 
       return query
     })
 
     return asyncResource.runInAsyncScope(() => {
-      startCh.publish()
-
       arguments[0] = wrappedQueryCompiler
 
       const result = command.apply(this, arguments)

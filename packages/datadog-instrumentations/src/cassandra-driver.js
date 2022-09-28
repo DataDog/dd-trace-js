@@ -7,10 +7,10 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const startCh = channel('apm:cassandra:query:start')
-const finishCh = channel('apm:cassandra:query:finish')
-const errorCh = channel('apm:cassandra:query:error')
-const addConnectionCh = channel(`apm:cassandra:query:addConnection`)
+const startCh = channel('apm:cassandra-driver:query:start')
+const finishCh = channel('apm:cassandra-driver:query:finish')
+const errorCh = channel('apm:cassandra-driver:query:error')
+const connectCh = channel(`apm:cassandra-driver:query:connect`)
 
 addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
   shimmer.wrap(cassandra.Client.prototype, 'batch', batch => function (queries, options, callback) {
@@ -115,7 +115,7 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.3'], file: 'lib/request-exec
     if (!startCh.hasSubscribers) {
       return _sendOnConnection.apply(this, arguments)
     }
-    addConnectionCh.publish({ address: this._connection.address, port: this._connection.port })
+    connectCh.publish({ hostname: this._connection.address, port: this._connection.port })
     return _sendOnConnection.apply(this, arguments)
   })
   return RequestExecution
@@ -136,7 +136,7 @@ addHook({ name: 'cassandra-driver', versions: ['3.3 - 4.3'], file: 'lib/request-
     getHostCallback = asyncResource.bind(getHostCallback)
 
     arguments[0] = AsyncResource.bind(function () {
-      addConnectionCh.publish({ address: execution._connection.address, port: execution._connection.port })
+      connectCh.publish({ hostname: execution._connection.address, port: execution._connection.port })
       return getHostCallback.apply(this, arguments)
     })
 
@@ -160,7 +160,7 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 3.2'], file: 'lib/request-ha
     callback = asyncResource.bind(callback)
 
     arguments[2] = AsyncResource.bind(function () {
-      addConnectionCh.publish({ address: handler.connection.address, port: handler.connection.port })
+      connectCh.publish({ hostname: handler.connection.address, port: handler.connection.port })
       return callback.apply(this, arguments)
     })
 
