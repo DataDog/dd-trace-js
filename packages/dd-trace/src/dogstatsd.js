@@ -3,7 +3,6 @@
 const lookup = require('dns').lookup // cache to avoid instrumentation
 const request = require('./exporters/common/request')
 const dgram = require('dgram')
-const url = require('url')
 const isIP = require('net').isIP
 const log = require('./log')
 
@@ -16,7 +15,6 @@ class Client {
     if (options.metricsProxyUrl) {
       this._httpOptions = {
         url: options.metricsProxyUrl.toString(),
-        agent: null,
         path: '/dogstatsd/v1/proxy'
       }
     }
@@ -41,32 +39,15 @@ class Client {
     this._add(stat, value, 'c', tags)
   }
 
-  flush (cb) {
+  flush () {
     const queue = this._enqueue()
 
     if (this._queue.length === 0) return
 
     this._queue = []
 
-    if (this._httpOptions) {
-      requestQueue(queue, this._httpOptions, err => {
-        if (err) {
-          log.debug('HTTP error from agent: ' + err.stack)
-          if (err.status) {
-            // Inside this if-block, we have connectivity to the agent, but
-            // we're not getting a 200 from the proxy endpoint. Fall back to
-            // UDP and try again.
-            this._httpOptions = null
-            this._queue = queue
-            this.flush()
-          }
-        }
-        if (cb) {
-          cb(err)
-        }
-      })
-    } else if (this._family !== 0) {
-      this._sendAll(queue, this._host, this._family)
+    if (this._httpOptions || this._family !== 0) {
+      this._sendAll(queue, this._host, this._family, this._httpOptions)
     } else {
       lookup(this._host, (err, address, family) => {
         if (err) return log.error(err)
@@ -75,7 +56,22 @@ class Client {
     }
   }
 
-  _send (address, family, buffer) {
+  _sendHttp (options, address, family, buffer) {
+    request(buffer, options, (err, _, code) => {
+      if (err) {
+        log.error('HTTP error from agent: ' + err.stack)
+        if (err.status) {
+          // Inside this if-block, we have connectivity to the agent, but
+          // we're not getting a 200 from the proxy endpoint. Fall back to
+          // UDP and try again.
+          this._httpOptions = null
+          this._sendUdp(address, family, buffer)
+        }
+      }
+    })
+  }
+
+  _sendUdp (address, family, buffer) {
     const socket = family === 6 ? this._udp6 : this._udp4
 
     log.debug(`Sending to DogStatsD: ${buffer}`)
@@ -83,8 +79,14 @@ class Client {
     socket.send(buffer, 0, buffer.length, this._port, address)
   }
 
-  _sendAll (queue, address, family) {
-    queue.forEach((buffer) => this._send(address, family, buffer))
+  _sendAll (queue, address, family, options) {
+    queue.forEach((buffer) => {
+      if (options) {
+        this._sendHttp(options, address, family, buffer)
+      } else {
+        this._sendUdp(address, family, buffer)
+      }
+    })
   }
 
   _add (stat, value, type, tags) {
@@ -131,23 +133,3 @@ class Client {
 }
 
 module.exports = Client
-
-function requestQueue (queue, options, callback) {
-  if (!queue.length) {
-    callback()
-    return
-  }
-
-  const [data, ...newQueue] = queue
-  request(data, options, (err, _, code) => {
-    if (err) {
-      callback(err)
-      return
-    }
-    if (code !== 200) {
-      callback(new Error('response code from the trace agent: ' + code))
-      return
-    }
-    requestQueue(newQueue, options, callback)
-  })
-}

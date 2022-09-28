@@ -52,7 +52,7 @@ function request (data, options, callback) {
     options.headers['Datadog-Container-ID'] = containerId
   }
 
-  options.agent = 'agent' in options ? options.agent : isSecure ? httpsAgent : httpAgent
+  options.agent = isSecure ? httpsAgent : httpAgent
 
   const onResponse = res => {
     let responseData = ''

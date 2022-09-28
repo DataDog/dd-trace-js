@@ -2,7 +2,7 @@
 
 const http = require('http')
 
-describe.only('dogstatsd', () => {
+describe('dogstatsd', () => {
   let client
   let Client
   let dgram
@@ -223,14 +223,11 @@ describe.only('dogstatsd', () => {
 
     client.gauge('test.avg', 0)
     client.gauge('test.avg2', 2)
-    client.flush((err) => {
-      if (err) {
-        done(err)
-        return
-      }
+    client.flush()
+    setTimeout(() => {
       expect(Buffer.concat(httpData).toString()).to.equal('test.avg:0|g\ntest.avg2:2|g\n')
       done()
-    })
+    }, 100)
   })
 
   it('should support HTTP via port', (done) => {
@@ -240,14 +237,11 @@ describe.only('dogstatsd', () => {
 
     client.gauge('test.avg', 1)
     client.gauge('test.avg2', 2)
-    client.flush((err) => {
-      if (err) {
-        done(err)
-        return
-      }
+    client.flush()
+    setTimeout(() => {
       expect(Buffer.concat(httpData).toString()).to.equal('test.avg:1|g\ntest.avg2:2|g\n')
       done()
-    })
+    }, 10)
   })
 
   it('should support HTTP via URL object', (done) => {
@@ -257,14 +251,11 @@ describe.only('dogstatsd', () => {
 
     client.gauge('test.avg', 1)
     client.gauge('test.avg2', 2)
-    client.flush((err) => {
-      if (err) {
-        done(err)
-        return
-      }
+    client.flush()
+    setTimeout(() => {
       expect(Buffer.concat(httpData).toString()).to.equal('test.avg:1|g\ntest.avg2:2|g\n')
       done()
-    })
+    }, 10)
   })
 
   it('should fail over to UDP', (done) => {
@@ -276,11 +267,12 @@ describe.only('dogstatsd', () => {
 
     client.increment('test.count', 10)
 
-    client.flush(() => {
+    client.flush()
+    setTimeout(() => {
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:10|c\n')
       expect(udp4.send.firstCall.args[2]).to.equal(16)
       done()
-    })
+    }, 10)
   })
 })
