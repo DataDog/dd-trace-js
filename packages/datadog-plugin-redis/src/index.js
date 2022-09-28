@@ -4,8 +4,8 @@ const CachePlugin = require('../../dd-trace/src/plugins/cache')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
 class RedisPlugin extends CachePlugin {
-  static name = 'redis'
-  static system = 'redis'
+  static get name () { return 'redis' }
+  static get system () { return 'redis' }
 
   start ({ db, command, args, connectionOptions = {}, connectionName }) {
     if (!this.config.filter(command)) return this.skip()

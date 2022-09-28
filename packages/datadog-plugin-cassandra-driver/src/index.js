@@ -3,8 +3,8 @@
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class CassandraDriverPlugin extends DatabasePlugin {
-  static name = 'cassandra-driver'
-  static system = 'cassandra'
+  static get name () { return 'cassandra-driver' }
+  static get system () { return 'cassandra' }
 
   start ({ keyspace, query, connectionOptions = {} }) {
     if (Array.isArray(query)) {

@@ -3,8 +3,8 @@
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class MySQLPlugin extends DatabasePlugin {
-  static name = 'mysql'
-  static system = 'mysql'
+  static get name () { return 'mysql' }
+  static get system () { return 'mysql' }
 
   start ({ sql, conf: dbConfig }) {
     const service = getServiceName(this.config, dbConfig)

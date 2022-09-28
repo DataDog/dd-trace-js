@@ -3,7 +3,7 @@
 const CachePlugin = require('../../dd-trace/src/plugins/cache')
 
 class MemcachedPlugin extends CachePlugin {
-  static name = 'memcached'
+  static get name () { return 'memcached' }
 
   start ({ client, server, query }) {
     const address = getAddress(client, server, query)

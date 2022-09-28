@@ -3,7 +3,7 @@
 const StoragePlugin = require('./storage')
 
 class CachePlugin extends StoragePlugin {
-  static operation = 'command'
+  static get operation () { return 'command' }
 }
 
 module.exports = CachePlugin
