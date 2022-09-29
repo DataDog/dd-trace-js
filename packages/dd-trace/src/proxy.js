@@ -53,8 +53,8 @@ class Tracer extends NoopProxy {
       }
 
       if (config.tracing) {
-        if (config.appsec.enabled === true) {
-          // dirty require for now so zero appsec code is executed unless explicitly enabled
+        // dirty require for now so zero appsec code is executed unless explicitly enabled
+        if (config.appsec.enabled) {
           require('./appsec').enable(config)
         } else if (config.appsec.enabled === undefined) { // only activate remote config when conf is not set locally
           rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
