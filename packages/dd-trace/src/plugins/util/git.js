@@ -1,6 +1,7 @@
 const { execSync } = require('child_process')
 const os = require('os')
 
+const log = require('../../log')
 const { sanitizedExec } = require('./exec')
 const {
   GIT_COMMIT_SHA,
@@ -24,10 +25,15 @@ function getRepositoryUrl () {
 }
 
 function getLatestCommits () {
-  return execSync('git log --format=%H -n 1000 --since="1 month ago"', { stdio: 'pipe' })
-    .toString()
-    .split('\n')
-    .filter(commit => !!commit)
+  try {
+    return execSync('git log --format=%H -n 1000 --since="1 month ago"', { stdio: 'pipe' })
+      .toString()
+      .split('\n')
+      .filter(commit => !!commit)
+  } catch (err) {
+    log.error(err)
+    return []
+  }
 }
 
 function getCommitsToUpload (commitsToExclude) {
@@ -38,10 +44,15 @@ function getCommitsToUpload (commitsToExclude) {
     gitCommandToGetCommitsToUpload = `${gitCommandToGetCommitsToUpload} ^${commit}`
   })
 
-  return execSync(gitCommandToGetCommitsToUpload, { stdio: 'pipe', maxBuffer: GIT_REV_LIST_MAX_BUFFER })
-    .toString()
-    .split('\n')
-    .filter(commit => !!commit)
+  try {
+    return execSync(gitCommandToGetCommitsToUpload, { stdio: 'pipe', maxBuffer: GIT_REV_LIST_MAX_BUFFER })
+      .toString()
+      .split('\n')
+      .filter(commit => !!commit)
+  } catch (err) {
+    log.error(err)
+    return []
+  }
 }
 
 // Generates pack files to upload and
