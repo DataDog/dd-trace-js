@@ -1,6 +1,7 @@
 'use strict'
 
 const callbacks = require('./callbacks')
+const Gateway = require('./gateway/engine')
 
 const appliedCallbacks = new Map()
 
