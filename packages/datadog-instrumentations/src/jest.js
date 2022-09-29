@@ -19,7 +19,7 @@ const testRunFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
-const libraryConfigurationCh = channel('ci:library:configuration')
+const jestConfigurationCh = channel('ci:jest:configuration')
 
 let skippableSuites = []
 let isCodeCoverageEnabled = false
@@ -193,7 +193,7 @@ function cliWrapper (cli) {
     })
 
     sessionAsyncResource.runInAsyncScope(() => {
-      libraryConfigurationCh.publish({ onResponse, onError })
+      jestConfigurationCh.publish({ onResponse, onError })
     })
 
     let isSuitesSkippingEnabled = false

@@ -95,7 +95,7 @@ class JestPlugin extends Plugin {
       isGitUploadFailed = true
     })
 
-    this.addSub('ci:library:configuration', ({ onResponse, onError }) => {
+    this.addSub('ci:jest:configuration', ({ onResponse, onError }) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
         onResponse({})
         return
