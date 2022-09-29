@@ -1,9 +1,9 @@
 'use strict'
 
-const OutgoingPlugin = require('./outgoing')
+const IncomingPlugin = require('./incoming')
 
-class ConsumerPlugin extends OutgoingPlugin {
-  static get operation () { return 'consumer' }
+class ConsumerPlugin extends IncomingPlugin {
+  static get operation () { return 'receive' }
 }
 
 module.exports = ConsumerPlugin
