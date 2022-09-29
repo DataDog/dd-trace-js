@@ -1,22 +1,16 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
 const ProducerPlugin = require('./producer')
 const ConsumerPlugin = require('./consumer')
+const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
-class RheaPlugin extends Plugin {
+class RheaPlugin extends CompositePlugin {
   static get name () { return 'rhea' }
-
-  constructor (...args) {
-    super(...args)
-
-    this.producer = new ProducerPlugin(...args)
-    this.consumer = new ConsumerPlugin(...args)
-  }
-
-  configure (config) {
-    this.producer.configure(config)
-    this.consumer.configure(config)
+  static get plugins () {
+    return {
+      producer: ProducerPlugin,
+      consumer: ConsumerPlugin
+    }
   }
 }
 
