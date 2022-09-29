@@ -10,6 +10,7 @@ function expectSomeSpan (agent, expected, timeout) {
     const scoredErrors = []
     for (const trace of traces) {
       for (const span of trace) {
+        // console.log(expected, span)
         try {
           deepInclude(expected, span)
           return
