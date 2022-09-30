@@ -56,7 +56,7 @@ function generatePackFilesForCommits (commitsToUpload) {
       execSync(
         `git pack-objects --compression=9 --max-pack-size=3m ${temporaryPath}`,
         { input: commitsToUpload.join('\n') }
-      ).toString().split('\n').filter(commit => !!commit)
+      ).toString().split('\n').filter(commit => commit)
 
     return orderedCommits.map(commit => `${temporaryPath}-${commit}.pack`)
   } catch (e) {
