@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 		procps python3 python3-pip python3-venv python3-setuptools
 
 RUN pip3 install virtualenv
-RUN curl -sSL https://install.python-poetry.org | python3 -
+RUN curl -sSL https://install.python-poetry.org | POETRY_HOME=/poetry python3 -
 
 # nvm works much better with bash than sh
 SHELL ["/bin/bash", "--login", "-c"]
