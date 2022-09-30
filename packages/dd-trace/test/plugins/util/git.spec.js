@@ -1,4 +1,6 @@
 const { execSync } = require('child_process')
+const os = require('os')
+const path = require('path')
 
 const { GIT_REV_LIST_MAX_BUFFER } = require('../../../src/plugins/util/git')
 const proxyquire = require('proxyquire')
@@ -159,5 +161,30 @@ describe('getCommitsToUpload', () => {
     const commitsToUpload = getCommitsToUpload([])
     expect(logErrorSpy).to.have.been.called
     expect(commitsToUpload.length).to.equal(0)
+  })
+})
+
+describe('generatePackFilesForCommits', () => {
+  after(() => {
+    sinon.restore()
+  })
+  it('calls git pack-objects', () => {
+    const execSyncSpy = sinon.stub().returns(['commitSHA'])
+
+    sinon.stub(Math, 'random').returns('0.1234')
+    sinon.stub(os, 'tmpdir').returns('tmp')
+
+    const temporaryPath = path.join('tmp', '1234')
+
+    const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
+      {
+        'child_process': {
+          'execSync': execSyncSpy
+        }
+      }
+    )
+
+    const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
+    expect(packFilesToUpload).to.eql([`${temporaryPath}-commitSHA.pack`])
   })
 })
