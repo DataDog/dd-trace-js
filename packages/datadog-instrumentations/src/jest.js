@@ -19,8 +19,10 @@ const testRunFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
+const jestConfigurationCh = channel('ci:jest:configuration')
 
 let skippableSuites = []
+let isCodeCoverageEnabled = false
 
 const {
   getTestSuitePath,
@@ -185,20 +187,42 @@ addHook({
 function cliWrapper (cli) {
   const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
     let onResponse, onError
-    const skippableSuitesPromise = new Promise((resolve, reject) => {
+    const configurationPromise = new Promise((resolve, reject) => {
       onResponse = resolve
       onError = reject
     })
 
     sessionAsyncResource.runInAsyncScope(() => {
-      skippableSuitesCh.publish({ onResponse, onError })
+      jestConfigurationCh.publish({ onResponse, onError })
     })
 
+    let isSuitesSkippingEnabled = false
+
     try {
-      skippableSuites = await skippableSuitesPromise
+      const config = await configurationPromise
+      isCodeCoverageEnabled = config.isCodeCoverageEnabled
+      isSuitesSkippingEnabled = config.isSuitesSkippingEnabled
     } catch (e) {
-      log.error(e)
+      // ignore error
     }
+
+    if (isSuitesSkippingEnabled) {
+      const skippableSuitesPromise = new Promise((resolve, reject) => {
+        onResponse = resolve
+        onError = reject
+      })
+
+      sessionAsyncResource.runInAsyncScope(() => {
+        skippableSuitesCh.publish({ onResponse, onError })
+      })
+
+      try {
+        skippableSuites = await skippableSuitesPromise
+      } catch (e) {
+        log.error(e)
+      }
+    }
+
     const isTestsSkipped = !!skippableSuites.length
 
     const processArgv = process.argv.slice(2).join(' ')
@@ -290,6 +314,14 @@ function configureTestEnvironment (readConfigsResult) {
   sessionAsyncResource.runInAsyncScope(() => {
     testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
   })
+  if (isCodeCoverageEnabled) {
+    const globalConfig = {
+      ...readConfigsResult.globalConfig,
+      collectCoverage: true
+    }
+    readConfigsResult.globalConfig = globalConfig
+  }
+  return readConfigsResult
 }
 
 function jestConfigAsyncWrapper (jestConfig) {

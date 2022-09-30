@@ -67,6 +67,7 @@ describe('Plugin', function () {
         process.env.DD_APP_KEY = 'app-key'
         process.env.DD_ENV = 'ci'
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
+        process.env.DD_SITE = 'datad0g.com'
         loadArguments.push({ service: 'test', isAgentlessEnabled: true, isIntelligentTestRunnerEnabled: true })
         loadArguments.push({ experimental: { exporter: 'datadog' } })
       } else {
@@ -384,9 +385,21 @@ describe('Plugin', function () {
             options.projects
           )
         })
-        it('can skip tests through ITR', (done) => {
+        it('can skip suites received by the intelligent test runner API', (done) => {
           gitMetadataUploadFinishCh.publish()
-          const scope = nock('https://api.datadoghq.com/')
+
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  code_coverage: true,
+                  tests_skipping: true
+                }
+              }
+            }))
+
+          const scope = nock('https://api.datad0g.com/')
             .post('/api/v2/ci/tests/skippable')
             .reply(200, JSON.stringify({
               data: [{
@@ -421,7 +434,19 @@ describe('Plugin', function () {
         })
         it('does not skip tests if git metadata is not uploaded', function (done) {
           gitMetadataUploadFinishCh.publish(new Error('error uploading'))
-          nock('https://api.datadoghq.com/')
+
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  code_coverage: true,
+                  tests_skipping: true
+                }
+              }
+            }))
+
+          nock('https://api.datad0g.com/')
             .post('/api/v2/ci/tests/skippable')
             .reply(200, JSON.stringify({
               data: [{
@@ -444,7 +469,67 @@ describe('Plugin', function () {
               suite: 'packages/datadog-plugin-jest/test/jest-itr-pass.js'
             }
           ]
+          const assertionPromises = tests.map(({ name, status, suite }) => {
+            return agent.use(agentlessPayload => {
+              const { events: [{ content: testSpan }] } = agentlessPayload
+              expect(testSpan.meta).to.contain({
+                [TEST_NAME]: name,
+                [TEST_STATUS]: status,
+                [TEST_SUITE]: suite
+              })
+            })
+          })
 
+          Promise.all(assertionPromises).then(() => done()).catch(done)
+
+          const options = {
+            ...jestCommonOptions,
+            testRegex: /jest-itr-/,
+            runInBand: true
+          }
+
+          jestExecutable.runCLI(
+            options,
+            options.projects
+          )
+        })
+        it('does not skip tests if test skipping is disabled via API', (done) => {
+          gitMetadataUploadFinishCh.publish()
+
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  code_coverage: true,
+                  tests_skipping: false
+                }
+              }
+            }))
+
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/ci/tests/skippable')
+            .reply(200, JSON.stringify({
+              data: [{
+                type: 'suite',
+                attributes: {
+                  suite: 'packages/datadog-plugin-jest/test/jest-itr-skip.js'
+                }
+              }]
+            }))
+
+          const tests = [
+            {
+              name: 'jest-itr-skip will be skipped through ITR',
+              status: 'pass',
+              suite: 'packages/datadog-plugin-jest/test/jest-itr-skip.js'
+            },
+            {
+              name: 'jest-itr-pass will be run',
+              status: 'pass',
+              suite: 'packages/datadog-plugin-jest/test/jest-itr-pass.js'
+            }
+          ]
           const assertionPromises = tests.map(({ name, status, suite }) => {
             return agent.use(agentlessPayload => {
               const { events: [{ content: testSpan }] } = agentlessPayload
