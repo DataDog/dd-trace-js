@@ -29,7 +29,7 @@ function getLatestCommits () {
     return execSync('git log --format=%H -n 1000 --since="1 month ago"', { stdio: 'pipe' })
       .toString()
       .split('\n')
-      .filter(commit => !!commit)
+      .filter(commit => commit)
   } catch (err) {
     log.error(err)
     return []
@@ -48,7 +48,7 @@ function getCommitsToUpload (commitsToExclude) {
     return execSync(gitCommandToGetCommitsToUpload, { stdio: 'pipe', maxBuffer: GIT_REV_LIST_MAX_BUFFER })
       .toString()
       .split('\n')
-      .filter(commit => !!commit)
+      .filter(commit => commit)
   } catch (err) {
     log.error(err)
     return []
