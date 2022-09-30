@@ -14,7 +14,7 @@ class AmqplibClientPlugin extends ClientPlugin {
 
     const stream = (channel.connection && channel.connection.stream) || {}
     const span = this.startSpan('amqp.command', {
-      service: this.config.service,
+      service: this.config.service || `${this.tracer._service}-amqp`,
       resource: getResourceName(method, fields),
       kind: 'client',
       meta: {

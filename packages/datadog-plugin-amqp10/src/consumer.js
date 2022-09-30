@@ -5,13 +5,14 @@ const { getAddress, getShortName } = require('./util')
 
 class Amqp10ConsumerPlugin extends ConsumerPlugin {
   static get name () { return 'amqp10' }
+  static get system () { return 'amqp' }
 
   start ({ link }) {
     const source = getShortName(link)
     const address = getAddress(link)
 
     this.startSpan('amqp.receive', {
-      service: this.config.service,
+      service: this.config.service || `${this.tracer._service}-amqp`,
       resource: ['receive', source].filter(v => v).join(' '),
       type: 'worker',
       kind: 'consumer',

@@ -15,7 +15,7 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
 
     this.startSpan('amqp.command', {
       childOf,
-      service: this.config.service,
+      service: this.config.service || `${this.tracer._service}-amqp`,
       resource: getResourceName(method, fields),
       kind: 'consumer',
       type: 'worker',

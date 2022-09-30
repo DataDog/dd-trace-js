@@ -16,7 +16,7 @@ class RheaProducerPlugin extends ProducerPlugin {
     const name = targetAddress || 'amq.topic'
 
     this.startSpan('amqp.send', {
-      service: this.config.service,
+      service: this.config.service || `${this.tracer._service}-amqp-producer`,
       resource: name,
       kind: 'producer',
       meta: {

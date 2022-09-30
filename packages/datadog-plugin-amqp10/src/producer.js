@@ -6,13 +6,14 @@ const { getAddress, getShortName } = require('./util')
 class Amqp10ProducerPlugin extends ProducerPlugin {
   static get name () { return 'amqp10' }
   static get operation () { return 'send' }
+  static get system () { return 'amqp' }
 
   start ({ link }) {
     const address = getAddress(link)
     const target = getShortName(link)
 
     this.startSpan('amqp.send', {
-      service: this.config.service,
+      service: this.config.service || `${this.tracer._service}-amqp`,
       resource: ['send', target].filter(v => v).join(' '),
       kind: 'producer',
       meta: {
