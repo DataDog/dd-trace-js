@@ -173,4 +173,36 @@ describe('git_metadata', () => {
       done()
     })
   })
+
+  it('should not crash if generatePackFiles returns an empty array', (done) => {
+    const scope = nock('https://api.test.com')
+      .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({ data: [] }))
+      .post('/api/v2/git/repository/packfile')
+      .reply(204)
+
+    generatePackFilesForCommitsStub.returns([])
+
+    gitMetadata.sendGitMetadata('test.com', (err) => {
+      expect(err.message).to.contain('Failed to generate packfiles')
+      expect(scope.isDone()).to.be.false
+      done()
+    })
+  })
+
+  it('should not crash if git is missing', (done) => {
+    const scope = nock('https://api.test.com')
+      .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({ data: [] }))
+      .post('/api/v2/git/repository/packfile')
+      .reply(204)
+
+    getRepositoryUrlStub.returns('')
+
+    gitMetadata.sendGitMetadata('test.com', (err) => {
+      expect(err.message).to.contain('Repository URL is empty')
+      expect(scope.isDone()).to.be.false
+      done()
+    })
+  })
 })
