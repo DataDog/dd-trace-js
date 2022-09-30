@@ -1,5 +1,7 @@
-const proxyquire = require('proxyquire')
+const { execSync } = require('child_process')
 
+const { GIT_REV_LIST_MAX_BUFFER } = require('../../../src/plugins/util/git')
+const proxyquire = require('proxyquire')
 const sanitizedExecStub = sinon.stub().returns('')
 
 const {
@@ -119,5 +121,43 @@ describe('git', () => {
     expect(sanitizedExecStub).to.have.been.calledWith('git rev-parse HEAD', { stdio: 'pipe' })
     expect(sanitizedExecStub).to.have.been.calledWith('git rev-parse --abbrev-ref HEAD', { stdio: 'pipe' })
     expect(sanitizedExecStub).to.have.been.calledWith('git rev-parse --show-toplevel', { stdio: 'pipe' })
+  })
+})
+
+describe('getCommitsToUpload', () => {
+  it('gets the commits to upload if the repository is smaller than the limit', () => {
+    const logErrorSpy = sinon.spy()
+
+    const { getCommitsToUpload } = proxyquire('../../../src/plugins/util/git',
+      {
+        'child_process': {
+          'execSync': (_, ...rest) =>
+            execSync(`head -c ${Math.floor(GIT_REV_LIST_MAX_BUFFER * 0.9)} /dev/zero`, ...rest)
+        },
+        '../../log': {
+          error: logErrorSpy
+        }
+      }
+    )
+    getCommitsToUpload([])
+    expect(logErrorSpy).not.to.have.been.called
+  })
+
+  it('does not crash and logs the error if the repository is bigger than the limit', () => {
+    const logErrorSpy = sinon.spy()
+
+    const { getCommitsToUpload } = proxyquire('../../../src/plugins/util/git',
+      {
+        'child_process': {
+          'execSync': (_, ...rest) => execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, ...rest)
+        },
+        '../../log': {
+          error: logErrorSpy
+        }
+      }
+    )
+    const commitsToUpload = getCommitsToUpload([])
+    expect(logErrorSpy).to.have.been.called
+    expect(commitsToUpload.length).to.equal(0)
   })
 })
