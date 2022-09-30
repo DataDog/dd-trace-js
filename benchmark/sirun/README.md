@@ -15,10 +15,12 @@ In order to run benchmarks using Docker, issue the following commands from the r
 $ docker build -t dd-trace-benchmark -f benchmark/sirun/Dockerfile .
 
 # Run the Docker Container
-$ docker run -it --platform=linux/amd64 sirun-js-beta bash
+$ docker run -it -v "$(pwd)":/app --platform=linux/amd64 dd-trace-benchmark bash
 cd /app/benchmark/sirun
 ./runall.sh
 cat results.ndjson
 ```
 
 The `--platform` flag is required when running benchmarks on a non-x86 system, such as a macOS computer with the M1 chip.
+
+`-v "$(pwd)":/app` mounts dd-trace-js source code root directory to /app inside container.

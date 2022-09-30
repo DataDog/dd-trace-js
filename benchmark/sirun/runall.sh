@@ -6,6 +6,16 @@ else
     source /usr/local/nvm/nvm.sh
 fi
 
+nvm use 18
+
+# using Node.js v18 for the global yarn package
+(
+  cd ../../ &&
+  npm install --global yarn \
+    && yarn install --ignore-engines \
+    && PLUGINS="bluebird|q|graphql" yarn services
+)
+
 # run each test in parallel for a given version of Node.js
 # once all of the tests have complete move on to the next version
 
