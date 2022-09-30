@@ -185,11 +185,6 @@ describe('generatePackFilesForCommits', () => {
     )
 
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
-    expect(execSyncSpy).to.have.been
-      .calledWith(
-        `git pack-objects --compression=9 --max-pack-size=3m ${temporaryPath}`,
-        { input: 'commitSHA' }
-      )
     expect(packFilesToUpload).to.eql([`${temporaryPath}-commitSHA.pack`])
   })
 })
