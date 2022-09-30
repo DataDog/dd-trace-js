@@ -30,7 +30,7 @@ class RheaProducerPlugin extends ProducerPlugin {
   }
 
   encode (msg) {
-    addDeliveryAnnotations(msg, this.tracer, this.activeSpan())
+    addDeliveryAnnotations(msg, this.tracer, this.activeSpan)
   }
 }
 

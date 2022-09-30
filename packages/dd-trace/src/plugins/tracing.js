@@ -24,6 +24,12 @@ class TracingPlugin extends Plugin {
     })
   }
 
+  get activeSpan () {
+    const store = storage.getStore()
+
+    return store && store.span
+  }
+
   configure (config) {
     return super.configure({
       ...config,
@@ -37,7 +43,7 @@ class TracingPlugin extends Plugin {
   start () {} // implemented by individual plugins
 
   finish () {
-    this.activeSpan().finish()
+    this.activeSpan.finish()
   }
 
   error (error) {
@@ -49,7 +55,7 @@ class TracingPlugin extends Plugin {
   }
 
   addError (error) {
-    const span = this.activeSpan()
+    const span = this.activeSpan
 
     if (!span._spanContext._tags['error']) {
       span.setTag('error', error || 1)
@@ -80,12 +86,6 @@ class TracingPlugin extends Plugin {
     storage.enterWith({ ...store, span })
 
     return span
-  }
-
-  activeSpan () {
-    const store = storage.getStore()
-
-    return store && store.span
   }
 }
 
