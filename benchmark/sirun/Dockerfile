@@ -3,13 +3,10 @@ FROM --platform=linux/amd64 debian:buster-slim
 RUN apt-get update && apt-get install --no-install-recommends -y \
 	wget ca-certificates valgrind \
 	    git hwinfo jq procps awscli \
-		procps python3 python3-pip python3-venv python3-dev
+		procps python3 python3-pip python3-venv python3-setuptools
 
-# RUN pip3 install setuptools
-# RUN pip3 install awscli
-# RUN pip3 install poetry
-# RUN pip3 install virtualenv
-# RUN pip3 install ez_setup
+RUN pip3 install virtualenv
+RUN curl -sSL https://install.python-poetry.org | python3 -
 
 # nvm works much better with bash than sh
 SHELL ["/bin/bash", "--login", "-c"]
@@ -31,11 +28,3 @@ RUN mkdir -p /usr/local/nvm \
 	&& nvm install --no-progress 18.10.0 \
 	&& nvm alias default 18 \
 	&& nvm use 18
-
-# TODO: Need to clone baseline branch and candidate branch
-COPY . /app
-
-# using Node.js v18 for the global yarn package
-RUN npm install --global yarn \
-	&& yarn install --ignore-engines \
-	&& PLUGINS="bluebird|q|graphql" yarn services
