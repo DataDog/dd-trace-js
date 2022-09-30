@@ -170,27 +170,31 @@ function sendGitMetadata (site, callback) {
 
   const repositoryUrl = getRepositoryUrl()
 
+  if (!repositoryUrl) {
+    return callback(new Error('Repository URL is empty'))
+  }
+
   getCommitsToExclude({ url, repositoryUrl }, (err, commitsToExclude, headCommit) => {
     if (err) {
-      callback(err)
-      return
+      return callback(err)
     }
     const commitsToUpload = getCommitsToUpload(commitsToExclude)
 
     if (!commitsToUpload.length) {
       log.debug('No commits to upload')
-      callback(null)
-      return
+      return callback(null)
     }
-
     const packFilesToUpload = generatePackFilesForCommits(commitsToUpload)
+
+    if (!packFilesToUpload.length) {
+      return callback(new Error('Failed to generate packfiles'))
+    }
 
     let packFileIndex = 0
     // This uploads packfiles sequentially
     const uploadPackFileCallback = (err) => {
       if (err || packFileIndex === packFilesToUpload.length) {
-        callback(err)
-        return
+        return callback(err)
       }
       return uploadPackFile(
         {
