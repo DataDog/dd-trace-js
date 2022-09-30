@@ -119,5 +119,6 @@ module.exports = {
   getLatestCommits,
   getRepositoryUrl,
   generatePackFilesForCommits,
-  getCommitsToUpload
+  getCommitsToUpload,
+  GIT_REV_LIST_MAX_BUFFER
 }
