@@ -61,7 +61,7 @@ function getCommitsToUpload (commitsToExclude) {
 function generatePackFilesForCommits (commitsToUpload) {
   const tmpFolder = os.tmpdir()
 
-  const randomPrefix = Math.floor(Math.random() * 10000)
+  const randomPrefix = String(Math.floor(Math.random() * 10000))
   const temporaryPath = path.join(tmpFolder, randomPrefix)
 
   try {
@@ -72,7 +72,8 @@ function generatePackFilesForCommits (commitsToUpload) {
       ).toString().split('\n').filter(commit => commit)
 
     return orderedCommits.map(commit => `${temporaryPath}-${commit}.pack`)
-  } catch (e) {
+  } catch (err) {
+    log.error(err)
     return []
   }
 }
