@@ -72,7 +72,8 @@ function generatePackFilesForCommits (commitsToUpload) {
       ).toString().split('\n').filter(commit => commit)
 
     return orderedCommits.map(commit => `${temporaryPath}-${commit}.pack`)
-  } catch (e) {
+  } catch (err) {
+    log.error(err)
     return []
   }
 }
