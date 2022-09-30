@@ -61,7 +61,7 @@ function getCommitsToUpload (commitsToExclude) {
 function generatePackFilesForCommits (commitsToUpload) {
   const tmpFolder = os.tmpdir()
 
-  const randomPrefix = Math.floor(Math.random() * 10000)
+  const randomPrefix = String(Math.floor(Math.random() * 10000))
   const temporaryPath = path.join(tmpFolder, randomPrefix)
 
   try {
