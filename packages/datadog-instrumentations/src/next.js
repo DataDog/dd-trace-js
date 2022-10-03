@@ -104,7 +104,7 @@ function instrument (req, res, handler) {
         err => finish(req, res, null, err)
       )
     } catch (e) {
-      finish(req, res, null, e)
+      throw finish(req, res, null, e)
     }
   })
 }
