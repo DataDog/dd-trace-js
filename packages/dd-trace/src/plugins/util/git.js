@@ -78,7 +78,7 @@ function generatePackFilesForCommits (commitsToUpload) {
     log.error(err)
     // The generation of pack files sometimes fail with
     // `unable to rename temporary pack file: Invalid cross-device link`
-    // This error from git itself and it is currently unclear how to fix it.
+    // This error comes from git itself and it is currently unclear how to fix it.
     // A temporary workaround is to attempt to generate the packfiles in process.cwd()
     try {
       return execGitPackObjects(cwdPath, commitsToUpload)
