@@ -7,7 +7,7 @@ const path = require('path')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
-const { isTrue, isFalse } = require('./util')
+const { isTrue, isFalse, isTrueOrFalse } = require('./util')
 const uuid = require('crypto-randomuuid')
 
 const fromEntries = Object.fromEntries || (entries =>
@@ -193,15 +193,21 @@ class Config {
       false
     )
 
-    let appsec = options.appsec || (options.experimental && options.experimental.appsec)
+    let appsec = options.appsec ?? options.experimental?.appsec
+
+    if (typeof appsec === 'boolean') {
+      appsec = {
+        enabled: appsec
+      }
+    } else if (appsec == null) {
+      appsec = {}
+    }
 
     const DD_APPSEC_ENABLED = coalesce(
-      isTrue(appsec && (appsec === true || appsec.enabled === true)), // TODO: remove when enabled by default
-      isTrue(process.env.DD_APPSEC_ENABLED),
-      undefined // represent the default "false"
+      isTrueOrFalse(appsec.enabled),
+      isTrueOrFalse(process.env.DD_APPSEC_ENABLED),
+      undefined // represent the default "false" which is different from explicit "false"
     )
-
-    appsec = appsec || {}
 
     const DD_APPSEC_RULES = coalesce(
       appsec.rules,
