@@ -18,7 +18,7 @@ const isValidSha = (sha) => /[0-9a-f]{40}/.test(sha)
 function sanitizeCommits (commits) {
   return commits.map(({ id: commitSha, type }) => {
     if (type !== 'commit') {
-      throw new Error('Invalid commit response')
+      throw new Error('Invalid commit type response')
     }
     const sanitizedCommit = commitSha.replace(/[^0-9a-f]+/g, '')
     if (sanitizedCommit !== commitSha || !isValidSha(sanitizedCommit)) {
@@ -73,7 +73,7 @@ function getCommitsToExclude ({ url, repositoryUrl }, callback) {
 
   request(localCommitData, options, (err, response, statusCode) => {
     if (err) {
-      const error = new Error(`search_commits returned an error: ${statusCode}`)
+      const error = new Error(`search_commits returned an error: status code ${statusCode}`)
       return callback(error)
     }
     let commitsToExclude
@@ -113,7 +113,7 @@ function uploadPackFile ({ url, packFileToUpload, repositoryUrl, headCommit }, c
       contentType: 'application/octet-stream'
     })
   } catch (e) {
-    callback(new Error(`Could not read ${packFileToUpload}`))
+    callback(new Error(`Could not read "${packFileToUpload}"`))
     return
   }
 
@@ -129,7 +129,7 @@ function uploadPackFile ({ url, packFileToUpload, repositoryUrl, headCommit }, c
   }
   request(form, options, (err, _, statusCode) => {
     if (err) {
-      const error = new Error(`Could not upload packfiles: ${statusCode}`)
+      const error = new Error(`Could not upload packfiles: status code ${statusCode}`)
       return callback(error)
     }
     callback(null)
