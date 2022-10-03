@@ -52,7 +52,7 @@ class NativeCpuProfiler {
   _enter () {
     if (!this._cpuProfiler) return
 
-    const active = getactiveSpan
+    const active = getActiveSpan()
     if (!active) return
 
     const activeCtx = active.context()
