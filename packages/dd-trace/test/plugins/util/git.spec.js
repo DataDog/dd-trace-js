@@ -165,16 +165,34 @@ describe('getCommitsToUpload', () => {
 })
 
 describe('generatePackFilesForCommits', () => {
-  after(() => {
-    sinon.restore()
-  })
-  it('calls git pack-objects', () => {
-    const execSyncSpy = sinon.stub().returns(['commitSHA'])
-
+  beforeEach(() => {
     sinon.stub(Math, 'random').returns('0.1234')
     sinon.stub(os, 'tmpdir').returns('tmp')
+    sinon.stub(process, 'cwd').returns('cwd')
+  })
+  afterEach(() => {
+    sinon.restore()
+  })
+  it('creates pack files in temporary path', () => {
+    const execSyncSpy = sinon.stub().returns(['commitSHA'])
+
+    const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
+      {
+        'child_process': {
+          'execSync': execSyncSpy
+        }
+      }
+    )
 
     const temporaryPath = path.join('tmp', '1234')
+    const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
+    expect(packFilesToUpload).to.eql([`${temporaryPath}-commitSHA.pack`])
+  })
+
+  it('creates pack files in cwd if the temporary path fails', () => {
+    const execSyncSpy = sinon.stub().onCall(0).throws().onCall(1).returns(['commitSHA'])
+
+    const cwdPath = path.join('cwd', '1234')
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
@@ -185,6 +203,6 @@ describe('generatePackFilesForCommits', () => {
     )
 
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
-    expect(packFilesToUpload).to.eql([`${temporaryPath}-commitSHA.pack`])
+    expect(packFilesToUpload).to.eql([`${cwdPath}-commitSHA.pack`])
   })
 })

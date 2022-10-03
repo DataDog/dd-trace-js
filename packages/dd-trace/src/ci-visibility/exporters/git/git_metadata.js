@@ -1,9 +1,9 @@
 
 const fs = require('fs')
-const https = require('https')
 const path = require('path')
 
 const FormData = require('../../../exporters/common/form-data')
+const request = require('../../../exporters/common/request')
 
 const log = require('../../../log')
 const {
@@ -71,33 +71,19 @@ function getCommitsToExclude ({ url, repositoryUrl }, callback) {
     }))
   })
 
-  const request = https.request(options, (res) => {
-    let responseData = ''
-
-    res.on('data', chunk => { responseData += chunk })
-    res.on('end', () => {
-      if (res.statusCode === 200) {
-        let commitsToExclude
-        try {
-          commitsToExclude = sanitizeCommits(JSON.parse(responseData).data)
-        } catch (e) {
-          callback(new Error(`Can't parse response: ${e.message}`))
-          return
-        }
-        callback(null, commitsToExclude, headCommit)
-      } else {
-        const error = new Error(`Error getting commits: ${res.statusCode} ${res.statusMessage}`)
-        callback(error)
-      }
-    })
+  request(localCommitData, options, (err, response, statusCode) => {
+    if (err) {
+      const error = new Error(`search_commits returned an error: ${statusCode}`)
+      return callback(error)
+    }
+    let commitsToExclude
+    try {
+      commitsToExclude = sanitizeCommits(JSON.parse(response).data)
+    } catch (e) {
+      return callback(new Error(`Can't parse search_commits response: ${e.message}`))
+    }
+    callback(null, commitsToExclude, headCommit)
   })
-
-  request.write(localCommitData)
-  request.on('error', callback)
-
-  request.end()
-
-  return request
 }
 
 /**
@@ -127,7 +113,7 @@ function uploadPackFile ({ url, packFileToUpload, repositoryUrl, headCommit }, c
       contentType: 'application/octet-stream'
     })
   } catch (e) {
-    callback(new Error(`Error reading packfile: ${packFileToUpload}`))
+    callback(new Error(`Could not read ${packFileToUpload}`))
     return
   }
 
@@ -141,25 +127,13 @@ function uploadPackFile ({ url, packFileToUpload, repositoryUrl, headCommit }, c
       ...form.getHeaders()
     }
   }
-
-  const req = https.request(options, res => {
-    res.on('data', () => {})
-    res.on('end', () => {
-      if (res.statusCode === 204) {
-        callback(null)
-      } else {
-        const error = new Error(`Error uploading packfiles: ${res.statusCode} ${res.statusMessage}`)
-        error.status = res.statusCode
-
-        callback(error)
-      }
-    })
+  request(form, options, (err, _, statusCode) => {
+    if (err) {
+      const error = new Error(`Could not upload packfiles: ${statusCode}`)
+      return callback(error)
+    }
+    callback(null)
   })
-
-  req.on('error', err => {
-    callback(err)
-  })
-  form.pipe(req)
 }
 
 /**

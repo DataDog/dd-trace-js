@@ -58,22 +58,34 @@ function getCommitsToUpload (commitsToExclude) {
 
 // Generates pack files to upload and
 // returns the ordered list of packfiles' paths
+function execGitPackObjects (targetPath, commitsToUpload) {
+  return execSync(
+    `git pack-objects --compression=9 --max-pack-size=3m ${targetPath}`,
+    { input: commitsToUpload.join('\n') }
+  ).toString().split('\n').filter(commit => commit).map(commit => `${targetPath}-${commit}.pack`)
+}
+
 function generatePackFilesForCommits (commitsToUpload) {
   const tmpFolder = os.tmpdir()
 
   const randomPrefix = String(Math.floor(Math.random() * 10000))
   const temporaryPath = path.join(tmpFolder, randomPrefix)
+  const cwdPath = path.join(process.cwd(), randomPrefix)
 
   try {
-    const orderedCommits =
-      execSync(
-        `git pack-objects --compression=9 --max-pack-size=3m ${temporaryPath}`,
-        { input: commitsToUpload.join('\n') }
-      ).toString().split('\n').filter(commit => commit)
-
-    return orderedCommits.map(commit => `${temporaryPath}-${commit}.pack`)
+    return execGitPackObjects(temporaryPath, commitsToUpload)
   } catch (err) {
     log.error(err)
+    // The generation of pack files sometimes fail with
+    // `unable to rename temporary pack file: Invalid cross-device link`
+    // This error from git itself and it is currently unclear how to fix it.
+    // A temporary workaround is to attempt to generate the packfiles in process.cwd()
+    try {
+      return execGitPackObjects(cwdPath, commitsToUpload)
+    } catch (err) {
+      log.error(err)
+    }
+
     return []
   }
 }
