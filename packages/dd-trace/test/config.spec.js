@@ -74,7 +74,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
-    expect(config).to.have.nested.property('appsec.enabled', false)
+    expect(config).to.have.nested.property('appsec.enabled', undefined)
     const rulePath = path.join(__dirname, '..', 'src', 'appsec', 'recommended.json')
     expect(config).to.have.nested.property('appsec.rules', rulePath)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
@@ -292,7 +292,7 @@ describe('Config', () => {
           maxContextOperations: 5
         }
       },
-      appsec: true
+      appsec: false
     })
 
     expect(config).to.have.property('protocolVersion', '0.5')
@@ -325,7 +325,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
-    expect(config).to.have.nested.property('appsec.enabled', true)
+    expect(config).to.have.nested.property('appsec.enabled', false)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 50)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 4)
