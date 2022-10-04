@@ -13,7 +13,7 @@ module.exports = {
       package: ''
     }
 
-    if (typeof path !== 'string') return
+    if (typeof path !== 'string') return tags
 
     const methodParts = path.split('/')
 

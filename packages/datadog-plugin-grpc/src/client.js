@@ -1,10 +1,10 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { TEXT_MAP } = require('../../../ext/formats')
 const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
 
-class GrpcClientPlugin extends Plugin {
+class GrpcClientPlugin extends ClientPlugin {
   static get name () { return 'grpc' }
 
   start ({ metadata, path, type }) {
