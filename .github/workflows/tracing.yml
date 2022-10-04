@@ -21,9 +21,8 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: MOCHA_FILE=test-results/tracing/macos.xml yarn test:trace:core:ci
+      - uses: ./.github/actions/datadog-ci
       - run: |
-          curl -L --fail "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_darwin-x64" --output "/usr/local/bin/datadog-ci"
-          chmod +x /usr/local/bin/datadog-ci
           datadog-ci junit upload --service dd-trace-js-tests --tags os.platform:darwin --tags runtime.version:14 test-results/tracing/macos.xml
       - uses: codecov/codecov-action@v2
 
@@ -41,9 +40,8 @@ jobs:
       - run: MOCHA_FILE=test-results/tracing/linux-16.xml yarn test:trace:core:ci
       - uses: ./.github/actions/node/latest
       - run: MOCHA_FILE=test-results/tracing/linux-latest.xml yarn test:trace:core:ci
+      - uses: ./.github/actions/datadog-ci
       - run: |
-          curl -L --fail "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_linux-x64" --output "/usr/local/bin/datadog-ci"
-          chmod +x /usr/local/bin/datadog-ci
           datadog-ci junit upload --service dd-trace-js-tests --tags os.platform:linux --tags runtime.version:14 test-results/tracing/linux-14.xml
           datadog-ci junit upload --service dd-trace-js-tests --tags os.platform:linux --tags runtime.version:16 test-results/tracing/linux-16.xml
           datadog-ci junit upload --service dd-trace-js-tests --tags os.platform:linux --tags runtime.version:18 test-results/tracing/linux-latest.xml
@@ -59,7 +57,6 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:trace:core:ci
-      - run: |
-          Invoke-WebRequest -Uri "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_win-x64.exe" -OutFile "datadog-ci.exe"
-          .\datadog-ci.exe junit upload --service dd-trace-js-tests --tags os.platform:windows --tags runtime.version:14 test-results/tracing/windows.xml
+      - uses: ./.github/actions/datadog-ci
+      - run: .\datadog-ci.exe junit upload --service dd-trace-js-tests --tags os.platform:windows --tags runtime.version:14 test-results/tracing/windows.xml
       - uses: codecov/codecov-action@v2
