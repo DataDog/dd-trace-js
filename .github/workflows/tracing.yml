@@ -14,20 +14,23 @@ concurrency:
 jobs:
   macos:
     runs-on: macos-latest
+    env:
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: MOCHA_FILE=./test-results-macos.yml yarn test:trace:core:ci
-      - uses: datadog/junit-upload-github-action@v1
-        with:
-          api-key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
-          files: ./test-results-macos.yml
+      - run: |
+        curl -L --fail "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_darwin-x64" --output "/usr/local/bin/datadog-ci"
+        chmod +x /usr/local/bin/datadog-ci
+        datadog-ci junit upload --service dd-trace-js-tests ./test-results-macos.yml
       - uses: codecov/codecov-action@v2
 
   ubuntu:
     runs-on: ubuntu-latest
+    env:
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
@@ -38,23 +41,22 @@ jobs:
       - run: MOCHA_FILE=./test-results-ubuntu-node-16.yml yarn test:trace:core:ci
       - uses: ./.github/actions/node/latest
       - run: MOCHA_FILE=./test-results-ubuntu-node-latest.yml yarn test:trace:core:ci
-      - uses: datadog/junit-upload-github-action@v1
-        with:
-          api-key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
-          files: ./test-results-ubuntu-node-14.yml ./test-results-ubuntu-node-16.yml ./test-results-ubuntu-node-latest.yml
+      - run: |
+        curl -L --fail "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_linux-x64" --output "/usr/local/bin/datadog-ci"
+        chmod +x /usr/local/bin/datadog-ci
+        datadog-ci junit upload --service dd-trace-js-tests ./test-results-ubuntu-node-16.yml ./test-results-ubuntu-node-latest.yml
       - uses: codecov/codecov-action@v2
 
   windows:
     runs-on: windows-latest
+    env:
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: MOCHA_FILE=./test-results-windows.yml yarn test:trace:core:ci
-      - uses: datadog/junit-upload-github-action@v1
-        with:
-          api-key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
-          files: ./test-results-windows.yml
+      - run: |
+        Invoke-WebRequest -Uri "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_win-x64.exe" -OutFile "datadog-ci.exe"
+        ./datadog-ci.exe junit upload --service dd-trace-js-tests ./test-results-windows.yml
       - uses: codecov/codecov-action@v2
