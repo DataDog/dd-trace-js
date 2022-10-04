@@ -24,7 +24,7 @@ jobs:
       - run: |
           curl -L --fail "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_darwin-x64" --output "/usr/local/bin/datadog-ci"
           chmod +x /usr/local/bin/datadog-ci
-          datadog-ci junit upload --service dd-trace-js-tests ./test-results-macos.yml
+          datadog-ci junit upload --service dd-trace-js-tests --tags os.platform:darwin ./test-results-macos.yml
       - uses: codecov/codecov-action@v2
 
   ubuntu:
@@ -44,19 +44,20 @@ jobs:
       - run: |
           curl -L --fail "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_linux-x64" --output "/usr/local/bin/datadog-ci"
           chmod +x /usr/local/bin/datadog-ci
-          datadog-ci junit upload --service dd-trace-js-tests ./test-results-ubuntu-node-16.yml ./test-results-ubuntu-node-latest.yml
+          datadog-ci junit upload --service dd-trace-js-tests --tags os.platform:linux ./test-results-ubuntu-node-16.yml ./test-results-ubuntu-node-latest.yml
       - uses: codecov/codecov-action@v2
 
   windows:
     runs-on: windows-latest
     env:
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
+      MOCHA_FILE: test-results-windows.yml
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - run: MOCHA_FILE=./test-results-windows.yml yarn test:trace:core:ci
+      - run: yarn test:trace:core:ci
       - run: |
           Invoke-WebRequest -Uri "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_win-x64.exe" -OutFile "datadog-ci.exe"
-          ./datadog-ci.exe junit upload --service dd-trace-js-tests ./test-results-windows.yml
+          .\datadog-ci.exe junit upload --service dd-trace-js-tests --tags os.platform:windows test-results-windows.yml
       - uses: codecov/codecov-action@v2
