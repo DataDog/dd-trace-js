@@ -10,37 +10,12 @@ class GrpcServerPlugin extends ServerPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addTraceSub('error', error => {
-      const span = this.activeSpan
-
-      if (!span) return
-
-      this.addCode(span, error.code)
-      this.addError(error)
-    })
-
     this.addTraceSub('update', ({ code }) => {
       const span = this.activeSpan
 
       if (!span) return
 
       this.addCode(span, code)
-    })
-
-    this.addTraceSub('finish', ({ code, trailer } = {}) => {
-      const span = this.activeSpan
-
-      if (!span) return
-
-      const metadataFilter = this.config.metadataFilter
-
-      this.addCode(span, code)
-
-      if (trailer && metadataFilter) {
-        addMetadataTags(span, trailer, metadataFilter, 'response')
-      }
-
-      span.finish()
     })
   }
 
@@ -68,6 +43,31 @@ class GrpcServerPlugin extends ServerPlugin {
     })
 
     addMetadataTags(span, metadata, metadataFilter, 'request')
+  }
+
+  error (error) {
+    const span = this.activeSpan
+
+    if (!span) return
+
+    this.addCode(span, error.code)
+    this.addError(error)
+  }
+
+  finish ({ code, trailer } = {}) {
+    const span = this.activeSpan
+
+    if (!span) return
+
+    const metadataFilter = this.config.metadataFilter
+
+    this.addCode(span, code)
+
+    if (trailer && metadataFilter) {
+      addMetadataTags(span, trailer, metadataFilter, 'response')
+    }
+
+    span.finish()
   }
 
   configure (config) {
