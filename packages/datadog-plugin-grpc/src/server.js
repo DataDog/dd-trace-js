@@ -1,66 +1,37 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const Tags = require('../../../ext/tags')
+const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { TEXT_MAP } = require('../../../ext/formats')
-const { addMethodTags, addMetadataTags, getFilter } = require('./util')
+const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
 
-class GrpcServerPlugin extends Plugin {
-  static get name () {
-    return 'http'
-  }
+class GrpcServerPlugin extends ServerPlugin {
+  static get name () { return 'grpc' }
 
   constructor (...args) {
     super(...args)
 
-    this.addSub('apm:grpc:server:request:start', ({ name, metadata, type }) => {
-      const metadataFilter = this.config.metadataFilter
-      const store = storage.getStore()
-      const childOf = extract(this.tracer, metadata)
-      const span = this.tracer.startSpan('grpc.server', {
-        childOf,
-        tags: {
-          [Tags.SPAN_KIND]: 'server',
-          'span.type': 'web',
-          'resource.name': name,
-          'service.name': this.config.service || this.tracer._service,
-          'component': 'grpc'
-        }
-      })
+    this.addTraceSub('error', error => {
+      const span = this.activeSpan
 
-      addMethodTags(span, name, type)
-      addMetadataTags(span, metadata, metadataFilter, 'request')
+      if (!span) return
 
-      analyticsSampler.sample(span, this.config.measured, true)
-
-      this.enter(span, store)
-    })
-
-    this.addSub('apm:grpc:server:request:error', error => {
-      const store = storage.getStore()
-
-      if (!store || !store.span) return
-
-      this.addCode(store.span, error.code)
+      this.addCode(span, error.code)
       this.addError(error)
     })
 
-    this.addSub('apm:grpc:server:request:update', ({ code }) => {
-      const store = storage.getStore()
+    this.addTraceSub('update', ({ code }) => {
+      const span = this.activeSpan
 
-      if (!store || !store.span) return
+      if (!span) return
 
-      this.addCode(store.span, code)
+      this.addCode(span, code)
     })
 
-    this.addSub('apm:grpc:server:request:finish', ({ code, trailer } = {}) => {
-      const store = storage.getStore()
+    this.addTraceSub('finish', ({ code, trailer } = {}) => {
+      const span = this.activeSpan
 
-      if (!store || !store.span) return
+      if (!span) return
 
-      const span = store.span
       const metadataFilter = this.config.metadataFilter
 
       this.addCode(span, code)
@@ -69,8 +40,34 @@ class GrpcServerPlugin extends Plugin {
         addMetadataTags(span, trailer, metadataFilter, 'response')
       }
 
-      store.span.finish()
+      span.finish()
     })
+  }
+
+  start ({ name, metadata, type }) {
+    const metadataFilter = this.config.metadataFilter
+    const childOf = extract(this.tracer, metadata)
+    const method = getMethodMetadata(name, type)
+    const span = this.startSpan('grpc.server', {
+      childOf,
+      service: this.config.service,
+      resource: name,
+      kind: 'server',
+      type: 'web',
+      meta: {
+        'component': 'grpc',
+        'grpc.method.kind': method.type,
+        'grpc.method.path': method.path,
+        'grpc.method.name': method.name,
+        'grpc.method.service': method.service,
+        'grpc.method.package': method.package
+      },
+      metrics: {
+        'grpc.status.code': 0
+      }
+    })
+
+    addMetadataTags(span, metadata, metadataFilter, 'request')
   }
 
   configure (config) {
