@@ -56,15 +56,6 @@ function getCommitsToUpload (commitsToExclude) {
   }
 }
 
-// Generates pack files to upload and
-// returns the ordered list of packfiles' paths
-function execGitPackObjects (targetPath, commitsToUpload) {
-  return execSync(
-    `git pack-objects --compression=9 --max-pack-size=3m ${targetPath}`,
-    { input: commitsToUpload.join('\n') }
-  ).toString().split('\n').filter(commit => commit).map(commit => `${targetPath}-${commit}.pack`)
-}
-
 function generatePackFilesForCommits (commitsToUpload) {
   const tmpFolder = os.tmpdir()
 
@@ -72,14 +63,31 @@ function generatePackFilesForCommits (commitsToUpload) {
   const temporaryPath = path.join(tmpFolder, randomPrefix)
   const cwdPath = path.join(process.cwd(), randomPrefix)
 
+  // Generates pack files to upload and
+  // returns the ordered list of packfiles' paths
+  function execGitPackObjects (targetPath) {
+    return execSync(
+      `git pack-objects --compression=9 --max-pack-size=3m ${targetPath}`,
+      { input: commitsToUpload.join('\n') }
+    ).toString().split('\n').filter(commit => commit).map(commit => `${targetPath}-${commit}.pack`)
+  }
+
   try {
     return execGitPackObjects(temporaryPath, commitsToUpload)
   } catch (err) {
     log.error(err)
-    // The generation of pack files sometimes fail with
-    // `unable to rename temporary pack file: Invalid cross-device link`
-    // This error comes from git itself and it is currently unclear how to fix it.
-    // A temporary workaround is to attempt to generate the packfiles in process.cwd()
+    /**
+     * The generation of pack files in the temporary folder (from `os.tmpdir()`)
+     * sometimes fails in certain CI setups with the error message
+     * `unable to rename temporary pack file: Invalid cross-device link`.
+     * The reason why is unclear.
+     *
+     * A workaround is to attempt to generate the pack files in `process.cwd()`.
+     * While this works most of the times, it's not ideal since it affects the git status.
+     * This workaround is intended to be temporary.
+     *
+     * TODO: fix issue and remove workaround.
+     */
     try {
       return execGitPackObjects(cwdPath, commitsToUpload)
     } catch (err) {
