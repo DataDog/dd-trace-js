@@ -6,6 +6,7 @@ const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
 
 class GrpcClientPlugin extends ClientPlugin {
   static get name () { return 'grpc' }
+  static get operation () { return 'client:request' }
 
   start ({ metadata, path, type }) {
     const metadataFilter = this.config.metadataFilter
@@ -17,7 +18,7 @@ class GrpcClientPlugin extends ClientPlugin {
       type: 'http',
       meta: {
         'component': 'grpc',
-        'grpc.method.kind': method.type,
+        'grpc.method.kind': method.kind,
         'grpc.method.path': method.path,
         'grpc.method.name': method.name,
         'grpc.method.service': method.service,

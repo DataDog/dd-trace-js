@@ -6,6 +6,7 @@ const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
 
 class GrpcServerPlugin extends ServerPlugin {
   static get name () { return 'grpc' }
+  static get operation () { return 'server:request' }
 
   constructor (...args) {
     super(...args)
@@ -31,7 +32,7 @@ class GrpcServerPlugin extends ServerPlugin {
       type: 'web',
       meta: {
         'component': 'grpc',
-        'grpc.method.kind': method.type,
+        'grpc.method.kind': method.kind,
         'grpc.method.path': method.path,
         'grpc.method.name': method.name,
         'grpc.method.service': method.service,
