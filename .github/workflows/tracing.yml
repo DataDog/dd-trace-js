@@ -15,7 +15,7 @@ jobs:
   macos:
     runs-on: macos-latest
     env:
-      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
@@ -30,7 +30,7 @@ jobs:
   ubuntu:
     runs-on: ubuntu-latest
     env:
-      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
@@ -50,7 +50,7 @@ jobs:
   windows:
     runs-on: windows-latest
     env:
-      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
