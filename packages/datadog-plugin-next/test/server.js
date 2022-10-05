@@ -28,6 +28,8 @@ app.prepare().then(() => {
 
     if (req.path === '/exit') {
       server.close()
+    } else if (req.path === '/puke') {
+      throw new Error('oh no');
     } else {
       handle(req, res, parsedUrl)
     }
