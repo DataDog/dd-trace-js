@@ -14,15 +14,22 @@ concurrency:
 jobs:
   macos:
     runs-on: macos-latest
+    env:
+      DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - run: yarn test:trace:core:ci
+      - run: MOCHA_FILE=test-results/tracing/macos.xml yarn test:trace:core:ci
+      - uses: ./.github/actions/datadog-ci
+      - run: |
+          datadog-ci junit upload --service dd-trace-js-tests --tags os.platform:darwin --tags runtime.version:14 test-results/tracing/macos.xml
       - uses: codecov/codecov-action@v2
 
   ubuntu:
     runs-on: ubuntu-latest
+    env:
+      DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
@@ -30,18 +37,28 @@ jobs:
       - uses: ./.github/actions/node/12
       - run: yarn test:trace:core:ci
       - uses: ./.github/actions/node/14
-      - run: yarn test:trace:core:ci
+      - run: MOCHA_FILE=test-results/tracing/linux-14.xml yarn test:trace:core:ci
       - uses: ./.github/actions/node/16
-      - run: yarn test:trace:core:ci
+      - run: MOCHA_FILE=test-results/tracing/linux-16.xml yarn test:trace:core:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:trace:core:ci
+      - run: MOCHA_FILE=test-results/tracing/linux-latest.xml yarn test:trace:core:ci
+      - uses: ./.github/actions/datadog-ci
+      - run: |
+          datadog-ci junit upload --service dd-trace-js-tests --tags os.platform:linux --tags runtime.version:14 test-results/tracing/linux-14.xml
+          datadog-ci junit upload --service dd-trace-js-tests --tags os.platform:linux --tags runtime.version:16 test-results/tracing/linux-16.xml
+          datadog-ci junit upload --service dd-trace-js-tests --tags os.platform:linux --tags runtime.version:18 test-results/tracing/linux-latest.xml
       - uses: codecov/codecov-action@v2
 
   windows:
     runs-on: windows-latest
+    env:
+      DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
+      MOCHA_FILE: test-results/tracing/windows.xml
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:trace:core:ci
+      - uses: ./.github/actions/datadog-ci
+      - run: .\datadog-ci.exe junit upload --service dd-trace-js-tests --tags os.platform:windows --tags runtime.version:14 test-results/tracing/windows.xml
       - uses: codecov/codecov-action@v2
