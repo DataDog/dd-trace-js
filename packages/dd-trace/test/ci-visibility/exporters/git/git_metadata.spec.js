@@ -90,7 +90,7 @@ describe('git_metadata', () => {
       .reply(204)
 
     gitMetadata.sendGitMetadata('test.com', (err) => {
-      expect(err.message).to.contain('Error getting commits: 500')
+      expect(err.message).to.contain('search_commits returned an error: status code 500')
       // to check that it is not called
       expect(scope.isDone()).to.be.false
       expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
@@ -106,7 +106,7 @@ describe('git_metadata', () => {
       .reply(204)
 
     gitMetadata.sendGitMetadata('test.com', (err) => {
-      expect(err.message).to.contain("Can't parse response")
+      expect(err.message).to.contain("Can't parse search_commits response: Invalid commit type response")
       // to check that it is not called
       expect(scope.isDone()).to.be.false
       expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
@@ -122,7 +122,7 @@ describe('git_metadata', () => {
       .reply(502)
 
     gitMetadata.sendGitMetadata('test.com', (err) => {
-      expect(err.message).to.contain('Error uploading packfiles: 502')
+      expect(err.message).to.contain('Could not upload packfiles: status code 502')
       expect(scope.isDone()).to.be.true
       done()
     })
@@ -168,7 +168,7 @@ describe('git_metadata', () => {
     ])
 
     gitMetadata.sendGitMetadata('test.com', (err) => {
-      expect(err.message).to.contain('Error reading packfile: not-there')
+      expect(err.message).to.contain('Could not read "not-there"')
       expect(scope.isDone()).to.be.false
       done()
     })
@@ -202,6 +202,24 @@ describe('git_metadata', () => {
     gitMetadata.sendGitMetadata('test.com', (err) => {
       expect(err.message).to.contain('Repository URL is empty')
       expect(scope.isDone()).to.be.false
+      done()
+    })
+  })
+
+  it('should retry if backend temporarily fails', (done) => {
+    const scope = nock('https://api.test.com')
+      .post('/api/v2/git/repository/search_commits')
+      .replyWithError('Server unavailable')
+      .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({ data: [] }))
+      .post('/api/v2/git/repository/packfile')
+      .replyWithError('Server unavailable')
+      .post('/api/v2/git/repository/packfile')
+      .reply(204)
+
+    gitMetadata.sendGitMetadata('test.com', (err) => {
+      expect(err).to.be.null
+      expect(scope.isDone()).to.be.true
       done()
     })
   })
