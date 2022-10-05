@@ -100,14 +100,14 @@ function instrument (req, res, handler) {
       const promise = handler()
 
       // promise should only reject when propagateError is true:
-      // https://github.com/vercel/next.js/blob/cee656238a175b8bb75434c013c79279e546381c/packages/next/server/api-utils/node.ts#L547
+      // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L547
       return promise.then(
         result => finish(req, res, result),
         err => finish(req, res, null, err)
       )
     } catch (e) {
       // this will probably never happen as the handler caller is an async function:
-      // https://github.com/vercel/next.js/blob/cee656238a175b8bb75434c013c79279e546381c/packages/next/server/api-utils/node.ts#L420
+      // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L420
       return finish(req, res, null, e)
     }
   })

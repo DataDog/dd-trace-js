@@ -230,18 +230,7 @@ describe('Plugin', function () {
         describe('when an error happens', () => {
           it('should not die', done => {
             agent
-              .use(traces => {
-                console.log('TRACES', traces);
-                // const spans = traces[0]
-
-                // expect(spans[0]).to.have.property('name', 'next.request')
-                // expect(spans[0]).to.have.property('service', 'test')
-                // expect(spans[0]).to.have.property('type', 'web')
-                // expect(spans[0]).to.have.property('resource', 'GET')
-                // expect(spans[0].meta).to.have.property('span.kind', 'server')
-                // expect(spans[0].meta).to.have.property('http.method', 'GET')
-                // expect(spans[0].meta).to.have.property('http.status_code', '200')
-              })
+              .use(_traces => { })
               .then(done)
               .catch(done)
 
