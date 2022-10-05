@@ -26,10 +26,8 @@ app.prepare().then(() => {
   const server = createServer((req, res) => {
     const parsedUrl = parse(req.url, true)
 
-    if (req.path === '/exit') {
+    if (parsedUrl.path === '/exit') {
       server.close()
-    } else if (req.path === '/puke') {
-      throw new Error('oh no');
     } else {
       handle(req, res, parsedUrl)
     }
