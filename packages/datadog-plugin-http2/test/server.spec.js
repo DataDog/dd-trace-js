@@ -73,7 +73,7 @@ describe('Plugin', () => {
       return agent.close({ ritmReset: false })
     })
 
-    describe('canceled request', () => {
+    describe('cancelled request', () => {
       beforeEach(() => {
         listener = (req, res) => {
           setTimeout(() => {
