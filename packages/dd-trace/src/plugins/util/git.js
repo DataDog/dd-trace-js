@@ -56,24 +56,44 @@ function getCommitsToUpload (commitsToExclude) {
   }
 }
 
-// Generates pack files to upload and
-// returns the ordered list of packfiles' paths
 function generatePackFilesForCommits (commitsToUpload) {
   const tmpFolder = os.tmpdir()
 
   const randomPrefix = String(Math.floor(Math.random() * 10000))
   const temporaryPath = path.join(tmpFolder, randomPrefix)
+  const cwdPath = path.join(process.cwd(), randomPrefix)
+
+  // Generates pack files to upload and
+  // returns the ordered list of packfiles' paths
+  function execGitPackObjects (targetPath) {
+    return execSync(
+      `git pack-objects --compression=9 --max-pack-size=3m ${targetPath}`,
+      { input: commitsToUpload.join('\n') }
+    ).toString().split('\n').filter(commit => commit).map(commit => `${targetPath}-${commit}.pack`)
+  }
 
   try {
-    const orderedCommits =
-      execSync(
-        `git pack-objects --compression=9 --max-pack-size=3m ${temporaryPath}`,
-        { input: commitsToUpload.join('\n') }
-      ).toString().split('\n').filter(commit => commit)
-
-    return orderedCommits.map(commit => `${temporaryPath}-${commit}.pack`)
+    return execGitPackObjects(temporaryPath, commitsToUpload)
   } catch (err) {
     log.error(err)
+    /**
+     * The generation of pack files in the temporary folder (from `os.tmpdir()`)
+     * sometimes fails in certain CI setups with the error message
+     * `unable to rename temporary pack file: Invalid cross-device link`.
+     * The reason why is unclear.
+     *
+     * A workaround is to attempt to generate the pack files in `process.cwd()`.
+     * While this works most of the times, it's not ideal since it affects the git status.
+     * This workaround is intended to be temporary.
+     *
+     * TODO: fix issue and remove workaround.
+     */
+    try {
+      return execGitPackObjects(cwdPath, commitsToUpload)
+    } catch (err) {
+      log.error(err)
+    }
+
     return []
   }
 }
