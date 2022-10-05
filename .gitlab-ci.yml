@@ -22,6 +22,7 @@ trigger_benchmarking_platform:
   trigger:
     project: DataDog/apm-reliability/relenv-microbenchmarking-platform
     branch: "dd-trace-js"
+    strategy: depend
   variables:
     UPSTREAM_PROJECT_ID: $CI_PROJECT_ID
     UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
