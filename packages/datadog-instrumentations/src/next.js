@@ -99,16 +99,16 @@ function instrument (req, res, handler) {
     try {
       const promise = handler()
 
-      // promise should only reject when propagateError is true:
+      // promise should only reject when `propagateError` is true:
       // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L547
       return promise.then(
         result => finish(req, res, result),
-        err => finish(req, res, null, err)
+        err => Promise.reject(finish(req, res, null, err))
       )
     } catch (e) {
       // this will probably never happen as the handler caller is an async function:
       // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L420
-      return finish(req, res, null, e)
+      return Promise.reject(finish(req, res, null, e))
     }
   })
 }
@@ -120,11 +120,7 @@ function finish (req, res, result, err) {
 
   finishChannel.publish({ req, res })
 
-  if (err) {
-    throw err
-  }
-
-  return result
+  return result || err
 }
 
 addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js' }, nextServer => {
