@@ -104,7 +104,7 @@ function instrument (req, res, handler) {
         err => finish(req, res, null, err)
       )
     } catch (e) {
-      throw finish(req, res, null, e) // TODO: This needs to be tested
+      return finish(req, res, null, e) // TODO: This needs to be tested
     }
   })
 }
@@ -116,7 +116,11 @@ function finish (req, res, result, err) {
 
   finishChannel.publish({ req, res })
 
-  return result || err
+  if (err) {
+    throw err
+  }
+
+  return result
 }
 
 addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js' }, nextServer => {
