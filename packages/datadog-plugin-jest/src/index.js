@@ -1,3 +1,5 @@
+const { channel } = require('diagnostics_channel')
+
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 
@@ -53,6 +55,16 @@ class JestPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
+    const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
+    // `gitMetadataPromise` is used to wait until git metadata is uploaded to
+    // proceed with calculating the suites to skip
+    // TODO: add timeout after which the promise is resolved
+    const gitMetadataPromise = new Promise(resolve => {
+      gitMetadataUploadFinishCh.subscribe(err => {
+        resolve(err)
+      })
+    })
+
     // Used to handle the end of a jest worker to be able to flush
     const handler = ([message]) => {
       if (message === CHILD_MESSAGE_END) {
@@ -80,20 +92,6 @@ class JestPlugin extends Plugin {
       'runtime.version': runtimeVersion,
       'git.branch': gitBranch
     } = this.testEnvironmentMetadata
-
-    let isGitUploadFailed = false
-    // TODO: set a timeout after which the promise is rejected
-    const gitMetadataPromise = new Promise((resolve, reject) => {
-      this.addSub('ci:git-metadata-upload:finish', err => {
-        if (err) {
-          reject(err)
-        } else {
-          resolve()
-        }
-      })
-    }).catch(() => {
-      isGitUploadFailed = true
-    })
 
     this.addSub('ci:jest:configuration', ({ onResponse, onError }) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
@@ -126,24 +124,24 @@ class JestPlugin extends Plugin {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
         return onResponse([])
       }
-      const testConfiguration = {
-        site: this.config.site,
-        env: this.tracer._env,
-        service: this.config.service || this.tracer._service,
-        repositoryUrl,
-        sha,
-        osVersion,
-        osPlatform,
-        osArchitecture,
-        runtimeName,
-        runtimeVersion,
-        branch: gitBranch
-      }
       // we only request after git upload has happened, if it didn't fail
-      if (isGitUploadFailed) {
-        return onError()
-      }
-      gitMetadataPromise.then(() => {
+      gitMetadataPromise.then((gitUploadError) => {
+        if (gitUploadError) {
+          return onError(gitUploadError)
+        }
+        const testConfiguration = {
+          site: this.config.site,
+          env: this.tracer._env,
+          service: this.config.service || this.tracer._service,
+          repositoryUrl,
+          sha,
+          osVersion,
+          osPlatform,
+          osArchitecture,
+          runtimeName,
+          runtimeVersion,
+          branch: gitBranch
+        }
         getSkippableSuites(testConfiguration, (err, skippableTests) => {
           if (err) {
             onError(err)
@@ -151,7 +149,7 @@ class JestPlugin extends Plugin {
             onResponse(skippableTests)
           }
         })
-      }).catch(onError)
+      })
     })
 
     this.addSub('ci:jest:session:start', (command) => {
