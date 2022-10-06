@@ -235,7 +235,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/puke`)
+              .get(`http://localhost:${port}/boom`)
               .catch((response) => {
                 expect(response.statusCode).to.eql(500)
               })
