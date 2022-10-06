@@ -1,12 +1,8 @@
-stages:
-  - ci-image
-  - benchmarks
-
 variables:
   BASE_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/relenv-microbenchmarking-platform:dd-trace-js-experimental-5
 
-build-ci-images:
-  stage: ci-image
+build-ci-image:
+  stage: benchmarks
   when: manual
   tags: ["runner:docker", "size:large"]
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/docker:20.10.3
