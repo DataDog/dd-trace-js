@@ -34,7 +34,7 @@ class Tracer extends NoopProxy {
       log.use(config.logger)
       log.toggle(config.debug, config.logLevel, this)
 
-      const rc = new RemoteConfigManager(config, this)
+      const rc = new RemoteConfigManager(config)
 
       rc.start()
 

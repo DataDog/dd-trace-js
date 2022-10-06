@@ -14,11 +14,17 @@ const POLL_INTERVAL = 5e3
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
 // with their own separated Client.ClientState.
 class RemoteConfigManager extends EventEmitter {
-  constructor (config, tracer) {
+  constructor (config) {
     super()
 
-    this.tracer = tracer
     this.scheduler = new Scheduler((cb) => this.poll(cb), POLL_INTERVAL)
+
+    this.requestOptions = {
+      url: config.url,
+      // TODO: do we need hostname/port here ?
+      path: '/v0.7/config',
+      method: 'POST'
+    }
 
     this.state = {
       client: {
@@ -87,30 +93,10 @@ class RemoteConfigManager extends EventEmitter {
   }
 
   poll (cb) {
-    const data = JSON.stringify(this.state)
-
-    const options = {
-      // TODO: url: this.tracer._tracer._exporter._url
-      path: '/v0.7/config',
-      method: 'POST'
-    }
-
-    // TODO: we need a better way to get the agent URL
-    const url = this.tracer._tracer._exporter._url
-
-    // TODO: this can be removed once #2387 is merged
-    if (url.protocol === 'unix:') {
-      options.socketPath = url.pathname
-    } else {
-      options.protocol = url.protocol
-      options.hostname = url.hostname
-      options.port = url.port
-    }
-
-    request(data, options, (err, data, statusCode) => {
+    request(JSON.stringify(this.state), this.requestOptions, (err, data, statusCode) => {
       // 404 means RC is disabled, ignore it
       if (statusCode === 404) return cb()
-      
+
       if (err) {
         log.error(err)
         return cb()
