@@ -20,6 +20,7 @@ benchmarks:
   timeout: 1h
   script:
     - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/".insteadOf "https://github.com/DataDog/"
+    - export REPORTS_DIR="$(pwd)/reports/" && (mkdir "${REPORTS_DIR}" || :)
     - git clone --branch dd-trace-js https://github.com/DataDog/relenv-microbenchmarking-platform /platform && cd /platform
     - ./steps/install-benchmark-analyzer.sh
     - ./steps/install-pr-commenter.sh
