@@ -7,7 +7,7 @@ build-ci-image:
   tags: ["runner:docker", "size:large"]
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/docker:20.10.3
   script:
-    - cd dd-trace-js/benchmark/sirun
+    - cd benchmark/sirun
     - docker build --tag ${BASE_CI_IMAGE} -f Dockerfile .
     - docker push ${BASE_CI_IMAGE}
 
