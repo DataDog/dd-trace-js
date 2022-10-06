@@ -9,13 +9,13 @@ class MySQLPlugin extends DatabasePlugin {
   start ({ sql, conf: dbConfig }) {
     const service = getServiceName(this.config, dbConfig)
 
-    this.startSpan('mysql.query', {
+    this.startSpan(`${this.system}.query`, {
       service,
       resource: sql,
       type: 'sql',
       kind: 'client',
       meta: {
-        'db.type': 'mysql',
+        'db.type': this.system,
         'db.user': dbConfig.user,
         'db.name': dbConfig.database,
         'out.host': dbConfig.host,
