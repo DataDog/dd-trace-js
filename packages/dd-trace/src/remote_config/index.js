@@ -123,11 +123,14 @@ class RemoteConfigManager extends EventEmitter {
     })
   }
 
-  parseConfig (data) {
-    // `client_configs` is the list of config paths to apply
-    // `targets` is the signed index with metadata for config files
-    // `target_files` is the list of config files containing the actual config data
-    let { client_configs, targets, target_files } = data
+  // `client_configs` is the list of config paths to have applied
+  // `targets` is the signed index with metadata for config files
+  // `target_files` is the list of config files containing the actual config data
+  parseConfig ({
+    client_configs: clientConfigs = [],
+    targets,
+    target_files: targetFiles = []
+  }) {
 
     targets = fromBase64(targets)
 
