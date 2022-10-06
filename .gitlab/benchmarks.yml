@@ -26,8 +26,8 @@ benchmarks:
     - ./steps/install-pr-commenter.sh
     - ./steps/capture-hardware-software-info.sh
     - ./steps/run-benchmarks.sh
-    - "./steps/upload-results-to-s3.sh || :"
     - ./steps/analyze-results.sh
+    - "./steps/upload-results-to-s3.sh || :"
     - "./steps/post-pr-comment.sh || :"
   artifacts:
     name: "reports"
