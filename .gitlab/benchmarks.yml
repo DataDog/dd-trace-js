@@ -1,0 +1,47 @@
+stages:
+  - ci-image
+  - benchmarks
+
+variables:
+  BASE_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/relenv-microbenchmarking-platform:dd-trace-js-experimental-5
+
+build-ci-images:
+  stage: ci-image
+  when: manual
+  tags: ["runner:docker", "size:large"]
+  image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/docker:20.10.3
+  script:
+    - cd dd-trace-js/benchmark/sirun
+    - docker build --tag ${BASE_CI_IMAGE} -f Dockerfile .
+    - docker push ${BASE_CI_IMAGE}
+
+benchmarks:
+  stage: benchmarks
+  when: on_success
+  tags: ["runner:apm-k8s-tweaked-metal"]
+  image: $BASE_CI_IMAGE
+  interruptible: true
+  timeout: 1h
+  script:
+    - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/".insteadOf "https://github.com/DataDog/"
+    - git clone --branch dd-trace-js https://github.com/DataDog/relenv-microbenchmarking-platform /platform && cd /platform
+    - ./steps/install-benchmark-analyzer.sh
+    - ./steps/install-pr-commenter.sh
+    - ./steps/capture-hardware-software-info.sh
+    - ./steps/run-benchmarks.sh
+    #- ./steps/upload-results-to-s3.sh
+    - ./steps/analyze-results.sh
+    - ./steps/post-pr-comment.sh
+  artifacts:
+    name: "reports"
+    paths:
+      - reports/
+    expire_in: 3 months
+  variables:
+    UPSTREAM_PROJECT_ID: $CI_PROJECT_ID
+    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
+    UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME
+    UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA
+
+    KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
+    FF_USE_LEGACY_KUBERNETES_EXECUTION_STRATEGY: "true"

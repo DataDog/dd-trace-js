@@ -1,3 +1,5 @@
+include: '.gitlab/benchmarks.yml'
+
 stages:
   - deploy
 
@@ -15,19 +17,6 @@ deploy_to_reliability_env:
     UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
     UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA
     FORCE_TRIGGER: $FORCE_TRIGGER
-
-trigger_benchmarking_platform:
-  stage: deploy
-  when: on_success
-  trigger:
-    project: DataDog/apm-reliability/relenv-microbenchmarking-platform
-    branch: "dd-trace-js"
-    strategy: depend
-  variables:
-    UPSTREAM_PROJECT_ID: $CI_PROJECT_ID
-    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
-    UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME
-    UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA
 
 deploy_to_docker_registries:
   stage: deploy
