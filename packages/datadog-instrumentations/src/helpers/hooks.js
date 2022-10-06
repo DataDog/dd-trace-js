@@ -43,6 +43,7 @@ module.exports = {
   'koa-router': () => require('../koa'),
   'kafkajs': () => require('../kafkajs'),
   'limitd-client': () => require('../limitd-client'),
+  'mariadb': () => require('../mariadb'),
   'memcached': () => require('../memcached'),
   'microgateway-core': () => require('../microgateway-core'),
   'mocha': () => require('../mocha'),
