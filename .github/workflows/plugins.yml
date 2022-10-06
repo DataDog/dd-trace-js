@@ -638,7 +638,7 @@ jobs:
         ports:
           - 3306:3306
     env:
-      PLUGINS: mysql|mysql2 # TODO: move mysql2 to its own job
+      PLUGINS: mysql|mysql2|mariadb # TODO: move mysql2 to its own job
       SERVICES: mysql
     steps:
       - uses: actions/checkout@v2
