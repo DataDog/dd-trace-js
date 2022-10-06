@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>pino | dd-trace</title>
+	<title>mariadb | dd-trace</title>
 	<meta name="description" content="Documentation for dd-trace">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="../assets/css/main.css">
@@ -57,10 +57,10 @@
 					<a href="../modules/plugins.html">plugins</a>
 				</li>
 				<li>
-					<a href="plugins.pino.html">pino</a>
+					<a href="plugins.mariadb.html">mariadb</a>
 				</li>
 			</ul>
-			<h1>Interface pino</h1>
+			<h1>Interface mariadb</h1>
 		</div>
 	</div>
 </header>
@@ -70,10 +70,8 @@
 			<section class="tsd-panel tsd-comment">
 				<div class="tsd-comment tsd-typography">
 					<div class="lead">
-						<p>This plugin patches the <a href="http://getpino.io">pino</a>
-							to automatically inject trace identifiers in log records when the
-							<a href="interfaces/traceroptions.html#logInjection">logInjection</a> option is enabled
-						on the tracer.</p>
+						<p>This plugin automatically instruments the
+						<a href="https://github.com/mariadb-corporation/mariadb-connector-nodejs">mariadb</a> module.</p>
 					</div>
 				</div>
 			</section>
@@ -81,10 +79,10 @@
 				<h3>Hierarchy</h3>
 				<ul class="tsd-hierarchy">
 					<li>
-						<span class="tsd-signature-type">Integration</span>
+						<a href="plugins.mysql.html" class="tsd-signature-type">mysql</a>
 						<ul class="tsd-hierarchy">
 							<li>
-								<span class="target">pino</span>
+								<span class="target">mariadb</span>
 							</li>
 						</ul>
 					</li>
@@ -97,8 +95,9 @@
 						<section class="tsd-index-section tsd-is-inherited">
 							<h3>Properties</h3>
 							<ul class="tsd-index-list">
-								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.pino.html#enabled" class="tsd-kind-icon">enabled</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.pino.html#service" class="tsd-kind-icon">service</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.mariadb.html#enabled" class="tsd-kind-icon">enabled</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.mariadb.html#measured" class="tsd-kind-icon">measured</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite tsd-is-inherited"><a href="plugins.mariadb.html#service" class="tsd-kind-icon">service</a></li>
 							</ul>
 						</section>
 					</div>
@@ -128,20 +127,33 @@
 					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
-					<a name="service" class="tsd-anchor"></a>
-					<h3><span class="tsd-flag ts-flagOptional">Optional</span> service</h3>
-					<div class="tsd-signature tsd-kind-icon">service<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">any</span></div>
+					<a name="measured" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> measured</h3>
+					<div class="tsd-signature tsd-kind-icon">measured<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-symbol">{}</span></div>
 					<aside class="tsd-sources">
-						<p>Inherited from Integration.service</p>
+						<p>Inherited from <a href="traceoptions.html">TraceOptions</a>.<a href="traceoptions.html#measured">measured</a></p>
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/e6d33cf/index.d.ts#L629">index.d.ts:629</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/e6d33cf/index.d.ts#L620">index.d.ts:620</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
 						<div class="lead">
-							<p>The service name to be used for this plugin.</p>
+							<p>Whether to measure the span. Can also be set to a key-value pair with span
+							names as keys and booleans as values for more granular control.</p>
 						</div>
 					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite tsd-is-inherited">
+					<a name="service" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> service</h3>
+					<div class="tsd-signature tsd-kind-icon">service<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">(</span>params<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">any</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol"> =&gt; </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span></div>
+					<aside class="tsd-sources">
+						<p>Inherited from <a href="plugins.mariadb.html">mariadb</a>.<a href="plugins.mariadb.html#service">service</a></p>
+						<p>Overrides Integration.service</p>
+						<ul>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/e6d33cf/index.d.ts#L1227">index.d.ts:1227</a></li>
+						</ul>
+					</aside>
 				</section>
 			</section>
 		</div>
@@ -161,13 +173,16 @@
 				</ul>
 				<ul class="current">
 					<li class="current tsd-kind-interface tsd-parent-kind-namespace">
-						<a href="plugins.pino.html" class="tsd-kind-icon">pino</a>
+						<a href="plugins.mariadb.html" class="tsd-kind-icon">mariadb</a>
 						<ul>
 							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
-								<a href="plugins.pino.html#enabled" class="tsd-kind-icon">enabled</a>
+								<a href="plugins.mariadb.html#enabled" class="tsd-kind-icon">enabled</a>
 							</li>
 							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
-								<a href="plugins.pino.html#service" class="tsd-kind-icon">service</a>
+								<a href="plugins.mariadb.html#measured" class="tsd-kind-icon">measured</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite tsd-is-inherited">
+								<a href="plugins.mariadb.html#service" class="tsd-kind-icon">service</a>
 							</li>
 						</ul>
 					</li>
