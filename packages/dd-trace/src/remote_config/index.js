@@ -2,7 +2,7 @@
 
 const uuid = require('crypto-randomuuid')
 const { EventEmitter } = require('events')
-const Scheduler = require('../exporters/scheduler')
+const Scheduler = require('./scheduler')
 const tracerVersion = require('../../../../package.json').version
 const request = require('../exporters/common/request')
 const log = require('../log')
@@ -11,7 +11,8 @@ const clientId = uuid()
 
 const POLL_INTERVAL = 5e3
 
-// There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest with their own separated Client.ClientState.
+// There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
+// with their own separated Client.ClientState.
 class RemoteConfigManager extends EventEmitter {
   constructor (config, tracer) {
     super()
@@ -52,7 +53,7 @@ class RemoteConfigManager extends EventEmitter {
     this.on('removeListener', this.updateProducts)
   }
 
-  updateCapabilities(mask, value) {
+  updateCapabilities (mask, value) {
     const hex = Buffer.from(this.state.client.capabilities, 'base64').toString('hex')
 
     let num = BigInt(`0x${hex}`)
@@ -70,7 +71,7 @@ class RemoteConfigManager extends EventEmitter {
     this.state.client.capabilities = Buffer.from(str, 'hex').toString('base64')
   }
 
-  updateProducts() {
+  updateProducts () {
     // this is needed because newListener fires before eventNames() is updated
     process.nextTick(() => {
       this.state.client.products = this.eventNames().slice(2) // omit newListener and removeListener
