@@ -226,6 +226,21 @@ describe('Plugin', function () {
               .catch(done)
           })
         })
+
+        describe('when an error happens', () => {
+          it('should not die', done => {
+            agent
+              .use(_traces => { })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/boom`)
+              .catch((response) => {
+                expect(response.statusCode).to.eql(500)
+              })
+          })
+        })
       })
 
       describe('with configuration', () => {
