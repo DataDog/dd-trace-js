@@ -247,8 +247,12 @@ class RemoteConfigManager extends EventEmitter {
   }
 }
 
-function fromBase64 (str) {
-  return JSON.parse(Buffer.from(str, 'base64').toString())
+function fromBase64JSON (str) {
+  try {
+    return JSON.parse(Buffer.from(str, 'base64').toString())
+  } catch {
+    return null
+  }
 }
 
 const configPathRegex = /^(?:datadog\/\d+|employee)\/([^/]+)\/([^/]+)\/[^/]+$/
