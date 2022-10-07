@@ -26,6 +26,7 @@ for MAJOR_VERSION in 14 16 18; do
     nvm use $MAJOR_VERSION
     export VERSION=`nvm current`
     echo "using Node.js ${VERSION}"
+    CPU_AFFINITY = 24 # reset for each node.js version
 
     for D in *; do
         if [ -d "${D}" ]; then
