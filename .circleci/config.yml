@@ -209,8 +209,8 @@ jobs:
             NODE_REPO_PATH: "/root/node"
             NODE_BIN: "/usr/local/bin/node"
 
-workflows:
-  version: 2
+# workflows:
+#   version: 2
 #   bench: &bench-jobs
 #     jobs:
 #       - node-bench-latest
@@ -252,14 +252,14 @@ workflows:
 #             - node-bench-sirun-plugin-graphql
 #             - node-bench-sirun-appsec
 #       - node-ci-visibility-performance-benchmark
-
-  nightly-bench:
-    triggers:
-      - schedule:
-          cron: "0 0 * * *"
-          filters:
-            branches:
-              only:
-                - master
-                - profiler
-    <<: *bench-jobs
+# 
+#   nightly-bench:
+#     triggers:
+#       - schedule:
+#           cron: "0 0 * * *"
+#           filters:
+#             branches:
+#               only:
+#                 - master
+#                 - profiler
+#     <<: *bench-jobs
