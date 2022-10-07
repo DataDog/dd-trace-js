@@ -156,34 +156,31 @@ class JestPlugin extends Plugin {
       if (!this.config.isAgentlessEnabled) {
         return
       }
-      const store = storage.getStore()
       const childOf = getTestParentSpan(this.tracer)
       const testSessionSpanMetadata = getTestSessionCommonTags(command, this.tracer._version)
 
-      const testSessionSpan = this.tracer.startSpan('jest.test_session', {
+      this.testSessionSpan = this.tracer.startSpan('jest.test_session', {
         childOf,
         tags: {
           ...this.testEnvironmentMetadata,
           ...testSessionSpanMetadata
         }
       })
-      this.enter(testSessionSpan, store)
     })
 
     this.addSub('ci:jest:session:finish', ({ status, isTestsSkipped, testCodeCoverageLinesTotal }) => {
       if (!this.config.isAgentlessEnabled) {
         return
       }
-      const testSessionSpan = storage.getStore().span
-      testSessionSpan.setTag(TEST_STATUS, status)
+      this.testSessionSpan.setTag(TEST_STATUS, status)
       if (isTestsSkipped) {
-        testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
+        this.testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
       }
       if (testCodeCoverageLinesTotal !== undefined) {
-        testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
+        this.testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
       }
-      testSessionSpan.finish()
-      finishAllTraceSpans(testSessionSpan)
+      this.testSessionSpan.finish()
+      finishAllTraceSpans(this.testSessionSpan)
       this.tracer._exporter._writer.flush()
     })
 
@@ -194,10 +191,9 @@ class JestPlugin extends Plugin {
       if (!this.config.isAgentlessEnabled) {
         return
       }
-      const testSessionSpan = storage.getStore().span
       configs.forEach(config => {
-        config._ddTestSessionId = testSessionSpan.context()._traceId.toString(10)
-        config._ddTestCommand = testSessionSpan.context()._tags[TEST_COMMAND]
+        config._ddTestSessionId = this.testSessionSpan.context()._traceId.toString(10)
+        config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
       })
     })
 
@@ -208,8 +204,6 @@ class JestPlugin extends Plugin {
 
       const { _ddTestSessionId: testSessionId, _ddTestCommand: testCommand } = testEnvironmentOptions
 
-      const store = storage.getStore()
-
       const testSessionSpanContext = this.tracer.extract('text_map', {
         'x-datadog-trace-id': testSessionId,
         'x-datadog-parent-id': '0000000000000000'
@@ -217,34 +211,31 @@ class JestPlugin extends Plugin {
 
       const testSuiteMetadata = getTestSuiteCommonTags(testCommand, this.tracer._version, testSuite)
 
-      const testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
+      this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
         childOf: testSessionSpanContext,
         tags: {
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
         }
       })
-      this.enter(testSuiteSpan, store)
     })
 
     this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage }) => {
       if (!this.config.isAgentlessEnabled) {
         return
       }
-      const testSuiteSpan = storage.getStore().span
-      testSuiteSpan.setTag(TEST_STATUS, status)
+      this.testSuiteSpan.setTag(TEST_STATUS, status)
       if (errorMessage) {
-        testSuiteSpan.setTag('error', new Error(errorMessage))
+        this.testSuiteSpan.setTag('error', new Error(errorMessage))
       }
-      testSuiteSpan.finish()
+      this.testSuiteSpan.finish()
     })
 
     this.addSub('ci:jest:test-suite:code-coverage', (coverageFiles) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
         return
       }
-      const testSuiteSpan = storage.getStore().span
-      this.tracer._exporter.exportCoverage({ span: testSuiteSpan, coverageFiles })
+      this.tracer._exporter.exportCoverage({ span: this.testSuiteSpan, coverageFiles })
     })
 
     this.addSub('ci:jest:test:start', (test) => {
@@ -278,13 +269,11 @@ class JestPlugin extends Plugin {
 
   startTestSpan (test) {
     const suiteTags = {}
-    const store = storage.getStore()
-    const testSuiteSpan = store ? store.span : undefined
-    if (testSuiteSpan) {
-      const testSuiteId = testSuiteSpan.context()._spanId.toString(10)
+    if (this.testSuiteSpan) {
+      const testSuiteId = this.testSuiteSpan.context()._spanId.toString(10)
       suiteTags[TEST_SUITE_ID] = testSuiteId
-      suiteTags[TEST_SESSION_ID] = testSuiteSpan.context()._traceId.toString(10)
-      suiteTags[TEST_COMMAND] = testSuiteSpan.context()._tags[TEST_COMMAND]
+      suiteTags[TEST_SESSION_ID] = this.testSuiteSpan.context()._traceId.toString(10)
+      suiteTags[TEST_COMMAND] = this.testSuiteSpan.context()._tags[TEST_COMMAND]
     }
 
     const {
