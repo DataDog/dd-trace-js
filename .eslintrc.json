@@ -7,7 +7,10 @@
     "standard"
   ],
   "env": {
-    "node" : true
+    "node": true
+  },
+  "globals": {
+    "BigInt": true
   },
   "rules": {
     "max-len": [2, 120, 2],
