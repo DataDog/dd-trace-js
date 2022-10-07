@@ -200,7 +200,7 @@ class RemoteConfigManager extends EventEmitter {
       this.dispatch(toModify, 'modify')
 
       this.state.client.state.config_states = []
-      this.targetCache = new Set()
+      this.targetCache = new Map()
       this.state.cached_target_files = []
 
       for (const conf of this.appliedConfigs.values()) {
