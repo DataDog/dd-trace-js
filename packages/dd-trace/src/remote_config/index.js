@@ -131,17 +131,17 @@ class RemoteConfigManager extends EventEmitter {
     targets,
     target_files: targetFiles = []
   }) {
-
-    targets = fromBase64(targets)
-
-    const toUnapply = Array.from(this.appliedConfigs.keys()).filter((path) => !client_configs.includes(path))
+    const toUnapply = []
     const toApply = []
     const toModify = []
 
-    client_configs = client_configs || []
+    for (const appliedConfig of this.appliedConfigs.values()) {
+      if (!clientConfigs.includes(appliedConfig.path)) {
+        toUnapply.push(appliedConfig)
+      }
+    }
 
-    // TODO: verify signatures
-    // TODO: meta.signed.expires ?
+    targets = fromBase64JSON(targets)
 
     for (const path of client_configs) {
       const meta = targets.signed.targets[path]
