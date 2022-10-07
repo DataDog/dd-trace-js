@@ -53,7 +53,7 @@ class RemoteConfigManager extends EventEmitter {
     }
 
     this.appliedConfigs = new Map()
-    this.confCache = new Map()
+    this.targetCache = new Map()
 
     this.on('newListener', this.updateProducts)
     this.on('removeListener', this.updateProducts)
@@ -143,51 +143,104 @@ class RemoteConfigManager extends EventEmitter {
 
     targets = fromBase64JSON(targets)
 
-    for (const path of client_configs) {
-      const meta = targets.signed.targets[path]
-      if (!meta) throw new Error(`Unable to find target for path ${path}`)
+    if (targets) {
+      for (const path of clientConfigs) {
+        const meta = targets.signed.targets[path]
+        if (!meta) throw new Error(`Unable to find target for path ${path}`)
 
-      const current = this.appliedConfigs.get(path)
+        const current = this.appliedConfigs.get(path)
 
-      if (!current) toApply.push(path)
-      else if (current.hashes.sha256 !== meta.hashes.sha256) toModify.push(path)
-      else continue
+        const newConf = {}
 
-      let file = this.confCache.get(meta.hashes.sha256) || target_files.find(file => file.path === path)
-      if (!file) throw new Error('No file found')
+        if (!current) toApply.push(newConf)
+        else if (current.target.hashes.sha256 !== meta.hashes.sha256) toModify.push(newConf)
+        else continue
 
-      file = fromBase64(file.raw)
+        let target = this.targetCache.get(meta.hashes.sha256)
 
-      const { product, id } = parseConfigPath(path)
+        if (!target) {
+          let file = targetFiles.find(file => file.path === path)
 
-      if (!product || !id) throw new Error('Cant parse path')
+          if (!file) throw new Error(`Unable to find file for path ${path}`)
 
-      this.appliedConfig.set(path, {
-        path,
-        product,
-        id,
-        hashes: meta.hashes
-      })
+          // TODO: verify signatures
 
-      this.confCache.set(meta.hashes.sha256, file)
+          file = fromBase64JSON(file.raw) // TODO
+
+          target = {
+            path,
+            length: meta.length,
+            hashes: meta.hashes,
+            file
+          }
+        }
+
+        // TODO: meta.signed.expires ?
+
+        const { product, id } = parseConfigPath(path)
+
+        Object.assign(newConf, {
+          path,
+          product,
+          id,
+          version: meta.custom.v,
+          apply_state: 1,
+          apply_error: '',
+          target
+        })
+      }
+
+      this.state.client.state.targets_version = targets.signed.version
+      this.state.client.state.backend_client_state = targets.signed.custom.opaque_backend_state
     }
 
+    if (toUnapply.length || toApply.length || toModify.length) {
+      this.dispatch(toUnapply, 'unapply')
+      this.dispatch(toApply, 'apply')
+      this.dispatch(toModify, 'modify')
 
-    this.state.client.state.backend_client_state = targets.signed.custom.opaque_backend_state
+      this.state.client.state.config_states = []
+      this.targetCache = new Set()
+      this.state.cached_target_files = []
 
-    // save
+      for (const conf of this.appliedConfigs.values()) {
+        this.state.client.state.config_states.push({
+          id: conf.id,
+          version: conf.version,
+          product: conf.product,
+          apply_state: conf.apply_state,
+          apply_error: conf.apply_error
+        })
 
-    // remove unapplied caches
+        const target = conf.target
 
-    this.dispatch(toUnapply, 'disable')
-    this.dispatch(toApply, 'enable')
-    this.dispatch(toModify, 'modify')
+        this.targetCache.set(target.hashes.sha256, target)
+
+        this.state.cached_target_files.push({
+          path: target.path,
+          length: target.length,
+          hashes: Object.entries(target.hashes).map((entry) => ({ algorithm: entry[0], hash: entry[1] }))
+        })
+      }
+    }
   }
 
   dispatch (list, action) {
-    for (let item of list) {
-      item = this.appliedConfig.get(item)
-      this.emit(item.product, action, item, this.confCache.get(item.hashes.sha256))
+    for (const item of list) {
+      try {
+        this.emit(item.product, action, item.target.file)
+
+        item.apply_state = 2
+      } catch (err) {
+        item.apply_state = 3
+        item.apply_error = err.toString()
+      }
+
+      if (action === 'unapply') {
+        this.appliedConfigs.delete(item.path)
+      } else {
+        this.appliedConfigs.set(item.path, item)
+      }
     }
   }
 }
