@@ -22,6 +22,8 @@ class RemoteConfigManager extends EventEmitter {
     this.requestOptions = {
       method: 'POST',
       url: config.url,
+      hostname: config.hostname,
+      port: config.port,
       // TODO: do we need hostname/port here ?
       path: '/v0.7/config'
     }
