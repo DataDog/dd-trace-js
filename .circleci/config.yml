@@ -129,54 +129,54 @@ jobs:
           - PLUGINS=mongodb-core
       - image: circleci/mongo
 
-  node-bench-sirun-startup: *node-bench-sirun-base
-
-  node-bench-sirun-spans: *node-bench-sirun-base
-
-  node-bench-sirun-async_hooks: *node-bench-sirun-base
-
-  node-bench-sirun-log: *node-bench-sirun-base
-
-  node-bench-sirun-encoding: *node-bench-sirun-base
-
-  node-bench-sirun-plugin-q: *node-bench-sirun-base
-
-  node-bench-sirun-plugin-bluebird: *node-bench-sirun-base
-
-  node-bench-sirun-plugin-http: *node-bench-sirun-base
-
-  node-bench-sirun-scope: *node-bench-sirun-base
-
-  node-bench-sirun-exporting-pipeline: *node-bench-sirun-base
-
-  node-bench-sirun-plugin-net: *node-bench-sirun-base
-
-  node-bench-sirun-profiler: *node-bench-sirun-base
-
-  node-bench-sirun-plugin-dns: *node-bench-sirun-base
-
-  node-bench-sirun-plugin-graphql: *node-bench-sirun-base
-
-  node-bench-sirun-appsec: *node-bench-sirun-base
-
-  node-bench-sirun-all:
-    docker:
-      - image: node
-    working_directory: ~/dd-trace-js
-    resource_class: small
-    steps:
-      - checkout-and-yarn-install
-      - attach_workspace:
-          at: ~/dd-trace-js
-      - run:
-          name: Aggregate sirun output
-          command: |
-            mkdir -p /tmp/artifacts
-            node ~/dd-trace-js/benchmark/sirun/aggregate | tee /tmp/artifacts/summary.json
-            cp ~/dd-trace-js/benchmark/sirun/*.ndjson /tmp/artifacts/
-            node ~/dd-trace-js/benchmark/sirun/diff-recent | tee /tmp/artifacts/diff.json
-      - store_artifacts:
-          path: /tmp/artifacts
+#  node-bench-sirun-startup: *node-bench-sirun-base
+#
+#  node-bench-sirun-spans: *node-bench-sirun-base
+#
+#  node-bench-sirun-async_hooks: *node-bench-sirun-base
+#
+#  node-bench-sirun-log: *node-bench-sirun-base
+#
+#  node-bench-sirun-encoding: *node-bench-sirun-base
+#
+#  node-bench-sirun-plugin-q: *node-bench-sirun-base
+#
+#  node-bench-sirun-plugin-bluebird: *node-bench-sirun-base
+#
+#  node-bench-sirun-plugin-http: *node-bench-sirun-base
+#
+#  node-bench-sirun-scope: *node-bench-sirun-base
+#
+#  node-bench-sirun-exporting-pipeline: *node-bench-sirun-base
+#
+#  node-bench-sirun-plugin-net: *node-bench-sirun-base
+#
+#  node-bench-sirun-profiler: *node-bench-sirun-base
+#
+#  node-bench-sirun-plugin-dns: *node-bench-sirun-base
+#
+#  node-bench-sirun-plugin-graphql: *node-bench-sirun-base
+#
+#  node-bench-sirun-appsec: *node-bench-sirun-base
+#
+#  node-bench-sirun-all:
+#    docker:
+#      - image: node
+#    working_directory: ~/dd-trace-js
+#    resource_class: small
+#    steps:
+#      - checkout-and-yarn-install
+#      - attach_workspace:
+#          at: ~/dd-trace-js
+#      - run:
+#          name: Aggregate sirun output
+#          command: |
+#            mkdir -p /tmp/artifacts
+#            node ~/dd-trace-js/benchmark/sirun/aggregate | tee /tmp/artifacts/summary.json
+#            cp ~/dd-trace-js/benchmark/sirun/*.ndjson /tmp/artifacts/
+#            node ~/dd-trace-js/benchmark/sirun/diff-recent | tee /tmp/artifacts/diff.json
+#      - store_artifacts:
+#          path: /tmp/artifacts
 
   node-ci-visibility-performance-benchmark:
     docker:
@@ -211,47 +211,47 @@ jobs:
 
 workflows:
   version: 2
-  bench: &bench-jobs
-    jobs:
-      - node-bench-latest
-      - node-bench-profiler-latest
-      - node-bench-e2e-latest
-      - node-bench-sirun-startup: &matrix-exact-supported-node-versions
-          matrix:
-            parameters:
-              node-version: ["14", "16", "18"]
-      - node-bench-sirun-spans: *matrix-exact-supported-node-versions
-      - node-bench-sirun-async_hooks: *matrix-exact-supported-node-versions
-      - node-bench-sirun-log: *matrix-exact-supported-node-versions
-      - node-bench-sirun-encoding: *matrix-exact-supported-node-versions
-      - node-bench-sirun-plugin-q: *matrix-exact-supported-node-versions
-      - node-bench-sirun-plugin-bluebird: *matrix-exact-supported-node-versions
-      - node-bench-sirun-plugin-http: *matrix-exact-supported-node-versions
-      - node-bench-sirun-plugin-net: *matrix-exact-supported-node-versions
-      - node-bench-sirun-scope: *matrix-exact-supported-node-versions
-      - node-bench-sirun-exporting-pipeline: *matrix-exact-supported-node-versions
-      - node-bench-sirun-profiler: *matrix-exact-supported-node-versions
-      - node-bench-sirun-plugin-dns: *matrix-exact-supported-node-versions
-      - node-bench-sirun-plugin-graphql: *matrix-exact-supported-node-versions
-      - node-bench-sirun-appsec: *matrix-exact-supported-node-versions
-      - node-bench-sirun-all:
-          requires:
-            - node-bench-sirun-startup
-            - node-bench-sirun-spans
-            - node-bench-sirun-async_hooks
-            - node-bench-sirun-log
-            - node-bench-sirun-encoding
-            - node-bench-sirun-plugin-q
-            - node-bench-sirun-plugin-bluebird
-            - node-bench-sirun-plugin-http
-            - node-bench-sirun-plugin-net
-            - node-bench-sirun-scope
-            - node-bench-sirun-exporting-pipeline
-            - node-bench-sirun-profiler
-            - node-bench-sirun-plugin-dns
-            - node-bench-sirun-plugin-graphql
-            - node-bench-sirun-appsec
-      - node-ci-visibility-performance-benchmark
+#   bench: &bench-jobs
+#     jobs:
+#       - node-bench-latest
+#       - node-bench-profiler-latest
+#       - node-bench-e2e-latest
+#       - node-bench-sirun-startup: &matrix-exact-supported-node-versions
+#           matrix:
+#             parameters:
+#               node-version: ["14", "16", "18"]
+#       - node-bench-sirun-spans: *matrix-exact-supported-node-versions
+#       - node-bench-sirun-async_hooks: *matrix-exact-supported-node-versions
+#       - node-bench-sirun-log: *matrix-exact-supported-node-versions
+#       - node-bench-sirun-encoding: *matrix-exact-supported-node-versions
+#       - node-bench-sirun-plugin-q: *matrix-exact-supported-node-versions
+#       - node-bench-sirun-plugin-bluebird: *matrix-exact-supported-node-versions
+#       - node-bench-sirun-plugin-http: *matrix-exact-supported-node-versions
+#       - node-bench-sirun-plugin-net: *matrix-exact-supported-node-versions
+#       - node-bench-sirun-scope: *matrix-exact-supported-node-versions
+#       - node-bench-sirun-exporting-pipeline: *matrix-exact-supported-node-versions
+#       - node-bench-sirun-profiler: *matrix-exact-supported-node-versions
+#       - node-bench-sirun-plugin-dns: *matrix-exact-supported-node-versions
+#       - node-bench-sirun-plugin-graphql: *matrix-exact-supported-node-versions
+#       - node-bench-sirun-appsec: *matrix-exact-supported-node-versions
+#       - node-bench-sirun-all:
+#           requires:
+#             - node-bench-sirun-startup
+#             - node-bench-sirun-spans
+#             - node-bench-sirun-async_hooks
+#             - node-bench-sirun-log
+#             - node-bench-sirun-encoding
+#             - node-bench-sirun-plugin-q
+#             - node-bench-sirun-plugin-bluebird
+#             - node-bench-sirun-plugin-http
+#             - node-bench-sirun-plugin-net
+#             - node-bench-sirun-scope
+#             - node-bench-sirun-exporting-pipeline
+#             - node-bench-sirun-profiler
+#             - node-bench-sirun-plugin-dns
+#             - node-bench-sirun-plugin-graphql
+#             - node-bench-sirun-appsec
+#       - node-ci-visibility-performance-benchmark
 
   nightly-bench:
     triggers:
