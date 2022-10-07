@@ -1,14 +1,5 @@
 variables:
-  BASE_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/dd-trace-js:base-image-1
-build-ci-image:
-  stage: benchmarks
-  when: manual
-  tags: ["runner:docker", "size:large"]
-  image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/docker:20.10.3
-  script:
-    - cd benchmark/sirun
-    - docker build --tag ${BASE_CI_IMAGE} -f Dockerfile .
-    - docker push ${BASE_CI_IMAGE}
+  BASE_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/relenv-microbenchmarking-platform:dd-trace-js-experimental-5
 
 benchmarks:
   stage: benchmarks
