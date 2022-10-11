@@ -82,16 +82,16 @@ class RemoteConfigManager extends EventEmitter {
   updateProducts () {
     // this is needed because newListener fires before eventNames() is updated
     process.nextTick(() => {
-      this.state.client.products = this.eventNames().slice(2) // omit newListener and removeListener
+      const events = this.eventNames().slice(2) // omit newListener and removeListener
+
+      this.state.client.products = events
+
+      if (events.length) {
+        this.scheduler.start()
+      } else {
+        this.scheduler.stop()
+      }
     })
-  }
-
-  start () {
-    this.scheduler.start()
-  }
-
-  stop () {
-    this.scheduler.stop()
   }
 
   poll (cb) {

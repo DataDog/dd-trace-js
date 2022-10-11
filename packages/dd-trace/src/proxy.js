@@ -36,8 +36,6 @@ class Tracer extends NoopProxy {
 
       const rc = new RemoteConfigManager(config)
 
-      rc.start()
-
       if (config.profiling.enabled) {
         // do not stop tracer initialization if the profiler fails to be imported
         try {
