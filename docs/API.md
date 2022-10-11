@@ -58,6 +58,7 @@ tracer.use('pg', {
 <h5 id="koa"></h5>
 <h5 id="koa-tags"></h5>
 <h5 id="koa-config"></h5>
+<h5 id="mariadb"></h5>
 <h5 id="memcached"></h5>
 <h5 id="memcached-tags"></h5>
 <h5 id="memcached-config"></h5>
@@ -119,7 +120,7 @@ tracer.use('pg', {
 * [kafkajs](./interfaces/plugins.kafkajs.html)
 * [knex](./interfaces/plugins.knex.html)
 * [koa](./interfaces/plugins.koa.html)
-* [ioredis](./interfaces/plugins.ioredis.html)
+* [mariadb](./interfaces/plugins.mariadb.html)
 * [microgateway--core](./interfaces/plugins.microgateway_core.html)
 * [mocha](./interfaces/plugins.mocha.html)
 * [mongodb-core](./interfaces/plugins.mongodb_core.html)
@@ -445,14 +446,14 @@ const tracer = require('dd-trace').init()
 function handle () {
   tracer.setUser({
     id: '123456789', // *REQUIRED* Unique identifier of the user.
-    
+
     // All other fields are optional.
     email: 'jane.doe@example.com', // Email of the user.
     name: 'Jane Doe', // User-friendly name of the user.
     session_id: '987654321', // Session ID of the user.
     role: 'admin', // Role the user is making the request under.
     scope: 'read:message, write:files', // Scopes or granted authorizations the user currently possesses.
-    
+
     // Arbitrary fields are also accepted to attach custom data to the user (RBAC, Oauth, etc…)
     custom_tag: 'custom data'
   })

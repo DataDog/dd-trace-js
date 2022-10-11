@@ -245,6 +245,7 @@ tracer.use('kafkajs');
 tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
+tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('memcached');
 tracer.use('microgateway-core', httpServerOptions);
 tracer.use('mocha');
