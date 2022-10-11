@@ -85,7 +85,10 @@ describe('Plugin', () => {
         it('should run handlers in the request scope', done => {
           const server = restify.createServer()
           const interval = setInterval(() => {
-            next && next() && clearInterval(interval)
+            if (next) {
+              next()
+              clearInterval(interval)
+            }
           })
 
           let next
@@ -170,6 +173,43 @@ describe('Plugin', () => {
             appListener = server.listen(port, 'localhost', () => {
               axios
                 .get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should allow handleUncaughtException', done => {
+          const server = restify.createServer({
+            handleUncaughtExceptions: true,
+            log: {
+              trace: function () {},
+              warn: function () {}
+            }
+          })
+          server.on('uncaughtException', function (req, res, route, err) {
+            res.send(599)
+          })
+
+          server.get('/error', [(req, res, next) => {
+            throw new Error('uncaught')
+          }])
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('resource', 'GET /error')
+                expect(traces[0][0].meta).to.have.property('error.msg', 'uncaught')
+                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/error`)
+                expect(traces[0][0].meta).to.have.property('http.status_code', '599')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/error`, {
+                  validateStatus: status => status === 599
+                })
                 .catch(done)
             })
           })
