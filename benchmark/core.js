@@ -79,7 +79,7 @@ suite
   })
   .add('Writer#append', {
     onStart () {
-      writer = new Writer({ sample: () => {} })
+      writer = new Writer({ sample: () => {}, url: '' })
     },
     fn () {
       writer.append([span])
