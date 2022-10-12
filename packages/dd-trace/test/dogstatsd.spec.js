@@ -63,7 +63,7 @@ describe('dogstatsd', () => {
     httpData = []
     statusCode = 200
     httpServer = http.createServer((req, res) => {
-      expect(req.url).to.equal('/dogstatsd/v1/proxy')
+      expect(req.url).to.equal('/dogstatsd/v2/proxy')
       req.on('data', d => httpData.push(d))
       req.on('end', () => {
         res.statusCode = statusCode
@@ -73,7 +73,7 @@ describe('dogstatsd', () => {
       httpPort = httpServer.address().port
       udsPath = `/tmp/test-dogstatsd-dd-trace-uds-${Math.random()}`
       httpUdsServer = http.createServer((req, res) => {
-        expect(req.url).to.equal('/dogstatsd/v1/proxy')
+        expect(req.url).to.equal('/dogstatsd/v2/proxy')
         req.on('data', d => httpData.push(d))
         req.on('end', () => {
           res.end()
@@ -227,7 +227,7 @@ describe('dogstatsd', () => {
     setTimeout(() => {
       expect(Buffer.concat(httpData).toString()).to.equal('test.avg:0|g\ntest.avg2:2|g\n')
       done()
-    }, 100)
+    }, 10)
   })
 
   it('should support HTTP via port', (done) => {

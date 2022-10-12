@@ -15,7 +15,7 @@ class Client {
     if (options.metricsProxyUrl) {
       this._httpOptions = {
         url: options.metricsProxyUrl.toString(),
-        path: '/dogstatsd/v1/proxy'
+        path: '/dogstatsd/v2/proxy'
       }
     }
 
@@ -56,8 +56,9 @@ class Client {
     }
   }
 
-  _sendHttp (options, address, family, buffer) {
-    request(buffer, options, (err, _, code) => {
+  _sendHttp (queue, address, family, options) {
+    const buffer = Buffer.concat(queue)
+    request(buffer, options, (err) => {
       if (err) {
         log.error('HTTP error from agent: ' + err.stack)
         if (err.status) {
@@ -65,7 +66,7 @@ class Client {
           // we're not getting a 200 from the proxy endpoint. Fall back to
           // UDP and try again.
           this._httpOptions = null
-          this._sendUdp(address, family, buffer)
+          this._sendAll(queue, address, family)
         }
       }
     })
@@ -80,13 +81,13 @@ class Client {
   }
 
   _sendAll (queue, address, family, options) {
-    queue.forEach((buffer) => {
-      if (options) {
-        this._sendHttp(options, address, family, buffer)
-      } else {
+    if (options) {
+      this._sendHttp(queue, address, family, options)
+    } else {
+      queue.forEach((buffer) => {
         this._sendUdp(address, family, buffer)
-      }
-    })
+      })
+    }
   }
 
   _add (stat, value, type, tags) {
