@@ -1,9 +1,9 @@
 #!/bin/bash
 
 if test -f ~/.nvm/nvm.sh; then
-    source ~/.nvm/nvm.sh
+  source ~/.nvm/nvm.sh
 else
-    source /usr/local/nvm/nvm.sh
+  source /usr/local/nvm/nvm.sh
 fi
 
 nvm use 18
@@ -23,22 +23,22 @@ export CPU_AFFINITY=24 # Benchmarking Platform convention
 
 # TODO: Remove this loop, set MAJOR_VERSION via CI config, run in parallel
 for MAJOR_VERSION in 14 16 18; do
-    nvm use $MAJOR_VERSION
-    export VERSION=`nvm current`
-    echo "using Node.js ${VERSION}"
-    CPU_AFFINITY=24 # reset for each node.js version
+  nvm use $MAJOR_VERSION
+  export VERSION=`nvm current`
+  echo "using Node.js ${VERSION}"
+  CPU_AFFINITY=24 # reset for each node.js version
 
-    for D in *; do
-        if [ -d "${D}" ]; then
-            echo "running ${D} in background, pinned to core ${CPU_AFFINITY}..."
-            cd "${D}"
-            (time node ../run-all-variants.js >> ../results.ndjson && echo "${D} finished.") &
-            cd ..
-            ((CPU_AFFINITY=CPU_AFFINITY+1))
-        fi
-    done
+  for D in *; do
+    if [ -d "${D}" ]; then
+      echo "running ${D} in background, pinned to core ${CPU_AFFINITY}..."
+      cd "${D}"
+      (time node ../run-all-variants.js >> ../results.ndjson && echo "${D} finished.") &
+      cd ..
+      ((CPU_AFFINITY=CPU_AFFINITY+1))
+    fi
+  done
 
-    wait
+  wait
 
-    echo "all tests for ${VERSION} have now completed."
+  echo "all tests for ${VERSION} have now completed."
 done
