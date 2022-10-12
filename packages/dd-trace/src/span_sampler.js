@@ -6,7 +6,7 @@ const {
 } = require('../../../ext').priority
 const RateLimiter = require('./rate_limiter')
 
-class SpanIngestor {
+class SpanSampler {
   constructor ({ spanSamplingRules = [] }) {
     this._rules = spanSamplingRules
     this._limiters = {}
@@ -77,4 +77,4 @@ function getMaxPerSecond (maxPerSecond) {
   return maxPerSecond || Infinity
 }
 
-module.exports = SpanIngestor
+module.exports = SpanSampler

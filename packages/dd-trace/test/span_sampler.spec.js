@@ -51,11 +51,11 @@ function createDummySpans () {
   return { spans, spanContexts }
 }
 
-describe('span ingestor', () => {
+describe('span sampler', () => {
   let spans
   let spanContexts
-  let SpanIngestor
-  let ingestor
+  let SpanSampler
+  let sampler
 
   beforeEach(() => {
     const info = createDummySpans()
@@ -64,7 +64,7 @@ describe('span ingestor', () => {
 
     spanContexts[0]._trace.started.push(...spans)
 
-    SpanIngestor = require('../src/span_ingestor')
+    SpanSampler = require('../src/span_sampler')
   })
 
   describe('without drop', () => {
@@ -77,9 +77,9 @@ describe('span ingestor', () => {
     })
 
     it('should not ingest anything when trace is kept', done => {
-      ingestor = new SpanIngestor({})
+      sampler = new SpanSampler({})
       try {
-        const ingested = ingestor.ingest(spanContexts[0])
+        const ingested = sampler.ingest(spanContexts[0])
         expect(ingested).to.be.undefined
         done()
       } catch (err) { done(err) }
@@ -88,7 +88,7 @@ describe('span ingestor', () => {
 
   describe('rules match properly', () => {
     it('should properly ingest a single span', () => {
-      ingestor = new SpanIngestor({
+      sampler = new SpanSampler({
         spanSamplingRules: [
           {
             service: 'test',
@@ -99,7 +99,7 @@ describe('span ingestor', () => {
         ]
       })
 
-      ingestor.ingest(spanContexts[0])
+      sampler.ingest(spanContexts[0])
       expect(spans[0].context()._sampling.spanSampling).to.eql({
         sampleRate: 1.0,
         maxPerSecond: 5
@@ -107,7 +107,7 @@ describe('span ingestor', () => {
     })
 
     it('should properly ingest multiple single spans with one rule', () => {
-      ingestor = new SpanIngestor({
+      sampler = new SpanSampler({
         spanSamplingRules: [
           {
             service: 'test',
@@ -118,7 +118,7 @@ describe('span ingestor', () => {
         ]
       })
 
-      ingestor.ingest(spanContexts[0])
+      sampler.ingest(spanContexts[0])
       expect(spans[4].context()._sampling.spanSampling, {
         sampleRate: 1.0,
         maxPerSecond: 5
@@ -130,7 +130,7 @@ describe('span ingestor', () => {
     })
 
     it('should properly ingest mutiple single spans with multiple rules', () => {
-      ingestor = new SpanIngestor({
+      sampler = new SpanSampler({
         spanSamplingRules: [
           {
             service: 'test',
@@ -147,7 +147,7 @@ describe('span ingestor', () => {
         ]
       })
 
-      ingestor.ingest(spanContexts[0])
+      sampler.ingest(spanContexts[0])
       expect(spans[0].context()._sampling.spanSampling, {
         sampleRate: 1.0,
         maxPerSecond: 5
@@ -178,7 +178,7 @@ describe('span ingestor', () => {
 
     it('should ingest a matched span on allowed sample rate', () => {
       Math.random.returns(0.5)
-      ingestor = new SpanIngestor({
+      sampler = new SpanSampler({
         spanSamplingRules: [
           {
             service: 'test',
@@ -189,13 +189,13 @@ describe('span ingestor', () => {
         ]
       })
 
-      ingestor.ingest(spanContexts[0])
+      sampler.ingest(spanContexts[0])
       expect(spans[0].context()._sampling).to.haveOwnProperty('spanSampling')
     })
 
     it('should not ingest a matched span on non-allowed sample rate', () => {
       Math.random.returns(0.5)
-      ingestor = new SpanIngestor({
+      sampler = new SpanSampler({
         spanSamplingRules: [
           {
             service: 'test',
@@ -206,7 +206,7 @@ describe('span ingestor', () => {
         ]
       })
 
-      ingestor.ingest(spanContexts[0])
+      sampler.ingest(spanContexts[0])
       for (const span of spans) {
         expect(span.context()._sampling).to.not.haveOwnProperty('spanSampling')
       }
@@ -214,7 +214,7 @@ describe('span ingestor', () => {
 
     it('should selectively ingest based on sample rates', () => {
       Math.random.returns(0.5)
-      ingestor = new SpanIngestor({
+      sampler = new SpanSampler({
         spanSamplingRules: [
           {
             service: 'test',
@@ -231,7 +231,7 @@ describe('span ingestor', () => {
         ]
       })
 
-      ingestor.ingest(spanContexts[0])
+      sampler.ingest(spanContexts[0])
       expect(spans[2].context()._sampling).to.haveOwnProperty('spanSampling')
       expect(spans[0].context()._sampling).to.not.haveOwnProperty('spanSampling')
     })
@@ -239,7 +239,7 @@ describe('span ingestor', () => {
 
   describe('maxPerSecond', () => {
     it('should not ingest spans past the rate limit', () => {
-      ingestor = new SpanIngestor({
+      sampler = new SpanSampler({
         spanSamplingRules: [
           {
             service: 'test',
@@ -250,18 +250,18 @@ describe('span ingestor', () => {
         ]
       })
 
-      ingestor.ingest(spanContexts[0])
+      sampler.ingest(spanContexts[0])
       expect(spans[0].context()._sampling).to.haveOwnProperty('spanSampling')
       delete spans[0].context()._sampling.spanSampling
 
       // with how quickly these tests execute, the limiter should not allow the
       // next call to ingest any spans
-      ingestor.ingest(spanContexts[0])
+      sampler.ingest(spanContexts[0])
       expect(spans[0].context()._sampling).to.not.haveOwnProperty('spanSampling')
     })
 
     it('should map different rules to different rate limiters', () => {
-      ingestor = new SpanIngestor({
+      sampler = new SpanSampler({
         spanSamplingRules: [
           {
             service: 'test',
@@ -278,7 +278,7 @@ describe('span ingestor', () => {
         ]
       })
 
-      ingestor.ingest(spanContexts[0])
+      sampler.ingest(spanContexts[0])
       expect(spans[0].context()._sampling).to.haveOwnProperty('spanSampling')
       expect(spans[1].context()._sampling).to.haveOwnProperty('spanSampling')
       delete spans[0].context()._sampling.spanSampling
@@ -286,13 +286,13 @@ describe('span ingestor', () => {
 
       // with how quickly these tests execute, the limiter should not allow the
       // next call to ingest any spans
-      ingestor.ingest(spanContexts[0])
+      sampler.ingest(spanContexts[0])
       expect(spans[0].context()._sampling).to.not.haveOwnProperty('spanSampling')
       expect(spans[1].context()._sampling).to.haveOwnProperty('spanSampling')
     })
 
     it('should allow unlimited rate limits', async () => {
-      ingestor = new SpanIngestor({
+      sampler = new SpanSampler({
         spanSamplingRules: [
           {
             service: 'test',
@@ -303,7 +303,7 @@ describe('span ingestor', () => {
       })
 
       const interval = setInterval(() => {
-        ingestor.ingest(spanContexts[0])
+        sampler.ingest(spanContexts[0])
         expect(spans[0].context()._sampling).to.haveOwnProperty('spanSampling')
         delete spans[0].context()._sampling.spanSampling
       }, 1)
@@ -316,7 +316,7 @@ describe('span ingestor', () => {
     })
 
     it('should ingest if enough time has elapsed', async () => {
-      ingestor = new SpanIngestor({
+      sampler = new SpanSampler({
         spanSamplingRules: [
           {
             service: 'test',
@@ -328,12 +328,12 @@ describe('span ingestor', () => {
       })
 
       await new Promise(resolve => {
-        ingestor.ingest(spanContexts[0])
+        sampler.ingest(spanContexts[0])
         const before = spans[0].context()._sampling.spanSampling
         delete spans[0].context()._sampling.spanSampling
 
         setTimeout(() => {
-          ingestor.ingest(spanContexts[0])
+          sampler.ingest(spanContexts[0])
           const after = spans[0].context()._sampling.spanSampling
           delete spans[0].context()._sampling.spanSampling
 
