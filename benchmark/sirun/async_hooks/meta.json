@@ -1,7 +1,7 @@
 {
   "name": "async_hooks",
   "run": "node -r ../monitor .",
-  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node -r ../monitor .",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node -r ../monitor .\"",
   "cachegrind": false,
   "iterations": 5,
   "variants": {
