@@ -1,4 +1,5 @@
 'use strict'
+const { parse } = require('url')
 const request = require('../../../exporters/common/request')
 const log = require('../../../log')
 
@@ -30,9 +31,11 @@ class Writer extends BaseWriter {
       timeout: 15000
     }
 
-    options.protocol = this._url.protocol
-    options.hostname = this._url.hostname
-    options.port = this._url.port
+    const thisUrl = typeof this._url === 'object' ? this._url : parse(this._url)
+
+    options.protocol = thisUrl.protocol
+    options.hostname = thisUrl.hostname
+    options.port = thisUrl.port
 
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
     request(data, options, (err, res) => {
