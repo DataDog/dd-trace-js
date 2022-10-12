@@ -31,13 +31,13 @@ squashAffinity(metaJson)
 if (metaJson.variants) {
   const variants = metaJson.variants
 
-  for (let variant_name in variants) {
-    const variant = variants[variant_name]
+  for (const variantName in variants) {
+    const variant = variants[variantName]
     squashAffinity(variant)
   }
 }
 
-function squashAffinity(obj) {
+function squashAffinity (obj) {
   if (obj.run_with_affinity) {
     obj.run = obj.run_with_affinity
     delete obj.run_with_affinity
