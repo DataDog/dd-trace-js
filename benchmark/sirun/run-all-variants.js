@@ -3,6 +3,7 @@
 'use strict'
 
 const childProcess = require('child_process')
+const fs = require('fs')
 const path = require('path')
 const readline = require('readline')
 
@@ -24,6 +25,31 @@ function exec (...args) {
 }
 
 const metaJson = require(path.join(process.cwd(), 'meta.json'))
+
+squashAffinity(metaJson)
+
+if (metaJson.variants) {
+  const variants = metaJson.variants
+
+  for (let variant_name in variants) {
+    const variant = variants[variant_name]
+    squashAffinity(variant)
+  }
+}
+
+function squashAffinity(obj) {
+  if (obj.run_with_affinity) {
+    obj.run = obj.run_with_affinity
+    delete obj.run_with_affinity
+  }
+
+  if (obj.setup_with_affinity) {
+    obj.setup = obj.setup_with_affinity
+    delete obj.setup_with_affinity
+  }
+}
+
+fs.writeFileSync(path.join(process.cwd(), 'meta-temp.json'), JSON.stringify(metaJson, null, 2))
 
 const env = Object.assign({}, process.env, { DD_TRACE_STARTUP_LOGS: 'false' })
 
@@ -52,10 +78,16 @@ function getStdio () {
       const variants = metaJson.variants
       for (const variant in variants) {
         const variantEnv = Object.assign({}, env, { SIRUN_VARIANT: variant })
-        await exec('sirun', ['meta.json'], { env: variantEnv, stdio: getStdio() })
+        await exec('sirun', ['meta-temp.json'], { env: variantEnv, stdio: getStdio() })
       }
     } else {
-      await exec('sirun', ['meta.json'], { env, stdio: getStdio() })
+      await exec('sirun', ['meta-temp.json'], { env, stdio: getStdio() })
+    }
+
+    try {
+      fs.unlinkSync(path.join(process.cwd(), 'meta-temp.json'))
+    } catch (e) {
+      // it's ok if we can't delete a temp file
     }
   } catch (e) {
     setImmediate(() => {
