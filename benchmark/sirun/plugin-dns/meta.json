@@ -1,6 +1,7 @@
 {
   "name": "plugin-dns",
-  "run": "taskset -c 30 node index.js",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
   "iterations": 3,
   "variants": {
