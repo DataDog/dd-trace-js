@@ -1,6 +1,8 @@
 'use strict'
 
 const http = require('http')
+const path = require('path')
+const os = require('os')
 
 describe('dogstatsd', () => {
   let client
@@ -71,7 +73,7 @@ describe('dogstatsd', () => {
       })
     }).listen(0, () => {
       httpPort = httpServer.address().port
-      udsPath = `/tmp/test-dogstatsd-dd-trace-uds-${Math.random()}`
+      udsPath = path.join(os.tmpdir(), `test-dogstatsd-dd-trace-uds-${Math.random()}`)
       httpUdsServer = http.createServer((req, res) => {
         expect(req.url).to.equal('/dogstatsd/v2/proxy')
         req.on('data', d => httpData.push(d))
