@@ -58,6 +58,10 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
 
+              if (implementation !== 'pg.native') {
+                expect(traces[0][0].metrics).to.have.property('db.pid')
+              }
+
               done()
             })
 
@@ -81,6 +85,10 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
                 expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
                 expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+
+                if (implementation !== 'pg.native') {
+                  expect(traces[0][0].metrics).to.have.property('db.pid')
+                }
 
                 done()
               })
