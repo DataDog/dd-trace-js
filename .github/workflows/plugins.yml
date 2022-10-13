@@ -337,12 +337,12 @@ jobs:
     runs-on: ubuntu-latest
     services:
       pubsub:
-        image: knarz/pubsub-emulator
+        image: ridedott/pubsub-emulator
         ports:
-          - 8085:8085
+          - 8081:8081
     env:
       PLUGINS: google-cloud-pubsub
-      SERVICES: google-cloud-pubsub
+      SERVICES: gpubsub
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
