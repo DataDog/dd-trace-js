@@ -7,7 +7,7 @@ class PGPlugin extends DatabasePlugin {
   static get operation () { return 'query' }
   static get system () { return 'postgres' }
 
-  start ({ params = {}, statement }) {
+  start ({ params = {}, statement, processId }) {
     const service = getServiceName(this.config, params)
 
     this.startSpan('pg.query', {
@@ -17,6 +17,7 @@ class PGPlugin extends DatabasePlugin {
       kind: 'client',
       meta: {
         'db.type': 'postgres',
+        'db.pid': processId,
         'db.name': params.database,
         'db.user': params.user,
         'out.host': params.host,
