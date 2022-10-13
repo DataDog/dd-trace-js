@@ -7,10 +7,6 @@ class StoragePlugin extends ClientPlugin {
     super(...args)
 
     this.system = this.constructor.system || this.component
-
-    this.addTraceSub('connect', message => {
-      this.connect(message)
-    })
   }
 
   startSpan (name, options) {
