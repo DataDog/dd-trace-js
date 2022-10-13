@@ -16,6 +16,8 @@ describe('TracerProxy', () => {
   let appsec
   let telemetry
   let iast
+  let remoteConfig
+  let RemoteConfigManager
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
@@ -49,6 +51,7 @@ describe('TracerProxy', () => {
     NoopTracer = sinon.stub().returns(noop)
 
     config = {
+      tags: {},
       tracing: true,
       experimental: {},
       logger: 'logger',
@@ -68,7 +71,8 @@ describe('TracerProxy', () => {
     }
 
     appsec = {
-      enable: sinon.spy()
+      enable: sinon.spy(),
+      disable: sinon.spy()
     }
 
     telemetry = {
@@ -78,6 +82,13 @@ describe('TracerProxy', () => {
     iast = {
       enable: sinon.spy()
     }
+
+    remoteConfig = {
+      updateCapabilities: sinon.spy(),
+      on: sinon.spy()
+    }
+
+    RemoteConfigManager = sinon.stub().returns(remoteConfig)
 
     NoopProxy = proxyquire('../src/noop/proxy', {
       './tracer': NoopTracer
@@ -92,7 +103,8 @@ describe('TracerProxy', () => {
       './profiler': profiler,
       './appsec': appsec,
       './appsec/iast': iast,
-      './telemetry': telemetry
+      './telemetry': telemetry,
+      './remote_config': RemoteConfigManager
     })
 
     proxy = new Proxy()
@@ -111,6 +123,7 @@ describe('TracerProxy', () => {
 
         expect(Config).to.have.been.calledWith(options)
         expect(DatadogTracer).to.have.been.calledWith(config)
+        expect(RemoteConfigManager).to.have.been.calledOnceWith(config)
       })
 
       it('should not initialize twice', () => {
@@ -118,6 +131,7 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(DatadogTracer).to.have.been.calledOnce
+        expect(RemoteConfigManager).to.have.been.calledOnce
       })
 
       it('should not initialize when disabled', () => {
@@ -155,6 +169,9 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(appsec.enable).to.have.been.called
+        expect(remoteConfig.updateCapabilities).to.not.have.been.called
+        expect(remoteConfig.on).to.not.have.been.called
+      })
       })
 
       it('should enable iast when configured', () => {
@@ -207,7 +224,8 @@ describe('TracerProxy', () => {
           './metrics': metrics,
           './log': log,
           './profiler': null, // this will cause the import failure error
-          './appsec': appsec
+          './appsec': appsec,
+          './remote_config': RemoteConfigManager
         })
 
         const profilerImportFailureProxy = new ProfilerImportFailureProxy()
