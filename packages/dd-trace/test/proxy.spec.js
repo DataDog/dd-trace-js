@@ -163,7 +163,7 @@ describe('TracerProxy', () => {
         expect(metrics.start).to.have.been.called
       })
 
-      it('should enable appsec when configured', () => {
+      it('should enable appsec when explicitely configured to true', () => {
         config.appsec = { enabled: true }
 
         proxy.init()
@@ -172,6 +172,63 @@ describe('TracerProxy', () => {
         expect(remoteConfig.updateCapabilities).to.not.have.been.called
         expect(remoteConfig.on).to.not.have.been.called
       })
+
+      it('should not enable appsec but listen to remote config when appsec is not explicitely configured', () => {
+        config.appsec = { enabled: undefined }
+
+        proxy.init()
+
+        expect(appsec.enable).to.not.have.been.called
+        expect(remoteConfig.updateCapabilities).to.have.been.calledOnceWithExactly(2n, true)
+        expect(remoteConfig.on).to.have.been.calledOnceWith('ASM_FEATURES')
+        expect(remoteConfig.on.firstCall.args[1]).to.be.a('function')
+      })
+
+      describe('ASM_FEATURES remote config listener', () => {
+        let listener
+
+        beforeEach(() => {
+          config.appsec = { enabled: undefined }
+
+          proxy.init()
+
+          listener = remoteConfig.on.firstCall.args[1]
+        })
+
+        it('should enable appsec when listener is called with apply and enabled', () => {
+          listener('apply', { asm: { enabled: true } })
+
+          expect(appsec.enable).to.have.been.calledOnceWithExactly(config)
+        })
+
+        it('should enable appsec when listener is called with modify and enabled', () => {
+          listener('modify', { asm: { enabled: true } })
+
+          expect(appsec.enable).to.have.been.calledOnceWithExactly(config)
+        })
+
+        it('should disable appsec when listener is called with unnaply and enabled', () => {
+          listener('unnaply', { asm: { enabled: true } })
+
+          expect(appsec.disable).to.have.been.calledOnce
+        })
+
+        it('should not do anything when listener is called with apply and malformed data', () => {
+          listener('apply', {})
+
+          expect(appsec.enable).to.not.have.been.called
+          expect(appsec.disable).to.not.have.been.called
+        })
+      })
+
+      it('should not enable appsec when explicitely configured to false', () => {
+        config.appsec = { enabled: false }
+
+        proxy.init()
+
+        expect(appsec.enable).to.not.have.been.called
+        expect(remoteConfig.updateCapabilities).to.not.have.been.called
+        expect(remoteConfig.on).to.not.have.been.called
       })
 
       it('should enable iast when configured', () => {
