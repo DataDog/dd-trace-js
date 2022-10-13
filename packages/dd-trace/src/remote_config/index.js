@@ -55,7 +55,6 @@ class RemoteConfigManager extends EventEmitter {
     }
 
     this.appliedConfigs = new Map()
-    this.targetCache = new Map()
 
     this.on('newListener', this.updateProducts)
     this.on('removeListener', this.updateProducts)
@@ -154,29 +153,18 @@ class RemoteConfigManager extends EventEmitter {
 
         const newConf = {}
 
-        if (!current) toApply.push(newConf)
-        else if (current.target.hashes.sha256 !== meta.hashes.sha256) toModify.push(newConf)
-        else continue
+        if (current) {
+          if (current.hashes.sha256 === meta.hashes.sha256) continue
 
-        let target = this.targetCache.get(meta.hashes.sha256)
-
-        if (!target) {
-          let file = targetFiles.find(file => file.path === path)
-
-          if (!file) throw new Error(`Unable to find file for path ${path}`)
-
-          // TODO: verify signatures
-
-          file = fromBase64JSON(file.raw) // TODO
-
-          target = {
-            path,
-            length: meta.length,
-            hashes: meta.hashes,
-            file
-          }
+          toModify.push(newConf)
+        } else {
+          toApply.push(newConf)
         }
 
+        const file = targetFiles.find(file => file.path === path)
+        if (!file) throw new Error(`Unable to find file for path ${path}`)
+
+        // TODO: verify signatures
         // TODO: meta.signed.expires ?
 
         const { product, id } = parseConfigPath(path)
@@ -188,7 +176,9 @@ class RemoteConfigManager extends EventEmitter {
           version: meta.custom.v,
           apply_state: 1,
           apply_error: '',
-          target
+          length: meta.length,
+          hashes: meta.hashes,
+          file: fromBase64JSON(file.raw)
         })
       }
 
@@ -202,7 +192,6 @@ class RemoteConfigManager extends EventEmitter {
       this.dispatch(toModify, 'modify')
 
       this.state.client.state.config_states = []
-      this.targetCache = new Map()
       this.state.cached_target_files = []
 
       for (const conf of this.appliedConfigs.values()) {
@@ -214,14 +203,10 @@ class RemoteConfigManager extends EventEmitter {
           apply_error: conf.apply_error
         })
 
-        const target = conf.target
-
-        this.targetCache.set(target.hashes.sha256, target)
-
         this.state.cached_target_files.push({
-          path: target.path,
-          length: target.length,
-          hashes: Object.entries(target.hashes).map((entry) => ({ algorithm: entry[0], hash: entry[1] }))
+          path: conf.path,
+          length: conf.length,
+          hashes: Object.entries(conf.hashes).map((entry) => ({ algorithm: entry[0], hash: entry[1] }))
         })
       }
     }
@@ -230,7 +215,8 @@ class RemoteConfigManager extends EventEmitter {
   dispatch (list, action) {
     for (const item of list) {
       try {
-        this.emit(item.product, action, item.target.file)
+        // TODO: do we want to pass old and new config ?
+        this.emit(item.product, action, item.file)
 
         item.apply_state = 2
       } catch (err) {
@@ -248,11 +234,9 @@ class RemoteConfigManager extends EventEmitter {
 }
 
 function fromBase64JSON (str) {
-  try {
-    return JSON.parse(Buffer.from(str, 'base64').toString())
-  } catch {
-    return null
-  }
+  if (!str) return null
+
+  return JSON.parse(Buffer.from(str, 'base64').toString())
 }
 
 const configPathRegex = /^(?:datadog\/\d+|employee)\/([^/]+)\/([^/]+)\/[^/]+$/
