@@ -3,7 +3,7 @@
   "run": "node -r ../monitor .",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node -r ../monitor .\"",
   "cachegrind": false,
-  "iterations": 25,
+  "iterations": 24,
   "variants": {
     "no-hooks": { "env": { "ASYNC_HOOKS": "" } },
     "init-only": {

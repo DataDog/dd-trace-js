@@ -2,5 +2,5 @@
 
 module.exports = {
   port: 3031,
-  reqs: 750
+  reqs: 720
 }
