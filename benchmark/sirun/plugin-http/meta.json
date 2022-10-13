@@ -1,7 +1,7 @@
 {
   "name": "plugin-http",
   "cachegrind": false,
-  "iterations": 10,
+  "iterations": 20,
   "variants": {
     "client-control": {
       "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
