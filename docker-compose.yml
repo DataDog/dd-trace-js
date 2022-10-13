@@ -77,9 +77,9 @@ services:
     ports:
       - "127.0.0.1:9231:9231"
   google-cloud-pubsub:
-    image: knarz/pubsub-emulator
+    image: ridedott/pubsub-emulator
     ports:
-      - "127.0.0.1:8085:8085"
+      - "127.0.0.1:8081:8081"
   localstack:
     image: localstack/localstack:0.11.2
     ports:

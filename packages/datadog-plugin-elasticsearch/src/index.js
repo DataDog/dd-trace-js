@@ -24,7 +24,7 @@ class ElasticsearchPlugin extends DatabasePlugin {
   }
 
   finish ({ params }) {
-    const span = this.activeSpan()
+    const span = this.activeSpan
     this.config.hooks.query(span, params)
     super.finish({ params })
   }

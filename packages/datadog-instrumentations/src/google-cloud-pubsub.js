@@ -65,7 +65,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
       try {
         return emit.apply(this, arguments)
       } catch (err) {
-        receiveErrorCh.publish({ err, message })
+        receiveErrorCh.publish(err)
         throw err
       }
     })
