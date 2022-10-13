@@ -81,3 +81,22 @@ jobs:
       - name: Run
         run: ./lib-injection/run-lib-injection.sh
 
+  parametric:
+    runs-on: ubuntu-latest
+    env:
+      CLIENTS_ENABLED: nodejs
+      NODEJS_DDTRACE_MODULE: datadog/dd-trace-js#${{ github.sha }}
+    steps:
+      - name: Checkout system tests
+        uses: actions/checkout@v3
+        with:
+          repository: 'DataDog/system-tests'
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Run
+        run: |
+          cd parametric
+          pip install wheel
+          pip install -r requirements.txt
+          ./run.sh
