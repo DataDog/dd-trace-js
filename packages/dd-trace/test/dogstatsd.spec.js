@@ -73,6 +73,10 @@ describe('dogstatsd', () => {
       })
     }).listen(0, () => {
       httpPort = httpServer.address().port
+      if (os.platform() === 'win32') {
+        done()
+        return
+      }
       udsPath = path.join(os.tmpdir(), `test-dogstatsd-dd-trace-uds-${Math.random()}`)
       httpUdsServer = http.createServer((req, res) => {
         expect(req.url).to.equal('/dogstatsd/v2/proxy')
@@ -88,7 +92,9 @@ describe('dogstatsd', () => {
 
   afterEach(() => {
     httpServer.close()
-    httpUdsServer.close()
+    if (httpUdsServer) {
+      httpUdsServer.close()
+    }
   })
 
   it('should send gauges', () => {
@@ -218,7 +224,8 @@ describe('dogstatsd', () => {
     expect(udp6.send.firstCall.args[4]).to.equal('::1')
   })
 
-  it('should support HTTP via unix domain socket', (done) => {
+  const udsIt = os.platform() === 'win32' ? it.skip : it
+  udsIt('should support HTTP via unix domain socket', (done) => {
     client = new Client({
       metricsProxyUrl: `unix://${udsPath}`
     })
