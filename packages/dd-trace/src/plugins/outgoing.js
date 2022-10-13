@@ -17,7 +17,7 @@ class OutgoingPlugin extends TracingPlugin {
   }
 
   addHost (hostname, port) {
-    const span = this.activeSpan()
+    const span = this.activeSpan
 
     if (!span) return
 
