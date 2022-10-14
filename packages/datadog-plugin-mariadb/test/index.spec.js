@@ -1,5 +1,6 @@
 'use strict'
 
+const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 
@@ -98,53 +99,53 @@ describe('Plugin', () => {
           })
         })
 
-        it('should support prepared statement shorthand', done => {
-          agent
-            .use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test-mariadb')
-              expect(traces[0][0]).to.have.property('resource', 'SELECT ? + ? AS solution')
-              expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('db.name', 'db')
-              expect(traces[0][0].meta).to.have.property('db.user', 'root')
-              expect(traces[0][0].meta).to.have.property('db.type', 'mariadb')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-            })
-            .then(done)
-            .catch(done)
+        if (semver.intersects(version, '>=3')) {
+          it('should support prepared statement shorthand', done => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('service', 'test-mariadb')
+                expect(traces[0][0]).to.have.property('resource', 'SELECT ? + ? AS solution')
+                expect(traces[0][0]).to.have.property('type', 'sql')
+                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+                expect(traces[0][0].meta).to.have.property('db.name', 'db')
+                expect(traces[0][0].meta).to.have.property('db.user', 'root')
+                expect(traces[0][0].meta).to.have.property('db.type', 'mariadb')
+                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              })
+              .then(done)
+              .catch(done)
 
-          connection.execute('SELECT ? + ? AS solution', [1, 1], (error, results, fields) => {
-            if (error) throw error
-          })
-
-          // connection.unprepare('SELECT ? + ? AS solution')
-        })
-
-        it('should support prepared statements', done => {
-          agent
-            .use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test-mariadb')
-              expect(traces[0][0]).to.have.property('resource', 'SELECT ? + ? AS solution')
-              expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('db.name', 'db')
-              expect(traces[0][0].meta).to.have.property('db.user', 'root')
-              expect(traces[0][0].meta).to.have.property('db.type', 'mariadb')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-            })
-            .then(done)
-            .catch(done)
-
-          connection.prepare('SELECT ? + ? AS solution', (err, statement) => {
-            if (err) throw err
-
-            statement.execute([1, 1], (error, rows, columns) => {
+            connection.execute('SELECT ? + ? AS solution', [1, 1], (error, results, fields) => {
               if (error) throw error
             })
-
-            statement.close()
           })
-        })
+
+          it('should support prepared statements', done => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('service', 'test-mariadb')
+                expect(traces[0][0]).to.have.property('resource', 'SELECT ? + ? AS solution')
+                expect(traces[0][0]).to.have.property('type', 'sql')
+                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+                expect(traces[0][0].meta).to.have.property('db.name', 'db')
+                expect(traces[0][0].meta).to.have.property('db.user', 'root')
+                expect(traces[0][0].meta).to.have.property('db.type', 'mariadb')
+                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+              })
+              .then(done)
+              .catch(done)
+
+            connection.prepare('SELECT ? + ? AS solution', (err, statement) => {
+              if (err) throw err
+
+              statement.execute([1, 1], (error, rows, columns) => {
+                if (error) throw error
+              })
+
+              statement.close()
+            })
+          })
+        }
 
         it('should handle errors', done => {
           let error
