@@ -47,7 +47,7 @@ function wrapCommandStart (start) {
 }
 
 const name = 'mariadb'
-const versions = ['>=2.5.1']
+const versions = ['>=2.0.3']
 
 addHook({ name, file: 'lib/cmd/query.js', versions }, (Query) => {
   shimmer.wrap(Query.prototype, 'start', wrapCommandStart)

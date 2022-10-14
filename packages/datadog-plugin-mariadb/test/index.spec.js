@@ -4,12 +4,15 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 
+// https://github.com/mariadb-corporation/mariadb-connector-nodejs/commit/0a90b71ab20ab4e8b6a86a77ba291bba8ba6a34e
+const range = semver.gte(process.version, '15.0.0') ? '>=2.5.1' : '>=2'
+
 describe('Plugin', () => {
   let mariadb
   let tracer
 
   describe('mariadb', () => {
-    withVersions('mariadb', 'mariadb', version => {
+    withVersions('mariadb', 'mariadb', range, version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
