@@ -18,6 +18,7 @@ function wrapCommandStart (start) {
     const reject = callbackResource.bind(this.reject)
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
+
     shimmer.wrap(this, 'resolve', function wrapResolve () {
       return function () {
         asyncResource.runInAsyncScope(() => {
