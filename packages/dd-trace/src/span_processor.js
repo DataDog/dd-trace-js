@@ -29,7 +29,7 @@ class SpanProcessor {
 
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this._prioritySampler.sample(spanContext)
-      this._spanSampler.ingest(spanContext)
+      this._spanSampler.sample(spanContext)
 
       for (const span of started) {
         if (span._duration !== undefined) {

@@ -12,11 +12,11 @@ class SpanSampler {
     this._limiters = {}
   }
 
-  ingest (rootContext) {
-    const decision = rootContext._sampling.priority
+  sample (spanContext) {
+    const decision = spanContext._sampling.priority
     if (decision === USER_KEEP || decision === AUTO_KEEP) return
 
-    const { started } = rootContext._trace
+    const { started } = spanContext._trace
     for (const span of started) {
       const service = span.tracer()._service
       const name = span._name
