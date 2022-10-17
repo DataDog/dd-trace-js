@@ -74,38 +74,42 @@ class MochaPlugin extends Plugin {
       if (!this.config.isAgentlessEnabled) {
         return
       }
+      const store = storage.getStore()
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.tracer._version,
         getTestSuitePath(suite.file, this.sourceRoot)
       )
-      this.testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
+      const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testSessionSpan,
         tags: {
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
         }
       })
-      this._testSuites.set(suite.file, this.testSuiteSpan)
+      this.enter(testSuiteSpan, store)
+      this._testSuites.set(suite.file, testSuiteSpan)
     })
 
     this.addSub('ci:mocha:test-suite:finish', (status) => {
       if (!this.config.isAgentlessEnabled) {
         return
       }
+      const span = storage.getStore().span
       // the test status of the suite may have been set in ci:mocha:test-suite:error already
-      if (!this.testSuiteSpan.context()._tags[TEST_STATUS]) {
-        this.testSuiteSpan.setTag(TEST_STATUS, status)
+      if (!span.context()._tags[TEST_STATUS]) {
+        span.setTag(TEST_STATUS, status)
       }
-      this.testSuiteSpan.finish()
+      span.finish()
     })
 
     this.addSub('ci:mocha:test-suite:error', (err) => {
       if (!this.config.isAgentlessEnabled) {
         return
       }
-      this.testSuiteSpan.setTag('error', err)
-      this.testSuiteSpan.setTag(TEST_STATUS, 'fail')
+      const span = storage.getStore().span
+      span.setTag('error', err)
+      span.setTag(TEST_STATUS, 'fail')
     })
 
     this.addSub('ci:mocha:test:start', (test) => {
