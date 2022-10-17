@@ -5,7 +5,7 @@ const log = require('../../log')
 
 class Writer {
   constructor ({ url }) {
-    this._url = url.toString()
+    this._url = url
   }
 
   flush (done = () => {}) {
@@ -39,7 +39,7 @@ class Writer {
   }
 
   setUrl (url) {
-    this._url = url.toString()
+    this._url = url
   }
 }
 

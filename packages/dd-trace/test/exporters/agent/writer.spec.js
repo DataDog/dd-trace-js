@@ -32,7 +32,7 @@ function describeWriter (protocolVersion) {
       makePayload: sinon.stub().returns([])
     }
 
-    url = 'http://localhost:8126'
+    url = new URL('http://localhost:8126')
 
     prioritySampler = {
       update: sinon.spy()
@@ -75,7 +75,7 @@ function describeWriter (protocolVersion) {
       encoder.makePayload.returns([Buffer.alloc(0)])
       writer.flush()
       expect(request.getCall(0).args[1]).to.contain({
-        url: 'http://example.com:1234/'
+        url
       })
     })
   })
@@ -180,7 +180,7 @@ function describeWriter (protocolVersion) {
         writer.flush()
         setImmediate(() => {
           expect(request.getCall(0).args[1]).to.contain({
-            url: url.toString()
+            url
           })
         })
       })
