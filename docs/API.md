@@ -77,6 +77,7 @@ tracer.use('pg', {
 <h5 id="mysql2-config"></h5>
 <h5 id="net"></h5>
 <h5 id="next"></h5>
+<h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>
 <h5 id="paperplane"></h5>
 <h5 id="paperplane-tags"></h5>
@@ -130,6 +131,7 @@ tracer.use('pg', {
 * [mysql2](./interfaces/plugins.mysql2.html)
 * [net](./interfaces/plugins.net.html)
 * [next](./interfaces/plugins.next.html)
+* [opensearch](./interfaces/plugins.opensearch.html)
 * [oracledb](./interfaces/plugins.oracledb.html)
 * [paperplane](./interfaces/plugins.paperplane.html)
 * [pino](./interfaces/plugins.pino.html)

@@ -609,6 +609,7 @@ interface Plugins {
   "mysql2": plugins.mysql2;
   "net": plugins.net;
   "next": plugins.next;
+  "opensearch": plugins.opensearch;
   "oracledb": plugins.oracledb;
   "paperplane": plugins.paperplane;
   "pg": plugins.pg;
@@ -1271,6 +1272,12 @@ declare namespace plugins {
       request?: (span?: opentracing.Span, req?: IncomingMessage, res?: ServerResponse) => any;
     };
   }
+
+  /**
+   * This plugin automatically instruments the
+   * [opensearch](https://github.com/opensearch-project/opensearch-js) module.
+   */
+  interface opensearch extends elasticsearch {}
 
   /**
    * This plugin automatically instruments the
