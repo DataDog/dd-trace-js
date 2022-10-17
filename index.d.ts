@@ -742,7 +742,7 @@ declare namespace plugins {
      * status code as its only parameter and return `true` for success or `false`
      * for errors.
      *
-     * @default code => code < 400
+     * @default code => code < 400 || code >= 500
      */
     validateStatus?: (code: number) => boolean;
 
@@ -776,7 +776,7 @@ declare namespace plugins {
      * status code as its only parameter and return `true` for success or `false`
      * for errors.
      *
-     * @default code => code < 400
+     * @default code => code < 400 || code >= 500
      */
     validateStatus?: (code: number) => boolean;
   }
