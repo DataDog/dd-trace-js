@@ -192,7 +192,14 @@ const moleculerOptions = {
   server: {
     meta: true
   }
-}
+};
+
+const openSearchOptions = {
+  service: 'test',
+  hooks: {
+    query: (span, params) => {},
+  },
+};
 
 tracer.use('amqp10');
 tracer.use('amqplib');
@@ -259,6 +266,7 @@ tracer.use('mysql2');
 tracer.use('mysql2', { service: () => `my-custom-mysql2` });
 tracer.use('net');
 tracer.use('next');
+tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
 tracer.use('oracledb', { service: params => `${params.host}-${params.database}` });
 tracer.use('paperplane');
