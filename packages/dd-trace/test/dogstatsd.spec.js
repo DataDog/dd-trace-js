@@ -236,7 +236,7 @@ describe('dogstatsd', () => {
     setTimeout(() => {
       expect(Buffer.concat(httpData).toString()).to.equal('test.avg:0|g\ntest.avg2:2|g\n')
       done()
-    }, 10)
+    }, 100)
   })
 
   it('should support HTTP via port', (done) => {
@@ -250,7 +250,7 @@ describe('dogstatsd', () => {
     setTimeout(() => {
       expect(Buffer.concat(httpData).toString()).to.equal('test.avg:1|g\ntest.avg2:2|g\n')
       done()
-    }, 10)
+    }, 100)
   })
 
   it('should support HTTP via URL object', (done) => {
@@ -264,7 +264,7 @@ describe('dogstatsd', () => {
     setTimeout(() => {
       expect(Buffer.concat(httpData).toString()).to.equal('test.avg:1|g\ntest.avg2:2|g\n')
       done()
-    }, 10)
+    }, 100)
   })
 
   it('should fail over to UDP', (done) => {
@@ -282,6 +282,6 @@ describe('dogstatsd', () => {
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:10|c\n')
       expect(udp4.send.firstCall.args[2]).to.equal(16)
       done()
-    }, 10)
+    }, 100)
   })
 })
