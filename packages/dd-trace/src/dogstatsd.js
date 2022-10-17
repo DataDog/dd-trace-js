@@ -46,12 +46,14 @@ class Client {
 
     this._queue = []
 
-    if (this._httpOptions || this._family !== 0) {
-      this._sendAll(queue, this._host, this._family, this._httpOptions)
+    if (this._httpOptions) {
+      this._sendHttp(queue, this._host, this._family, this._httpOptions)
+    } else if (this._family !== 0) {
+      this._sendUdp(queue, this._host, this._family)
     } else {
       lookup(this._host, (err, address, family) => {
         if (err) return log.error(err)
-        this._sendAll(queue, address, family)
+        this._sendUdp(queue, address, family)
       })
     }
   }
@@ -66,28 +68,30 @@ class Client {
           // we're not getting a 200 from the proxy endpoint. Fall back to
           // UDP and try again.
           this._httpOptions = null
-          this._sendAll(queue, address, family)
+          this._sendUdp(queue, address, family)
         }
       }
     })
   }
 
-  _sendUdp (address, family, buffer) {
-    const socket = family === 6 ? this._udp6 : this._udp4
-
-    log.debug(`Sending to DogStatsD: ${buffer}`)
-
-    socket.send(buffer, 0, buffer.length, this._port, address)
-  }
-
-  _sendAll (queue, address, family, options) {
-    if (options) {
-      this._sendHttp(queue, address, family, options)
+  _sendUdp (queue) {
+    if (this._family !== 0) {
+      this._sendUdpFromQueue(queue, this._host, this._family)
     } else {
-      queue.forEach((buffer) => {
-        this._sendUdp(address, family, buffer)
+      lookup(this._host, (err, address, family) => {
+        if (err) return log.error(err)
+        this._sendUdpFromQueue(queue, address, family)
       })
     }
+  }
+
+  _sendUdpFromQueue (queue, address, family) {
+    const socket = family === 6 ? this._udp6 : this._udp4
+
+    queue.forEach((buffer) => {
+      log.debug(`Sending to DogStatsD: ${buffer}`)
+      socket.send(buffer, 0, buffer.length, this._port, address)
+    })
   }
 
   _add (stat, value, type, tags) {
