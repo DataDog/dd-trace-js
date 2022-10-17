@@ -1,5 +1,4 @@
 'use strict'
-const { parse } = require('url')
 const request = require('../../../exporters/common/request')
 const log = require('../../../log')
 
@@ -27,14 +26,9 @@ class Writer extends BaseWriter {
         'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
         ...form.getHeaders()
       },
-      timeout: 15000
+      timeout: 15000,
+      url: this._url
     }
-
-    const thisUrl = typeof this._url === 'object' ? this._url : parse(this._url)
-
-    options.protocol = thisUrl.protocol
-    options.hostname = thisUrl.hostname
-    options.port = thisUrl.port
 
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
 
