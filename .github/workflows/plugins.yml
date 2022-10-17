@@ -654,6 +654,29 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
+  opensearch:
+    runs-on: ubuntu-latest
+    services:
+      opensearch:
+        image: opensearchproject/opensearch:2
+        env:
+          plugins.security.disabled: 'true'
+          discovery.type: single-node
+        ports:
+          - 9201:9200
+    env:
+      PLUGINS: opensearch
+      SERVICES: opensearch
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - uses: codecov/codecov-action@v2
+
   # TODO: Install the Oracle client on the host and test Node >=14.
   oracledb:
     runs-on: ubuntu-latest
