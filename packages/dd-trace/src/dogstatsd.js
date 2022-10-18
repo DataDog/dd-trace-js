@@ -60,9 +60,12 @@ class Client {
         log.error('HTTP error from agent: ' + err.stack)
         if (err.status) {
           // Inside this if-block, we have connectivity to the agent, but
-          // we're not getting a 200 from the proxy endpoint. Fall back to
-          // UDP and try again.
-          this._httpOptions = null
+          // we're not getting a 200 from the proxy endpoint. If it's a 404,
+          // then we know we'll never have the endpoint, so just clear out the
+          // options. Either way, we can give UDP a try.
+          if (err.status === 404) {
+            this._httpOptions = null
+          }
           this._sendUdp(queue)
         }
       }
