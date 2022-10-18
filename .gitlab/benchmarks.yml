@@ -1,7 +1,7 @@
 variables:
-  BASE_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/relenv-microbenchmarking-platform:dd-trace-js-experimental-5
+  BASE_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/relenv-microbenchmarking-platform:dd-trace-js
 
-benchmarks:
+.benchmarks:
   stage: benchmarks
   when: on_success
   tags: ["runner:apm-k8s-tweaked-metal"]
@@ -32,3 +32,18 @@ benchmarks:
 
     KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
     FF_USE_LEGACY_KUBERNETES_EXECUTION_STRATEGY: "true"
+
+benchmark-v14:
+  extends: .benchmarks
+  variables:
+    MAJOR_VERSION: 14
+
+benchmark-v16:
+  extends: .benchmarks
+  variables:
+    MAJOR_VERSION: 16
+
+benchmark-v18:
+  extends: .benchmarks
+  variables:
+    MAJOR_VERSION: 18
