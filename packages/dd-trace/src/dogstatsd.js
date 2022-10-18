@@ -47,20 +47,15 @@ class Client {
     this._queue = []
 
     if (this._httpOptions) {
-      this._sendHttp(queue, this._host, this._family, this._httpOptions)
-    } else if (this._family !== 0) {
-      this._sendUdp(queue, this._host, this._family)
+      this._sendHttp(queue)
     } else {
-      lookup(this._host, (err, address, family) => {
-        if (err) return log.error(err)
-        this._sendUdp(queue, address, family)
-      })
+      this._sendUdp(queue)
     }
   }
 
-  _sendHttp (queue, address, family, options) {
+  _sendHttp (queue) {
     const buffer = Buffer.concat(queue)
-    request(buffer, options, (err) => {
+    request(buffer, this._httpOptions, (err) => {
       if (err) {
         log.error('HTTP error from agent: ' + err.stack)
         if (err.status) {
@@ -68,7 +63,7 @@ class Client {
           // we're not getting a 200 from the proxy endpoint. Fall back to
           // UDP and try again.
           this._httpOptions = null
-          this._sendUdp(queue, address, family)
+          this._sendUdp(queue)
         }
       }
     })
