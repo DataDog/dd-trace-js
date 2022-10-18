@@ -142,5 +142,3 @@ addHook({
 
   return Runtime
 })
-
-module.exports = { pickleHook, testCaseHook }
