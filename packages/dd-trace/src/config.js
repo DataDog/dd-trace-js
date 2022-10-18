@@ -13,6 +13,15 @@ const uuid = require('crypto-randomuuid')
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
 
+function maybeFile (filepath) {
+  if (!filepath) return
+  try {
+    return fs.readFileSync(filepath, 'utf8')
+  } catch (e) {
+    return undefined
+  }
+}
+
 function safeJsonParse (input) {
   try {
     return JSON.parse(input)
@@ -260,9 +269,24 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
         ingestion.sampleRate
       ),
       rateLimit: coalesce(options.rateLimit, process.env.DD_TRACE_RATE_LIMIT, ingestion.rateLimit),
-      rules: coalesce(options.samplingRules, safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES), []).map(rule => {
+      rules: coalesce(
+        options.samplingRules,
+        safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES),
+        []
+      ).map(rule => {
         return remapify(rule, {
           sample_rate: 'sampleRate'
+        })
+      }),
+      spanSamplingRules: coalesce(
+        options.spanSamplingRules,
+        safeJsonParse(maybeFile(process.env.DD_SPAN_SAMPLING_RULES_FILE)),
+        safeJsonParse(process.env.DD_SPAN_SAMPLING_RULES),
+        []
+      ).map(rule => {
+        return remapify(rule, {
+          sample_rate: 'sampleRate',
+          max_per_second: 'maxPerSecond'
         })
       })
     }

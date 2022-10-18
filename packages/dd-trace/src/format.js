@@ -9,6 +9,10 @@ const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
 const SAMPLING_LIMIT_DECISION = constants.SAMPLING_LIMIT_DECISION
 const SAMPLING_AGENT_DECISION = constants.SAMPLING_AGENT_DECISION
+const SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM
+const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
+const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
+const SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN
 const MEASURED = tags.MEASURED
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
@@ -45,6 +49,13 @@ function formatSpan (span) {
     start: Math.round(span._startTime * 1e6),
     duration: Math.round(span._duration * 1e6)
   }
+}
+
+function setSingleSpanIngestionTags (span, options) {
+  if (!options) return
+  addTag({}, span.metrics, SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN)
+  addTag({}, span.metrics, SPAN_SAMPLING_RULE_RATE, options.sampleRate)
+  addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
 }
 
 function extractTags (trace, span) {
@@ -95,6 +106,8 @@ function extractTags (trace, span) {
   if (span.tracer()._service === tags['service.name']) {
     addTag(trace.meta, trace.metrics, 'language', 'javascript')
   }
+
+  setSingleSpanIngestionTags(trace, context._sampling.spanSampling)
 
   addTag(trace.meta, trace.metrics, SAMPLING_PRIORITY_KEY, priority)
   addTag(trace.meta, trace.metrics, ORIGIN_KEY, origin)
