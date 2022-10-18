@@ -26,26 +26,28 @@ function exec (...args) {
 
 const metaJson = require(path.join(process.cwd(), 'meta.json'))
 
-squashAffinity(metaJson)
+if (process.env.ENABLE_AFFINITY) {
+  squashAffinity(metaJson)
 
-if (metaJson.variants) {
-  const variants = metaJson.variants
+  if (metaJson.variants) {
+    const variants = metaJson.variants
 
-  for (const variantName in variants) {
-    const variant = variants[variantName]
-    squashAffinity(variant)
-  }
-}
-
-function squashAffinity (obj) {
-  if (obj.run_with_affinity) {
-    obj.run = obj.run_with_affinity
-    delete obj.run_with_affinity
+    for (const variantName in variants) {
+      const variant = variants[variantName]
+      squashAffinity(variant)
+    }
   }
 
-  if (obj.setup_with_affinity) {
-    obj.setup = obj.setup_with_affinity
-    delete obj.setup_with_affinity
+  function squashAffinity (obj) {
+    if (obj.run_with_affinity) {
+      obj.run = obj.run_with_affinity
+      delete obj.run_with_affinity
+    }
+
+    if (obj.setup_with_affinity) {
+      obj.setup = obj.setup_with_affinity
+      delete obj.setup_with_affinity
+    }
   }
 }
 
