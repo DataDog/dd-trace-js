@@ -37,17 +37,17 @@ if (process.env.ENABLE_AFFINITY) {
       squashAffinity(variant)
     }
   }
+}
 
-  function squashAffinity (obj) {
-    if (obj.run_with_affinity) {
-      obj.run = obj.run_with_affinity
-      delete obj.run_with_affinity
-    }
+function squashAffinity (obj) {
+  if (obj.run_with_affinity) {
+    obj.run = obj.run_with_affinity
+    delete obj.run_with_affinity
+  }
 
-    if (obj.setup_with_affinity) {
-      obj.setup = obj.setup_with_affinity
-      delete obj.setup_with_affinity
-    }
+  if (obj.setup_with_affinity) {
+    obj.setup = obj.setup_with_affinity
+    delete obj.setup_with_affinity
   }
 }
 
