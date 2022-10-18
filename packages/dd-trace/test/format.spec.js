@@ -11,6 +11,10 @@ const HOSTNAME_KEY = constants.HOSTNAME_KEY
 const SAMPLING_AGENT_DECISION = constants.SAMPLING_AGENT_DECISION
 const SAMPLING_LIMIT_DECISION = constants.SAMPLING_LIMIT_DECISION
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
+const SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM
+const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
+const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
+const SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN
 
 const spanId = id('0234567812345678')
 
@@ -115,6 +119,30 @@ describe('format', () => {
         SAMPLING_AGENT_DECISION,
         SAMPLING_LIMIT_DECISION,
         SAMPLING_RULE_DECISION
+      )
+    })
+
+    it('should always add single span ingestion tags from options if present', () => {
+      spanContext._sampling.spanSampling = {
+        maxPerSecond: 5,
+        sampleRate: 1.0
+      }
+      trace = format(span)
+
+      expect(trace.metrics).to.include({
+        [SPAN_SAMPLING_MECHANISM]: SAMPLING_MECHANISM_SPAN,
+        [SPAN_SAMPLING_MAX_PER_SECOND]: 5,
+        [SPAN_SAMPLING_RULE_RATE]: 1.0
+      })
+    })
+
+    it('should not add single span ingestion tags if options not present', () => {
+      trace = format(span)
+
+      expect(trace.metrics).to.not.have.keys(
+        SPAN_SAMPLING_MECHANISM,
+        SPAN_SAMPLING_MAX_PER_SECOND,
+        SPAN_SAMPLING_RULE_RATE
       )
     })
 
