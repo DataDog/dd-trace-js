@@ -1,0 +1,265 @@
+version: 2.1
+
+orbs:
+  win: circleci/windows@2.2.0
+
+commands:
+  checkout-and-yarn-install:
+    parameters:
+      yarn-args:
+        type: string
+        default: --ignore-engines
+    steps:
+      - checkout
+      - &yarn-versions
+        run:
+          name: Versions
+          command: yarn versions
+      - &restore-yarn-cache
+        restore_cache:
+          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+      - &yarn-install
+        run:
+          name: Install dependencies
+          command: yarn install << parameters.yarn-args >>
+      - &save-yarn-cache
+        save_cache:
+          key: yarn-{{ .Environment.CIRCLE_JOB }}-{{ checksum "package.json" }}
+          paths:
+            - ./node_modules
+            - ./yarn.lock
+
+node-bench-base: &node-bench-base
+  resource_class: small
+  working_directory: ~/dd-trace-js
+  docker:
+    - image: node
+  steps:
+    - checkout-and-yarn-install
+    - run:
+        name: Benchmark Tracer
+        command: yarn bench
+
+node-bench-e2e-base: &node-bench-e2e-base
+  resource_class: medium
+  working_directory: ~/dd-trace-js
+
+  steps:
+    - checkout-and-yarn-install
+    - run:
+        name: E2E Benchmark
+        command: yarn bench:e2e
+
+node-bench-sirun-base: &node-bench-sirun-base
+  parameters:
+    node-version:
+      type: string
+      default: "latest"
+  docker:
+    - image: node:<< parameters.node-version >>
+  resource_class: small
+  working_directory: ~/dd-trace-js
+  steps:
+    - checkout-and-yarn-install
+    - run:
+        name: Install dependencies
+        command: |
+          if [[ $CIRCLE_JOB == *"plugin"* ]]; then
+            export PLUGINS=$(node -p "process.env.CIRCLE_JOB.replace(/.*plugin-/, '').replace('-latest', '').replace(/-\d*$/, '')")
+            node ./scripts/install_plugin_modules
+          fi
+    - run:
+        name: Install system deps
+        command: apt-get update && apt-get install -y valgrind wget
+    - run:
+        name: Install sirun
+        command: wget https://github.com/DataDog/sirun/releases/download/v0.1.9/sirun-v0.1.9-x86_64-unknown-linux-gnu.tar.gz && tar zxf sirun-v0.1.9-x86_64-unknown-linux-gnu.tar.gz && mv sirun /usr/bin
+    - run:
+        name: Run sirun
+        command: |
+          cd benchmark/sirun/$(node -p "process.env.CIRCLE_JOB.replace('node-bench-sirun-', '').replace('-latest', '').replace(/-\d*$/, '')")
+          node /root/dd-trace-js/benchmark/sirun/run-all-variants.js | tee ../$CIRCLE_JOB-sirun-output.ndjson
+    - persist_to_workspace:
+        root: ~/dd-trace-js
+        paths:
+          - benchmark/sirun/*-sirun-output.ndjson
+
+node-bench-profiler-base: &node-bench-profiler-base
+  resource_class: small
+  working_directory: ~/dd-trace-js
+  docker:
+    - image: node
+  steps:
+    - checkout-and-yarn-install
+    - run:
+        name: Benchmark Profiler
+        command: yarn bench:profiler
+
+node-upstream-base: &node-upstream-base
+  parameters:
+    node-version:
+      type: string
+      default: "14"
+  docker:
+    - image: node:<< parameters.node-version >>
+  working_directory: ~/dd-trace-js
+  resource_class: small
+  steps:
+    - checkout-and-yarn-install:
+        yarn-args: ""
+    - run:
+        name: Library test suite
+        command: |
+          export PLUGINS=$(node -p "process.env.CIRCLE_JOB.replace('node-upstream-', '').replace('-latest', '').replace(/-\d*$/, '')")
+          node /root/dd-trace-js/packages/dd-trace/test/plugins/suite.js
+
+jobs:
+  # Benchmarks
+
+  node-bench-latest: *node-bench-base
+
+  node-bench-profiler-latest: *node-bench-profiler-base
+
+  node-bench-e2e-latest:
+    <<: *node-bench-e2e-base
+    docker:
+      - image: node
+        environment:
+          - SERVICES=mongo
+          - PLUGINS=mongodb-core
+      - image: circleci/mongo
+
+  node-bench-sirun-startup: *node-bench-sirun-base
+
+  node-bench-sirun-spans: *node-bench-sirun-base
+
+  node-bench-sirun-async_hooks: *node-bench-sirun-base
+
+  node-bench-sirun-log: *node-bench-sirun-base
+
+  node-bench-sirun-encoding: *node-bench-sirun-base
+
+  node-bench-sirun-plugin-q: *node-bench-sirun-base
+
+  node-bench-sirun-plugin-bluebird: *node-bench-sirun-base
+
+  node-bench-sirun-plugin-http: *node-bench-sirun-base
+
+  node-bench-sirun-scope: *node-bench-sirun-base
+
+  node-bench-sirun-exporting-pipeline: *node-bench-sirun-base
+
+  node-bench-sirun-plugin-net: *node-bench-sirun-base
+
+  node-bench-sirun-profiler: *node-bench-sirun-base
+
+  node-bench-sirun-plugin-dns: *node-bench-sirun-base
+
+  node-bench-sirun-plugin-graphql: *node-bench-sirun-base
+
+  node-bench-sirun-appsec: *node-bench-sirun-base
+
+  node-bench-sirun-all:
+    docker:
+      - image: node
+    working_directory: ~/dd-trace-js
+    resource_class: small
+    steps:
+      - checkout-and-yarn-install
+      - attach_workspace:
+          at: ~/dd-trace-js
+      - run:
+          name: Aggregate sirun output
+          command: |
+            mkdir -p /tmp/artifacts
+            node ~/dd-trace-js/benchmark/sirun/aggregate | tee /tmp/artifacts/summary.json
+            cp ~/dd-trace-js/benchmark/sirun/*.ndjson /tmp/artifacts/
+            node ~/dd-trace-js/benchmark/sirun/diff-recent | tee /tmp/artifacts/diff.json
+      - store_artifacts:
+          path: /tmp/artifacts
+
+  node-ci-visibility-performance-benchmark:
+    docker:
+      - image: node
+    resource_class: medium
+    working_directory: ~/dd-trace-js
+
+    steps:
+      - checkout-and-yarn-install
+      - run:
+          name: CI Visibility Performance Overhead Test
+          command: yarn bench:e2e:ci-visibility
+
+  # Node upstream tests
+
+  node-upstream-node:
+    resource_class: small
+    working_directory: ~/dd-trace-js
+    docker:
+      - image: node:14
+    steps:
+      - checkout-and-yarn-install
+      - run:
+          name: Pull the NodeJS repository
+          command: "git clone --depth 1 --branch v14.x https://github.com/nodejs/node.git ~/node"
+      - run:
+          name: Run test script
+          command: node node-upstream-tests/node/run_tests.js
+          environment:
+            NODE_REPO_PATH: "/root/node"
+            NODE_BIN: "/usr/local/bin/node"
+
+workflows:
+  version: 2
+  bench: &bench-jobs
+    jobs:
+      - node-bench-latest
+      - node-bench-profiler-latest
+      - node-bench-e2e-latest
+      - node-bench-sirun-startup: &matrix-exact-supported-node-versions
+          matrix:
+            parameters:
+              node-version: ["14", "16", "18"]
+      - node-bench-sirun-spans: *matrix-exact-supported-node-versions
+      - node-bench-sirun-async_hooks: *matrix-exact-supported-node-versions
+      - node-bench-sirun-log: *matrix-exact-supported-node-versions
+      - node-bench-sirun-encoding: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-q: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-bluebird: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-http: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-net: *matrix-exact-supported-node-versions
+      - node-bench-sirun-scope: *matrix-exact-supported-node-versions
+      - node-bench-sirun-exporting-pipeline: *matrix-exact-supported-node-versions
+      - node-bench-sirun-profiler: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-dns: *matrix-exact-supported-node-versions
+      - node-bench-sirun-plugin-graphql: *matrix-exact-supported-node-versions
+      - node-bench-sirun-appsec: *matrix-exact-supported-node-versions
+      - node-bench-sirun-all:
+          requires:
+            - node-bench-sirun-startup
+            - node-bench-sirun-spans
+            - node-bench-sirun-async_hooks
+            - node-bench-sirun-log
+            - node-bench-sirun-encoding
+            - node-bench-sirun-plugin-q
+            - node-bench-sirun-plugin-bluebird
+            - node-bench-sirun-plugin-http
+            - node-bench-sirun-plugin-net
+            - node-bench-sirun-scope
+            - node-bench-sirun-exporting-pipeline
+            - node-bench-sirun-profiler
+            - node-bench-sirun-plugin-dns
+            - node-bench-sirun-plugin-graphql
+            - node-bench-sirun-appsec
+      - node-ci-visibility-performance-benchmark
+
+  nightly-bench:
+    triggers:
+      - schedule:
+          cron: "0 0 * * *"
+          filters:
+            branches:
+              only:
+                - master
+                - profiler
+    <<: *bench-jobs
