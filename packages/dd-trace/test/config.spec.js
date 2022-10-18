@@ -119,12 +119,18 @@ describe('Config', () => {
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_SAMPLE_RATE = '0.5'
     process.env.DD_TRACE_RATE_LIMIT = '-1'
-    /* eslint-disable-next-line */
-    process.env.DD_TRACE_SAMPLING_RULES = '[ \
-      {"service":"usersvc","name":"healthcheck","sample_rate":0.0 }, \
-      {"service":"usersvc","sample_rate":0.5}, \
-      {"service":"authsvc","sample_rate":1.0}, \
-      {"sample_rate":0.1}]'
+    process.env.DD_TRACE_SAMPLING_RULES = `[
+      {"service":"usersvc","name":"healthcheck","sample_rate":0.0 },
+      {"service":"usersvc","sample_rate":0.5},
+      {"service":"authsvc","sample_rate":1.0},
+      {"sample_rate":0.1}
+    ]`
+    process.env.DD_SPAN_SAMPLING_RULES = `[
+      {"service":"mysql","name":"mysql.query","sample_rate":0.0,"max_per_second":1},
+      {"service":"mysql","sample_rate":0.5},
+      {"service":"mysql","sample_rate":1.0},
+      {"sample_rate":0.1}
+    ]`
     process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_TRACEPARENT_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED = 'true'
@@ -160,14 +166,22 @@ describe('Config', () => {
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
-    expect(config).to.have.deep.nested.property('sampler', { sampleRate: '0.5',
+    expect(config).to.have.deep.nested.property('sampler', {
+      sampleRate: '0.5',
       rateLimit: '-1',
       rules: [
-        { 'service': 'usersvc', 'name': 'healthcheck', 'sampleRate': 0.0 },
-        { 'service': 'usersvc', 'sampleRate': 0.5 },
-        { 'service': 'authsvc', 'sampleRate': 1.0 },
-        { 'sampleRate': 0.1 }
-      ] })
+        { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
+        { service: 'usersvc', sampleRate: 0.5 },
+        { service: 'authsvc', sampleRate: 1.0 },
+        { sampleRate: 0.1 }
+      ],
+      spanSamplingRules: [
+        { service: 'mysql', name: 'mysql.query', sampleRate: 0.0, maxPerSecond: 1 },
+        { service: 'mysql', sampleRate: 0.5 },
+        { service: 'mysql', sampleRate: 1.0 },
+        { sampleRate: 0.1 }
+      ]
+    })
     expect(config).to.have.nested.property('experimental.b3', true)
     expect(config).to.have.nested.property('experimental.traceparent', true)
     expect(config).to.have.nested.property('experimental.runtimeId', true)
@@ -243,10 +257,16 @@ describe('Config', () => {
       sampleRate: 0.5,
       rateLimit: 1000,
       samplingRules: [
-        { 'service': 'usersvc', 'name': 'healthcheck', 'sampleRate': 0.0 },
-        { 'service': 'usersvc', 'sampleRate': 0.5 },
-        { 'service': 'authsvc', 'sampleRate': 1.0 },
-        { 'sampleRate': 0.1 }
+        { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
+        { service: 'usersvc', sampleRate: 0.5 },
+        { service: 'authsvc', sampleRate: 1.0 },
+        { sampleRate: 0.1 }
+      ],
+      spanSamplingRules: [
+        { service: 'mysql', name: 'mysql.query', sampleRate: 0.0, maxPerSecond: 1 },
+        { service: 'mysql', sampleRate: 0.5 },
+        { service: 'mysql', sampleRate: 1.0 },
+        { sampleRate: 0.1 }
       ],
       logger,
       tags,
@@ -311,11 +331,18 @@ describe('Config', () => {
       sampleRate: 0.5,
       rateLimit: 1000,
       rules: [
-        { 'service': 'usersvc', 'name': 'healthcheck', 'sampleRate': 0.0 },
-        { 'service': 'usersvc', 'sampleRate': 0.5 },
-        { 'service': 'authsvc', 'sampleRate': 1.0 },
-        { 'sampleRate': 0.1 }
-      ] })
+        { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
+        { service: 'usersvc', sampleRate: 0.5 },
+        { service: 'authsvc', sampleRate: 1.0 },
+        { sampleRate: 0.1 }
+      ],
+      spanSamplingRules: [
+        { service: 'mysql', name: 'mysql.query', sampleRate: 0.0, maxPerSecond: 1 },
+        { service: 'mysql', sampleRate: 0.5 },
+        { service: 'mysql', sampleRate: 1.0 },
+        { sampleRate: 0.1 }
+      ]
+    })
   })
 
   it('should initialize from the options with url taking precedence', () => {
@@ -611,6 +638,20 @@ describe('Config', () => {
       }
     })
     expect(config.iast.requestSampling).to.be.equals(30)
+  })
+
+  it('should load span sampling rules from json file', () => {
+    const path = './fixtures/config/span-sampling-rules.json'
+    process.env.DD_SPAN_SAMPLING_RULES_FILE = require.resolve(path)
+
+    const config = new Config()
+
+    expect(config.sampler).to.have.deep.nested.property('spanSamplingRules', [
+      { service: 'mysql', name: 'mysql.query', sampleRate: 0.0, maxPerSecond: 1 },
+      { service: 'mysql', sampleRate: 0.5 },
+      { service: 'mysql', sampleRate: 1.0 },
+      { sampleRate: 0.1 }
+    ])
   })
 
   context('auto configuration w/ unix domain sockets', () => {
