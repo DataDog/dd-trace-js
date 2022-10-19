@@ -1,9 +1,15 @@
-const { storage } = require('../../../../datadog-core')
-const shimmer = require('../../../../datadog-shimmer')
-const iastContextFunctions = require('./iast-context')
-const IAST_TRANSACTION_ID = Symbol('_dd.iast.transactionId')
-const TaintedUtils = require('@datadog/native-iast-taint-tracking')
+'use strict'
+
+const Module = require('module')
 const { Rewriter } = require('@datadog/native-iast-rewriter')
+const TaintedUtils = require('@datadog/native-iast-taint-tracking')
+const iastContextFunctions = require('./iast-context')
+const shimmer = require('../../../../datadog-shimmer')
+const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
+const TaintTrackingFilter = require('./taint-tracking-filter')
+
+const IAST_TRANSACTION_ID = Symbol('_dd.iast.transactionId')
 
 let rewriter;
 const getRewriter = function() {
@@ -11,7 +17,7 @@ const getRewriter = function() {
     try {
       rewriter = new Rewriter()
     }catch(e){
-      // log exception?
+      log.warn('Unable to initialize TaintTracking Rewriter')
     }
   }
   return rewriter
@@ -19,13 +25,15 @@ const getRewriter = function() {
 
 const enableRewriter = function() {
   let rewriter = getRewriter();
+  // TODO: set prepareStackTrace
   if (rewriter){
-    shimmer.wrap(module.__proto__, '_compile', compileMethod => function(content, filename){
-        // TODO: filter node_modules & set prepareStackTrace
+    shimmer.wrap(Module.prototype, '_compile', compileMethod => function(content, filename){
         try{
-          content = rewriter.rewrite(content, filename);
+          if (TaintTrackingFilter.isPrivateModule(filename)) {
+            content = rewriter.rewrite(content, filename);
+          }
         }catch(e){
-          // log exception
+          log.debug(e)
         }
         return compileMethod.apply(this, [content, filename]);
       }
@@ -34,7 +42,7 @@ const enableRewriter = function() {
 }
 
 const disableRewriter = function() {
-    shimmer.unwrap(module.__proto__, '_compile');
+    shimmer.unwrap(Module.prototype, '_compile');
 }
 
 const noop = function(res){return res}
@@ -55,40 +63,40 @@ const TaintTracking = {
         res = TaintedUtils.concat(transactionId, res, op1, op2)
       }
     }catch(e){
-      // log exception?
+      log.debug(e)
     }
     return res
   }
 };
 
 const createTransaction = function(id, iastContext){
-  const transactionId = TaintedUtils.createTransaction(id)
-  iastContext[IAST_TRANSACTION_ID] = transactionId
+  if (id && iastContext){
+    const transactionId = TaintedUtils.createTransaction(id)
+    iastContext[IAST_TRANSACTION_ID] = transactionId
+  }
 }
+
 const removeTransaction = function(iastContext){
-    if (iastContext[IAST_TRANSACTION_ID]){
+    if (iastContext && iastContext[IAST_TRANSACTION_ID]){
       const transactionId = iastContext[IAST_TRANSACTION_ID]
       TaintedUtils.removeTransaction(transactionId)
     }
 }
 
 const enableTaintTracking = function(enable){
-  let success
   if (enable && TaintedUtils) {
-    global._ddiast = global._ddiast || TaintTracking;
     enableRewriter()
-    success = true
+    global._ddiast = TaintTracking;
   }
   else {
     disableRewriter()
     global._ddiast = TaintTrackingDummy
-    success = false
   }
-  return success
 }
 
 module.exports = {
   createTransaction,
   removeTransaction,
-  enableTaintTracking
+  enableTaintTracking,
+  IAST_TRANSACTION_ID
 }
