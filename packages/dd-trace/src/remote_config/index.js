@@ -165,7 +165,10 @@ class RemoteConfigManager extends EventEmitter {
         if (!file) throw new Error(`Unable to find file for path ${path}`)
 
         // TODO: verify signatures
-        // TODO: meta.signed.expires ?
+        //       verify length
+        //       verify hash
+        //       verify _type
+        // TODO: new Date(meta.signed.expires) ignore the Targets data if it has expired ?
 
         const { product, id } = parseConfigPath(path)
 
@@ -245,7 +248,7 @@ function parseConfigPath (configPath) {
   const match = configPathRegex.exec(configPath)
 
   if (!match || !match[1] || !match[2]) {
-    throw new Error('Cant parse path')
+    throw new Error(`Unable to parse path ${configPath}`)
   }
 
   return {
