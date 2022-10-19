@@ -1,6 +1,7 @@
 'use strict'
 
 const lookup = require('dns').lookup // cache to avoid instrumentation
+const request = require('./exporters/common/request')
 const dgram = require('dgram')
 const isIP = require('net').isIP
 const log = require('./log')
@@ -10,6 +11,13 @@ const MAX_BUFFER_SIZE = 1024 // limit from the agent
 class Client {
   constructor (options) {
     options = options || {}
+
+    if (options.metricsProxyUrl) {
+      this._httpOptions = {
+        url: options.metricsProxyUrl.toString(),
+        path: '/dogstatsd/v2/proxy'
+      }
+    }
 
     this._host = options.host || 'localhost'
     this._family = isIP(this._host)
@@ -38,26 +46,50 @@ class Client {
 
     this._queue = []
 
+    if (this._httpOptions) {
+      this._sendHttp(queue)
+    } else {
+      this._sendUdp(queue)
+    }
+  }
+
+  _sendHttp (queue) {
+    const buffer = Buffer.concat(queue)
+    request(buffer, this._httpOptions, (err) => {
+      if (err) {
+        log.error('HTTP error from agent: ' + err.stack)
+        if (err.status) {
+          // Inside this if-block, we have connectivity to the agent, but
+          // we're not getting a 200 from the proxy endpoint. If it's a 404,
+          // then we know we'll never have the endpoint, so just clear out the
+          // options. Either way, we can give UDP a try.
+          if (err.status === 404) {
+            this._httpOptions = null
+          }
+          this._sendUdp(queue)
+        }
+      }
+    })
+  }
+
+  _sendUdp (queue) {
     if (this._family !== 0) {
-      this._sendAll(queue, this._host, this._family)
+      this._sendUdpFromQueue(queue, this._host, this._family)
     } else {
       lookup(this._host, (err, address, family) => {
         if (err) return log.error(err)
-        this._sendAll(queue, address, family)
+        this._sendUdpFromQueue(queue, address, family)
       })
     }
   }
 
-  _send (address, family, buffer) {
+  _sendUdpFromQueue (queue, address, family) {
     const socket = family === 6 ? this._udp6 : this._udp4
 
-    log.debug(`Sending to DogStatsD: ${buffer}`)
-
-    socket.send(buffer, 0, buffer.length, this._port, address)
-  }
-
-  _sendAll (queue, address, family) {
-    queue.forEach((buffer) => this._send(address, family, buffer))
+    queue.forEach((buffer) => {
+      log.debug(`Sending to DogStatsD: ${buffer}`)
+      socket.send(buffer, 0, buffer.length, this._port, address)
+    })
   }
 
   _add (stat, value, type, tags) {
