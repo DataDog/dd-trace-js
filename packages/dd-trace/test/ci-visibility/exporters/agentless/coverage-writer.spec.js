@@ -84,8 +84,7 @@ describe('CI Visibility Coverage Writer', () => {
       encoder.makePayload.returns(payload)
       coverageWriter.flush(() => {
         expect(request).to.have.been.calledWithMatch(payload, {
-          protocol: url.protocol,
-          hostname: url.hostname,
+          url,
           path: '/api/v2/citestcov',
           method: 'POST'
         })
