@@ -237,6 +237,8 @@ class JestPlugin extends Plugin {
         testSuiteSpan.setTag('error', new Error(errorMessage))
       }
       testSuiteSpan.finish()
+      // Suites potentially run in a different process than the session,
+      // so calling finishAllTraceSpans on the session span is not enough
       finishAllTraceSpans(testSuiteSpan)
     })
 
