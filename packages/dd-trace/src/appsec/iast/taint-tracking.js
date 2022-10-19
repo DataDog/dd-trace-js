@@ -1,10 +1,22 @@
 const { storage } = require('../../../../datadog-core')
+const shimmer = require('../../../../datadog-shimmer')
 const iastContextFunctions = require('./iast-context')
 const IAST_TRANSACTION_ID = Symbol('_dd.iast.transactionId')
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { Rewriter } = require('@datadog/native-iast-rewriter')
 
 const rewriter = new Rewriter();
+
+const enableRewriter = function() {
+    shimmer.wrap(module.__proto__, '_compile', (compileMethod) => function(content, filename){
+        try{
+            content = rewriter.rewrite(content, filename);
+        }catch(e){
+            // log exception
+        }
+        return compileMethod.apply(this, [content, filename]);
+    })
+}
 
 const noop = function(res){return res}
 const TaintTrackingDummy = {
@@ -44,6 +56,7 @@ const enableTaintTracking = function(enable){
     let success
     if (enable && TaintedUtils) {
         global._ddiast = global._ddiast || TaintTracking;
+        enableRewriter()
         success = true
     }
     else {

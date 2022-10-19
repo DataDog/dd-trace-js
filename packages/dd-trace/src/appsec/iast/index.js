@@ -11,14 +11,6 @@ const { createTransaction, removeTransaction, enableTaintTracking } = require('.
 const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
 const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 
-
-const rewrite = function(code, path){
-  try{
-      return rewriter.rewrite(code, path);
-  }catch(e){}
-  return code;
-}
-
 function enable (config) {
   enableAllAnalyzers()
   enableTaintTracking(true)
