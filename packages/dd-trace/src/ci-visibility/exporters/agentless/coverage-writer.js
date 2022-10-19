@@ -26,12 +26,9 @@ class Writer extends BaseWriter {
         'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
         ...form.getHeaders()
       },
-      timeout: 15000
+      timeout: 15000,
+      url: this._url
     }
-
-    options.protocol = this._url.protocol
-    options.hostname = this._url.hostname
-    options.port = this._url.port
 
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
 
