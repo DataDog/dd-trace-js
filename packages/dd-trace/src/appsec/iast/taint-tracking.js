@@ -18,6 +18,10 @@ const enableRewriter = function() {
     })
 }
 
+const disableRewriter = function() {
+    shimmer.unwrap(module.__proto__, '_compile');
+}
+
 const noop = function(res){return res}
 const TaintTrackingDummy = {
     plusOperator: noop
@@ -52,6 +56,7 @@ const removeTransaction = function(iastContext){
         TaintedUtils.removeTransaction(transactionId)
     }
 }
+
 const enableTaintTracking = function(enable){
     let success
     if (enable && TaintedUtils) {
@@ -60,6 +65,7 @@ const enableTaintTracking = function(enable){
         success = true
     }
     else {
+        disableRewriter()
         global._ddiast = TaintTrackingDummy
         success = false
     }
