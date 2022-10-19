@@ -151,7 +151,7 @@ class Config {
     )
     const DD_TRACE_CLIENT_IP_HEADER_DISABLED = coalesce(
       process.env.DD_TRACE_CLIENT_IP_HEADER_DISABLED,
-      false
+      true
     )
     const DD_TRACE_CLIENT_IP_HEADER = coalesce(
       process.env.DD_TRACE_CLIENT_IP_HEADER,

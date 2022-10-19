@@ -59,7 +59,7 @@ describe('Config', () => {
     expect(config).to.have.property('flushInterval', 2000)
     expect(config).to.have.property('flushMinSpans', 1000)
     expect(config).to.have.property('queryStringObfuscation').with.length(626)
-    expect(config).to.have.property('clientIpHeaderDisabled', false)
+    expect(config).to.have.property('clientIpHeaderDisabled', true)
     expect(config).to.have.property('clientIpHeader', null)
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.property('runtimeMetrics', false)
@@ -113,7 +113,7 @@ describe('Config', () => {
     process.env.DD_SERVICE = 'service'
     process.env.DD_VERSION = '1.0.0'
     process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '.*'
-    process.env.DD_TRACE_CLIENT_IP_HEADER_DISABLED = 'true'
+    process.env.DD_TRACE_CLIENT_IP_HEADER_DISABLED = 'false'
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'x-true-client-ip'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
@@ -161,7 +161,7 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('queryStringObfuscation', '.*')
-    expect(config).to.have.property('clientIpHeaderDisabled', true)
+    expect(config).to.have.property('clientIpHeaderDisabled', false)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
