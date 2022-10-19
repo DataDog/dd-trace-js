@@ -197,8 +197,16 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encode (bytes, trace) {
-    this._eventCount += trace.length
-    const events = trace.map(formatSpan)
+    const rawEvents = trace.map(formatSpan)
+
+    const testSessionEvents = rawEvents.filter(
+      event => event.type === 'test_session_end' || event.type === 'test_suite_end'
+    )
+
+    const isTestSessionTrace = !!testSessionEvents.length
+    const events = isTestSessionTrace ? testSessionEvents : rawEvents
+
+    this._eventCount += events.length
 
     for (const event of events) {
       this._encodeEvent(bytes, event)
