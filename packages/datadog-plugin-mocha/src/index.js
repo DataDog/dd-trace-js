@@ -53,7 +53,7 @@ class MochaPlugin extends Plugin {
     this.sourceRoot = process.cwd()
     this.codeOwnersEntries = getCodeOwnersFileEntries(this.sourceRoot)
 
-    this.addSub('ci:mocha:run:start', (command) => {
+    this.addSub('ci:mocha:session:start', (command) => {
       if (!this.config.isAgentlessEnabled) {
         return
       }
@@ -154,7 +154,7 @@ class MochaPlugin extends Plugin {
       this._testNameToParams[name] = params
     })
 
-    this.addSub('ci:mocha:run:finish', (status) => {
+    this.addSub('ci:mocha:session:finish', (status) => {
       if (this.testSessionSpan) {
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testSessionSpan.finish()
