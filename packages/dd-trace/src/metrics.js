@@ -48,11 +48,19 @@ module.exports = {
       nativeMetrics = null
     }
 
-    client = new Client({
+    const clientConfig = {
       host: config.dogstatsd.hostname,
       port: config.dogstatsd.port,
       tags
-    })
+    }
+
+    if (config.url) {
+      clientConfig.metricsProxyUrl = config.url
+    } else if (config.port) {
+      clientConfig.metricsProxyUrl = new URL(`http://${config.hostname || 'localhost'}:${config.port}`)
+    }
+
+    client = new Client(clientConfig)
 
     time = process.hrtime()
 

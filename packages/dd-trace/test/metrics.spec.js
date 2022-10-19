@@ -24,6 +24,8 @@ describe('metrics', () => {
     })
 
     config = {
+      hostname: 'localhost',
+      port: '8126',
       dogstatsd: {
         hostname: 'localhost',
         port: 8125
@@ -50,6 +52,7 @@ describe('metrics', () => {
       this.timeout(10000)
 
       expect(Client).to.have.been.calledWithMatch({
+        metricsProxyUrl: new URL('http://localhost:8126'),
         host: 'localhost',
         tags: [
           'str:bar',

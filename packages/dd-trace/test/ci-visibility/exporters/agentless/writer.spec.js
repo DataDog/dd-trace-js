@@ -91,8 +91,7 @@ describe('CI Visibility Writer', () => {
 
       writer.flush(() => {
         expect(request).to.have.been.calledWithMatch([expectedData], {
-          protocol: url.protocol,
-          hostname: url.hostname,
+          url,
           path: '/api/v2/citestcycle',
           method: 'POST',
           headers: {
