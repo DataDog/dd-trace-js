@@ -5,7 +5,7 @@ const { storage } = require('../../../../datadog-core')
 const overheadController = require('./overhead-controller')
 const dc = require('diagnostics_channel')
 const iastContextFunctions = require('./iast-context')
-const { createTransaction, removeTransaction, enableTaintTracking } = require('./taint-tracking')
+const { createTransaction, removeTransaction, enableTaintTracking, disableTaintTracking } = require('./taint-tracking')
 // TODO Change to `apm:http:server:request:[start|close]` when the subscription
 //  order of the callbacks can be enforce
 const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
