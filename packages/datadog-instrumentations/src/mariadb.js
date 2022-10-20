@@ -8,82 +8,56 @@ const startCh = channel('apm:mariadb:query:start')
 const finishCh = channel('apm:mariadb:query:finish')
 const errorCh = channel('apm:mariadb:query:error')
 
-function wrapConnectionAddCommand (addCommand) {
-  return function (cmd) {
-    if (!startCh.hasSubscribers) return addCommand.apply(this, arguments)
+function wrapCommandStart (start) {
+  return function () {
+    if (!startCh.hasSubscribers) return start.apply(this, arguments)
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    const name = cmd && cmd.constructor && cmd.constructor.name
-    const isCommand = typeof cmd.start === 'function'
-    const isQuery = isCommand && (name === 'Execute' || name === 'Query')
-
-    // TODO: consider supporting all commands and not just queries
-    cmd.start = isQuery
-      ? wrapStart(cmd, cmd.start, asyncResource, this.opts)
-      : bindStart(cmd, cmd.start, asyncResource)
-
-    return asyncResource.bind(addCommand, this).apply(this, arguments)
-  }
-}
-
-function bindStart (cmd, start, asyncResource) {
-  return asyncResource.bind(function (packet, connection) {
-    if (this.resolve) {
-      this.resolve = asyncResource.bind(this.resolve)
-    }
-
-    if (this.reject) {
-      this.reject = asyncResource.bind(this.reject)
-    }
-
-    return start.apply(this, arguments)
-  }, cmd)
-}
-
-function wrapStart (cmd, start, asyncResource, config) {
-  const callbackResource = new AsyncResource('bound-anonymous-fn')
-
-  return asyncResource.bind(function (packet, connection) {
-    if (!this.resolve || !this.reject) return start.apply(this, arguments)
-
-    const sql = cmd.statement ? cmd.statement.query : cmd.sql
-
-    startCh.publish({ sql, conf: config })
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
 
     const resolve = callbackResource.bind(this.resolve)
     const reject = callbackResource.bind(this.reject)
 
-    this.resolve = asyncResource.bind(function () {
-      finishCh.publish(undefined)
-      resolve.apply(this, arguments)
-    }, 'bound-anonymous-fn', this)
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    this.reject = asyncResource.bind(function (error) {
-      errorCh.publish(error)
-      finishCh.publish(undefined)
-      reject.apply(this, arguments)
-    }, 'bound-anonymous-fn', this)
+    shimmer.wrap(this, 'resolve', function wrapResolve () {
+      return function () {
+        asyncResource.runInAsyncScope(() => {
+          finishCh.publish()
+        })
 
-    this.start = start
+        return resolve.apply(this, arguments)
+      }
+    })
 
-    try {
+    shimmer.wrap(this, 'reject', function wrapReject () {
+      return function (error) {
+        asyncResource.runInAsyncScope(() => {
+          errorCh.publish(error)
+          finishCh.publish()
+        })
+
+        return reject.apply(this, arguments)
+      }
+    })
+
+    return asyncResource.runInAsyncScope(() => {
+      startCh.publish({ sql: this.sql, conf: this.opts })
       return start.apply(this, arguments)
-    } catch (err) {
-      errorCh.publish(err)
-    }
-  }, cmd)
+    })
+  }
 }
 
-addHook(
-  {
-    name: 'mariadb',
-    file: 'lib/connection.js',
-    versions: ['>=3']
-  },
-  (Connection) => {
-    shimmer.wrap(Connection.prototype, 'addCommandEnable', wrapConnectionAddCommand)
-    shimmer.wrap(Connection.prototype, 'addCommandEnablePipeline', wrapConnectionAddCommand)
+const name = 'mariadb'
+const versions = ['>=2.0.3']
 
-    return Connection
-  }
-)
+addHook({ name, file: 'lib/cmd/query.js', versions }, (Query) => {
+  shimmer.wrap(Query.prototype, 'start', wrapCommandStart)
+
+  return Query
+})
+
+addHook({ name, file: 'lib/cmd/execute.js', versions }, (Query) => {
+  shimmer.wrap(Query.prototype, 'start', wrapCommandStart)
+
+  return Query
+})
