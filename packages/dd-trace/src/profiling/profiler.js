@@ -36,9 +36,16 @@ class Profiler extends EventEmitter {
     this._logger = config.logger
     this._enabled = true
 
+    // Log errors if the source map finder fails, but don't prevent the rest
+    // of the profiler from running without source maps.
+    let mapper
     try {
-      const mapper = await maybeSourceMap(config.sourceMap)
+      mapper = await maybeSourceMap(config.sourceMap)
+    } catch (err) {
+      this._logger.error(err)
+    }
 
+    try {
       for (const profiler of config.profilers) {
         // TODO: move this out of Profiler when restoring sourcemap support
         profiler.start({ mapper })
