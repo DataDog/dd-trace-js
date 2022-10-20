@@ -42,7 +42,7 @@ const enableRewriter = function() {
 }
 
 const disableRewriter = function() {
-    shimmer.unwrap(Module.prototype, '_compile');
+  shimmer.unwrap(Module.prototype, '_compile');
 }
 
 const noop = function(res){return res}
@@ -77,10 +77,10 @@ const createTransaction = function(id, iastContext){
 }
 
 const removeTransaction = function(iastContext){
-    if (iastContext && iastContext[IAST_TRANSACTION_ID]){
-      const transactionId = iastContext[IAST_TRANSACTION_ID]
-      TaintedUtils.removeTransaction(transactionId)
-    }
+  if (iastContext && iastContext[IAST_TRANSACTION_ID]){
+    const transactionId = iastContext[IAST_TRANSACTION_ID]
+    TaintedUtils.removeTransaction(transactionId)
+  }
 }
 
 const newTaintedString = function(iastContext, string, name, type){
