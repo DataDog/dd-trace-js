@@ -24,7 +24,7 @@ describe('IAST TaintTracking', () => {
   }
 
   const store = {}
-  
+
   const shimmer = {
     wrap: (target, name, wrapper) => {},
     unwrap: (target, name) => {}
@@ -173,7 +173,6 @@ describe('IAST TaintTracking', () => {
       tainTracking.isTainted(iastContext)
       expect(taintedUtils.isTainted).not.to.be.called
     })
-
   })
 
   describe('getRanges', () => {
@@ -197,6 +196,37 @@ describe('IAST TaintTracking', () => {
       tainTracking.getRanges(iastContext)
       expect(taintedUtils.getRanges).not.to.be.called
     })
+  })
 
+  describe('plusOperator', () => {
+    beforeEach(() => {
+      iastContextFunctions.saveIastContext(store, {}, {[tainTracking.IAST_TRANSACTION_ID]: 'id'})
+      tainTracking.enableTaintTracking(true)
+    })
+
+    it('Should not call taintedUtils.concat method if result is not a string', () => {
+      global._ddiast.plusOperator(1 + 2, 1, 2)
+      expect(taintedUtils.concat).not.to.be.called
+    })
+
+    it('Should not call taintedUtils.concat method if both operands are not string', () => {
+      const a = { x: 'hello' }
+      const b = { y: 'world' }
+      global._ddiast.plusOperator(a + b, a, b)
+      expect(taintedUtils.concat).not.to.be.called
+    })
+
+    it('Should not call taintedUtils.concat method if there is not an active transaction', () => {
+      iastContextFunctions.saveIastContext(store, {}, {[tainTracking.IAST_TRANSACTION_ID]: null})
+      global._ddiast.plusOperator('helloworld', 'hello', 'world')
+      expect(taintedUtils.concat).not.to.be.called
+    })
+
+    it('Should not fail if taintTracking is not enabled', () => {
+      tainTracking.enableTaintTracking(false)
+      const res = global._ddiast.plusOperator('helloworld', 'hello', 'world')
+      expect(taintedUtils.concat).not.to.be.called
+      expect(res).equal('helloworld')
+    })
   })
 })
