@@ -13,7 +13,7 @@ const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 
 function enable (config) {
   enableAllAnalyzers()
-  enableTaintTracking(true)
+  enableTaintTracking()
   requestStart.subscribe(onIncomingHttpRequestStart)
   requestClose.subscribe(onIncomingHttpRequestEnd)
   overheadController.configure(config.iast)
@@ -21,7 +21,7 @@ function enable (config) {
 
 function disable () {
   disableAllAnalyzers()
-  enableTaintTracking(false)
+  disableTaintTracking()
   if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
   if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestEnd)
 }

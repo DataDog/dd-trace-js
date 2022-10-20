@@ -83,20 +83,47 @@ const removeTransaction = function(iastContext){
     }
 }
 
-const enableTaintTracking = function(enable){
-  if (enable && TaintedUtils) {
+const newTaintedString = function(iastContext, string, name, type){
+    if (iastContext && iastContext[IAST_TRANSACTION_ID]){
+      const transactionId = iastContext[IAST_TRANSACTION_ID]
+      TaintedUtils.newTaintedString(transactionId, string, name, type)
+    }
+}
+
+const isTainted = function(iastContext, string){
+    if (iastContext && iastContext[IAST_TRANSACTION_ID]){
+      const transactionId = iastContext[IAST_TRANSACTION_ID]
+      TaintedUtils.isTainted(transactionId, string) 
+    }
+}
+
+const getRanges = function(iastContext, string){
+    if (iastContext && iastContext[IAST_TRANSACTION_ID]){
+      const transactionId = iastContext[IAST_TRANSACTION_ID]
+      TaintedUtils.getRanges(transactionId, string) 
+    }
+}
+
+const enableTaintTracking = function(){
+  if (TaintedUtils) {
     enableRewriter()
     global._ddiast = TaintTracking;
   }
-  else {
-    disableRewriter()
-    global._ddiast = TaintTrackingDummy
-  }
 }
+
+const disableTaintTracking = function() {
+  disableRewriter()
+  global._ddiast = TaintTrackingDummy
+}
+
 
 module.exports = {
   createTransaction,
   removeTransaction,
   enableTaintTracking,
+  disableTaintTracking,
+  newTaintedString,
+  isTainted,
+  getRanges,
   IAST_TRANSACTION_ID
 }

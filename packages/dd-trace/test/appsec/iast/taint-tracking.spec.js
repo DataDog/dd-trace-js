@@ -11,6 +11,9 @@ describe('IAST TaintTracking', () => {
   const taintedUtils = {
     createTransaction: id => id,
     removeTransaction: id => id,
+    newTaintedString: (id, name, type) => id,
+    isTainted: id => id,
+    getRanges: id => id,
     concat: (id, res, op1, op2) => id
   }
   
@@ -93,7 +96,7 @@ describe('IAST TaintTracking', () => {
     })
 
     it('Should set a not dummy global._ddiast object', () => {
-      tainTracking.enableTaintTracking(true)
+      tainTracking.enableTaintTracking()
       
       // taintedUtils is declared in global scope
       expect(global._ddiast).not.to.be.undefined
@@ -108,7 +111,7 @@ describe('IAST TaintTracking', () => {
     })
 
     it('Should set dummy global._ddiast object', () => {
-      tainTracking.enableTaintTracking(false)
+      tainTracking.disableTaintTracking()
 
       // dummy taintedUtils is declared in global scope
       expect(global._ddiast).not.to.be.undefined
@@ -121,5 +124,79 @@ describe('IAST TaintTracking', () => {
       // remove Module.prototype._compile wrap
       expect(shimmer.unwrap).to.be.calledWith(Module.prototype, '_compile')
     })
+  })
+
+  describe('newTaintedString', () => {
+    it('Given not null iastContext with defined IAST_TRANSACTION_ID should call TaintedUtils.newTaintedString', () => {
+      const iastContext = {
+        [tainTracking.IAST_TRANSACTION_ID]: 'id'
+      }
+      const value = 'value'
+      const param = 'param'
+      const type = 'REQUEST'
+      tainTracking.newTaintedString(iastContext, value, param, type)
+      expect(taintedUtils.newTaintedString).to.be.called
+      expect(taintedUtils.newTaintedString).to.be.calledWithExactly(iastContext[tainTracking.IAST_TRANSACTION_ID], value, param, type)
+    })
+    it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.newTaintedString', () => {
+      const iastContext = {}
+      tainTracking.newTaintedString(iastContext)
+      expect(taintedUtils.newTaintedString).not.to.be.called
+    })
+
+    it('Given null iastContext should call not TaintedUtils.newTaintedString', () => {
+      const iastContext = null
+      tainTracking.newTaintedString(iastContext)
+      expect(taintedUtils.newTaintedString).not.to.be.called
+    })
+
+  })
+
+  describe('isTainted', () => {
+    it('Given not null iastContext with defined IAST_TRANSACTION_ID should call TaintedUtils.isTainted', () => {
+      const iastContext = {
+        [tainTracking.IAST_TRANSACTION_ID]: 'id'
+      }
+      const value = 'value'
+      tainTracking.isTainted(iastContext, value)
+      expect(taintedUtils.isTainted).to.be.called
+      expect(taintedUtils.isTainted).to.be.calledWithExactly(iastContext[tainTracking.IAST_TRANSACTION_ID], value)
+    })
+    it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.isTainted', () => {
+      const iastContext = {}
+      tainTracking.isTainted(iastContext)
+      expect(taintedUtils.isTainted).not.to.be.called
+    })
+
+    it('Given null iastContext should call not TaintedUtils.isTainted', () => {
+      const iastContext = null
+      tainTracking.isTainted(iastContext)
+      expect(taintedUtils.isTainted).not.to.be.called
+    })
+
+  })
+
+  describe('getRanges', () => {
+    it('Given not null iastContext with defined IAST_TRANSACTION_ID should call TaintedUtils.getRanges', () => {
+      const iastContext = {
+        [tainTracking.IAST_TRANSACTION_ID]: 'id'
+      }
+      const value = 'value'
+      tainTracking.getRanges(iastContext, value)
+      expect(taintedUtils.getRanges).to.be.called
+      expect(taintedUtils.getRanges).to.be.calledWithExactly(iastContext[tainTracking.IAST_TRANSACTION_ID], value)
+    })
+    it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.getRanges', () => {
+      const iastContext = {}
+      tainTracking.getRanges(iastContext)
+      expect(taintedUtils.getRanges).not.to.be.called
+    })
+
+    it('Given null iastContext should call not TaintedUtils.getRanges', () => {
+      const iastContext = null
+      tainTracking.getRanges(iastContext)
+      expect(taintedUtils.getRanges).not.to.be.called
+    })
+
   })
 })
