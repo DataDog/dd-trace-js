@@ -25,7 +25,7 @@ const getRewriter = function () {
     try {
       rewriter = new Rewriter()
     } catch (e) {
-      log.warn('Unable to initialize TaintTracking Rewriter')
+      log.warn(`Unable to initialize TaintTracking Rewriter: ${e.message}`)
     }
   }
   return rewriter
