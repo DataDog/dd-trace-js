@@ -61,6 +61,8 @@
     "@datadog/native-appsec": "^1.2.1",
     "@datadog/native-metrics": "^1.5.0",
     "@datadog/pprof": "^1.1.0",
+    "@datadog/native-iast-rewriter": "file:datadog-native-iast-rewriter-0.1.0-beta.0.tgz",
+    "@datadog/native-iast-rewriter-linux-x64-gnu": "file:datadog-native-iast-rewriter-linux-x64-gnu-0.1.0-beta.0.tgz",
     "@datadog/native-iast-taint-tracking": "file:datadog-native-iast-taint-tracking-0.1.0-beta.0.tgz",
     "@datadog/sketches-js": "^2.1.0",
     "crypto-randomuuid": "^1.0.0",
