@@ -4,6 +4,7 @@ const Span = require('../src/opentracing/span')
 const { storage } = require('../../datadog-core')
 const Config = require('../src/config')
 const tags = require('../../../ext/tags')
+const { expect } = require('chai')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -223,6 +224,20 @@ describe('Tracer', () => {
             done()
           })
           .catch(done)
+      })
+
+      it('should not treat rejections as handled', done => {
+        const err = new Error('boom')
+
+        tracer
+          .trace('name', {}, () => {
+            return Promise.reject(err)
+          })
+
+        process.once('unhandledRejection', (received) => {
+          expect(received).to.equal(err)
+          done()
+        })
       })
     })
 
