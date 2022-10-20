@@ -1,12 +1,20 @@
 'use strict'
 
 const Module = require('module')
-const { Rewriter } = require('@datadog/native-iast-rewriter')
-const TaintedUtils = require('@datadog/native-iast-taint-tracking')
-const iastContextFunctions = require('../iast-context')
+
 const shimmer = require('../../../../../datadog-shimmer')
 const { storage } = require('../../../../../datadog-core')
+const iastContextFunctions = require('../iast-context')
 const log = require('../../../log')
+
+let Rewriter
+let TaintedUtils
+try {
+  Rewriter = require('@datadog/native-iast-rewriter').Rewriter
+  TaintedUtils = require('@datadog/native-iast-taint-tracking')
+} catch(e) {
+  log.error(e)
+}
 const TaintTrackingFilter = require('./taint-tracking-filter')
 
 const IAST_TRANSACTION_ID = Symbol('_dd.iast.transactionId')
