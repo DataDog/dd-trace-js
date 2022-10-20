@@ -1,8 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
 const Module = require('module')
-const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const iastContextFunctions = require('../../../src/appsec/iast/iast-context')
 
@@ -39,7 +37,8 @@ describe('IAST TaintTracking', () => {
 
   describe('createTransaction', () => {
 
-    it('Given not null id and not null iastContext should call TaintedUtils.createTransaction and set IAST_TRANSACTION_ID in iastContext', () => {
+    it('Given not null id and not null iastContext should call TaintedUtils.createTransaction and set IAST_TRANSACTION_ID \
+in iastContext', () => {
       const iastContext = {}
       const transactionId = 'id'
       tainTracking.createTransaction(transactionId, iastContext)

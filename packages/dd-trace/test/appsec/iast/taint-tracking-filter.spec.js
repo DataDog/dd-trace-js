@@ -1,7 +1,5 @@
 'use strict'
-const { expect } = require('chai')
 const fs = require('fs')
-const sinon = require('sinon')
 
 describe('IAST TaintTrackingFilter', () => {
   let filter
