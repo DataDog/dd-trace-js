@@ -49,8 +49,8 @@ function onIncomingHttpRequestEnd (data) {
     const store = storage.getStore()
     const iastContext = iastContextFunctions.getIastContext(storage.getStore())
     if (iastContext && iastContext.rootSpan) {
-        sendVulnerabilities(iastContext, iastContext.rootSpan)
-        removeTransaction(iastContext)
+      sendVulnerabilities(iastContext, iastContext.rootSpan)
+      removeTransaction(iastContext)
     }
     // TODO web.getContext(data.req) is required when the request is aborted
     if (iastContextFunctions.cleanIastContext(store, web.getContext(data.req), iastContext)) {
