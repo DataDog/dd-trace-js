@@ -25,7 +25,7 @@ const getRewriter = function () {
     try {
       rewriter = new Rewriter()
     } catch (e) {
-      log.warn('Unable to initialize TaintTracking Rewriter')
+      log.warn(`Unable to initialize TaintTracking Rewriter: ${e.message}`)
     }
   }
   return rewriter
@@ -101,14 +101,14 @@ const newTaintedString = function (iastContext, string, name, type) {
 const isTainted = function (iastContext, string) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
-    TaintedUtils.isTainted(transactionId, string)
+    return TaintedUtils.isTainted(transactionId, string)
   }
 }
 
 const getRanges = function (iastContext, string) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
-    TaintedUtils.getRanges(transactionId, string)
+    return TaintedUtils.getRanges(transactionId, string)
   }
 }
 
