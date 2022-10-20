@@ -1,5 +1,4 @@
 const IAST_CONTEXT_KEY = Symbol('_dd.iast.context')
-const { storage } = require('../../../../datadog-core')
 
 function getIastContext (store) {
   return store && store[IAST_CONTEXT_KEY]
