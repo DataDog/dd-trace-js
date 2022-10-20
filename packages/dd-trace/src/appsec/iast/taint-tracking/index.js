@@ -86,21 +86,21 @@ const removeTransaction = function (iastContext) {
 const newTaintedString = function (iastContext, string, name, type) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
-    TaintedUtils.newTaintedString(transactionId, string, name, type)
+    return TaintedUtils.newTaintedString(transactionId, string, name, type)
   }
 }
 
 const isTainted = function (iastContext, string) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
-    TaintedUtils.isTainted(transactionId, string)
+    return TaintedUtils.isTainted(transactionId, string)
   }
 }
 
 const getRanges = function (iastContext, string) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
-    TaintedUtils.getRanges(transactionId, string)
+    return TaintedUtils.getRanges(transactionId, string)
   }
 }
 
