@@ -1,19 +1,37 @@
 'use strict'
 
 const { expect } = require('chai')
+const Module = require('module')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const iastContextFunctions = require('../../../src/appsec/iast/iast-context')
 
 describe('IAST TaintTracking', () => {
-  let taintedUtils
   let tainTracking
-  beforeEach(() => {
-    taintedUtils = {
-      createTransaction: id => id,
-      removeTransaction: id => id
+  const taintedUtils = {
+    createTransaction: id => id,
+    removeTransaction: id => id,
+    concat: (id, res, op1, op2) => id
+  }
+  
+  const datadogCore = {
+    storage: {
+      getStore: () => store
     }
+  }
+
+  const store = {}
+  
+  const shimmer = {
+    wrap: (target, name, wrapper) => {},
+    unwrap: (target, name) => {}
+  }
+
+  beforeEach(() => {
     tainTracking = proxyquire('../../../src/appsec/iast/taint-tracking', {
-      '@datadog/native-iast-taint-tracking': sinon.spy(taintedUtils)
+      '@datadog/native-iast-taint-tracking': sinon.spy(taintedUtils),
+      '../../../../datadog-core': datadogCore,
+      '../../../../datadog-shimmer': sinon.spy(shimmer)
     })
   })
 
@@ -69,6 +87,39 @@ describe('IAST TaintTracking', () => {
   })
 
   describe('enableTaintTracking', () => {
-    
+
+    beforeEach(() => {
+      iastContextFunctions.saveIastContext(store, {}, {[tainTracking.IAST_TRANSACTION_ID]: 'id'})
+    })
+
+    it('Should set a not dummy global._ddiast object', () => {
+      tainTracking.enableTaintTracking(true)
+      
+      // taintedUtils is declared in global scope
+      expect(global._ddiast).not.to.be.undefined
+      expect(global._ddiast.plusOperator).not.to.be.undefined
+
+      // taintedUtils methods are called
+      global._ddiast.plusOperator('helloworld', 'hello', 'world')
+      expect(taintedUtils.concat).to.be.called
+
+      // Module.prototype._compile wrap is setted
+      expect(shimmer.wrap).to.be.calledWith(Module.prototype, '_compile')
+    })
+
+    it('Should set dummy global._ddiast object', () => {
+      tainTracking.enableTaintTracking(false)
+
+      // dummy taintedUtils is declared in global scope
+      expect(global._ddiast).not.to.be.undefined
+      expect(global._ddiast.plusOperator).not.to.be.undefined
+
+      // taintedUtils methods are not called
+      global._ddiast.plusOperator('helloworld', 'hello', 'world')
+      expect(taintedUtils.concat).not.to.be.called
+
+      // remove Module.prototype._compile wrap
+      expect(shimmer.unwrap).to.be.calledWith(Module.prototype, '_compile')
+    })
   })
 })
