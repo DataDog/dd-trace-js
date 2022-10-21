@@ -6,6 +6,7 @@ const iastContextFunctions = require('../../../src/appsec/iast/iast-context')
 
 describe('IAST TaintTracking', () => {
   let taintTracking
+  let rewriter
   const taintedUtils = {
     createTransaction: id => id,
     removeTransaction: id => id,
@@ -29,10 +30,13 @@ describe('IAST TaintTracking', () => {
   }
 
   beforeEach(() => {
+    rewriter = proxyquire('../../../src/appsec/iast/taint-tracking/rewriter', {
+      '../../../../../datadog-shimmer': sinon.spy(shimmer)
+    })
     taintTracking = proxyquire('../../../src/appsec/iast/taint-tracking', {
       '@datadog/native-iast-taint-tracking': sinon.spy(taintedUtils),
       '../../../../../datadog-core': datadogCore,
-      '../../../../../datadog-shimmer': sinon.spy(shimmer)
+      '../../../src/appsec/iast/taint-tracking/rewriter': rewriter
     })
   })
 
