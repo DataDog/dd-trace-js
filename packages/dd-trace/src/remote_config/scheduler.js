@@ -20,9 +20,11 @@ class Scheduler {
   start () {
     if (this._timer) return
 
-    setImmediate(() => this.func())
+    const cb = () => this.func()
 
-    this._timer = setInterval(() => this.func(), this._interval)
+    setImmediate(cb)
+
+    this._timer = setInterval(cb, this._interval)
 
     this._timer.unref && this._timer.unref()
   }
