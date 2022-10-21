@@ -58,7 +58,7 @@ class Tracer extends NoopProxy {
           rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
 
           rc.on('ASM_FEATURES', (action, conf) => {
-            if (typeof conf?.asm?.enabled === 'boolean') {
+            if (conf && conf.asm && typeof conf.asm.enabled === 'boolean') {
               if (action === 'apply' || action === 'modify') action = conf.asm.enabled // take control
               else action = config.appsec.enabled // give back control to local config
 
