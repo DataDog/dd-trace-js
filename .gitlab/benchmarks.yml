@@ -25,10 +25,10 @@ variables:
       - reports/
     expire_in: 3 months
   variables:
-    UPSTREAM_PROJECT_ID: $CI_PROJECT_ID
-    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
-    UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME
-    UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA
+    UPSTREAM_PROJECT_ID: $CI_PROJECT_ID # The ID of the current project. This ID is unique across all projects on the GitLab instance.
+    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME # "dd-trace-js", probably
+    UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME # The branch or tag name for which project is built.
+    UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA # The commit revision the project is built for.
 
     KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
     FF_USE_LEGACY_KUBERNETES_EXECUTION_STRATEGY: "true"
@@ -36,7 +36,8 @@ variables:
 .benchmarks-merge-master:
   extends: .benchmarks
   rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "tlhunter/benchmark-on-commit-master"
+    #- if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 benchmark-v14:
   extends: .benchmarks
