@@ -371,7 +371,6 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | flushInterval   | -                                  | `2000`         | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | flushMinSpans   | `DD_TRACE_PARTIAL_FLUSH_MIN_SPANS` | `1000`         | Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces. |
 | -               | `DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP` | -      | A regex to redact sensitive data from incoming requests' querystring reported in the `http.url` tag (matches will be replaced with `<redacted>`). Can be an empty string to disable redaction or `.*` to redact all querystring. **WARNING: this regex will execute for every incoming request on an unsafe input (url), please make sure you use a safe regex.** |
-| -               | `DD_TRACE_CLIENT_IP_HEADER_DISABLED` | `true`      | Whether to disable HTTP client IP reporting. Setting this to `false` will enable collection of the `http.client_ip` tag. |
 | -               | `DD_TRACE_CLIENT_IP_HEADER`        | -              | Custom header name to source the `http.client_ip` tag from. |
 | lookup          | -                                  | `dns.lookup()` | Custom function for DNS lookups when sending requests to the agent. |
 | protocolVersion | `DD_TRACE_AGENT_PROTOCOL_VERSION`  | `0.4`          | Protocol version to use for requests to the agent. The version configured must be supported by the agent version installed or all traces will be dropped. |
