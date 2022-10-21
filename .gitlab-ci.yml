@@ -1,6 +1,7 @@
 stages:
-  - benchmarks
   - deploy
+  - benchmarks
+  - benchmarks-pr-comment
 
 include: ".gitlab/benchmarks.yml"
 
