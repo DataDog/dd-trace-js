@@ -36,8 +36,8 @@ variables:
 .benchmarks-merge-master:
   extends: .benchmarks
   rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "tlhunter/benchmark-on-commit-master"
-    #- if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    #- if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "tlhunter/benchmark-on-commit-master"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 benchmark-v14:
   extends: .benchmarks
