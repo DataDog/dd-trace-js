@@ -3,13 +3,13 @@
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../iast-context')
 const log = require('../../../log')
-const {enableRewriter, disableRewriter} = require('./rewriter')
+const { enableRewriter, disableRewriter } = require('./rewriter')
 const IAST_TRANSACTION_ID = Symbol('_dd.iast.transactionId')
 
 let TaintedUtils
 try {
   TaintedUtils = require('@datadog/native-iast-taint-tracking')
-} catch(e) {
+} catch (e) {
   log.error(e)
 }
 
