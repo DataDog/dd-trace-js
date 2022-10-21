@@ -2,6 +2,7 @@
 
 const Module = require('module')
 const shimmer = require('../../../../../datadog-shimmer')
+const log = require('../../../log')
 const TaintTrackingFilter = require('./filter')
 
 let Rewriter
@@ -10,21 +11,21 @@ try {
   const iastRewriter = require('@datadog/native-iast-rewriter')
   Rewriter = iastRewriter.Rewriter
   getPrepareStackTrace = iastRewriter.getPrepareStackTrace
-} catch(e) {
+} catch (e) {
   log.error(e)
 }
 
 const originalPrepareStackTrace = Error.prepareStackTrace
-function getPrepareStackTraceAccessor() {
-    let actual = getPrepareStackTrace(originalPrepareStackTrace)
-    return  {
-        get() {
-            return actual
-        },
-        set(value) {
-            actual = getPrepareStackTrace(value)
-        }
+function getPrepareStackTraceAccessor () {
+  let actual = getPrepareStackTrace(originalPrepareStackTrace)
+  return {
+    get () {
+      return actual
+    },
+    set (value) {
+      actual = getPrepareStackTrace(value)
     }
+  }
 }
 
 let rewriter
@@ -42,7 +43,6 @@ const getRewriter = function () {
 const enableRewriter = function () {
   const rewriter = getRewriter()
   if (rewriter) {
-    
     Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
 
     shimmer.wrap(Module.prototype, '_compile', compileMethod => function (content, filename) {
@@ -65,5 +65,5 @@ const disableRewriter = function () {
 }
 
 module.exports = {
-    enableRewriter, disableRewriter
+  enableRewriter, disableRewriter
 }
