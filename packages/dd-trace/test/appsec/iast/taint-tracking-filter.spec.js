@@ -9,7 +9,7 @@ describe('IAST TaintTrackingFilter', () => {
       sinon.stub(fs, 'existsSync').returns((filepath) => {
         return filepath === 'node_modules/test-package/package.json'
       });
-      filter = require('../../../src/appsec/iast/taint-tracking/taint-tracking-filter')
+      filter = require('../../../src/appsec/iast/taint-tracking/filter')
     })
 
     afterEach(sinon.restore)

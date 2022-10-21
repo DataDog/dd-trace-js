@@ -1,56 +1,16 @@
 'use strict'
 
-const Module = require('module')
-
-const shimmer = require('../../../../../datadog-shimmer')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../iast-context')
 const log = require('../../../log')
+const {enableRewriter, disableRewriter} = require('./rewriter')
+const IAST_TRANSACTION_ID = Symbol('_dd.iast.transactionId')
 
-let Rewriter
 let TaintedUtils
 try {
-  Rewriter = require('@datadog/native-iast-rewriter').Rewriter
   TaintedUtils = require('@datadog/native-iast-taint-tracking')
 } catch(e) {
   log.error(e)
-}
-const TaintTrackingFilter = require('./taint-tracking-filter')
-
-const IAST_TRANSACTION_ID = Symbol('_dd.iast.transactionId')
-
-let rewriter
-const getRewriter = function () {
-  if (!rewriter) {
-    try {
-      rewriter = new Rewriter()
-    } catch (e) {
-      log.warn(`Unable to initialize TaintTracking Rewriter: ${e.message}`)
-    }
-  }
-  return rewriter
-}
-
-const enableRewriter = function () {
-  const rewriter = getRewriter()
-  // TODO: set prepareStackTrace
-  if (rewriter) {
-    shimmer.wrap(Module.prototype, '_compile', compileMethod => function (content, filename) {
-      try {
-        if (TaintTrackingFilter.isPrivateModule(filename)) {
-          content = rewriter.rewrite(content, filename)
-        }
-      } catch (e) {
-        log.debug(e)
-      }
-      return compileMethod.apply(this, [content, filename])
-    }
-    )
-  }
-}
-
-const disableRewriter = function () {
-  shimmer.unwrap(Module.prototype, '_compile')
 }
 
 const noop = function (res) { return res }
