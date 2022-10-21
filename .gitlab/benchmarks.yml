@@ -33,8 +33,18 @@ variables:
     KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
     FF_USE_LEGACY_KUBERNETES_EXECUTION_STRATEGY: "true"
 
+.benchmarks-merge-master:
+  extends: .benchmarks
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
 benchmark-v14:
   extends: .benchmarks
+  variables:
+    MAJOR_VERSION: 14
+
+benchmark-master-v14:
+  extends: .benchmarks-merge-master
   variables:
     MAJOR_VERSION: 14
 
@@ -43,7 +53,17 @@ benchmark-v16:
   variables:
     MAJOR_VERSION: 16
 
+benchmark-master-v16:
+  extends: .benchmarks-merge-master
+  variables:
+    MAJOR_VERSION: 16
+
 benchmark-v18:
   extends: .benchmarks
+  variables:
+    MAJOR_VERSION: 18
+
+benchmark-master-v18:
+  extends: .benchmarks-merge-master
   variables:
     MAJOR_VERSION: 18
