@@ -113,7 +113,6 @@ describe('Config', () => {
     process.env.DD_SERVICE = 'service'
     process.env.DD_VERSION = '1.0.0'
     process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '.*'
-    process.env.DD_TRACE_CLIENT_IP_HEADER_DISABLED = 'false'
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'x-true-client-ip'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
