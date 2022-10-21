@@ -149,10 +149,6 @@ class Config {
       process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       qsRegex
     )
-    // const DD_TRACE_CLIENT_IP_HEADER_DISABLED = coalesce(
-    //   process.env.DD_TRACE_CLIENT_IP_HEADER_DISABLED,
-    //   true
-    // )
     const DD_TRACE_CLIENT_IP_HEADER = coalesce(
       process.env.DD_TRACE_CLIENT_IP_HEADER,
       null
