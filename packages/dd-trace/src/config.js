@@ -193,7 +193,7 @@ class Config {
       false
     )
 
-    let appsec = options.appsec ?? options.experimental?.appsec
+    let appsec = options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
 
     if (typeof appsec === 'boolean') {
       appsec = {
