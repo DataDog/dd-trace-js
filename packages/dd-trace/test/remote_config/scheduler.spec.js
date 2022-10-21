@@ -1,90 +1,82 @@
 'use strict'
 
+const Scheduler = require('../../src/remote_config/scheduler')
+
 describe('Scheduler', () => {
-  let Scheduler
   let clock
-  let once
-  let removeListener
+  let stub
+  let scheduler
 
   beforeEach(() => {
-    Scheduler = require('../../src/exporters/scheduler')
-
     clock = sinon.useFakeTimers()
-    once = process.once
-    removeListener = process.removeListener
+    stub = sinon.stub()
+    scheduler = new Scheduler(stub, 5000)
   })
 
   afterEach(() => {
     clock.restore()
-    process.once = once
-    process.removeListener = removeListener
+  })
+
+  describe('func', () => {
+    it('should not run when already running', () => {
+      let cb
+      stub.callsFake((_cb) => { cb = _cb })
+
+      scheduler.func()
+      expect(stub).to.have.been.calledOnce
+
+      scheduler.func()
+      expect(stub).to.have.been.calledOnce
+
+      cb()
+
+      scheduler.func()
+      expect(stub).to.have.been.calledTwice
+    })
   })
 
   describe('start', () => {
-    it('should call the callback at the specified interval', () => {
-      const spy = sinon.spy()
-      const scheduler = new Scheduler(spy, 5000)
+    it('should not start when already started', () => {
+      stub.yieldsRight()
 
       scheduler.start()
-      clock.tick(5000)
 
-      expect(spy).to.have.been.calledOnce
+      scheduler.start()
+      clock.tick(1)
 
-      clock.tick(5000)
+      scheduler.start()
+      clock.tick(1)
 
-      expect(spy).to.have.been.calledTwice
+      expect(stub).to.have.been.calledOnce
     })
 
-    it('should call the callback when the process exits gracefully', () => {
-      process.once = sinon.spy()
-
-      const spy = sinon.spy()
-      const scheduler = new Scheduler(spy, 5000)
+    it('should call the callback at the specified interval', () => {
+      stub.yieldsRight()
 
       scheduler.start()
-      process.once.withArgs('beforeExit').yield()
+      clock.tick(1)
 
-      expect(spy).to.have.been.called
+      expect(stub).to.have.been.calledOnce
+
+      clock.tick(5000)
+
+      expect(stub).to.have.been.calledTwice
+
+      clock.tick(5000)
+
+      expect(stub).to.have.been.calledThrice
     })
   })
 
   describe('stop', () => {
     it('should stop calling the callback at the specified interval', () => {
-      const spy = sinon.spy()
-      const scheduler = new Scheduler(spy, 5000)
+      stub.yieldsRight()
 
       scheduler.start()
       scheduler.stop()
       clock.tick(5000)
 
-      expect(spy).to.not.have.been.called
-    })
-
-    it('should stop calling the callback when the process exits gracefully', () => {
-      process.once = sinon.spy()
-      process.removeListener = sinon.spy()
-
-      const spy = sinon.spy()
-      const scheduler = new Scheduler(spy, 5000)
-
-      scheduler.start()
-      scheduler.stop()
-
-      expect(process.removeListener).to.have.been.calledWith('beforeExit', process.once.firstCall.args[1])
-    })
-  })
-
-  describe('reset', () => {
-    it('should reset the internal clock', () => {
-      const spy = sinon.spy()
-      const scheduler = new Scheduler(spy, 5000)
-
-      scheduler.start()
-      clock.tick(4000)
-      scheduler.reset()
-      clock.tick(6000)
-
-      expect(spy).to.have.been.calledOnce
+      expect(stub).to.have.been.calledOnce
     })
   })
 })
