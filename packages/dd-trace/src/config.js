@@ -142,10 +142,6 @@ class Config {
       parseInt(process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS),
       1000
     )
-    const DD_TRACE_CLIENT_IP_HEADER_DISABLED = coalesce(
-      process.env.DD_TRACE_CLIENT_IP_HEADER_DISABLED,
-      false
-    )
     const DD_TRACE_CLIENT_IP_HEADER = coalesce(
       process.env.DD_TRACE_CLIENT_IP_HEADER,
       null
@@ -306,7 +302,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.sampleRate = coalesce(Math.min(Math.max(sampler.sampleRate, 0), 1), 1)
-    this.clientIpHeaderDisabled = isTrue(DD_TRACE_CLIENT_IP_HEADER_DISABLED)
+    this.clientIpHeaderDisabled = !isTrue(DD_APPSEC_ENABLED)
     this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
     this.logger = options.logger
     this.plugins = !!coalesce(options.plugins, true)
