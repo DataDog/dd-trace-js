@@ -239,7 +239,7 @@ describe('Overhead controller', () => {
               for (let i = 0; i < traces.length; i++) {
                 for (let j = 0; j < traces[i].length; j++) {
                   const trace = traces[i][j]
-                  if (trace.name === 'web.request') {
+                  if (trace.type === 'web') {
                     const url = trace.meta['http.url']
                     if (url.includes(FIRST_REQUEST)) {
                       expect(trace.meta['_dd.iast.json']).not.to.be.undefined
@@ -289,7 +289,7 @@ describe('Overhead controller', () => {
               for (let i = 0; i < traces.length; i++) {
                 for (let j = 0; j < traces[i].length; j++) {
                   const trace = traces[i][j]
-                  if (trace.name === 'web.request') {
+                  if (trace.type === 'web') {
                     urlCounter++
                     expect(trace.meta['_dd.iast.json']).not.to.be.undefined
                     if (urlCounter === 2) {
@@ -346,7 +346,7 @@ describe('Overhead controller', () => {
               for (let i = 0; i < traces.length; i++) {
                 for (let j = 0; j < traces[i].length; j++) {
                   const trace = traces[i][j]
-                  if (trace.name === 'web.request') {
+                  if (trace.type === 'web') {
                     counter++
                     const url = trace.meta['http.url']
                     if (url.includes(FIRST_REQUEST)) {
