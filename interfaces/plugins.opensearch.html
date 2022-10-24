@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>couchbase | dd-trace</title>
+	<title>opensearch | dd-trace</title>
 	<meta name="description" content="Documentation for dd-trace">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="../assets/css/main.css">
@@ -57,10 +57,10 @@
 					<a href="../modules/plugins.html">plugins</a>
 				</li>
 				<li>
-					<a href="plugins.couchbase.html">couchbase</a>
+					<a href="plugins.opensearch.html">opensearch</a>
 				</li>
 			</ul>
-			<h1>Interface couchbase</h1>
+			<h1>Interface opensearch</h1>
 		</div>
 	</div>
 </header>
@@ -71,7 +71,7 @@
 				<div class="tsd-comment tsd-typography">
 					<div class="lead">
 						<p>This plugin automatically instruments the
-						<a href="https://www.npmjs.com/package/couchbase">couchbase</a> module.</p>
+						<a href="https://github.com/opensearch-project/opensearch-js">opensearch</a> module.</p>
 					</div>
 				</div>
 			</section>
@@ -79,10 +79,10 @@
 				<h3>Hierarchy</h3>
 				<ul class="tsd-hierarchy">
 					<li>
-						<span class="tsd-signature-type">Instrumentation</span>
+						<a href="plugins.elasticsearch.html" class="tsd-signature-type">elasticsearch</a>
 						<ul class="tsd-hierarchy">
 							<li>
-								<span class="target">couchbase</span>
+								<span class="target">opensearch</span>
 							</li>
 						</ul>
 					</li>
@@ -95,9 +95,10 @@
 						<section class="tsd-index-section tsd-is-inherited">
 							<h3>Properties</h3>
 							<ul class="tsd-index-list">
-								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.couchbase.html#enabled" class="tsd-kind-icon">enabled</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.couchbase.html#measured" class="tsd-kind-icon">measured</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.couchbase.html#service" class="tsd-kind-icon">service</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.opensearch.html#enabled" class="tsd-kind-icon">enabled</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.opensearch.html#hooks" class="tsd-kind-icon">hooks</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.opensearch.html#measured" class="tsd-kind-icon">measured</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.opensearch.html#service" class="tsd-kind-icon">service</a></li>
 							</ul>
 						</section>
 					</div>
@@ -124,6 +125,22 @@
 							<dd><p>true</p>
 							</dd>
 						</dl>
+					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
+					<a name="hooks" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> hooks</h3>
+					<div class="tsd-signature tsd-kind-icon">hooks<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-symbol">{ </span>query<span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">(</span>span<span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">opentracing.Span</span>, params<span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">TransportRequestParams</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol"> =&gt; </span><span class="tsd-signature-type">any</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol"> }</span></div>
+					<aside class="tsd-sources">
+						<p>Inherited from <a href="plugins.elasticsearch.html">elasticsearch</a>.<a href="plugins.elasticsearch.html#hooks">hooks</a></p>
+						<ul>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d40277a/index.d.ts#L931">index.d.ts:931</a></li>
+						</ul>
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Hooks to run before spans are finished.</p>
+						</div>
 					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
@@ -177,16 +194,19 @@
 				</ul>
 				<ul class="current">
 					<li class="current tsd-kind-interface tsd-parent-kind-namespace">
-						<a href="plugins.couchbase.html" class="tsd-kind-icon">couchbase</a>
+						<a href="plugins.opensearch.html" class="tsd-kind-icon">opensearch</a>
 						<ul>
 							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
-								<a href="plugins.couchbase.html#enabled" class="tsd-kind-icon">enabled</a>
+								<a href="plugins.opensearch.html#enabled" class="tsd-kind-icon">enabled</a>
 							</li>
 							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
-								<a href="plugins.couchbase.html#measured" class="tsd-kind-icon">measured</a>
+								<a href="plugins.opensearch.html#hooks" class="tsd-kind-icon">hooks</a>
 							</li>
 							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
-								<a href="plugins.couchbase.html#service" class="tsd-kind-icon">service</a>
+								<a href="plugins.opensearch.html#measured" class="tsd-kind-icon">measured</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
+								<a href="plugins.opensearch.html#service" class="tsd-kind-icon">service</a>
 							</li>
 						</ul>
 					</li>

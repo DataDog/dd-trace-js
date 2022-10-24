@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>User | dd-trace</title>
+	<title>SpanSamplingRule | dd-trace</title>
 	<meta name="description" content="Documentation for dd-trace">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="../assets/css/main.css">
@@ -54,10 +54,10 @@
 					<a href="../globals.html">Globals</a>
 				</li>
 				<li>
-					<a href="user.html">User</a>
+					<a href="spansamplingrule.html">SpanSamplingRule</a>
 				</li>
 			</ul>
-			<h1>Interface User</h1>
+			<h1>Interface SpanSamplingRule</h1>
 		</div>
 	</div>
 </header>
@@ -67,7 +67,7 @@
 			<section class="tsd-panel tsd-comment">
 				<div class="tsd-comment tsd-typography">
 					<div class="lead">
-						<p>User object that can be passed to <code>tracer.setUser()</code>.</p>
+						<p>Span sampling rules to ingest single spans where the enclosing trace is dropped</p>
 					</div>
 				</div>
 			</section>
@@ -75,18 +75,9 @@
 				<h3>Hierarchy</h3>
 				<ul class="tsd-hierarchy">
 					<li>
-						<span class="target">User</span>
+						<span class="target">SpanSamplingRule</span>
 					</li>
 				</ul>
-			</section>
-			<section class="tsd-panel tsd-kind-interface">
-				<h3 class="tsd-before-signature">Indexable</h3>
-				<div class="tsd-signature tsd-kind-icon"><span class="tsd-signature-symbol">[</span>key: <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">]: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">undefined</span></div>
-				<div class="tsd-comment tsd-typography">
-					<div class="lead">
-						<p>Custom fields to attach to the user (RBAC, Oauth, etc…).</p>
-					</div>
-				</div>
 			</section>
 			<section class="tsd-panel-group tsd-index-group">
 				<h2>Index</h2>
@@ -95,12 +86,10 @@
 						<section class="tsd-index-section ">
 							<h3>Properties</h3>
 							<ul class="tsd-index-list">
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="user.html#email" class="tsd-kind-icon">email</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="user.html#id" class="tsd-kind-icon">id</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="user.html#name" class="tsd-kind-icon">name</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="user.html#role" class="tsd-kind-icon">role</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="user.html#scope" class="tsd-kind-icon">scope</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="user.html#session_id" class="tsd-kind-icon">session_<wbr>id</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="spansamplingrule.html#maxpersecond" class="tsd-kind-icon">max<wbr>Per<wbr>Second</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="spansamplingrule.html#name" class="tsd-kind-icon">name</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="spansamplingrule.html#samplerate" class="tsd-kind-icon">sample<wbr>Rate</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="spansamplingrule.html#service" class="tsd-kind-icon">service</a></li>
 							</ul>
 						</section>
 					</div>
@@ -109,33 +98,17 @@
 			<section class="tsd-panel-group tsd-member-group ">
 				<h2>Properties</h2>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="email" class="tsd-anchor"></a>
-					<h3><span class="tsd-flag ts-flagOptional">Optional</span> email</h3>
-					<div class="tsd-signature tsd-kind-icon">email<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">string</span></div>
+					<a name="maxpersecond" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> max<wbr>Per<wbr>Second</h3>
+					<div class="tsd-signature tsd-kind-icon">max<wbr>Per<wbr>Second<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Number</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d40277a/index.d.ts#L518">index.d.ts:518</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d40277a/index.d.ts#L204">index.d.ts:204</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
 						<div class="lead">
-							<p>Email of the user.</p>
-						</div>
-					</div>
-				</section>
-				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="id" class="tsd-anchor"></a>
-					<h3>id</h3>
-					<div class="tsd-signature tsd-kind-icon">id<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
-					<aside class="tsd-sources">
-						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d40277a/index.d.ts#L513">index.d.ts:513</a></li>
-						</ul>
-					</aside>
-					<div class="tsd-comment tsd-typography">
-						<div class="lead">
-							<p>Unique identifier of the user.
-							Mandatory.</p>
+							<p>Maximum number of spans matching a span sampling rule to be allowed per second.</p>
 						</div>
 					</div>
 				</section>
@@ -145,59 +118,42 @@
 					<div class="tsd-signature tsd-kind-icon">name<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">string</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d40277a/index.d.ts#L523">index.d.ts:523</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d40277a/index.d.ts#L214">index.d.ts:214</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
 						<div class="lead">
-							<p>User-friendly name of the user.</p>
+							<p>Operation name or pattern on which to apply this rule. The rule will apply to all operation names if not provided.</p>
 						</div>
 					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="role" class="tsd-anchor"></a>
-					<h3><span class="tsd-flag ts-flagOptional">Optional</span> role</h3>
-					<div class="tsd-signature tsd-kind-icon">role<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">string</span></div>
+					<a name="samplerate" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> sample<wbr>Rate</h3>
+					<div class="tsd-signature tsd-kind-icon">sample<wbr>Rate<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Number</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d40277a/index.d.ts#L533">index.d.ts:533</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d40277a/index.d.ts#L199">index.d.ts:199</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
 						<div class="lead">
-							<p>Role the user is making the request under.</p>
+							<p>Sampling rate for this rule. Will default to 1.0 (always) if not provided.</p>
 						</div>
 					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="scope" class="tsd-anchor"></a>
-					<h3><span class="tsd-flag ts-flagOptional">Optional</span> scope</h3>
-					<div class="tsd-signature tsd-kind-icon">scope<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">string</span></div>
+					<a name="service" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> service</h3>
+					<div class="tsd-signature tsd-kind-icon">service<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">string</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d40277a/index.d.ts#L540">index.d.ts:540</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d40277a/index.d.ts#L209">index.d.ts:209</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
 						<div class="lead">
-							<p>Scopes or granted authorizations the user currently possesses.
-								The value could come from the scope associated with an OAuth2
-							Access Token or an attribute value in a SAML 2 Assertion.</p>
-						</div>
-					</div>
-				</section>
-				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
-					<a name="session_id" class="tsd-anchor"></a>
-					<h3><span class="tsd-flag ts-flagOptional">Optional</span> session_<wbr>id</h3>
-					<div class="tsd-signature tsd-kind-icon">session_<wbr>id<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">string</span></div>
-					<aside class="tsd-sources">
-						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d40277a/index.d.ts#L528">index.d.ts:528</a></li>
-						</ul>
-					</aside>
-					<div class="tsd-comment tsd-typography">
-						<div class="lead">
-							<p>Session ID of the user.</p>
+							<p>Service name or pattern on which to apply this rule. The rule will apply to all services if not provided.</p>
 						</div>
 					</div>
 				</section>
@@ -225,9 +181,27 @@
 					<li class=" tsd-kind-interface">
 						<a href="spancontext.html" class="tsd-kind-icon">Span<wbr>Context</a>
 					</li>
-					<li class=" tsd-kind-interface">
+				</ul>
+				<ul class="current">
+					<li class="current tsd-kind-interface">
 						<a href="spansamplingrule.html" class="tsd-kind-icon">Span<wbr>Sampling<wbr>Rule</a>
+						<ul>
+							<li class=" tsd-kind-property tsd-parent-kind-interface">
+								<a href="spansamplingrule.html#maxpersecond" class="tsd-kind-icon">max<wbr>Per<wbr>Second</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-interface">
+								<a href="spansamplingrule.html#name" class="tsd-kind-icon">name</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-interface">
+								<a href="spansamplingrule.html#samplerate" class="tsd-kind-icon">sample<wbr>Rate</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-interface">
+								<a href="spansamplingrule.html#service" class="tsd-kind-icon">service</a>
+							</li>
+						</ul>
 					</li>
+				</ul>
+				<ul class="after-current">
 					<li class=" tsd-kind-interface">
 						<a href="traceoptions.html" class="tsd-kind-icon">Trace<wbr>Options</a>
 					</li>
@@ -237,33 +211,9 @@
 					<li class=" tsd-kind-interface">
 						<a href="traceroptions.html" class="tsd-kind-icon">Tracer<wbr>Options</a>
 					</li>
-				</ul>
-				<ul class="current">
-					<li class="current tsd-kind-interface">
+					<li class=" tsd-kind-interface">
 						<a href="user.html" class="tsd-kind-icon">User</a>
-						<ul>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="user.html#email" class="tsd-kind-icon">email</a>
-							</li>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="user.html#id" class="tsd-kind-icon">id</a>
-							</li>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="user.html#name" class="tsd-kind-icon">name</a>
-							</li>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="user.html#role" class="tsd-kind-icon">role</a>
-							</li>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="user.html#scope" class="tsd-kind-icon">scope</a>
-							</li>
-							<li class=" tsd-kind-property tsd-parent-kind-interface">
-								<a href="user.html#session_id" class="tsd-kind-icon">session_<wbr>id</a>
-							</li>
-						</ul>
 					</li>
-				</ul>
-				<ul class="after-current">
 					<li class=" tsd-kind-variable">
 						<a href="../globals.html#tracer" class="tsd-kind-icon">tracer</a>
 					</li>

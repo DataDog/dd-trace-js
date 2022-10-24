@@ -130,6 +130,7 @@ tracer.use(<span class="hljs-string">&#x27;pg&#x27;</span>, {
 				<h5 id="mysql2-config"></h5>
 				<h5 id="net"></h5>
 				<h5 id="next"></h5>
+				<h5 id="opensearch"></h5>
 				<h5 id="oracledb"></h5>
 				<h5 id="paperplane"></h5>
 				<h5 id="paperplane-tags"></h5>
@@ -182,6 +183,7 @@ tracer.use(<span class="hljs-string">&#x27;pg&#x27;</span>, {
 					<li><a href="./interfaces/plugins.mysql2.html">mysql2</a></li>
 					<li><a href="./interfaces/plugins.net.html">net</a></li>
 					<li><a href="./interfaces/plugins.next.html">next</a></li>
+					<li><a href="./interfaces/plugins.opensearch.html">opensearch</a></li>
 					<li><a href="./interfaces/plugins.oracledb.html">oracledb</a></li>
 					<li><a href="./interfaces/plugins.paperplane.html">paperplane</a></li>
 					<li><a href="./interfaces/plugins.pino.html">pino</a></li>
@@ -434,6 +436,18 @@ opentracing.initGlobalTracer(tracer)</code></pre>
 							<td>Sampling rules to apply to priority samplin. Each rule is a JSON, consisting of <code>service</code> and <code>name</code>, which are regexes to match against a trace&#39;s <code>service</code> and <code>name</code>, and a corresponding <code>sampleRate</code>. If not specified, will defer to global sampling rate for all spans.</td>
 						</tr>
 						<tr>
+							<td>spanSamplingRules</td>
+							<td><code>DD_SPAN_SAMPLING_RULES</code></td>
+							<td><code>[]</code></td>
+							<td>Span sampling rules for ingesting single spans, in cases where the whole trace is dropped.</td>
+						</tr>
+						<tr>
+							<td>-</td>
+							<td><code>DD_SPAN_SAMPLING_RULES_FILE</code></td>
+							<td>-</td>
+							<td>Points to a JSON file that contains the span sampling rules. <code>DD_SPAN_SAMPLING_RULES</code> takes precedence over this variable.</td>
+						</tr>
+						<tr>
 							<td>flushInterval</td>
 							<td>-</td>
 							<td><code>2000</code></td>
@@ -450,12 +464,6 @@ opentracing.initGlobalTracer(tracer)</code></pre>
 							<td><code>DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP</code></td>
 							<td>-</td>
 							<td>A regex to redact sensitive data from incoming requests&#39; querystring reported in the <code>http.url</code> tag (matches will be replaced with <code>&lt;redacted&gt;</code>). Can be an empty string to disable redaction or <code>.*</code> to redact all querystring. <strong>WARNING: this regex will execute for every incoming request on an unsafe input (url), please make sure you use a safe regex.</strong></td>
-						</tr>
-						<tr>
-							<td>-</td>
-							<td><code>DD_TRACE_CLIENT_IP_HEADER_DISABLED</code></td>
-							<td><code>false</code></td>
-							<td>Whether to enable HTTP client IP reporting. Setting this to <code>true</code> will disable collection of the <code>http.client_ip</code> tag.</td>
 						</tr>
 						<tr>
 							<td>-</td>
@@ -477,7 +485,7 @@ opentracing.initGlobalTracer(tracer)</code></pre>
 						</tr>
 						<tr>
 							<td>runtimeMetrics</td>
-							<td><code>DD_RUNTIME_METRICS_EN ABLED</code></td>
+							<td><code>DD_RUNTIME_METRICS_ENABLED</code></td>
 							<td><code>false</code></td>
 							<td>Whether to enable capturing runtime metrics. Port 8125 (or configured with <code>dogstatsd.port</code>) must be opened on the agent for UDP.</td>
 						</tr>
@@ -634,6 +642,9 @@ tracer.use(<span class="hljs-string">&#x27;express&#x27;</span>, {
 					</li>
 					<li class=" tsd-kind-interface">
 						<a href="interfaces/spancontext.html" class="tsd-kind-icon">Span<wbr>Context</a>
+					</li>
+					<li class=" tsd-kind-interface">
+						<a href="interfaces/spansamplingrule.html" class="tsd-kind-icon">Span<wbr>Sampling<wbr>Rule</a>
 					</li>
 					<li class=" tsd-kind-interface">
 						<a href="interfaces/traceoptions.html" class="tsd-kind-icon">Trace<wbr>Options</a>
