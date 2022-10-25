@@ -1,6 +1,6 @@
 'use strict'
 const Analyzer = require('./vulnerability-analyzer')
-const { isTainted } = require('../taint-tracking')
+const { isTainted, getRanges } = require('../taint-tracking')
 
 class SqlInjectionAnalyzer extends Analyzer {
   constructor () {
@@ -15,6 +15,11 @@ class SqlInjectionAnalyzer extends Analyzer {
       return isTainted(iastContext, query)
     }
     return false
+  }
+
+  _getEvidence (value, iastContext) {
+    const ranges = getRanges(iastContext, value)
+    return { value, ranges }
   }
 }
 
