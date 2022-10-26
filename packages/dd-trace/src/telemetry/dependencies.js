@@ -7,7 +7,7 @@ const { sendData } = require('./send-data')
 const dc = require('diagnostics_channel')
 const { fileURLToPath } = require('url')
 
-const savedDependencies = []
+const savedDependencies = new Set()
 const detectedDependencyNames = new Set()
 const FILE_URI_START = `file://`
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
@@ -18,10 +18,14 @@ function waitAndSend (config, application, host) {
   if (!immediate) {
     immediate = setImmediate(() => {
       immediate = null
-      if (savedDependencies.length > 0) {
-        const dependencies = savedDependencies.splice(0, 1000)
+      if (savedDependencies.size > 0) {
+        const dependencies = Array.from(savedDependencies.values()).splice(0, 1000).map(pair => {
+          savedDependencies.delete(pair)
+          const [name, version] = pair.split(' ')
+          return { name, version }
+        })
         sendData(config, application, host, 'app-dependencies-loaded', { dependencies })
-        if (savedDependencies.length > 0) {
+        if (savedDependencies.size > 0) {
           waitAndSend(config, application, host)
         }
       }
@@ -49,7 +53,7 @@ function onModuleLoad (data) {
         if (basedir) {
           try {
             const { version } = requirePackageJson(basedir, module)
-            savedDependencies.push({ name, version })
+            savedDependencies.add(`${name} ${version}`)
             waitAndSend(config, application, host)
           } catch (e) {
             // can not read the package.json, do nothing
@@ -75,7 +79,7 @@ function stop () {
   application = null
   host = null
   detectedDependencyNames.clear()
-  savedDependencies.splice(0, savedDependencies.length)
+  savedDependencies.clear()
   if (moduleLoadStartChannel.hasSubscribers) {
     moduleLoadStartChannel.unsubscribe(onModuleLoad)
   }

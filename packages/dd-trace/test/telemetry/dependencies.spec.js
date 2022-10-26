@@ -160,6 +160,24 @@ describe('dependencies', () => {
         .to.have.been.calledOnceWith(config, application, host, 'app-dependencies-loaded', expectedDependencies)
     })
 
+    it('should only include one copy of each dependency, regardless of how many of its files are loaded', () => {
+      const moduleName = 'custom-module'
+      const packageVersion = '1.0.0'
+      requirePackageJson.returns({ version: packageVersion })
+      const filename1 = [fileURIWithoutNodeModules, 'node_modules', moduleName, 'index1.js'].join('/')
+      const filename2 = [fileURIWithoutNodeModules, 'node_modules', moduleName, 'index2.js'].join('/')
+      dependencies.start(config, application, host)
+      moduleLoadStartChannel.publish({ request: moduleName, filename: filename1 })
+      moduleLoadStartChannel.publish({ request: moduleName, filename: filename2 })
+      const expectedDependencies = {
+        dependencies: [
+          { name: moduleName, version: packageVersion }
+        ]
+      }
+      expect(sendData)
+        .to.have.been.calledOnceWith(config, application, host, 'app-dependencies-loaded', expectedDependencies)
+    })
+
     it('should call sendData only once with duplicated dependency', () => {
       const request = 'custom-module'
       requirePackageJson.returns({ version: '1.0.0' })
