@@ -124,7 +124,8 @@ module.exports = class PluginManager {
       clientIpHeader,
       isIntelligentTestRunnerEnabled,
       site,
-      experimental
+      experimental,
+      sqlInjectionMode
     } = this._tracerConfig
 
     const sharedConfig = {}
@@ -151,6 +152,8 @@ module.exports = class PluginManager {
 
     sharedConfig.isIntelligentTestRunnerEnabled = isIntelligentTestRunnerEnabled
 
+    sharedConfig.sqlInjectionMode = sqlInjectionMode
+    
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
     }
