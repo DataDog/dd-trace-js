@@ -9,7 +9,7 @@ class PGPlugin extends DatabasePlugin {
 
   start ({ params = {}, pgQuery, processId }) {
     const service = getServiceName(this.config, params)
-    let originalStatement = pgQuery.text
+    const originalStatement = pgQuery.text
 
     if (this.config.sqlInjectionMode === 'service') {
       pgQuery.text = this.createSQLInjectionComment() + pgQuery.text
