@@ -4,9 +4,11 @@ const id = require('../../src/id')
 
 describe('SpanContext', () => {
   let SpanContext
+  let TraceState
 
   beforeEach(() => {
     SpanContext = require('../../src/opentracing/span_context')
+    TraceState = require('../../src/opentracing/propagation/tracestate')
   })
 
   it('should instantiate with the given properties', () => {
@@ -26,7 +28,8 @@ describe('SpanContext', () => {
         started: ['span1', 'span2'],
         finished: ['span1'],
         tags: { foo: 'bar' }
-      }
+      },
+      tracestate: TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
     }
     const spanContext = new SpanContext(props)
 
@@ -44,7 +47,8 @@ describe('SpanContext', () => {
         started: ['span1', 'span2'],
         finished: ['span1'],
         tags: { foo: 'bar' }
-      }
+      },
+      _tracestate: TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
     })
   })
 
@@ -68,7 +72,8 @@ describe('SpanContext', () => {
         started: [],
         finished: [],
         tags: {}
-      }
+      },
+      _tracestate: new TraceState()
     })
   })
 

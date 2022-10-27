@@ -60,6 +60,8 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: 'DataDog/system-tests'
+          # TODO: Delete when https://github.com/DataDog/system-tests/pull/691 lands
+          ref: zach/headers-parametric-w3c
       - uses: actions/setup-python@v4
         with:
           python-version: '3.9'
