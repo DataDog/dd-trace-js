@@ -7,8 +7,8 @@ const skipCh = channel('ci:mocha:test:skip')
 const testFinishCh = channel('ci:mocha:test:finish')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 
-const testRunStartCh = channel('ci:mocha:run:start')
-const testRunFinishCh = channel('ci:mocha:run:finish')
+const testSessionStartCh = channel('ci:mocha:session:start')
+const testSessionFinishCh = channel('ci:mocha:session:finish')
 
 const testSuiteStartCh = channel('ci:mocha:test-suite:start')
 const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
@@ -19,7 +19,31 @@ const patched = new WeakSet()
 
 const testToAr = new WeakMap()
 const originalFns = new WeakMap()
-const testSuiteToAr = new WeakMap()
+const testFileToSuiteAr = new Map()
+
+function getSuitesByTestFile (root) {
+  const suitesByTestFile = {}
+  function getSuites (suite) {
+    if (suite.file) {
+      if (suitesByTestFile[suite.file]) {
+        suitesByTestFile[suite.file].push(suite)
+      } else {
+        suitesByTestFile[suite.file] = [suite]
+      }
+    }
+    suite.suites.forEach(suite => {
+      getSuites(suite)
+    })
+  }
+  getSuites(root)
+
+  const numSuitesByTestFile = Object.keys(suitesByTestFile).reduce((acc, testFile) => {
+    acc[testFile] = suitesByTestFile[testFile].length
+    return acc
+  }, {})
+
+  return { suitesByTestFile, numSuitesByTestFile }
+}
 
 function getTestStatus (test) {
   if (test.pending) {
@@ -56,6 +80,8 @@ function mochaHook (Runner) {
       return run.apply(this, arguments)
     }
 
+    const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
+
     const testRunAsyncResource = new AsyncResource('bound-anonymous-fn')
 
     this.once('end', testRunAsyncResource.bind(function () {
@@ -65,44 +91,56 @@ function mochaHook (Runner) {
       } else if (this.failures !== 0) {
         status = 'fail'
       }
-      testRunFinishCh.publish(status)
+      testFileToSuiteAr.clear()
+      testSessionFinishCh.publish(status)
     }))
 
     this.once('start', testRunAsyncResource.bind(function () {
       const processArgv = process.argv.slice(2).join(' ')
       const command = `mocha ${processArgv}`
-      testRunStartCh.publish(command)
+      testSessionStartCh.publish(command)
     }))
 
     this.on('suite', function (suite) {
-      if (suite.root) {
+      if (suite.root || !suite.tests.length) {
         return
       }
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-      testSuiteToAr.set(suite, asyncResource)
-
-      asyncResource.runInAsyncScope(() => {
-        testSuiteStartCh.publish(suite)
-      })
+      let asyncResource = testFileToSuiteAr.get(suite.file)
+      if (!asyncResource) {
+        asyncResource = new AsyncResource('bound-anonymous-fn')
+        testFileToSuiteAr.set(suite.file, asyncResource)
+        asyncResource.runInAsyncScope(() => {
+          testSuiteStartCh.publish(suite)
+        })
+      }
     })
 
     this.on('suite end', function (suite) {
       if (suite.root) {
         return
       }
+      const suitesInTestFile = suitesByTestFile[suite.file]
+
+      const isLastSuite = --numSuitesByTestFile[suite.file] === 0
+      if (!isLastSuite) {
+        return
+      }
+
       let status = 'pass'
-      if (suite.pending) {
+      if (suitesInTestFile.every(suite => suite.pending)) {
         status = 'skip'
       } else {
-        suite.eachTest(test => {
-          if (test.state === 'failed' || test.timedOut) {
-            status = 'fail'
-          }
+        // has to check every test in the test file
+        suitesInTestFile.forEach(suite => {
+          suite.eachTest(test => {
+            if (test.state === 'failed' || test.timedOut) {
+              status = 'fail'
+            }
+          })
         })
       }
 
-      const asyncResource = testSuiteToAr.get(suite)
+      const asyncResource = testFileToSuiteAr.get(suite.file)
       asyncResource.runInAsyncScope(() => {
         // get suite status
         testSuiteFinishCh.publish(status)
@@ -125,7 +163,7 @@ function mochaHook (Runner) {
       const status = getTestStatus(test)
 
       // if there are afterEach to be run, we don't finish the test yet
-      if (!test.parent._afterEach.length) {
+      if (asyncResource && !test.parent._afterEach.length) {
         asyncResource.runInAsyncScope(() => {
           testFinishCh.publish(status)
         })
@@ -148,34 +186,38 @@ function mochaHook (Runner) {
     })
 
     this.on('fail', (testOrHook, err) => {
+      const testFile = testOrHook.file
       let test = testOrHook
       const isHook = testOrHook.type === 'hook'
       if (isHook && testOrHook.ctx) {
         test = testOrHook.ctx.currentTest
       }
-      let asyncResource
+      let testAsyncResource
       if (test) {
-        asyncResource = getTestAsyncResource(test)
+        testAsyncResource = getTestAsyncResource(test)
       }
-      if (asyncResource) {
-        asyncResource.runInAsyncScope(() => {
+      if (testAsyncResource) {
+        testAsyncResource.runInAsyncScope(() => {
           if (isHook) {
-            err.message = `${testOrHook.title}: ${err.message}`
+            err.message = `${testOrHook.fullTitle()}: ${err.message}`
             errorCh.publish(err)
             // if it's a hook and it has failed, 'test end' will not be called
             testFinishCh.publish('fail')
           } else {
             errorCh.publish(err)
           }
-          // we propagate the error to the suite
-          const testSuiteAsyncResource = testSuiteToAr.get(test.parent)
-          if (testSuiteAsyncResource) {
-            const testSuiteError = new Error(`Test "${test.fullTitle()}" failed with message "${err.message}"`)
-            testSuiteError.stack = err.stack
-            testSuiteAsyncResource.runInAsyncScope(() => {
-              testSuiteErrorCh.publish(testSuiteError)
-            })
-          }
+        })
+      }
+      const testSuiteAsyncResource = testFileToSuiteAr.get(testFile)
+
+      if (testSuiteAsyncResource) {
+        // we propagate the error to the suite
+        const testSuiteError = new Error(
+          `"${testOrHook.parent.fullTitle()}" failed with message "${err.message}"`
+        )
+        testSuiteError.stack = err.stack
+        testSuiteAsyncResource.runInAsyncScope(() => {
+          testSuiteErrorCh.publish(testSuiteError)
         })
       }
     })
@@ -189,7 +231,11 @@ function mochaHook (Runner) {
       } else {
         // if there is no async resource, the test has been skipped through `test.skip``
         const skippedTestAsyncResource = new AsyncResource('bound-anonymous-fn')
-        testToAr.set(test, skippedTestAsyncResource)
+        if (test.fn) {
+          testToAr.set(test.fn, skippedTestAsyncResource)
+        } else {
+          testToAr.set(test, skippedTestAsyncResource)
+        }
         skippedTestAsyncResource.runInAsyncScope(() => {
           skipCh.publish(test)
         })
@@ -197,13 +243,6 @@ function mochaHook (Runner) {
     })
 
     return run.apply(this, arguments)
-  })
-
-  shimmer.wrap(Runner.prototype, 'runTests', runTests => function () {
-    if (!testRunFinishCh.hasSubscribers) {
-      return runTests.apply(this, arguments)
-    }
-    return runTests.apply(this, arguments)
   })
 
   return Runner
@@ -239,6 +278,9 @@ addHook({
   file: 'lib/runnable.js'
 }, (Runnable) => {
   shimmer.wrap(Runnable.prototype, 'run', run => function () {
+    if (!testStartCh.hasSubscribers) {
+      return run.apply(this, arguments)
+    }
     const isBeforeEach = this.parent._beforeEach.includes(this)
     const isAfterEach = this.parent._afterEach.includes(this)
 
@@ -254,13 +296,15 @@ addHook({
       const test = isTestHook ? this.ctx.currentTest : this
       const asyncResource = getTestAsyncResource(test)
 
-      // we bind the test fn to the correct async resource
-      const newFn = asyncResource.bind(this.fn)
+      if (asyncResource) {
+        // we bind the test fn to the correct async resource
+        const newFn = asyncResource.bind(this.fn)
 
-      // we store the original function, not to lose it
-      originalFns.set(newFn, this.fn)
+        // we store the original function, not to lose it
+        originalFns.set(newFn, this.fn)
 
-      this.fn = newFn
+        this.fn = newFn
+      }
     }
 
     return run.apply(this, arguments)
@@ -272,5 +316,3 @@ addHook({
   name: 'mocha-each',
   versions: ['>=2.0.1']
 }, mochaEachHook)
-
-module.exports = { mochaHook, mochaEachHook }

@@ -1,0 +1,21 @@
+name: Download datadog-ci CLI
+runs:
+  using: composite
+  steps:
+    - name: Install datadog-ci for Linux
+      if: runner.os == 'Linux'
+      run: |
+        curl -L --fail "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_linux-x64" --output "/usr/local/bin/datadog-ci"
+        chmod +x /usr/local/bin/datadog-ci
+      shell: bash
+    - name: Install datadog-ci for macOS
+      if: runner.os == 'macOS'
+      run: |
+        curl -L --fail "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_darwin-x64" --output "/usr/local/bin/datadog-ci"
+        chmod +x /usr/local/bin/datadog-ci
+      shell: bash
+    - name: Install datadog-ci for Windows
+      if: runner.os == 'Windows'
+      run: Invoke-WebRequest -Uri "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_win-x64.exe" -OutFile "datadog-ci.exe"
+      shell: pwsh
+

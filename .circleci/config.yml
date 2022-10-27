@@ -32,8 +32,12 @@ commands:
 node-bench-base: &node-bench-base
   resource_class: small
   working_directory: ~/dd-trace-js
+  parameters:
+    node-version:
+      type: string
+      default: "18"
   docker:
-    - image: node
+    - image: node:<< parameters.node-version >>
   steps:
     - checkout-and-yarn-install
     - run:
@@ -43,7 +47,12 @@ node-bench-base: &node-bench-base
 node-bench-e2e-base: &node-bench-e2e-base
   resource_class: medium
   working_directory: ~/dd-trace-js
-
+  parameters:
+    node-version:
+      type: string
+      default: "18"
+  docker:
+    - image: node:<< parameters.node-version >>
   steps:
     - checkout-and-yarn-install
     - run:
@@ -54,7 +63,7 @@ node-bench-sirun-base: &node-bench-sirun-base
   parameters:
     node-version:
       type: string
-      default: "latest"
+      default: "18"
   docker:
     - image: node:<< parameters.node-version >>
   resource_class: small
@@ -87,8 +96,12 @@ node-bench-sirun-base: &node-bench-sirun-base
 node-bench-profiler-base: &node-bench-profiler-base
   resource_class: small
   working_directory: ~/dd-trace-js
+  parameters:
+    node-version:
+      type: string
+      default: "18"
   docker:
-    - image: node
+    - image: node:<< parameters.node-version >>
   steps:
     - checkout-and-yarn-install
     - run:
@@ -99,7 +112,7 @@ node-upstream-base: &node-upstream-base
   parameters:
     node-version:
       type: string
-      default: "12"
+      default: "14"
   docker:
     - image: node:<< parameters.node-version >>
   working_directory: ~/dd-trace-js
@@ -123,7 +136,7 @@ jobs:
   node-bench-e2e-latest:
     <<: *node-bench-e2e-base
     docker:
-      - image: node
+      - image: node:<< parameters.node-version >>
         environment:
           - SERVICES=mongo
           - PLUGINS=mongodb-core
@@ -219,7 +232,7 @@ workflows:
       - node-bench-sirun-startup: &matrix-exact-supported-node-versions
           matrix:
             parameters:
-              node-version: ["12", "14", "16"]
+              node-version: ["14", "16", "18"]
       - node-bench-sirun-spans: *matrix-exact-supported-node-versions
       - node-bench-sirun-async_hooks: *matrix-exact-supported-node-versions
       - node-bench-sirun-log: *matrix-exact-supported-node-versions

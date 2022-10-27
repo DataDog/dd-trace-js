@@ -11,6 +11,7 @@ const traceKey = 'x-datadog-trace-id'
 const spanKey = 'x-datadog-parent-id'
 const originKey = 'x-datadog-origin'
 const samplingKey = 'x-datadog-sampling-priority'
+const tagsKey = 'x-datadog-tags'
 const baggagePrefix = 'ot-baggage-'
 const b3TraceKey = 'x-b3-traceid'
 const b3TraceExpr = /^([0-9a-f]{16}){1,2}$/i
@@ -23,6 +24,8 @@ const b3HeaderKey = 'b3'
 const sqsdHeaderHey = 'x-aws-sqsd-attr-_datadog'
 const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)?|[01d])$/i
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
+const tagKeyExpr = /^_dd\.p\.[\x21-\x2b\x2d-\x7e]+$/ // ASCII minus spaces and commas
+const tagValueExpr = /^[\x20-\x2b\x2d-\x7e]*$/ // ASCII minus commas
 const ddKeys = [traceKey, spanKey, samplingKey, originKey]
 const b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey]
 const logKeys = ddKeys.concat(b3Keys)
@@ -43,6 +46,7 @@ class TextMapPropagator {
     this._injectBaggageItems(spanContext, carrier)
     this._injectB3(spanContext, carrier)
     this._injectTraceparent(spanContext, carrier)
+    this._injectTags(spanContext, carrier)
 
     log.debug(() => `Inject into carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
   }
@@ -79,11 +83,40 @@ class TextMapPropagator {
     })
   }
 
+  _injectTags (spanContext, carrier) {
+    const trace = spanContext._trace
+
+    if (this._config.tagsHeaderMaxLength === 0) {
+      log.debug('Trace tag propagation is disabled, skipping injection.')
+      return
+    }
+
+    const tags = []
+
+    for (const key in trace.tags) {
+      if (!trace.tags[key] || !key.startsWith('_dd.p.')) continue
+      if (!this._validateTagKey(key) || !this._validateTagValue(trace.tags[key])) {
+        log.error('Trace tags from span are invalid, skipping injection.')
+        return
+      }
+
+      tags.push(`${key}=${trace.tags[key]}`)
+    }
+
+    const header = tags.join(',')
+
+    if (header.length > this._config.tagsHeaderMaxLength) {
+      log.error('Trace tags from span are too large, skipping injection.')
+    } else if (header) {
+      carrier[tagsKey] = header
+    }
+  }
+
   _injectB3 (spanContext, carrier) {
     if (!this._config.experimental.b3) return
 
-    carrier[b3TraceKey] = spanContext._traceId.toString('hex')
-    carrier[b3SpanKey] = spanContext._spanId.toString('hex')
+    carrier[b3TraceKey] = spanContext._traceId.toString(16)
+    carrier[b3SpanKey] = spanContext._spanId.toString(16)
     carrier[b3SampledKey] = spanContext._sampling.priority >= AUTO_KEEP ? '1' : '0'
 
     if (spanContext._sampling.priority > AUTO_KEEP) {
@@ -91,7 +124,7 @@ class TextMapPropagator {
     }
 
     if (spanContext._parentId) {
-      carrier[b3ParentKey] = spanContext._parentId.toString('hex')
+      carrier[b3ParentKey] = spanContext._parentId.toString(16)
     }
   }
 
@@ -99,8 +132,8 @@ class TextMapPropagator {
     if (!this._config.experimental.traceparent) return
 
     const sampling = spanContext._sampling.priority >= AUTO_KEEP ? '01' : '00'
-    const traceId = spanContext._traceId.toString('hex').padStart(32, '0')
-    const spanId = spanContext._spanId.toString('hex').padStart(16, '0')
+    const traceId = spanContext._traceId.toString(16).padStart(32, '0')
+    const spanId = spanContext._spanId.toString(16).padStart(16, '0')
     carrier[traceparentKey] = `01-${traceId}-${spanId}-${sampling}`
   }
 
@@ -118,6 +151,7 @@ class TextMapPropagator {
       this._extractOrigin(carrier, spanContext)
       this._extractBaggageItems(carrier, spanContext)
       this._extractSamplingPriority(carrier, spanContext)
+      this._extractTags(carrier, spanContext)
     }
 
     return spanContext
@@ -129,7 +163,7 @@ class TextMapPropagator {
     const b3 = this._extractB3Headers(carrier)
     const debug = b3[b3FlagsKey] === '1'
     const priority = this._getPriority(b3[b3SampledKey], debug)
-    const spanContext = this._extractGenericContext(b3, b3TraceKey, b3SpanKey)
+    const spanContext = this._extractGenericContext(b3, b3TraceKey, b3SpanKey, 16)
 
     if (priority !== undefined) {
       if (!spanContext) {
@@ -271,6 +305,43 @@ class TextMapPropagator {
     if (Number.isInteger(priority)) {
       spanContext._sampling.priority = parseInt(carrier[samplingKey], 10)
     }
+  }
+
+  _extractTags (carrier, spanContext) {
+    if (!carrier[tagsKey]) return
+
+    const trace = spanContext._trace
+
+    if (this._config.tagsHeaderMaxLength === 0) {
+      log.debug('Trace tag propagation is disabled, skipping extraction.')
+    } else if (carrier[tagsKey].length > this._config.tagsHeaderMaxLength) {
+      log.error('Trace tags from carrier are too large, skipping extraction.')
+    } else {
+      const pairs = carrier[tagsKey].split(',')
+      const tags = {}
+
+      for (const pair of pairs) {
+        const [key, ...rest] = pair.split('=')
+        const value = rest.join('=')
+
+        if (!this._validateTagKey(key) || !this._validateTagValue(value)) {
+          log.error('Trace tags from carrier are invalid, skipping extraction.')
+          return
+        }
+
+        tags[key] = value
+      }
+
+      Object.assign(trace.tags, tags)
+    }
+  }
+
+  _validateTagKey (key) {
+    return tagKeyExpr.test(key)
+  }
+
+  _validateTagValue (value) {
+    return tagValueExpr.test(value)
   }
 
   _getPriority (sampled, debug) {

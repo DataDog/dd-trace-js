@@ -1,8 +1,9 @@
 {
   "name": "plugin-graphql",
   "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
-  "iterations": 3,
+  "iterations": 2,
   "variants": {
     "control": {},
     "with-async-hooks": {
@@ -12,7 +13,8 @@
     "with-depth-off": {
       "baseline": "control",
       "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0"}
-    },"with-depth-on-max": {
+    },
+    "with-depth-on-max": {
       "baseline": "control",
       "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4"}
     },

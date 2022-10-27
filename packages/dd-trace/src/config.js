@@ -14,7 +14,34 @@ const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
 
 // eslint-disable-next-line max-len
-const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
+const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
+
+function maybeFile (filepath) {
+  if (!filepath) return
+  try {
+    return fs.readFileSync(filepath, 'utf8')
+  } catch (e) {
+    return undefined
+  }
+}
+
+function safeJsonParse (input) {
+  try {
+    return JSON.parse(input)
+  } catch (err) {
+    return undefined
+  }
+}
+
+// Shallow clone with property name remapping
+function remapify (input, mappings) {
+  if (!input) return
+  const output = {}
+  for (const [key, value] of Object.entries(input)) {
+    output[key in mappings ? mappings[key] : key] = value
+  }
+  return output
+}
 
 class Config {
   constructor (options) {
@@ -70,6 +97,12 @@ class Config {
       null
     )
     const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
+
+    const DD_CIVISIBILITY_ITR_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_ITR_ENABLED,
+      false
+    )
+
     const DD_SERVICE = options.service ||
       process.env.DD_SERVICE ||
       process.env.DD_SERVICE_NAME ||
@@ -116,6 +149,10 @@ class Config {
       process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       qsRegex
     )
+    const DD_TRACE_CLIENT_IP_HEADER = coalesce(
+      process.env.DD_TRACE_CLIENT_IP_HEADER,
+      null
+    )
     const DD_TRACE_B3_ENABLED = coalesce(
       options.experimental && options.experimental.b3,
       process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
@@ -138,6 +175,17 @@ class Config {
     const DD_TRACE_GET_RUM_DATA_ENABLED = coalesce(
       options.experimental && options.experimental.enableGetRumData,
       process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
+      false
+    )
+
+    const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
+      process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
+      '512'
+    )
+
+    const DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
+      options.stats,
+      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
       false
     )
 
@@ -181,19 +229,70 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
     )
 
-    const sampler = (options.experimental && options.experimental.sampler) || {}
+    const iastOptions = options.experimental && options.experimental.iast
+    const DD_IAST_ENABLED = coalesce(
+      iastOptions &&
+      (iastOptions === true || iastOptions.enabled === true),
+      process.env.DD_IAST_ENABLED,
+      false
+    )
+
+    const defaultIastRequestSampling = 30
+    const iastRequestSampling = coalesce(
+      parseInt(iastOptions && iastOptions.requestSampling),
+      parseInt(process.env.DD_IAST_REQUEST_SAMPLING),
+      defaultIastRequestSampling
+    )
+    const DD_IAST_REQUEST_SAMPLING = iastRequestSampling < 0 ||
+      iastRequestSampling > 100 ? defaultIastRequestSampling : iastRequestSampling
+
+    const DD_IAST_MAX_CONCURRENT_REQUESTS = coalesce(
+      parseInt(iastOptions && iastOptions.maxConcurrentRequests),
+      parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS),
+      2
+    )
+
+    const DD_IAST_MAX_CONTEXT_OPERATIONS = coalesce(
+      parseInt(iastOptions && iastOptions.maxContextOperations),
+      parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS),
+      2
+    )
+
+    const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
+      false
+    )
+
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
-
-    Object.assign(sampler, {
+    const sampler = {
       sampleRate: coalesce(
         options.sampleRate,
-        ingestion.sampleRate,
-        sampler.sampleRate,
-        process.env.DD_TRACE_SAMPLE_RATE
+        process.env.DD_TRACE_SAMPLE_RATE,
+        ingestion.sampleRate
       ),
-      rateLimit: coalesce(ingestion.rateLimit, sampler.rateLimit, process.env.DD_TRACE_RATE_LIMIT)
-    })
+      rateLimit: coalesce(options.rateLimit, process.env.DD_TRACE_RATE_LIMIT, ingestion.rateLimit),
+      rules: coalesce(
+        options.samplingRules,
+        safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES),
+        []
+      ).map(rule => {
+        return remapify(rule, {
+          sample_rate: 'sampleRate'
+        })
+      }),
+      spanSamplingRules: coalesce(
+        options.spanSamplingRules,
+        safeJsonParse(maybeFile(process.env.DD_SPAN_SAMPLING_RULES_FILE)),
+        safeJsonParse(process.env.DD_SPAN_SAMPLING_RULES),
+        []
+      ).map(rule => {
+        return remapify(rule, {
+          sample_rate: 'sampleRate',
+          max_per_second: 'maxPerSecond'
+        })
+      })
+    }
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
@@ -211,6 +310,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.sampleRate = coalesce(Math.min(Math.max(sampler.sampleRate, 0), 1), 1)
     this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
+    this.clientIpHeaderDisabled = !isTrue(DD_APPSEC_ENABLED)
+    this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
     this.logger = options.logger
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE
@@ -228,9 +329,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       traceparent: isTrue(DD_TRACE_TRACEPARENT_ENABLED),
       runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
       exporter: DD_TRACE_EXPORTER,
-      enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED),
-      sampler
+      enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED)
     }
+    this.sampler = sampler
     this.reportHostname = isTrue(coalesce(options.reportHostname, process.env.DD_TRACE_REPORT_HOSTNAME, false))
     this.scope = process.env.DD_TRACE_SCOPE
     this.logLevel = coalesce(
@@ -248,6 +349,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     // Disabled for CI Visibility's agentless
     this.telemetryEnabled = DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED)
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
+    this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
     this.appsec = {
       enabled: isTrue(DD_APPSEC_ENABLED),
       rules: DD_APPSEC_RULES,
@@ -255,6 +357,17 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       wafTimeout: DD_APPSEC_WAF_TIMEOUT,
       obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP
+    }
+    this.iast = {
+      enabled: isTrue(DD_IAST_ENABLED),
+      requestSampling: DD_IAST_REQUEST_SAMPLING,
+      maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
+      maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS
+    }
+    this.isGitUploadEnabled = isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
+    this.isIntelligentTestRunnerEnabled = isTrue(DD_CIVISIBILITY_ITR_ENABLED)
+    this.stats = {
+      enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
     }
 
     tagger.add(this.tags, {

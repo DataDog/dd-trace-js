@@ -2,6 +2,9 @@
 
 const log = require('./log')
 const format = require('./format')
+const SpanSampler = require('./span_sampler')
+
+const { SpanStatsProcessor } = require('./span_stats')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -12,6 +15,9 @@ class SpanProcessor {
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
+
+    this._stats = new SpanStatsProcessor(config)
+    this._spanSampler = new SpanSampler(config)
   }
 
   process (span) {
@@ -24,10 +30,13 @@ class SpanProcessor {
 
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this._prioritySampler.sample(spanContext)
+      this._spanSampler.sample(spanContext)
 
       for (const span of started) {
         if (span._duration !== undefined) {
-          formatted.push(format(span))
+          const formattedSpan = format(span)
+          this._stats.onSpanFinished(formattedSpan)
+          formatted.push(formattedSpan)
         } else {
           active.push(span)
         }

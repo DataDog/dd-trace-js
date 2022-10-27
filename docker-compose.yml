@@ -77,9 +77,9 @@ services:
     ports:
       - "127.0.0.1:9231:9231"
   google-cloud-pubsub:
-    image: knarz/pubsub-emulator
+    image: ridedott/pubsub-emulator
     ports:
-      - "127.0.0.1:8085:8085"
+      - "127.0.0.1:8081:8081"
   localstack:
     image: localstack/localstack:0.11.2
     ports:
@@ -121,4 +121,11 @@ services:
       - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
       - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://127.0.0.1:9092
       - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
-
+  opensearch:
+    image: opensearchproject/opensearch:2
+    environment:
+      - plugins.security.disabled=true
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms128m -Xmx128m"
+    ports:
+      - "127.0.0.1:9201:9200"

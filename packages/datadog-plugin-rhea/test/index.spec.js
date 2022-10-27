@@ -7,6 +7,9 @@ describe('Plugin', () => {
   let tracer
 
   describe('rhea', () => {
+    before(() => agent.load('rhea'))
+    after(() => agent.close({ ritmReset: false }))
+
     withVersions('rhea', 'rhea', version => {
       describe('with broker', () => {
         let container
@@ -17,14 +20,12 @@ describe('Plugin', () => {
         })
 
         afterEach((done) => {
-          agent.close({ ritmReset: false })
-          agent.wipe()
           context.connection.once('connection_close', () => done())
           context.connection.close()
         })
 
         describe('without configuration', () => {
-          beforeEach(() => agent.load('rhea'))
+          beforeEach(() => agent.reload('rhea'))
 
           beforeEach(done => {
             container = require(`../../../versions/rhea@${version}`).get()
@@ -78,6 +79,19 @@ describe('Plugin', () => {
               })
               context.sender.send({ body: 'Hello World!' })
             })
+
+            it('should inject span context with encoded messages', (done) => {
+              container.once('message', msg => {
+                const keys = Object.keys(msg.message.delivery_annotations)
+                expect(keys).to.include('x-datadog-trace-id')
+                expect(keys).to.include('x-datadog-parent-id')
+                done()
+              })
+              tracer.trace('web.request', () => {
+                const encodedMessage = container.message.encode({ body: 'Hello World!' })
+                context.sender.send(encodedMessage, undefined, 0)
+              })
+            })
           })
 
           describe('receiving a message', () => {
@@ -113,7 +127,7 @@ describe('Plugin', () => {
         })
 
         describe('with configuration', () => {
-          beforeEach(() => agent.load('rhea', {
+          beforeEach(() => agent.reload('rhea', {
             service: 'a_test_service'
           }))
 
@@ -167,8 +181,6 @@ describe('Plugin', () => {
         })
 
         afterEach((done) => {
-          agent.close({ ritmReset: false })
-          agent.wipe()
           if (connection.socket_ready) {
             connection.once('connection_close', () => done())
             connection.close()
@@ -178,7 +190,7 @@ describe('Plugin', () => {
         })
 
         describe('with defaults', () => {
-          beforeEach(() => agent.load('rhea'))
+          beforeEach(() => agent.reload('rhea'))
 
           beforeEach(done => {
             const rhea = require(`../../../versions/rhea@${version}`).get()
@@ -279,7 +291,7 @@ describe('Plugin', () => {
         })
 
         describe('with pre-settled messages', () => {
-          beforeEach(() => agent.load('rhea'))
+          beforeEach(() => agent.reload('rhea'))
 
           beforeEach(done => {
             const rhea = require(`../../../versions/rhea@${version}`).get()
@@ -348,7 +360,7 @@ describe('Plugin', () => {
         })
 
         describe('with manually settled messages', () => {
-          beforeEach(() => agent.load('rhea'))
+          beforeEach(() => agent.reload('rhea'))
 
           beforeEach(done => {
             const rhea = require(`../../../versions/rhea@${version}`).get()
@@ -429,7 +441,7 @@ describe('Plugin', () => {
         })
 
         describe('on disconnect', () => {
-          beforeEach(() => agent.load('rhea'))
+          beforeEach(() => agent.reload('rhea'))
 
           beforeEach(done => {
             const rhea = require(`../../../versions/rhea@${version}`).get()

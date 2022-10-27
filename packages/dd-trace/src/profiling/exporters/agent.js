@@ -2,10 +2,10 @@
 
 const retry = require('retry')
 const { request } = require('http')
-const FormData = require('./form-data')
 
 // TODO: avoid using dd-trace internals. Make this a separate module?
 const docker = require('../../exporters/common/docker')
+const FormData = require('../../exporters/common/form-data')
 const version = require('../../../../../package.json').version
 
 const containerId = docker.id()

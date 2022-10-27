@@ -10,7 +10,7 @@ const BaseWriter = require('../common/writer')
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 class Writer extends BaseWriter {
-  constructor ({ prioritySampler, lookup, protocolVersion }) {
+  constructor ({ prioritySampler, lookup, protocolVersion, headers }) {
     super(...arguments)
     const AgentEncoder = getEncoder(protocolVersion)
 
@@ -18,12 +18,14 @@ class Writer extends BaseWriter {
     this._lookup = lookup
     this._protocolVersion = protocolVersion
     this._encoder = new AgentEncoder(this)
+    this._headers = headers
   }
 
   _sendPayload (data, count, done) {
     metrics.increment(`${METRIC_PREFIX}.requests`, true)
 
-    makeRequest(this._protocolVersion, data, count, this._url, this._lookup, true, (err, res, status) => {
+    const { _headers, _lookup, _protocolVersion, _url } = this
+    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, true, (err, res, status) => {
       if (status) {
         metrics.increment(`${METRIC_PREFIX}.responses`, true)
         metrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
@@ -73,33 +75,27 @@ function getEncoder (protocolVersion) {
   }
 }
 
-function makeRequest (version, data, count, url, lookup, needsStartupLog, cb) {
+function makeRequest (version, data, count, url, headers, lookup, needsStartupLog, cb) {
   const options = {
     path: `/v${version}/traces`,
     method: 'PUT',
     headers: {
+      ...headers,
       'Content-Type': 'application/msgpack',
       'Datadog-Meta-Tracer-Version': tracerVersion,
       'X-Datadog-Trace-Count': String(count)
     },
-    lookup
+    lookup,
+    url
   }
 
   setHeader(options.headers, 'Datadog-Meta-Lang', 'nodejs')
   setHeader(options.headers, 'Datadog-Meta-Lang-Version', process.version)
   setHeader(options.headers, 'Datadog-Meta-Lang-Interpreter', process.jsEngine || 'v8')
 
-  if (url.protocol === 'unix:') {
-    options.socketPath = url.pathname
-  } else {
-    options.protocol = url.protocol
-    options.hostname = url.hostname
-    options.port = url.port
-  }
-
   log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)
 
-  request(data, options, true, (err, res, status) => {
+  request(data, options, (err, res, status) => {
     if (needsStartupLog) {
       // Note that logging will only happen once, regardless of how many times this is called.
       startupLog({

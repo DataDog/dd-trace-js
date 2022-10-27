@@ -1,12 +1,12 @@
 'use strict'
 
+const { expect } = require('chai')
+
 const URL = require('url').URL
 
 describe('Exporter', () => {
   let url
   let flushInterval
-  let Scheduler
-  let scheduler
   let Exporter
   let exporter
   let Writer
@@ -18,22 +18,26 @@ describe('Exporter', () => {
     url = 'www.example.com'
     flushInterval = 1000
     span = {}
-    scheduler = {
-      start: sinon.spy(),
-      reset: sinon.spy()
-    }
     writer = {
       append: sinon.spy(),
       flush: sinon.spy(),
       setUrl: sinon.spy()
     }
     prioritySampler = {}
-    Scheduler = sinon.stub().returns(scheduler)
     Writer = sinon.stub().returns(writer)
 
     Exporter = proxyquire('../src/exporters/agent', {
-      '../scheduler': Scheduler,
       './writer': Writer
+    })
+  })
+
+  it('should pass computed stats header through to writer', () => {
+    const stats = { enabled: true }
+    exporter = new Exporter({ url, flushInterval, stats }, prioritySampler)
+    expect(Writer).to.have.been.calledWithMatch({
+      headers: {
+        'Datadog-Client-Computed-Stats': 'yes'
+      }
     })
   })
 
@@ -42,13 +46,21 @@ describe('Exporter', () => {
       exporter = new Exporter({ url, flushInterval }, prioritySampler)
     })
 
-    it('should schedule flushing after the configured interval', () => {
-      writer.length = 0
+    it('should not flush if export has not been called', (done) => {
       exporter = new Exporter({ url, flushInterval }, prioritySampler)
-      Scheduler.firstCall.args[0]()
+      setTimeout(() => {
+        expect(writer.flush).not.to.have.been.called
+        done()
+      }, flushInterval + 100)
+    })
 
-      expect(scheduler.start).to.have.been.called
-      expect(writer.flush).to.have.been.called
+    it('should flush after the configured interval if a payload has been exported', (done) => {
+      exporter = new Exporter({ url, flushInterval }, prioritySampler)
+      exporter.export([{}])
+      setTimeout(() => {
+        expect(writer.flush).to.have.been.called
+        done()
+      }, flushInterval + 100)
     })
 
     describe('export', () => {

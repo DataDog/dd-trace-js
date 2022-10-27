@@ -58,6 +58,7 @@ tracer.use('pg', {
 <h5 id="koa"></h5>
 <h5 id="koa-tags"></h5>
 <h5 id="koa-config"></h5>
+<h5 id="mariadb"></h5>
 <h5 id="memcached"></h5>
 <h5 id="memcached-tags"></h5>
 <h5 id="memcached-config"></h5>
@@ -75,6 +76,7 @@ tracer.use('pg', {
 <h5 id="mysql2-config"></h5>
 <h5 id="net"></h5>
 <h5 id="next"></h5>
+<h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>
 <h5 id="paperplane"></h5>
 <h5 id="paperplane-tags"></h5>
@@ -119,7 +121,7 @@ tracer.use('pg', {
 * [kafkajs](./interfaces/plugins.kafkajs.html)
 * [knex](./interfaces/plugins.knex.html)
 * [koa](./interfaces/plugins.koa.html)
-* [ioredis](./interfaces/plugins.ioredis.html)
+* [mariadb](./interfaces/plugins.mariadb.html)
 * [microgateway--core](./interfaces/plugins.microgateway_core.html)
 * [mocha](./interfaces/plugins.mocha.html)
 * [mongodb-core](./interfaces/plugins.mongodb_core.html)
@@ -127,6 +129,7 @@ tracer.use('pg', {
 * [mysql2](./interfaces/plugins.mysql2.html)
 * [net](./interfaces/plugins.net.html)
 * [next](./interfaces/plugins.next.html)
+* [opensearch](./interfaces/plugins.opensearch.html)
 * [oracledb](./interfaces/plugins.oracledb.html)
 * [paperplane](./interfaces/plugins.paperplane.html)
 * [pino](./interfaces/plugins.pino.html)
@@ -288,26 +291,15 @@ someFunction() // null because called outside the scope
 
 <h4>scope.bind(target, [span])</h4>
 
-This method binds a target to the specified span, or to the active span if
-unspecified. It supports binding functions, promises and event emitters.
+This method binds a function to the specified span, or to the active span if
+unspecified.
 
-When a span is provided, the target is always bound to that span. Explicitly
+When a span is provided, the function is always bound to that span. Explicitly
 passing `null` as the span will actually bind to `null` or no span. When a span
-is not provided, the binding uses the following rules:
+is not provided, the function is bound to the span that is active when
+`scope.bind(fn)` is called.
 
-* Functions are bound to the span that is active when `scope.bind(fn)` is called.
-* Promise handlers are bound to the active span in the scope where `.then()` was
-called. This also applies to any equivalent method such as `.catch()`.
-* Event emitter listeners are bound to the active span in the scope where
-`.addEventListener()` was called. This also applies to any equivalent method
-such as `.on()`
-
-**Note**: Native promises and promises from `bluebird`, `q` and `when` are
-already bound by default and don't need to be explicitly bound.
-
-<h5>Examples</h5>
-
-<h6>Function binding</h6>
+<h5>Example</h5>
 
 ```javascript
 const tracer = require('dd-trace').init()
@@ -332,70 +324,7 @@ scope.activate(outerSpan, () => {
 })
 ```
 
-<h6>Promise binding</h6>
-
-```javascript
-const tracer = require('dd-trace').init()
-const scope = tracer.scope()
-const log = console.log
-
-const outerSpan = tracer.startSpan('web.request')
-const innerPromise = Promise.resolve()
-const outerPromise = Promise.resolve()
-
-scope.activate(outerSpan, () => {
-  const innerSpan = tracer.startSpan('web.middleware')
-
-  scope.bind(innerPromise, innerSpan)
-  scope.bind(outerPromise)
-
-  innerPromise.then(() => {
-    log(scope.active()) // innerSpan because explicitly bound
-  })
-
-  outerPromise.then(() => {
-    log(scope.active()) // outerSpan because implicitly bound on `then()` call
-  })
-})
-```
-
-**Note**: `async/await` cannot be bound and always execute in the scope where
-`await` was called. If binding `async/await` is needed, the promise must be
-wrapped by a function.
-
-<h6>Event emitter binding</h6>
-
-```javascript
-const tracer = require('dd-trace').init()
-const scope = tracer.scope()
-const log = console.log
-const EventEmitter = require('events').EventEmitter
-
-const outerSpan = tracer.startSpan('web.request')
-const innerEmitter = new EventEmitter()
-const outerEmitter = new EventEmitter()
-
-scope.activate(outerSpan, async () => {
-  const innerSpan = tracer.startSpan('web.middleware')
-
-  scope.bind(innerEmitter, innerSpan)
-  scope.bind(outerEmitter)
-
-  innerEmitter.on('request', () => {
-    log(scope.active()) // innerSpan because explicitly bound
-  })
-
-  outerEmitter.on('request', () => {
-    log(scope.active()) // outerSpan because implicitly bound on `then()` call
-  })
-})
-
-innerEmitter.emit('request')
-outerEmitter.emit('request')
-```
-
 See the [API documentation](./interfaces/scope.html) for more details.
-
 
 <h2 id="opentracing-api">OpenTracing Compatibility</h2>
 
@@ -435,16 +364,19 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | logInjection    | `DD_LOGS_INJECTION`                | `false`        | Enable automatic injection of trace IDs in logs for supported logging libraries. |
 | tags            | `DD_TAGS`                          | `{}`           | Set global tags that should be applied to all spans and metrics. When passed as an environment variable, the format is `key:value,key:value` |
 | sampleRate      | `DD_TRACE_SAMPLE_RATE`             | -              | Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent. |
+| rateLimit       | `DD_TRACE_RATE_LIMIT`              | -              | Global rate limit that is applied on the global sample rate and all rules, and controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent. |
+| samplingRules   | `DD_TRACE_SAMPLING_RULES`          | `[]`           | Sampling rules to apply to priority samplin. Each rule is a JSON, consisting of `service` and `name`, which are regexes to match against a trace's `service` and `name`, and a corresponding `sampleRate`. If not specified, will defer to global sampling rate for all spans. |
+| spanSamplingRules | `DD_SPAN_SAMPLING_RULES`         | `[]`           | Span sampling rules for ingesting single spans, in cases where the whole trace is dropped. |
+| -               | `DD_SPAN_SAMPLING_RULES_FILE`      | -              | Points to a JSON file that contains the span sampling rules. `DD_SPAN_SAMPLING_RULES` takes precedence over this variable.
 | flushInterval   | -                                  | `2000`         | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | flushMinSpans   | `DD_TRACE_PARTIAL_FLUSH_MIN_SPANS` | `1000`         | Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces. |
 | -               | `DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP` | -      | A regex to redact sensitive data from incoming requests' querystring reported in the `http.url` tag (matches will be replaced with `<redacted>`). Can be an empty string to disable redaction or `.*` to redact all querystring. **WARNING: this regex will execute for every incoming request on an unsafe input (url), please make sure you use a safe regex.** |
+| -               | `DD_TRACE_CLIENT_IP_HEADER`        | -              | Custom header name to source the `http.client_ip` tag from. |
 | lookup          | -                                  | `dns.lookup()` | Custom function for DNS lookups when sending requests to the agent. |
 | protocolVersion | `DD_TRACE_AGENT_PROTOCOL_VERSION`  | `0.4`          | Protocol version to use for requests to the agent. The version configured must be supported by the agent version installed or all traces will be dropped. |
-| runtimeMetrics  | `DD_RUNTIME_METRICS_EN ABLED`      | `false`        | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
+| runtimeMetrics  | `DD_RUNTIME_METRICS_ENABLED`      | `false`        | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
 | profiling       | `DD_PROFILING_ENABLED`             | `false`        | Whether to enable profiling. |
 | reportHostname  | `DD_TRACE_REPORT_HOSTNAME`         | `false`        | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
-| ingestion.sampleRate | `DD_TRACE_SAMPLE_RATE`        | `-`            | Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent. |
-| ingestion.rateLimit  | `DD_TRACE_RATE_LIMIT`         | `-`            | Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent. |
 | experimental    | -                                  | `{}`           | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Please contact us to learn more about the available experimental features. |
 | plugins         | -                                  | `true`         | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
 | -               | `DD_TRACE_DISABLED_PLUGINS`        | -              | A comma-separated string of integration names automatically disabled when tracer is initialized. Environment variable only e.g. `DD_TRACE_DISABLED_PLUGINS=express,dns`. |
@@ -517,14 +449,14 @@ const tracer = require('dd-trace').init()
 function handle () {
   tracer.setUser({
     id: '123456789', // *REQUIRED* Unique identifier of the user.
-    
+
     // All other fields are optional.
     email: 'jane.doe@example.com', // Email of the user.
     name: 'Jane Doe', // User-friendly name of the user.
     session_id: '987654321', // Session ID of the user.
     role: 'admin', // Role the user is making the request under.
     scope: 'read:message, write:files', // Scopes or granted authorizations the user currently possesses.
-    
+
     // Arbitrary fields are also accepted to attach custom data to the user (RBAC, Oauth, etc…)
     custom_tag: 'custom data'
   })

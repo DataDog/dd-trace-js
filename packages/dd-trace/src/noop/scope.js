@@ -11,12 +11,8 @@ class Scope {
     return callback()
   }
 
-  bind (target, span) {
-    return target
-  }
-
-  unbind (target) {
-    return target
+  bind (fn, span) {
+    return fn
   }
 }
 

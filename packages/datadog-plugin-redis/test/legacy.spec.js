@@ -99,22 +99,35 @@ describe('Plugin', () => {
         })
 
         it('should handle errors', done => {
+          const assertError = () => {
+            if (!error || !span) return
+
+            try {
+              expect(span.meta).to.have.property('error.type', error.name)
+              expect(span.meta).to.have.property('error.msg', error.message)
+              expect(span.meta).to.have.property('error.stack', error.stack)
+
+              done()
+            } catch (e) {
+              done(e)
+            }
+          }
+
           let error
+          let span
+
+          agent.use(traces => {
+            expect(traces[0][0]).to.have.property('resource', 'set')
+            span = traces[0][0]
+            assertError()
+          })
 
           client.on('error', done)
 
           client.set('foo', 123, 'bar', (err, res) => {
             error = err
+            assertError()
           })
-
-          agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.have.property('error.type', error.name)
-              expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-              expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
-            })
-            .then(done)
-            .catch(done)
         })
       })
 

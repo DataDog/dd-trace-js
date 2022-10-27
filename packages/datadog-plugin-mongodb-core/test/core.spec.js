@@ -109,30 +109,6 @@ describe('Plugin', () => {
             }, () => {})
           })
 
-          it('should sanitize the query', done => {
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                const query = '{"foo":"?","bar":{"baz":"?"}}'
-                const resource = `find test.${collection} ${query}`
-
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
-              })
-              .then(done)
-              .catch(done)
-
-            server.command(`test.${collection}`, {
-              find: `test.${collection}`,
-              query: {
-                foo: 1,
-                bar: {
-                  baz: [1, 2, 3]
-                }
-              }
-            }, () => {})
-          })
-
           it('should sanitize buffers as values and not as objects', done => {
             agent
               .use(traces => {
@@ -152,13 +128,14 @@ describe('Plugin', () => {
             }, () => {})
           })
 
-          it('should sanitize BSON as values and not as objects', done => {
+          it('should stringify BSON objects', done => {
             const BSON = require(`../../../versions/bson@4.0.0`).get()
+            const id = '123456781234567812345678'
 
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collection} {"_id":"?"}`
+                const resource = `find test.${collection} {"_id":"${id}"}`
 
                 expect(span).to.have.property('resource', resource)
               })
@@ -168,7 +145,7 @@ describe('Plugin', () => {
             server.command(`test.${collection}`, {
               find: `test.${collection}`,
               query: {
-                _id: new BSON.ObjectID('123456781234567812345678')
+                _id: new BSON.ObjectID(id)
               }
             }, () => {})
           })
@@ -177,7 +154,7 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collection} {"_id":"?"}`
+                const resource = `find test.${collection} {"_id":"1234"}`
 
                 expect(span).to.have.property('resource', resource)
               })
@@ -263,7 +240,7 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collection} {"foo":"?","bar":{"baz":"?"}}`
+                const resource = `find test.${collection} {"foo":1,"bar":{"baz":[1,2,3]}}`
 
                 expect(span).to.have.property('resource', resource)
               })

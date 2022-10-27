@@ -63,6 +63,7 @@ describe('Plugin', () => {
     }
 
     Transport.prototype.log = log
+    Transport.prototype.name = 'dd'
 
     transport = new Transport()
     httpTransport = new winston.transports.Http({
@@ -93,6 +94,14 @@ describe('Plugin', () => {
     withVersions('winston', 'winston', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
+      })
+
+      afterEach(() => {
+        if (!winston.configure) {
+          winston.remove('dd')
+          winston.remove('http')
+          winston.add(winston.transports.Console)
+        }
       })
 
       afterEach(() => {
@@ -223,26 +232,33 @@ describe('Plugin', () => {
             })
           }
 
-          it('should overwrite any existing "dd" property', async () => {
-            const meta = {
-              dd: {
-                trace_id: span.context().toTraceId(),
-                span_id: span.context().toSpanId()
-              }
-            }
-
+          it('should not overwrite any existing "dd" property', async () => {
             tracer.scope().activate(span, () => {
-              const logObj = {
-                some: 'data',
+              const meta = {
                 dd: 'something else'
               }
-              winston.info(logObj)
-              expect(logObj.dd).to.equal('something else')
+              winston.log('info', 'test', meta)
+              expect(meta.dd).to.equal('something else')
 
-              expect(spy).to.have.been.calledWithMatch(meta.dd)
+              expect(spy).to.have.been.calledWithMatch('something else')
             })
-            expect(await logServer.logPromise).to.include(meta.dd)
+            expect(await logServer.logPromise).to.include('something else')
           })
+
+          // New versions clone the meta object so it's always extensible.
+          if (semver.intersects(version, '<3')) {
+            it('should not add "dd" property to non-extensible objects', async () => {
+              tracer.scope().activate(span, () => {
+                const meta = {}
+                Object.preventExtensions(meta)
+                winston.log('info', 'test', meta)
+                expect(meta.dd).to.be.undefined
+
+                expect(spy).to.have.been.calledWith()
+              })
+              expect(await logServer.logPromise).to.be.undefined
+            })
+          }
 
           it('should skip injection without a store', async () => {
             expect(() => winston.info('message')).to.not.throw()

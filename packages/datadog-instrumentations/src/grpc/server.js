@@ -37,15 +37,17 @@ function wrapHandler (func, name) {
     return requestResource.runInAsyncScope(() => {
       startChannel.publish({ name, metadata, type })
 
-      // Finish the span if the call was cancelled.
-      call.once('cancelled', requestResource.bind(() => {
+      const onCancel = requestResource.bind(() => {
         finishChannel.publish({ code: CANCELLED })
-      }))
+      })
+
+      // Finish the span if the call was cancelled.
+      call.once('cancelled', onCancel)
 
       if (isStream) {
-        wrapStream(call, requestResource, parentResource)
+        wrapStream(call, requestResource, onCancel)
       } else {
-        arguments[1] = wrapCallback(callback, requestResource, parentResource)
+        arguments[1] = wrapCallback(callback, call, requestResource, parentResource, onCancel)
       }
 
       shimmer.wrap(call, 'emit', emit => requestResource.bind(emit))
@@ -65,7 +67,7 @@ function wrapRegister (register) {
   }
 }
 
-function wrapStream (call, requestResource) {
+function wrapStream (call, requestResource, onCancel) {
   if (call.call && call.call.sendStatus) {
     call.call.sendStatus = wrapSendStatus(call.call.sendStatus, requestResource)
   }
@@ -76,6 +78,8 @@ function wrapStream (call, requestResource) {
         case 'error':
           errorChannel.publish(args[0])
           finishChannel.publish({ code: args[0].code })
+
+          call.removeListener('cancelled', onCancel)
 
           break
 
@@ -90,6 +94,8 @@ function wrapStream (call, requestResource) {
             finishChannel.publish()
           }
 
+          call.removeListener('cancelled', onCancel)
+
           break
       }
 
@@ -98,7 +104,7 @@ function wrapStream (call, requestResource) {
   })
 }
 
-function wrapCallback (callback, requestResource, parentResource) {
+function wrapCallback (callback, call, requestResource, parentResource, onCancel) {
   return function (err, value, trailer, flags) {
     requestResource.runInAsyncScope(() => {
       if (err instanceof Error) {
@@ -107,6 +113,8 @@ function wrapCallback (callback, requestResource, parentResource) {
       } else {
         finishChannel.publish({ code: OK, trailer })
       }
+
+      call.removeListener('cancelled', onCancel)
     })
 
     if (callback) {
@@ -131,7 +139,7 @@ function isEmitter (obj) {
   return typeof obj.emit === 'function' && typeof obj.once === 'function'
 }
 
-addHook({ name: 'grpc', versions: ['>=1.20.2'], file: 'src/server.js' }, server => {
+addHook({ name: 'grpc', versions: ['>=1.24.3'], file: 'src/server.js' }, server => {
   shimmer.wrap(server.Server.prototype, 'register', wrapRegister)
 
   return server

@@ -1,5 +1,6 @@
 'use strict'
 
+const net = require('net')
 const uniq = require('lodash.uniq')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = 'http_headers'
@@ -8,6 +9,7 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
+const BlockList = require('./ip_blocklist')
 const { incomingHttpRequestEnd } = require('../../appsec/gateway/channels')
 
 const WEB = types.WEB
@@ -24,11 +26,24 @@ const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
+const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const MANUAL_DROP = tags.MANUAL_DROP
 
 const HTTP2_HEADER_AUTHORITY = ':authority'
 const HTTP2_HEADER_SCHEME = ':scheme'
 const HTTP2_HEADER_PATH = ':path'
+
+const ipHeaderList = [
+  'x-forwarded-for',
+  'x-real-ip',
+  'client-ip',
+  'x-forwarded',
+  'x-cluster-client-ip',
+  'forwarded-for',
+  'forwarded',
+  'via',
+  'true-client-ip'
+]
 
 const contexts = new WeakMap()
 const ends = new WeakMap()
@@ -337,6 +352,42 @@ const web = {
 
     return `${path}?${qs}`
   },
+
+  extractIp (context) {
+    const { req, config } = context
+
+    if (config.clientIpHeaderDisabled) return
+
+    const headers = req.headers
+
+    if (config.clientIpHeader) {
+      const header = headers[config.clientIpHeader]
+      if (!header) return
+
+      return findFirstIp(header)
+    }
+
+    const foundHeaders = []
+
+    for (let i = 0; i < ipHeaderList.length; i++) {
+      if (headers[ipHeaderList[i]]) {
+        foundHeaders.push(ipHeaderList[i])
+      }
+    }
+
+    if (foundHeaders.length === 1) {
+      const header = headers[foundHeaders[0]]
+      const firstIp = findFirstIp(header)
+
+      if (firstIp) return firstIp
+    } else if (foundHeaders.length > 1) {
+      log.error(`Cannot find client IP: multiple IP headers detected ${foundHeaders}`)
+      return
+    }
+
+    return req.socket && req.socket.remoteAddress
+  },
+
   wrapWriteHead (context) {
     const { req, res } = context
     const writeHead = res.writeHead
@@ -392,7 +443,8 @@ function addAllowHeaders (req, res, headers) {
     'x-datadog-parent-id',
     'x-datadog-sampled', // Deprecated, but still accept it in case it's sent.
     'x-datadog-sampling-priority',
-    'x-datadog-trace-id'
+    'x-datadog-trace-id',
+    'x-datadog-tags'
   ]
 
   for (const header of contextHeaders) {
@@ -434,7 +486,8 @@ function addRequestTags (context) {
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
     [SPAN_TYPE]: WEB,
-    [HTTP_USERAGENT]: req.headers['user-agent']
+    [HTTP_USERAGENT]: req.headers['user-agent'],
+    [HTTP_CLIENT_IP]: web.extractIp(context)
   })
 
   addHeaders(context)
@@ -500,6 +553,51 @@ function getProtocol (req) {
   if (req.connection && req.connection.encrypted) return 'https'
 
   return 'http'
+}
+
+const privateCIDRs = [
+  '127.0.0.0/8',
+  '10.0.0.0/8',
+  '172.16.0.0/12',
+  '192.168.0.0/16',
+  '169.254.0.0/16',
+  '::1/128',
+  'fec0::/10',
+  'fe80::/10',
+  'fc00::/7',
+  'fd00::/8'
+]
+
+const privateIPMatcher = new BlockList()
+
+for (const cidr of privateCIDRs) {
+  const [ address, prefix ] = cidr.split('/')
+
+  privateIPMatcher.addSubnet(address, parseInt(prefix), net.isIPv6(address) ? 'ipv6' : 'ipv4')
+}
+
+function findFirstIp (str) {
+  let firstPrivateIp
+  const splitted = str.split(',')
+
+  for (let i = 0; i < splitted.length; i++) {
+    const chunk = splitted[i].trim()
+
+    // TODO: strip port and interface data ?
+
+    const type = net.isIP(chunk)
+    if (!type) continue
+
+    if (!privateIPMatcher.check(chunk, type === 6 ? 'ipv6' : 'ipv4')) {
+      // it's public, return it immediately
+      return chunk
+    }
+
+    // it's private, only save the first one found
+    if (!firstPrivateIp) firstPrivateIp = chunk
+  }
+
+  return firstPrivateIp
 }
 
 function getHeadersToRecord (config) {

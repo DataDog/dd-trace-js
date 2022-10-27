@@ -3,25 +3,40 @@
 // TODO: Add test with slow or unresponsive agent.
 // TODO: Add telemetry for things like dropped requests, errors, etc.
 
+const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
+const { parse: urlParse } = require('url')
 const docker = require('./docker')
 const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
 
 const keepAlive = true
-const maxTotalSockets = 1
+const maxSockets = 1
 const maxActiveRequests = 8
-const httpAgent = new http.Agent({ keepAlive, maxTotalSockets })
-const httpsAgent = new https.Agent({ keepAlive, maxTotalSockets })
+const httpAgent = new http.Agent({ keepAlive, maxSockets })
+const httpsAgent = new https.Agent({ keepAlive, maxSockets })
 const containerId = docker.id()
 
 let activeRequests = 0
 
-function request (data, options, keepAlive, callback) {
-  console.log('flushing in request!!')
+function request (data, options, callback) {
   if (!options.headers) {
     options.headers = {}
   }
+
+  if (options.url) {
+    const url = typeof options.url === 'object' ? options.url : urlParse(options.url)
+    if (url.protocol === 'unix:') {
+      options.socketPath = url.pathname
+    } else {
+      options.protocol = url.protocol
+      options.hostname = url.hostname
+      options.port = url.port
+    }
+  }
+
+  const isReadable = data instanceof Readable
 
   // The timeout should be kept low to avoid excessive queueing.
   const timeout = options.timeout || 2000
@@ -29,15 +44,15 @@ function request (data, options, keepAlive, callback) {
   const client = isSecure ? https : http
   const dataArray = [].concat(data)
 
-  options.headers['Content-Length'] = byteLength(dataArray)
+  if (!isReadable) {
+    options.headers['Content-Length'] = byteLength(dataArray)
+  }
 
   if (containerId) {
     options.headers['Datadog-Container-ID'] = containerId
   }
 
-  if (keepAlive) {
-    options.agent = isSecure ? httpsAgent : httpAgent
-  }
+  options.agent = isSecure ? httpsAgent : httpAgent
 
   const onResponse = res => {
     let responseData = ''
@@ -60,7 +75,10 @@ function request (data, options, keepAlive, callback) {
   }
 
   const makeRequest = onError => {
-    if (!request.writable) return callback(null)
+    if (!request.writable) {
+      log.debug('Maximum number of active requests reached: payload is discarded.')
+      return callback(null)
+    }
 
     activeRequests++
 
@@ -75,15 +93,23 @@ function request (data, options, keepAlive, callback) {
       onError(err)
     })
 
-    dataArray.forEach(buffer => req.write(buffer))
-
     req.setTimeout(timeout, req.abort)
-    req.end()
+
+    if (isReadable) {
+      data.pipe(req) // TODO: Validate whether this is actually retriable.
+    } else {
+      dataArray.forEach(buffer => req.write(buffer))
+      req.end()
+    }
 
     storage.enterWith(store)
   }
 
-  makeRequest(() => makeRequest(callback))
+  // TODO: Figure out why setTimeout is needed to avoid losing the async context
+  // in the retry request before socket.connect() is called.
+  // TODO: Test that this doesn't trace itself on retry when the diagnostics
+  // channel events are available in the agent exporter.
+  makeRequest(() => setTimeout(() => makeRequest(callback)))
 }
 
 function byteLength (data) {

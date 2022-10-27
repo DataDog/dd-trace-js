@@ -12,7 +12,10 @@ const config = {
   url: 'http://localhost:8126',
   flushInterval: 2000,
   flushMinSpans: 1000,
-  protocolVersion: process.env.ENCODER_VERSION
+  protocolVersion: process.env.ENCODER_VERSION,
+  stats: {
+    enabled: process.env.WITH_STATS === '1'
+  }
 }
 const prioritySampler = new PrioritySampler()
 const exporter = new Exporter(config, prioritySampler)
@@ -59,7 +62,7 @@ function processSpans () {
   sp.process(finished[0])
   trace.finished = finished
   trace.started = finished
-  if (++iterations < 25000) {
+  if (++iterations < 2500) {
     setImmediate(processSpans)
   }
 }

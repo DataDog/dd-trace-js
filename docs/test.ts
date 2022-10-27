@@ -12,6 +12,7 @@ import {
   HTTP_STATUS_CODE,
   HTTP_URL,
   HTTP_USERAGENT,
+  HTTP_CLIENT_IP,
   MANUAL_DROP,
   MANUAL_KEEP,
   RESOURCE_NAME,
@@ -44,17 +45,10 @@ tracer.init({
     rateLimit: 500
   },
   experimental: {
+    iast: true,
     b3: true,
     runtimeId: true,
-    exporter: 'log',
-    sampler: {
-      sampleRate: 1,
-      rateLimit: 1000,
-      rules: [
-        { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
-        { sampleRate: 0.1, service: /foo/, name: /foo\.request/ }
-      ]
-    }
+    exporter: 'log'
   },
   hostname: 'agent',
   logger: {
@@ -73,6 +67,15 @@ tracer.init({
   flushMinSpans: 500,
   lookup: () => {},
   sampleRate: 0.1,
+  rateLimit: 1000,
+  samplingRules: [
+    { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
+    { sampleRate: 0.1, service: /foo/, name: /foo\.request/ }
+  ],
+  spanSamplingRules: [
+    { sampleRate: 1.0, service: 'foo', name: 'foo.request', maxPerSecond: 5 },
+    { sampleRate: 0.5, service: 'ba?', name: 'ba?.*', maxPerSecond: 10 }
+  ],
   service: 'test',
   tags: {
     foo: 'bar'
@@ -92,6 +95,17 @@ tracer.init({
     obfuscatorValueRegex: '.*'
   }
 });
+
+tracer.init({
+  experimental: {
+    iast: {
+      enabled: true,
+      requestSampling: 50,
+      maxConcurrentRequests: 4,
+      maxContextOperations: 30
+    }
+  }
+})
 
 const httpOptions = {
   service: 'test',
@@ -182,7 +196,14 @@ const moleculerOptions = {
   server: {
     meta: true
   }
-}
+};
+
+const openSearchOptions = {
+  service: 'test',
+  hooks: {
+    query: (span, params) => {},
+  },
+};
 
 tracer.use('amqp10');
 tracer.use('amqplib');
@@ -235,6 +256,7 @@ tracer.use('kafkajs');
 tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
+tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('memcached');
 tracer.use('microgateway-core', httpServerOptions);
 tracer.use('mocha');
@@ -248,6 +270,7 @@ tracer.use('mysql2');
 tracer.use('mysql2', { service: () => `my-custom-mysql2` });
 tracer.use('net');
 tracer.use('next');
+tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
 tracer.use('oracledb', { service: params => `${params.host}-${params.database}` });
 tracer.use('paperplane');
@@ -314,29 +337,6 @@ const activateVoidType: void = scope.activate(span, () => {});
 const bindFunctionStringType: (arg1: string, arg2: number) => string = scope.bind((arg1: string, arg2: number): string => 'test');
 const bindFunctionVoidType: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): void => {});
 const bindFunctionVoidTypeWithSpan: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): string => 'test', span);
-
-Promise.resolve();
-
-scope.bind(promise);
-scope.bind(promise, span);
-
-const simpleEmitter = {
-  emit (eventName: string, arg1: boolean, arg2: number): void {}
-};
-
-scope.bind(simpleEmitter);
-scope.bind(simpleEmitter, span);
-
-const emitter = {
-  emit (eventName: string, arg1: boolean, arg2: number): void {},
-  on (eventName: string, listener: (arg1: boolean, arg2: number) => void) {},
-  off (eventName: string, listener: (arg1: boolean, arg2: number) => void) {},
-  addListener (eventName: string, listener: (arg1: boolean, arg2: number) => void) {},
-  removeListener (eventName: string, listener: (arg1: boolean, arg2: number) => void) {}
-};
-
-scope.bind(emitter);
-scope.bind(emitter, span);
 
 tracer.wrap('x', () => {
   const rumData: string = tracer.getRumData();

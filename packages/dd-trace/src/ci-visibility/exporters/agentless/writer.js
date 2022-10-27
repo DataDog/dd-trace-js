@@ -5,16 +5,34 @@ const log = require('../../../log')
 const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')
 
+function safeJSONStringify (value) {
+  return JSON.stringify(value, (key, value) =>
+    key !== 'dd-api-key' ? value : undefined
+  )
+}
+
 class Writer extends BaseWriter {
   constructor ({ url, tags }) {
     super(...arguments)
     const { 'runtime-id': runtimeId, env, service } = tags
     this._url = url
-    this._encoder = new AgentlessCiVisibilityEncoder({ runtimeId, env, service })
+    this._encoder = new AgentlessCiVisibilityEncoder(this, { runtimeId, env, service })
   }
 
   _sendPayload (data, _, done) {
-    makeRequest(data, this._url, (err, res) => {
+    const options = {
+      path: '/api/v2/citestcycle',
+      method: 'POST',
+      headers: {
+        'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
+        'Content-Type': 'application/msgpack'
+      },
+      timeout: 15000,
+      url: this._url
+    }
+
+    log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
+    request(data, options, (err, res) => {
       if (err) {
         log.error(err)
         done()
@@ -24,28 +42,6 @@ class Writer extends BaseWriter {
       done()
     })
   }
-}
-
-function makeRequest (data, url, cb) {
-  const options = {
-    path: '/api/v2/citestcycle',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/msgpack',
-      'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY
-    },
-    timeout: 15000
-  }
-
-  options.protocol = url.protocol
-  options.hostname = url.hostname
-  options.port = url.port
-
-  log.debug(() => `Request to the intake: ${JSON.stringify(options)}`)
-
-  request(data, options, false, (err, res) => {
-    cb(err, res)
-  })
 }
 
 module.exports = Writer

@@ -47,13 +47,13 @@ class MochaPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this._testSuites = new WeakMap()
+    this._testSuites = new Map()
     this._testNameToParams = {}
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('mocha', this.config)
     this.sourceRoot = process.cwd()
     this.codeOwnersEntries = getCodeOwnersFileEntries(this.sourceRoot)
 
-    this.addSub('ci:mocha:run:start', (command) => {
+    this.addSub('ci:mocha:session:start', (command) => {
       if (!this.config.isAgentlessEnabled) {
         return
       }
@@ -75,7 +75,11 @@ class MochaPlugin extends Plugin {
         return
       }
       const store = storage.getStore()
-      const testSuiteMetadata = getTestSuiteCommonTags(this.command, this.tracer._version, suite.fullTitle())
+      const testSuiteMetadata = getTestSuiteCommonTags(
+        this.command,
+        this.tracer._version,
+        getTestSuitePath(suite.file, this.sourceRoot)
+      )
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testSessionSpan,
         tags: {
@@ -84,7 +88,7 @@ class MochaPlugin extends Plugin {
         }
       })
       this.enter(testSuiteSpan, store)
-      this._testSuites.set(suite, testSuiteSpan)
+      this._testSuites.set(suite.file, testSuiteSpan)
     })
 
     this.addSub('ci:mocha:test-suite:finish', (status) => {
@@ -92,7 +96,10 @@ class MochaPlugin extends Plugin {
         return
       }
       const span = storage.getStore().span
-      span.setTag(TEST_STATUS, status)
+      // the test status of the suite may have been set in ci:mocha:test-suite:error already
+      if (!span.context()._tags[TEST_STATUS]) {
+        span.setTag(TEST_STATUS, status)
+      }
       span.finish()
     })
 
@@ -102,6 +109,7 @@ class MochaPlugin extends Plugin {
       }
       const span = storage.getStore().span
       span.setTag('error', err)
+      span.setTag(TEST_STATUS, 'fail')
     })
 
     this.addSub('ci:mocha:test:start', (test) => {
@@ -146,7 +154,7 @@ class MochaPlugin extends Plugin {
       this._testNameToParams[name] = params
     })
 
-    this.addSub('ci:mocha:run:finish', (status) => {
+    this.addSub('ci:mocha:session:finish', (status) => {
       if (this.testSessionSpan) {
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testSessionSpan.finish()
@@ -158,15 +166,15 @@ class MochaPlugin extends Plugin {
 
   startTestSpan (test) {
     const testSuiteTags = {}
-    const testSuiteSpan = this._testSuites.get(test.parent)
+    const testSuiteSpan = this._testSuites.get(test.parent.file)
 
     if (testSuiteSpan) {
-      const testSuiteId = testSuiteSpan.context()._spanId.toString('hex')
+      const testSuiteId = testSuiteSpan.context()._spanId.toString(10)
       testSuiteTags[TEST_SUITE_ID] = testSuiteId
     }
 
     if (this.testSessionSpan) {
-      const testSessionId = this.testSessionSpan.context()._traceId.toString('hex')
+      const testSessionId = this.testSessionSpan.context()._traceId.toString(10)
       testSuiteTags[TEST_SESSION_ID] = testSessionId
       testSuiteTags[TEST_COMMAND] = this.command
     }

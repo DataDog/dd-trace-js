@@ -33,7 +33,7 @@ describe('agentless-ci-visibility-encode', () => {
       '../log': logger
     })
     writer = { flush: sinon.spy() }
-    encoder = new AgentlessCiVisibilityEncoder(writer)
+    encoder = new AgentlessCiVisibilityEncoder(writer, {})
 
     trace = [{
       trace_id: id('1234abcd1234abcd'),
@@ -210,5 +210,46 @@ describe('agentless-ci-visibility-encode', () => {
     expect(spanEvent.content.metrics).to.eql({
       [`${tooLongKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`]: `${tooLongValue.slice(0, MAX_METRIC_VALUE_LENGTH)}...`
     })
+  })
+
+  it('should not encode events other than sessions and suites if the trace is a test session', () => {
+    const traceToFilter = [
+      {
+        trace_id: id('1234abcd1234abcd'),
+        span_id: id('1234abcd1234abcd'),
+        parent_id: id('1234abcd1234abcd'),
+        error: 0,
+        meta: {},
+        metrics: {},
+        start: 123,
+        duration: 456,
+        type: 'test_session_end',
+        name: '',
+        resource: '',
+        service: ''
+      },
+      {
+        trace_id: id('1234abcd1234abcd'),
+        span_id: id('1234abcd1234abcd'),
+        parent_id: id('1234abcd1234abcd'),
+        error: 0,
+        meta: {},
+        metrics: {},
+        start: 123,
+        duration: 456,
+        type: 'http',
+        name: '',
+        resource: '',
+        service: ''
+      }
+    ]
+
+    encoder.encode(traceToFilter)
+
+    const buffer = encoder.makePayload()
+    const decodedTrace = msgpack.decode(buffer, { codec })
+    expect(decodedTrace.events.length).to.equal(1)
+    expect(decodedTrace.events[0].type).to.equal('test_session_end')
+    expect(decodedTrace.events[0].content.type).to.eql('test_session_end')
   })
 })

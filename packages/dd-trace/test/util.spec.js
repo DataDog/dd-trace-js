@@ -1,6 +1,6 @@
 'use strict'
 
-const { isTrue, isFalse } = require('../src/util')
+const { isTrue, isFalse, globMatch } = require('../src/util')
 
 const TRUES = [
   1,
@@ -15,6 +15,22 @@ const FALSES = [
   'false',
   'FALSE',
   'fAlSe'
+]
+
+const MATCH_CASES = [
+  { pattern: 'foo', subject: 'foo' },
+  { pattern: 'foo.*', subject: 'foo.you' },
+  { pattern: 'hi*there', subject: 'hithere' },
+  { pattern: '*stuff', subject: 'lots of stuff' },
+  { pattern: 'test.?', subject: 'test.1' },
+  { pattern: '*a*a*a*a*a*a', subject: 'aaaaaaaarrrrrrraaaraaarararaarararaarararaaa' }
+]
+
+const NONMATCH_CASES = [
+  { pattern: 'foo.*', subject: 'snafoo.' },
+  { pattern: 'test.?', subject: 'test.abc' },
+  { pattern: '*stuff', subject: 'stuff to think about' },
+  { pattern: 'test?test', subject: 'test123test' }
 ]
 
 describe('util', () => {
@@ -37,6 +53,16 @@ describe('util', () => {
     TRUES.forEach((v) => {
       expect(isFalse(v)).to.equal(false)
       expect(isFalse(String(v))).to.equal(false)
+    })
+  })
+
+  it('globMatch works', () => {
+    MATCH_CASES.forEach(({ subject, pattern }) => {
+      expect(globMatch(pattern, subject)).to.equal(true)
+    })
+
+    NONMATCH_CASES.forEach(({ subject, pattern }) => {
+      expect(globMatch(pattern, subject)).to.equal(false)
     })
   })
 })

@@ -1,5 +1,9 @@
-const proxyquire = require('proxyquire')
+const { execSync } = require('child_process')
+const os = require('os')
+const path = require('path')
 
+const { GIT_REV_LIST_MAX_BUFFER } = require('../../../src/plugins/util/git')
+const proxyquire = require('proxyquire')
 const sanitizedExecStub = sinon.stub().returns('')
 
 const {
@@ -119,5 +123,86 @@ describe('git', () => {
     expect(sanitizedExecStub).to.have.been.calledWith('git rev-parse HEAD', { stdio: 'pipe' })
     expect(sanitizedExecStub).to.have.been.calledWith('git rev-parse --abbrev-ref HEAD', { stdio: 'pipe' })
     expect(sanitizedExecStub).to.have.been.calledWith('git rev-parse --show-toplevel', { stdio: 'pipe' })
+  })
+})
+
+describe('getCommitsToUpload', () => {
+  it('gets the commits to upload if the repository is smaller than the limit', () => {
+    const logErrorSpy = sinon.spy()
+
+    const { getCommitsToUpload } = proxyquire('../../../src/plugins/util/git',
+      {
+        'child_process': {
+          'execSync': (_, ...rest) =>
+            execSync(`head -c ${Math.floor(GIT_REV_LIST_MAX_BUFFER * 0.9)} /dev/zero`, ...rest)
+        },
+        '../../log': {
+          error: logErrorSpy
+        }
+      }
+    )
+    getCommitsToUpload([])
+    expect(logErrorSpy).not.to.have.been.called
+  })
+
+  it('does not crash and logs the error if the repository is bigger than the limit', () => {
+    const logErrorSpy = sinon.spy()
+
+    const { getCommitsToUpload } = proxyquire('../../../src/plugins/util/git',
+      {
+        'child_process': {
+          'execSync': (_, ...rest) => execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, ...rest)
+        },
+        '../../log': {
+          error: logErrorSpy
+        }
+      }
+    )
+    const commitsToUpload = getCommitsToUpload([])
+    expect(logErrorSpy).to.have.been.called
+    expect(commitsToUpload.length).to.equal(0)
+  })
+})
+
+describe('generatePackFilesForCommits', () => {
+  beforeEach(() => {
+    sinon.stub(Math, 'random').returns('0.1234')
+    sinon.stub(os, 'tmpdir').returns('tmp')
+    sinon.stub(process, 'cwd').returns('cwd')
+  })
+  afterEach(() => {
+    sinon.restore()
+  })
+  it('creates pack files in temporary path', () => {
+    const execSyncSpy = sinon.stub().returns(['commitSHA'])
+
+    const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
+      {
+        'child_process': {
+          'execSync': execSyncSpy
+        }
+      }
+    )
+
+    const temporaryPath = path.join('tmp', '1234')
+    const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
+    expect(packFilesToUpload).to.eql([`${temporaryPath}-commitSHA.pack`])
+  })
+
+  it('creates pack files in cwd if the temporary path fails', () => {
+    const execSyncSpy = sinon.stub().onCall(0).throws().onCall(1).returns(['commitSHA'])
+
+    const cwdPath = path.join('cwd', '1234')
+
+    const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
+      {
+        'child_process': {
+          'execSync': execSyncSpy
+        }
+      }
+    )
+
+    const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
+    expect(packFilesToUpload).to.eql([`${cwdPath}-commitSHA.pack`])
   })
 })

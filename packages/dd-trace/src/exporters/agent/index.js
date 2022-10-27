@@ -3,17 +3,28 @@
 const URL = require('url').URL
 const log = require('../../log')
 const Writer = require('./writer')
-const Scheduler = require('../scheduler')
 
 class AgentExporter {
-  constructor ({ url, hostname, port, flushInterval, lookup, protocolVersion }, prioritySampler) {
+  constructor (config, prioritySampler) {
+    this._config = config
+    const { url, hostname, port, lookup, protocolVersion, stats = {} } = config
     this._url = url || new URL(`http://${hostname || 'localhost'}:${port}`)
-    this._writer = new Writer({ url: this._url, prioritySampler, lookup, protocolVersion })
 
-    if (flushInterval > 0) {
-      this._scheduler = new Scheduler(() => this._writer.flush(), flushInterval)
+    const headers = {}
+    if (stats.enabled) {
+      headers['Datadog-Client-Computed-Stats'] = 'yes'
     }
-    this._scheduler && this._scheduler.start()
+
+    this._writer = new Writer({
+      url: this._url,
+      prioritySampler,
+      lookup,
+      protocolVersion,
+      headers
+    })
+
+    this._timer = undefined
+    process.once('beforeExit', () => this._writer.flush())
   }
 
   setUrl (url) {
@@ -29,8 +40,15 @@ class AgentExporter {
   export (spans) {
     this._writer.append(spans)
 
-    if (!this._scheduler) {
+    const { flushInterval } = this._config
+
+    if (flushInterval === 0) {
       this._writer.flush()
+    } else if (flushInterval > 0 && !this._timer) {
+      this._timer = setTimeout(() => {
+        this._writer.flush()
+        this._timer = clearTimeout(this._timer)
+      }, flushInterval).unref()
     }
   }
 }
