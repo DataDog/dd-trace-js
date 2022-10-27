@@ -7,8 +7,8 @@ const skipCh = channel('ci:mocha:test:skip')
 const testFinishCh = channel('ci:mocha:test:finish')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 
-const testRunStartCh = channel('ci:mocha:run:start')
-const testRunFinishCh = channel('ci:mocha:run:finish')
+const testSessionStartCh = channel('ci:mocha:session:start')
+const testSessionFinishCh = channel('ci:mocha:session:finish')
 
 const testSuiteStartCh = channel('ci:mocha:test-suite:start')
 const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
@@ -92,13 +92,13 @@ function mochaHook (Runner) {
         status = 'fail'
       }
       testFileToSuiteAr.clear()
-      testRunFinishCh.publish(status)
+      testSessionFinishCh.publish(status)
     }))
 
     this.once('start', testRunAsyncResource.bind(function () {
       const processArgv = process.argv.slice(2).join(' ')
       const command = `mocha ${processArgv}`
-      testRunStartCh.publish(command)
+      testSessionStartCh.publish(command)
     }))
 
     this.on('suite', function (suite) {
@@ -245,13 +245,6 @@ function mochaHook (Runner) {
     return run.apply(this, arguments)
   })
 
-  shimmer.wrap(Runner.prototype, 'runTests', runTests => function () {
-    if (!testRunFinishCh.hasSubscribers) {
-      return runTests.apply(this, arguments)
-    }
-    return runTests.apply(this, arguments)
-  })
-
   return Runner
 }
 
@@ -285,6 +278,9 @@ addHook({
   file: 'lib/runnable.js'
 }, (Runnable) => {
   shimmer.wrap(Runnable.prototype, 'run', run => function () {
+    if (!testStartCh.hasSubscribers) {
+      return run.apply(this, arguments)
+    }
     const isBeforeEach = this.parent._beforeEach.includes(this)
     const isAfterEach = this.parent._afterEach.includes(this)
 
@@ -300,13 +296,15 @@ addHook({
       const test = isTestHook ? this.ctx.currentTest : this
       const asyncResource = getTestAsyncResource(test)
 
-      // we bind the test fn to the correct async resource
-      const newFn = asyncResource.bind(this.fn)
+      if (asyncResource) {
+        // we bind the test fn to the correct async resource
+        const newFn = asyncResource.bind(this.fn)
 
-      // we store the original function, not to lose it
-      originalFns.set(newFn, this.fn)
+        // we store the original function, not to lose it
+        originalFns.set(newFn, this.fn)
 
-      this.fn = newFn
+        this.fn = newFn
+      }
     }
 
     return run.apply(this, arguments)
@@ -318,5 +316,3 @@ addHook({
   name: 'mocha-each',
   versions: ['>=2.0.1']
 }, mochaEachHook)
-
-module.exports = { mochaHook, mochaEachHook }

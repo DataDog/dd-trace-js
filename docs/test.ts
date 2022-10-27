@@ -72,6 +72,10 @@ tracer.init({
     { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
     { sampleRate: 0.1, service: /foo/, name: /foo\.request/ }
   ],
+  spanSamplingRules: [
+    { sampleRate: 1.0, service: 'foo', name: 'foo.request', maxPerSecond: 5 },
+    { sampleRate: 0.5, service: 'ba?', name: 'ba?.*', maxPerSecond: 10 }
+  ],
   service: 'test',
   tags: {
     foo: 'bar'
@@ -192,7 +196,14 @@ const moleculerOptions = {
   server: {
     meta: true
   }
-}
+};
+
+const openSearchOptions = {
+  service: 'test',
+  hooks: {
+    query: (span, params) => {},
+  },
+};
 
 tracer.use('amqp10');
 tracer.use('amqplib');
@@ -259,6 +270,7 @@ tracer.use('mysql2');
 tracer.use('mysql2', { service: () => `my-custom-mysql2` });
 tracer.use('net');
 tracer.use('next');
+tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
 tracer.use('oracledb', { service: params => `${params.host}-${params.database}` });
 tracer.use('paperplane');

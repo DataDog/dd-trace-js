@@ -2,8 +2,9 @@
   "name": "exporting-pipeline",
   "setup": "bash -c \"nohup node ../../e2e/fake-agent.js >/dev/null 2>&1 &\"",
   "run": "node index.js",
-  "iterations": 10,
-  "cachegrind": true,
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "iterations": 22,
+  "cachegrind": false,
   "variants": {
     "0.4": {
       "env": {

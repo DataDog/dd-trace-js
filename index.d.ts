@@ -176,7 +176,7 @@ export declare interface SamplingRule {
   /**
    * Sampling rate for this rule.
    */
-  sampleRate: Number
+  sampleRate: number
 
   /**
    * Service on which to apply this rule. The rule will apply to all services if not provided.
@@ -187,6 +187,31 @@ export declare interface SamplingRule {
    * Operation name on which to apply this rule. The rule will apply to all operation names if not provided.
    */
   name?: string | RegExp
+}
+
+/**
+ * Span sampling rules to ingest single spans where the enclosing trace is dropped
+ */
+export declare interface SpanSamplingRule {
+  /**
+   * Sampling rate for this rule. Will default to 1.0 (always) if not provided.
+   */
+  sampleRate?: number
+
+  /**
+   * Maximum number of spans matching a span sampling rule to be allowed per second.
+   */
+  maxPerSecond?: number
+
+  /**
+   * Service name or pattern on which to apply this rule. The rule will apply to all services if not provided.
+   */
+  service?: string
+
+  /**
+   * Operation name or pattern on which to apply this rule. The rule will apply to all operation names if not provided.
+   */
+  name?: string
 }
 
 /**
@@ -272,7 +297,7 @@ export declare interface TracerOptions {
    * and controls the ingestion rate limit between the agent and the backend.
    * Defaults to deferring the decision to the agent.
    */
-  rateLimit?: Number,
+  rateLimit?: number,
 
   /**
    * Sampling rules to apply to priority samplin. Each rule is a JSON,
@@ -282,6 +307,12 @@ export declare interface TracerOptions {
    * @default []
    */
   samplingRules?: SamplingRule[]
+
+  /**
+   * Span sampling rules that take effect when the enclosing trace is dropped, to ingest single spans
+   * @default []
+   */
+  spanSamplingRules?: SpanSamplingRule[]
 
   /**
    * Interval in milliseconds at which the tracer will submit traces to the agent.
@@ -598,6 +629,7 @@ interface Plugins {
   "mysql2": plugins.mysql2;
   "net": plugins.net;
   "next": plugins.next;
+  "opensearch": plugins.opensearch;
   "oracledb": plugins.oracledb;
   "paperplane": plugins.paperplane;
   "pg": plugins.pg;
@@ -730,7 +762,7 @@ declare namespace plugins {
      * status code as its only parameter and return `true` for success or `false`
      * for errors.
      *
-     * @default code => code < 400
+     * @default code => code < 400 || code >= 500
      */
     validateStatus?: (code: number) => boolean;
 
@@ -764,7 +796,7 @@ declare namespace plugins {
      * status code as its only parameter and return `true` for success or `false`
      * for errors.
      *
-     * @default code => code < 400
+     * @default code => code < 400 || code >= 500
      */
     validateStatus?: (code: number) => boolean;
   }
@@ -1254,6 +1286,12 @@ declare namespace plugins {
       request?: (span?: opentracing.Span, req?: IncomingMessage, res?: ServerResponse) => any;
     };
   }
+
+  /**
+   * This plugin automatically instruments the
+   * [opensearch](https://github.com/opensearch-project/opensearch-js) module.
+   */
+  interface opensearch extends elasticsearch {}
 
   /**
    * This plugin automatically instruments the

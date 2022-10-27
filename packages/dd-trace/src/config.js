@@ -16,6 +16,15 @@ const fromEntries = Object.fromEntries || (entries =>
 // eslint-disable-next-line max-len
 const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
 
+function maybeFile (filepath) {
+  if (!filepath) return
+  try {
+    return fs.readFileSync(filepath, 'utf8')
+  } catch (e) {
+    return undefined
+  }
+}
+
 function safeJsonParse (input) {
   try {
     return JSON.parse(input)
@@ -145,10 +154,6 @@ class Config {
       process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       qsRegex
     )
-    const DD_TRACE_CLIENT_IP_HEADER_DISABLED = coalesce(
-      process.env.DD_TRACE_CLIENT_IP_HEADER_DISABLED,
-      false
-    )
     const DD_TRACE_CLIENT_IP_HEADER = coalesce(
       process.env.DD_TRACE_CLIENT_IP_HEADER,
       null
@@ -272,9 +277,24 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
         ingestion.sampleRate
       ),
       rateLimit: coalesce(options.rateLimit, process.env.DD_TRACE_RATE_LIMIT, ingestion.rateLimit),
-      rules: coalesce(options.samplingRules, safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES), []).map(rule => {
+      rules: coalesce(
+        options.samplingRules,
+        safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES),
+        []
+      ).map(rule => {
         return remapify(rule, {
           sample_rate: 'sampleRate'
+        })
+      }),
+      spanSamplingRules: coalesce(
+        options.spanSamplingRules,
+        safeJsonParse(maybeFile(process.env.DD_SPAN_SAMPLING_RULES_FILE)),
+        safeJsonParse(process.env.DD_SPAN_SAMPLING_RULES),
+        []
+      ).map(rule => {
+        return remapify(rule, {
+          sample_rate: 'sampleRate',
+          max_per_second: 'maxPerSecond'
         })
       })
     }
@@ -296,7 +316,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.sampleRate = coalesce(Math.min(Math.max(sampler.sampleRate, 0), 1), 1)
     this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
-    this.clientIpHeaderDisabled = isTrue(DD_TRACE_CLIENT_IP_HEADER_DISABLED)
+    this.clientIpHeaderDisabled = !isTrue(DD_APPSEC_ENABLED)
     this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
     this.logger = options.logger
     this.plugins = !!coalesce(options.plugins, true)

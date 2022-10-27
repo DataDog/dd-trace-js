@@ -3,8 +3,6 @@
 const expect = require('chai').expect
 const sinon = require('sinon')
 
-const pprof = require('@datadog/pprof')
-
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 
@@ -28,6 +26,7 @@ describe('profiler', function () {
   let profilers
   let consoleLogger
   let logger
+  let sourceMapCreate
 
   function waitForExport () {
     return Promise.all([
@@ -76,7 +75,15 @@ describe('profiler', function () {
     exporters = [exporter]
     profilers = [wallProfiler, spaceProfiler]
 
-    Profiler = require('../../src/profiling/profiler').Profiler
+    sourceMapCreate = sinon.stub()
+
+    Profiler = proxyquire('../src/profiling/profiler', {
+      '@datadog/pprof': {
+        SourceMapper: {
+          create: sourceMapCreate
+        }
+      }
+    }).Profiler
 
     profiler = new Profiler()
   })
@@ -295,10 +302,20 @@ describe('profiler', function () {
   })
 
   it('should pass source mapper to profilers when enabled', async () => {
+    const mapper = {}
+    sourceMapCreate.returns(mapper)
     await profiler._start({ profilers, exporters, sourceMap: true })
 
     const options = profilers[0].start.args[0][0]
     expect(options).to.have.property('mapper')
-      .with.instanceOf(pprof.SourceMapper)
+      .which.equals(mapper)
+  })
+
+  it('should work with a root working dir and source maps on', async () => {
+    const error = new Error('fail')
+    sourceMapCreate.rejects(error)
+    await profiler._start({ profilers, exporters, logger, sourceMap: true })
+    expect(consoleLogger.error.args[0][0]).to.equal(error)
+    expect(profiler._enabled).to.equal(true)
   })
 })
