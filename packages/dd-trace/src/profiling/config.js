@@ -35,7 +35,7 @@ class Config {
     const version = coalesce(options.version, DD_VERSION)
     // Must be longer than one minute so pad with five seconds
     // const flushInterval = coalesce(options.interval, 65 * 1000)
-    const flushIntervalInSeconds = process.env.AWS_LAMBDA_FUNCTION_NAME ? 10 : 65 
+    const flushIntervalInSeconds = process.env.AWS_LAMBDA_FUNCTION_NAME ? 1 : 65 
     const flushInterval = coalesce(options.interval, flushIntervalInSeconds * 1000)
     const uploadTimeout = coalesce(options.uploadTimeout,
       DD_PROFILING_UPLOAD_TIMEOUT, 60 * 1000)

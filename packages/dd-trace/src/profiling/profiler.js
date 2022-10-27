@@ -24,7 +24,7 @@ class Profiler extends EventEmitter {
     this._profiledIntervals = 0
     // FIXME: how to represent constants
     this._forcedInterval = 1
-    this._flushAfterIntervals = 5
+    this._flushAfterIntervals = 65
     this._lambdaFunctionName = process.env.AWS_LAMBDA_FUNCTION_NAME
     // TODO: remove
     this._numProfiles = 0
@@ -119,9 +119,9 @@ class Profiler extends EventEmitter {
         this._profiledIntervals = 0
         // want to continue to collect profile submission
       } else {
-        console.log('[Amy:_serverlessCapture] incrementing profiledIntervals, returning')
+        console.log('[Amy:_collect] incrementing profiledIntervals, returning')
         this._profiledIntervals += 1
-        console.log('[Amy:_serverlessCapture] profiledIntervals:', this._profiledIntervals)
+        console.log('[Amy:_collect] profiledIntervals:', this._profiledIntervals)
         this._capture(this._config.flushInterval)
         return
       }
