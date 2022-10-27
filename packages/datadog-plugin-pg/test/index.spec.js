@@ -1,6 +1,8 @@
 'use strict'
 
+const { log } = require('console')
 const semver = require('semver')
+const Client = require('../../dd-trace/src/dogstatsd')
 const agent = require('../../dd-trace/test/plugins/agent')
 
 const clients = {
@@ -243,6 +245,120 @@ describe('Plugin', () => {
           })
         })
       })
+
+    describe('with sql comment injection enabled with service', () => {
+      
+      before(() => {
+        return agent.load('pg', [{sqlInjectionMode: 'service', service:'serviced'}])
+      })
+
+      after(() => {
+        return agent.close({ ritmReset: false })
+      })
+    
+      beforeEach(done => {
+        pg = require(`../../../versions/pg@${version}`).get()
+
+        client = new pg.Client({
+          user: 'postgres',
+          password: 'postgres',
+          database: 'postgres'
+        })
+
+        client.connect(err => done(err))
+        
+      })
+
+      it('should contain comment in query text', done => {
+        const client = new pg.Client({
+          user: 'postgres',
+          password: 'postgres',
+          database: 'postgres'
+        })
+
+        client.connect(err => done(err))
+
+        client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+          if (err) return done(err)
+          
+          client.end((err) => {
+            if (err) return done(err)
+          })
+
+        })
+
+          if(client.queryQueue[0] !== undefined) {
+            try {
+              expect(client.queryQueue[0].text).to.equal(`/*dddbs='serviced',dde='tester',ddps='test',ddpv='8.4.0'*/ SELECT $1::text as message`)
+            }
+            catch (e) {
+              done(e)
+            }
+          }
+
+      })
+
+      it('trace query resource should not be changed when comment injection is enabled', done => {
+
+        agent.use(traces => {
+          expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
+
+          done()
+        })
+        client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+          if (err) return done(err)
+          
+        client.end((err) => {
+          if (err) return done(err)
+          })
+        })
+      })
     })
+
+    describe('sql injection should handle special characters', () => {
+      let clientDBM
+      before(() => {
+        return agent.load('pg', [{sqlInjectionMode: 'service', service:'~!@#$%^&*()_+|??/<>'}])
+      })
+
+      after(() => {
+        return agent.close({ ritmReset: false })
+
+      })
+      beforeEach(done => {
+        pg = require(`../../../versions/pg@${version}`).get()
+
+        clientDBM = new pg.Client({
+          user: 'postgres',
+          password: 'postgres',
+          database: 'postgres'
+        })
+
+        clientDBM.connect(err => done(err))
+      })
+
+      it('comment injection should handle special characters', done => {
+
+        clientDBM.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+          if (err) return done(err)
+
+          clientDBM.end((err) => {
+            if (err) return done(err)
+          })
+        })
+
+        if(clientDBM.queryQueue[0] !== undefined) {
+          try {
+              expect(clientDBM.queryQueue[0].text).to.equal(`/*dddbs='~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E',dde='tester',ddps='test',ddpv='8.4.0'*/ SELECT $1::text as message`)
+              done()
+            }
+            catch (e) {
+              done(e)
+            }
+          }
+
+      })
+    }) 
   })
+})
 })
