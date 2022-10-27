@@ -70,6 +70,11 @@ class Config {
       process.env.DD_RUNTIME_METRICS_ENABLED,
       false
     )
+    const DD_TRACE_SQL_COMMENT_INJECTION_MODE = coalesce(
+      options.sqlInjectionMode,
+      process.env.DD_TRACE_SQL_COMMENT_INJECTION_MODE,
+      false
+    )
     const DD_AGENT_HOST = coalesce(
       options.hostname,
       process.env.DD_AGENT_HOST,
@@ -279,6 +284,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.debug = isTrue(DD_TRACE_DEBUG)
+    this.sqlInjectionMode = DD_TRACE_SQL_COMMENT_INJECTION_MODE
     this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
