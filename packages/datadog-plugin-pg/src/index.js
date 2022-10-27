@@ -7,12 +7,13 @@ class PGPlugin extends DatabasePlugin {
   static get operation () { return 'query' }
   static get system () { return 'postgres' }
 
-  start ({ params = {}, statement, processId }) {
+  start ({ params = {}, query, processId }) {
     const service = getServiceName(this.config, params)
+    const originalStatement = query.text
 
     this.startSpan('pg.query', {
       service,
-      resource: statement,
+      resource: originalStatement,
       type: 'sql',
       kind: 'client',
       meta: {
@@ -24,6 +25,8 @@ class PGPlugin extends DatabasePlugin {
         'out.port': params.port
       }
     })
+
+    query.text = this.injectDbmQuery(query.text)
   }
 }
 
