@@ -69,7 +69,7 @@ class Profiler extends EventEmitter {
       this._capture(config.flushInterval)
       console.log('[Amy:_start] after this._capture call')
     } catch (e) {
-      console.log('[Amy:_start] errored')
+      console.log('[Amy:_start] errored', e)
       this._logger.error(e)
       this.stop()
     }
@@ -122,6 +122,7 @@ class Profiler extends EventEmitter {
         console.log('[Amy:_serverlessCapture] incrementing profiledIntervals, returning')
         this._profiledIntervals += 1
         console.log('[Amy:_serverlessCapture] profiledIntervals:', this._profiledIntervals)
+        this._capture(this._config.flushInterval)
         return
       }
     }
