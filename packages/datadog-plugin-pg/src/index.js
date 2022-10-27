@@ -7,12 +7,17 @@ class PGPlugin extends DatabasePlugin {
   static get operation () { return 'query' }
   static get system () { return 'postgres' }
 
-  start ({ params = {}, statement, processId }) {
+  start ({ params = {}, pgQuery, processId }) {
     const service = getServiceName(this.config, params)
+    let originalStatement = pgQuery.text
+
+    if (this.config.sqlInjectionMode === 'service') {
+      pgQuery.text = this.createSQLInjectionComment() + pgQuery.text
+    }
 
     this.startSpan('pg.query', {
       service,
-      resource: statement,
+      resource: originalStatement,
       type: 'sql',
       kind: 'client',
       meta: {
@@ -31,7 +36,6 @@ function getServiceName (config, params) {
   if (typeof config.service === 'function') {
     return config.service(params)
   }
-
   return config.service
 }
 
