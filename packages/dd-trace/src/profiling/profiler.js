@@ -113,8 +113,7 @@ class Profiler extends EventEmitter {
 
     if (this._lambdaFunctionName) {
       console.log('[Amy:_collect] checking lambda conditions')
-      if (this._profiledIntervals >= this._flushAfterIntervals &&
-          (end - start) >= this._forcedInterval * this._flushAfterIntervals) {
+      if (this._profiledIntervals >= this._flushAfterIntervals) {
         console.log('[Amy:_collect] resetting profiledIntervals, submitting profile')
         this._profiledIntervals = 0
         // want to continue to collect profile submission
@@ -143,6 +142,7 @@ class Profiler extends EventEmitter {
       }
 
       this._capture(this._config.flushInterval)
+
       this._numProfiles += 1
       console.log('[Amy:_collect] submitting profile #:', this._numProfiles)
       await this._submit(profiles, start, end)

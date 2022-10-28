@@ -23,7 +23,8 @@ const {
   DD_AGENT_HOST,
   DD_TRACE_AGENT_PORT,
   DD_PROFILING_UPLOAD_TIMEOUT,
-  DD_PROFILING_SOURCE_MAP
+  DD_PROFILING_SOURCE_MAP,
+  AWS_LAMBDA_FUNCTION_NAME,
 } = process.env
 
 class Config {
@@ -33,9 +34,10 @@ class Config {
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
     const version = coalesce(options.version, DD_VERSION)
+    const functionName = coalesce(options.functionName, AWS_LAMBDA_FUNCTION_NAME)
     // Must be longer than one minute so pad with five seconds
     // const flushInterval = coalesce(options.interval, 65 * 1000)
-    const flushIntervalInSeconds = process.env.AWS_LAMBDA_FUNCTION_NAME ? 1 : 65 
+    const flushIntervalInSeconds = AWS_LAMBDA_FUNCTION_NAME ? 1 : 65 
     const flushInterval = coalesce(options.interval, flushIntervalInSeconds * 1000)
     const uploadTimeout = coalesce(options.uploadTimeout,
       DD_PROFILING_UPLOAD_TIMEOUT, 60 * 1000)
@@ -48,13 +50,16 @@ class Config {
     this.service = service
     this.env = env
     this.host = host
+    this.functionName = functionName
 
     this.version = version
+    console.log('[Amy:config] functionName:', this.functionName)
     this.tags = Object.assign(
       tagger.parse(DD_TAGS),
       tagger.parse(options.tags),
-      tagger.parse({ env, host, service, version })
+      tagger.parse({ env, host, service, version, functionName })
     )
+    console.log('[Amy:config] this.tags:', this.tags)
     this.logger = ensureLogger(options.logger)
     this.flushInterval = flushInterval
     this.uploadTimeout = uploadTimeout
