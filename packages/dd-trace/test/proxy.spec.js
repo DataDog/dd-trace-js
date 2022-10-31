@@ -163,7 +163,7 @@ describe('TracerProxy', () => {
         expect(metrics.start).to.have.been.called
       })
 
-      it('should enable appsec when explicitely configured to true', () => {
+      it('should enable appsec when explicitly configured to true', () => {
         config.appsec = { enabled: true }
 
         proxy.init()
