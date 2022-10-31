@@ -173,7 +173,7 @@ describe('TracerProxy', () => {
         expect(remoteConfig.on).to.not.have.been.called
       })
 
-      it('should not enable appsec but listen to remote config when appsec is not explicitely configured', () => {
+      it('should not enable appsec but listen to remote config when appsec is not explicitly configured', () => {
         config.appsec = { enabled: undefined }
 
         proxy.init()
