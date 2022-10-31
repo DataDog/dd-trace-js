@@ -221,7 +221,7 @@ describe('TracerProxy', () => {
         })
       })
 
-      it('should not enable appsec when explicitely configured to false', () => {
+      it('should not enable appsec when explicitly configured to false', () => {
         config.appsec = { enabled: false }
 
         proxy.init()
