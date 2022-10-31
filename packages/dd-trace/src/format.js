@@ -13,6 +13,7 @@ const MEASURED = tags.MEASURED
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
 const TOP_LEVEL_KEY = constants.TOP_LEVEL_KEY
+const PROCESS_ID = constants.PROCESS_ID
 
 const map = {
   'service.name': 'service',
@@ -96,6 +97,7 @@ function extractTags (trace, span) {
     addTag(trace.meta, trace.metrics, 'language', 'javascript')
   }
 
+  addTag(trace.meta, trace.metrics, PROCESS_ID, process.pid)
   addTag(trace.meta, trace.metrics, SAMPLING_PRIORITY_KEY, priority)
   addTag(trace.meta, trace.metrics, ORIGIN_KEY, origin)
   addTag(trace.meta, trace.metrics, HOSTNAME_KEY, hostname)

@@ -16,5 +16,6 @@ module.exports = {
   SAMPLING_MECHANISM_APPSEC: 5,
   SAMPLING_MECHANISM_SPAN: 8,
   DATADOG_LAMBDA_EXTENSION_PATH: '/opt/extensions/datadog-agent',
-  DECISION_MAKER_KEY: '_dd.p.dm'
+  DECISION_MAKER_KEY: '_dd.p.dm',
+  PROCESS_ID: 'process_id'
 }
