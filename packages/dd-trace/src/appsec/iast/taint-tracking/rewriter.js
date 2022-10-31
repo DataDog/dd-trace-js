@@ -16,7 +16,7 @@ try {
 }
 
 const originalPrepareStackTrace = Error.prepareStackTrace
-const getPrepareStackTraceAccessor = function() {
+const getPrepareStackTraceAccessor = function () {
   let actual = getPrepareStackTrace(originalPrepareStackTrace)
   return {
     get () {
@@ -40,7 +40,7 @@ const getRewriter = function () {
   return rewriter
 }
 
-const getCompileMethodFn = function(compileMethod){
+const getCompileMethodFn = function (compileMethod) {
   return function (content, filename) {
     try {
       if (TaintTrackingFilter.isPrivateModule(filename)) {

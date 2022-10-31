@@ -48,6 +48,7 @@ describe('IAST TaintTracking', () => {
       expect(() => {
         TaintedUtils = require('@datadog/native-iast-taint-tracking')
       }).to.not.throw(Error)
+      expect(TaintedUtils).to.not.be.null
     })
 
     it('should load rewriter', () => {
@@ -55,6 +56,7 @@ describe('IAST TaintTracking', () => {
       expect(() => {
         rewriter = require('@datadog/native-iast-rewriter')
       }).to.not.throw(Error)
+      expect(rewriter).to.not.be.null
     })
   })
 
