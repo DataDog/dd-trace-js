@@ -20,11 +20,10 @@ class RemoteConfigManager extends EventEmitter {
     this.scheduler = new Scheduler((cb) => this.poll(cb), POLL_INTERVAL)
 
     this.requestOptions = {
-      method: 'POST',
       url: config.url,
       hostname: config.hostname,
       port: config.port,
-      // TODO: do we need hostname/port here ?
+      method: 'POST',
       path: '/v0.7/config'
     }
 
