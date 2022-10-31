@@ -59,8 +59,11 @@ class Tracer extends NoopProxy {
 
           rc.on('ASM_FEATURES', (action, conf) => {
             if (conf && conf.asm && typeof conf.asm.enabled === 'boolean') {
-              if (action === 'apply' || action === 'modify') action = conf.asm.enabled // take control
-              else action = config.appsec.enabled // give back control to local config
+              if (action === 'apply' || action === 'modify') {
+                action = conf.asm.enabled // take control
+              } else {
+                action = config.appsec.enabled // give back control to local config
+              }
 
               if (action) {
                 require('./appsec').enable(config)
