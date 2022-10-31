@@ -11,6 +11,8 @@ function maybeSourceMap (sourceMap) {
   ])
 }
 
+const isServerless = !!process.env.AWS_LAMBDA_FUNCTION_NAME
+
 class Profiler extends EventEmitter {
   constructor () {
     super()
@@ -20,12 +22,10 @@ class Profiler extends EventEmitter {
     this._timer = undefined
     this._lastStart = undefined
 
-    // FIXME: where to put these for the serverless capture? How to set up serverless capture?
+    // FIXME: where to put these for the serverless capture?
     this._profiledIntervals = 0
-    // FIXME: how to represent constants
     this._forcedInterval = 1
     this._flushAfterIntervals = 65
-    this._lambdaFunctionName = process.env.AWS_LAMBDA_FUNCTION_NAME
     // TODO: remove
     this._numProfiles = 0
   }
@@ -96,27 +96,21 @@ class Profiler extends EventEmitter {
     console.log('[Amy:_capture] beginning of method w timeout:', timeout)
     if (!this._enabled) return
     this._lastStart = new Date()
-
     if (!this._timer || timeout !== this._config.flushInterval) {
-      this._timer = setTimeout(() => this._collect(), timeout)
+      this._timer = setTimeout(() => this._maybeCollect(), timeout)
       this._timer.unref()
     } else {
       this._timer.refresh()
     }
   }
 
-  async _collect () {
-    console.log('[Amy:_collect] beginning of method')
-    const start = this._lastStart
-    const end = new Date()
-    const profiles = {}
-
-    if (this._lambdaFunctionName) {
+  async _maybeCollect () {
+    if (isServerless) {
       console.log('[Amy:_collect] checking lambda conditions')
       if (this._profiledIntervals >= this._flushAfterIntervals) {
         console.log('[Amy:_collect] resetting profiledIntervals, submitting profile')
         this._profiledIntervals = 0
-        // want to continue to collect profile submission
+        // want to continue to flush profile
       } else {
         console.log('[Amy:_collect] incrementing profiledIntervals, returning')
         this._profiledIntervals += 1
@@ -125,6 +119,16 @@ class Profiler extends EventEmitter {
         return
       }
     }
+
+    await this._collect() // always collect if not serverless service
+  }
+
+  async _collect () {
+    console.log('[Amy:_collect] beginning of method')
+
+    const start = this._lastStart
+    const end = new Date()
+    const profiles = {}
 
     try {
       for (const profiler of this._config.profilers) {
