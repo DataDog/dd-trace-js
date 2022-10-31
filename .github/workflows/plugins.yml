@@ -317,12 +317,12 @@ jobs:
     runs-on: ubuntu-latest
     services:
       pubsub:
-        image: knarz/pubsub-emulator
+        image: ridedott/pubsub-emulator
         ports:
-          - 8085:8085
+          - 8081:8081
     env:
       PLUGINS: google-cloud-pubsub
-      SERVICES: google-cloud-pubsub
+      SERVICES: gpubsub
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
@@ -614,7 +614,7 @@ jobs:
         ports:
           - 3306:3306
     env:
-      PLUGINS: mysql|mysql2 # TODO: move mysql2 to its own job
+      PLUGINS: mysql|mysql2|mariadb # TODO: move mysql2 to its own job
       SERVICES: mysql
     steps:
       - uses: actions/checkout@v2
@@ -651,6 +651,29 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
+      - run: yarn test:plugins:ci
+      - uses: codecov/codecov-action@v2
+
+  opensearch:
+    runs-on: ubuntu-latest
+    services:
+      opensearch:
+        image: opensearchproject/opensearch:2
+        env:
+          plugins.security.disabled: 'true'
+          discovery.type: single-node
+        ports:
+          - 9201:9200
+    env:
+      PLUGINS: opensearch
+      SERVICES: opensearch
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 

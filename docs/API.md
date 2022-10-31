@@ -58,6 +58,7 @@ tracer.use('pg', {
 <h5 id="koa"></h5>
 <h5 id="koa-tags"></h5>
 <h5 id="koa-config"></h5>
+<h5 id="mariadb"></h5>
 <h5 id="memcached"></h5>
 <h5 id="memcached-tags"></h5>
 <h5 id="memcached-config"></h5>
@@ -75,6 +76,7 @@ tracer.use('pg', {
 <h5 id="mysql2-config"></h5>
 <h5 id="net"></h5>
 <h5 id="next"></h5>
+<h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>
 <h5 id="paperplane"></h5>
 <h5 id="paperplane-tags"></h5>
@@ -119,7 +121,7 @@ tracer.use('pg', {
 * [kafkajs](./interfaces/plugins.kafkajs.html)
 * [knex](./interfaces/plugins.knex.html)
 * [koa](./interfaces/plugins.koa.html)
-* [ioredis](./interfaces/plugins.ioredis.html)
+* [mariadb](./interfaces/plugins.mariadb.html)
 * [microgateway--core](./interfaces/plugins.microgateway_core.html)
 * [mocha](./interfaces/plugins.mocha.html)
 * [mongodb-core](./interfaces/plugins.mongodb_core.html)
@@ -127,6 +129,7 @@ tracer.use('pg', {
 * [mysql2](./interfaces/plugins.mysql2.html)
 * [net](./interfaces/plugins.net.html)
 * [next](./interfaces/plugins.next.html)
+* [opensearch](./interfaces/plugins.opensearch.html)
 * [oracledb](./interfaces/plugins.oracledb.html)
 * [paperplane](./interfaces/plugins.paperplane.html)
 * [pino](./interfaces/plugins.pino.html)
@@ -363,14 +366,15 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | sampleRate      | `DD_TRACE_SAMPLE_RATE`             | -              | Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent. |
 | rateLimit       | `DD_TRACE_RATE_LIMIT`              | -              | Global rate limit that is applied on the global sample rate and all rules, and controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent. |
 | samplingRules   | `DD_TRACE_SAMPLING_RULES`          | `[]`           | Sampling rules to apply to priority samplin. Each rule is a JSON, consisting of `service` and `name`, which are regexes to match against a trace's `service` and `name`, and a corresponding `sampleRate`. If not specified, will defer to global sampling rate for all spans. |
+| spanSamplingRules | `DD_SPAN_SAMPLING_RULES`         | `[]`           | Span sampling rules for ingesting single spans, in cases where the whole trace is dropped. |
+| -               | `DD_SPAN_SAMPLING_RULES_FILE`      | -              | Points to a JSON file that contains the span sampling rules. `DD_SPAN_SAMPLING_RULES` takes precedence over this variable.
 | flushInterval   | -                                  | `2000`         | Interval in milliseconds at which the tracer will submit traces to the agent. |
 | flushMinSpans   | `DD_TRACE_PARTIAL_FLUSH_MIN_SPANS` | `1000`         | Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces. |
 | -               | `DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP` | -      | A regex to redact sensitive data from incoming requests' querystring reported in the `http.url` tag (matches will be replaced with `<redacted>`). Can be an empty string to disable redaction or `.*` to redact all querystring. **WARNING: this regex will execute for every incoming request on an unsafe input (url), please make sure you use a safe regex.** |
-| -               | `DD_TRACE_CLIENT_IP_HEADER_DISABLED` | `false`      | Whether to enable HTTP client IP reporting. Setting this to `true` will disable collection of the `http.client_ip` tag. |
 | -               | `DD_TRACE_CLIENT_IP_HEADER`        | -              | Custom header name to source the `http.client_ip` tag from. |
 | lookup          | -                                  | `dns.lookup()` | Custom function for DNS lookups when sending requests to the agent. |
 | protocolVersion | `DD_TRACE_AGENT_PROTOCOL_VERSION`  | `0.4`          | Protocol version to use for requests to the agent. The version configured must be supported by the agent version installed or all traces will be dropped. |
-| runtimeMetrics  | `DD_RUNTIME_METRICS_EN ABLED`      | `false`        | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
+| runtimeMetrics  | `DD_RUNTIME_METRICS_ENABLED`      | `false`        | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
 | profiling       | `DD_PROFILING_ENABLED`             | `false`        | Whether to enable profiling. |
 | reportHostname  | `DD_TRACE_REPORT_HOSTNAME`         | `false`        | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
 | experimental    | -                                  | `{}`           | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Please contact us to learn more about the available experimental features. |
@@ -445,14 +449,14 @@ const tracer = require('dd-trace').init()
 function handle () {
   tracer.setUser({
     id: '123456789', // *REQUIRED* Unique identifier of the user.
-    
+
     // All other fields are optional.
     email: 'jane.doe@example.com', // Email of the user.
     name: 'Jane Doe', // User-friendly name of the user.
     session_id: '987654321', // Session ID of the user.
     role: 'admin', // Role the user is making the request under.
     scope: 'read:message, write:files', // Scopes or granted authorizations the user currently possesses.
-    
+
     // Arbitrary fields are also accepted to attach custom data to the user (RBAC, Oauth, etc…)
     custom_tag: 'custom data'
   })

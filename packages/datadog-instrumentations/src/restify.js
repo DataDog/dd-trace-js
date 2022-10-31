@@ -54,6 +54,7 @@ function wrapFn (fn) {
       errorChannel.publish({ req, error })
       nextChannel.publish({ req })
       exitChannel.publish({ req })
+      throw error
     }
   }
 }

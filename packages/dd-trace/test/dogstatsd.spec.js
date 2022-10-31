@@ -1,5 +1,9 @@
 'use strict'
 
+const http = require('http')
+const path = require('path')
+const os = require('os')
+
 describe('dogstatsd', () => {
   let client
   let Client
@@ -7,8 +11,14 @@ describe('dogstatsd', () => {
   let udp4
   let udp6
   let dns
+  let httpServer
+  let httpPort
+  let httpData
+  let httpUdsServer
+  let udsPath
+  let statusCode
 
-  beforeEach(() => {
+  beforeEach((done) => {
     udp6 = {
       send: sinon.spy(),
       on: sinon.stub().returns(udp6),
@@ -51,6 +61,40 @@ describe('dogstatsd', () => {
       'dgram': dgram,
       'dns': dns
     })
+
+    httpData = []
+    statusCode = 200
+    httpServer = http.createServer((req, res) => {
+      expect(req.url).to.equal('/dogstatsd/v2/proxy')
+      req.on('data', d => httpData.push(d))
+      req.on('end', () => {
+        res.statusCode = statusCode
+        res.end()
+      })
+    }).listen(0, () => {
+      httpPort = httpServer.address().port
+      if (os.platform() === 'win32') {
+        done()
+        return
+      }
+      udsPath = path.join(os.tmpdir(), `test-dogstatsd-dd-trace-uds-${Math.random()}`)
+      httpUdsServer = http.createServer((req, res) => {
+        expect(req.url).to.equal('/dogstatsd/v2/proxy')
+        req.on('data', d => httpData.push(d))
+        req.on('end', () => {
+          res.end()
+        })
+      }).listen(udsPath, () => {
+        done()
+      })
+    })
+  })
+
+  afterEach(() => {
+    httpServer.close()
+    if (httpUdsServer) {
+      httpUdsServer.close()
+    }
   })
 
   it('should send gauges', () => {
@@ -178,5 +222,66 @@ describe('dogstatsd', () => {
     expect(udp6.send.firstCall.args[2]).to.equal(37)
     expect(udp6.send.firstCall.args[3]).to.equal(7777)
     expect(udp6.send.firstCall.args[4]).to.equal('::1')
+  })
+
+  const udsIt = os.platform() === 'win32' ? it.skip : it
+  udsIt('should support HTTP via unix domain socket', (done) => {
+    client = new Client({
+      metricsProxyUrl: `unix://${udsPath}`
+    })
+
+    client.gauge('test.avg', 0)
+    client.gauge('test.avg2', 2)
+    client.flush()
+    setTimeout(() => {
+      expect(Buffer.concat(httpData).toString()).to.equal('test.avg:0|g\ntest.avg2:2|g\n')
+      done()
+    }, 100)
+  })
+
+  it('should support HTTP via port', (done) => {
+    client = new Client({
+      metricsProxyUrl: `http://localhost:${httpPort}`
+    })
+
+    client.gauge('test.avg', 1)
+    client.gauge('test.avg2', 2)
+    client.flush()
+    setTimeout(() => {
+      expect(Buffer.concat(httpData).toString()).to.equal('test.avg:1|g\ntest.avg2:2|g\n')
+      done()
+    }, 100)
+  })
+
+  it('should support HTTP via URL object', (done) => {
+    client = new Client({
+      metricsProxyUrl: new URL(`http://localhost:${httpPort}`)
+    })
+
+    client.gauge('test.avg', 1)
+    client.gauge('test.avg2', 2)
+    client.flush()
+    setTimeout(() => {
+      expect(Buffer.concat(httpData).toString()).to.equal('test.avg:1|g\ntest.avg2:2|g\n')
+      done()
+    }, 100)
+  })
+
+  it('should fail over to UDP', (done) => {
+    statusCode = 404
+
+    client = new Client({
+      metricsProxyUrl: `http://localhost:${httpPort}`
+    })
+
+    client.increment('test.count', 10)
+
+    client.flush()
+    setTimeout(() => {
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:10|c\n')
+      expect(udp4.send.firstCall.args[2]).to.equal(16)
+      done()
+    }, 100)
   })
 })

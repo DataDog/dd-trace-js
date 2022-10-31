@@ -11,17 +11,22 @@ const circularBufferConstructor = Symbol('circularBufferConstructor')
 const inFlightDeliveries = Symbol('inFlightDeliveries')
 
 const patched = new WeakSet()
-const dispatchCh = channel('apm:rhea:dispatch')
-const errorCh = channel('apm:rhea:error')
-const finishCh = channel('apm:rhea:finish')
 
-const encodeCh = channel('apm:rhea:encode')
+const startSendCh = channel('apm:rhea:send:start')
+const encodeSendCh = channel('apm:rhea:send:encode')
+const errorSendCh = channel('apm:rhea:send:error')
+const finishSendCh = channel('apm:rhea:send:finish')
+
+const startReceiveCh = channel('apm:rhea:receive:start')
+const dispatchReceiveCh = channel('apm:rhea:receive:dispatch')
+const errorReceiveCh = channel('apm:rhea:receive:error')
+const finishReceiveCh = channel('apm:rhea:receive:finish')
 
 const contexts = new WeakMap()
 
 addHook({ name: 'rhea', versions: ['>=1'] }, rhea => {
   shimmer.wrap(rhea.message, 'encode', encode => function (msg) {
-    encodeCh.publish(msg)
+    encodeSendCh.publish(msg)
     return encode.apply(this, arguments)
   })
 
@@ -29,9 +34,6 @@ addHook({ name: 'rhea', versions: ['>=1'] }, rhea => {
 })
 
 addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
-  const startSendCh = channel('apm:rhea:send:start')
-  const startReceiveCh = channel('apm:rhea:receive:start')
-
   const Sender = obj.Sender
   const Receiver = obj.Receiver
   shimmer.wrap(Sender.prototype, 'send', send => function (msg, tag, format) {
@@ -58,7 +60,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
       try {
         return delivery
       } catch (err) {
-        errorCh.publish(err)
+        errorSendCh.publish(err)
 
         throw err
       }
@@ -87,7 +89,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
         try {
           return dispatch.apply(this, arguments)
         } catch (err) {
-          errorCh.publish(err)
+          errorReceiveCh.publish(err)
 
           throw err
         }
@@ -111,8 +113,9 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/connection.js' }, Connecti
           if (!asyncResource) return
 
           asyncResource.runInAsyncScope(() => {
-            errorCh.publish(error)
-            finish(delivery, null)
+            errorReceiveCh.publish(error)
+            beforeFinish(delivery, null)
+            finishReceiveCh.publish()
           })
         })
       }
@@ -148,7 +151,7 @@ function wrapDeliveryUpdate (obj, update) {
     const cb = asyncResource.bind(update)
     return AsyncResource.bind(function wrappedUpdate (settled, stateData) {
       const state = getStateFromData(stateData)
-      dispatchCh.publish({ state })
+      dispatchReceiveCh.publish({ state })
       return cb.apply(this, arguments)
     })
   }
@@ -184,7 +187,8 @@ function patchCircularBuffer (proto, Session) {
                 const state = remoteState && remoteState.constructor
                   ? entry.remote_state.constructor.composite_type : undefined
                 asyncResource.runInAsyncScope(() => {
-                  return finish(entry, state)
+                  beforeFinish(entry, state)
+                  finishSendCh.publish()
                 })
               }
 
@@ -212,13 +216,12 @@ function addToInFlightDeliveries (connection, delivery) {
   deliveries.add(delivery)
 }
 
-function finish (delivery, state) {
+function beforeFinish (delivery, state) {
   const obj = contexts.get(delivery)
   if (obj) {
     if (state) {
-      dispatchCh.publish({ state })
+      dispatchReceiveCh.publish({ state })
     }
-    finishCh.publish(undefined)
     if (obj.connection && obj.connection[inFlightDeliveries]) {
       obj.connection[inFlightDeliveries].delete(delivery)
     }
