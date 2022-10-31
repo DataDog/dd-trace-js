@@ -1,6 +1,5 @@
 'use strict'
 
-const Module = require('module')
 const proxyquire = require('proxyquire')
 const iastContextFunctions = require('../../../src/appsec/iast/iast-context')
 
@@ -107,7 +106,8 @@ describe('IAST TaintTracking', () => {
       expect(taintedUtils.concat).to.be.called
 
       // Module.prototype._compile wrap is setted
-      expect(shimmer.wrap).to.be.calledWith(Module.prototype, '_compile')
+      expect(shimmer.wrap).to.be.calledOnce
+      expect(shimmer.wrap.getCall(0).args[1]).eq('_compile')
     })
 
     it('Should set dummy global._ddiast object', () => {
@@ -122,7 +122,7 @@ describe('IAST TaintTracking', () => {
       expect(taintedUtils.concat).not.to.be.called
 
       // remove Module.prototype._compile wrap
-      expect(shimmer.unwrap).to.be.calledWith(Module.prototype, '_compile')
+      expect(shimmer.unwrap.getCall(0).args[1]).eq('_compile')
     })
   })
 
