@@ -16,7 +16,7 @@ try {
 }
 
 const originalPrepareStackTrace = Error.prepareStackTrace
-function getPrepareStackTraceAccessor () {
+const getPrepareStackTraceAccessor = function() {
   let actual = getPrepareStackTrace(originalPrepareStackTrace)
   return {
     get () {
@@ -40,22 +40,24 @@ const getRewriter = function () {
   return rewriter
 }
 
+const getCompileMethodFn = function(compileMethod){
+  return function (content, filename) {
+    try {
+      if (TaintTrackingFilter.isPrivateModule(filename)) {
+        content = rewriter.rewrite(content, filename)
+      }
+    } catch (e) {
+      log.debug(e)
+    }
+    return compileMethod.apply(this, [content, filename])
+  }
+}
+
 const enableRewriter = function () {
   const rewriter = getRewriter()
   if (rewriter) {
     Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
-
-    shimmer.wrap(Module.prototype, '_compile', compileMethod => function (content, filename) {
-      try {
-        if (TaintTrackingFilter.isPrivateModule(filename)) {
-          content = rewriter.rewrite(content, filename)
-        }
-      } catch (e) {
-        log.debug(e)
-      }
-      return compileMethod.apply(this, [content, filename])
-    }
-    )
+    shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
   }
 }
 

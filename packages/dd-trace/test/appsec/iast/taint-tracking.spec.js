@@ -1,5 +1,6 @@
 'use strict'
 
+const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 const iastContextFunctions = require('../../../src/appsec/iast/iast-context')
 
@@ -35,11 +36,27 @@ describe('IAST TaintTracking', () => {
     taintTracking = proxyquire('../../../src/appsec/iast/taint-tracking', {
       '@datadog/native-iast-taint-tracking': sinon.spy(taintedUtils),
       '../../../../../datadog-core': datadogCore,
-      '../../../src/appsec/iast/taint-tracking/rewriter': rewriter
+      './rewriter': rewriter
     })
   })
 
   afterEach(sinon.restore)
+
+  describe('load addons', () => {
+    it('should load taint-tracking', () => {
+      let TaintedUtils = null
+      expect(() => {
+        TaintedUtils = require('@datadog/native-iast-taint-tracking')
+      }).to.not.throw(Error)
+    })
+
+    it('should load rewriter', () => {
+      let rewriter = null
+      expect(() => {
+        rewriter = require('@datadog/native-iast-rewriter')
+      }).to.not.throw(Error)
+    })
+  })
 
   describe('createTransaction', () => {
     it('Given not null id and not null iastContext should createTransaction', () => {
@@ -122,6 +139,7 @@ describe('IAST TaintTracking', () => {
       expect(taintedUtils.concat).not.to.be.called
 
       // remove Module.prototype._compile wrap
+      expect(shimmer.unwrap).to.be.calledOnce
       expect(shimmer.unwrap.getCall(0).args[1]).eq('_compile')
     })
   })
