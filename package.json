@@ -114,6 +114,7 @@
     "multer": "^1.4.5-lts.1",
     "nock": "^11.3.3",
     "nyc": "^15.1.0",
+    "pprof-format": "^2.0.4",
     "proxyquire": "^1.8.0",
     "rimraf": "^3.0.0",
     "sinon": "^11.1.2",
