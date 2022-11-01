@@ -40,6 +40,8 @@ jobs:
       - run: MOCHA_FILE=test-results/tracing/linux-14.xml yarn test:trace:core:ci
       - uses: ./.github/actions/node/16
       - run: MOCHA_FILE=test-results/tracing/linux-16.xml yarn test:trace:core:ci
+      - uses: ./.github/actions/node/18
+      - run: MOCHA_FILE=test-results/tracing/linux-18.xml yarn test:trace:core:ci
       - uses: ./.github/actions/node/latest
       - run: MOCHA_FILE=test-results/tracing/linux-latest.xml yarn test:trace:core:ci
       - uses: ./.github/actions/datadog-ci
