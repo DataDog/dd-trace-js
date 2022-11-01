@@ -22,6 +22,8 @@ jobs:
       - run: yarn test:integration
       - uses: ./.github/actions/node/16
       - run: yarn test:integration
+      - uses: ./.github/actions/node/18
+      - run: yarn test:integration
       - uses: ./.github/actions/node/latest
       - run: yarn test:integration
 
