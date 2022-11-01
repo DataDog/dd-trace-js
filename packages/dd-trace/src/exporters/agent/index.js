@@ -1,6 +1,6 @@
 'use strict'
 
-const URL = require('url').URL
+const { URL, format } = require('url')
 const log = require('../../log')
 const Writer = require('./writer')
 
@@ -8,7 +8,11 @@ class AgentExporter {
   constructor (config, prioritySampler) {
     this._config = config
     const { url, hostname, port, lookup, protocolVersion, stats = {} } = config
-    this._url = url || new URL(`http://${hostname || 'localhost'}:${port}`)
+    this._url = url || new URL(format({
+      protocol: 'http:',
+      hostname: hostname || 'localhost',
+      port
+    }))
 
     const headers = {}
     if (stats.enabled) {
