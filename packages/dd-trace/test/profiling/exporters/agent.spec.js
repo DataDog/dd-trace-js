@@ -13,15 +13,13 @@ const { gunzipSync } = require('zlib')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const logger = require('../../../src/log')
-const { perftools } = require('@datadog/pprof/proto/profile')
+const { Profile } = require('pprof-format')
 const semver = require('semver')
 const version = require('../../../../../package.json').version
 
 if (!semver.satisfies(process.version, '>=10.12')) {
   describe = describe.skip // eslint-disable-line no-global-assign
 }
-
-const { decode } = perftools.profiles.Profile
 
 function wait (ms) {
   return new Promise((resolve, reject) => {
@@ -91,14 +89,14 @@ describe('exporters/agent', function () {
     expect(req.files[1]).to.have.property('mimetype', 'application/octet-stream')
     expect(req.files[1]).to.have.property('size', req.files[1].buffer.length)
 
-    const wallProfile = decode(gunzipSync(req.files[0].buffer))
-    const spaceProfile = decode(gunzipSync(req.files[1].buffer))
+    const wallProfile = Profile.decode(gunzipSync(req.files[0].buffer))
+    const spaceProfile = Profile.decode(gunzipSync(req.files[1].buffer))
 
     expect(wallProfile).to.be.a.profile
     expect(spaceProfile).to.be.a.profile
 
-    expect(wallProfile).to.deep.equal(decode(gunzipSync(profiles.wall)))
-    expect(spaceProfile).to.deep.equal(decode(gunzipSync(profiles.space)))
+    expect(wallProfile).to.deep.equal(Profile.decode(gunzipSync(profiles.wall)))
+    expect(spaceProfile).to.deep.equal(Profile.decode(gunzipSync(profiles.space)))
   }
 
   beforeEach(() => {
@@ -367,14 +365,14 @@ describe('exporters/agent', function () {
             expect(req.files[1]).to.have.property('mimetype', 'application/octet-stream')
             expect(req.files[1]).to.have.property('size', req.files[1].buffer.length)
 
-            const wallProfile = decode(gunzipSync(req.files[0].buffer))
-            const spaceProfile = decode(gunzipSync(req.files[1].buffer))
+            const wallProfile = Profile.decode(gunzipSync(req.files[0].buffer))
+            const spaceProfile = Profile.decode(gunzipSync(req.files[1].buffer))
 
             expect(wallProfile).to.be.a.profile
             expect(spaceProfile).to.be.a.profile
 
-            expect(wallProfile).to.deep.equal(decode(gunzipSync(profiles.wall)))
-            expect(spaceProfile).to.deep.equal(decode(gunzipSync(profiles.space)))
+            expect(wallProfile).to.deep.equal(Profile.decode(gunzipSync(profiles.wall)))
+            expect(spaceProfile).to.deep.equal(Profile.decode(gunzipSync(profiles.space)))
 
             resolve()
           } catch (e) {
