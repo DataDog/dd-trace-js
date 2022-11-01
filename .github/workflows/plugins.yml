@@ -3,10 +3,7 @@ name: Plugins
 on:
   pull_request:
   push:
-    branches: [master]
-  push:
-    branches:
-      - AIT-5054-add-component-tag
+    branches: [master, AIT-5054-add-component-tag]
   schedule:
     - cron: '0 4 * * *'
 
