@@ -31,6 +31,8 @@ jobs:
       - run: yarn test:profiler:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:profiler:ci
+      - uses: ./.github/actions/node/18
+      - run: yarn test:profiler:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:profiler:ci
       - uses: codecov/codecov-action@v2

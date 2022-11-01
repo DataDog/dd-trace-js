@@ -245,6 +245,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/18
+      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
@@ -387,6 +389,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/18
+      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
@@ -402,6 +406,8 @@ jobs:
       - uses: ./.github/actions/node/14
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/18
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
@@ -637,6 +643,8 @@ jobs:
       - uses: ./.github/actions/node/14
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/18
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
