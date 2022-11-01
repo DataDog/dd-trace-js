@@ -9,6 +9,7 @@ const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -42,6 +43,7 @@ class Http2ClientPlugin extends Plugin {
       const span = this.tracer.startSpan('http.request', {
         childOf,
         tags: {
+          [COMPONENT]: this.constructor.name,
           [SPAN_KIND]: CLIENT,
           'service.name': getServiceName(this.tracer, this.config, sessionDetails),
           'resource.name': method,

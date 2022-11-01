@@ -17,6 +17,7 @@ const {
   getTestCommonTags
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class CucumberPlugin extends Plugin {
   static get name () {
@@ -49,6 +50,7 @@ class CucumberPlugin extends Plugin {
       const span = this.tracer.startSpan('cucumber.test', {
         childOf,
         tags: {
+          [COMPONENT]: this.constructor.name,
           ...commonTags,
           ...testEnvironmentMetadata
         }
@@ -64,6 +66,7 @@ class CucumberPlugin extends Plugin {
       const span = this.tracer.startSpan('cucumber.step', {
         childOf,
         tags: {
+          "component": "cucumber",
           'cucumber.step': resource,
           [RESOURCE_NAME]: resource
         }

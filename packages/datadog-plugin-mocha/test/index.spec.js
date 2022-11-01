@@ -6,7 +6,7 @@ const fs = require('fs')
 const nock = require('nock')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -130,6 +130,7 @@ describe('Plugin', () => {
               JSON.stringify(['@DataDog/dd-trace-js']) // reads from dd-trace-js
             )
             expect(testSpan.meta[LIBRARY_VERSION]).to.equal(ddTraceVersion)
+            expect(testSpan.meta[COMPONENT]).to.equal('mocha')
           })
         })
         Promise.all(assertionPromises)
@@ -149,6 +150,7 @@ describe('Plugin', () => {
           .use(traces => {
             const testSpan = traces[0][0]
             expect(testSpan.meta).to.contain({
+              [COMPONENT]: 'mocha',
               language: 'javascript',
               service: 'test',
               [TEST_NAME]: 'mocha-test-fail can fail',
@@ -191,6 +193,7 @@ describe('Plugin', () => {
             expect(testSpan.meta[TEST_STATUS]).to.equal('skip')
             expect(testSpan.meta[TEST_NAME]).to.equal(testName)
             expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+            expect(testSpan.meta[COMPONENT]).to.equal('mocha')
           })
         })
         Promise.all(assertionPromises)
@@ -233,6 +236,7 @@ describe('Plugin', () => {
               expect(testSpan.type).to.equal('test')
               expect(testSpan.name).to.equal('mocha.test')
               expect(testSpan.resource).to.equal(`${testSuite}.${test.root} ${test.testName}`)
+              expect(testSpan.meta[COMPONENT]).to.equal('mocha')
             }).then(done, done)
 
           const mocha = new Mocha({
@@ -265,6 +269,7 @@ describe('Plugin', () => {
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('mocha.test')
             expect(testSpan.resource).to.equal(`${testSuite}.mocha-parameterized can do parameterized`)
+            expect(testSpan.meta[COMPONENT]).to.equal('mocha')
           }).then(done, done)
 
         const mocha = new Mocha({
@@ -286,6 +291,7 @@ describe('Plugin', () => {
           expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
           expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
           expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
+          expect(testSpan.meta[COMPONENT]).to.equal('mocha')
           expect(testSpan.meta).to.contain({
             language: 'javascript',
             service: 'test',
@@ -312,6 +318,7 @@ describe('Plugin', () => {
           expect(testSpan.meta).to.contain({
             [ERROR_TYPE]: 'TypeError'
           })
+          expect(testSpan.meta[COMPONENT]).to.equal('mocha')
           expect(testSpan.meta[ERROR_TYPE]).to.equal('TypeError')
           const beginning = `mocha-fail-hook-sync "before each" hook for "will not run but be reported as failed": `
           expect(testSpan.meta[ERROR_MESSAGE].startsWith(beginning)).to.equal(true)
@@ -343,6 +350,7 @@ describe('Plugin', () => {
             const testSpan = trace[0][0]
             expect(testSpan.meta[TEST_NAME]).to.equal(name)
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
+            expect(testSpan.meta[COMPONENT]).to.equal('mocha')
           })
         })
 
@@ -393,6 +401,7 @@ describe('Plugin', () => {
             const testSpan = trace[0][0]
             expect(testSpan.meta[TEST_NAME]).to.equal(name)
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
+            expect(testSpan.meta[COMPONENT]).to.equal('mocha')
             if (errorMsg) {
               expect(testSpan.meta[ERROR_MESSAGE].startsWith(errorMsg)).to.equal(true)
               expect(testSpan.meta[ERROR_TYPE]).to.equal('Error')
@@ -425,6 +434,7 @@ describe('Plugin', () => {
           expect(testSpan.meta[ERROR_STACK].startsWith('AssertionError: expected true to equal false')).to.equal(true)
           expect(testSpan.meta[TEST_STATUS]).to.equal('fail')
           expect(testSpan.meta[TEST_NAME]).to.equal('mocha-test-done-fail can do badly setup failed tests with done')
+          expect(testSpan.meta[COMPONENT]).to.equal('mocha')
         }).then(done, done)
         const mocha = new Mocha({
           reporter: function () {} // silent on internal tests
@@ -446,6 +456,7 @@ describe('Plugin', () => {
             const testSpan = trace[0][0]
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
             expect(testSpan.meta[TEST_NAME]).to.equal(testName)
+            expect(testSpan.meta[COMPONENT]).to.equal('mocha')
           })
         })
 
@@ -521,6 +532,7 @@ describe('Plugin', () => {
             const testSpan = trace[0][0]
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
             expect(testSpan.meta[TEST_NAME]).to.equal(testName)
+            expect(testSpan.meta[COMPONENT]).to.equal('mocha')
           })
         })
 

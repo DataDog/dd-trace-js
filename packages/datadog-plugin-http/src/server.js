@@ -4,6 +4,7 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/gateway/channels')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class HttpServerPlugin extends Plugin {
   static get name () {
@@ -16,6 +17,8 @@ class HttpServerPlugin extends Plugin {
     this.addSub('apm:http:server:request:start', ({ req, res }) => {
       const store = storage.getStore()
       const span = web.startSpan(this.tracer, this.config, req, res, 'web.request')
+      
+      span.setTag(COMPONENT, this.constructor.name)
 
       this.enter(span, { ...store, req })
 
