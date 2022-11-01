@@ -1,11 +1,15 @@
-const { URL } = require('url')
+const { URL, format } = require('url')
 
 const { Writer } = require('./writer')
 
 class SpanStatsExporter {
   constructor (config) {
     const { hostname = '127.0.0.1', port = 8126, tags, url } = config
-    this._url = url || new URL(`http://${hostname || 'localhost'}:${port}`)
+    this._url = url || new URL(format({
+      protocol: 'http:',
+      hostname: hostname || 'localhost',
+      port
+    }))
     this._writer = new Writer({ url: this._url, tags })
   }
 
