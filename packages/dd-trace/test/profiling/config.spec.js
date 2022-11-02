@@ -122,37 +122,40 @@ describe('config', () => {
 
     expect(config.tags).to.include({ env, service, version })
   })
+})
 
-  describe('serverless', () => {
-    const functionName = 'foobar'
+describe('serverless config', () => {
+  let Config
+  const functionName = 'foobar'
 
-    beforeEach(() => {
-      process.env.AWS_LAMBDA_FUNCTION_NAME = functionName
-    })
+  beforeEach(() => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = functionName
+    Config = require('../../src/profiling/config').Config
+  })
 
-    afterEach(() => {
-      delete process.env.AWS_LAMBDA_FUNCTION_NAME
-    })
+  afterEach(() => {
+    delete process.env.AWS_LAMBDA_FUNCTION_NAME
+  })
 
-    it('should support serverless configuration options', () => {
-      const options = {
-        enabled: false,
-        service: 'test',
-        version: '1.2.3-test.0',
-        logger: {
-          debug () { },
-          info () { },
-          warn () { },
-          error () { }
-        },
-        exporters: 'agent,file',
-        profilers: 'wall,cpu-experimental',
-        url: 'http://localhost:1234/'
-      }
-      const slsConfig = new Config(options)
-  
-      expect(slsConfig.tags.functionName).to.equal(functionName)
-      expect(slsConfig.flushInterval).to.equal(1 * 1000)
-    })
+  it('should support serverless configuration options', () => {
+    Config = require('../../src/profiling/config').Config
+    const options = {
+      enabled: false,
+      service: 'test',
+      version: '1.2.3-test.0',
+      logger: {
+        debug () { },
+        info () { },
+        warn () { },
+        error () { }
+      },
+      exporters: 'agent,file',
+      profilers: 'wall,cpu-experimental',
+      url: 'http://localhost:1234/'
+    }
+    const slsConfig = new Config(options)
+
+    expect(slsConfig.tags.functionName).to.equal(functionName)
+    expect(slsConfig.flushInterval).to.equal(1 * 1000)
   })
 })

@@ -11,8 +11,6 @@ function maybeSourceMap (sourceMap) {
   ])
 }
 
-// const isServerless = !!process.env.AWS_LAMBDA_FUNCTION_NAME
-
 class Profiler extends EventEmitter {
   constructor () {
     super()
@@ -22,6 +20,7 @@ class Profiler extends EventEmitter {
     this._timer = undefined
     this._lastStart = undefined
 
+    this._isServerless = !!process.env.AWS_LAMBDA_FUNCTION_NAME
     this._profiledIntervals = 0
     this._forcedInterval = 1
     this._flushAfterIntervals = 65
@@ -92,8 +91,7 @@ class Profiler extends EventEmitter {
   }
 
   async _maybeCollect () {
-    // if (isServerless) {
-    if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    if (this._isServerless) {
       if (this._profiledIntervals >= this._flushAfterIntervals) {
         this._profiledIntervals = 0
       } else {
