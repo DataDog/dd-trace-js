@@ -5,17 +5,7 @@ const shimmer = require('../../../../../datadog-shimmer')
 const log = require('../../../log')
 const TaintTrackingFilter = require('./filter')
 
-let Rewriter
-let getPrepareStackTrace
-try {
-  const iastRewriter = require('@datadog/native-iast-rewriter')
-  Rewriter = iastRewriter.Rewriter
-  getPrepareStackTrace = iastRewriter.getPrepareStackTrace
-} catch (e) {
-  log.error(e)
-}
-
-const originalPrepareStackTrace = Error.prepareStackTrace
+let originalPrepareStackTrace = Error.prepareStackTrace
 function getPrepareStackTraceAccessor () {
   let actual = getPrepareStackTrace(originalPrepareStackTrace)
   return {
@@ -24,14 +14,19 @@ function getPrepareStackTraceAccessor () {
     },
     set (value) {
       actual = getPrepareStackTrace(value)
+      originalPrepareStackTrace = value
     }
   }
 }
 
 let rewriter
+let getPrepareStackTrace
 function getRewriter () {
   if (!rewriter) {
     try {
+      const iastRewriter = require('@datadog/native-iast-rewriter')
+      const Rewriter = iastRewriter.Rewriter
+      getPrepareStackTrace = iastRewriter.getPrepareStackTrace
       rewriter = new Rewriter()
     } catch (e) {
       log.warn(`Unable to initialize TaintTracking Rewriter: ${e.message}`)
