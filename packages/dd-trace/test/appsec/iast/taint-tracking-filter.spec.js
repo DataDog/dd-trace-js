@@ -1,14 +1,10 @@
 'use strict'
-const fs = require('fs')
 
 describe('IAST TaintTrackingFilter', () => {
   let filter
 
   describe('isPrivateModule', () => {
     beforeEach(() => {
-      sinon.stub(fs, 'existsSync').returns((filepath) => {
-        return filepath === 'node_modules/test-package/package.json'
-      })
       filter = require('../../../src/appsec/iast/taint-tracking/filter')
     })
 
@@ -19,20 +15,7 @@ describe('IAST TaintTrackingFilter', () => {
       expect(filter.isPrivateModule(filename)).to.be.true
     })
 
-    it('Filename inside node_modules and module with registry different from npm is private', () => {
-      sinon.stub(fs, 'readFileSync').returns('{"publishConfig":{"registry":"my_registry.test.com"}}')
-      const filename = 'node_modules/test-package/test.js'
-      expect(filter.isPrivateModule(filename)).to.be.true
-    })
-
-    it('Filename inside node_modules and module without registry is not private', () => {
-      sinon.stub(fs, 'readFileSync').returns('{}')
-      const filename = 'node_modules/test-package/test.js'
-      expect(filter.isPrivateModule(filename)).to.be.false
-    })
-
-    it('Filename inside node_modules and module with npm registry is not private', () => {
-      sinon.stub(fs, 'readFileSync').returns('{"publishConfig":{"registry":"registry.npmjs.org"}}')
+    it('Filename inside node_modules is not private', () => {
       const filename = 'node_modules/test-package/test.js'
       expect(filter.isPrivateModule(filename)).to.be.false
     })

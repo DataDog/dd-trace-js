@@ -13,7 +13,7 @@ try {
   log.error(e)
 }
 
-const noop = function (res) { return res }
+function noop (res) { return res }
 const TaintTrackingDummy = {
   plusOperator: noop
 }
@@ -37,28 +37,28 @@ const TaintTracking = {
   }
 }
 
-const createTransaction = function (id, iastContext) {
+function createTransaction (id, iastContext) {
   if (id && iastContext) {
     const transactionId = TaintedUtils.createTransaction(id)
     iastContext[IAST_TRANSACTION_ID] = transactionId
   }
 }
 
-const removeTransaction = function (iastContext) {
+function removeTransaction (iastContext) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
     TaintedUtils.removeTransaction(transactionId)
   }
 }
 
-const newTaintedString = function (iastContext, string, name, type) {
+function newTaintedString (iastContext, string, name, type) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
     return TaintedUtils.newTaintedString(transactionId, string, name, type)
   }
 }
 
-const isTainted = function (iastContext, string) {
+function isTainted (iastContext, string) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
     return TaintedUtils.isTainted(transactionId, string)
@@ -67,32 +67,34 @@ const isTainted = function (iastContext, string) {
   }
 }
 
-const getRanges = function (iastContext, string) {
+function getRanges (iastContext, string) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
     return TaintedUtils.getRanges(transactionId, string)
   }
 }
 
-const enableTaintTracking = function () {
+function enableTaintTracking () {
   if (TaintedUtils) {
     enableRewriter()
     global._ddiast = TaintTracking
   }
 }
 
-const disableTaintTracking = function () {
+function disableTaintTracking () {
   disableRewriter()
   global._ddiast = TaintTrackingDummy
 }
 
+function empty () {}
+
 module.exports = {
-  createTransaction,
-  removeTransaction,
-  enableTaintTracking,
-  disableTaintTracking,
-  newTaintedString,
-  isTainted,
-  getRanges,
+  createTransaction: TaintTracking ? createTransaction : empty,
+  removeTransaction: TaintTracking ? removeTransaction : empty,
+  enableTaintTracking: TaintTracking ? enableTaintTracking : empty,
+  disableTaintTracking: TaintTracking ? disableTaintTracking : empty,
+  newTaintedString: TaintTracking ? newTaintedString : empty,
+  isTainted: TaintTracking ? isTainted : empty,
+  getRanges: TaintTracking ? getRanges : empty,
   IAST_TRANSACTION_ID
 }
