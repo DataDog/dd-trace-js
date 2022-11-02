@@ -205,17 +205,17 @@
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/pprof@^1.1.0":
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-1.1.0.tgz#b1ba7b05d574dc83d6513021f5987a800c1532cc"
-  integrity sha512-3jeZ1poZqRd2JDXXcOO4G1+NiU0y0AXGdp5DQnldLieeS7u3bjLo1u0sTdAbRLnzGRb8Lr9PMeMUyASdFw3S0w==
+"@datadog/pprof@^1.1.1":
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-1.1.1.tgz#17e86035140523ac3a96f3662e5dd29822042d61"
+  integrity sha512-5lYXUpikQhrJwzODtJ7aFM0oKmPccISnTCecuWhjxIj4/7UJv0DamkLak634bgEW+kiChgkKFDapHSesuXRDXQ==
   dependencies:
     delay "^5.0.0"
     findit2 "^2.2.3"
     node-gyp-build "^3.9.0"
     p-limit "^3.1.0"
     pify "^5.0.0"
-    pprof-format "^2.0.4"
+    protobufjs "^7.0.0"
     source-map "^0.7.3"
     split "^1.0.1"
 
@@ -2935,11 +2935,6 @@ platform@^1.3.3:
   resolved "https://registry.yarnpkg.com/platform/-/platform-1.3.6.tgz#48b4ce983164b209c2d45a107adb31f473a6e7a7"
   integrity sha512-fnWVljUchTro6RiCFvCXBbNhJc2NijN7oIQxbwsyL0buWJPG85v81ehlHI9fXrJsMNgTofEoWIQeClKpgxFLrg==
 
-pprof-format@^2.0.4:
-  version "2.0.4"
-  resolved "https://registry.yarnpkg.com/pprof-format/-/pprof-format-2.0.4.tgz#d357620ed52f80e963012c30ac95bf4d6909642b"
-  integrity sha512-RC/Iie9QJWtg6UFvw+wpbKUYSBvY9lWyiDluHFlG0xhyfwXS7rO4PPKRw3itP9sieli0xEG7A9UO6CLhEVV8YA==
-
 prelude-ls@^1.2.1:
   version "1.2.1"
   resolved "https://registry.yarnpkg.com/prelude-ls/-/prelude-ls-1.2.1.tgz#debc6489d7a6e6b0e7611888cec880337d316396"
@@ -2972,7 +2967,7 @@ propagate@^2.0.0:
   resolved "https://registry.yarnpkg.com/propagate/-/propagate-2.0.1.tgz#40cdedab18085c792334e64f0ac17256d38f9a45"
   integrity sha512-vGrhOavPSTz4QVNuBNdcNXePNdNMaO1xj9yBeH1ScQPjk/rhg9sSlCXPhMkFuaNNW/syTvYqsnbIJxMBfRbbag==
 
-protobufjs@^7.1.2:
+protobufjs@^7.0.0, protobufjs@^7.1.2:
   version "7.1.2"
   resolved "https://registry.yarnpkg.com/protobufjs/-/protobufjs-7.1.2.tgz#a0cf6aeaf82f5625bffcf5a38b7cd2a7de05890c"
   integrity sha512-4ZPTPkXCdel3+L81yw3dG6+Kq3umdWKh7Dc7GW/CpNk4SX3hK58iPCWeCyhVTDrbkNeKrYNZ7EojM5WDaEWTLQ==
