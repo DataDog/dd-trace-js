@@ -115,6 +115,12 @@ export declare interface Tracer extends opentracing.Tracer {
    * @returns {Tracer} The Tracer instance for chaining.
    */
   setUser(user: User): Tracer;
+
+  /**
+   * Returns the current loca root span
+   * @returns {Span} The local root span for the tracer
+   */
+  getLocalRootSpan(): Span;
 }
 
 export declare interface TraceOptions extends Analyzable {

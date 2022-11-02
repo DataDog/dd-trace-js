@@ -72,6 +72,10 @@ class Tracer {
     this._tracer.setUser.apply(this._tracer, arguments)
     return this
   }
+
+  getLocalRootSpan(){
+    return this._tracer.getLocalRootSpan.apply(this._tracer)
+  }
 }
 
 module.exports = Tracer

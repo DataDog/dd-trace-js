@@ -41,6 +41,10 @@ class NoopTracer {
   setUser () {
     return this
   }
+
+  getLocalRootSpan(){
+    return this
+  }
 }
 
 module.exports = NoopTracer

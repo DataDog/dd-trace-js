@@ -26,7 +26,8 @@ describe('SpanContext', () => {
         started: ['span1', 'span2'],
         finished: ['span1'],
         tags: { foo: 'bar' }
-      }
+      },
+      localRoot: null,
     }
     const spanContext = new SpanContext(props)
 
@@ -44,7 +45,8 @@ describe('SpanContext', () => {
         started: ['span1', 'span2'],
         finished: ['span1'],
         tags: { foo: 'bar' }
-      }
+      },
+      _localRoot: null,
     })
   })
 
@@ -68,7 +70,8 @@ describe('SpanContext', () => {
         started: [],
         finished: [],
         tags: {}
-      }
+      },
+      _localRoot: null,
     })
   })
 

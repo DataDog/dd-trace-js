@@ -138,6 +138,14 @@ class DatadogTracer extends Tracer {
 
     return this
   }
+
+  getLocalRootSpan (){
+    const span = this.scope().active()
+    if(span){
+      return span._spanContext._localRoot
+    }
+    return null
+  }
 }
 
 function addError (span, error) {

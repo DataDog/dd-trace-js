@@ -18,6 +18,7 @@ class DatadogSpanContext {
       finished: [],
       tags: {}
     }
+    this._localRoot = props.localRoot || null
   }
 
   toTraceId () {

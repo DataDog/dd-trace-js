@@ -149,14 +149,15 @@ class DatadogSpan {
         parentId: parent._spanId,
         sampling: parent._sampling,
         baggageItems: Object.assign({}, parent._baggageItems),
-        trace: parent._trace
+        trace: parent._trace,
+        localRoot: parent._localRoot
       })
     } else {
       const spanId = id()
       spanContext = new SpanContext({
         traceId: spanId,
         spanId
-      })
+      }) 
     }
 
     spanContext._trace.started.push(this)
