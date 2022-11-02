@@ -85,7 +85,6 @@ describe('profiler', function () {
     }).Profiler
 
     if (isServerless) {
-      process.env.AWS_LAMBDA_FUNCTION_NAME = 'foobar'
       interval = 1 * 1000
     } else {
       interval = 65 * 1000
@@ -335,6 +334,7 @@ describe('profiler', function () {
     const flushAfterIntervals = 65
 
     beforeEach(() => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'foobar'
       setUpProfiler(true)
     })
 
