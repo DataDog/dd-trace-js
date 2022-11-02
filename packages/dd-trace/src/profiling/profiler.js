@@ -22,7 +22,6 @@ class Profiler extends EventEmitter {
     this._timer = undefined
     this._lastStart = undefined
 
-    // FIXME: where to put these for the serverless capture?
     this._profiledIntervals = 0
     this._forcedInterval = 1
     this._flushAfterIntervals = 65
@@ -106,15 +105,15 @@ class Profiler extends EventEmitter {
 
   async _maybeCollect () {
     if (isServerless) {
-      console.log('[Amy:_collect] checking lambda conditions')
+      console.log('[Amy:_maybeCollect] checking lambda conditions')
       if (this._profiledIntervals >= this._flushAfterIntervals) {
-        console.log('[Amy:_collect] resetting profiledIntervals, submitting profile')
+        console.log('[Amy:_maybeCollect] resetting profiledIntervals, submitting profile')
         this._profiledIntervals = 0
         // want to continue to flush profile
       } else {
-        console.log('[Amy:_collect] incrementing profiledIntervals, returning')
+        console.log('[Amy:_maybeCollect] incrementing profiledIntervals, returning')
         this._profiledIntervals += 1
-        console.log('[Amy:_collect] profiledIntervals:', this._profiledIntervals)
+        console.log('[Amy:_maybeCollect] profiledIntervals:', this._profiledIntervals)
         this._capture(this._config.flushInterval)
         return
       }
@@ -175,7 +174,5 @@ class Profiler extends EventEmitter {
     return Promise.all(tasks)
   }
 }
-
-
 
 module.exports = { Profiler }

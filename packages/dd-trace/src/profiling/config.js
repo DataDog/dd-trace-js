@@ -24,7 +24,7 @@ const {
   DD_TRACE_AGENT_PORT,
   DD_PROFILING_UPLOAD_TIMEOUT,
   DD_PROFILING_SOURCE_MAP,
-  AWS_LAMBDA_FUNCTION_NAME,
+  AWS_LAMBDA_FUNCTION_NAME
 } = process.env
 
 class Config {
@@ -35,9 +35,8 @@ class Config {
     const host = os.hostname()
     const version = coalesce(options.version, DD_VERSION)
     const functionName = coalesce(options.functionName, AWS_LAMBDA_FUNCTION_NAME)
-    // Must be longer than one minute so pad with five seconds
-    // const flushInterval = coalesce(options.interval, 65 * 1000)
-    const flushIntervalInSeconds = AWS_LAMBDA_FUNCTION_NAME ? 1 : 65 
+    // If not serverless, must be longer than one minute so pad with five seconds
+    const flushIntervalInSeconds = AWS_LAMBDA_FUNCTION_NAME ? 1 : 65
     const flushInterval = coalesce(options.interval, flushIntervalInSeconds * 1000)
     const uploadTimeout = coalesce(options.uploadTimeout,
       DD_PROFILING_UPLOAD_TIMEOUT, 60 * 1000)
