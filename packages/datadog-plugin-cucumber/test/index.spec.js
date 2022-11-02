@@ -6,7 +6,7 @@ const proxyquire = require('proxyquire').noPreserveCache()
 const nock = require('nock')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const { SAMPLING_PRIORITY } = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
 const {
@@ -90,7 +90,8 @@ describe('Plugin', function () {
               [TEST_TYPE]: 'test',
               [TEST_FRAMEWORK]: 'cucumber',
               [TEST_STATUS]: 'pass',
-              [LIBRARY_VERSION]: ddTraceVersion
+              [LIBRARY_VERSION]: ddTraceVersion,
+              [COMPONENT]: 'cucumber'
             })
             expect(testSpan.metrics).to.contain({
               [SAMPLING_PRIORITY]: AUTO_KEEP
@@ -100,7 +101,6 @@ describe('Plugin', function () {
             expect(testSpan.meta[TEST_SOURCE_FILE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('cucumber.test')
-            expect(testSpan.meta['component']).to.equal('cucumber') 
             expect(testSpan.resource.endsWith('simple.feature.pass scenario')).to.equal(true)
           })
           const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'pass scenario')
@@ -126,7 +126,7 @@ describe('Plugin', function () {
               expect(stepSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
               expect(stepSpan.meta['cucumber.step']).to.equal(steps[spanIndex].name)
               expect(stepSpan.meta['step.status']).to.equal(steps[spanIndex].stepStatus)
-              expect(stepSpan.meta['component']).to.equal('cucumber') 
+              expect(stepSpan.meta[COMPONENT]).to.equal('cucumber') 
               expect(stepSpan.type).not.to.equal('test')
             })
           })
@@ -157,7 +157,7 @@ describe('Plugin', function () {
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.meta[TEST_SOURCE_FILE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.type).to.equal('test')
-            expect(testSpan.meta['component']).to.equal('cucumber')
+            expect(testSpan.meta[COMPONENT]).to.equal('cucumber')
             expect(testSpan.name).to.equal('cucumber.test')
             expect(testSpan.resource.endsWith('simple.feature.fail scenario')).to.equal(true)
           })
@@ -185,7 +185,7 @@ describe('Plugin', function () {
               expect(stepSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
               expect(stepSpan.meta['cucumber.step']).to.equal(steps[spanIndex].name)
               expect(stepSpan.meta['step.status']).to.equal(steps[spanIndex].stepStatus)
-              expect(stepSpan.meta['component']).to.equal('cucumber')
+              expect(stepSpan.meta[COMPONENT]).to.equal('cucumber')
               expect(stepSpan.type).not.to.equal('test')
             })
             errors.forEach((msg, errorIndex) => {
@@ -223,7 +223,7 @@ describe('Plugin', function () {
             expect(testSpan.meta[TEST_SOURCE_FILE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('cucumber.test')
-            expect(testSpan.meta['component']).to.equal('cucumber') 
+            expect(testSpan.meta[COMPONENT]).to.equal('cucumber') 
             expect(testSpan.resource.endsWith('simple.feature.skip scenario')).to.equal(true)
           })
           const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'skip scenario')
@@ -249,7 +249,7 @@ describe('Plugin', function () {
               expect(stepSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
               expect(stepSpan.meta['cucumber.step']).to.equal(steps[spanIndex].name)
               expect(stepSpan.meta['step.status']).to.equal(steps[spanIndex].stepStatus)
-              expect(stepSpan.meta['component']).to.equal('cucumber') 
+              expect(stepSpan.meta[COMPONENT]).to.equal('cucumber') 
               expect(stepSpan.type).not.to.equal('test')
             })
           })
@@ -281,7 +281,7 @@ describe('Plugin', function () {
             expect(testSpan.meta[TEST_SOURCE_FILE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('cucumber.test')
-            expect(testSpan.meta['component']).to.equal('cucumber') 
+            expect(testSpan.meta[COMPONENT]).to.equal('cucumber') 
             expect(testSpan.resource.endsWith('simple.feature.skip scenario based on tag')).to.equal(true)
           })
           const result = await runCucumber(
@@ -311,7 +311,7 @@ describe('Plugin', function () {
               expect(stepSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
               expect(stepSpan.meta['cucumber.step']).to.equal(steps[spanIndex].name)
               expect(stepSpan.meta['step.status']).to.equal(steps[spanIndex].stepStatus)
-              expect(stepSpan.meta['component']).to.equal('cucumber') 
+              expect(stepSpan.meta[COMPONENT]).to.equal('cucumber') 
               expect(stepSpan.type).not.to.equal('test')
             })
           })
@@ -375,7 +375,7 @@ describe('Plugin', function () {
               [TEST_FRAMEWORK]: 'cucumber',
               [TEST_STATUS]: 'pass'
             })
-            expect(testSpan.meta['component']).to.equal('cucumber') 
+            expect(testSpan.meta[COMPONENT]).to.equal('cucumber') 
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.meta[TEST_SOURCE_FILE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.type).to.equal('test')
@@ -407,7 +407,7 @@ describe('Plugin', function () {
               // children spans should carry _dd.origin
               expect(stepSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
               // all steps are children of the test span
-              expect(stepSpan.meta['component']).to.equal('cucumber') 
+              expect(stepSpan.meta[COMPONENT]).to.equal('cucumber') 
               expect(stepSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
               expect(stepSpan.meta['cucumber.step']).to.equal(steps[spanIndex].name)
               expect(stepSpan.meta['step.status']).to.equal(steps[spanIndex].stepStatus)
@@ -438,7 +438,7 @@ describe('Plugin', function () {
               [TEST_FRAMEWORK]: 'cucumber',
               [TEST_STATUS]: 'fail'
             })
-            expect(testSpan.meta['component']).to.equal('cucumber') 
+            expect(testSpan.meta[COMPONENT]).to.equal('cucumber') 
             expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.meta[TEST_SOURCE_FILE].endsWith('simple.feature')).to.equal(true)
             expect(testSpan.type).to.equal('test')
@@ -469,7 +469,7 @@ describe('Plugin', function () {
               // children spans should carry _dd.origin
               expect(stepSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
               // all steps are children of the test span
-              expect(stepSpan.meta['component']).to.equal('cucumber') 
+              expect(stepSpan.meta[COMPONENT]).to.equal('cucumber') 
               expect(stepSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
               expect(stepSpan.meta['cucumber.step']).to.equal(steps[spanIndex].name)
               expect(stepSpan.meta['step.status']).to.equal(steps[spanIndex].stepStatus)

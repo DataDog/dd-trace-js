@@ -66,7 +66,7 @@ class CucumberPlugin extends Plugin {
       const span = this.tracer.startSpan('cucumber.step', {
         childOf,
         tags: {
-          "component": "cucumber",
+          [COMPONENT]: this.constructor.name,
           'cucumber.step': resource,
           [RESOURCE_NAME]: resource
         }

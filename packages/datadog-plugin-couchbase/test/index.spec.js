@@ -105,6 +105,7 @@ describe('Plugin', () => {
                 expect(span).to.have.property('resource', 'couchbase.upsert')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
+                expect(span.meta).to.have.property('component', 'couchbase')
               })
               .then(done)
               .catch(done)

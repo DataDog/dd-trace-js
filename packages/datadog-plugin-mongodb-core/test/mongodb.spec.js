@@ -83,6 +83,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('db.name', `test.${collectionName}`)
                 expect(span.meta).to.have.property('out.host', '127.0.0.1')
+                expect(span.meta).to.have.property('component', 'mongodb-core')
               })
               .then(done)
               .catch(done)
