@@ -34,7 +34,6 @@ class Config {
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
     const version = coalesce(options.version, DD_VERSION)
-    // console.log(`in Config constructor: process.env.AWS_LAMBDA_FUNCTION_NAME = ${process.env.AWS_LAMBDA_FUNCTION_NAME}`)
     // const functionName = AWS_LAMBDA_FUNCTION_NAME
     const functionName = process.env.AWS_LAMBDA_FUNCTION_NAME
     // If not serverless, must be longer than one minute so pad with five seconds
@@ -54,13 +53,11 @@ class Config {
     this.functionName = functionName
 
     this.version = version
-    // console.log('[Amy:config] functionName:', this.functionName)
     this.tags = Object.assign(
       tagger.parse(DD_TAGS),
       tagger.parse(options.tags),
       tagger.parse({ env, host, service, version, functionName })
     )
-    // console.log('[Amy:config] this.tags:', this.tags)
     this.logger = ensureLogger(options.logger)
     this.flushInterval = flushInterval
     this.uploadTimeout = uploadTimeout
