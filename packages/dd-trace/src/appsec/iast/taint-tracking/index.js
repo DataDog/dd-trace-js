@@ -62,6 +62,8 @@ const isTainted = function (iastContext, string) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
     return TaintedUtils.isTainted(transactionId, string)
+  } else {
+    return false
   }
 }
 
