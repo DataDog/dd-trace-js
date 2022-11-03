@@ -65,7 +65,7 @@ class DatadogTracer {
     span.addTags(options.tags)
 
     const spanCtx = getContext(span)
-    if(parent && spanCtx){
+    if(parent === null && spanCtx !== null){
       spanCtx._localRoot = span
     }
     return span
