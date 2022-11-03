@@ -3,9 +3,9 @@
 const uuid = require('crypto-randomuuid')
 const { EventEmitter } = require('events')
 const Scheduler = require('./scheduler')
-const tracerVersion = require('../../../../package.json').version
-const request = require('../exporters/common/request')
-const log = require('../log')
+const tracerVersion = require('../../../../../package.json').version
+const request = require('../../exporters/common/request')
+const log = require('../../log')
 
 const clientId = uuid()
 

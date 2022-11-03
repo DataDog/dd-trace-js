@@ -104,7 +104,7 @@ describe('TracerProxy', () => {
       './appsec': appsec,
       './appsec/iast': iast,
       './telemetry': telemetry,
-      './remote_config': RemoteConfigManager
+      './appsec/remote_config': RemoteConfigManager
     })
 
     proxy = new Proxy()
@@ -282,7 +282,7 @@ describe('TracerProxy', () => {
           './log': log,
           './profiler': null, // this will cause the import failure error
           './appsec': appsec,
-          './remote_config': RemoteConfigManager
+          './appsec/remote_config': RemoteConfigManager
         })
 
         const profilerImportFailureProxy = new ProfilerImportFailureProxy()

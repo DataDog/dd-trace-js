@@ -1,6 +1,6 @@
 'use strict'
 
-const Capabilities = require('../../src/remote_config/capabilities')
+const Capabilities = require('../../../src/appsec/remote_config/capabilities')
 
 const noop = () => {}
 
@@ -30,12 +30,12 @@ describe('RemoteConfigManager', () => {
       error: sinon.spy()
     }
 
-    RemoteConfigManager = proxyquire('../src/remote_config', {
+    RemoteConfigManager = proxyquire('../src/appsec/remote_config', {
       'crypto-randomuuid': uuid,
       './scheduler': Scheduler,
-      '../../../../package.json': { version: '3.0.0' },
-      '../exporters/common/request': request,
-      '../log': log
+      '../../../../../package.json': { version: '3.0.0' },
+      '../../exporters/common/request': request,
+      '../../log': log
     })
 
     config = {
