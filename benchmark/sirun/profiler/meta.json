@@ -4,6 +4,7 @@
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node -r ../monitor index.js\"",
   "cachegrind": false,
   "iterations": 5,
+  "instructions": true,
   "variants": {
     "control": {
       "env": {

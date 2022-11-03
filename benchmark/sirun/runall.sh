@@ -39,4 +39,7 @@ done
 
 wait
 
+echo "RESULTS:"
+cat ./results.ndjson
+
 echo "all tests for ${VERSION} have now completed."
