@@ -34,7 +34,7 @@ describe('Scheduler', () => {
       expect(stub).to.have.been.calledOnce
     })
 
-    it('should call the callback ', () => {
+    it('should call the callback once the async operation is done and a delay has passed', () => {
       let cb
       stub.callsFake((_cb) => { cb = _cb })
 
@@ -51,22 +51,9 @@ describe('Scheduler', () => {
 
       clock.tick(INTERVAL)
       expect(stub).to.have.been.calledTwice
-    })
 
-    it('should call the callback at the specified interval', () => {
-      stub.yieldsRight()
-
-      scheduler.start()
-      clock.tick(1)
-
-      expect(stub).to.have.been.calledOnce
-
+      cb()
       clock.tick(INTERVAL)
-
-      expect(stub).to.have.been.calledTwice
-
-      clock.tick(INTERVAL)
-
       expect(stub).to.have.been.calledThrice
     })
   })
