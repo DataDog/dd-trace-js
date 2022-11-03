@@ -12,6 +12,7 @@ class TracingPlugin extends Plugin {
     this.operation = this.constructor.operation
 
     this.addTraceSub('start', message => {
+      message.parentStore = storage.getStore()
       this.start(message)
     })
 
@@ -21,6 +22,16 @@ class TracingPlugin extends Plugin {
 
     this.addTraceSub('finish', message => {
       this.finish(message)
+    })
+
+    this.addTraceSub('async_end', message => {
+      this.asyncEnd(message)
+      this.exit(message)
+    })
+
+    this.addTraceSub('end', message => {
+      this.end(message)
+      this.exit(message)
     })
   }
 
@@ -46,7 +57,16 @@ class TracingPlugin extends Plugin {
     this.activeSpan.finish()
   }
 
+  asyncEnd (...args) {
+    this.finish(...args)
+  }
+
+  end () {} // implemented by individual plugins
+
   error (error) {
+    if (error && typeof error === 'object' && error.error) {
+      error = error.error
+    }
     this.addError(error)
   }
 
@@ -83,7 +103,7 @@ class TracingPlugin extends Plugin {
 
     analyticsSampler.sample(span, this.config.measured)
 
-    storage.enterWith({ ...store, span })
+    this.enter(span, store)
 
     return span
   }
