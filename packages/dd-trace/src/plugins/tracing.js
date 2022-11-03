@@ -12,7 +12,9 @@ class TracingPlugin extends Plugin {
     this.operation = this.constructor.operation
 
     this.addTraceSub('start', message => {
-      message.parentStore = storage.getStore()
+      if (message && typeof message === 'object') {
+        message.parentStore = storage.getStore()
+      }
       this.start(message)
     })
 
