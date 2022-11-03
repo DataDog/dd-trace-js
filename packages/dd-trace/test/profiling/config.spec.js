@@ -137,23 +137,8 @@ describe('serverless config', () => {
     delete process.env.AWS_LAMBDA_FUNCTION_NAME
   })
 
-  it('should support serverless configuration options', () => {
-    Config = require('../../src/profiling/config').Config
-    const options = {
-      enabled: false,
-      service: 'test',
-      version: '1.2.3-test.0',
-      logger: {
-        debug () { },
-        info () { },
-        warn () { },
-        error () { }
-      },
-      exporters: 'agent,file',
-      profilers: 'wall,cpu-experimental',
-      url: 'http://localhost:1234/'
-    }
-    const slsConfig = new Config(options)
+  it('should modify config values for serverless', () => {
+    const slsConfig = new Config({})
 
     expect(slsConfig.tags.functionName).to.equal(functionName)
     expect(slsConfig.flushInterval).to.equal(1 * 1000)
