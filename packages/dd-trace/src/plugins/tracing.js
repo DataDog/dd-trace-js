@@ -12,7 +12,8 @@ class TracingPlugin extends Plugin {
     this.operation = this.constructor.operation
 
     this.addTraceSub('start', message => {
-      if (message && typeof message === 'object') {
+      // TODO hasAsyncEnd is temporary until all plugins are converted to have asyncEnd
+      if (message && typeof message === 'object' && message.hasAsyncEnd) {
         message.parentStore = storage.getStore()
       }
       this.start(message)
@@ -28,12 +29,10 @@ class TracingPlugin extends Plugin {
 
     this.addTraceSub('async_end', message => {
       this.asyncEnd(message)
-      this.exit(message)
     })
 
     this.addTraceSub('end', message => {
       this.end(message)
-      this.exit(message)
     })
   }
 
@@ -61,9 +60,12 @@ class TracingPlugin extends Plugin {
 
   asyncEnd (...args) {
     this.finish(...args)
+    this.exit(...args)
   }
 
-  end () {} // implemented by individual plugins
+  end (...args) {
+    this.exit(...args)
+  }
 
   error (error) {
     if (error && typeof error === 'object' && error.error) {

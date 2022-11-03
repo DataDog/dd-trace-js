@@ -68,7 +68,7 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
       startArgs.push(rrtype)
     }
 
-    const context = { args: startArgs }
+    const context = { args: startArgs, hasAsyncEnd: true }
     startCh.publish(context)
 
     arguments[arguments.length - 1] = function (error, result) {
