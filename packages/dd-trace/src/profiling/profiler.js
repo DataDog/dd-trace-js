@@ -19,11 +19,6 @@ class Profiler extends EventEmitter {
     this._config = undefined
     this._timer = undefined
     this._lastStart = undefined
-
-    this._isServerless = !!process.env.AWS_LAMBDA_FUNCTION_NAME
-    this._profiledIntervals = 0
-    this._forcedInterval = 1
-    this._flushAfterIntervals = 65
   }
 
   start (options) {
@@ -83,25 +78,11 @@ class Profiler extends EventEmitter {
     if (!this._enabled) return
     this._lastStart = new Date()
     if (!this._timer || timeout !== this._config.flushInterval) {
-      this._timer = setTimeout(() => this._maybeCollect(), timeout)
+      this._timer = setTimeout(() => this._collect(), timeout)
       this._timer.unref()
     } else {
       this._timer.refresh()
     }
-  }
-
-  async _maybeCollect () {
-    if (this._isServerless) {
-      if (this._profiledIntervals >= this._flushAfterIntervals) {
-        this._profiledIntervals = 0
-      } else {
-        this._profiledIntervals += 1
-        this._capture(this._config.flushInterval)
-        return
-      }
-    }
-
-    await this._collect()
   }
 
   async _collect () {
@@ -150,4 +131,23 @@ class Profiler extends EventEmitter {
   }
 }
 
-module.exports = { Profiler }
+class ServerlessProfiler extends Profiler {
+  constructor () {
+    super()
+    this._profiledIntervals = 0
+    this._flushAfterIntervals = 65
+  }
+
+  async _collect () {
+    if (this._profiledIntervals >= this._flushAfterIntervals) {
+      this._profiledIntervals = 0
+      await super._collect()
+    } else {
+      this._profiledIntervals += 1
+      this._capture(this._config.flushInterval)
+      // Don't submit profile until 65 (flushAfterIntervals) intervals have elapsed
+    }
+  }
+}
+
+module.exports = { Profiler, ServerlessProfiler }

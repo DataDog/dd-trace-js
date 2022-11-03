@@ -37,7 +37,8 @@ describe('profiler', function () {
     ]).then(() => Promise.resolve())
   }
 
-  function setUpProfiler (isServerless) {
+  function setUpProfiler () {
+    interval = 65 * 1000
     clock = sinon.useFakeTimers()
     exporterPromise = Promise.resolve()
     exporter = {
@@ -75,27 +76,24 @@ describe('profiler', function () {
     profilers = [wallProfiler, spaceProfiler]
 
     sourceMapCreate = sinon.stub()
-
-    Profiler = proxyquire('../src/profiling/profiler', {
-      '@datadog/pprof': {
-        SourceMapper: {
-          create: sourceMapCreate
-        }
-      }
-    }).Profiler
-
-    if (isServerless) {
-      interval = 1 * 1000
-    } else {
-      interval = 65 * 1000
-    }
-
-    profiler = new Profiler()
   }
 
   describe('not serverless', function () {
+    function initProfiler () {
+      Profiler = proxyquire('../src/profiling/profiler', {
+        '@datadog/pprof': {
+          SourceMapper: {
+            create: sourceMapCreate
+          }
+        }
+      }).Profiler
+
+      profiler = new Profiler()
+    }
+
     beforeEach(() => {
-      setUpProfiler(false)
+      setUpProfiler()
+      initProfiler()
     })
 
     afterEach(() => {
@@ -333,9 +331,24 @@ describe('profiler', function () {
   describe('serverless', function () {
     const flushAfterIntervals = 65
 
+    function initServerlessProfiler () {
+      Profiler = proxyquire('../src/profiling/profiler', {
+        '@datadog/pprof': {
+          SourceMapper: {
+            create: sourceMapCreate
+          }
+        }
+      }).ServerlessProfiler
+
+      interval = 1 * 1000
+
+      profiler = new Profiler()
+    }
+
     beforeEach(() => {
       process.env.AWS_LAMBDA_FUNCTION_NAME = 'foobar'
-      setUpProfiler(true)
+      setUpProfiler()
+      initServerlessProfiler()
     })
 
     afterEach(() => {
