@@ -2,7 +2,9 @@
 
 const Scheduler = require('../../../src/appsec/remote_config/scheduler')
 
-describe('Scheduler', () => {
+const INTERVAL = 5e3
+
+describe.only('Scheduler', () => {
   let clock
   let stub
   let scheduler
@@ -10,29 +12,11 @@ describe('Scheduler', () => {
   beforeEach(() => {
     clock = sinon.useFakeTimers()
     stub = sinon.stub()
-    scheduler = new Scheduler(stub, 5000)
+    scheduler = new Scheduler(stub, INTERVAL)
   })
 
   afterEach(() => {
     clock.restore()
-  })
-
-  describe('func', () => {
-    it('should not run when already running', () => {
-      let cb
-      stub.callsFake((_cb) => { cb = _cb })
-
-      scheduler.func()
-      expect(stub).to.have.been.calledOnce
-
-      scheduler.func()
-      expect(stub).to.have.been.calledOnce
-
-      cb()
-
-      scheduler.func()
-      expect(stub).to.have.been.calledTwice
-    })
   })
 
   describe('start', () => {
@@ -50,6 +34,25 @@ describe('Scheduler', () => {
       expect(stub).to.have.been.calledOnce
     })
 
+    it('should call the callback ', () => {
+      let cb
+      stub.callsFake((_cb) => { cb = _cb })
+
+      scheduler.start()
+      clock.tick(1)
+      expect(stub).to.have.been.calledOnce
+
+      clock.tick(INTERVAL)
+      expect(stub).to.have.been.calledOnce
+
+      cb()
+      clock.tick(1)
+      expect(stub).to.have.been.calledOnce
+
+      clock.tick(INTERVAL)
+      expect(stub).to.have.been.calledTwice
+    })
+
     it('should call the callback at the specified interval', () => {
       stub.yieldsRight()
 
@@ -58,11 +61,11 @@ describe('Scheduler', () => {
 
       expect(stub).to.have.been.calledOnce
 
-      clock.tick(5000)
+      clock.tick(INTERVAL)
 
       expect(stub).to.have.been.calledTwice
 
-      clock.tick(5000)
+      clock.tick(INTERVAL)
 
       expect(stub).to.have.been.calledThrice
     })
@@ -73,8 +76,10 @@ describe('Scheduler', () => {
       stub.yieldsRight()
 
       scheduler.start()
+      clock.tick(1)
+
       scheduler.stop()
-      clock.tick(5000)
+      clock.tick(INTERVAL)
 
       expect(stub).to.have.been.calledOnce
     })

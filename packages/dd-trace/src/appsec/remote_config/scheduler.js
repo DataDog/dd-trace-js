@@ -5,32 +5,22 @@ class Scheduler {
     this._timer = null
     this._callback = callback
     this._interval = interval
-    this._running = false
-  }
-
-  func () {
-    if (this._running) return
-    this._running = true
-
-    this._callback(() => {
-      this._running = false
-    })
   }
 
   start () {
     if (this._timer) return
 
-    const cb = () => this.func()
+    this.runAfterDelay(0)
+  }
 
-    setImmediate(cb)
-
-    this._timer = setInterval(cb, this._interval)
+  runAfterDelay (interval = this._interval) {
+    this._timer = setTimeout(this._callback, interval, () => this.runAfterDelay())
 
     this._timer.unref && this._timer.unref()
   }
 
   stop () {
-    clearInterval(this._timer)
+    clearTimeout(this._timer)
 
     this._timer = null
   }
