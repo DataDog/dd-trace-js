@@ -4,7 +4,7 @@ const Scheduler = require('../../../src/appsec/remote_config/scheduler')
 
 const INTERVAL = 5e3
 
-describe.only('Scheduler', () => {
+describe('Scheduler', () => {
   let clock
   let stub
   let scheduler
