@@ -6,7 +6,7 @@ class DNSLookupPlugin extends ClientPlugin {
   static get name () { return 'dns' }
   static get operation () { return 'lookup' }
 
-  start ([hostname]) {
+  start ({ args: [hostname] }) {
     this.startSpan('dns.lookup', {
       service: this.config.service,
       resource: hostname,
@@ -19,7 +19,7 @@ class DNSLookupPlugin extends ClientPlugin {
     })
   }
 
-  finish (result) {
+  finish ({ result }) {
     const span = this.activeSpan
 
     if (Array.isArray(result)) {

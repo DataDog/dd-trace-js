@@ -6,7 +6,7 @@ class DNSReversePlugin extends ClientPlugin {
   static get name () { return 'dns' }
   static get operation () { return 'reverse' }
 
-  start ([ip]) {
+  start ({ args: [ip] }) {
     this.startSpan('dns.reverse', {
       service: this.config.service,
       resource: ip,
