@@ -139,9 +139,9 @@ class DatadogTracer extends Tracer {
     return this
   }
 
-  getLocalRootSpan (){
+  getLocalRootSpan () {
     const span = this.scope().active()
-    if(span){
+    if (span) {
       return span._spanContext._localRoot
     }
     return null

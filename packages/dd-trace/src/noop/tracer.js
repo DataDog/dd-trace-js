@@ -42,7 +42,7 @@ class NoopTracer {
     return this
   }
 
-  getLocalRootSpan(){
+  getLocalRootSpan () {
     return this
   }
 }

@@ -157,7 +157,7 @@ class DatadogSpan {
       spanContext = new SpanContext({
         traceId: spanId,
         spanId
-      }) 
+      })
     }
 
     spanContext._trace.started.push(this)

@@ -73,7 +73,7 @@ class Tracer {
     return this
   }
 
-  getLocalRootSpan(){
+  getLocalRootSpan () {
     return this._tracer.getLocalRootSpan.apply(this._tracer)
   }
 }

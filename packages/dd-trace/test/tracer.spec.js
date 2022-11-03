@@ -573,14 +573,14 @@ describe('Tracer', () => {
     })
   })
 
-  describe('getLocalRootSpan', () =>{
-    it('A single span trace', () =>{
-      tracer.trace('name', {}, (span) =>{
+  describe('getLocalRootSpan', () => {
+    it('A single span trace', () => {
+      tracer.trace('name', {}, (span) => {
         expect(tracer.getLocalRootSpan()).to.equal(span)
       })
     })
 
-    it('A multi span trace', () =>{
+    it('A multi span trace', () => {
       const root = tracer.startSpan('parent')
 
       tracer.scope().activate(root, () => {
@@ -590,11 +590,11 @@ describe('Tracer', () => {
       })
     })
 
-    it('A multi span trace with different services', () =>{
+    it('A multi span trace with different services', () => {
       const root = tracer.startSpan('parent')
 
       tracer.scope().activate(root, () => {
-        tracer.trace('name', {service: 'foo'}, span => {
+        tracer.trace('name', { service: 'foo' }, span => {
           expect(tracer.getLocalRootSpan()).to.equal(root)
         })
       })
