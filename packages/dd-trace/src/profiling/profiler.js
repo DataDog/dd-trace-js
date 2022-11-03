@@ -124,7 +124,6 @@ class Profiler extends EventEmitter {
       }
 
       this._capture(this._config.flushInterval)
-
       await this._submit(profiles, start, end)
       this._logger.debug('Submitted profiles')
     } catch (err) {
