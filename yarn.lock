@@ -198,22 +198,22 @@
     minimist "^1.2.6"
     tar "^6.1.11"
 
+"@datadog/native-iast-rewriter@^0.1.0-beta.1":
+  version "0.1.0-beta.1"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-0.1.0-beta.1.tgz#504f467f1cde7eea276a3e904ba0816825bf4ac9"
+  integrity sha512-uFP6GanFhF7fbhrrYCj3Re1Iy5z/nftO20C6V/GaqS/un8S0PRyJzW6521V2a9kDOvpT9p5AvSwhU/2oAh3BLA==
+  dependencies:
+    node-gyp-build "^4.5.0"
+
+"@datadog/native-iast-taint-tracking@^0.1.0-beta.1":
+  version "0.1.0-beta.1"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-0.1.0-beta.1.tgz#2fae7f175f11ef40dc8d10ab1c32164db655166f"
+  integrity sha512-247W2kSEwD/6uuoN7hVzIrMM/I98ifKtmRZjMeWJ2v7yvIA3G37C3RVKdk9BZ4iM10y05pTxiPN67UUvbvWuJg==
+
 "@datadog/native-metrics@^1.5.0":
   version "1.5.0"
   resolved "https://registry.yarnpkg.com/@datadog/native-metrics/-/native-metrics-1.5.0.tgz#e71b6b6d65f4bd58dfdffab2737890e8eef34584"
   integrity sha512-K63XMDx74RLhOpM8I9GGZR9ft0CNNB/RkjYPLHcVGvVnBR47zmWE2KFa7Yrtzjbk73+88PXI4nzqLyR3PJsaIQ==
-
-"@datadog/native-iast-rewriter@^0.1.0-beta.0":
-  version "0.1.0-beta.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-0.1.0-beta.0.tgz#8b5e07fd454abac8a60141e54b8e1b12d7c90432"
-  integrity sha512-BeVxl9sHAK3fSl4BD4ffBJASvoi2/YwBMBQZWV2ERRt+rSgOqwyqCjXBHMGt7N2rq0Vx1aNm2ybEs1R/qXsK+w==
-  dependencies:
-    node-gyp-build "^4.5.0"
-
-"@datadog/native-iast-taint-tracking@^0.1.0-beta.0":
-  version "0.1.0-beta.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-0.1.0-beta.0.tgz#8bf2b057ee455da1741716848ca71970e60c83c9"
-  integrity sha512-DhT50WOWv61KNSazZyzU4RlM0e4jKpbGOe8jxeYQg8KYEOgHg+qVz5ISSR5CmXFPEW1Nmc55ovgItKIp3GZBzw==
   dependencies:
     node-gyp-build "^3.9.0"
 
