@@ -3,6 +3,14 @@
 echo "WHICH SIRUN:"
 sha1sum `which sirun`
 
+wget -O sirun.tar.gz https://github.com/DataDog/sirun/releases/download/v0.1.10/sirun-v0.1.10-x86_64-unknown-linux-musl.tar.gz \
+	&& tar -xzf sirun.tar.gz \
+	&& rm sirun.tar.gz \
+	&& mv sirun /usr/bin/sirun
+
+echo "WHICH SIRUN AGAIN:"
+sha1sum `which sirun`
+
 echo "WHICH GLIBC:"
 ldd --version
 
