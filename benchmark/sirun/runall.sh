@@ -3,6 +3,9 @@
 echo "WHICH SIRUN:"
 sha1sum `which sirun`
 
+echo "WHICH GLIBC:"
+ldd --version
+
 if test -f ~/.nvm/nvm.sh; then
   source ~/.nvm/nvm.sh
 else
