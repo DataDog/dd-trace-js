@@ -20,7 +20,7 @@ const TaintTracking = {
       const iastContext = iastContextFunctions.getIastContext(store)
       const transactionId = iastContext && iastContext[IAST_TRANSACTION_ID]
       if (transactionId) {
-        res = TaintedUtils.concat(transactionId, res, op1, op2)
+        return TaintedUtils.concat(transactionId, res, op1, op2)
       }
     } catch (e) {
       log.debug(e)

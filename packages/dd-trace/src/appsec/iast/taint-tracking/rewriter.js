@@ -3,7 +3,7 @@
 const Module = require('module')
 const shimmer = require('../../../../../datadog-shimmer')
 const log = require('../../../log')
-const TaintTrackingFilter = require('./filter')
+const { isPrivateModule } = require('./filter')
 
 let originalPrepareStackTrace = Error.prepareStackTrace
 function getPrepareStackTraceAccessor () {
@@ -38,7 +38,7 @@ function getRewriter () {
 function getCompileMethodFn (compileMethod) {
   return function (content, filename) {
     try {
-      if (TaintTrackingFilter.isPrivateModule(filename)) {
+      if (isPrivateModule(filename)) {
         content = rewriter.rewrite(content, filename)
       }
     } catch (e) {
