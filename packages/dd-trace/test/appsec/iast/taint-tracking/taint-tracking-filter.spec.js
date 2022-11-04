@@ -5,7 +5,7 @@ describe('IAST TaintTrackingFilter', () => {
 
   describe('isPrivateModule', () => {
     beforeEach(() => {
-      filter = require('../../../src/appsec/iast/taint-tracking/filter')
+      filter = require('../../../../src/appsec/iast/taint-tracking/filter')
     })
 
     afterEach(sinon.restore)
