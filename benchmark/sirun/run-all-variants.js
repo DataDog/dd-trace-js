@@ -51,6 +51,8 @@ function squashAffinity (obj) {
   }
 }
 
+console.log('meta-temp.json', JSON.stringify(metaJson))
+
 fs.writeFileSync(path.join(process.cwd(), 'meta-temp.json'), JSON.stringify(metaJson, null, 2))
 
 const env = Object.assign({}, process.env, { DD_TRACE_STARTUP_LOGS: 'false' })
