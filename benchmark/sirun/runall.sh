@@ -1,5 +1,8 @@
 #!/bin/bash
 
+echo "WHICH SIRUN:"
+sha1sum `which sirun`
+
 if test -f ~/.nvm/nvm.sh; then
   source ~/.nvm/nvm.sh
 else
