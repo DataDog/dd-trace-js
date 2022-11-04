@@ -1,6 +1,8 @@
 Component,Origin,License,Copyright
 require,@datadog/native-appsec,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/native-metrics,Apache license 2.0,Copyright 2018 Datadog Inc.
+require,@datadog/native-iast-rewriter,Apache license 2.0,Copyright 2018 Datadog Inc.
+require,@datadog/native-iast-taint-tracking,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/pprof,Apache license 2.0,Copyright 2019 Google Inc.
 require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
 require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
