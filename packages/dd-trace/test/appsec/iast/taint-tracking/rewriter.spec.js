@@ -4,7 +4,6 @@ const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 
 describe('IAST Rewriter', () => {
-
   it('Addon should return a rewritter instance', () => {
     let rewriter = null
     expect(() => {
@@ -27,7 +26,6 @@ describe('IAST Rewriter', () => {
     })
 
     afterEach(sinon.restore)
-
 
     it('Should wrap module compile method on taint tracking enable', () => {
       rewriter.enableRewriter()
