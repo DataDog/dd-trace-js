@@ -6,6 +6,8 @@ const Scope = require('./scope')
 const { storage } = require('../../datadog-core')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
+const { channel } = require('../../datadog-instrumentations/src/helpers/instrument')
+
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -40,15 +42,22 @@ class DatadogTracer extends Tracer {
         }))
       }
 
-      // const result = this.scope().activate(span, () => fn(span))
-      const result = this.scope().activate(span, () => {
-        if (process.env.DD_TRACE_MAX_DURATION) {
+      const result = this.scope().activate(span, () => fn(span))
+      const dc = channel('_ddtrace:tracer:killSpan')
+      // kill spans
+      dc.subscribe(_ => {
+        this.crashFlush()
+      })
+      
+      /* const result = this.scope().activate(span, () => {
+        if (this.___lambdaContext) {
+          const timeout = this.___lambdaContext.getRemainingTimeInMillis()
           setTimeout(() => {
             this.crashFlush()
-          }, process.env.DD_TRACE_MAX_DURATION)
+          }, timeout)
         }
         return fn(span)
-      })
+      })  */
       if (result && typeof result.then === 'function') {
         return result.then(
           value => {
@@ -83,6 +92,7 @@ class DatadogTracer extends Tracer {
     console.log('active scope tags', active._spanContext._tags)
     active.finish()
   }
+
   wrap (name, options, fn) {
     const tracer = this
 
