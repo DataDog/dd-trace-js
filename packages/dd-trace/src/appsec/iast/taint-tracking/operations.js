@@ -39,6 +39,7 @@ function removeTransaction (iastContext) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
     TaintedUtils.removeTransaction(transactionId)
+    delete iastContext[IAST_TRANSACTION_ID]
   }
 }
 

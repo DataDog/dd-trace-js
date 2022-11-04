@@ -69,13 +69,15 @@ describe('IAST TaintTracking Operations', () => {
 
   describe('removeTransaction', () => {
     it('Given not null iastContext with defined IAST_TRANSACTION_ID should removeTransaction', () => {
+      const transactionId = 'TRANSACTION_ID'
       const iastContext = {
-        [taintTrackingOperations.IAST_TRANSACTION_ID]: 'id'
+        [taintTrackingOperations.IAST_TRANSACTION_ID]: transactionId
       }
       taintTrackingOperations.removeTransaction(iastContext)
       expect(taintedUtils.removeTransaction).to.be.calledWithExactly(
-        iastContext[taintTrackingOperations.IAST_TRANSACTION_ID]
+        transactionId
       )
+      expect(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID]).to.be.undefined
     })
 
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not removeTransaction', () => {
