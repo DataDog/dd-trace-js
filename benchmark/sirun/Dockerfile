@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 debian:buster-slim
+FROM --platform=linux/amd64 ubuntu:22.04
 
 RUN apt-get update && apt-get install --no-install-recommends -y \
 	wget curl ca-certificates valgrind \
