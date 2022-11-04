@@ -11,10 +11,8 @@ describe('IAST TaintTracking', () => {
   }
 
   const taintTrackingOperations = {
-    taintOperations: {
-      enable: sinon.spy(),
-      disable: sinon.spy()
-    }
+    enableTaintOperations: sinon.spy(),
+    disableTaintOperations: sinon.spy()
   }
 
   beforeEach(() => {
@@ -29,12 +27,12 @@ describe('IAST TaintTracking', () => {
   it('Should enable both rewriter and taint tracking operations', () => {
     taintTracking.enableTaintTracking()
     expect(rewriter.enableRewriter).to.be.calledOnce
-    expect(taintTrackingOperations.taintOperations.enable).to.be.calledOnce
+    expect(taintTrackingOperations.enableTaintOperations).to.be.calledOnce
   })
 
   it('Should disable both rewriter and taint tracking operations', () => {
     taintTracking.disableTaintTracking()
     expect(rewriter.disableRewriter).to.be.calledOnce
-    expect(taintTrackingOperations.taintOperations.disable).to.be.calledOnce
+    expect(taintTrackingOperations.disableTaintOperations).to.be.calledOnce
   })
 })

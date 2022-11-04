@@ -1,15 +1,15 @@
 const { enableRewriter, disableRewriter } = require('./rewriter')
-const { taintOperations } = require('./operations')
+const { createTransaction, removeTransaction, enableTaintOperations, disableTaintOperations } = require('./operations')
 
 module.exports = {
   enableTaintTracking () {
     enableRewriter()
-    taintOperations.enable()
+    enableTaintOperations()
   },
   disableTaintTracking () {
     disableRewriter()
-    taintOperations.disable()
+    disableTaintOperations()
   },
-  createTransaction: taintOperations.createTransaction,
-  removeTransaction: taintOperations.removeTransaction
+  createTransaction: createTransaction,
+  removeTransaction: removeTransaction
 }

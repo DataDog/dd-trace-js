@@ -45,7 +45,7 @@ describe('IAST TaintTracking Operations', () => {
     it('Given not null id and not null iastContext should createTransaction', () => {
       const iastContext = {}
       const transactionId = 'id'
-      taintTrackingOperations.taintOperations.createTransaction(transactionId, iastContext)
+      taintTrackingOperations.createTransaction(transactionId, iastContext)
       expect(taintedUtils.createTransaction).to.be.calledOnce
       expect(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID]).to.be.equal(transactionId)
     })
@@ -53,7 +53,7 @@ describe('IAST TaintTracking Operations', () => {
     it('Given null id and not null iastContext should not createTransaction', () => {
       const iastContext = {}
       const transactionId = null
-      taintTrackingOperations.taintOperations.createTransaction(transactionId, iastContext)
+      taintTrackingOperations.createTransaction(transactionId, iastContext)
       expect(taintedUtils.createTransaction).not.to.be.called
       expect(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID]).to.be.undefined
     })
@@ -61,7 +61,7 @@ describe('IAST TaintTracking Operations', () => {
     it('Given not null id and null iastContext should not createTransaction', () => {
       const iastContext = null
       const transactionId = 'id'
-      taintTrackingOperations.taintOperations.createTransaction(transactionId, iastContext)
+      taintTrackingOperations.createTransaction(transactionId, iastContext)
       expect(taintedUtils.createTransaction).not.to.be.called
       expect(iastContext).to.be.null
     })
@@ -72,7 +72,7 @@ describe('IAST TaintTracking Operations', () => {
       const iastContext = {
         [taintTrackingOperations.IAST_TRANSACTION_ID]: 'id'
       }
-      taintTrackingOperations.taintOperations.removeTransaction(iastContext)
+      taintTrackingOperations.removeTransaction(iastContext)
       expect(taintedUtils.removeTransaction).to.be.calledWithExactly(
         iastContext[taintTrackingOperations.IAST_TRANSACTION_ID]
       )
@@ -80,13 +80,13 @@ describe('IAST TaintTracking Operations', () => {
 
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not removeTransaction', () => {
       const iastContext = {}
-      taintTrackingOperations.taintOperations.removeTransaction(iastContext)
+      taintTrackingOperations.removeTransaction(iastContext)
       expect(taintedUtils.removeTransaction).not.to.be.called
     })
 
     it('Given null iastContext should call not removeTransaction', () => {
       const iastContext = null
-      taintTrackingOperations.taintOperations.removeTransaction(iastContext)
+      taintTrackingOperations.removeTransaction(iastContext)
       expect(taintedUtils.removeTransaction).not.to.be.called
     })
   })
@@ -101,7 +101,7 @@ describe('IAST TaintTracking Operations', () => {
     })
 
     it('Should set a not dummy global._ddiast object', () => {
-      taintTrackingOperations.taintOperations.enable()
+      taintTrackingOperations.enableTaintOperations()
 
       // taintedUtils is declared in global scope
       expect(global._ddiast).not.to.be.undefined
@@ -113,7 +113,7 @@ describe('IAST TaintTracking Operations', () => {
     })
 
     it('Should set dummy global._ddiast object', () => {
-      taintTrackingOperations.taintOperations.disable()
+      taintTrackingOperations.disableTaintOperations()
 
       // dummy taintedUtils is declared in global scope
       expect(global._ddiast).not.to.be.undefined
@@ -133,20 +133,20 @@ describe('IAST TaintTracking Operations', () => {
       const value = 'value'
       const param = 'param'
       const type = 'REQUEST'
-      taintTrackingOperations.taintOperations.newTaintedString(iastContext, value, param, type)
+      taintTrackingOperations.newTaintedString(iastContext, value, param, type)
       expect(taintedUtils.newTaintedString).to.be.called
       expect(taintedUtils.newTaintedString).to.be
         .calledWithExactly(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID], value, param, type)
     })
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.newTaintedString', () => {
       const iastContext = {}
-      taintTrackingOperations.taintOperations.newTaintedString(iastContext)
+      taintTrackingOperations.newTaintedString(iastContext)
       expect(taintedUtils.newTaintedString).not.to.be.called
     })
 
     it('Given null iastContext should call not TaintedUtils.newTaintedString', () => {
       const iastContext = null
-      taintTrackingOperations.taintOperations.newTaintedString(iastContext)
+      taintTrackingOperations.newTaintedString(iastContext)
       expect(taintedUtils.newTaintedString).not.to.be.called
     })
   })
@@ -157,7 +157,7 @@ describe('IAST TaintTracking Operations', () => {
         [taintTrackingOperations.IAST_TRANSACTION_ID]: 'id'
       }
       const value = 'value'
-      taintTrackingOperations.taintOperations.isTainted(iastContext, value)
+      taintTrackingOperations.isTainted(iastContext, value)
       expect(taintedUtils.isTainted).to.be.called
       expect(taintedUtils.isTainted).to.be.calledWithExactly(
         iastContext[taintTrackingOperations.IAST_TRANSACTION_ID],
@@ -166,13 +166,13 @@ describe('IAST TaintTracking Operations', () => {
     })
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.isTainted', () => {
       const iastContext = {}
-      taintTrackingOperations.taintOperations.isTainted(iastContext)
+      taintTrackingOperations.isTainted(iastContext)
       expect(taintedUtils.isTainted).not.to.be.called
     })
 
     it('Given null iastContext should call not TaintedUtils.isTainted', () => {
       const iastContext = null
-      taintTrackingOperations.taintOperations.isTainted(iastContext)
+      taintTrackingOperations.isTainted(iastContext)
       expect(taintedUtils.isTainted).not.to.be.called
     })
   })
@@ -183,7 +183,7 @@ describe('IAST TaintTracking Operations', () => {
         [taintTrackingOperations.IAST_TRANSACTION_ID]: 'id'
       }
       const value = 'value'
-      taintTrackingOperations.taintOperations.getRanges(iastContext, value)
+      taintTrackingOperations.getRanges(iastContext, value)
       expect(taintedUtils.getRanges).to.be.called
       expect(taintedUtils.getRanges).to.be.calledWithExactly(
         iastContext[taintTrackingOperations.IAST_TRANSACTION_ID],
@@ -192,13 +192,13 @@ describe('IAST TaintTracking Operations', () => {
     })
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.getRanges', () => {
       const iastContext = {}
-      taintTrackingOperations.taintOperations.getRanges(iastContext)
+      taintTrackingOperations.getRanges(iastContext)
       expect(taintedUtils.getRanges).not.to.be.called
     })
 
     it('Given null iastContext should call not TaintedUtils.getRanges', () => {
       const iastContext = null
-      taintTrackingOperations.taintOperations.getRanges(iastContext)
+      taintTrackingOperations.getRanges(iastContext)
       expect(taintedUtils.getRanges).not.to.be.called
     })
   })
@@ -206,7 +206,7 @@ describe('IAST TaintTracking Operations', () => {
   describe('plusOperator', () => {
     beforeEach(() => {
       iastContextFunctions.saveIastContext(store, {}, { [taintTrackingOperations.IAST_TRANSACTION_ID]: 'id' })
-      taintTrackingOperations.taintOperations.enable()
+      taintTrackingOperations.enableTaintOperations()
     })
 
     it('Should not call taintedUtils.concat method if result is not a string', () => {
@@ -228,7 +228,7 @@ describe('IAST TaintTracking Operations', () => {
     })
 
     it('Should not fail if taintTracking is not enabled', () => {
-      taintTrackingOperations.taintOperations.disable()
+      taintTrackingOperations.disableTaintOperations()
       const res = global._ddiast.plusOperator('helloworld', 'hello', 'world')
       expect(taintedUtils.concat).not.to.be.called
       expect(res).equal('helloworld')

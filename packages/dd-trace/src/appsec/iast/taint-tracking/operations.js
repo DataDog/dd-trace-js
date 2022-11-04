@@ -29,53 +29,57 @@ const TaintTracking = {
   }
 }
 
-class TaintOperations {
-  createTransaction (id, iastContext) {
-    if (id && iastContext) {
-      iastContext[IAST_TRANSACTION_ID] = TaintedUtils.createTransaction(id)
-    }
-  }
-
-  removeTransaction (iastContext) {
-    if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
-      const transactionId = iastContext[IAST_TRANSACTION_ID]
-      TaintedUtils.removeTransaction(transactionId)
-    }
-  }
-
-  newTaintedString (iastContext, string, name, type) {
-    if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
-      const transactionId = iastContext[IAST_TRANSACTION_ID]
-      return TaintedUtils.newTaintedString(transactionId, string, name, type)
-    }
-  }
-
-  isTainted (iastContext, string) {
-    if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
-      const transactionId = iastContext[IAST_TRANSACTION_ID]
-      return TaintedUtils.isTainted(transactionId, string)
-    } else {
-      return false
-    }
-  }
-
-  getRanges (iastContext, string) {
-    if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
-      const transactionId = iastContext[IAST_TRANSACTION_ID]
-      return TaintedUtils.getRanges(transactionId, string)
-    }
-  }
-
-  enable () {
-    global._ddiast = TaintTracking
-  }
-
-  disable () {
-    global._ddiast = TaintTrackingDummy
+function createTransaction (id, iastContext) {
+  if (id && iastContext) {
+    iastContext[IAST_TRANSACTION_ID] = TaintedUtils.createTransaction(id)
   }
 }
 
+function removeTransaction (iastContext) {
+  if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
+    const transactionId = iastContext[IAST_TRANSACTION_ID]
+    TaintedUtils.removeTransaction(transactionId)
+  }
+}
+
+function newTaintedString (iastContext, string, name, type) {
+  if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
+    const transactionId = iastContext[IAST_TRANSACTION_ID]
+    return TaintedUtils.newTaintedString(transactionId, string, name, type)
+  }
+}
+
+function isTainted (iastContext, string) {
+  if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
+    const transactionId = iastContext[IAST_TRANSACTION_ID]
+    return TaintedUtils.isTainted(transactionId, string)
+  } else {
+    return false
+  }
+}
+
+function getRanges (iastContext, string) {
+  if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
+    const transactionId = iastContext[IAST_TRANSACTION_ID]
+    return TaintedUtils.getRanges(transactionId, string)
+  }
+}
+
+function enableTaintOperations () {
+  global._ddiast = TaintTracking
+}
+
+function disableTaintOperations () {
+  global._ddiast = TaintTrackingDummy
+}
+
 module.exports = {
-  taintOperations: new TaintOperations(),
+  createTransaction,
+  removeTransaction,
+  newTaintedString,
+  isTainted,
+  getRanges,
+  enableTaintOperations,
+  disableTaintOperations,
   IAST_TRANSACTION_ID
 }
