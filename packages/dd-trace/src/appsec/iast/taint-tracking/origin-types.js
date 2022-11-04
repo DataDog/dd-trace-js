@@ -1,0 +1,4 @@
+module.exports = {
+  REQUEST_BODY: 'REQUEST_BODY',
+  REQUEST_QUERY: 'REQUEST_QUERY'
+}
