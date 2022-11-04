@@ -51,8 +51,6 @@ const ends = new WeakMap()
 const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
-    config = config.server || config
-
     const headers = getHeadersToRecord(config)
     const validateStatus = getStatusValidator(config)
     const hooks = getHooks(config)
