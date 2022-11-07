@@ -65,7 +65,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('moleculer.context.service', 'math')
               expect(spans[0].meta).to.have.property('moleculer.namespace', 'multi')
               expect(spans[0].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
-              expect(spans[0].meta).to.have.property('component', 'molecular')
+              expect(spans[0].meta).to.have.property('component', 'moleculer')
 
               expect(spans[1]).to.have.property('name', 'moleculer.action')
               expect(spans[1]).to.have.property('service', 'test')
@@ -78,7 +78,7 @@ describe('Plugin', () => {
               expect(spans[1].meta).to.have.property('moleculer.context.service', 'math')
               expect(spans[1].meta).to.have.property('moleculer.namespace', 'multi')
               expect(spans[1].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
-              expect(spans[1].meta).to.have.property('component', 'molecular')
+              expect(spans[1].meta).to.have.property('component', 'moleculer')
             }).then(done, done)
 
             broker.call('math.add', { a: 5, b: 3 }).catch(done)
