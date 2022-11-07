@@ -40,6 +40,7 @@ describe('Plugin', () => {
   let collectionName
   let collection
   let db
+  let BSON
 
   describe('mongodb-core', () => {
     withTopologies(createClient => {
@@ -48,6 +49,8 @@ describe('Plugin', () => {
         tracer = require('../../dd-trace')
 
         collectionName = id().toString()
+
+        BSON = require(`../../../versions/bson@4.0.0`).get()
       })
 
       afterEach(() => {
@@ -125,8 +128,6 @@ describe('Plugin', () => {
           })
 
           it('should sanitize BSON binary', done => {
-            const BSON = require(`../../../versions/bson@4.0.0`).get()
-
             agent
               .use(traces => {
                 const span = traces[0][0]
@@ -143,7 +144,6 @@ describe('Plugin', () => {
           })
 
           it('should stringify BSON primitives', done => {
-            const BSON = require(`../../../versions/bson@4.0.0`).get()
             const id = '123456781234567812345678'
 
             agent
@@ -162,8 +162,6 @@ describe('Plugin', () => {
           })
 
           it('should stringify BSON objects', done => {
-            const BSON = require(`../../../versions/bson@4.0.0`).get()
-
             agent
               .use(traces => {
                 const span = traces[0][0]
@@ -176,6 +174,22 @@ describe('Plugin', () => {
 
             collection.find({
               _time: new BSON.Timestamp()
+            }).toArray()
+          })
+
+          it('should stringify BSON internal types', done => {
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                const resource = `find test.${collectionName} {"_id":"?"}`
+
+                expect(span).to.have.property('resource', resource)
+              })
+              .then(done)
+              .catch(done)
+
+            collection.find({
+              _id: new BSON.MinKey()
             }).toArray()
           })
 

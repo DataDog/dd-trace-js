@@ -79,7 +79,7 @@ function limitDepth (input) {
       let child = input[key]
 
       if (isBSON(child)) {
-        child = child.toJSON()
+        child = typeof child.toJSON === 'function' ? child.toJSON() : '?'
       }
 
       if (depth >= 10 || shouldHide(child)) {
