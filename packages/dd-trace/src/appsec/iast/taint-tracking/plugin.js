@@ -1,7 +1,7 @@
 const Plugin = require('../../../plugins/plugin')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
-const { REQUEST_QUERY, REQUEST_BODY } = require('./origin-types')
+const { HTTP_REQUEST_PARAMETER, HTTP_REQUEST_BODY } = require('./origin-types')
 const { taintObject } = require('./operations')
 
 class TaintTrackingPlugin extends Plugin {
@@ -10,9 +10,11 @@ class TaintTrackingPlugin extends Plugin {
     this._type = 'taint-tracking'
     this.addSub(
       'datadog:body-parser:read:start',
-      ({ request }) => this._taintTrackingHandler(REQUEST_BODY, request, 'body')
+      ({ request }) => this._taintTrackingHandler(HTTP_REQUEST_BODY, request, 'body')
     )
-    this.addSub('datadog:qs:parse:start', ({ qs }) => this._taintTrackingHandler(REQUEST_QUERY, qs))
+    this.addSub(
+      'datadog:qs:parse:start',
+      ({ qs }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, qs))
   }
 
   _taintTrackingHandler (type, target, property) {

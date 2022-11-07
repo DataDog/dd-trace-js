@@ -1,4 +1,4 @@
 module.exports = {
-  REQUEST_BODY: 'REQUEST_BODY',
-  REQUEST_QUERY: 'REQUEST_QUERY'
+  HTTP_REQUEST_BODY: 'http.request.body',
+  HTTP_REQUEST_PARAMETER: 'http.request.parameter'
 }
