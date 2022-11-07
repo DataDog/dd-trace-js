@@ -80,7 +80,7 @@ describe('Plugin', () => {
               expect(spans[0]).to.have.property('name', 'web.request')
               expect(spans[0]).to.have.property('service', 'test')
               expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET /v1')
+              expect(spans[0]).to.have.property('resource', 'GET')
               expect(spans[0].meta).to.have.property('span.kind', 'server')
               expect(spans[0].meta).to.have.property('http.url', `http://localhost:${gatewayPort}/v1/foo`)
               expect(spans[0].meta).to.have.property('http.method', 'GET')

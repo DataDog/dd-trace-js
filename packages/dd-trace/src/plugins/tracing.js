@@ -70,7 +70,8 @@ class TracingPlugin extends Plugin {
       childOf = store.span
     }
 
-    if (this.constructor.name && !meta.component) {
+    if (this.constructor.name && (!meta || !meta.component)) {
+      if (!meta) { meta = {}; }
       meta[COMPONENT] = this.constructor.name
     }
 
