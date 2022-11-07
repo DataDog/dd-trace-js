@@ -58,14 +58,15 @@ const web = {
     const middleware = getMiddlewareSetting(config)
     const queryStringObfuscation = getQsObfuscator(config)
 
-    return Object.assign({}, config, {
+    return {
+      ...config,
       headers,
       validateStatus,
       hooks,
       filter,
       middleware,
       queryStringObfuscation
-    })
+    }
   },
 
   setFramework (req, name, config) {
