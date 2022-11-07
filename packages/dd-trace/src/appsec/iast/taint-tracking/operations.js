@@ -50,6 +50,32 @@ function newTaintedString (iastContext, string, name, type) {
   }
 }
 
+function taintObject (iastContext, object, type) {
+  let result = object
+  if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
+    const transactionId = iastContext[IAST_TRANSACTION_ID]
+    const queue = [{ parent: null, property: null, value: object }]
+    while (queue.length > 0) {
+      const { parent, property, value } = queue.pop()
+      if (typeof value === 'string') {
+        const tainted = TaintedUtils.newTaintedString(transactionId, value, property, type)
+        if (!parent) {
+          result = tainted
+        } else {
+          parent[property] = tainted
+        }
+      } else if (typeof value === 'object') {
+        const keys = Object.keys(value)
+        for (let i = 0; i < keys.length; i++) {
+          const key = keys[i]
+          queue.push({ parent: value, property: property ? `${property}.${key}` : key, value: value[key] })
+        }
+      }
+    }
+  }
+  return result
+}
+
 function isTainted (iastContext, string) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
@@ -78,6 +104,7 @@ module.exports = {
   createTransaction,
   removeTransaction,
   newTaintedString,
+  taintObject,
   isTainted,
   getRanges,
   enableTaintOperations,
