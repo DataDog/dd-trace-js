@@ -26,8 +26,8 @@ describe('IAST Taint tracking plugin', () => {
 
   it('Should subscribe to body parser and qs channel', () => {
     expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(2)
-    expect(taintTrackingPlugin._subscriptions[0]._channel.name).to.equals('datadog:body-parser:read:start')
-    expect(taintTrackingPlugin._subscriptions[1]._channel.name).to.equals('datadog:qs:parse:start')
+    expect(taintTrackingPlugin._subscriptions[0]._channel.name).to.equals('datadog:body-parser:read:finish')
+    expect(taintTrackingPlugin._subscriptions[1]._channel.name).to.equals('datadog:qs:parse:finish')
   })
 
   it('Should taint full object', () => {

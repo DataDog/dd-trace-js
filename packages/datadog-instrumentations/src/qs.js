@@ -3,7 +3,7 @@
 const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const qsParseCh = channel('datadog:qs:parse:start')
+const qsParseCh = channel('datadog:qs:parse:finish')
 
 function wrapParse (originalParse) {
   return function () {

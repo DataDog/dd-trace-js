@@ -2,7 +2,7 @@
 
 const { channel, addHook } = require('./helpers/instrument')
 
-const bodyParserReadCh = channel('datadog:body-parser:read:start')
+const bodyParserReadCh = channel('datadog:body-parser:read:finish')
 
 function publishRequestBodyAndNext (request, next) {
   return function () {

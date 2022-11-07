@@ -9,11 +9,11 @@ class TaintTrackingPlugin extends Plugin {
     super()
     this._type = 'taint-tracking'
     this.addSub(
-      'datadog:body-parser:read:start',
+      'datadog:body-parser:read:finish',
       ({ request }) => this._taintTrackingHandler(HTTP_REQUEST_BODY, request, 'body')
     )
     this.addSub(
-      'datadog:qs:parse:start',
+      'datadog:qs:parse:finish',
       ({ qs }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, qs))
   }
 
