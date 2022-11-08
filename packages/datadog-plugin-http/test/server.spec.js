@@ -209,13 +209,9 @@ describe('Plugin', () => {
 
       // see https://github.com/DataDog/dd-trace-js/issues/2453
       it('should not have disabled tracing', (done) => {
-        const spy = sinon.spy(() => {})
-        agent.use(spy)
-
-        setTimeout(() => {
-          expect(spy).to.have.been.called
-          done()
-        }, 100)
+        agent.use(() => {})
+          .then(done)
+          .catch(done)
 
         axios.get(`http://localhost:${port}/user`).catch(done)
       })
