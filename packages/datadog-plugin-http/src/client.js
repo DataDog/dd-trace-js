@@ -31,9 +31,10 @@ class HttpClientPlugin extends Plugin {
       const host = options.port ? `${hostname}:${options.port}` : hostname
       const path = options.path ? options.path.split(/[?#]/)[0] : '/'
       const uri = `${protocol}//${host}${path}`
+      const allowed = this.config.filter(uri)
 
       const method = (options.method || 'GET').toUpperCase()
-      const childOf = store ? store.span : store
+      const childOf = store && allowed ? store.span : null
       const span = this.tracer.startSpan('http.request', {
         childOf,
         tags: {
@@ -45,6 +46,11 @@ class HttpClientPlugin extends Plugin {
           'http.url': uri
         }
       })
+
+      // TODO: Figure out a better way to do this for any span.
+      if (!allowed) {
+        span._spanContext._trace.record = false
+      }
 
       if (!(hasAmazonSignature(options) || !this.config.propagationFilter(uri))) {
         this.tracer.inject(span, HTTP_HEADERS, options.headers)
@@ -116,12 +122,14 @@ function addRequestHeaders (req, span, config) {
 
 function normalizeClientConfig (config) {
   const validateStatus = getStatusValidator(config)
+  const filter = getFilter(config)
   const propagationFilter = getFilter({ blocklist: config.propagationBlocklist })
   const headers = getHeaders(config)
   const hooks = getHooks(config)
 
   return Object.assign({}, config, {
     validateStatus,
+    filter,
     propagationFilter,
     headers,
     hooks

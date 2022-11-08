@@ -1225,6 +1225,52 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with blocklist configuration', () => {
+        let config
+
+        beforeEach(() => {
+          config = {
+            server: false,
+            client: {
+              blocklist: [/\/user/]
+            }
+          }
+
+          return agent.load('http', config)
+            .then(() => {
+              http = require(protocol)
+              express = require('express')
+            })
+        })
+
+        it('should skip recording if the url matches an item in the blocklist', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            const timer = setTimeout(done, 100)
+
+            agent
+              .use(() => {
+                clearTimeout(timer)
+                done(new Error('Blocklisted requests should not be recorded.'))
+              })
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => {})
+              })
+
+              req.end()
+            })
+          })
+        })
+      })
     })
   })
 })
