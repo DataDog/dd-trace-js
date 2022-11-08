@@ -29,9 +29,6 @@ class Tracer extends NoopProxy {
     try {
       const config = new Config(options) // TODO: support dynamic config
 
-      log.use(config.logger)
-      log.toggle(config.debug, config.logLevel, this)
-
       if (config.profiling.enabled) {
         // do not stop tracer initialization if the profiler fails to be imported
         try {
