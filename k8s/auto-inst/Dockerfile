@@ -7,4 +7,6 @@ COPY . .
 
 RUN npm install ./dd-trace.tgz
 
+USER node
+
 ADD copy-lib.sh /operator-build/copy-lib.sh
