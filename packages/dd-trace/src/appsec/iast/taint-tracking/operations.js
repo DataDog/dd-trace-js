@@ -44,10 +44,14 @@ function removeTransaction (iastContext) {
 }
 
 function newTaintedString (iastContext, string, name, type) {
+  let result = string
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
-    return TaintedUtils.newTaintedString(transactionId, string, name, type)
+    result = TaintedUtils.newTaintedString(transactionId, string, name, type)
+  } else {
+    result = string
   }
+  return result
 }
 
 function taintObject (iastContext, object, type) {
@@ -77,19 +81,25 @@ function taintObject (iastContext, object, type) {
 }
 
 function isTainted (iastContext, string) {
+  let result = false
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
-    return TaintedUtils.isTainted(transactionId, string)
+    result = TaintedUtils.isTainted(transactionId, string)
   } else {
-    return false
+    result = false
   }
+  return result
 }
 
 function getRanges (iastContext, string) {
+  let result = []
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
-    return TaintedUtils.getRanges(transactionId, string)
+    result = TaintedUtils.getRanges(transactionId, string)
+  } else {
+    result = []
   }
+  return result
 }
 
 function enableTaintOperations () {
