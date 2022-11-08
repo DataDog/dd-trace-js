@@ -49,6 +49,8 @@ describe('metrics', () => {
 
   describe('start', () => {
     it('it should initialize the Dogstatsd client with the correct options', function () {
+      metrics.start(config)
+
       this.timeout(10000)
 
       expect(Client).to.have.been.calledWithMatch({
@@ -61,7 +63,26 @@ describe('metrics', () => {
       })
     })
 
+    it('it should initialize the Dogstatsd client with an IPv6 URL', function () {
+      config.hostname = '::1'
+
+      metrics.start(config)
+
+      this.timeout(10000)
+
+      expect(Client).to.have.been.calledWithMatch({
+        metricsProxyUrl: new URL('http://[::1]:8126'),
+        host: 'localhost',
+        tags: [
+          'str:bar',
+          'invalid:t_e_s_t5-:./'
+        ]
+      })
+    })
+
     it('should start collecting metrics every 10 seconds', () => {
+      metrics.start(config)
+
       global.gc()
 
       clock.tick(10000)
@@ -124,172 +145,174 @@ describe('metrics', () => {
     })
   })
 
-  describe('stop', () => {
-    it('should stop collecting metrics every 10 seconds', () => {
-      metrics.stop()
+  describe('when started', () => {
+    describe('stop', () => {
+      it('should stop collecting metrics every 10 seconds', () => {
+        metrics.stop()
 
-      clock.tick(10000)
+        clock.tick(10000)
 
-      expect(client.gauge).to.not.have.been.called
-    })
-  })
-
-  describe('histogram', () => {
-    it('should add a record to a histogram', () => {
-      metrics.histogram('test', 1)
-      metrics.histogram('test', 2)
-      metrics.histogram('test', 3)
-
-      clock.tick(10000)
-
-      expect(client.gauge).to.have.been.calledWith('test.max', 3)
-      expect(client.gauge).to.have.been.calledWith('test.min', 1)
-      expect(client.increment).to.have.been.calledWith('test.sum', 6)
-      expect(client.increment).to.have.been.calledWith('test.total', 6)
-      expect(client.gauge).to.have.been.calledWith('test.avg', 2)
-      expect(client.gauge).to.have.been.calledWith('test.median', sinon.match.number)
-      expect(client.gauge).to.have.been.calledWith('test.95percentile', sinon.match.number)
-      expect(client.increment).to.have.been.calledWith('test.count', 3)
-    })
-  })
-
-  describe('increment', () => {
-    it('should increment a gauge', () => {
-      metrics.increment('test')
-
-      clock.tick(10000)
-
-      expect(client.gauge).to.have.been.calledWith('test', 1)
-    })
-
-    it('should increment a gauge with a tag', () => {
-      metrics.increment('test', 'foo:bar')
-
-      clock.tick(10000)
-
-      expect(client.gauge).to.have.been.calledWith('test', 1, ['foo:bar'])
-    })
-
-    it('should increment a monotonic counter', () => {
-      metrics.increment('test', true)
-
-      clock.tick(10000)
-
-      expect(client.increment).to.have.been.calledWith('test', 1)
-
-      client.increment.resetHistory()
-
-      clock.tick(10000)
-
-      expect(client.increment).to.not.have.been.calledWith('test')
-    })
-
-    it('should increment a monotonic counter with a tag', () => {
-      metrics.increment('test', 'foo:bar', true)
-
-      clock.tick(10000)
-
-      expect(client.increment).to.have.been.calledWith('test', 1, ['foo:bar'])
-
-      client.increment.resetHistory()
-
-      clock.tick(10000)
-
-      expect(client.increment).to.not.have.been.calledWith('test')
-    })
-  })
-
-  describe('decrement', () => {
-    it('should increment a gauge', () => {
-      metrics.decrement('test')
-
-      clock.tick(10000)
-
-      expect(client.gauge).to.have.been.calledWith('test', -1)
-    })
-
-    it('should decrement a gauge with a tag', () => {
-      metrics.decrement('test', 'foo:bar')
-
-      clock.tick(10000)
-
-      expect(client.gauge).to.have.been.calledWith('test', -1, ['foo:bar'])
-    })
-  })
-
-  describe('gauge', () => {
-    it('should set a gauge', () => {
-      metrics.gauge('test', 10)
-
-      clock.tick(10000)
-
-      expect(client.gauge).to.have.been.calledWith('test', 10)
-    })
-
-    it('should set a gauge with a tag', () => {
-      metrics.gauge('test', 10, 'foo:bar')
-
-      clock.tick(10000)
-
-      expect(client.gauge).to.have.been.calledWith('test', 10, ['foo:bar'])
-    })
-  })
-
-  describe('boolean', () => {
-    it('should set a gauge', () => {
-      metrics.boolean('test', true)
-
-      clock.tick(10000)
-
-      expect(client.gauge).to.have.been.calledWith('test', 1)
-    })
-
-    it('should set a gauge with a tag', () => {
-      metrics.boolean('test', true, 'foo:bar')
-
-      clock.tick(10000)
-
-      expect(client.gauge).to.have.been.calledWith('test', 1, ['foo:bar'])
-    })
-  })
-
-  describe('without native metrics', () => {
-    beforeEach(() => {
-      metrics = proxyquire('../src/metrics', {
-        './dogstatsd': Client,
-        'node-gyp-build': sinon.stub().returns(null)
+        expect(client.gauge).to.not.have.been.called
       })
     })
 
-    it('should fallback to only metrics available to JavaScript code', () => {
-      clock.tick(10000)
+    describe('histogram', () => {
+      it('should add a record to a histogram', () => {
+        metrics.histogram('test', 1)
+        metrics.histogram('test', 2)
+        metrics.histogram('test', 3)
 
-      expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.system')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.total')
+        clock.tick(10000)
 
-      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_total')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_used')
+        expect(client.gauge).to.have.been.calledWith('test.max', 3)
+        expect(client.gauge).to.have.been.calledWith('test.min', 1)
+        expect(client.increment).to.have.been.calledWith('test.sum', 6)
+        expect(client.increment).to.have.been.calledWith('test.total', 6)
+        expect(client.gauge).to.have.been.calledWith('test.avg', 2)
+        expect(client.gauge).to.have.been.calledWith('test.median', sinon.match.number)
+        expect(client.gauge).to.have.been.calledWith('test.95percentile', sinon.match.number)
+        expect(client.increment).to.have.been.calledWith('test.count', 3)
+      })
+    })
 
-      expect(client.gauge).to.have.been.calledWith('runtime.node.process.uptime')
+    describe('increment', () => {
+      it('should increment a gauge', () => {
+        metrics.increment('test')
 
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size_executable')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_physical_size')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_available_size')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.heap_size_limit')
+        clock.tick(10000)
 
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.malloced_memory')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.peak_malloced_memory')
+        expect(client.gauge).to.have.been.calledWith('test', 1)
+      })
 
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.size.by.space')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.used_size.by.space')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.available_size.by.space')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.physical_size.by.space')
+      it('should increment a gauge with a tag', () => {
+        metrics.increment('test', 'foo:bar')
 
-      expect(client.flush).to.have.been.called
+        clock.tick(10000)
+
+        expect(client.gauge).to.have.been.calledWith('test', 1, ['foo:bar'])
+      })
+
+      it('should increment a monotonic counter', () => {
+        metrics.increment('test', true)
+
+        clock.tick(10000)
+
+        expect(client.increment).to.have.been.calledWith('test', 1)
+
+        client.increment.resetHistory()
+
+        clock.tick(10000)
+
+        expect(client.increment).to.not.have.been.calledWith('test')
+      })
+
+      it('should increment a monotonic counter with a tag', () => {
+        metrics.increment('test', 'foo:bar', true)
+
+        clock.tick(10000)
+
+        expect(client.increment).to.have.been.calledWith('test', 1, ['foo:bar'])
+
+        client.increment.resetHistory()
+
+        clock.tick(10000)
+
+        expect(client.increment).to.not.have.been.calledWith('test')
+      })
+    })
+
+    describe('decrement', () => {
+      it('should increment a gauge', () => {
+        metrics.decrement('test')
+
+        clock.tick(10000)
+
+        expect(client.gauge).to.have.been.calledWith('test', -1)
+      })
+
+      it('should decrement a gauge with a tag', () => {
+        metrics.decrement('test', 'foo:bar')
+
+        clock.tick(10000)
+
+        expect(client.gauge).to.have.been.calledWith('test', -1, ['foo:bar'])
+      })
+    })
+
+    describe('gauge', () => {
+      it('should set a gauge', () => {
+        metrics.gauge('test', 10)
+
+        clock.tick(10000)
+
+        expect(client.gauge).to.have.been.calledWith('test', 10)
+      })
+
+      it('should set a gauge with a tag', () => {
+        metrics.gauge('test', 10, 'foo:bar')
+
+        clock.tick(10000)
+
+        expect(client.gauge).to.have.been.calledWith('test', 10, ['foo:bar'])
+      })
+    })
+
+    describe('boolean', () => {
+      it('should set a gauge', () => {
+        metrics.boolean('test', true)
+
+        clock.tick(10000)
+
+        expect(client.gauge).to.have.been.calledWith('test', 1)
+      })
+
+      it('should set a gauge with a tag', () => {
+        metrics.boolean('test', true, 'foo:bar')
+
+        clock.tick(10000)
+
+        expect(client.gauge).to.have.been.calledWith('test', 1, ['foo:bar'])
+      })
+    })
+
+    describe('without native metrics', () => {
+      beforeEach(() => {
+        metrics = proxyquire('../src/metrics', {
+          './dogstatsd': Client,
+          'node-gyp-build': sinon.stub().returns(null)
+        })
+      })
+
+      it('should fallback to only metrics available to JavaScript code', () => {
+        clock.tick(10000)
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.system')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.total')
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_total')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_used')
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.process.uptime')
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size_executable')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_physical_size')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_available_size')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.heap_size_limit')
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.malloced_memory')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.peak_malloced_memory')
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.size.by.space')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.used_size.by.space')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.available_size.by.space')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.physical_size.by.space')
+
+        expect(client.flush).to.have.been.called
+      })
     })
   })
 })

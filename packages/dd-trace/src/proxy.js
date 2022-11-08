@@ -31,9 +31,6 @@ class Tracer extends NoopProxy {
     try {
       const config = new Config(options) // TODO: support dynamic config
 
-      log.use(config.logger)
-      log.toggle(config.debug, config.logLevel, this)
-
       const rc = new RemoteConfigManager(config)
 
       if (config.profiling.enabled) {

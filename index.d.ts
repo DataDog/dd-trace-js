@@ -176,7 +176,7 @@ export declare interface SamplingRule {
   /**
    * Sampling rate for this rule.
    */
-  sampleRate: Number
+  sampleRate: number
 
   /**
    * Service on which to apply this rule. The rule will apply to all services if not provided.
@@ -196,12 +196,12 @@ export declare interface SpanSamplingRule {
   /**
    * Sampling rate for this rule. Will default to 1.0 (always) if not provided.
    */
-  sampleRate?: Number
+  sampleRate?: number
 
   /**
    * Maximum number of spans matching a span sampling rule to be allowed per second.
    */
-  maxPerSecond?: Number
+  maxPerSecond?: number
 
   /**
    * Service name or pattern on which to apply this rule. The rule will apply to all services if not provided.
@@ -297,7 +297,7 @@ export declare interface TracerOptions {
    * and controls the ingestion rate limit between the agent and the backend.
    * Defaults to deferring the decision to the agent.
    */
-  rateLimit?: Number,
+  rateLimit?: number,
 
   /**
    * Sampling rules to apply to priority samplin. Each rule is a JSON,

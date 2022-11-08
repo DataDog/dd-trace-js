@@ -42,8 +42,6 @@ describe('TracerProxy', () => {
     }
 
     log = {
-      use: sinon.spy(),
-      toggle: sinon.spy(),
       error: sinon.spy()
     }
 
@@ -140,13 +138,6 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(DatadogTracer).to.not.have.been.called
-      })
-
-      it('should support logging', () => {
-        proxy.init()
-
-        expect(log.use).to.have.been.calledWith(config.logger)
-        expect(log.toggle).to.have.been.calledWith(config.debug)
       })
 
       it('should not capture metrics by default', () => {

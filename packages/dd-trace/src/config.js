@@ -4,6 +4,7 @@ const fs = require('fs')
 const os = require('os')
 const URL = require('url').URL
 const path = require('path')
+const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
@@ -46,6 +47,21 @@ function remapify (input, mappings) {
 class Config {
   constructor (options) {
     options = options || {}
+
+    // Configure the logger first so it can be used to warn about other configs
+    this.debug = isTrue(coalesce(
+      process.env.DD_TRACE_DEBUG,
+      false
+    ))
+    this.logger = options.logger
+    this.logLevel = coalesce(
+      options.logLevel,
+      process.env.DD_TRACE_LOG_LEVEL,
+      'debug'
+    )
+
+    log.use(this.logger)
+    log.toggle(this.debug, this.logLevel, this)
 
     this.tags = {}
 
@@ -131,10 +147,6 @@ class Config {
       process.env.DD_TRACE_TELEMETRY_ENABLED,
       !process.env.AWS_LAMBDA_FUNCTION_NAME
     )
-    const DD_TRACE_DEBUG = coalesce(
-      process.env.DD_TRACE_DEBUG,
-      false
-    )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
       options.protocolVersion,
       process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
@@ -148,10 +160,6 @@ class Config {
     const DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = coalesce(
       process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       qsRegex
-    )
-    const DD_TRACE_CLIENT_IP_HEADER_DISABLED = coalesce(
-      process.env.DD_TRACE_CLIENT_IP_HEADER_DISABLED,
-      false
     )
     const DD_TRACE_CLIENT_IP_HEADER = coalesce(
       process.env.DD_TRACE_CLIENT_IP_HEADER,
@@ -308,7 +316,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
-    this.debug = isTrue(DD_TRACE_DEBUG)
     this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
@@ -320,9 +327,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.sampleRate = coalesce(Math.min(Math.max(sampler.sampleRate, 0), 1), 1)
     this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
-    this.clientIpHeaderDisabled = isTrue(DD_TRACE_CLIENT_IP_HEADER_DISABLED)
+    this.clientIpHeaderDisabled = !isTrue(DD_APPSEC_ENABLED)
     this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
-    this.logger = options.logger
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE
     this.serviceMapping = DD_SERVICE_MAPPING.length ? fromEntries(
@@ -344,11 +350,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.sampler = sampler
     this.reportHostname = isTrue(coalesce(options.reportHostname, process.env.DD_TRACE_REPORT_HOSTNAME, false))
     this.scope = process.env.DD_TRACE_SCOPE
-    this.logLevel = coalesce(
-      options.logLevel,
-      process.env.DD_TRACE_LOG_LEVEL,
-      'debug'
-    )
     this.profiling = {
       enabled: isTrue(DD_PROFILING_ENABLED),
       sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
