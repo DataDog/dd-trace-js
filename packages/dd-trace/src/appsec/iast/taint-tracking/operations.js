@@ -92,14 +92,14 @@ function isTainted (iastContext, string) {
 }
 
 function getRanges (iastContext, string) {
-  let ret = []
+  let result = []
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
-    ret = TaintedUtils.getRanges(transactionId, string)
+    result = TaintedUtils.getRanges(transactionId, string)
   } else {
-    ret = []
+    result = []
   }
-  return ret
+  return result
 }
 
 function enableTaintOperations () {
