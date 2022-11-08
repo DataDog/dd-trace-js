@@ -71,7 +71,7 @@ class TracingPlugin extends Plugin {
     }
 
     if (this.constructor.name && (!meta || !meta.component)) {
-      if (!meta) { meta = {}; }
+      if (!meta) { meta = {} }
       meta[COMPONENT] = this.constructor.name
     }
 

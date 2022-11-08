@@ -21,5 +21,5 @@ module.exports = {
   DATADOG_LAMBDA_EXTENSION_PATH: '/opt/extensions/datadog-agent',
   DECISION_MAKER_KEY: '_dd.p.dm',
   PROCESS_ID: 'process_id',
-  COMPONENT: 'component',
+  COMPONENT: 'component'
 }

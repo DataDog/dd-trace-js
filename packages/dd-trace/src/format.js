@@ -108,7 +108,6 @@ function extractTags (trace, span) {
     addTag(trace.meta, trace.metrics, 'language', 'javascript')
   }
 
-  
   setSingleSpanIngestionTags(trace, context._sampling.spanSampling)
 
   addTag(trace.meta, trace.metrics, PROCESS_ID, process.pid)
