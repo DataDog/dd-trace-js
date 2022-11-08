@@ -813,6 +813,53 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with blocklist configuration', () => {
+        let config
+
+        beforeEach(() => {
+          config = {
+            server: false,
+            client: {
+              blocklist: [/\/user/]
+            }
+          }
+
+          return agent.load('http2', config)
+            .then(() => {
+              http2 = require('http2')
+            })
+        })
+
+        it('should skip recording if the url matches an item in the blocklist', done => {
+          const app = (stream, headers) => {
+            stream.respond({
+              ':status': 200
+            })
+            stream.end()
+          }
+
+          getPort().then(port => {
+            const timer = setTimeout(done, 100)
+
+            agent
+              .use(() => {
+                clearTimeout(timer)
+                done(new Error('Blocklisted requests should not be recorded.'))
+              })
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const client = http2.connect(`${protocol}://localhost:${port}`)
+                .on('error', done)
+
+              client.request({ ':path': '/user' })
+                .on('error', done)
+                .end()
+            })
+          })
+        })
+      })
     })
   })
 })
