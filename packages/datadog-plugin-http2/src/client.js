@@ -10,6 +10,7 @@ const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
+const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -37,9 +38,10 @@ class Http2ClientPlugin extends Plugin {
       const pathname = path.split(/[?#]/)[0]
       const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
       const uri = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${pathname}`
+      const allowed = this.config.filter(uri)
 
       const store = storage.getStore()
-      const childOf = store ? store.span : store
+      const childOf = store && allowed ? store.span : null
       const span = this.tracer.startSpan('http.request', {
         childOf,
         tags: {
@@ -52,6 +54,11 @@ class Http2ClientPlugin extends Plugin {
           'http.url': uri
         }
       })
+
+      // TODO: Figure out a better way to do this for any span.
+      if (!allowed) {
+        span._spanContext._trace.record = false
+      }
 
       addHeaderTags(span, headers, HTTP_REQUEST_HEADERS, this.config)
 
@@ -157,12 +164,22 @@ function getStatusValidator (config) {
 
 function normalizeConfig (config) {
   const validateStatus = getStatusValidator(config)
+  const filter = getFilter(config)
   const headers = getHeaders(config)
 
   return Object.assign({}, config, {
     validateStatus,
+    filter,
     headers
   })
+}
+
+function getFilter (config) {
+  config = Object.assign({}, config, {
+    blocklist: config.blocklist || []
+  })
+
+  return urlFilter.getFilter(config)
 }
 
 function addHeaderTags (span, headers, prefix, config) {
