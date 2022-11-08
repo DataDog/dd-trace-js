@@ -151,6 +151,13 @@ describe('IAST TaintTracking Operations', () => {
       taintTrackingOperations.newTaintedString(iastContext)
       expect(taintedUtils.newTaintedString).not.to.be.called
     })
+
+    it('Given null iastContext should return the string passed as parameter', () => {
+      const iastContext = null
+      const value = 'test'
+      const result = taintTrackingOperations.newTaintedString(iastContext, value)
+      expect(result).to.be.equal('test')
+    })
   })
 
   describe('isTainted', () => {
@@ -192,6 +199,7 @@ describe('IAST TaintTracking Operations', () => {
         value
       )
     })
+
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.getRanges', () => {
       const iastContext = {}
       taintTrackingOperations.getRanges(iastContext)
@@ -202,6 +210,12 @@ describe('IAST TaintTracking Operations', () => {
       const iastContext = null
       taintTrackingOperations.getRanges(iastContext)
       expect(taintedUtils.getRanges).not.to.be.called
+    })
+
+    it('Given null iastContext should return empty array', () => {
+      const result = taintTrackingOperations.getRanges(null)
+      expect(result).to.be.instanceof(Array)
+      expect(result).to.have.length(0)
     })
   })
 
