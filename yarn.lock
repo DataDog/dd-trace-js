@@ -198,10 +198,10 @@
     minimist "^1.2.6"
     tar "^6.1.11"
 
-"@datadog/native-iast-rewriter@^0.1.0-beta.2":
-  version "0.1.0-beta.2"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-0.1.0-beta.2.tgz#0ce8fbc8798d6c78b2f818ddebf7b1ee163aa0fd"
-  integrity sha512-0biV5lNuqQC8HmIBYVCQQ/ZBITP/jammXZL6btxkR/uGX/RNu0DrppoPUY6p1vU76Hy6ytNQcz5N9JGXtIvGRg==
+"@datadog/native-iast-rewriter@^0.1.0-beta.3":
+  version "0.1.0-beta.3"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-0.1.0-beta.3.tgz#a75fe7f9177dc8a0e47fcc74a9b74bac346fdb9f"
+  integrity sha512-Fw2Xu9iPAIL0FQ4vblgaXTi7ziyScXQhfpHAZrJ1+aGmjSx5LS6hO0nmlxjVPBfR7YjlRl+FrF0ZspLaL+BZpA==
   dependencies:
     node-gyp-build "^4.5.0"
 
