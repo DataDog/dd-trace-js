@@ -149,26 +149,9 @@ module.exports = {
     return promise
   },
 
-  // Return a promise that will resolve when all expectations have run.
-  async promise () {
-    const promises = Array.from(handlers)
-      .map(handler => handler.promise.catch(e => e))
-
-    const results = Promise.all(promises)
-    return results.find(e => e instanceof Error)
-  },
-
   // Unregister any outstanding expectation callbacks.
   reset () {
     handlers.clear()
-  },
-
-  // Wrap a callback so it will only be called when all expectations have run.
-  wrap (callback) {
-    return error => {
-      this.promise()
-        .then(err => callback(error || err))
-    }
   },
 
   // Stop the mock agent, reset all expectations and wipe the require cache.
