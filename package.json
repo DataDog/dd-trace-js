@@ -59,7 +59,7 @@
   },
   "dependencies": {
     "@datadog/native-appsec": "^1.2.1",
-    "@datadog/native-iast-rewriter": "^0.1.0-beta.1",
+    "@datadog/native-iast-rewriter": "^0.1.0-beta.2",
     "@datadog/native-iast-taint-tracking": "^0.1.0-beta.1",
     "@datadog/native-metrics": "^1.5.0",
     "@datadog/pprof": "^1.1.1",
