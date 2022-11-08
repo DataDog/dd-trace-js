@@ -96,7 +96,7 @@ describe('Plugin', () => {
               [JEST_TEST_RUNNER]: 'jest-jasmine2',
               [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/dd-trace-js']), // reads from dd-trace-js
               [LIBRARY_VERSION]: ddTraceVersion,
-              [COMPONENT]: 'jest',
+              [COMPONENT]: 'jest'
             })
             if (extraTags) {
               expect(testSpan.meta).to.contain(extraTags)
@@ -152,7 +152,7 @@ describe('Plugin', () => {
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-jasmine2',
-              [COMPONENT]: 'jest',
+              [COMPONENT]: 'jest'
             })
             expect(testSpan.meta[ERROR_MESSAGE]).to.equal(error)
             expect(testSpan.type).to.equal('test')
@@ -198,7 +198,7 @@ describe('Plugin', () => {
               [TEST_FRAMEWORK]: 'jest',
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
-              [COMPONENT]: 'jest',
+              [COMPONENT]: 'jest'
             })
           }, { timeoutMs: 30000 })
         })

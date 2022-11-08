@@ -5,7 +5,7 @@ const semver = require('semver')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const appServer = require('./app/app-server')
-const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
