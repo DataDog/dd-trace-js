@@ -20,19 +20,9 @@ class TaintTrackingPlugin extends Plugin {
   _taintTrackingHandler (type, target, property) {
     const iastContext = getIastContext(storage.getStore())
     if (!property) {
-      const taintedTarget = taintObject(iastContext, target, type)
-      Object.defineProperties(
-        target,
-        { value: taintedTarget }
-      )
+      target = taintObject(iastContext, target, type)
     } else {
-      const taintedTarget = taintObject(iastContext, target[property], type)
-      Object.defineProperties(
-        target[property],
-        {
-          value: taintedTarget
-        }
-      )
+      target[property] = taintObject(iastContext, target[property], type)
     }
   }
 
