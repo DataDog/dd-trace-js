@@ -2,8 +2,8 @@ FROM --platform=linux/amd64 ubuntu:22.04
 
 RUN apt-get update && apt-get install --no-install-recommends -y \
 	wget curl ca-certificates valgrind \
-	    git hwinfo jq procps \
-      software-properties-common build-essential libnss3-dev zlib1g-dev libgdbm-dev libncurses5-dev libssl-dev libffi-dev libreadline-dev libsqlite3-dev libbz2-dev
+	git hwinfo jq procps \
+	software-properties-common build-essential libnss3-dev zlib1g-dev libgdbm-dev libncurses5-dev libssl-dev libffi-dev libreadline-dev libsqlite3-dev libbz2-dev
 
 RUN git clone --depth 1 https://github.com/pyenv/pyenv.git --branch "v2.0.4" --single-branch /pyenv
 ENV PYENV_ROOT "/pyenv"
