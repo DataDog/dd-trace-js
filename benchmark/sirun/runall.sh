@@ -43,7 +43,9 @@ for D in *; do
   fi
 done
 
-wait
+wait # waits until all tests are complete before continuing
+
+node ./strip-unwanted-results.js
 
 echo "Benchmark Results:"
 cat ./results.ndjson
