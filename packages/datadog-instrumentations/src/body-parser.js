@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel, addHook } = require('./helpers/instrument')
+const { channel, addHook, AsyncResource } = require('./helpers/instrument')
 
 const bodyParserReadCh = channel('datadog:body-parser:read:finish')
 
@@ -19,7 +19,8 @@ addHook({
   versions: ['>=1']
 }, read => {
   return function (req, res, next) {
-    arguments[2] = publishRequestBodyAndNext(req, next)
+    const nextResource = new AsyncResource('bound-anonymous-fn')
+    arguments[2] = nextResource.bind(publishRequestBodyAndNext(req, next))
     read.apply(this, arguments)
   }
 })
