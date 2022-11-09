@@ -67,10 +67,11 @@ function extractTags (trace, span) {
   const priority = context._sampling.priority
 
   if (tags['span.kind'] && tags['span.kind'] !== 'internal') {
-    if (tags['span.kind'] in ['client', 'producer']) {
-      addTag(trace.meta, trace.metrics, 'language', 'javascript')
-    }
     addTag({}, trace.metrics, MEASURED, 1)
+  }
+
+  if (!tags['span.kind'] || !(tags['span.kind'] in ['client', 'producer'])) {
+    addTag(trace.meta, trace.metrics, 'language', 'javascript')
   }
 
   for (const tag in tags) {
