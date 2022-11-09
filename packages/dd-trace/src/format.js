@@ -70,10 +70,6 @@ function extractTags (trace, span) {
     addTag({}, trace.metrics, MEASURED, 1)
   }
 
-  if (!tags['span.kind'] || !(tags['span.kind'] in ['client', 'producer'])) {
-    addTag(trace.meta, trace.metrics, 'language', 'javascript')
-  }
-
   for (const tag in tags) {
     switch (tag) {
       case 'service.name':
@@ -109,6 +105,10 @@ function extractTags (trace, span) {
   }
 
   setSingleSpanIngestionTags(trace, context._sampling.spanSampling)
+
+  if (!tags['span.kind'] || !['client', 'producer'].includes(tags['span.kind'])) {
+    addTag(trace.meta, trace.metrics, 'language', 'javascript')
+  }
 
   addTag(trace.meta, trace.metrics, PROCESS_ID, process.pid)
   addTag(trace.meta, trace.metrics, SAMPLING_PRIORITY_KEY, priority)
