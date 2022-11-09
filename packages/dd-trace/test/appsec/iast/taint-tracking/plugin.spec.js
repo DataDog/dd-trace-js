@@ -74,4 +74,31 @@ describe('IAST Taint tracking plugin', () => {
       originType
     )
   })
+
+  it('Should taint property in object with circular refs', () => {
+    const transactionId = 'TRANSACTION_ID'
+    const iastContext = { [taintTrackingOperations.IAST_TRANSACTION_ID]: transactionId }
+    const originType = 'ORIGIN_TYPE'
+    const propertyToBeTainted = 'foo'
+    const objToBeTainted = {
+      [propertyToBeTainted]: {
+        bar: 'taintValue'
+      }
+    }
+
+    objToBeTainted[propertyToBeTainted].self = objToBeTainted
+
+    iastContextFunctions.saveIastContext(
+      store,
+      {},
+      iastContext
+    )
+
+    taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
+    expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      iastContext,
+      objToBeTainted[propertyToBeTainted],
+      originType
+    )
+  })
 })

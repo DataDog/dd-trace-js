@@ -59,6 +59,7 @@ function taintObject (iastContext, object, type) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
     const queue = [{ parent: null, property: null, value: object }]
+    const visited = new WeakSet()
     while (queue.length > 0) {
       const { parent, property, value } = queue.pop()
       if (typeof value === 'string') {
@@ -68,7 +69,8 @@ function taintObject (iastContext, object, type) {
         } else {
           parent[property] = tainted
         }
-      } else if (typeof value === 'object') {
+      } else if (typeof value === 'object' && !visited.has(value)) {
+        visited.add(value)
         const keys = Object.keys(value)
         for (let i = 0; i < keys.length; i++) {
           const key = keys[i]
