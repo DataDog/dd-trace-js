@@ -258,16 +258,30 @@ describe('format', () => {
       expect(trace.meta[ORIGIN_KEY]).to.equal('synthetics')
     })
 
-    it('should add runtime tags', () => {
-      spanContext._tags['service.name'] = 'test'
+    it('should add the language tag for a basic span', () => {
+      trace = format(span)
+
+      expect(trace.meta['language']).to.equal('javascript')
+    })
+
+    it('should add the language tag for a span with span.kind set to consumer', () => {
+      spanContext._tags['span.kind'] = 'consumer'
 
       trace = format(span)
 
       expect(trace.meta['language']).to.equal('javascript')
     })
 
-    it('should add runtime tags only for the root service', () => {
-      spanContext._tags['service.name'] = 'other'
+    it('should not add the language tag for a span with span.kind set to client', () => {
+      spanContext._tags['span.kind'] = 'client'
+
+      trace = format(span)
+
+      expect(trace.meta).to.not.have.property('language')
+    })
+
+    it('should not add the language tag for a span with span.kind set to producer', () => {
+      spanContext._tags['span.kind'] = 'producer'
 
       trace = format(span)
 
