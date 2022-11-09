@@ -67,6 +67,9 @@ function extractTags (trace, span) {
   const priority = context._sampling.priority
 
   if (tags['span.kind'] && tags['span.kind'] !== 'internal') {
+    if (tags['span.kind'] in ['client', 'producer']) {
+      addTag(trace.meta, trace.metrics, 'language', 'javascript')
+    }
     addTag({}, trace.metrics, MEASURED, 1)
   }
 
@@ -102,10 +105,6 @@ function extractTags (trace, span) {
       default: // eslint-disable-line no-fallthrough
         addTag(trace.meta, trace.metrics, tag, tags[tag])
     }
-  }
-
-  if (span.tracer()._service === tags['service.name']) {
-    addTag(trace.meta, trace.metrics, 'language', 'javascript')
   }
 
   setSingleSpanIngestionTags(trace, context._sampling.spanSampling)
