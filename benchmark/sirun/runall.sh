@@ -45,6 +45,8 @@ done
 
 wait
 
+# TODO: Delete system.time since it's just too noisy
+
 echo "Benchmark Results:"
 cat ./results.ndjson
 
