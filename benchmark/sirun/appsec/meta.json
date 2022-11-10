@@ -2,7 +2,7 @@
   "name": "appsec",
   "cachegrind": false,
   "instructions": true,
-  "iterations": 12,
+  "iterations": 200,
   "variants": {
     "control": {
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
