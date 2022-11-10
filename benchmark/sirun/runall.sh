@@ -43,9 +43,9 @@ for D in *; do
   fi
 done
 
-wait
+wait # waits until all tests are complete before continuing
 
-# TODO: Delete system.time since it's just too noisy
+node ./strip-unwanted-results.js
 
 echo "Benchmark Results:"
 cat ./results.ndjson
