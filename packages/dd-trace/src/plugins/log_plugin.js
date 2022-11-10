@@ -3,7 +3,6 @@
 const { LOG } = require('../../../../ext/formats')
 const Plugin = require('./plugin')
 const { storage } = require('../../../datadog-core')
-const { COMPONENT } = require('../constants')
 
 const hasOwn = (obj, prop) => Object.prototype.hasOwnProperty.call(obj, prop)
 
@@ -45,10 +44,6 @@ module.exports = class LogPlugin extends Plugin {
       const span = store && store.span
 
       if (!span) return
-
-      if (this.constructor.name) {
-        span.setTag(COMPONENT, this.constructor.name)
-      }
 
       const holder = {}
       this.tracer.inject(span, LOG, holder)
