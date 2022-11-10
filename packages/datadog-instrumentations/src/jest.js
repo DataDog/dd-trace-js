@@ -280,7 +280,7 @@ function jestAdapterWrapper (jestAdapter) {
         testSuiteFinishCh.publish({ status, errorMessage })
         if (environment.global.__coverage__) {
           const coverageFiles = extractCoverageInformation(environment.global.__coverage__, environment.rootDir)
-          if (coverageFiles.length) {
+          if (coverageFiles.length && isCodeCoverageEnabled) {
             testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
           }
         }
