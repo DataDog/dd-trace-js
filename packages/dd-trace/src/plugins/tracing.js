@@ -70,11 +70,6 @@ class TracingPlugin extends Plugin {
       childOf = store.span
     }
 
-    if (this.constructor.name && (!meta || !meta.component)) {
-      if (!meta) { meta = {} }
-      meta[COMPONENT] = this.constructor.name
-    }
-
     const span = this.tracer.startSpan(name, {
       childOf,
       tags: {
@@ -86,6 +81,8 @@ class TracingPlugin extends Plugin {
         ...metrics
       }
     })
+
+    if (this.component) { span.setTag(COMPONENT, this.component) }
 
     analyticsSampler.sample(span, this.config.measured)
 
