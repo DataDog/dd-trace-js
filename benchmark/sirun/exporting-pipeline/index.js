@@ -25,7 +25,7 @@ const finished = []
 const trace = { finished, started: finished, tags: {} }
 
 function createSpan (parent) {
-  const spanId = id(1)
+  const spanId = id(0)
   const context = {
     _trace: trace,
     _spanId: spanId,
