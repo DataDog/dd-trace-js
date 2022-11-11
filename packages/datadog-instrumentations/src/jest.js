@@ -280,7 +280,7 @@ function jestAdapterWrapper (jestAdapter) {
         testSuiteFinishCh.publish({ status, errorMessage })
         if (environment.global.__coverage__) {
           const coverageFiles = extractCoverageInformation(environment.global.__coverage__, environment.rootDir)
-          if (coverageFiles.length && isCodeCoverageEnabled) {
+          if (coverageFiles.length && environment.testEnvironmentOptions._ddTestCodeCoverageEnabled) {
             testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
           }
         }
@@ -313,6 +313,11 @@ function configureTestEnvironment (readConfigsResult) {
   })
   sessionAsyncResource.runInAsyncScope(() => {
     testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
+  })
+  // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
+  // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
+  configs.forEach(config => {
+    config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
   })
   if (isCodeCoverageEnabled) {
     const globalConfig = {
