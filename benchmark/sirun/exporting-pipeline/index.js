@@ -10,8 +10,8 @@ const hostname = require('os').hostname()
 
 const config = {
   url: 'http://localhost:8126',
-  flushInterval: 2000,
-  flushMinSpans: 1000,
+  flushInterval: 1000,
+  flushMinSpans: 100,
   protocolVersion: process.env.ENCODER_VERSION,
   stats: {
     enabled: process.env.WITH_STATS === '1'
@@ -25,7 +25,7 @@ const finished = []
 const trace = { finished, started: finished, tags: {} }
 
 function createSpan (parent) {
-  const spanId = id()
+  const spanId = id(1)
   const context = {
     _trace: trace,
     _spanId: spanId,

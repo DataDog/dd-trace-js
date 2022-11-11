@@ -1,7 +1,7 @@
 {
   "name": "net",
   "cachegrind": false,
-  "iterations": 500,
+  "iterations": 300,
   "instructions": true,
   "setup": "bash -c \"nohup node server.js >/dev/null 2>&1 &\"",
   "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node server.js >/dev/null 2>&1 &\"",
