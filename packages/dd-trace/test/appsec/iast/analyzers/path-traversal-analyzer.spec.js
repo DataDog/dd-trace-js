@@ -1,14 +1,19 @@
 'use strict'
 
+const { storage } = require('../../../../../datadog-core')
+const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const expect = require('chai').expect
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const pathTraversalAnalyzer = require('../../../../src/appsec/iast/analyzers/path-traversal-analyzer')
+const { isTainted, newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
+const { testThatRequestHasVulnerability } = require('../utils')
+const fs = require('fs')
 
 describe('path-traversal-analyzer', () => {
   it('Analyzer should be subscribe to proper channel', () => {
     expect(pathTraversalAnalyzer._subscriptions).to.have.lengthOf(1)
-    expect(pathTraversalAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:path:access')
+    expect(pathTraversalAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:fs:access')
   })
 
   it('If no context it should not report vulnerability', () => {
@@ -20,7 +25,8 @@ describe('path-traversal-analyzer', () => {
   it('If no context it should return evidence with an undefined ranges array', () => {
     const evidence = pathTraversalAnalyzer._getEvidence('test', null)
     expect(evidence.value).to.be.equal('test')
-    expect(evidence.ranges).to.be.equal(undefined)
+    expect(evidence.ranges).to.be.instanceof(Array)
+    expect(evidence.ranges).to.have.length(0)
   })
 
   it('if context exists but value is not a string it should not call isTainted', () => {
@@ -75,5 +81,15 @@ describe('path-traversal-analyzer', () => {
     proxyPathAnalyzer.analyze('test')
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { type: 'PATH_TRAVERSAL' })
+  })
+
+  describe('integration test', () => {
+    testThatRequestHasVulnerability(function () {
+      const store = storage.getStore()
+      const iastCtx = iastContextFunctions.getIastContext(store)
+      let path = __filename
+      path = newTaintedString(iastCtx, __filename, 'param', 'Request')
+      const fd = fs.openSync(path, 'r')
+    }, 'PATH_TRAVERSAL')
   })
 })

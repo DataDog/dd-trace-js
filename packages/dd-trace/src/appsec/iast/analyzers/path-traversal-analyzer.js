@@ -5,7 +5,7 @@ const { isTainted, getRanges } = require('../taint-tracking/operations')
 class PathTraversalAnalyzer extends Analyzer {
   constructor () {
     super('PATH_TRAVERSAL')
-    this.addSub('datadog:path:access', path => this.analyze(path))
+    this.addSub('datadog:fs:access', path => this.analyze(path))
   }
 
   _isVulnerable (path, ctx) {
