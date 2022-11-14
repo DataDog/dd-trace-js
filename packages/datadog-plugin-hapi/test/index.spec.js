@@ -40,7 +40,7 @@ describe('Plugin', () => {
           })
       })
 
-      if (semver.intersects(version, '>=17')) {
+      if (semver.intersects(version, '>=17 <21')) {
         beforeEach(() => {
           return getPort()
             .then(_port => {
