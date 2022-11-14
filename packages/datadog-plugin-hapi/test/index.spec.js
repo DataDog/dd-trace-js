@@ -40,7 +40,7 @@ describe('Plugin', () => {
           })
       })
 
-      if (semver.intersects(version, '>=17')) {
+      if (semver.intersects(version, '>=17 <20')) {
         beforeEach(() => {
           return getPort()
             .then(_port => {
@@ -192,7 +192,7 @@ describe('Plugin', () => {
           .catch(done)
       })
 
-      if (semver.intersects(version, '>=11')) {
+      if (semver.intersects(version, '>=11 <20')) {
         it('should run extension events in the request scope', done => {
           server.route({
             method: 'POST',
