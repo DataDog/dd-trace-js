@@ -113,6 +113,7 @@ class Config {
       null
     )
     const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
+    const DD_CIVISIBILITY_AGENTLESS_ENABLED = process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
 
     const DD_CIVISIBILITY_ITR_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_ITR_ENABLED,
@@ -369,8 +370,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS
     }
-    this.isGitUploadEnabled = isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
-    this.isIntelligentTestRunnerEnabled = isTrue(DD_CIVISIBILITY_ITR_ENABLED)
+
+    const isCiVisibilityAgentlessEnabled = isTrue(DD_CIVISIBILITY_AGENTLESS_ENABLED)
+    this.isGitUploadEnabled = isCiVisibilityAgentlessEnabled && isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
+    this.isIntelligentTestRunnerEnabled = isCiVisibilityAgentlessEnabled && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
+
     this.stats = {
       enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
     }
