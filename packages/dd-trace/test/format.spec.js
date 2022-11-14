@@ -264,30 +264,6 @@ describe('format', () => {
       expect(trace.meta['language']).to.equal('javascript')
     })
 
-    it('should add the language tag for a span with span.kind set to consumer', () => {
-      spanContext._tags['span.kind'] = 'consumer'
-
-      trace = format(span)
-
-      expect(trace.meta['language']).to.equal('javascript')
-    })
-
-    it('should not add the language tag for a span with span.kind set to client', () => {
-      spanContext._tags['span.kind'] = 'client'
-
-      trace = format(span)
-
-      expect(trace.meta).to.not.have.property('language')
-    })
-
-    it('should not add the language tag for a span with span.kind set to producer', () => {
-      spanContext._tags['span.kind'] = 'producer'
-
-      trace = format(span)
-
-      expect(trace.meta).to.not.have.property('language')
-    })
-
     describe('when there is an `error` tag ', () => {
       it('should set the error flag when error tag is true', () => {
         spanContext._tags['error'] = true
