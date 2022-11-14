@@ -2,6 +2,7 @@ const request = require('../../exporters/common/request')
 const id = require('../../id')
 
 function getItrConfiguration ({
+  url,
   site,
   env,
   service,
@@ -14,7 +15,7 @@ function getItrConfiguration ({
   runtimeVersion,
   branch
 }, done) {
-  const url = new URL(`https://api.${site}`)
+  const intakeUrl = url || new URL(`https://api.${site}`)
 
   const apiKey = process.env.DATADOG_API_KEY || process.env.DD_API_KEY
   const appKey = process.env.DATADOG_APP_KEY ||
@@ -35,9 +36,9 @@ function getItrConfiguration ({
       'dd-application-key': appKey,
       'Content-Type': 'application/json'
     },
-    protocol: url.protocol,
-    hostname: url.hostname,
-    port: url.port
+    protocol: intakeUrl.protocol,
+    hostname: intakeUrl.hostname,
+    port: intakeUrl.port
   }
 
   const data = JSON.stringify({
