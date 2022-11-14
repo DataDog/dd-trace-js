@@ -263,6 +263,9 @@ function jestAdapterWrapper (jestAdapter) {
   const adapter = jestAdapter.default ? jestAdapter.default : jestAdapter
   const newAdapter = shimmer.wrap(adapter, function () {
     const environment = arguments[2]
+    if (!environment) {
+      return adapter.apply(this, arguments)
+    }
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
       testSuiteStartCh.publish({
@@ -280,7 +283,9 @@ function jestAdapterWrapper (jestAdapter) {
         testSuiteFinishCh.publish({ status, errorMessage })
         if (environment.global.__coverage__) {
           const coverageFiles = extractCoverageInformation(environment.global.__coverage__, environment.rootDir)
-          if (coverageFiles.length && environment.testEnvironmentOptions._ddTestCodeCoverageEnabled) {
+          if (coverageFiles.length &&
+            environment.testEnvironmentOptions &&
+            environment.testEnvironmentOptions._ddTestCodeCoverageEnabled) {
             testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
           }
         }
