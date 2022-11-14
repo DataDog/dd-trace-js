@@ -100,6 +100,7 @@ class JestPlugin extends Plugin {
         return
       }
       const testConfiguration = {
+        url: this.config.url,
         site: this.config.site,
         env: this.tracer._env,
         service: this.config.service || this.tracer._service,
@@ -131,6 +132,7 @@ class JestPlugin extends Plugin {
           return onError(gitUploadError)
         }
         const testConfiguration = {
+          url: this.config.url,
           site: this.config.site,
           env: this.tracer._env,
           service: this.config.service || this.tracer._service,
