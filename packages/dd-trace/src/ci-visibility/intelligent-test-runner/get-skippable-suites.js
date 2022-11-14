@@ -1,6 +1,7 @@
 const request = require('../../exporters/common/request')
 
 function getSkippableSuites ({
+  url,
   site,
   env,
   service,
@@ -12,7 +13,7 @@ function getSkippableSuites ({
   runtimeName,
   runtimeVersion
 }, done) {
-  const url = new URL(`https://api.${site}`)
+  const intakeUrl = url || new URL(`https://api.${site}`)
 
   const apiKey = process.env.DATADOG_API_KEY || process.env.DD_API_KEY
   const appKey = process.env.DATADOG_APP_KEY ||
@@ -33,9 +34,9 @@ function getSkippableSuites ({
       'Content-Type': 'application/json'
     },
     timeout: 15000,
-    protocol: url.protocol,
-    hostname: url.hostname,
-    port: url.port
+    protocol: intakeUrl.protocol,
+    hostname: intakeUrl.hostname,
+    port: intakeUrl.port
   }
 
   const data = JSON.stringify({

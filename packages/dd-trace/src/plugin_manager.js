@@ -124,7 +124,8 @@ module.exports = class PluginManager {
       clientIpHeader,
       isIntelligentTestRunnerEnabled,
       site,
-      experimental
+      experimental,
+      url
     } = this._tracerConfig
 
     const sharedConfig = {}
@@ -156,6 +157,7 @@ module.exports = class PluginManager {
     }
 
     sharedConfig.site = site
+    sharedConfig.url = url
 
     return sharedConfig
   }
