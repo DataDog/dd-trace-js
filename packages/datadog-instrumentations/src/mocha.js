@@ -1,11 +1,14 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
 
 const testStartCh = channel('ci:mocha:test:start')
 const errorCh = channel('ci:mocha:test:error')
 const skipCh = channel('ci:mocha:test:skip')
 const testFinishCh = channel('ci:mocha:test:finish')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
+
+const configurationCh = channel('ci:mocha:configuration')
 
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
@@ -76,6 +79,7 @@ function mochaHook (Runner) {
   patched.add(Runner)
 
   shimmer.wrap(Runner.prototype, 'run', run => function () {
+    debugger
     if (!testStartCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
@@ -242,7 +246,15 @@ function mochaHook (Runner) {
       }
     })
 
-    return run.apply(this, arguments)
+    const onDone = testRunAsyncResource.bind((err, config) => {
+      if (err) {
+        log.error(err)
+      }
+      run.apply(this, arguments)
+    })
+    configurationCh.publish({
+      onDone
+    })
   })
 
   return Runner
