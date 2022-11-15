@@ -1,8 +1,6 @@
 'use strict'
 
 const { channel } = require('diagnostics_channel')
-const { extractModuleRootAndHandler, splitHandlerString } = require('./lambda')
-const fs = require('fs')
 const path = require('path')
 const semver = require('semver')
 const Hook = require('./hook')
@@ -10,19 +8,6 @@ const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
 
 const hooks = require('./hooks')
-
-if (process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined) {
-  const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
-  const originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
-
-  const [moduleRoot, moduleAndHandler] = extractModuleRootAndHandler(originalLambdaHandler)
-  const [module, _] = splitHandlerString(moduleAndHandler);
-
-  const lambdaStylePath = path.resolve(lambdaTaskRoot, moduleRoot, module) + '.js'
-  if (fs.existsSync(lambdaStylePath)) {
-    hooks[lambdaStylePath] = () => require('../aws-lambda-handler')
-  }
-}
 
 const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
@@ -47,7 +32,6 @@ for (const packageName of names) {
         if (matchVersion(version, versions)) {
           try {
             loadChannel.publish({ name, version, file })
-
             moduleExports = hook(moduleExports)
           } catch (e) {
             log.error(e)
