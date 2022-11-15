@@ -52,11 +52,8 @@ class SpanProcessor {
     }
 
     if (this._killAll) {
-      console.log('killall set, killing spans')
       started.map(startedSpan => {
-        console.log('started is', startedSpan._spanContext._name, startedSpan.context().toSpanId())
         if (!startedSpan._finished) {
-          console.log('killing unfinished span ID', startedSpan._spanContext._name, startedSpan.context().toSpanId())
           startedSpan.finish()
         }
       })
