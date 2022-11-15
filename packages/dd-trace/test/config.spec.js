@@ -772,10 +772,21 @@ describe('Config', () => {
       beforeEach(() => {
         process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
       })
+      it('should activate git upload if the env var is passed', () => {
+        process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'true'
+        const config = new Config()
+        expect(config).to.have.property('isGitUploadEnabled', true)
+      })
       it('should activate intelligent test runner if the env var is passed', () => {
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
         const config = new Config()
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
+      })
+      it('should activate git upload automatically if intelligent test runner is activated', () => {
+        process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
+        const config = new Config()
+        expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
+        expect(config).to.have.property('isGitUploadEnabled', true)
       })
     })
     context('agentless is disabled', () => {
