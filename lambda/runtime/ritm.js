@@ -1,3 +1,10 @@
+/**
+ * Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Modifications copyright 2022 Datadog, Inc.
+ *
+ * Some functions are part of aws-lambda-nodejs-runtime-interface-client
+ * https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/main/src/utils/UserFunction.ts
+ */
 'use strict'
 
 const fs = require('fs')
