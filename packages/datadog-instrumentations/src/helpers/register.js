@@ -8,7 +8,6 @@ const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
 
 const hooks = require('./hooks')
-
 const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
@@ -32,6 +31,7 @@ for (const packageName of names) {
         if (matchVersion(version, versions)) {
           try {
             loadChannel.publish({ name, version, file })
+
             moduleExports = hook(moduleExports)
           } catch (e) {
             log.error(e)

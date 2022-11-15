@@ -24,6 +24,7 @@ class DatadogTracer extends Tracer {
     options = Object.assign({
       childOf: this.scope().active()
     }, options)
+
     if (!options.childOf && options.orphanable === false) {
       return fn(null, () => {})
     }

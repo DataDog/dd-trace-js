@@ -52,6 +52,7 @@ function Hook (modules, options, onrequire) {
     const filename = Module._resolveFilename(request, this)
     const core = filename.indexOf(path.sep) === -1
     let name, basedir, hooks
+
     // return known patched modules immediately
     if (cache[filename]) {
       // require.cache was potentially altered externally
@@ -96,6 +97,7 @@ function Hook (modules, options, onrequire) {
       if (!stat) return exports // abort if filename could not be parsed
       name = stat.name
       basedir = stat.basedir
+
       hooks = moduleHooks[name]
       if (!hooks) return exports // abort if module name isn't on whitelist
 
