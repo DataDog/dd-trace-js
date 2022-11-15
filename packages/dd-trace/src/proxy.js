@@ -58,7 +58,7 @@ class Tracer extends NoopProxy {
         telemetry.start(config, this._pluginManager)
       }
 
-      if (config.isGitUploadEnabled || config.isIntelligentTestRunnerEnabled) {
+      if (config.isGitUploadEnabled) {
         sendGitMetadata(config.site, (err) => {
           if (err) {
             log.error(`Error uploading git metadata: ${err}`)
