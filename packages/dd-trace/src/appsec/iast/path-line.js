@@ -12,6 +12,8 @@ const EXCLUDED_PATHS = [
 const EXCLUDED_PATH_PREFIXES = [
   'node:diagnostics_channel',
   'diagnostics_channel',
+  'node:child_process',
+  'child_process',
   'node:async_hooks',
   'async_hooks'
 ]
