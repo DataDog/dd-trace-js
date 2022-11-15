@@ -51,7 +51,6 @@ function Hook (modules, options, onrequire) {
   patchedRequire = Module.prototype.require = function (request) {
     const filename = Module._resolveFilename(request, this)
     const core = filename.indexOf(path.sep) === -1
-    const inLambdaFunction = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
     let name, basedir, hooks
     // return known patched modules immediately
     if (cache[filename]) {
@@ -92,10 +91,11 @@ function Hook (modules, options, onrequire) {
       if (!hooks) return exports // abort if module name isn't on whitelist
       name = filename
     } else {
-      const stat = parse(filename)
-      if (!stat && !inLambdaFunction) return exports // abort if filename could not be parsed
-      name = inLambdaFunction ? filename : stat.name
-      basedir = inLambdaFunction ? undefined : stat.basedir
+      const inLambdaFunction = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+      const stat = inLambdaFunction ? { name: filename } : parse(filename)
+      if (!stat) return exports // abort if filename could not be parsed
+      name = stat.name
+      basedir = stat.basedir
       hooks = moduleHooks[name]
       if (!hooks) return exports // abort if module name isn't on whitelist
 
