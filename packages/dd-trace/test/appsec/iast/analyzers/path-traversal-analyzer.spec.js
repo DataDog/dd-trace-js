@@ -18,13 +18,13 @@ describe('path-traversal-analyzer', () => {
 
   it('If no context it should not report vulnerability', () => {
     const iastContext = null
-    const isVulnerable = pathTraversalAnalyzer._isVulnerable('test', iastContext)
+    const isVulnerable = pathTraversalAnalyzer._isVulnerable(['test'], iastContext)
     expect(isVulnerable).to.be.false
   })
 
   it('If no context it should return evidence with an undefined ranges array', () => {
-    const evidence = pathTraversalAnalyzer._getEvidence('test', null)
-    expect(evidence.value).to.be.equal('test')
+    const evidence = pathTraversalAnalyzer._getEvidence(null)
+    expect(evidence.value).to.be.equal('')
     expect(evidence.ranges).to.be.instanceof(Array)
     expect(evidence.ranges).to.have.length(0)
   })
@@ -48,7 +48,7 @@ describe('path-traversal-analyzer', () => {
       '../taint-tracking/operations': { isTainted }
     })
 
-    const result = proxyPathAnalyzer._isVulnerable('test', iastContext)
+    const result = proxyPathAnalyzer._isVulnerable(['test'], iastContext)
     expect(result).to.be.false
     expect(isTainted).to.have.been.calledOnce
   })
@@ -78,18 +78,90 @@ describe('path-traversal-analyzer', () => {
         '../taint-tracking/operations': { isTainted: () => true }
       })
 
-    proxyPathAnalyzer.analyze('test')
+    proxyPathAnalyzer.analyze(['test'])
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { type: 'PATH_TRAVERSAL' })
   })
 
-  describe('integration test', () => {
-    testThatRequestHasVulnerability(function () {
-      const store = storage.getStore()
-      const iastCtx = iastContextFunctions.getIastContext(store)
-      let path = __filename
-      path = newTaintedString(iastCtx, __filename, 'param', 'Request')
-      const fd = fs.openSync(path, 'r')
-    }, 'PATH_TRAVERSAL')
+  it('Should report 1st argument', () => {
+    const addVulnerability = sinon.stub()
+    const iastContext = {
+      rootSpan: {
+        context () {
+          return {
+            toSpanId () {
+              return '123'
+            }
+          }
+        }
+      }
+    }
+    const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
+      '../iast-context': {
+        getIastContext: () => iastContext
+      },
+      '../overhead-controller': { hasQuota: () => true },
+      '../vulnerability-reporter': { addVulnerability }
+    })
+    const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer',
+      { './vulnerability-analyzer': ProxyAnalyzer,
+        '../taint-tracking/operations': {
+          isTainted: (ctx, value) => {
+            if (value.includes('tainted')) {
+              return true
+            }
+          }
+        }
+      })
+
+    proxyPathAnalyzer.analyze(['taintedArg1', 'taintedArg2'])
+    expect(addVulnerability).to.have.been.calledOnce
+    expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { evidence: { value: 'taintedArg1' } })
   })
+
+  it('Should report 2nd argument', () => {
+    const addVulnerability = sinon.stub()
+    const iastContext = {
+      rootSpan: {
+        context () {
+          return {
+            toSpanId () {
+              return '123'
+            }
+          }
+        }
+      }
+    }
+    const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
+      '../iast-context': {
+        getIastContext: () => iastContext
+      },
+      '../overhead-controller': { hasQuota: () => true },
+      '../vulnerability-reporter': { addVulnerability }
+    })
+    const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer',
+      { './vulnerability-analyzer': ProxyAnalyzer,
+        '../taint-tracking/operations': {
+          isTainted: (ctx, value) => {
+            if (value.includes('tainted')) {
+              return true
+            }
+          }
+        }
+      })
+
+    proxyPathAnalyzer.analyze(['arg1', 'taintedArg2'])
+    expect(addVulnerability).to.have.been.calledOnce
+    expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { evidence: { value: 'taintedArg2' } })
+  })
+})
+
+describe('integration test', () => {
+  testThatRequestHasVulnerability(function () {
+    const store = storage.getStore()
+    const iastCtx = iastContextFunctions.getIastContext(store)
+    let path = __filename
+    path = newTaintedString(iastCtx, __filename, 'param', 'Request')
+    fs.openSync(path, 'r')
+  }, 'PATH_TRAVERSAL')
 })
