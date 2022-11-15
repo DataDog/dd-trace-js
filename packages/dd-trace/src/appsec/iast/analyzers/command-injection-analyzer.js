@@ -1,11 +1,11 @@
 'use strict'
 const InjectionAnalyzer = require('./injection-analyzer')
 
-class CmdInjectionAnalyzer extends InjectionAnalyzer {
+class CommandInjectionAnalyzer extends InjectionAnalyzer {
   constructor () {
-    super('CMD_INJECTION')
+    super('COMMAND_INJECTION')
     this.addSub('datadog:child_process:execution:start', ({ command }) => this.analyze(command))
   }
 }
 
-module.exports = new CmdInjectionAnalyzer()
+module.exports = new CommandInjectionAnalyzer()
