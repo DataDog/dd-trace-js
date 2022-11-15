@@ -761,4 +761,34 @@ describe('Config', () => {
       })
     })
   })
+
+  context('ci visibility config', () => {
+    beforeEach(() => {
+      delete process.env.DD_CIVISIBILITY_ITR_ENABLED
+      delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
+      delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
+    })
+    context('agentless is enabled', () => {
+      beforeEach(() => {
+        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
+      })
+      it('should activate intelligent test runner if the env var is passed', () => {
+        process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
+        const config = new Config()
+        expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
+      })
+    })
+    context('agentless is disabled', () => {
+      beforeEach(() => {
+        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'false'
+      })
+      it('should not activate intelligent test runner or git metadata upload', () => {
+        process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
+        process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'true'
+        const config = new Config()
+        expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
+        expect(config).to.have.property('isGitUploadEnabled', false)
+      })
+    })
+  })
 })
