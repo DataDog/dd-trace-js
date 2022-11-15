@@ -19,6 +19,7 @@ module.exports = {
   'body-parser': () => require('../body-parser'),
   'bunyan': () => require('../bunyan'),
   'cassandra-driver': () => require('../cassandra-driver'),
+  'child_process': () => require('../child-process'),
   'connect': () => require('../connect'),
   'couchbase': () => require('../couchbase'),
   'crypto': () => require('../crypto'),
