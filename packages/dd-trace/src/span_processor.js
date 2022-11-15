@@ -47,8 +47,6 @@ class SpanProcessor {
       }
 
       this._erase(trace, active)
-    } else {
-      console.log('NOT FLUSHING BECAUSE STARTED AND FINISHED NOT EQUAL')
     }
 
     if (this._killAll) {
@@ -137,7 +135,6 @@ class SpanProcessor {
     }
 
     for (const span of trace.finished) {
-      console.log('removing span tags in _erase with id', span._spanContext._name, span.context().toSpanId())
       span.context()._tags = {}
     }
 

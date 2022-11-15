@@ -1,17 +1,15 @@
 'use strict'
 
-const { active } = require('../packages/dd-trace/src/plugins/util/web')
-
 const globalTracer = global._ddtrace
 const tracer = globalTracer._tracer
 
 /**
  * Calls `crashFlush` when the remaining time is about to end.
- * 
+ *
  * @param {number} remainingTimeInMillis remaining time a Lambda function
  * has until it gets killed.
  */
-function checkTimeout(context) {
+function checkTimeout (context) {
   const remainingTimeInMillis = context.getRemainingTimeInMillis()
   setTimeout(() => {
     crashFlush()
@@ -20,13 +18,13 @@ function checkTimeout(context) {
 
 /**
  * Grabs the current span, adds an error for an impending timeout.
- * 
- * After that, it calls `killAll` on the tracer processor 
+ *
+ * After that, it calls `killAll` on the tracer processor
  * in order to kill remaining unfinished spans.
- * 
+ *
  * Once that is done, it finishes the last span.
  */
-function crashFlush() {
+function crashFlush () {
   const activeSpan = tracer.scope().active()
   const error = new Error('Datadog detected an impending timeout')
   addError(activeSpan, error)
@@ -36,7 +34,7 @@ function crashFlush() {
 }
 
 // Try to use addError from tracer?
-function addError(span, error) {
+function addError (span, error) {
   span.addTags({
     'error.type': error.name,
     'error.msg': error.message,
@@ -46,11 +44,10 @@ function addError(span, error) {
 
 /**
  * Patches your AWS Lambda handler function to add some tracing support.
- * 
+ *
  * @param {*} lambdaHandler a Lambda handler function.
  */
-exports.datadog = function datadog(lambdaHandler) {
-
+exports.datadog = function datadog (lambdaHandler) {
   return (...args) => {
     const context = args[1]
     const patched = lambdaHandler.apply(this, args)

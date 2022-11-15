@@ -9,7 +9,7 @@ const shimmer = require('../../packages/datadog-shimmer')
 
 /**
  * Patches a Lambda module on the given handler path.
- * 
+ *
  * @param {string} handlerPath path of the handler to be patched.
  * @returns a module with the given handler path patched.
  */
@@ -21,11 +21,11 @@ const patchLambdaModule = (handlerPath) => (lambdaModule) => {
 
 /**
  * Patches a Lambda handler in order to do Datadog instrumentation.
- * 
+ *
  * @param {*} lambdaHandler the Lambda handler to be patched.
  * @returns a function which patches the given Lambda handler.
  */
-function patchLambdaHandler(lambdaHandler) {
+function patchLambdaHandler (lambdaHandler) {
   return datadog(lambdaHandler)
 }
 
@@ -44,4 +44,4 @@ function patchLambdaHandler(lambdaHandler) {
   const lambdaFilePath = lambdaStylePath + '.js'
 
   addHook({ name: lambdaFilePath }, patchLambdaModule(handlerPath))
-})();
+})()
