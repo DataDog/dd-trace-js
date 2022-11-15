@@ -108,6 +108,14 @@ class MochaPlugin extends Plugin {
       })
     })
 
+    this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suite }) => {
+      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
+        return
+      }
+      const testSuiteSpan = this._testSuites.get(suite)
+      this.tracer._exporter.exportCoverage({ span: testSuiteSpan, coverageFiles })
+    })
+
     this.addSub('ci:mocha:session:start', (command) => {
       if (!this.config.isAgentlessEnabled) {
         return

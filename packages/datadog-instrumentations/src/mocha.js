@@ -1,3 +1,6 @@
+const istanbul = require('istanbul-lib-coverage')
+const cloneDeep = require('lodash.clonedeep')
+
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -16,6 +19,7 @@ const testSessionFinishCh = channel('ci:mocha:session:finish')
 const testSuiteStartCh = channel('ci:mocha:test-suite:start')
 const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
+const testSuiteCodeCoverageCh = channel('ci:mocha:test-suite:code-coverage')
 
 // TODO: remove when root hooks and fixtures are implemented
 const patched = new WeakSet()
@@ -23,6 +27,28 @@ const patched = new WeakSet()
 const testToAr = new WeakMap()
 const originalFns = new WeakMap()
 const testFileToSuiteAr = new Map()
+
+// this is where we'll preserve the real coverage
+const originalCoverage = istanbul.createCoverageMap()
+
+let isCodeCoverageEnabled = false
+
+function extractCoverageInformation (coverage) {
+  const coverageMap = istanbul.createCoverageMap(coverage)
+
+  return coverageMap
+    .files()
+    .filter(filename => {
+      const fileCoverage = coverageMap.fileCoverageFor(filename)
+      const lineCoverage = fileCoverage.getLineCoverage()
+      const isAnyLineExecuted = Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
+
+      fileCoverage.resetHits()
+
+      return isAnyLineExecuted
+    })
+    .map(filename => filename.replace(`${process.cwd()}/`, ''))
+}
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -79,7 +105,6 @@ function mochaHook (Runner) {
   patched.add(Runner)
 
   shimmer.wrap(Runner.prototype, 'run', run => function () {
-    debugger
     if (!testStartCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
@@ -97,6 +122,11 @@ function mochaHook (Runner) {
       }
       testFileToSuiteAr.clear()
       testSessionFinishCh.publish(status)
+      // restore the original coverage
+      global.__coverage__ = Object.entries(originalCoverage.data).reduce((acc, [filename, fileCoverage]) => {
+        acc[filename] = fileCoverage.data
+        return acc
+      }, {})
     }))
 
     this.once('start', testRunAsyncResource.bind(function () {
@@ -144,9 +174,18 @@ function mochaHook (Runner) {
         })
       }
 
+      const copiedCoverage = cloneDeep(global.__coverage__)
+
+      originalCoverage.merge(copiedCoverage)
+
+      const coverageFiles = extractCoverageInformation(global.__coverage__)
+
+      if (coverageFiles && coverageFiles.length && isCodeCoverageEnabled) {
+        testSuiteCodeCoverageCh.publish({ coverageFiles: [...coverageFiles, suite.file], suite: suite.file })
+      }
+
       const asyncResource = testFileToSuiteAr.get(suite.file)
       asyncResource.runInAsyncScope(() => {
-        // get suite status
         testSuiteFinishCh.publish(status)
       })
     })
@@ -250,6 +289,7 @@ function mochaHook (Runner) {
       if (err) {
         log.error(err)
       }
+      isCodeCoverageEnabled = config.isCodeCoverageEnabled
       run.apply(this, arguments)
     })
     configurationCh.publish({
