@@ -10,10 +10,14 @@ const tracer = globalTracer._tracer
  * has until it gets killed.
  */
 function checkTimeout (context) {
-  const remainingTimeInMillis = context.getRemainingTimeInMillis()
+  let remainingTimeInMillis = context.getRemainingTimeInMillis()
+  const apmFlushDeadline = parseInt(process.env.DD_APM_FLUSH_DEADLINE)
+  if (apmFlushDeadline && apmFlushDeadline <= remainingTimeInMillis) {
+    remainingTimeInMillis = apmFlushDeadline
+  }
   setTimeout(() => {
     crashFlush()
-  }, remainingTimeInMillis - 100)
+  }, remainingTimeInMillis - 50)
 }
 
 /**
