@@ -26,6 +26,8 @@ class Subscription {
 }
 
 module.exports = class Plugin {
+  static storesByContext = new WeakMap()
+
   constructor (tracer) {
     this._subscriptions = []
     this._enabled = false
@@ -42,7 +44,7 @@ module.exports = class Plugin {
   }
 
   exit (ctx) {
-    storage.enterWith(ctx.parentStore)
+    storage.enterWith(this.constructor.storesByContext.get(ctx))
   }
 
   // TODO: Implement filters on resource name for all plugins.
