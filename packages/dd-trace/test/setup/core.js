@@ -23,14 +23,13 @@ global.withExports = withExports
 
 process.env.DD_TRACE_TELEMETRY_ENABLED = 'false'
 
-afterEach(() => {
-  agent.reset()
-  metrics.stop()
-})
-
-afterEach(() => {
-  storage.enterWith(undefined)
-})
+exports.mochaHooks = {
+  afterEach () {
+    agent.reset()
+    metrics.stop()
+    storage.enterWith(undefined)
+  }
+}
 
 function loadInst (plugin) {
   const instrumentations = []
