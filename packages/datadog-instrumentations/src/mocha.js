@@ -4,6 +4,7 @@ const cloneDeep = require('lodash.clonedeep')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const { extractCoverageInformation } = require('../../dd-trace/src/plugins/util/test')
 
 const testStartCh = channel('ci:mocha:test:start')
 const errorCh = channel('ci:mocha:test:error')
@@ -12,6 +13,7 @@ const testFinishCh = channel('ci:mocha:test:finish')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 
 const configurationCh = channel('ci:mocha:configuration')
+const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
 
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
@@ -32,23 +34,6 @@ const testFileToSuiteAr = new Map()
 const originalCoverage = istanbul.createCoverageMap()
 
 let isCodeCoverageEnabled = false
-
-function extractCoverageInformation (coverage) {
-  const coverageMap = istanbul.createCoverageMap(coverage)
-
-  return coverageMap
-    .files()
-    .filter(filename => {
-      const fileCoverage = coverageMap.fileCoverageFor(filename)
-      const lineCoverage = fileCoverage.getLineCoverage()
-      const isAnyLineExecuted = Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
-
-      fileCoverage.resetHits()
-
-      return isAnyLineExecuted
-    })
-    .map(filename => filename.replace(`${process.cwd()}/`, ''))
-}
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -178,9 +163,9 @@ function mochaHook (Runner) {
 
       originalCoverage.merge(copiedCoverage)
 
-      const coverageFiles = extractCoverageInformation(global.__coverage__)
+      const coverageFiles = extractCoverageInformation(global.__coverage__, true)
 
-      if (coverageFiles && coverageFiles.length && isCodeCoverageEnabled) {
+      if (coverageFiles && isCodeCoverageEnabled) {
         testSuiteCodeCoverageCh.publish({ coverageFiles: [...coverageFiles, suite.file], suite: suite.file })
       }
 
@@ -285,16 +270,7 @@ function mochaHook (Runner) {
       }
     })
 
-    const onDone = testRunAsyncResource.bind((err, config) => {
-      if (err) {
-        log.error(err)
-      }
-      isCodeCoverageEnabled = config.isCodeCoverageEnabled
-      run.apply(this, arguments)
-    })
-    configurationCh.publish({
-      onDone
-    })
+    return run.apply(this, arguments)
   })
 
   return Runner
@@ -317,6 +293,48 @@ function mochaEachHook (mochaEach) {
     }
   })
 }
+
+addHook({
+  name: 'mocha',
+  versions: ['>=5.2.0'],
+  file: 'lib/mocha.js'
+}, (Mocha) => {
+  const testRunAsyncResource = new AsyncResource('bound-anonymous-fn')
+
+  shimmer.wrap(Mocha.prototype, 'run', run => function () {
+    const onDone = (err, config) => {
+      if (err) {
+        log.error(err)
+      }
+      // we don't start the test run until we know the configuration and know which test to skip
+      isCodeCoverageEnabled = config.isCodeCoverageEnabled
+      if (config.isSuitesSkippingEnabled) {
+        skippableSuitesCh.publish({
+          onDone: testRunAsyncResource.bind((err, skippableSuites) => {
+            if (err) {
+              log.error(err)
+            } else {
+              this.suite.suites.forEach(suite => {
+                if (skippableSuites.includes(suite.file.replace(`${process.cwd()}/`, ''))) {
+                  suite.pending = true
+                }
+              })
+            }
+            run.apply(this, arguments)
+          })
+        })
+      } else {
+        run.apply(this, arguments)
+      }
+    }
+    testRunAsyncResource.runInAsyncScope(() => {
+      configurationCh.publish({
+        onDone: testRunAsyncResource.bind(onDone)
+      })
+    })
+  })
+  return Mocha
+})
 
 addHook({
   name: 'mocha',

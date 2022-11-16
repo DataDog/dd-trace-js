@@ -1,6 +1,7 @@
 const path = require('path')
 const fs = require('fs')
 
+const istanbul = require('istanbul-lib-coverage')
 const ignore = require('ignore')
 
 const { getGitMetadata } = require('./git')
@@ -84,7 +85,8 @@ module.exports = {
   TEST_SESSION_ID,
   TEST_SUITE_ID,
   TEST_ITR_TESTS_SKIPPED,
-  TEST_CODE_COVERAGE_LINES_TOTAL
+  TEST_CODE_COVERAGE_LINES_TOTAL,
+  extractCoverageInformation
 }
 
 function getTestEnvironmentMetadata (testFramework, config) {
@@ -261,4 +263,23 @@ function getTestSuiteCommonTags (command, version, testSuite) {
     [TEST_SUITE]: testSuite,
     [TEST_COMMAND]: command
   }
+}
+
+function extractCoverageInformation (coverage, shouldReset = false, sourceRoot = process.cwd()) {
+  const coverageMap = istanbul.createCoverageMap(coverage)
+
+  return coverageMap
+    .files()
+    .filter(filename => {
+      const fileCoverage = coverageMap.fileCoverageFor(filename)
+      const lineCoverage = fileCoverage.getLineCoverage()
+      const isAnyLineExecuted = Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
+
+      if (shouldReset) {
+        fileCoverage.resetHits()
+      }
+
+      return isAnyLineExecuted
+    })
+    .map(filename => filename.replace(`${sourceRoot}/`, ''))
 }

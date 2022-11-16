@@ -1,8 +1,8 @@
 'use strict'
-const istanbul = require('istanbul-lib-coverage')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const { extractCoverageInformation } = require('../../dd-trace/src/plugins/util/test')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -32,21 +32,6 @@ const {
 const { getFormattedJestTestParameters, getJestTestName } = require('../../datadog-plugin-jest/src/util')
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
-
-function extractCoverageInformation (coverage, rootDir) {
-  const coverageMap = istanbul.createCoverageMap(coverage)
-
-  return coverageMap
-    .files()
-    .filter(filename => {
-      const fileCoverage = coverageMap.fileCoverageFor(filename)
-      const lineCoverage = fileCoverage.getLineCoverage()
-      const isAnyLineExecuted = Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
-
-      return isAnyLineExecuted
-    })
-    .map(filename => filename.replace(`${rootDir}/`, ''))
-}
 
 const specStatusToTestStatus = {
   'pending': 'skip',
@@ -282,9 +267,8 @@ function jestAdapterWrapper (jestAdapter) {
         }
         testSuiteFinishCh.publish({ status, errorMessage })
         if (environment.global.__coverage__) {
-          const coverageFiles = extractCoverageInformation(environment.global.__coverage__, environment.rootDir)
-          if (coverageFiles.length &&
-            environment.testEnvironmentOptions &&
+          const coverageFiles = extractCoverageInformation(environment.global.__coverage__, false, environment.rootDir)
+          if (coverageFiles && environment.testEnvironmentOptions &&
             environment.testEnvironmentOptions._ddTestCodeCoverageEnabled) {
             testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
           }

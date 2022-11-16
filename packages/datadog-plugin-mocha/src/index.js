@@ -80,6 +80,34 @@ class MochaPlugin extends Plugin {
       'git.branch': gitBranch
     } = this.testEnvironmentMetadata
 
+    this.addSub('ci:mocha:test-suite:skippable', ({ onDone }) => {
+      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
+        onDone(null, [])
+        return
+      }
+      const testConfiguration = {
+        url: this.config.url,
+        site: this.config.site,
+        env: this.tracer._env,
+        service: this.config.service || this.tracer._service,
+        repositoryUrl,
+        sha,
+        osVersion,
+        osPlatform,
+        osArchitecture,
+        runtimeName,
+        runtimeVersion,
+        branch: gitBranch
+      }
+      getSkippableSuites(testConfiguration, (err, skippableSuites) => {
+        if (err) {
+          onDone(err)
+        } else {
+          onDone(null, skippableSuites)
+        }
+      })
+    })
+
     this.addSub('ci:mocha:configuration', ({ onDone }) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
         onDone(null, {})
