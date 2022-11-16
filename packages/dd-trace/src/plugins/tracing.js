@@ -82,7 +82,7 @@ class TracingPlugin extends Plugin {
       }
     })
 
-    if (span && this.component) { span.setTag(COMPONENT, this.component) }
+    span.setTag(COMPONENT, this.component)
 
     analyticsSampler.sample(span, this.config.measured)
 
