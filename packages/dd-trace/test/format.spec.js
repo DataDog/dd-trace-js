@@ -15,6 +15,7 @@ const SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM
 const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
 const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
 const SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN
+const PROCESS_ID = constants.PROCESS_ID
 
 const spanId = id('0234567812345678')
 
@@ -412,6 +413,11 @@ describe('format', () => {
       spanContext._tags['span.kind'] = 'server'
       trace = format(span)
       expect(trace.metrics[MEASURED]).to.equal(0)
+    })
+
+    it('should possess a process_id tag', () => {
+      trace = format(span)
+      expect(trace.metrics[PROCESS_ID]).to.equal(process.pid)
     })
   })
 })
