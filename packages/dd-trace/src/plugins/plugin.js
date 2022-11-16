@@ -26,8 +26,6 @@ class Subscription {
 }
 
 module.exports = class Plugin {
-  static storesByContext = new WeakMap()
-
   constructor (tracer) {
     this._subscriptions = []
     this._enabled = false
@@ -81,3 +79,5 @@ module.exports = class Plugin {
     }
   }
 }
+
+module.exports.storesByContext = new WeakMap()
