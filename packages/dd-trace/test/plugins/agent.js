@@ -19,7 +19,7 @@ let plugins = []
 
 module.exports = {
   // Load the plugin on the tracer with an optional config and start a mock agent.
-  load (pluginName, config, tracerConfig = {}) {
+  async load (pluginName, config, tracerConfig = {}) {
     tracer = require('../..')
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -44,41 +44,43 @@ module.exports = {
       handlers.forEach(handler => handler(req.body))
     })
 
-    return getPort().then(port => {
-      return new Promise((resolve, reject) => {
-        const server = this.server = http.createServer(agent)
-        const emit = server.emit
+    const port = await getPort()
 
-        server.emit = function () {
-          storage.enterWith({ noop: true })
-          return emit.apply(this, arguments)
-        }
+    const server = this.server = http.createServer(agent)
+    const emit = server.emit
 
-        server.on('connection', socket => sockets.push(socket))
+    server.emit = function () {
+      storage.enterWith({ noop: true })
+      return emit.apply(this, arguments)
+    }
 
-        listener = server.listen(port, () => resolve())
+    server.on('connection', socket => sockets.push(socket))
 
-        pluginName = [].concat(pluginName)
-        plugins = pluginName
-        config = [].concat(config)
-
-        server.on('close', () => {
-          tracer = null
-        })
-
-        tracer.init(Object.assign({}, {
-          service: 'test',
-          port,
-          flushInterval: 0,
-          plugins: false
-        }, tracerConfig))
-        tracer.setUrl(`http://127.0.0.1:${port}`)
-
-        for (let i = 0, l = pluginName.length; i < l; i++) {
-          tracer.use(pluginName[i], config[i])
-        }
-      })
+    const promise = new Promise((resolve, reject) => {
+      listener = server.listen(port, () => resolve())
     })
+
+    pluginName = [].concat(pluginName)
+    plugins = pluginName
+    config = [].concat(config)
+
+    server.on('close', () => {
+      tracer = null
+    })
+
+    tracer.init(Object.assign({}, {
+      service: 'test',
+      port,
+      flushInterval: 0,
+      plugins: false
+    }, tracerConfig))
+    tracer.setUrl(`http://127.0.0.1:${port}`)
+
+    for (let i = 0, l = pluginName.length; i < l; i++) {
+      tracer.use(pluginName[i], config[i])
+    }
+
+    return promise
   },
 
   reload (pluginName, config) {
@@ -101,7 +103,18 @@ module.exports = {
     handlers.delete(handler)
   },
 
-  // Register a callback with expectations to be run on every agent call.
+  /**
+   * Register a callback with expectations to be run on every tracing payload sent to the agent.
+   * If the callback does not throw, the returned promise resolves. If it does,
+   * then the agent will wait for additional payloads up until the timeout
+   * (default 1000 ms) and if any of them succeed, the promise will resolve.
+   * Otherwise, it will reject.
+   *
+   * @param {(traces: Array<Array<object>>) => void} callback - A function that tests trace data as it's received.
+   * @param {Object} [options] - An options object
+   * @param {number} [options.timeoutMs=1000] - The timeout in ms.
+   * @returns {Promise<void>} A promise resolving if expectations are met
+   */
   use (callback, options) {
     const deferred = {}
     const promise = new Promise((resolve, reject) => {
@@ -136,26 +149,9 @@ module.exports = {
     return promise
   },
 
-  // Return a promise that will resolve when all expectations have run.
-  promise () {
-    const promises = Array.from(handlers)
-      .map(handler => handler.promise.catch(e => e))
-
-    return Promise.all(promises)
-      .then(results => results.find(e => e instanceof Error))
-  },
-
   // Unregister any outstanding expectation callbacks.
   reset () {
     handlers.clear()
-  },
-
-  // Wrap a callback so it will only be called when all expectations have run.
-  wrap (callback) {
-    return error => {
-      this.promise()
-        .then(err => callback(error || err))
-    }
   },
 
   // Stop the mock agent, reset all expectations and wipe the require cache.

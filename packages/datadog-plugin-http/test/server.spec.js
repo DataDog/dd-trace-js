@@ -193,6 +193,30 @@ describe('Plugin', () => {
       })
     })
 
+    describe('with a `server` configuration', () => {
+      beforeEach(() => {
+        return agent.load('http', { client: false, server: {} })
+          .then(() => {
+            http = require('http')
+          })
+      })
+
+      beforeEach(done => {
+        const server = new http.Server(listener)
+        appListener = server
+          .listen(port, 'localhost', () => done())
+      })
+
+      // see https://github.com/DataDog/dd-trace-js/issues/2453
+      it('should not have disabled tracing', (done) => {
+        agent.use(() => {})
+          .then(done)
+          .catch(done)
+
+        axios.get(`http://localhost:${port}/user`).catch(done)
+      })
+    })
+
     describe('with a blocklist configuration', () => {
       beforeEach(() => {
         return agent.load('http', { client: false, blocklist: '/health' })
