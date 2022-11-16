@@ -51,8 +51,6 @@ const ends = new WeakMap()
 const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
-    config = config.server || config
-
     const headers = getHeadersToRecord(config)
     const validateStatus = getStatusValidator(config)
     const hooks = getHooks(config)
@@ -60,14 +58,15 @@ const web = {
     const middleware = getMiddlewareSetting(config)
     const queryStringObfuscation = getQsObfuscator(config)
 
-    return Object.assign({}, config, {
+    return {
+      ...config,
       headers,
       validateStatus,
       hooks,
       filter,
       middleware,
       queryStringObfuscation
-    })
+    }
   },
 
   setFramework (req, name, config) {
