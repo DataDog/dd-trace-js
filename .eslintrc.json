@@ -1,16 +1,11 @@
 {
-  "parserOptions": {
-    "ecmaVersion": 2020
-  },
   "extends": [
     "eslint:recommended",
     "standard"
   ],
   "env": {
-    "node": true
-  },
-  "globals": {
-    "BigInt": true
+    "node": true,
+    "es2020": true
   },
   "rules": {
     "max-len": [2, 120, 2],
