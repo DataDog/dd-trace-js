@@ -292,6 +292,18 @@ describe('Plugin', function () {
       describe('agentless', () => {
         it('can report code coverage', function (done) {
           gitMetadataUploadFinishCh.publish()
+
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  code_coverage: true,
+                  tests_skipping: true
+                }
+              }
+            }))
+
           nock(`http://127.0.0.1:${agent.server.address().port}`)
             .post('/api/v2/citestcov')
             .reply(202, function () {
@@ -329,6 +341,40 @@ describe('Plugin', function () {
             options,
             options.projects
           )
+        })
+        it('does not report code coverage if not enabled by the API', function (done) {
+          gitMetadataUploadFinishCh.publish()
+
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  code_coverage: false,
+                  tests_skipping: true
+                }
+              }
+            }))
+
+          const scope = nock(`http://127.0.0.1:${agent.server.address().port}`)
+            .post('/api/v2/citestcov')
+            .reply(202, function () {
+              done(new Error('Code coverage should not be uploaded when not enabled'))
+            })
+
+          const options = {
+            ...jestCommonOptions,
+            testRegex: 'jest-coverage.js',
+            coverage: true
+          }
+
+          jestExecutable.runCLI(
+            options,
+            options.projects
+          ).then(() => {
+            expect(scope.isDone()).to.be.false
+            done()
+          })
         })
         it('should create spans for the test session and test suite', (done) => {
           gitMetadataUploadFinishCh.publish()
