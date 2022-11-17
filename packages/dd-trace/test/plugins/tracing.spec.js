@@ -5,8 +5,7 @@ const DatadogTracer = require('../../src/opentracing/tracer')
 describe('TracingPlugin', () => {
   describe('startSpan method', () => {
     it('passes given childOf relationship to the tracer', () => {
-      const span = new DatadogTracer(new Config()).startSpan('Test span')
-      const startSpanSpy = sinon.stub().returns(span)
+      const startSpanSpy = sinon.spy()
       const plugin = new TracingPlugin({
         _tracer: {
           startSpan: startSpanSpy
@@ -22,7 +21,6 @@ describe('TracingPlugin', () => {
           childOf: 'some parent span'
         })
       )
-      expect(span._spanContext._tags.component).to.equal('TracingPlugin')
     })
   })
 })
