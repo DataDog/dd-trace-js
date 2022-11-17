@@ -1,5 +1,7 @@
 'use strict'
 
+const { Timeout } = require("./runtime/errors")
+
 const globalTracer = global._ddtrace
 const tracer = globalTracer._tracer
 
@@ -30,7 +32,7 @@ function checkTimeout (context) {
  */
 function crashFlush () {
   const activeSpan = tracer.scope().active()
-  const error = new Error('Datadog detected an impending timeout')
+  const error = new Timeout('Datadog detected an impending timeout')
   addError(activeSpan, error)
   activeSpan.setTag('error', 1)
   tracer._processor.killAll()
