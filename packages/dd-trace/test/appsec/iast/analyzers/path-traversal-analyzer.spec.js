@@ -6,7 +6,7 @@ const expect = require('chai').expect
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const pathTraversalAnalyzer = require('../../../../src/appsec/iast/analyzers/path-traversal-analyzer')
-const { isTainted, newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
+const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const { testThatRequestHasVulnerability } = require('../utils')
 const fs = require('fs')
 
@@ -18,12 +18,12 @@ describe('path-traversal-analyzer', () => {
 
   it('If no context it should not report vulnerability', () => {
     const iastContext = null
-    const isVulnerable = pathTraversalAnalyzer._isVulnerable(['test'], iastContext)
+    const isVulnerable = pathTraversalAnalyzer._isVulnerable('test', iastContext)
     expect(isVulnerable).to.be.false
   })
 
   it('If no context it should return evidence with an undefined ranges array', () => {
-    const evidence = pathTraversalAnalyzer._getEvidence(null)
+    const evidence = pathTraversalAnalyzer._getEvidence('', null)
     expect(evidence.value).to.be.equal('')
     expect(evidence.ranges).to.be.instanceof(Array)
     expect(evidence.ranges).to.have.length(0)
@@ -48,7 +48,7 @@ describe('path-traversal-analyzer', () => {
       '../taint-tracking/operations': { isTainted }
     })
 
-    const result = proxyPathAnalyzer._isVulnerable(['test'], iastContext)
+    const result = proxyPathAnalyzer._isVulnerable('test', iastContext)
     expect(result).to.be.false
     expect(isTainted).to.have.been.calledOnce
   })
