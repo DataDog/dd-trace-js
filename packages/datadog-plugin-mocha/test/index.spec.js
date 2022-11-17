@@ -2,6 +2,7 @@
 
 const path = require('path')
 const fs = require('fs')
+const { channel } = require('diagnostics_channel')
 
 const msgpack = require('msgpack-lite')
 const nock = require('nock')
@@ -24,6 +25,8 @@ const {
   TEST_CODE_OWNERS,
   LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
+
+const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
 
 const { version: ddTraceVersion } = require('../../../package.json')
 
@@ -549,6 +552,7 @@ describe('Plugin', () => {
           mocha.run()
         })
         it('can report code coverage', function (done) {
+          gitMetadataUploadFinishCh.publish()
           nock('https://api.datad0g.com/')
             .post('/api/v2/libraries/tests/services/setting')
             .reply(200, JSON.stringify({
@@ -597,6 +601,7 @@ describe('Plugin', () => {
           mocha.run()
         })
         it('does not report code coverage if disabled by API', function (done) {
+          gitMetadataUploadFinishCh.publish()
           nock('https://api.datad0g.com/')
             .post('/api/v2/libraries/tests/services/setting')
             .reply(200, JSON.stringify({
@@ -627,7 +632,7 @@ describe('Plugin', () => {
           })
         })
         it('can skip suites received by the intelligent test runner API', function (done) {
-          this.timeout(100000)
+          gitMetadataUploadFinishCh.publish()
           nock('https://api.datad0g.com/')
             .post('/api/v2/libraries/tests/services/setting')
             .reply(200, JSON.stringify({
@@ -691,6 +696,116 @@ describe('Plugin', () => {
 
           mocha.run(() => {
             expect(scope.isDone()).to.be.true
+          })
+        })
+        it('does not skip tests if git metadata is not uploaded', function (done) {
+          gitMetadataUploadFinishCh.publish(new Error('error uploading'))
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  code_coverage: true,
+                  tests_skipping: true
+                }
+              }
+            }))
+
+          const scope = nock('https://api.datad0g.com/')
+            .post('/api/v2/ci/tests/skippable')
+            .reply(200, JSON.stringify({
+              data: [{
+                type: 'suite',
+                attributes: {
+                  suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-1.js'
+                }
+              }]
+            }))
+
+          const events = [
+            { suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-2.js', status: 'pass' },
+            { suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-1.js', status: 'pass' }
+          ]
+
+          const testAssertions = events.map(({ status, suite }) => {
+            return agent.use(agentlessPayload => {
+              const events = agentlessPayload.events.map(event => event.content)
+              expect(events[0].type).to.equal('test')
+              expect(events[0].meta[TEST_SUITE]).to.equal(suite)
+              expect(events[0].meta[TEST_STATUS]).to.equal(status)
+            })
+          })
+
+          Promise.all(testAssertions)
+            .then(() => done())
+            .catch(done)
+
+          const testFilePath = path.join(__dirname, 'mocha-test-itr-1.js')
+          const testFilePath2 = path.join(__dirname, 'mocha-test-itr-2.js')
+
+          const mocha = new Mocha({
+            reporter: function () {} // silent on internal tests
+          })
+          mocha.addFile(testFilePath)
+          mocha.addFile(testFilePath2)
+
+          mocha.run(() => {
+            expect(scope.isDone()).to.be.false // skippable API is not called
+          })
+        })
+        it('does not skip tests if tests skipping is disabled by API', function (done) {
+          gitMetadataUploadFinishCh.publish()
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  code_coverage: true,
+                  tests_skipping: false
+                }
+              }
+            }))
+
+          const scope = nock('https://api.datad0g.com/')
+            .post('/api/v2/ci/tests/skippable')
+            .reply(200, JSON.stringify({
+              data: [{
+                type: 'suite',
+                attributes: {
+                  suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-1.js'
+                }
+              }]
+            }))
+
+          const events = [
+            { suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-2.js', status: 'pass' },
+            { suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-1.js', status: 'pass' }
+          ]
+
+          const testAssertions = events.map(({ status, suite }) => {
+            return agent.use(agentlessPayload => {
+              const events = agentlessPayload.events.map(event => event.content)
+              expect(events[0].type).to.equal('test')
+              expect(events[0].meta[TEST_SUITE]).to.equal(suite)
+              expect(events[0].meta[TEST_STATUS]).to.equal(status)
+            })
+          })
+
+          Promise.all(testAssertions)
+            .then(() => done())
+            .catch(done)
+
+          const testFilePath = path.join(__dirname, 'mocha-test-itr-1.js')
+          const testFilePath2 = path.join(__dirname, 'mocha-test-itr-2.js')
+
+          const mocha = new Mocha({
+            reporter: function () {} // silent on internal tests
+          })
+          mocha.addFile(testFilePath)
+          mocha.addFile(testFilePath2)
+
+          mocha.run(() => {
+            expect(scope.isDone()).to.be.false // skippable API is not called
           })
         })
       })
