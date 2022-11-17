@@ -3,5 +3,5 @@
 module.exports = {
   parallel: true,
   jobs: 1000,
-  timeout: 10000
+  timeout: 60000
 }
