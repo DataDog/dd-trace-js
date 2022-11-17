@@ -78,7 +78,7 @@ describe('path-traversal-analyzer', () => {
         '../taint-tracking/operations': { isTainted: () => true }
       })
 
-    proxyPathAnalyzer.analyze(['test'])
+    proxyPathAnalyzer.analyze({ arguments: ['test'] })
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { type: 'PATH_TRAVERSAL' })
   })
@@ -114,7 +114,7 @@ describe('path-traversal-analyzer', () => {
         }
       })
 
-    proxyPathAnalyzer.analyze(['taintedArg1', 'taintedArg2'])
+    proxyPathAnalyzer.analyze({ arguments: ['taintedArg1', 'taintedArg2'] })
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { evidence: { value: 'taintedArg1' } })
   })
@@ -150,7 +150,7 @@ describe('path-traversal-analyzer', () => {
         }
       })
 
-    proxyPathAnalyzer.analyze(['arg1', 'taintedArg2'])
+    proxyPathAnalyzer.analyze({ arguments: ['arg1', 'taintedArg2'] })
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { evidence: { value: 'taintedArg2' } })
   })
