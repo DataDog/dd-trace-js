@@ -73,6 +73,7 @@ class TracingPlugin extends Plugin {
     const span = this.tracer.startSpan(name, {
       childOf,
       tags: {
+        [COMPONENT]: this.component,
         'service.name': service || this.tracer._service,
         'resource.name': resource,
         'span.kind': kind,
@@ -81,8 +82,6 @@ class TracingPlugin extends Plugin {
         ...metrics
       }
     })
-
-    span.setTag(COMPONENT, this.component)
 
     analyticsSampler.sample(span, this.config.measured)
 

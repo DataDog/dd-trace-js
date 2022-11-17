@@ -188,7 +188,6 @@ describe('Plugin', () => {
               expect(span).to.have.property('type', 'graphql')
               expect(span).to.have.property('error', 0)
               expect(span.meta).to.not.have.property('graphql.source')
-              expect(span.meta).to.have.property('graphql.source')
               expect(span.meta).to.have.property('component', 'graphql')
             })
             .then(done)
