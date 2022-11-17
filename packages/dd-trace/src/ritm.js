@@ -16,6 +16,8 @@ let cache = Object.create(null)
 let patching = Object.create(null)
 let patchedRequire = null
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
+const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
+
 function Hook (modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)
   if (typeof modules === 'function') {
@@ -52,7 +54,6 @@ function Hook (modules, options, onrequire) {
     const filename = Module._resolveFilename(request, this)
     const core = filename.indexOf(path.sep) === -1
     let name, basedir, hooks
-
     // return known patched modules immediately
     if (cache[filename]) {
       // require.cache was potentially altered externally
@@ -69,8 +70,19 @@ function Hook (modules, options, onrequire) {
     if (!patched) {
       patching[filename] = true
     }
+    const payload = {
+      filename,
+      request
+    }
 
+    if (moduleLoadStartChannel.hasSubscribers) {
+      moduleLoadStartChannel.publish(payload)
+    }
     const exports = origRequire.apply(this, arguments)
+    payload.module = exports
+    if (moduleLoadEndChannel.hasSubscribers) {
+      moduleLoadEndChannel.publish(payload)
+    }
 
     // If it's already patched, just return it as-is.
     if (patched) return exports
@@ -78,14 +90,6 @@ function Hook (modules, options, onrequire) {
     // The module has already been loaded,
     // so the patching mark can be cleaned up.
     delete patching[filename]
-
-    if (moduleLoadStartChannel.hasSubscribers) {
-      moduleLoadStartChannel.publish({
-        filename,
-        module: exports,
-        request
-      })
-    }
 
     if (core) {
       hooks = moduleHooks[filename]
