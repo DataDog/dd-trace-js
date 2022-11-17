@@ -10,6 +10,7 @@ const log = require('../../log')
 const clientId = uuid()
 
 const POLL_INTERVAL = 5e3
+const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64')
 
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
 // with their own separated Client.ClientState.
@@ -48,7 +49,7 @@ class RemoteConfigManager extends EventEmitter {
           env: config.env,
           app_version: config.version
         },
-        capabilities: 'AA==' // updated by `updateCapabilities()`
+        capabilities: DEFAULT_CAPABILITY // updated by `updateCapabilities()`
       },
       cached_target_files: [] // updated by `parseConfig()`
     }
