@@ -29,11 +29,8 @@ function wrapFsMethod (channel, numParams) {
   function wrapMethod (fsMethod) {
     return function () {
       if (channel.hasSubscribers && arguments.length) {
-        const args = []
-        for (let i = 0; i < numParams; i++) {
-          args.push(arguments[i])
-        }
-        channel.publish(args)
+        const args = Array.prototype.slice.call(arguments, 0, numParams)
+        channel.publish({ arguments: args })
       }
       return fsMethod.apply(this, arguments)
     }
