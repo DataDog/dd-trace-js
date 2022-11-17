@@ -70,10 +70,11 @@ class TracingPlugin extends Plugin {
       childOf = store.span
     }
 
+    meta[COMPONENT] = meta[COMPONENT] || this.component
+
     const span = this.tracer.startSpan(name, {
       childOf,
       tags: {
-        [COMPONENT]: this.component,
         'service.name': service || this.tracer._service,
         'resource.name': resource,
         'span.kind': kind,

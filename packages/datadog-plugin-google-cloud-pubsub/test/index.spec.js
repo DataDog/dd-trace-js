@@ -10,7 +10,7 @@ const TIMEOUT = 30000
 describe('Plugin', () => {
   let tracer
 
-  describe('google-cloud-pubsub', function () {
+  describe('@google-cloud/pubsub', function () {
     this.timeout(TIMEOUT)
 
     before(() => {
@@ -22,7 +22,7 @@ describe('Plugin', () => {
     afterEach(() => {
       return agent.close({ ritmReset: false })
     })
-    withVersions('google-cloud-pubsub', '@google-cloud/pubsub', version => {
+    withVersions('@google-cloud/pubsub', '@google-cloud/pubsub', version => {
       let pubsub
       let project
       let topicName
@@ -30,7 +30,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load('google-cloud-pubsub')
+          return agent.load('@google-cloud/pubsub')
         })
         beforeEach(() => {
           tracer = require('../../dd-trace')
@@ -46,7 +46,7 @@ describe('Plugin', () => {
               meta: {
                 'pubsub.method': 'createTopic',
                 'span.kind': 'client',
-                'component': 'google-cloud-pubsub'
+                'component': '@google-cloud/pubsub'
               }
             })
             await pubsub.createTopic(topicName)
@@ -62,7 +62,7 @@ describe('Plugin', () => {
                 'error.msg': error.message,
                 'error.type': error.name,
                 'error.stack': error.stack,
-                'component': 'google-cloud-pubsub'
+                'component': '@google-cloud/pubsub'
               }
             })
             pubsub.getClient_ = function (config, callback) {
@@ -92,7 +92,7 @@ describe('Plugin', () => {
                 'pubsub.topic': resource,
                 'pubsub.method': 'publish',
                 'span.kind': 'producer',
-                'component': 'google-cloud-pubsub'
+                'component': '@google-cloud/pubsub'
               }
             })
             const [topic] = await pubsub.createTopic(topicName)
@@ -109,7 +109,7 @@ describe('Plugin', () => {
                 'error.msg': error.message,
                 'error.type': error.name,
                 'error.stack': error.stack,
-                'component': 'google-cloud-pubsub'
+                'component': '@google-cloud/pubsub'
               }
             })
             const [topic] = await pubsub.createTopic(topicName)
@@ -142,7 +142,7 @@ describe('Plugin', () => {
               name: 'pubsub.receive',
               type: 'worker',
               meta: {
-                'component': 'google-cloud-pubsub',
+                'component': '@google-cloud/pubsub',
                 'span.kind': 'consumer',
                 'pubsub.topic': resource
               },
@@ -190,7 +190,7 @@ describe('Plugin', () => {
                 'error.msg': error.message,
                 'error.type': error.name,
                 'error.stack': error.stack,
-                'component': 'google-cloud-pubsub'
+                'component': '@google-cloud/pubsub'
               }
             })
             const [topic] = await pubsub.createTopic(topicName)
@@ -224,7 +224,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         beforeEach(() => {
-          return agent.load('google-cloud-pubsub', {
+          return agent.load('@google-cloud/pubsub', {
             service: 'a_test_service'
           })
         })
@@ -259,7 +259,7 @@ describe('Plugin', () => {
           service,
           error: 0,
           meta: {
-            'component': 'google-cloud-pubsub',
+            'component': '@google-cloud/pubsub',
             'gcloud.project_id': project
           }
         }, expected)
