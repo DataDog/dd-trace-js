@@ -4,7 +4,7 @@ const cloneDeep = require('lodash.clonedeep')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
-const { extractCoverageInformation } = require('../../dd-trace/src/plugins/util/test')
+const { extractCoverageInformation, getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
 
 const testStartCh = channel('ci:mocha:test:start')
 const errorCh = channel('ci:mocha:test:error')
@@ -33,12 +33,7 @@ const testFileToSuiteAr = new Map()
 // this is where we'll preserve the real coverage
 const originalCoverage = istanbul.createCoverageMap()
 
-let isCodeCoverageEnabled = false
 let suitesToSkip = []
-
-function getSuiteFileRelativePath (suiteFile) {
-  return suiteFile.replace(`${process.cwd()}/`, '')
-}
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -170,15 +165,10 @@ function mochaHook (Runner) {
 
       const coverageFiles = extractCoverageInformation(global.__coverage__, true)
 
-      if (coverageFiles && isCodeCoverageEnabled) {
-        testSuiteCodeCoverageCh.publish({
-          coverageFiles: [
-            ...coverageFiles,
-            getSuiteFileRelativePath(suite.file) // TODO: do this addition in the subscriber
-          ],
-          suite: suite.file
-        })
-      }
+      testSuiteCodeCoverageCh.publish({
+        coverageFiles,
+        suiteFile: suite.file
+      })
 
       const asyncResource = testFileToSuiteAr.get(suite.file)
       asyncResource.runInAsyncScope(() => {
@@ -282,8 +272,9 @@ function mochaHook (Runner) {
       }
     })
 
+    // TODO: is this the best way to skip suites?
     this.suite.suites.forEach(suite => {
-      if (suitesToSkip.includes(getSuiteFileRelativePath(suite.file))) {
+      if (suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))) {
         suite.pending = true
       }
     })
@@ -319,36 +310,35 @@ addHook({
 }, (Mocha) => {
   const testRunAsyncResource = new AsyncResource('bound-anonymous-fn')
 
+  /**
+   * Get ITR configuration and skippable suites
+   * If ITR is disabled, `onDone` is called immediately on the subscriber
+   */
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
-    const onDone = (err, config) => {
+    const onReceivedSkippableSuites = (err, skippableSuites) => {
       if (err) {
         log.error(err)
-        isCodeCoverageEnabled = false
+        suitesToSkip = []
+      } else {
+        suitesToSkip = skippableSuites
+      }
+      run.apply(this, arguments)
+    }
+
+    const onReceivedConfiguration = (err) => {
+      if (err) {
+        log.error(err)
         return run.apply(this, arguments)
       }
-      // we don't start the test run until we know the configuration and know which test to skip
-      isCodeCoverageEnabled = config.isCodeCoverageEnabled
 
-      // TODO: maybe publish on the channel regardless but check in the subscriber the response of the API?
-      if (config.isSuitesSkippingEnabled) {
-        skippableSuitesCh.publish({
-          onDone: testRunAsyncResource.bind((err, skippableSuites) => {
-            if (err) {
-              log.error(err)
-              suitesToSkip = []
-            } else {
-              suitesToSkip = skippableSuites
-            }
-            run.apply(this, arguments)
-          })
-        })
-      } else {
-        run.apply(this, arguments)
-      }
+      skippableSuitesCh.publish({
+        onDone: testRunAsyncResource.bind(onReceivedSkippableSuites)
+      })
     }
+
     testRunAsyncResource.runInAsyncScope(() => {
       configurationCh.publish({
-        onDone: testRunAsyncResource.bind(onDone)
+        onDone: testRunAsyncResource.bind(onReceivedConfiguration)
       })
     })
   })

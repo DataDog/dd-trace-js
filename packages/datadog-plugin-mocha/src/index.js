@@ -77,8 +77,19 @@ class MochaPlugin extends Plugin {
       'os.architecture': osArchitecture,
       'runtime.name': runtimeName,
       'runtime.version': runtimeVersion,
-      'git.branch': gitBranch
+      'git.branch': branch
     } = this.testEnvironmentMetadata
+
+    const testConfiguration = {
+      repositoryUrl,
+      sha,
+      osVersion,
+      osPlatform,
+      osArchitecture,
+      runtimeName,
+      runtimeVersion,
+      branch
+    }
 
     this.addSub('ci:mocha:test-suite:skippable', ({ onDone }) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
@@ -90,21 +101,16 @@ class MochaPlugin extends Plugin {
         if (gitUploadError) {
           return onDone(gitUploadError)
         }
-        const testConfiguration = {
+        if (!this.itrConfig || !this.itrConfig.isSuitesSkippingEnabled) {
+          return onDone(null, [])
+        }
+        getSkippableSuites({
+          ...testConfiguration,
           url: this.config.url,
           site: this.config.site,
           env: this.tracer._env,
-          service: this.config.service || this.tracer._service,
-          repositoryUrl,
-          sha,
-          osVersion,
-          osPlatform,
-          osArchitecture,
-          runtimeName,
-          runtimeVersion,
-          branch: gitBranch
-        }
-        getSkippableSuites(testConfiguration, (err, skippableSuites) => {
+          service: this.config.service || this.tracer._service
+        }, (err, skippableSuites) => {
           if (err) {
             onDone(err)
           } else {
@@ -119,35 +125,36 @@ class MochaPlugin extends Plugin {
         onDone(null, {})
         return
       }
-      const testConfiguration = {
+      getItrConfiguration({
+        ...testConfiguration,
         url: this.config.url,
         site: this.config.site,
         env: this.tracer._env,
-        service: this.config.service || this.tracer._service,
-        repositoryUrl,
-        sha,
-        osVersion,
-        osPlatform,
-        osArchitecture,
-        runtimeName,
-        runtimeVersion,
-        branch: gitBranch
-      }
-      getItrConfiguration(testConfiguration, (err, config) => {
+        service: this.config.service || this.tracer._service
+      }, (err, itrConfig) => {
         if (err) {
           onDone(err)
         } else {
-          onDone(null, config)
+          this.itrConfig = itrConfig
+          onDone(null)
         }
       })
     })
 
-    this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suite }) => {
+    this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
         return
       }
-      const testSuiteSpan = this._testSuites.get(suite)
-      this.tracer._exporter.exportCoverage({ span: testSuiteSpan, coverageFiles })
+      if (!this.itrConfig || !this.itrConfig.isCodeCoverageEnabled) {
+        return
+      }
+      const testSuiteSpan = this._testSuites.get(suiteFile)
+
+      this.tracer._exporter.exportCoverage(
+        {
+          span: testSuiteSpan,
+          coverageFiles: [...coverageFiles, getTestSuitePath(suiteFile, this.sourceRoot)]
+        })
     })
 
     this.addSub('ci:mocha:session:start', (command) => {
@@ -258,6 +265,7 @@ class MochaPlugin extends Plugin {
         finishAllTraceSpans(this.testSessionSpan)
       }
       this.tracer._exporter._writer.flush()
+      this.itrConfig = null
     })
   }
 
