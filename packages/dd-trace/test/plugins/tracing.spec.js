@@ -1,6 +1,4 @@
 const TracingPlugin = require('../../src/plugins/tracing')
-const Config = require('../../src/config')
-const DatadogTracer = require('../../src/opentracing/tracer')
 
 describe('TracingPlugin', () => {
   describe('startSpan method', () => {
