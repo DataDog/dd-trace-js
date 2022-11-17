@@ -86,6 +86,18 @@ const _getNestedProperty = (object, nestedProperty) => {
   }, object)
 }
 
+function _getLambdaFilePath (lambdaStylePath) {
+  let lambdaFilePath = lambdaStylePath
+  if (fs.existsSync(lambdaStylePath + '.js')) {
+    lambdaFilePath += '.js'
+  } else if (fs.existsSync(lambdaStylePath + '.mjs')) {
+    lambdaFilePath += '.mjs'
+  } else if (fs.existsSync(lambdaStylePath + '.cjs')) {
+    lambdaFilePath += '.cjs'
+  } 
+  return lambdaFilePath
+} 
+
 exports.registerLambdaHook = () => {
   const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
   const originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
@@ -94,9 +106,7 @@ exports.registerLambdaHook = () => {
   const [_module] = _extractModuleNameAndHandlerPath(moduleAndHandler)
 
   const lambdaStylePath = path.resolve(lambdaTaskRoot, moduleRoot, _module)
-  // TODO: identify which file is actually being require
-  // extensionless? .js? .mjs? .cjs? node style path?
-  const lambdaFilePath = lambdaStylePath + '.js'
+  const lambdaFilePath = _getLambdaFilePath(lambdaStylePath)
 
   if (fs.existsSync(lambdaFilePath)) { // remove this line by identifying file?
     Hook([lambdaFilePath], (moduleExports) => {
@@ -118,3 +128,4 @@ exports.registerLambdaHook = () => {
 exports._extractModuleRootAndHandler = _extractModuleRootAndHandler
 exports._extractModuleNameAndHandlerPath = _extractModuleNameAndHandlerPath
 exports._resolveHandler = _resolveHandler
+exports._getLambdaFilePath = _getLambdaFilePath

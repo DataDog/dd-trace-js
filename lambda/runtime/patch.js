@@ -2,7 +2,7 @@
 
 const path = require('path')
 
-const { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler } = require('./ritm')
+const { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler, _getLambdaFilePath } = require('./ritm')
 const { datadog } = require('../handler')
 const { addHook } = require('../../packages/datadog-instrumentations/src/helpers/instrument')
 const shimmer = require('../../packages/datadog-shimmer')
@@ -41,7 +41,7 @@ function patchLambdaHandler (lambdaHandler) {
   const [_module, handlerPath] = _extractModuleNameAndHandlerPath(moduleAndHandler)
 
   const lambdaStylePath = path.resolve(lambdaTaskRoot, moduleRoot, _module)
-  const lambdaFilePath = lambdaStylePath + '.js'
+  const lambdaFilePath = _getLambdaFilePath(lambdaStylePath)
 
   addHook({ name: lambdaFilePath }, patchLambdaModule(handlerPath))
 })()
