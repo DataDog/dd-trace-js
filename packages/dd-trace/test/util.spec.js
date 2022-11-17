@@ -1,6 +1,6 @@
 'use strict'
 
-const { isTrue, isFalse, isTrueOrFalse, globMatch } = require('../src/util')
+const { isTrue, isFalse, globMatch } = require('../src/util')
 
 const TRUES = [
   1,
@@ -15,13 +15,6 @@ const FALSES = [
   'false',
   'FALSE',
   'fAlSe'
-]
-const OTHERS = [
-  undefined,
-  null,
-  'michel',
-  42,
-  NaN
 ]
 
 const MATCH_CASES = [
@@ -60,21 +53,6 @@ describe('util', () => {
     TRUES.forEach((v) => {
       expect(isFalse(v)).to.equal(false)
       expect(isFalse(String(v))).to.equal(false)
-    })
-  })
-
-  it('isTrueOrFalse works', () => {
-    TRUES.forEach((v) => {
-      expect(isTrueOrFalse(v)).to.equal(true)
-      expect(isTrueOrFalse(String(v))).to.equal(true)
-    })
-    FALSES.forEach((v) => {
-      expect(isTrueOrFalse(v)).to.equal(false)
-      expect(isTrueOrFalse(String(v))).to.equal(false)
-    })
-    OTHERS.forEach((v) => {
-      expect(isTrueOrFalse(v)).to.equal(undefined)
-      expect(isTrueOrFalse(String(v))).to.equal(undefined)
     })
   })
 

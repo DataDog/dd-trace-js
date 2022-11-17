@@ -8,7 +8,7 @@ const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
-const { isTrue, isFalse, isTrueOrFalse } = require('./util')
+const { isTrue, isFalse } = require('./util')
 const uuid = require('crypto-randomuuid')
 
 const fromEntries = Object.fromEntries || (entries =>
@@ -212,8 +212,8 @@ class Config {
     }
 
     const DD_APPSEC_ENABLED = coalesce(
-      isTrueOrFalse(appsec.enabled),
-      isTrueOrFalse(process.env.DD_APPSEC_ENABLED),
+      appsec.enabled && isTrue(appsec.enabled),
+      process.env.DD_APPSEC_ENABLED && isTrue(process.env.DD_APPSEC_ENABLED),
       undefined // represent the default "false" which is different from explicit "false"
     )
 
