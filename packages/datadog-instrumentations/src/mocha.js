@@ -35,6 +35,10 @@ const originalCoverage = istanbul.createCoverageMap()
 
 let isCodeCoverageEnabled = false
 
+function getSuiteFileRelativePath (suiteFile) {
+  return suiteFile.replace(`${process.cwd()}/`, '')
+}
+
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
   function getSuites (suite) {
@@ -166,7 +170,13 @@ function mochaHook (Runner) {
       const coverageFiles = extractCoverageInformation(global.__coverage__, true)
 
       if (coverageFiles && isCodeCoverageEnabled) {
-        testSuiteCodeCoverageCh.publish({ coverageFiles: [...coverageFiles, suite.file], suite: suite.file })
+        testSuiteCodeCoverageCh.publish({
+          coverageFiles: [
+            ...coverageFiles,
+            getSuiteFileRelativePath(suite.file) // TODO: do this addition in the subscriber
+          ],
+          suite: suite.file
+        })
       }
 
       const asyncResource = testFileToSuiteAr.get(suite.file)
@@ -305,6 +315,7 @@ addHook({
     const onDone = (err, config) => {
       if (err) {
         log.error(err)
+        return run.apply(this, arguments)
       }
       // we don't start the test run until we know the configuration and know which test to skip
       isCodeCoverageEnabled = config.isCodeCoverageEnabled
@@ -315,7 +326,7 @@ addHook({
               log.error(err)
             } else {
               this.suite.suites.forEach(suite => {
-                if (skippableSuites.includes(suite.file.replace(`${process.cwd()}/`, ''))) {
+                if (skippableSuites.includes(getSuiteFileRelativePath(suite.file))) {
                   suite.pending = true
                 }
               })
