@@ -34,6 +34,7 @@ const testFileToSuiteAr = new Map()
 const originalCoverage = istanbul.createCoverageMap()
 
 let isCodeCoverageEnabled = false
+let suitesToSkip = []
 
 function getSuiteFileRelativePath (suiteFile) {
   return suiteFile.replace(`${process.cwd()}/`, '')
@@ -64,13 +65,13 @@ function getSuitesByTestFile (root) {
 }
 
 function getTestStatus (test) {
-  if (test.pending) {
+  if (test.isPending()) {
     return 'skip'
   }
-  if (test.state !== 'failed' && !test.timedOut) {
-    return 'pass'
+  if (test.isFailed() || test.timedOut) {
+    return 'fail'
   }
-  return 'fail'
+  return 'pass'
 }
 
 function isRetry (test) {
@@ -267,7 +268,8 @@ function mochaHook (Runner) {
           skipCh.publish(test)
         })
       } else {
-        // if there is no async resource, the test has been skipped through `test.skip``
+        // if there is no async resource, the test has been skipped through `test.skip`
+        // or the suite is skipped (through ITR or otherwise)
         const skippedTestAsyncResource = new AsyncResource('bound-anonymous-fn')
         if (test.fn) {
           testToAr.set(test.fn, skippedTestAsyncResource)
@@ -277,6 +279,12 @@ function mochaHook (Runner) {
         skippedTestAsyncResource.runInAsyncScope(() => {
           skipCh.publish(test)
         })
+      }
+    })
+
+    this.suite.suites.forEach(suite => {
+      if (suitesToSkip.includes(getSuiteFileRelativePath(suite.file))) {
+        suite.pending = true
       }
     })
 
@@ -320,16 +328,14 @@ addHook({
       // we don't start the test run until we know the configuration and know which test to skip
       isCodeCoverageEnabled = config.isCodeCoverageEnabled
       if (config.isSuitesSkippingEnabled) {
+        // ***************TODO IMPORTANT*********************
+        // DO NOT DO THIS UNTIL GIT UPLOAD IS FINISHED
         skippableSuitesCh.publish({
           onDone: testRunAsyncResource.bind((err, skippableSuites) => {
             if (err) {
               log.error(err)
             } else {
-              this.suite.suites.forEach(suite => {
-                if (skippableSuites.includes(getSuiteFileRelativePath(suite.file))) {
-                  suite.pending = true
-                }
-              })
+              suitesToSkip = skippableSuites
             }
             run.apply(this, arguments)
           })
