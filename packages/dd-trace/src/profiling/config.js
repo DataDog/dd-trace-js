@@ -34,9 +34,8 @@ class Config {
     const host = os.hostname()
     const version = coalesce(options.version, DD_VERSION)
     const functionName = process.env.AWS_LAMBDA_FUNCTION_NAME
-    // If not serverless, must be longer than one minute so pad with five seconds
-    const flushIntervalInSeconds = functionName ? 1 : 65
-    const flushInterval = coalesce(options.interval, flushIntervalInSeconds * 1000)
+    // Must be longer than one minute so pad with five seconds
+    const flushInterval = coalesce(options.interval, 65 * 1000)
     const uploadTimeout = coalesce(options.uploadTimeout,
       DD_PROFILING_UPLOAD_TIMEOUT, 60 * 1000)
     const sourceMap = coalesce(options.sourceMap,

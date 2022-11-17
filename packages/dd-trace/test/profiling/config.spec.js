@@ -123,24 +123,3 @@ describe('config', () => {
     expect(config.tags).to.include({ env, service, version })
   })
 })
-
-describe('serverless config', () => {
-  let Config
-  const functionName = 'foobar'
-
-  beforeEach(() => {
-    process.env.AWS_LAMBDA_FUNCTION_NAME = functionName
-    Config = require('../../src/profiling/config').Config
-  })
-
-  afterEach(() => {
-    delete process.env.AWS_LAMBDA_FUNCTION_NAME
-  })
-
-  it('should modify config values for serverless', () => {
-    const slsConfig = new Config({})
-
-    expect(slsConfig.tags.functionName).to.equal(functionName)
-    expect(slsConfig.flushInterval).to.equal(1 * 1000)
-  })
-})

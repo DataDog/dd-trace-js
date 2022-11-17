@@ -19,6 +19,7 @@ class Profiler extends EventEmitter {
     this._config = undefined
     this._timer = undefined
     this._lastStart = undefined
+    this._timeoutInterval = undefined
   }
 
   start (options) {
@@ -34,6 +35,7 @@ class Profiler extends EventEmitter {
 
     this._logger = config.logger
     this._enabled = true
+    this._setInterval()
 
     // Log errors if the source map finder fails, but don't prevent the rest
     // of the profiler from running without source maps.
@@ -51,11 +53,15 @@ class Profiler extends EventEmitter {
         this._logger.debug(`Started ${profiler.type} profiler`)
       }
 
-      this._capture(config.flushInterval)
+      this._capture(this._timeoutInterval)
     } catch (e) {
       this._logger.error(e)
       this.stop()
     }
+  }
+
+  _setInterval () {
+    this._timeoutInterval = this._config.flushInterval
   }
 
   stop () {
@@ -104,7 +110,7 @@ class Profiler extends EventEmitter {
         })
       }
 
-      this._capture(this._config.flushInterval)
+      this._capture(this._timeoutInterval)
       await this._submit(profiles, start, end)
       this._logger.debug('Submitted profiles')
     } catch (err) {
@@ -135,7 +141,13 @@ class ServerlessProfiler extends Profiler {
   constructor () {
     super()
     this._profiledIntervals = 0
-    this._flushAfterIntervals = 65
+    this._interval = 1
+    this._flushAfterIntervals = undefined
+  }
+
+  _setInterval () {
+    this._timeoutInterval = this._interval * 1000
+    this._flushAfterIntervals = this._config.flushInterval / 1000
   }
 
   async _collect () {
@@ -144,7 +156,7 @@ class ServerlessProfiler extends Profiler {
       await super._collect()
     } else {
       this._profiledIntervals += 1
-      this._capture(this._config.flushInterval)
+      this._capture(this._timeoutInterval)
       // Don't submit profile until 65 (flushAfterIntervals) intervals have elapsed
     }
   }
