@@ -1,10 +1,14 @@
 const path = require('path')
+const istanbul = require('istanbul-lib-coverage')
 
 const {
   getTestParametersString,
   getTestSuitePath,
   getCodeOwnersFileEntries,
-  getCodeOwnersForFilename
+  getCodeOwnersForFilename,
+  getCoveredFilenamesFromCoverage,
+  mergeCoverage,
+  resetCoverage
 } = require('../../../src/plugins/util/test')
 
 describe('getTestParametersString', () => {
@@ -96,5 +100,63 @@ describe('getCodeOwnersForFilename', () => {
     )
 
     expect(codeOwnersForTestSpec).to.equal(JSON.stringify(['@datadog-ci-app']))
+  })
+})
+
+describe('coverage utils', () => {
+  let coverage
+  beforeEach(() => {
+    delete require.cache[path.join(__dirname, './fixtures/coverage.json')]
+    coverage = require('./fixtures/coverage.json')
+  })
+  describe('getCoveredFilenamesFromCoverage', () => {
+    it('returns the list of files the code coverage includes', () => {
+      const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
+      expect(coverageFiles).to.eql(['subtract.js'])
+    })
+    it('returns an empty list if coverage is empty', () => {
+      const coverageFiles = getCoveredFilenamesFromCoverage({})
+      expect(coverageFiles).to.eql([])
+    })
+  })
+
+  describe('resetCoverage', () => {
+    it('resets the code coverage', () => {
+      resetCoverage(coverage)
+      const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
+      expect(coverageFiles).to.eql([])
+    })
+  })
+
+  describe('mergeCoverage', () => {
+    it('copies the code coverage', () => {
+      const newCoverageMap = istanbul.createCoverageMap()
+      // At first it's different, then it is the same after copying
+      expect(JSON.stringify(coverage)).not.to.equal(JSON.stringify(newCoverageMap.toJSON()))
+      mergeCoverage(coverage, newCoverageMap)
+      expect(JSON.stringify(coverage)).to.equal(JSON.stringify(newCoverageMap.toJSON()))
+    })
+    it('returns a copy that is not affected by other copies being reset', () => {
+      const newCoverageMap = istanbul.createCoverageMap()
+
+      expect(JSON.stringify(coverage)).not.to.equal(JSON.stringify(newCoverageMap.toJSON()))
+      mergeCoverage(coverage, newCoverageMap)
+
+      const originalCoverageJson = JSON.stringify(coverage)
+      const copiedCoverageJson = JSON.stringify(newCoverageMap.toJSON())
+      expect(originalCoverageJson).to.equal(copiedCoverageJson)
+
+      // The original coverage is reset
+      resetCoverage(coverage)
+
+      // The original coverage JSON representation changes
+      expect(originalCoverageJson).not.to.equal(JSON.stringify(coverage))
+
+      // The original coverage JSON representation is not the same as the copied coverage
+      expect(JSON.stringify(coverage)).not.to.equal(JSON.stringify(newCoverageMap.toJSON()))
+
+      // The copied coverage remains the same after the original reset
+      expect(copiedCoverageJson).to.equal(JSON.stringify(newCoverageMap.toJSON()))
+    })
   })
 })

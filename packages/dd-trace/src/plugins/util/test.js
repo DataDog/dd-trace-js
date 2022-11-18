@@ -88,7 +88,8 @@ module.exports = {
   TEST_CODE_COVERAGE_LINES_TOTAL,
   getCoveredFilenamesFromCoverage,
   resetCoverage,
-  copyCoverage
+  mergeCoverage,
+  fromCoverageMapToCoverage
 }
 
 function getTestEnvironmentMetadata (testFramework, config) {
@@ -292,7 +293,7 @@ function resetCoverage (coverage) {
     })
 }
 
-function copyCoverage (coverage, targetCoverage) {
+function mergeCoverage (coverage, targetCoverage) {
   const coverageMap = istanbul.createCoverageMap(coverage)
   return coverageMap
     .files()
@@ -313,4 +314,11 @@ function copyCoverage (coverage, targetCoverage) {
         targetFileCoverage.data.b[key] = [...value]
       })
     })
+}
+
+function fromCoverageMapToCoverage (coverageMap) {
+  return Object.entries(coverageMap.data).reduce((acc, [filename, fileCoverage]) => {
+    acc[filename] = fileCoverage.data
+    return acc
+  }, {})
 }

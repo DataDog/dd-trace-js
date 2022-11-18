@@ -6,8 +6,9 @@ const log = require('../../dd-trace/src/log')
 const {
   getCoveredFilenamesFromCoverage,
   resetCoverage,
-  copyCoverage,
-  getTestSuitePath
+  mergeCoverage,
+  getTestSuitePath,
+  fromCoverageMapToCoverage
 } = require('../../dd-trace/src/plugins/util/test')
 
 const testStartCh = channel('ci:mocha:test:start')
@@ -35,7 +36,7 @@ const originalFns = new WeakMap()
 const testFileToSuiteAr = new Map()
 
 // We'll preserve the original coverage here
-const originalCoverage = createCoverageMap()
+const originalCoverageMap = createCoverageMap()
 
 let suitesToSkip = []
 
@@ -112,10 +113,7 @@ function mochaHook (Runner) {
       testFileToSuiteAr.clear()
       testSessionFinishCh.publish(status)
       // restore the original coverage
-      global.__coverage__ = Object.entries(originalCoverage.data).reduce((acc, [filename, fileCoverage]) => {
-        acc[filename] = fileCoverage.data
-        return acc
-      }, {})
+      global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }))
 
     this.once('start', testRunAsyncResource.bind(function () {
@@ -172,7 +170,7 @@ function mochaHook (Runner) {
         })
         // We need to reset coverage to get a code coverage per suite
         // Before that, we preserve the original coverage
-        copyCoverage(global.__coverage__, originalCoverage)
+        mergeCoverage(global.__coverage__, originalCoverageMap)
         resetCoverage(global.__coverage__)
       }
 
