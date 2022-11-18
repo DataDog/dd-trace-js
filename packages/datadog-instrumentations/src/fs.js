@@ -6,7 +6,7 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const fsCahnnel = channel('datadog:fs:access')
+const fsChannel = channel('datadog:fs:access')
 const onePathMethods = ['access', 'appendFile', 'chmod', 'lchown', 'mkdir', 'mkdtemp', 'mkdtempSync', 'open',
   'openSync', 'opendir', 'readdir', 'readFile', 'readlink', 'realpath', 'rm', 'rmdir', 'stat', 'truncate', 'unlink',
   'utimes', 'writeFile', 'watch']
@@ -17,11 +17,11 @@ const twoPathMethods = ['copyFile', 'link', 'rename', 'symlink']
 const twoPathMethodsSync = ['copyFileSync', 'linkSync', 'renameSync', 'symlinkSync']
 
 addHook({ name: 'fs' }, fs => {
-  shimmer.massWrap(fs, onePathMethods.concat(onePathMethodsSync), wrapFsMethod(fsCahnnel, 1))
-  shimmer.massWrap(fs, twoPathMethods.concat(twoPathMethodsSync), wrapFsMethod(fsCahnnel, 2))
+  shimmer.massWrap(fs, onePathMethods.concat(onePathMethodsSync), wrapFsMethod(fsChannel, 1))
+  shimmer.massWrap(fs, twoPathMethods.concat(twoPathMethodsSync), wrapFsMethod(fsChannel, 2))
 
-  shimmer.massWrap(fs.promises, onePathMethods, wrapFsMethod(fsCahnnel, 1))
-  shimmer.massWrap(fs.promises, twoPathMethods, wrapFsMethod(fsCahnnel, 2))
+  shimmer.massWrap(fs.promises, onePathMethods, wrapFsMethod(fsChannel, 1))
+  shimmer.massWrap(fs.promises, twoPathMethods, wrapFsMethod(fsChannel, 2))
   return fs
 })
 
