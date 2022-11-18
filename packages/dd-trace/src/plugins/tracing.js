@@ -70,7 +70,7 @@ class TracingPlugin extends Plugin {
       childOf = store.span
     }
 
-    meta[COMPONENT] = meta[COMPONENT] || this.component
+    if (meta) { meta[COMPONENT] = meta[COMPONENT] || this.component }
 
     const span = this.tracer.startSpan(name, {
       childOf,

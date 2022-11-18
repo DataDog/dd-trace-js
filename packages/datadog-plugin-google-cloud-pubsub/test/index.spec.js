@@ -10,7 +10,7 @@ const TIMEOUT = 30000
 describe('Plugin', () => {
   let tracer
 
-  describe('@google-cloud/pubsub', function () {
+  describe('google-cloud-pubsub', function () {
     this.timeout(TIMEOUT)
 
     before(() => {
@@ -22,7 +22,7 @@ describe('Plugin', () => {
     afterEach(() => {
       return agent.close({ ritmReset: false })
     })
-    withVersions('@google-cloud/pubsub', '@google-cloud/pubsub', version => {
+    withVersions('google-cloud-pubsub', '@google-cloud/pubsub', version => {
       let pubsub
       let project
       let topicName
@@ -30,7 +30,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load('@google-cloud/pubsub')
+          return agent.load('google-cloud-pubsub')
         })
         beforeEach(() => {
           tracer = require('../../dd-trace')
@@ -224,7 +224,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         beforeEach(() => {
-          return agent.load('@google-cloud/pubsub', {
+          return agent.load('google-cloud-pubsub', {
             service: 'a_test_service'
           })
         })
