@@ -13,7 +13,7 @@ class TracingPlugin extends Plugin {
 
     this.addTraceSub('start', message => {
       if (message && typeof message === 'object') {
-       this.constructor.storesByContext.set(message, storage.getStore())
+        this.setStoreByContext(message, storage.getStore())
       }
       this.start(message)
     })
@@ -22,6 +22,7 @@ class TracingPlugin extends Plugin {
       this.error(err)
     })
 
+    // TODO remove the finish event everywhere
     this.addTraceSub('finish', message => {
       this.finish(message)
     })

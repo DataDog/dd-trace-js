@@ -5,6 +5,8 @@
 const dc = require('diagnostics_channel')
 const { storage } = require('../../../datadog-core')
 
+const storesByContext = new WeakMap()
+
 class Subscription {
   constructor (event, handler) {
     this._channel = dc.channel(event)
@@ -42,7 +44,7 @@ module.exports = class Plugin {
   }
 
   exit (ctx) {
-    storage.enterWith(this.constructor.storesByContext.get(ctx))
+    storage.enterWith(this.getStoreByContext(ctx))
   }
 
   // TODO: Implement filters on resource name for all plugins.
@@ -65,6 +67,14 @@ module.exports = class Plugin {
     }
   }
 
+  setStoreByContext (context, store) {
+    storesByContext.set(context, store)
+  }
+
+  getStoreByContext (context) {
+    return storesByContext.get(context)
+  }
+
   configure (config) {
     if (typeof config === 'boolean') {
       config = { enabled: config }
@@ -79,5 +89,3 @@ module.exports = class Plugin {
     }
   }
 }
-
-module.exports.storesByContext = new WeakMap()
