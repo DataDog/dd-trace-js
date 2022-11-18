@@ -2,7 +2,7 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
-const { extractCoverageInformation } = require('../../dd-trace/src/plugins/util/test')
+const { getCoveredFilenamesFromCoverage } = require('../../dd-trace/src/plugins/util/test')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -267,7 +267,9 @@ function jestAdapterWrapper (jestAdapter) {
         }
         testSuiteFinishCh.publish({ status, errorMessage })
         if (environment.global.__coverage__) {
-          const coverageFiles = extractCoverageInformation(environment.global.__coverage__, false, environment.rootDir)
+          const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
+            .map(filename => getTestSuitePath(filename, environment.rootDir))
+
           if (coverageFiles && environment.testEnvironmentOptions &&
             environment.testEnvironmentOptions._ddTestCodeCoverageEnabled) {
             testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])

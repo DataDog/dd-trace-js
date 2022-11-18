@@ -86,7 +86,9 @@ module.exports = {
   TEST_SUITE_ID,
   TEST_ITR_TESTS_SKIPPED,
   TEST_CODE_COVERAGE_LINES_TOTAL,
-  extractCoverageInformation
+  getCoveredFilenamesFromCoverage,
+  resetCoverage,
+  copyCoverage
 }
 
 function getTestEnvironmentMetadata (testFramework, config) {
@@ -265,7 +267,7 @@ function getTestSuiteCommonTags (command, version, testSuite) {
   }
 }
 
-function extractCoverageInformation (coverage, shouldReset = false, sourceRoot = process.cwd()) {
+function getCoveredFilenamesFromCoverage (coverage) {
   const coverageMap = istanbul.createCoverageMap(coverage)
 
   return coverageMap
@@ -275,11 +277,40 @@ function extractCoverageInformation (coverage, shouldReset = false, sourceRoot =
       const lineCoverage = fileCoverage.getLineCoverage()
       const isAnyLineExecuted = Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
 
-      if (shouldReset) {
-        fileCoverage.resetHits()
-      }
-
       return isAnyLineExecuted
     })
-    .map(filename => filename.replace(`${sourceRoot}/`, ''))
+}
+
+function resetCoverage (coverage) {
+  const coverageMap = istanbul.createCoverageMap(coverage)
+
+  return coverageMap
+    .files()
+    .forEach(filename => {
+      const fileCoverage = coverageMap.fileCoverageFor(filename)
+      fileCoverage.resetHits()
+    })
+}
+
+function copyCoverage (coverage, targetCoverage) {
+  const coverageMap = istanbul.createCoverageMap(coverage)
+  return coverageMap
+    .files()
+    .forEach(filename => {
+      const fileCoverage = coverageMap.fileCoverageFor(filename)
+
+      // If the fileCoverage is not there for this filename,
+      // we create it to force a merge between the fileCoverages
+      // instead of a reference assignment (which would not work if the coverage is reset later on)
+      if (!targetCoverage.data[filename]) {
+        targetCoverage.addFileCoverage(istanbul.createFileCoverage(filename))
+      }
+      targetCoverage.addFileCoverage(fileCoverage)
+      const targetFileCoverage = targetCoverage.fileCoverageFor(filename)
+
+      // branches (.b) are copied by reference, so `resetHits` affects the copy, so we need to copy it manually
+      Object.entries(targetFileCoverage.data.b).forEach(([key, value]) => {
+        targetFileCoverage.data.b[key] = [...value]
+      })
+    })
 }

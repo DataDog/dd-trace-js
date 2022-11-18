@@ -1,10 +1,14 @@
-const istanbul = require('istanbul-lib-coverage')
-const cloneDeep = require('lodash.clonedeep')
+const { createCoverageMap } = require('istanbul-lib-coverage')
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
-const { extractCoverageInformation, getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
+const {
+  getCoveredFilenamesFromCoverage,
+  resetCoverage,
+  copyCoverage,
+  getTestSuitePath
+} = require('../../dd-trace/src/plugins/util/test')
 
 const testStartCh = channel('ci:mocha:test:start')
 const errorCh = channel('ci:mocha:test:error')
@@ -30,8 +34,8 @@ const testToAr = new WeakMap()
 const originalFns = new WeakMap()
 const testFileToSuiteAr = new Map()
 
-// this is where we'll preserve the real coverage
-const originalCoverage = istanbul.createCoverageMap()
+// We'll preserve the original coverage here
+const originalCoverage = createCoverageMap()
 
 let suitesToSkip = []
 
@@ -159,16 +163,18 @@ function mochaHook (Runner) {
         })
       }
 
-      const copiedCoverage = cloneDeep(global.__coverage__)
+      if (global.__coverage__) {
+        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
 
-      originalCoverage.merge(copiedCoverage)
-
-      const coverageFiles = extractCoverageInformation(global.__coverage__, true)
-
-      testSuiteCodeCoverageCh.publish({
-        coverageFiles,
-        suiteFile: suite.file
-      })
+        testSuiteCodeCoverageCh.publish({
+          coverageFiles,
+          suiteFile: suite.file
+        })
+        // We need to reset coverage to get a code coverage per suite
+        // Before that, we preserve the original coverage
+        copyCoverage(global.__coverage__, originalCoverage)
+        resetCoverage(global.__coverage__)
+      }
 
       const asyncResource = testFileToSuiteAr.get(suite.file)
       asyncResource.runInAsyncScope(() => {
@@ -259,7 +265,7 @@ function mochaHook (Runner) {
         })
       } else {
         // if there is no async resource, the test has been skipped through `test.skip`
-        // or the suite is skipped (through ITR or otherwise)
+        // or the parent suite is skipped
         const skippedTestAsyncResource = new AsyncResource('bound-anonymous-fn')
         if (test.fn) {
           testToAr.set(test.fn, skippedTestAsyncResource)
@@ -272,12 +278,10 @@ function mochaHook (Runner) {
       }
     })
 
-    // TODO: is this the best way to skip suites?
-    this.suite.suites.forEach(suite => {
-      if (suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))) {
-        suite.pending = true
-      }
-    })
+    // We remove the suites that we skip through ITR
+    this.suite.suites = this.suite.suites.filter(suite =>
+      !suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
+    )
 
     return run.apply(this, arguments)
   })
@@ -308,7 +312,7 @@ addHook({
   versions: ['>=5.2.0'],
   file: 'lib/mocha.js'
 }, (Mocha) => {
-  const testRunAsyncResource = new AsyncResource('bound-anonymous-fn')
+  const mochaRunAsyncResource = new AsyncResource('bound-anonymous-fn')
 
   /**
    * Get ITR configuration and skippable suites
@@ -332,13 +336,13 @@ addHook({
       }
 
       skippableSuitesCh.publish({
-        onDone: testRunAsyncResource.bind(onReceivedSkippableSuites)
+        onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
       })
     }
 
-    testRunAsyncResource.runInAsyncScope(() => {
+    mochaRunAsyncResource.runInAsyncScope(() => {
       configurationCh.publish({
-        onDone: testRunAsyncResource.bind(onReceivedConfiguration)
+        onDone: mochaRunAsyncResource.bind(onReceivedConfiguration)
       })
     })
   })
