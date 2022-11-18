@@ -655,33 +655,24 @@ describe('Plugin', () => {
               }]
             }))
 
-          const events = [
-            { suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-2.js', status: 'pass' },
-            { suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-1.js', status: 'skip' }
-          ]
-
-          const testAssertions = events.map(({ status, suite }) => {
-            return agent.use(agentlessPayload => {
-              const events = agentlessPayload.events.map(event => event.content)
-              expect(events[0].type).to.equal('test')
-              expect(events[0].meta[TEST_SUITE]).to.equal(suite)
-              expect(events[0].meta[TEST_STATUS]).to.equal(status)
-            })
+          const testAssertion = agent.use(agentlessPayload => {
+            const events = agentlessPayload.events.map(event => event.content)
+            expect(events[0].type).to.equal('test')
+            expect(events[0].meta[TEST_SUITE]).to.equal('packages/datadog-plugin-mocha/test/mocha-test-itr-2.js')
+            expect(events[0].meta[TEST_STATUS]).to.equal('pass')
           })
 
-          const suiteAssertions = events.map(({ status, suite }) => {
-            return agent.use(agentlessPayload => {
-              const events = agentlessPayload.events.map(event => event.content)
-              const testSuite = events.find(
-                event =>
-                  event.type === 'test_suite_end' &&
-                  event.meta[TEST_SUITE] === suite
-              )
-              expect(testSuite.meta[TEST_STATUS]).to.equal(status)
-            })
+          const suiteAssertion = agent.use(agentlessPayload => {
+            const events = agentlessPayload.events.map(event => event.content)
+            const testSuite = events.find(
+              event =>
+                event.type === 'test_suite_end' &&
+                event.meta[TEST_SUITE] === 'packages/datadog-plugin-mocha/test/mocha-test-itr-2.js'
+            )
+            expect(testSuite.meta[TEST_STATUS]).to.equal('pass')
           })
 
-          Promise.all([...testAssertions, ...suiteAssertions])
+          Promise.all([testAssertion, suiteAssertion])
             .then(() => done())
             .catch(done)
 
