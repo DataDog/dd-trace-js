@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel, addHook, AsyncResource } = require('./helpers/instrument')
+const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 const rrtypes = {
@@ -53,7 +53,7 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
   const errorCh = channel(prefix + ':error')
 
   const wrapped = function () {
-    const cb = AsyncResource.bind(arguments[arguments.length - 1])
+    const cb = arguments[arguments.length - 1]
     if (
       !startCh.hasSubscribers ||
       arguments.length < expectedArgs ||
