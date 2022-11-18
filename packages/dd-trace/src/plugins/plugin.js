@@ -5,8 +5,6 @@
 const dc = require('diagnostics_channel')
 const { storage } = require('../../../datadog-core')
 
-const storesByContext = new WeakMap()
-
 class Subscription {
   constructor (event, handler) {
     this._channel = dc.channel(event)
@@ -32,6 +30,7 @@ module.exports = class Plugin {
     this._subscriptions = []
     this._enabled = false
     this._tracer = tracer
+    this._storesByContext = new WeakMap()
   }
 
   get tracer () {
@@ -68,11 +67,11 @@ module.exports = class Plugin {
   }
 
   setStoreByContext (context, store) {
-    storesByContext.set(context, store)
+    this._storesByContext.set(context, store)
   }
 
   getStoreByContext (context) {
-    return storesByContext.get(context)
+    return this._storesByContext.get(context)
   }
 
   configure (config) {
