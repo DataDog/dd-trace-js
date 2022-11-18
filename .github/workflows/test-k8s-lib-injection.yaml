@@ -8,69 +8,66 @@ on:
     - cron: '0 4 * * *'
 
 jobs:
-  lib-injection-test:
+  injection-tests-nodejs:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        lib-injection-connection: [ 'network','uds']
+        lib-injection-use-admission-controller: ['', 'use-admission-controller']
+        weblog-variant: [ 'sample-app']
+      fail-fast: false
+    env:
+      TEST_LIBRARY: nodejs
+      WEBLOG_VARIANT: ${{ matrix.weblog-variant }}
+      LIBRARY_INJECTION_CONNECTION: ${{ matrix.lib-injection-connection }}
+      LIBRARY_INJECTION_ADMISSION_CONTROLLER: ${{ matrix.lib-injection-admission-controller }}
+      DOCKER_REGISTRY_IMAGES_PATH: ghcr.io/datadog/system-tests
+      DOCKER_IMAGE_TAG: ${{ github.sha }}
     steps:
-      - name: Checkout repository
+      - name: Checkout nodejs tracer
+        uses: actions/checkout@v3
+        with:
+          path: './dd-trace-js'
+ 
+      - name: Checkout system tests
         uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f # 2.3.4
+        with:
+          repository: 'DataDog/system-tests'
+          ref: 'robertomonteromiguel/lib_injection_integration'
+          path: './system-tests'
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2 # 2.0.0
+        with:
+          install: true
+          config-inline: |
+              [worker.oci]
+                max-parallelism = 1
 
       - name: Log in to the Container registry
-        uses: docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b
+        uses: docker/login-action@v2 
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create k8s Kind Cluster
-        uses: helm/kind-action@d08cf6ff1575077dee99962540d77ce91c62387d # 1.3.0
-        with:
-          config: k8s/kind-config.yaml
-          kubectl_version: v1.22.10
-          node_image: kindest/node:v1.22.9
-
-      - name: Deploy apm test trace agent
+      - name: Copy js tracer
         run: |
-          kubectl apply -f k8s/dd-apm-test-agent-config.yaml
-          kubectl rollout status daemonset/datadog-agent
-          kubectl wait $(kubectl get pods -l app=datadog-agent -o name) --for condition=ready
-          sleep 5
+          cp -R dd-trace-js system-tests/binaries/
 
-      - name: Npm pack for injection image
+      - name: Build and push images
         run: |
-          npm pack
-
-      - uses: ./.github/actions/injection
-        with:
-          init-image-version: ${GITHUB_SHA}
-
-      - name: Build sample app image
+          cd system-tests   
+          ./lib-injection/run.sh build-and-push-test-app-image build-and-push-init-image  
+          ./lib-injection/build.sh
+ 
+      - name: Run lib injection tests
         run: |
-          docker build k8s/sample-app --build-arg npm_pkg=./dd-trace.tgz -t ghcr.io/datadog/dd-trace-js/sample-app:${GITHUB_SHA}
-          docker push ghcr.io/datadog/dd-trace-js/sample-app:${GITHUB_SHA}
-
-      - name: Deploy test pod
-        run: |
-          sed -i "s|LATEST|$GITHUB_SHA|g" k8s/test-pod.yaml
-          sleep 5
-          n=0
-          until [ "$n" -ge 5 ]
-          do
-            kubectl apply -f k8s/test-pod.yaml && sleep 5 && kubectl wait pod/sample-app --for condition=ready && break
-            n=$((n+1))
-            sleep 15
-          done
-          sleep 5
-
-      - name: Test
-        run: |
-          wget http://localhost:18126/test/session/traces || true
-          kubectl logs $(kubectl get pods -l app=datadog-agent -o name)
-
-          TRACES=`cat traces`
-          if [[ ${#TRACES} -lt 3 ]] ; then
-            echo "No traces reported - ${TRACES}"
-            exit 1
-          else
-            echo "Traces reported - ${TRACES}"
-            exit 0
-          fi
+          cd system-tests   
+          ./lib-injection/run-lib-injection.sh
