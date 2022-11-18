@@ -26,6 +26,7 @@ jobs:
       LIBRARY_INJECTION_ADMISSION_CONTROLLER: ${{ matrix.lib-injection-admission-controller }}
       DOCKER_REGISTRY_IMAGES_PATH: ghcr.io/datadog/system-tests
       DOCKER_IMAGE_TAG: ${{ github.sha }}
+      BUILDX_PLATFORMS: linux/amd64
     steps:
       - name: Checkout nodejs tracer
         uses: actions/checkout@v3
