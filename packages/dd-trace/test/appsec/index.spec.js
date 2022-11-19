@@ -1,7 +1,5 @@
 'use strict'
 
-require('../setup/core')
-
 const fs = require('fs')
 const proxyquire = require('proxyquire')
 const log = require('../../src/log')

@@ -1,6 +1,6 @@
 'use strict'
 
-require('../../setup/core')
+require('../../setup/tap')
 
 const { execSync } = require('child_process')
 const os = require('os')

@@ -1,6 +1,6 @@
 'use strict'
 
-require('./setup/core')
+require('./setup/tap')
 
 /* eslint-disable import/no-extraneous-dependencies */
 

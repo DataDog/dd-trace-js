@@ -1,6 +1,6 @@
 'use strict'
 
-require('./setup/core')
+require('./setup/tap')
 
 const http = require('http')
 const path = require('path')

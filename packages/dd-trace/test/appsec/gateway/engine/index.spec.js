@@ -1,7 +1,5 @@
 'use strict'
 
-require('../../../setup/core')
-
 const Engine = require('../../../../src/appsec/gateway/engine')
 const { SubscriptionManager, Context } = require('../../../../src/appsec/gateway/engine/engine')
 const als = require('../../../../src/appsec/gateway/als')

@@ -7,15 +7,10 @@ const os = require('os')
 const path = require('path')
 const proxyquire = require('../proxyquire')
 const semver = require('semver')
-const metrics = require('../../src/metrics')
-const agent = require('../plugins/agent')
 const externals = require('../plugins/externals.json')
-const { storage } = require('../../../datadog-core')
 
 chai.use(sinonChai)
 chai.use(require('../asserts/profile'))
-
-require('tap').mochaGlobals()
 
 global.sinon = sinon
 global.expect = chai.expect
@@ -24,14 +19,6 @@ global.withVersions = withVersions
 global.withExports = withExports
 
 process.env.DD_TRACE_TELEMETRY_ENABLED = 'false'
-
-exports.mochaHooks = {
-  afterEach () {
-    agent.reset()
-    metrics.stop()
-    storage.enterWith(undefined)
-  }
-}
 
 function loadInst (plugin) {
   const instrumentations = []

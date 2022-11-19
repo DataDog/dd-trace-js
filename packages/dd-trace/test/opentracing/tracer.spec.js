@@ -1,6 +1,6 @@
 'use strict'
 
-require('../setup/core')
+require('../setup/tap')
 
 const opentracing = require('opentracing')
 const os = require('os')

@@ -1,6 +1,6 @@
 'use strict'
 
-require('./setup/core')
+require('./setup/tap')
 
 const Span = require('../src/opentracing/span')
 const { storage } = require('../../datadog-core')

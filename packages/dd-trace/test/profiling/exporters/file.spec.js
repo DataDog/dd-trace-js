@@ -1,6 +1,6 @@
 'use strict'
 
-require('../../setup/core')
+require('../../setup/tap')
 
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')

@@ -1,6 +1,6 @@
 'use strict'
 
-require('./setup/core')
+require('./setup/tap')
 
 const MEASURED = require('../../../ext/tags').MEASURED
 

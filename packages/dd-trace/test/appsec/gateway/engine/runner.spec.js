@@ -1,7 +1,5 @@
 'use strict'
 
-require('../../../setup/core')
-
 const Runner = require('../../../../src/appsec/gateway/engine/runner')
 const als = require('../../../../src/appsec/gateway/als')
 

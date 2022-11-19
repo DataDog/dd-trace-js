@@ -1,6 +1,6 @@
 'use strict'
 
-require('../../setup/core')
+require('../../setup/tap')
 
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')

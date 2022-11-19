@@ -1,6 +1,6 @@
 'use strict'
 
-require('./setup/core')
+require('./setup/tap')
 
 const { expect } = require('chai')
 const semver = require('semver')

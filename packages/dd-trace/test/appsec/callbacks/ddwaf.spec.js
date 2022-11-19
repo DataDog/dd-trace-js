@@ -1,7 +1,5 @@
 'use strict'
 
-require('../../setup/core')
-
 const WAFCallback = require('../../../src/appsec/callbacks/ddwaf')
 const Gateway = require('../../../src/appsec/gateway/engine')
 const Reporter = require('../../../src/appsec/reporter')

@@ -1,6 +1,6 @@
 'use strict'
 
-require('../setup/core')
+require('../setup/tap')
 
 const tracerVersion = require('../../../../package.json').version
 const proxyquire = require('proxyquire')

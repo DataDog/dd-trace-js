@@ -1,6 +1,6 @@
 'use strict'
 
-require('../../../dd-trace/test/setup/core')
+require('../../../dd-trace/test/setup/tap')
 
 const { executionAsyncId } = require('async_hooks')
 const { expect } = require('chai')

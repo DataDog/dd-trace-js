@@ -1,6 +1,6 @@
 'use strict'
 
-require('../setup/core')
+require('../setup/tap')
 
 const apiCompatibilityChecks = require('opentracing/lib/test/api_compatibility').default
 const tracer = require('../..')

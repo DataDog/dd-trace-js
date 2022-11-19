@@ -1,6 +1,6 @@
 'use strict'
 
-require('../../../setup/core')
+require('../../../setup/tap')
 
 const nock = require('nock')
 const os = require('os')

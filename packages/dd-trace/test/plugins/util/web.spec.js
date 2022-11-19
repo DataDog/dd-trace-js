@@ -1,6 +1,6 @@
 'use strict'
 
-require('../../setup/core')
+require('../../setup/tap')
 
 const log = require('../../../src/log')
 const types = require('../../../../../ext/types')

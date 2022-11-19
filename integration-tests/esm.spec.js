@@ -1,7 +1,5 @@
 'use strict'
 
-require('../packages/dd-trace/test/setup/core')
-
 const {
   FakeAgent,
   spawnProc,

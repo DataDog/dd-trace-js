@@ -1,6 +1,6 @@
 'use strict'
 
-require('./setup/core')
+require('./setup/tap')
 
 const RateLimiter = require('../src/rate_limiter')
 

@@ -1,7 +1,5 @@
 'use strict'
 
-require('../../../setup/core')
-
 const proxyquire = require('proxyquire')
 const weakCipherAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-cipher-analyzer')
 const { testThatRequestHasVulnerability } = require('../utils')
