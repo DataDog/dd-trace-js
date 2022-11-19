@@ -1,3 +1,7 @@
+'use strict'
+
+require('../../setup/core')
+
 const os = require('os')
 const {
   getRuntimeAndOSMetadata,

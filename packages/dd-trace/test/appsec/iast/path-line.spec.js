@@ -1,3 +1,7 @@
+'use strict'
+
+require('../../setup/core')
+
 const pathLine = require('../../../src/appsec/iast/path-line')
 const path = require('path')
 class CallSiteMock {
@@ -26,9 +30,9 @@ describe('path-line', function () {
     'diagnostics_channel'
   ]
 
-  describe.skip('getFirstNonDDPathAndLine', () => {
+  describe('getFirstNonDDPathAndLine', () => {
     // TODO: make this work regardless of the test runner
-    it('call does not fail', () => {
+    it.skip('call does not fail', () => {
       const obj = pathLine.getFirstNonDDPathAndLine()
       expect(obj).to.not.be.null
     })

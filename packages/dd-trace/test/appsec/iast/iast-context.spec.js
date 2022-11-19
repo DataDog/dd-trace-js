@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../setup/core')
+
 const iastContextHandler = require('../../../src/appsec/iast/iast-context')
 
 describe('IAST context', () => {

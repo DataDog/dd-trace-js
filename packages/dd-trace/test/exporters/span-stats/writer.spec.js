@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../setup/core')
+
 const proxyquire = require('proxyquire')
 const { expect } = require('chai')
 
@@ -96,7 +98,6 @@ describe('span-stats writer', () => {
     })
 
     describe('when request fails', function () {
-      this.timeout(100000)
       it('should log request errors', done => {
         const error = new Error('boom')
 

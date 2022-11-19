@@ -15,6 +15,8 @@ const { storage } = require('../../../datadog-core')
 chai.use(sinonChai)
 chai.use(require('../asserts/profile'))
 
+require('tap').mochaGlobals()
+
 global.sinon = sinon
 global.expect = chai.expect
 global.proxyquire = proxyquire

@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/core')
+
 const { hostname } = require('os')
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')

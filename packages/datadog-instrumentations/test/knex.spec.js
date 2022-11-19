@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../dd-trace/test/setup/core')
+
 require('../src/knex')
 const { storage } = require('../../datadog-core')
 

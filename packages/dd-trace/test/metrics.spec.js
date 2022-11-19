@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/core')
+
 describe('metrics', () => {
   let metrics
   let config
@@ -51,8 +53,6 @@ describe('metrics', () => {
     it('it should initialize the Dogstatsd client with the correct options', function () {
       metrics.start(config)
 
-      this.timeout(10000)
-
       expect(Client).to.have.been.calledWithMatch({
         metricsProxyUrl: new URL('http://localhost:8126'),
         host: 'localhost',
@@ -67,8 +67,6 @@ describe('metrics', () => {
       config.hostname = '::1'
 
       metrics.start(config)
-
-      this.timeout(10000)
 
       expect(Client).to.have.been.calledWithMatch({
         metricsProxyUrl: new URL('http://[::1]:8126'),

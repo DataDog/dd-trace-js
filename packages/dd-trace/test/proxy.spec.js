@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/core')
+
 describe('TracerProxy', () => {
   let Proxy
   let proxy

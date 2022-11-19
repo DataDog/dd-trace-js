@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/core')
+
 const Histogram = require('../src/histogram')
 
 describe('Histogram', () => {

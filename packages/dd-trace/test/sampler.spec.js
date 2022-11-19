@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/core')
+
 describe('Sampler', () => {
   let Sampler
   let sampler

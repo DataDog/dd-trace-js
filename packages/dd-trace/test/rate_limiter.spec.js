@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/core')
+
 const RateLimiter = require('../src/rate_limiter')
 
 describe('RateLimiter', () => {

@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../setup/core')
+
 /* eslint-disable no-console */
 
 const sinon = require('sinon')

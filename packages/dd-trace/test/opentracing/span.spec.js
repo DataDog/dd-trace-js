@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/core')
+
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 

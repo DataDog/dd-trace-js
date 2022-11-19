@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/core')
+
 describe('Scheduler', () => {
   let Scheduler
   let clock

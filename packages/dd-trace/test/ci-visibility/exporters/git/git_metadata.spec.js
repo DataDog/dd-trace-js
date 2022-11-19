@@ -1,4 +1,7 @@
 'use strict'
+
+require('../../../setup/core')
+
 const nock = require('nock')
 const os = require('os')
 const fs = require('fs')

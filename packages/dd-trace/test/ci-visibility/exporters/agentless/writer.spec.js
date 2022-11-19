@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../setup/core')
+
 const proxyquire = require('proxyquire')
 const { expect } = require('chai')
 
@@ -103,7 +105,6 @@ describe('CI Visibility Writer', () => {
     })
 
     describe('when request fails', function () {
-      this.timeout(100000)
       it('should log request errors', done => {
         const error = new Error('boom')
 

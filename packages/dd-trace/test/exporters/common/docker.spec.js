@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../setup/core')
+
 describe('docker', () => {
   let docker
   let fs

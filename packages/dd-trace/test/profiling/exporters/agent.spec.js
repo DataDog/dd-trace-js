@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../setup/core')
+
 const expect = require('chai').expect
 const sinon = require('sinon')
 const express = require('express')
@@ -51,8 +53,6 @@ async function createProfile (periodType) {
 const describeOnUnix = os.platform() === 'win32' ? describe.skip : describe
 
 describe('exporters/agent', function () {
-  this.timeout(10000)
-
   let AgentExporter
   let sockets
   let url
@@ -238,7 +238,6 @@ describe('exporters/agent', function () {
     })
 
     it('should log exports and handle http errors gracefully', async function () {
-      this.timeout(10000)
       const expectedLogs = [
         /^Building agent export report: (\n {2}[a-z-_]+(\[\])?: [a-z0-9-TZ:.]+)+$/m,
         /^Adding wall profile to agent export:( [0-9a-f]{2})+$/,

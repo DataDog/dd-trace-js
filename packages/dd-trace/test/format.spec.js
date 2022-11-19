@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/core')
+
 const constants = require('../src/constants')
 const tags = require('../../../ext/tags')
 const id = require('../src/id')

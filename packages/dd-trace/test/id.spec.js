@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/core')
+
 describe('id', () => {
   let id
   let crypto

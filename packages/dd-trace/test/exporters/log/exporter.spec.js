@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../setup/core')
+
 describe('LogExporter', () => {
   let Exporter
   let exporter

@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/core')
+
 const { channel } = require('diagnostics_channel')
 const proxyquire = require('proxyquire')
 

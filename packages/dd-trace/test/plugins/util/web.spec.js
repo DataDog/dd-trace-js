@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../setup/core')
+
 const log = require('../../../src/log')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')

@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/core')
+
 const ext = require('../../../ext')
 
 const {

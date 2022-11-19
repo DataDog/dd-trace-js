@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/core')
+
 /* eslint-disable import/no-extraneous-dependencies */
 
 const proxyquire = require('proxyquire')

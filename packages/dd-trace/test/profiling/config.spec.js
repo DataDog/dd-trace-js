@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/core')
+
 const { expect } = require('chai')
 const os = require('os')
 const { AgentExporter } = require('../../src/profiling/exporters/agent')

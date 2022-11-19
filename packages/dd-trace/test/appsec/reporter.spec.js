@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/core')
+
 const proxyquire = require('proxyquire')
 const Engine = require('../../src/appsec/gateway/engine')
 const { Context } = require('../../src/appsec/gateway/engine/engine')

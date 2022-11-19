@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../setup/core')
+
 const { SubscriptionManager, Context } = require('../../../../src/appsec/gateway/engine/engine')
 const Runner = require('../../../../src/appsec/gateway/engine/runner')
 

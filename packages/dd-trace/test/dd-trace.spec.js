@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/core')
+
 const Uint64BE = require('int64-buffer').Uint64BE
 const agent = require('./plugins/agent')
 

@@ -1,4 +1,7 @@
 'use strict'
+
+require('../../../setup/core')
+
 const proxyquire = require('proxyquire')
 
 describe('CI Visibility Exporter', () => {
@@ -29,7 +32,6 @@ describe('CI Visibility Exporter', () => {
   })
 
   describe('when interval is set to a positive number', function () {
-    this.timeout(5000)
     it('should not flush if export has not been called', (done) => {
       exporter = new Exporter({ url, flushInterval })
       setTimeout(() => {
@@ -86,7 +88,6 @@ describe('CI Visibility Exporter', () => {
       expect(coverageWriter.flush).to.have.been.called
     })
     it('should flush after the configured flush interval', function (done) {
-      this.timeout(3000)
       exporter = new Exporter({ url, flushInterval, isIntelligentTestRunnerEnabled: true })
 
       const span = {

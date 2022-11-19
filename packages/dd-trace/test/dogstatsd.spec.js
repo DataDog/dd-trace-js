@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/core')
+
 const http = require('http')
 const path = require('path')
 const os = require('os')

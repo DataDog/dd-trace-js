@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/core')
+
 const Span = require('../src/noop/span')
 
 describe('NoopTracer', () => {

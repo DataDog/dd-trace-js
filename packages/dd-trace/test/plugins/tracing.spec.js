@@ -1,3 +1,7 @@
+'use strict'
+
+require('../setup/core')
+
 const TracingPlugin = require('../../src/plugins/tracing')
 
 describe('TracingPlugin', () => {

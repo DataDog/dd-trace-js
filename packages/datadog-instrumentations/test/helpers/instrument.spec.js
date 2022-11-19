@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../dd-trace/test/setup/core')
+
 const { executionAsyncId } = require('async_hooks')
 const { expect } = require('chai')
 const { storage } = require('../../../datadog-core')

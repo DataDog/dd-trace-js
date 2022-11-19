@@ -1,4 +1,6 @@
 'use strict'
+
+require('./setup/core')
 const requirePackageJson = require('../src/require-package-json')
 const packageJson = require('../../../package.json')
 describe('requirePackageJson', () => {

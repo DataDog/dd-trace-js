@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/core')
+
 const id = require('../../src/id')
 
 describe('SpanContext', () => {

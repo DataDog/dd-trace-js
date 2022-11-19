@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../setup/core')
+
 const proxyquire = require('proxyquire')
 
 describe('Analyzers index', () => {

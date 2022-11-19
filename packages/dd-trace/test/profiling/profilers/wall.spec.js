@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../setup/core')
+
 const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')

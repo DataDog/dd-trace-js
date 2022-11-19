@@ -1,4 +1,6 @@
 'use strict'
+
+require('./setup/core')
 const fs = require('fs')
 
 const AgentExporter = require('../src/exporters/agent')

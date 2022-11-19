@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../dd-trace/test/setup/core')
+
 require('..')
 const { storage } = require('../../datadog-core')
 

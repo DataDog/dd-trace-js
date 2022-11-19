@@ -1,3 +1,7 @@
+'use strict'
+
+require('../setup/core')
+
 const proxyquire = require('proxyquire')
 describe('sendData', () => {
   let sendDataModule

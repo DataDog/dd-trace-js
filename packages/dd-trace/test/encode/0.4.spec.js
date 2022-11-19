@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/core')
+
 const { expect } = require('chai')
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
@@ -82,7 +84,6 @@ describe('encode', () => {
   })
 
   it('should truncate long fields', function () {
-    this.timeout(5000)
     const flushSize = 8 * 1024 * 1024
     const tooLongString = randString(flushSize)
 
@@ -111,7 +112,6 @@ describe('encode', () => {
   })
 
   it('should flush when the payload size limit is reached', function () {
-    this.timeout(5000)
     // Make 8mb of data
     for (let i = 0; i < 8 * 1024; i++) {
       data[0].meta[`foo${i}`] = randString(1024)
@@ -146,7 +146,6 @@ describe('encode', () => {
   })
 
   it('should work when the buffer is resized', function () {
-    this.timeout(30000)
     // big enough to trigger a resize
     const dataToEncode = Array(15000).fill({
       trace_id: id('1234abcd1234abcd'),

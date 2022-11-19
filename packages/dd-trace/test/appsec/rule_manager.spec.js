@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/core')
+
 const { applyRules, clearAllRules } = require('../../src/appsec/rule_manager')
 const callbacks = require('../../src/appsec/callbacks')
 
