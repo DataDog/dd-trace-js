@@ -55,6 +55,7 @@ dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
 dev,rimraf,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
+dev,tap,ISC,Copyright 2011-2022 Isaac Z. Schlueter and Contributors
 dev,tape,MIT,Copyright James Halliday
 dev,wait-on,MIT,Copyright 2015 Jeff Barczewski
 file,profile.proto,Apache license 2.0,Copyright 2016 Google Inc.
