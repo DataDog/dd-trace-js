@@ -1,7 +1,5 @@
 'use strict'
 
-require('../../dd-trace/test/setup/tap')
-
 require('../src/bluebird')
 
 const assertPromise = require('./helpers/promise')
