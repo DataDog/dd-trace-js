@@ -1,0 +1,47 @@
+name: AppSec
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: '0 4 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - run: yarn test:appsec:ci
+      - uses: codecov/codecov-action@v2
+
+  ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/14
+      - run: yarn test:appsec:ci
+      - uses: ./.github/actions/node/16
+      - run: yarn test:appsec:ci
+      - uses: ./.github/actions/node/18
+      - run: yarn test:appsec:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:appsec:ci
+      - uses: codecov/codecov-action@v2
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - run: yarn test:appsec:ci
+      - uses: codecov/codecov-action@v2
