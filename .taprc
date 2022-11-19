@@ -3,4 +3,3 @@ color: true
 coverage: false
 node-arg: --expose-gc
 reporter: spec
-timeout: 10
