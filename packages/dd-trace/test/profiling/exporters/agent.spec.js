@@ -50,8 +50,6 @@ async function createProfile (periodType) {
   return profiler.encode(profile)
 }
 
-const describeOnUnix = os.platform() === 'win32' ? describe.skip : describe
-
 describe('exporters/agent', function () {
   let AgentExporter
   let sockets
@@ -305,86 +303,88 @@ describe('exporters/agent', function () {
     })
   })
 
-  describeOnUnix('using UDS', () => {
-    let listener
+  if (os.platform() !== 'win32') {
+    describe('using UDS', () => {
+      let listener
 
-    beforeEach(done => {
-      url = `${path.join(os.tmpdir(), `dd-trace-profiler-test-${Date.now()}`)}.sock`
+      beforeEach(done => {
+        url = `${path.join(os.tmpdir(), `dd-trace-profiler-test-${Date.now()}`)}.sock`
 
-      listener = app.listen(url, done)
-      listener.on('connection', socket => sockets.push(socket))
-    })
+        listener = app.listen(url, done)
+        listener.on('connection', socket => sockets.push(socket))
+      })
 
-    afterEach(done => {
-      listener.close(done)
-      sockets.forEach(socket => socket.end())
-    })
+      afterEach(done => {
+        listener.close(done)
+        sockets.forEach(socket => socket.end())
+      })
 
-    it('should support Unix domain sockets', async () => {
-      const exporter = new AgentExporter({ url: new URL(`unix://${url}`), logger, uploadTimeout: 100 })
-      const start = new Date()
-      const end = new Date()
-      const tags = { foo: 'bar' }
+      it('should support Unix domain sockets', async () => {
+        const exporter = new AgentExporter({ url: new URL(`unix://${url}`), logger, uploadTimeout: 100 })
+        const start = new Date()
+        const end = new Date()
+        const tags = { foo: 'bar' }
 
-      const [ wall, space ] = await Promise.all([
-        createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
-      ])
+        const [ wall, space ] = await Promise.all([
+          createProfile(['wall', 'microseconds']),
+          createProfile(['space', 'bytes'])
+        ])
 
-      const profiles = {
-        wall,
-        space
-      }
+        const profiles = {
+          wall,
+          space
+        }
 
-      await new Promise((resolve, reject) => {
-        app.post('/profiling/v1/input', upload.any(), (req, res) => {
-          try {
-            expect(req.body).to.have.property('language', 'javascript')
-            expect(req.body).to.have.property('runtime', 'nodejs')
-            expect(req.body).to.have.property('runtime_version', process.version)
-            expect(req.body).to.have.property('profiler_version', version)
-            expect(req.body).to.have.property('format', 'pprof')
-            expect(req.body).to.have.deep.property('tags', [
-              'language:javascript',
-              'runtime:nodejs',
-              `runtime_version:${process.version}`,
-              `profiler_version:${version}`,
-              'format:pprof',
-              'foo:bar'
-            ])
-            expect(req.body).to.have.deep.property('types', ['wall', 'space'])
-            expect(req.body).to.have.property('recording-start', start.toISOString())
-            expect(req.body).to.have.property('recording-end', end.toISOString())
+        await new Promise((resolve, reject) => {
+          app.post('/profiling/v1/input', upload.any(), (req, res) => {
+            try {
+              expect(req.body).to.have.property('language', 'javascript')
+              expect(req.body).to.have.property('runtime', 'nodejs')
+              expect(req.body).to.have.property('runtime_version', process.version)
+              expect(req.body).to.have.property('profiler_version', version)
+              expect(req.body).to.have.property('format', 'pprof')
+              expect(req.body).to.have.deep.property('tags', [
+                'language:javascript',
+                'runtime:nodejs',
+                `runtime_version:${process.version}`,
+                `profiler_version:${version}`,
+                'format:pprof',
+                'foo:bar'
+              ])
+              expect(req.body).to.have.deep.property('types', ['wall', 'space'])
+              expect(req.body).to.have.property('recording-start', start.toISOString())
+              expect(req.body).to.have.property('recording-end', end.toISOString())
 
-            expect(req.files[0]).to.have.property('fieldname', 'data[0]')
-            expect(req.files[0]).to.have.property('originalname', 'wall.pb.gz')
-            expect(req.files[0]).to.have.property('mimetype', 'application/octet-stream')
-            expect(req.files[0]).to.have.property('size', req.files[0].buffer.length)
+              expect(req.files[0]).to.have.property('fieldname', 'data[0]')
+              expect(req.files[0]).to.have.property('originalname', 'wall.pb.gz')
+              expect(req.files[0]).to.have.property('mimetype', 'application/octet-stream')
+              expect(req.files[0]).to.have.property('size', req.files[0].buffer.length)
 
-            expect(req.files[1]).to.have.property('fieldname', 'data[1]')
-            expect(req.files[1]).to.have.property('originalname', 'space.pb.gz')
-            expect(req.files[1]).to.have.property('mimetype', 'application/octet-stream')
-            expect(req.files[1]).to.have.property('size', req.files[1].buffer.length)
+              expect(req.files[1]).to.have.property('fieldname', 'data[1]')
+              expect(req.files[1]).to.have.property('originalname', 'space.pb.gz')
+              expect(req.files[1]).to.have.property('mimetype', 'application/octet-stream')
+              expect(req.files[1]).to.have.property('size', req.files[1].buffer.length)
 
-            const wallProfile = decode(gunzipSync(req.files[0].buffer))
-            const spaceProfile = decode(gunzipSync(req.files[1].buffer))
+              const wallProfile = decode(gunzipSync(req.files[0].buffer))
+              const spaceProfile = decode(gunzipSync(req.files[1].buffer))
 
-            expect(wallProfile).to.be.a.profile
-            expect(spaceProfile).to.be.a.profile
+              expect(wallProfile).to.be.a.profile
+              expect(spaceProfile).to.be.a.profile
 
-            expect(wallProfile).to.deep.equal(decode(gunzipSync(profiles.wall)))
-            expect(spaceProfile).to.deep.equal(decode(gunzipSync(profiles.space)))
+              expect(wallProfile).to.deep.equal(decode(gunzipSync(profiles.wall)))
+              expect(spaceProfile).to.deep.equal(decode(gunzipSync(profiles.space)))
 
-            resolve()
-          } catch (e) {
-            reject(e)
-          }
+              resolve()
+            } catch (e) {
+              reject(e)
+            }
 
-          res.send()
+            res.send()
+          })
+
+          exporter.export({ profiles, start, end, tags }).catch(reject)
         })
-
-        exporter.export({ profiles, start, end, tags }).catch(reject)
       })
     })
-  })
+  }
 })
