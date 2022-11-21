@@ -10,8 +10,7 @@ const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
 const { sendGitMetadata } = require('./ci-visibility/exporters/git/git_metadata')
-const RemoteConfigManager = require('./appsec/remote_config')
-const RemoteConfigCapabilities = require('./appsec/remote_config/capabilities')
+const remoteConfig = require('./appsec/remote_config')
 
 const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
 
@@ -31,7 +30,7 @@ class Tracer extends NoopProxy {
     try {
       const config = new Config(options) // TODO: support dynamic config
 
-      const rc = new RemoteConfigManager(config)
+      remoteConfig.enable(config)
 
       if (config.profiling.enabled) {
         // do not stop tracer initialization if the profiler fails to be imported
@@ -51,24 +50,6 @@ class Tracer extends NoopProxy {
         // dirty require for now so zero appsec code is executed unless explicitly enabled
         if (config.appsec.enabled) {
           require('./appsec').enable(config)
-        } else if (config.appsec.enabled === undefined) { // only activate remote config when conf is not set locally
-          rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
-
-          rc.on('ASM_FEATURES', (action, conf) => {
-            if (conf && conf.asm && typeof conf.asm.enabled === 'boolean') {
-              if (action === 'apply' || action === 'modify') {
-                action = conf.asm.enabled // take control
-              } else {
-                action = config.appsec.enabled // give back control to local config
-              }
-
-              if (action) {
-                require('./appsec').enable(config)
-              } else {
-                require('./appsec').disable()
-              }
-            }
-          })
         }
 
         if (config.iast.enabled) {
