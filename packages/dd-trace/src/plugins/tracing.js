@@ -83,7 +83,7 @@ class TracingPlugin extends Plugin {
         'resource.name': resource,
         'span.kind': kind,
         'span.type': type,
-        ...meta,
+        ...meta(),
         ...metrics
       }
     })
