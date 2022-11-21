@@ -93,8 +93,9 @@ function testThatRequestHasNotVulnerability (app, vulnerability) {
     it(`should not have ${vulnerability} vulnerability`, function (done) {
       agent
         .use(traces => {
-          const iastJson = traces[0][0].meta['_dd.iast.json']
-          expect(iastJson && iastJson.indexOf(`"${vulnerability}"`) > -1).not.to.be.true
+          // iastJson == undefiend is valid
+          const iastJson = traces[0][0].meta['_dd.iast.json']  || ''
+          expect(iastJson).to.not.include(`"${vulnerability}"`)
         })
         .then(done)
         .catch(done)
