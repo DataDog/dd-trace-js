@@ -6,7 +6,7 @@ let RemoteConfigManager
 let appsec
 let remoteConfig
 
-describe.only('Remote Config enable', () => {
+describe('Remote Config enable', () => {
   beforeEach(() => {
     config = {
       appsec: {
