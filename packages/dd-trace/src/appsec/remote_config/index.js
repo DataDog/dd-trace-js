@@ -20,9 +20,9 @@ function enable (config) {
         }
 
         if (shouldEnable) {
-          require('./appsec').enable(config)
+          require('..').enable(config)
         } else {
-          require('./appsec').disable()
+          require('..').disable()
         }
       }
     })
