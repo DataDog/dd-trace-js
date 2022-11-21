@@ -94,9 +94,9 @@ function _getLambdaFilePath (lambdaStylePath) {
     lambdaFilePath += '.mjs'
   } else if (fs.existsSync(lambdaStylePath + '.cjs')) {
     lambdaFilePath += '.cjs'
-  } 
+  }
   return lambdaFilePath
-} 
+}
 
 exports.registerLambdaHook = () => {
   const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT

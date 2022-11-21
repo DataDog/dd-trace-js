@@ -7,9 +7,9 @@ const tracer = globalTracer._tracer
 
 /**
  * Adds error tags to a span given the error.
- * 
+ *
  * @param {*} span span to add error tags to.
- * @param {*} error 
+ * @param {*} error
  */
 function addError (span, error) {
   if (isError(error)) {

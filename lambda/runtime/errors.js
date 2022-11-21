@@ -18,7 +18,7 @@ function isError (obj) {
 }
 
 class ExtendedError extends Error {
-  constructor(reason) {
+  constructor (reason) {
     super(reason)
     Object.setPrototypeOf(this, new.target.prototype)
   }
@@ -33,15 +33,15 @@ ImpendingTimeout.prototype.name = 'Impending Timeout'
 const errorClasses = [
   ImportModuleError,
   HandlerNotFound,
-  MalformedHandlerName,
+  MalformedHandlerName
 ]
 
-errorClasses.forEach((e) => {e.prototype.name = `Runtime.${e.name}`})
+errorClasses.forEach((e) => { e.prototype.name = `Runtime.${e.name}` })
 
 module.exports = {
   ImportModuleError,
   isError,
   HandlerNotFound,
   MalformedHandlerName,
-  ImpendingTimeout,
+  ImpendingTimeout
 }
