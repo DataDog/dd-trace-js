@@ -48,7 +48,6 @@ describe('TracerProxy', () => {
     NoopTracer = sinon.stub().returns(noop)
 
     config = {
-      tags: {},
       tracing: true,
       experimental: {},
       logger: 'logger',
@@ -68,8 +67,7 @@ describe('TracerProxy', () => {
     }
 
     appsec = {
-      enable: sinon.spy(),
-      disable: sinon.spy()
+      enable: sinon.spy()
     }
 
     telemetry = {
