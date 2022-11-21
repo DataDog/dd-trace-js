@@ -12,18 +12,20 @@ function safeJSONStringify (value) {
 }
 
 class Writer extends BaseWriter {
-  constructor ({ url }) {
+  constructor ({ url, evpProxyPrefix = '' }) {
     super(...arguments)
     this._url = url
     this._encoder = new CoverageCIVisibilityEncoder(this)
+    this._evpProxyPrefix = evpProxyPrefix
   }
 
   _sendPayload (form, _, done) {
     const options = {
-      path: '/api/v2/citestcov',
+      path: `${this._evpProxyPrefix}/api/v2/citestcov`,
       method: 'POST',
       headers: {
         'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
+        'X-Datadog-EVP-Subdomain': 'event-platform-intake',
         ...form.getHeaders()
       },
       timeout: 15000,
