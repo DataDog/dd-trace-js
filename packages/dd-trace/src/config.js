@@ -70,6 +70,11 @@ class Config {
     tagger.add(this.tags, process.env.DD_TRACE_GLOBAL_TAGS)
     tagger.add(this.tags, options.tags)
 
+    const DD_IS_CIVISIBILITY = coalesce(
+      options.isCiVisibility,
+      false
+    )
+
     const DD_TRACING_ENABLED = coalesce(
       process.env.DD_TRACING_ENABLED,
       true
@@ -381,6 +386,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS
     }
+
+    this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
 
     const isCiVisibilityAgentlessEnabled = isTrue(DD_CIVISIBILITY_AGENTLESS_ENABLED)
     this.isIntelligentTestRunnerEnabled = isCiVisibilityAgentlessEnabled && isTrue(DD_CIVISIBILITY_ITR_ENABLED)

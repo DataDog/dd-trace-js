@@ -49,9 +49,6 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:session:start', (command) => {
-      if (!this.config.isAgentlessEnabled) {
-        return
-      }
       const childOf = getTestParentSpan(this.tracer)
       const testSessionSpanMetadata = getTestSessionCommonTags(command, this.tracer._version)
 
@@ -67,9 +64,6 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test-suite:start', (suite) => {
-      if (!this.config.isAgentlessEnabled) {
-        return
-      }
       const store = storage.getStore()
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
@@ -89,9 +83,6 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test-suite:finish', (status) => {
-      if (!this.config.isAgentlessEnabled) {
-        return
-      }
       const span = storage.getStore().span
       // the test status of the suite may have been set in ci:mocha:test-suite:error already
       if (!span.context()._tags[TEST_STATUS]) {
@@ -101,9 +92,6 @@ class MochaPlugin extends CiPlugin {
     })
 
     this.addSub('ci:mocha:test-suite:error', (err) => {
-      if (!this.config.isAgentlessEnabled) {
-        return
-      }
       const span = storage.getStore().span
       span.setTag('error', err)
       span.setTag(TEST_STATUS, 'fail')
@@ -157,8 +145,10 @@ class MochaPlugin extends CiPlugin {
         this.testSessionSpan.finish()
         finishAllTraceSpans(this.testSessionSpan)
       }
-      this.tracer._exporter._writer.flush()
       this.itrConfig = null
+      if (this.tracer._exporter.writer) {
+        this.tracer._exporter._writer.flush()
+      }
     })
   }
 

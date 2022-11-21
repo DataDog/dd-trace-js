@@ -9,8 +9,7 @@ const log = require('../../../log')
 class AgentlessCiVisibilityExporter {
   constructor (config) {
     this._config = config
-    const { tags, site, url, isIntelligentTestRunnerEnabled } = config
-    this._isIntelligentTestRunnerEnabled = isIntelligentTestRunnerEnabled
+    const { tags, site, url } = config
     this._url = url || new URL(`https://citestcycle-intake.${site}`)
     this._writer = new Writer({ url: this._url, tags })
     this._timer = undefined
