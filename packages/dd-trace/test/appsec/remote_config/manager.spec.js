@@ -50,9 +50,6 @@ describe('RemoteConfigManager', () => {
       version: 'appVersion'
     }
 
-    sinon.spy(RemoteConfigManager.prototype, 'on')
-    sinon.spy(RemoteConfigManager.prototype, 'emit')
-
     rc = new RemoteConfigManager(config)
   })
 
@@ -104,10 +101,6 @@ describe('RemoteConfigManager', () => {
     })
 
     expect(rc.appliedConfigs).to.be.an.instanceOf(Map)
-
-    expect(rc.on).to.have.been.calledTwice
-    expect(rc.on.firstCall).to.have.been.calledWithExactly('newListener', rc.updateProducts)
-    expect(rc.on.secondCall).to.have.been.calledWithExactly('removeListener', rc.updateProducts)
   })
 
   describe('updateCapabilities', () => {
@@ -145,41 +138,31 @@ describe('RemoteConfigManager', () => {
     })
   })
 
-  describe('updateProducts', () => {
-    it('should update the product list and autostart', (cb) => {
-      rc.on('ASM_FEATURES', noop)
+  describe('on/off', () => {
+    it('should update the product list and autostart or autostop', () => {
+      expect(rc.on('ASM_FEATURES', noop)).to.equal(rc)
+
+      expect(rc.state.client.products).to.deep.equal(['ASM_FEATURES'])
+      expect(rc.scheduler.start).to.have.been.calledOnce
+
       rc.on('ASM_DATA', noop)
       rc.on('ASM_DD', noop)
 
+      expect(rc.state.client.products).to.deep.equal(['ASM_FEATURES', 'ASM_DATA', 'ASM_DD'])
+      expect(rc.scheduler.start).to.have.been.calledThrice
+
+      expect(rc.off('ASM_FEATURES', noop)).to.equal(rc)
+
+      expect(rc.state.client.products).to.deep.equal(['ASM_DATA', 'ASM_DD'])
+
+      rc.off('ASM_DATA', noop)
+
+      expect(rc.scheduler.stop).to.not.have.been.called
+
+      rc.off('ASM_DD', noop)
+
+      expect(rc.scheduler.stop).to.have.been.calledOnce
       expect(rc.state.client.products).to.be.empty
-
-      process.nextTick(() => {
-        expect(rc.scheduler.start).to.have.been.calledThrice
-        expect(rc.state.client.products).to.deep.equal(['ASM_FEATURES', 'ASM_DATA', 'ASM_DD'])
-        cb()
-      })
-    })
-
-    it('should update the product list and autostop', (cb) => {
-      rc.scheduler.stop.resetHistory()
-
-      rc.on('ASM_FEATURES', noop)
-      rc.on('ASM_DATA', noop)
-      rc.on('ASM_DD', noop)
-
-      process.nextTick(() => {
-        rc.off('ASM_FEATURES', noop)
-        rc.off('ASM_DATA', noop)
-        rc.off('ASM_DD', noop)
-
-        expect(rc.state.client.products).to.deep.equal(['ASM_FEATURES', 'ASM_DATA', 'ASM_DD'])
-
-        process.nextTick(() => {
-          expect(rc.scheduler.stop).to.have.been.calledThrice
-          expect(rc.state.client.products).to.be.empty
-          cb()
-        })
-      })
     })
   })
 
@@ -536,7 +519,6 @@ describe('RemoteConfigManager', () => {
 
   describe('dispatch', () => {
     beforeEach(() => {
-      rc.emit.restore()
       sinon.stub(rc, 'emit')
     })
 

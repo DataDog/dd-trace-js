@@ -10,7 +10,7 @@ const log = require('../../log')
 const clientId = uuid()
 
 const POLL_INTERVAL = 5e3
-const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64')
+const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
 
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
 // with their own separated Client.ClientState.
@@ -55,9 +55,6 @@ class RemoteConfigManager extends EventEmitter {
     }
 
     this.appliedConfigs = new Map()
-
-    this.on('newListener', this.updateProducts)
-    this.on('removeListener', this.updateProducts)
   }
 
   updateCapabilities (mask, value) {
@@ -78,19 +75,26 @@ class RemoteConfigManager extends EventEmitter {
     this.state.client.capabilities = Buffer.from(str, 'hex').toString('base64')
   }
 
-  updateProducts () {
-    // this is needed because newListener fires before eventNames() is updated
-    process.nextTick(() => {
-      const events = this.eventNames().slice(2) // omit newListener and removeListener
+  on (event, listener) {
+    super.on(event, listener)
 
-      this.state.client.products = events
+    this.state.client.products = this.eventNames()
 
-      if (events.length) {
-        this.scheduler.start()
-      } else {
-        this.scheduler.stop()
-      }
-    })
+    this.scheduler.start()
+
+    return this
+  }
+
+  off (event, listener) {
+    super.off(event, listener)
+
+    this.state.client.products = this.eventNames()
+
+    if (!this.state.client.products.length) {
+      this.scheduler.stop()
+    }
+
+    return this
   }
 
   poll (cb) {
