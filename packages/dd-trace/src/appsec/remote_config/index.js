@@ -6,7 +6,7 @@ const RemoteConfigCapabilities = require('./capabilities')
 function enable (config) {
   const rc = new RemoteConfigManager(config)
 
-  if (config.appsec.enabled === undefined) { // only activate remote config when conf is not set locally
+  if (config.appsec.enabled === undefined) { // only activate ASM_FEATURES when conf is not set locally
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
 
     rc.on('ASM_FEATURES', (action, conf) => {
