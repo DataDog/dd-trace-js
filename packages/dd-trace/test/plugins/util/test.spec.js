@@ -112,7 +112,7 @@ describe('coverage utils', () => {
   describe('getCoveredFilenamesFromCoverage', () => {
     it('returns the list of files the code coverage includes', () => {
       const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
-      expect(coverageFiles).to.eql(['subtract.js'])
+      expect(coverageFiles).to.eql(['subtract.js', 'add.js'])
     })
     it('returns an empty list if coverage is empty', () => {
       const coverageFiles = getCoveredFilenamesFromCoverage({})

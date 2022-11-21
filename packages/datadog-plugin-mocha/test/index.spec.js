@@ -580,6 +580,8 @@ describe('Plugin', () => {
               expect(coverageFiles)
                 .to.include('sum.js')
               expect(coverageFiles)
+                .to.include('subtract.js')
+              expect(coverageFiles)
                 .to.include('packages/datadog-plugin-mocha/test/mocha-test-code-coverage.js')
               expect(contentDisposition).to.contain(
                 'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"'
