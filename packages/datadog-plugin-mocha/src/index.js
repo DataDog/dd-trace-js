@@ -110,13 +110,7 @@ class MochaPlugin extends Plugin {
           site: this.config.site,
           env: this.tracer._env,
           service: this.config.service || this.tracer._service
-        }, (err, skippableSuites) => {
-          if (err) {
-            onDone(err)
-          } else {
-            onDone(null, skippableSuites)
-          }
-        })
+        }, onDone)
       })
     })
 

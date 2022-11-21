@@ -106,7 +106,7 @@ describe('getCodeOwnersForFilename', () => {
 describe('coverage utils', () => {
   let coverage
   beforeEach(() => {
-    delete require.cache[path.join(__dirname, './fixtures/coverage.json')]
+    delete require.cache[require.resolve('./fixtures/coverage.json')]
     coverage = require('./fixtures/coverage.json')
   })
   describe('getCoveredFilenamesFromCoverage', () => {
