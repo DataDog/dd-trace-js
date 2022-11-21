@@ -91,7 +91,7 @@ describe('Plugin', () => {
       // before subsequent calls in whichever manner best suits your needs.
       const mochaTestFiles = fs.readdirSync(__dirname).filter(name => name.startsWith('mocha-'))
       mochaTestFiles.forEach((testFile) => {
-        delete require.cache[require.resolve(path.join(__dirname, testFile))]
+        delete require.cache[require.resolve(`./${testFile}`)]
       })
       return agent.close({ ritmReset: false, wipe: true })
     })
@@ -500,7 +500,7 @@ describe('Plugin', () => {
       describe('agentless', () => {
         beforeEach(() => {
           delete global.__coverage__
-          delete require.cache[require.resolve(path.join(__dirname, './fixtures/coverage.json'))]
+          delete require.cache[require.resolve('./fixtures/coverage.json')]
           // we have to mock the __coverage__ global variable that `nyc` adds
           global.__coverage__ = require('./fixtures/coverage.json')
         })
