@@ -153,11 +153,10 @@ class MochaPlugin extends Plugin {
       const relativeCoverageFiles = [...coverageFiles, suiteFile]
         .map(filename => getTestSuitePath(filename, this.sourceRoot))
 
-      this.tracer._exporter.exportCoverage(
-        {
-          span: testSuiteSpan,
-          coverageFiles: relativeCoverageFiles
-        })
+      this.tracer._exporter.exportCoverage({
+        span: testSuiteSpan,
+        coverageFiles: relativeCoverageFiles
+      })
     })
 
     this.addSub('ci:mocha:session:start', (command) => {
