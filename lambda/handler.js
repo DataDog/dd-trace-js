@@ -1,15 +1,30 @@
 'use strict'
 
-const { Timeout } = require("./runtime/errors")
+const { ImpendingTimeout, isError } = require('./runtime/errors')
 
 const globalTracer = global._ddtrace
 const tracer = globalTracer._tracer
 
 /**
+ * Adds error tags to a span given the error.
+ * 
+ * @param {*} span span to add error tags to.
+ * @param {*} error 
+ */
+function addError (span, error) {
+  if (isError(error)) {
+    span.addTags({
+      'error.type': error.name,
+      'error.msg': error.message,
+      'error.stack': error.stack
+    })
+  }
+}
+
+/**
  * Calls `crashFlush` when the remaining time is about to end.
  *
- * @param {number} remainingTimeInMillis remaining time a Lambda function
- * has until it gets killed.
+ * @param {*} context AWS Lambda context object.
  */
 function checkTimeout (context) {
   let remainingTimeInMillis = context.getRemainingTimeInMillis()
@@ -32,20 +47,11 @@ function checkTimeout (context) {
  */
 function crashFlush () {
   const activeSpan = tracer.scope().active()
-  const error = new Timeout('Datadog detected an impending timeout')
+  const error = new ImpendingTimeout('Datadog detected an impending timeout')
   addError(activeSpan, error)
   activeSpan.setTag('error', 1)
   tracer._processor.killAll()
   activeSpan.finish()
-}
-
-// Try to use addError from tracer?
-function addError (span, error) {
-  span.addTags({
-    'error.type': error.name,
-    'error.msg': error.message,
-    'error.stack': error.stack
-  })
 }
 
 /**
