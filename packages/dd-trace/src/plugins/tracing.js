@@ -5,6 +5,12 @@ const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT } = require('../constants')
 
+const defaultMeta = (metaActual) => {
+  const meta = { ...metaActual }
+  meta[COMPONENT] = metaActual.component || this.component
+  return meta
+}
+
 class TracingPlugin extends Plugin {
   constructor (...args) {
     super(...args)
@@ -63,14 +69,12 @@ class TracingPlugin extends Plugin {
     }
   }
 
-  startSpan (name, { childOf, kind, meta, metrics, service, resource, type } = {}) {
+  startSpan (name, { childOf, kind, meta = (meta) => defaultMeta(meta), metrics, service, resource, type } = {}) {
     const store = storage.getStore()
 
     if (store && childOf === undefined) {
       childOf = store.span
     }
-
-    if (meta) { meta[COMPONENT] = meta[COMPONENT] || this.component }
 
     const span = this.tracer.startSpan(name, {
       childOf,
