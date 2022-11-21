@@ -30,7 +30,6 @@ describe('RemoteConfigManager', () => {
       error: sinon.spy()
     }
 
-    RemoteConfigManager = proxyquire('../src/appsec/remote_config', {
       'crypto-randomuuid': uuid,
       './scheduler': Scheduler,
       '../../../../../package.json': { version: '3.0.0' },
