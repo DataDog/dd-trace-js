@@ -171,38 +171,44 @@ addHook({
 
 function cliWrapper (cli) {
   const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
-    let onResponse, onError
-    const configurationPromise = new Promise((resolve, reject) => {
-      onResponse = resolve
-      onError = reject
+    let onDone
+    const configurationPromise = new Promise((resolve) => {
+      onDone = resolve
     })
 
     sessionAsyncResource.runInAsyncScope(() => {
-      jestConfigurationCh.publish({ onResponse, onError })
+      jestConfigurationCh.publish({ onDone })
     })
 
     let isSuitesSkippingEnabled = false
 
     try {
-      const config = await configurationPromise
+      const { err, config } = await configurationPromise
+      if (err) {
+        log.error(err)
+      }
       isCodeCoverageEnabled = config.isCodeCoverageEnabled
       isSuitesSkippingEnabled = config.isSuitesSkippingEnabled
     } catch (e) {
-      // ignore error
+      log.error(e)
     }
 
     if (isSuitesSkippingEnabled) {
-      const skippableSuitesPromise = new Promise((resolve, reject) => {
-        onResponse = resolve
-        onError = reject
+      const skippableSuitesPromise = new Promise((resolve) => {
+        onDone = resolve
       })
 
       sessionAsyncResource.runInAsyncScope(() => {
-        skippableSuitesCh.publish({ onResponse, onError })
+        skippableSuitesCh.publish({ onDone })
       })
 
       try {
-        skippableSuites = await skippableSuitesPromise
+        const { err, skippableSuites: receivedSkippableSuites } = await skippableSuitesPromise
+        if (err) {
+          log.error(err)
+        } else {
+          skippableSuites = receivedSkippableSuites
+        }
       } catch (e) {
         log.error(e)
       }

@@ -1,6 +1,6 @@
 const { channel } = require('diagnostics_channel')
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 
 const {
@@ -25,9 +25,6 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { getSkippableSuites } = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-skippable-suites')
-const {
-  getItrConfiguration
-} = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-itr-configuration')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
@@ -48,7 +45,7 @@ function getTestSpanMetadata (tracer, test) {
   }
 }
 
-class JestPlugin extends Plugin {
+class JestPlugin extends CiPlugin {
   static get name () {
     return 'jest'
   }
@@ -93,34 +90,6 @@ class JestPlugin extends Plugin {
       'runtime.version': runtimeVersion,
       'git.branch': gitBranch
     } = this.testEnvironmentMetadata
-
-    this.addSub('ci:jest:configuration', ({ onResponse, onError }) => {
-      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
-        onResponse({})
-        return
-      }
-      const testConfiguration = {
-        url: this.config.url,
-        site: this.config.site,
-        env: this.tracer._env,
-        service: this.config.service || this.tracer._service,
-        repositoryUrl,
-        sha,
-        osVersion,
-        osPlatform,
-        osArchitecture,
-        runtimeName,
-        runtimeVersion,
-        branch: gitBranch
-      }
-      getItrConfiguration(testConfiguration, (err, config) => {
-        if (err) {
-          onError(err)
-        } else {
-          onResponse(config)
-        }
-      })
-    })
 
     this.addSub('ci:jest:test-suite:skippable', ({ onResponse, onError }) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {

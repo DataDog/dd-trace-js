@@ -1,6 +1,6 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 const { channel } = require('diagnostics_channel')
 
@@ -46,7 +46,7 @@ function getTestSpanMetadata (tracer, test, sourceRoot) {
   }
 }
 
-class MochaPlugin extends Plugin {
+class MochaPlugin extends CiPlugin {
   static get name () {
     return 'mocha'
   }
@@ -54,87 +54,9 @@ class MochaPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
-    // `gitMetadataPromise` is used to wait until git metadata is uploaded to
-    // proceed with calculating the suites to skip
-    // TODO: add timeout after which the promise is resolved
-    const gitMetadataPromise = new Promise(resolve => {
-      gitMetadataUploadFinishCh.subscribe(err => {
-        resolve(err)
-      })
-    })
-
     this._testSuites = new Map()
     this._testNameToParams = {}
-    this.testEnvironmentMetadata = getTestEnvironmentMetadata('mocha', this.config)
     this.sourceRoot = process.cwd()
-    this.codeOwnersEntries = getCodeOwnersFileEntries(this.sourceRoot)
-
-    const {
-      'git.repository_url': repositoryUrl,
-      'git.commit.sha': sha,
-      'os.version': osVersion,
-      'os.platform': osPlatform,
-      'os.architecture': osArchitecture,
-      'runtime.name': runtimeName,
-      'runtime.version': runtimeVersion,
-      'git.branch': branch
-    } = this.testEnvironmentMetadata
-
-    const testConfiguration = {
-      repositoryUrl,
-      sha,
-      osVersion,
-      osPlatform,
-      osArchitecture,
-      runtimeName,
-      runtimeVersion,
-      branch
-    }
-
-    this.addSub('ci:mocha:test-suite:skippable', ({ onDone }) => {
-      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
-        onDone(null, [])
-        return
-      }
-      // we only request after git upload has happened, if it didn't fail
-      gitMetadataPromise.then((gitUploadError) => {
-        if (gitUploadError) {
-          return onDone(gitUploadError)
-        }
-        if (!this.itrConfig || !this.itrConfig.isSuitesSkippingEnabled) {
-          return onDone(null, [])
-        }
-        getSkippableSuites({
-          ...testConfiguration,
-          url: this.config.url,
-          site: this.config.site,
-          env: this.tracer._env,
-          service: this.config.service || this.tracer._service
-        }, onDone)
-      })
-    })
-
-    this.addSub('ci:mocha:configuration', ({ onDone }) => {
-      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
-        onDone(null, {})
-        return
-      }
-      getItrConfiguration({
-        ...testConfiguration,
-        url: this.config.url,
-        site: this.config.site,
-        env: this.tracer._env,
-        service: this.config.service || this.tracer._service
-      }, (err, itrConfig) => {
-        if (err) {
-          onDone(err)
-        } else {
-          this.itrConfig = itrConfig
-          onDone(null)
-        }
-      })
-    })
 
     this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
