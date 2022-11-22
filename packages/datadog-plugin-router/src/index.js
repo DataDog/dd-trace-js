@@ -4,6 +4,7 @@ const web = require('../../dd-trace/src/plugins/util/web')
 const WebPlugin = require('../../datadog-plugin-web/src')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { storage } = require('../../datadog-core')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class RouterPlugin extends WebPlugin {
   static get name () {
@@ -97,6 +98,7 @@ class RouterPlugin extends WebPlugin {
     const span = this.tracer.startSpan(`${this.constructor.name}.middleware`, {
       childOf,
       tags: {
+        [COMPONENT]: this.constructor.name,
         'resource.name': name || '<anonymous>'
       }
     })

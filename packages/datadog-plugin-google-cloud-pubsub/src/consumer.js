@@ -18,7 +18,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       kind: 'consumer',
       type: 'worker',
       meta: {
-        'component': '@google-cloud/pubsub',
         'gcloud.project_id': subscription.pubsub.projectId,
         'pubsub.topic': topic
       },

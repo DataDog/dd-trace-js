@@ -5,7 +5,7 @@ const semver = require('semver')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const appServer = require('./app/app-server')
-const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -77,7 +77,8 @@ describe('Plugin', function () {
               [ORIGIN_KEY]: CI_APP_ORIGIN,
               [TEST_IS_RUM_ACTIVE]: 'true',
               [TEST_CODE_OWNERS]: JSON.stringify(['@datadog']),
-              [LIBRARY_VERSION]: ddTraceVersion
+              [LIBRARY_VERSION]: ddTraceVersion,
+              [COMPONENT]: 'cypress'
             })
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           })
@@ -102,7 +103,8 @@ describe('Plugin', function () {
               [TEST_TYPE]: 'test',
               [ORIGIN_KEY]: CI_APP_ORIGIN,
               [ERROR_TYPE]: 'AssertionError',
-              [TEST_IS_RUM_ACTIVE]: 'true'
+              [TEST_IS_RUM_ACTIVE]: 'true',
+              [COMPONENT]: 'cypress'
             })
             expect(testSpan.meta).to.not.contain({
               addTagsAfterFailure: 'custom'

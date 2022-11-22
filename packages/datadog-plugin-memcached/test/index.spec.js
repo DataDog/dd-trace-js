@@ -35,6 +35,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
               expect(traces[0][0].meta).to.have.property('out.port', '11211')
               expect(traces[0][0].meta).to.have.property('memcached.command', 'get test')
+              expect(traces[0][0].meta).to.have.property('component', 'memcached')
             })
             .then(done)
             .catch(done)
@@ -71,6 +72,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('error.type', error.name)
               expect(traces[0][0].meta).to.have.property('error.msg', error.message)
               expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+              expect(traces[0][0].meta).to.have.property('component', 'memcached')
             })
             .then(done)
             .catch(done)
@@ -87,6 +89,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
               expect(traces[0][0].meta).to.have.property('out.port', '11211')
+              expect(traces[0][0].meta).to.have.property('component', 'memcached')
             })
             .then(done)
             .catch(done)
@@ -104,6 +107,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
               expect(traces[0][0].meta).to.have.property('out.port', '11211')
+              expect(traces[0][0].meta).to.have.property('component', 'memcached')
             })
             .then(done)
             .catch(done)
@@ -127,6 +131,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
                 expect(traces[0][0].meta).to.have.property('out.port', '11211')
+                expect(traces[0][0].meta).to.have.property('component', 'memcached')
               })
               .then(done)
               .catch(done)

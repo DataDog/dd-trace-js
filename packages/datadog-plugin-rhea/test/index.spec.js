@@ -60,7 +60,8 @@ describe('Plugin', () => {
                   'amqp.link.target.address': 'amq.topic',
                   'amqp.link.role': 'sender',
                   'amqp.delivery.state': 'accepted',
-                  'out.host': 'localhost'
+                  'out.host': 'localhost',
+                  'component': 'rhea'
                 })
                 expect(span.metrics).to.include({
                   'out.port': 5673
@@ -108,7 +109,8 @@ describe('Plugin', () => {
                 expect(span.meta).to.include({
                   'span.kind': 'consumer',
                   'amqp.link.source.address': 'amq.topic',
-                  'amqp.link.role': 'receiver'
+                  'amqp.link.role': 'receiver',
+                  'component': 'rhea'
                 })
               })
                 .then(done, done)
@@ -279,7 +281,8 @@ describe('Plugin', () => {
                   expect(span.meta).to.include({
                     'error.msg': 'this is an error',
                     'error.type': 'Error',
-                    'error.stack': error.stack
+                    'error.stack': error.stack,
+                    'component': 'rhea'
                   })
                   Session.prototype.on_transfer = onTransfer
                 }).then(done, done)
@@ -483,7 +486,8 @@ describe('Plugin', () => {
                 'amqp.link.role': 'sender',
                 'error.type': 'Error',
                 'error.msg': 'fake protocol error',
-                'error.stack': err.stack
+                'error.stack': err.stack,
+                'component': 'rhea'
               })
             }).then(done, done)
             connection.output = function () {
@@ -511,7 +515,8 @@ describe('Plugin', () => {
                 'amqp.link.role': 'receiver',
                 'error.type': 'Error',
                 'error.msg': 'fake protocol error',
-                'error.stack': err.stack
+                'error.stack': err.stack,
+                'component': 'rhea'
               })
             }).then(done, done)
             client.on('message', msg => {
@@ -543,7 +548,8 @@ function expectReceiving (agent, deliveryState, topic) {
     const expectedMeta = {
       'span.kind': 'consumer',
       'amqp.link.source.address': topic,
-      'amqp.link.role': 'receiver'
+      'amqp.link.role': 'receiver',
+      'component': 'rhea'
     }
     if (deliveryState) {
       expectedMeta['amqp.delivery.state'] = deliveryState
@@ -567,7 +573,8 @@ function expectSending (agent, deliveryState, topic) {
     const expectedMeta = {
       'span.kind': 'producer',
       'amqp.link.target.address': topic,
-      'amqp.link.role': 'sender'
+      'amqp.link.role': 'sender',
+      'component': 'rhea'
     }
     if (deliveryState) {
       expectedMeta['amqp.delivery.state'] = deliveryState
