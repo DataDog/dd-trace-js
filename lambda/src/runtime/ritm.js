@@ -10,8 +10,9 @@
 const fs = require('fs')
 const path = require('path')
 
-const Hook = require('../../packages/datadog-instrumentations/src/helpers/hook')
-const instrumentations = require('../../packages/datadog-instrumentations/src/helpers/instrumentations')
+const Hook = require('../../../packages/datadog-instrumentations/src/helpers/hook')
+const instrumentations = require('../../../packages/datadog-instrumentations/src/helpers/instrumentations')
+const log = require('../../../packages/dd-trace/src/log')
 
 /**
  * Breaks the full handler string into two pieces: the module root
@@ -98,7 +99,7 @@ function _getLambdaFilePath (lambdaStylePath) {
   return lambdaFilePath
 }
 
-exports.registerLambdaHook = () => {
+const registerLambdaHook = () => {
   const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
   const originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
 
@@ -115,8 +116,8 @@ exports.registerLambdaHook = () => {
       for (const { hook } of instrumentations[lambdaFilePath]) {
         try {
           moduleExports = hook(moduleExports)
-        } catch (error) {
-          // TODO: throw error
+        } catch (e) {
+          log.error(e)
         }
       }
 
@@ -125,7 +126,10 @@ exports.registerLambdaHook = () => {
   }
 }
 
-exports._extractModuleRootAndHandler = _extractModuleRootAndHandler
-exports._extractModuleNameAndHandlerPath = _extractModuleNameAndHandlerPath
-exports._resolveHandler = _resolveHandler
-exports._getLambdaFilePath = _getLambdaFilePath
+module.exports = {
+  _extractModuleRootAndHandler,
+  _extractModuleNameAndHandlerPath,
+  _resolveHandler,
+  _getLambdaFilePath,
+  registerLambdaHook
+}

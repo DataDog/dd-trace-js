@@ -1,5 +1,5 @@
 'use strict'
 
-const { registerLambdaHook } = require('./runtime/ritm')
+const { registerLambdaHook } = require('./src/runtime/ritm')
 
 registerLambdaHook()

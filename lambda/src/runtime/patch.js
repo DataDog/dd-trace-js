@@ -4,8 +4,8 @@ const path = require('path')
 
 const { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler, _getLambdaFilePath } = require('./ritm')
 const { datadog } = require('../handler')
-const { addHook } = require('../../packages/datadog-instrumentations/src/helpers/instrument')
-const shimmer = require('../../packages/datadog-shimmer')
+const { addHook } = require('../../../packages/datadog-instrumentations/src/helpers/instrument')
+const shimmer = require('../../../packages/datadog-shimmer')
 
 /**
  * Patches a Lambda module on the given handler path.

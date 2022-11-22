@@ -63,7 +63,6 @@ exports.datadog = function datadog (lambdaHandler) {
   return (...args) => {
     const context = args[1]
     const patched = lambdaHandler.apply(this, args)
-
     checkTimeout(context)
 
     return patched
