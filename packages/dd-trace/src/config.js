@@ -213,8 +213,7 @@ class Config {
 
     const DD_APPSEC_ENABLED = coalesce(
       appsec.enabled,
-      process.env.DD_APPSEC_ENABLED && isTrue(process.env.DD_APPSEC_ENABLED),
-      undefined // represent the default "false" which is different from explicit "false"
+      process.env.DD_APPSEC_ENABLED && isTrue(process.env.DD_APPSEC_ENABLED)
     )
 
     const DD_APPSEC_RULES = coalesce(
