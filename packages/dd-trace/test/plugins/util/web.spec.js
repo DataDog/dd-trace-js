@@ -95,34 +95,6 @@ describe('plugins/util/web', () => {
       expect(config.hooks.request()).to.equal('test')
     })
 
-    it('should use the server config if set', () => {
-      const config = web.normalizeConfig({
-        server: {
-          headers: ['test'],
-          validateStatus: code => false,
-          hooks: {
-            request: () => 'test'
-          }
-        }
-      })
-
-      expect(config.headers).to.include('test')
-      expect(config.validateStatus(200)).to.equal(false)
-      expect(config).to.have.property('hooks')
-      expect(config.hooks.request()).to.equal('test')
-    })
-
-    it('should prioritize the server config over the shared config', () => {
-      const config = web.normalizeConfig({
-        headers: ['foo'],
-        server: {
-          headers: ['bar']
-        }
-      })
-
-      expect(config.headers).to.include('bar')
-    })
-
     describe('queryStringObfuscation', () => {
       it('should keep booleans as is', () => {
         const config = web.normalizeConfig({
