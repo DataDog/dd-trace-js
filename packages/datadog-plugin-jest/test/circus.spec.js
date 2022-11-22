@@ -7,7 +7,7 @@ const nock = require('nock')
 const semver = require('semver')
 const msgpack = require('msgpack-lite')
 
-const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const {
   TEST_FRAMEWORK,
@@ -143,7 +143,8 @@ describe('Plugin', function () {
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-circus',
               [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/dd-trace-js']), // reads from dd-trace-js
-              [LIBRARY_VERSION]: ddTraceVersion
+              [LIBRARY_VERSION]: ddTraceVersion,
+              [COMPONENT]: 'jest'
             })
             if (extraTags) {
               expect(testSpan.meta).to.contain(extraTags)
@@ -200,7 +201,8 @@ describe('Plugin', function () {
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
               [TEST_TYPE]: 'test',
-              [JEST_TEST_RUNNER]: 'jest-circus'
+              [JEST_TEST_RUNNER]: 'jest-circus',
+              [COMPONENT]: 'jest'
             })
             expect(testSpan.meta[ERROR_MESSAGE]).to.equal(error)
             expect(testSpan.type).to.equal('test')
@@ -245,7 +247,8 @@ describe('Plugin', function () {
               [TEST_STATUS]: status,
               [TEST_FRAMEWORK]: 'jest',
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
-              [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js'
+              [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
+              [COMPONENT]: 'jest'
             })
           })
         })
@@ -398,6 +401,7 @@ describe('Plugin', function () {
               const { events } = agentlessPayload
               const span = events.find(event => event.type === type).content
               expect(span.meta[TEST_STATUS]).to.equal(status)
+              expect(span.meta[COMPONENT]).to.equal('jest')
               if (type === 'test_session_end') {
                 expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
                 expect(span[TEST_SUITE_ID]).to.equal(undefined)
@@ -519,6 +523,7 @@ describe('Plugin', function () {
             return agent.use(agentlessPayload => {
               const { events: [{ content: testSpan }] } = agentlessPayload
               expect(testSpan.meta).to.contain({
+                [COMPONENT]: 'jest',
                 [TEST_NAME]: name,
                 [TEST_STATUS]: status,
                 [TEST_SUITE]: suite
@@ -580,6 +585,7 @@ describe('Plugin', function () {
             return agent.use(agentlessPayload => {
               const { events: [{ content: testSpan }] } = agentlessPayload
               expect(testSpan.meta).to.contain({
+                [COMPONENT]: 'jest',
                 [TEST_NAME]: name,
                 [TEST_STATUS]: status,
                 [TEST_SUITE]: suite

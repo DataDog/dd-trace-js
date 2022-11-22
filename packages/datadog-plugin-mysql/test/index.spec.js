@@ -73,7 +73,7 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('db.name', 'db')
             expect(traces[0][0].meta).to.have.property('db.user', 'root')
             expect(traces[0][0].meta).to.have.property('db.type', 'mysql')
-            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+            expect(traces[0][0].meta).to.have.property('component', 'mysql')
 
             done()
           })
@@ -90,6 +90,7 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('error.type', error.name)
             expect(traces[0][0].meta).to.have.property('error.msg', error.message)
             expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+            expect(traces[0][0].meta).to.have.property('component', 'mysql')
 
             done()
           })
@@ -207,7 +208,7 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')
             expect(traces[0][0].meta).to.have.property('db.user', 'root')
             expect(traces[0][0].meta).to.have.property('db.type', 'mysql')
-            expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+            expect(traces[0][0].meta).to.have.property('component', 'mysql')
 
             done()
           })

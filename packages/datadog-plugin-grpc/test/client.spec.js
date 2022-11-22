@@ -217,6 +217,7 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'bidi_streaming')
                   expect(traces[0][0].meta).to.have.property('span.kind', 'client')
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
+                  expect(traces[0][0].meta).to.have.property('component', 'grpc')
                 })
             })
 
