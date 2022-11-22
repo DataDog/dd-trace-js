@@ -1,6 +1,7 @@
 const path = require('path')
 const fs = require('fs')
 
+const istanbul = require('istanbul-lib-coverage')
 const ignore = require('ignore')
 
 const { getGitMetadata } = require('./git')
@@ -77,7 +78,11 @@ module.exports = {
   TEST_SESSION_ID,
   TEST_SUITE_ID,
   TEST_ITR_TESTS_SKIPPED,
-  TEST_CODE_COVERAGE_LINES_TOTAL
+  TEST_CODE_COVERAGE_LINES_TOTAL,
+  getCoveredFilenamesFromCoverage,
+  resetCoverage,
+  mergeCoverage,
+  fromCoverageMapToCoverage
 }
 
 function getTestEnvironmentMetadata (testFramework, config) {
@@ -254,4 +259,59 @@ function getTestSuiteCommonTags (command, version, testSuite) {
     [TEST_SUITE]: testSuite,
     [TEST_COMMAND]: command
   }
+}
+
+function getCoveredFilenamesFromCoverage (coverage) {
+  const coverageMap = istanbul.createCoverageMap(coverage)
+
+  return coverageMap
+    .files()
+    .filter(filename => {
+      const fileCoverage = coverageMap.fileCoverageFor(filename)
+      const lineCoverage = fileCoverage.getLineCoverage()
+      const isAnyLineExecuted = Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
+
+      return isAnyLineExecuted
+    })
+}
+
+function resetCoverage (coverage) {
+  const coverageMap = istanbul.createCoverageMap(coverage)
+
+  return coverageMap
+    .files()
+    .forEach(filename => {
+      const fileCoverage = coverageMap.fileCoverageFor(filename)
+      fileCoverage.resetHits()
+    })
+}
+
+function mergeCoverage (coverage, targetCoverage) {
+  const coverageMap = istanbul.createCoverageMap(coverage)
+  return coverageMap
+    .files()
+    .forEach(filename => {
+      const fileCoverage = coverageMap.fileCoverageFor(filename)
+
+      // If the fileCoverage is not there for this filename,
+      // we create it to force a merge between the fileCoverages
+      // instead of a reference assignment (which would not work if the coverage is reset later on)
+      if (!targetCoverage.data[filename]) {
+        targetCoverage.addFileCoverage(istanbul.createFileCoverage(filename))
+      }
+      targetCoverage.addFileCoverage(fileCoverage)
+      const targetFileCoverage = targetCoverage.fileCoverageFor(filename)
+
+      // branches (.b) are copied by reference, so `resetHits` affects the copy, so we need to copy it manually
+      Object.entries(targetFileCoverage.data.b).forEach(([key, value]) => {
+        targetFileCoverage.data.b[key] = [...value]
+      })
+    })
+}
+
+function fromCoverageMapToCoverage (coverageMap) {
+  return Object.entries(coverageMap.data).reduce((acc, [filename, fileCoverage]) => {
+    acc[filename] = fileCoverage.data
+    return acc
+  }, {})
 }

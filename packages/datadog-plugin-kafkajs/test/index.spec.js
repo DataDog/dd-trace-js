@@ -69,7 +69,8 @@ describe('Plugin', () => {
               expect(span.meta).to.include({
                 [ERROR_TYPE]: error.name,
                 [ERROR_MESSAGE]: error.message,
-                [ERROR_STACK]: error.stack
+                [ERROR_STACK]: error.stack,
+                'component': 'kafkajs'
               })
             })
 
@@ -165,7 +166,8 @@ describe('Plugin', () => {
               meta: {
                 [ERROR_TYPE]: fakeError.name,
                 [ERROR_MESSAGE]: fakeError.message,
-                [ERROR_STACK]: fakeError.stack
+                [ERROR_STACK]: fakeError.stack,
+                'component': 'kafkajs'
               },
               resource: testTopic,
               error: 1,

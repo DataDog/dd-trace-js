@@ -9,7 +9,7 @@ const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const log = require('../../dd-trace/src/log')
 const url = require('url')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
@@ -39,6 +39,7 @@ class HttpClientPlugin extends Plugin {
       const span = this.tracer.startSpan('http.request', {
         childOf,
         tags: {
+          [COMPONENT]: this.constructor.name,
           'span.kind': 'client',
           'service.name': getServiceName(this.tracer, this.config, options),
           'resource.name': method,

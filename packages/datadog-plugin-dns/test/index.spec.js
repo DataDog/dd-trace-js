@@ -31,6 +31,7 @@ describe('Plugin', () => {
             resource: 'localhost'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'component': 'dns',
             'span.kind': 'client',
             'dns.hostname': 'localhost',
             'dns.address': '127.0.0.1'
@@ -51,6 +52,7 @@ describe('Plugin', () => {
             resource: 'localhost'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'component': 'dns',
             'span.kind': 'client',
             'dns.hostname': 'localhost',
             'dns.address': '127.0.0.1',
@@ -73,6 +75,7 @@ describe('Plugin', () => {
             error: 1
           })
           expect(traces[0][0].meta).to.deep.include({
+            'component': 'dns',
             'span.kind': 'client',
             'dns.hostname': 'fakedomain.faketld',
             [ERROR_TYPE]: 'Error',
@@ -96,6 +99,7 @@ describe('Plugin', () => {
             resource: '127.0.0.1:22'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'component': 'dns',
             'span.kind': 'client',
             'dns.address': '127.0.0.1'
           })
@@ -118,6 +122,7 @@ describe('Plugin', () => {
             resource: 'A lvh.me'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'component': 'dns',
             'span.kind': 'client',
             'dns.hostname': 'lvh.me',
             'dns.rrtype': 'A'
@@ -138,6 +143,7 @@ describe('Plugin', () => {
             resource: 'ANY lvh.me'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'component': 'dns',
             'span.kind': 'client',
             'dns.hostname': 'lvh.me',
             'dns.rrtype': 'ANY'
@@ -158,6 +164,7 @@ describe('Plugin', () => {
             resource: '127.0.0.1'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'component': 'dns',
             'span.kind': 'client',
             'dns.ip': '127.0.0.1'
           })
@@ -202,6 +209,7 @@ describe('Plugin', () => {
             resource: 'A lvh.me'
           })
           expect(traces[0][0].meta).to.deep.include({
+            'component': 'dns',
             'dns.hostname': 'lvh.me',
             'dns.rrtype': 'A'
           })

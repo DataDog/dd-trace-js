@@ -47,6 +47,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.type', 'redis')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
+              expect(traces[0][0].meta).to.have.property('component', 'redis')
             })
 
           await client.get('foo')
@@ -59,6 +60,7 @@ describe('Plugin', () => {
           const promise = agent.use(traces => {
             expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
             expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+            expect(traces[0][0].meta).to.have.property('component', 'redis')
             // stack trace is not available in newer versions
           })
 
@@ -82,6 +84,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.type', 'redis')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
+              expect(traces[0][0].meta).to.have.property('component', 'redis')
             })
 
           breakThen(Promise.prototype)

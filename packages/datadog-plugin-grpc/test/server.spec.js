@@ -120,6 +120,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'server_streaming')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
+              expect(traces[0][0].meta).to.have.property('component', 'grpc')
             })
         })
 
@@ -145,6 +146,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'bidi_streaming')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
+              expect(traces[0][0].meta).to.have.property('component', 'grpc')
             })
         })
 
@@ -244,6 +246,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta[ERROR_STACK]).to.match(/^Error: foobar\n {4}at Object.getUnary.*/)
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, 'Error')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
+              expect(traces[0][0].meta).to.have.property('component', 'grpc')
             })
         })
 

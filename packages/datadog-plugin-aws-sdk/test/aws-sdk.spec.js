@@ -71,7 +71,8 @@ describe('Plugin', () => {
             expect(span.meta).to.include({
               [ERROR_TYPE]: error.name,
               [ERROR_MESSAGE]: error.message,
-              [ERROR_STACK]: error.stack
+              [ERROR_STACK]: error.stack,
+              'component': 'aws-sdk'
             })
           }).then(done, done)
 
@@ -167,7 +168,8 @@ describe('Plugin', () => {
             })
             expect(span).to.have.property('error', 0)
             expect(span.meta).to.include({
-              'hook.operation': 'listBuckets'
+              'hook.operation': 'listBuckets',
+              'component': 'aws-sdk'
             })
           }).then(done, done)
 

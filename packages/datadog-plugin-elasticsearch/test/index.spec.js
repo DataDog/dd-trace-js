@@ -57,6 +57,7 @@ describe('Plugin', () => {
         it('should set the correct tags', done => {
           agent
             .use(traces => {
+              expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('db.type', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
@@ -89,6 +90,7 @@ describe('Plugin', () => {
         it('should set the correct tags on msearch', done => {
           agent
             .use(traces => {
+              expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('db.type', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
@@ -182,6 +184,7 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
                   expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
                   expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+                  expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
                 })
                 .then(done)
                 .catch(done)
@@ -238,6 +241,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+              expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
             })
               .then(done)
               .catch(done)
@@ -313,6 +317,7 @@ describe('Plugin', () => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', 'test')
+              expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('elasticsearch.params', 'foo')
               expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
             })

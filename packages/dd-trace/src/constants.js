@@ -23,5 +23,6 @@ module.exports = {
   PROCESS_ID: 'process_id',
   ERROR_TYPE: 'error.type',
   ERROR_MESSAGE: 'error.message',
-  ERROR_STACK: 'error.stack'
+  ERROR_STACK: 'error.stack',
+  COMPONENT: 'component'
 }

@@ -107,12 +107,9 @@ function extractTags (trace, span) {
     }
   }
 
-  if (span.tracer()._service === tags['service.name']) {
-    addTag(trace.meta, trace.metrics, 'language', 'javascript')
-  }
-
   setSingleSpanIngestionTags(trace, context._sampling.spanSampling)
 
+  addTag(trace.meta, trace.metrics, 'language', 'javascript')
   addTag(trace.meta, trace.metrics, PROCESS_ID, process.pid)
   addTag(trace.meta, trace.metrics, SAMPLING_PRIORITY_KEY, priority)
   addTag(trace.meta, trace.metrics, ORIGIN_KEY, origin)

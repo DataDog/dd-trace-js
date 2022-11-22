@@ -77,6 +77,7 @@ const web = {
     if (!span) return
 
     span.context()._name = `${name}.request`
+    span.context()._tags['component'] = name
 
     web.setConfig(req, config)
   },

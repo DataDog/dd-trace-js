@@ -11,7 +11,9 @@ const EXCLUDED_PATHS = [
 ]
 const EXCLUDED_PATH_PREFIXES = [
   'node:diagnostics_channel',
-  'diagnostics_channel'
+  'diagnostics_channel',
+  'node:async_hooks',
+  'async_hooks'
 ]
 
 function calculateDDBasePath (dirname) {
@@ -22,13 +24,16 @@ function calculateDDBasePath (dirname) {
 
 function getCallSiteInfo () {
   const previousPrepareStackTrace = Error.prepareStackTrace
+  const previousStackTraceLimit = Error.stackTraceLimit
   let callsiteList
+  Error.stackTraceLimit = 100
   Error.prepareStackTrace = function (_, callsites) {
     callsiteList = callsites
   }
   const e = new Error()
   e.stack
   Error.prepareStackTrace = previousPrepareStackTrace
+  Error.stackTraceLimit = previousStackTraceLimit
   return callsiteList
 }
 
