@@ -1,6 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let redis
@@ -103,9 +104,9 @@ describe('Plugin', () => {
             if (!error || !span) return
 
             try {
-              expect(span.meta).to.have.property('error.type', error.name)
-              expect(span.meta).to.have.property('error.msg', error.message)
-              expect(span.meta).to.have.property('error.stack', error.stack)
+              expect(span.meta).to.have.property(ERROR_TYPE, error.name)
+              expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(span.meta).to.have.property(ERROR_STACK, error.stack)
 
               done()
             } catch (e) {

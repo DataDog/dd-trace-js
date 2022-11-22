@@ -5,6 +5,7 @@ const dns = require('dns')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const { Int64BE } = require('int64-buffer') // TODO remove dependency
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let net
@@ -167,9 +168,9 @@ describe('Plugin', () => {
             'tcp.family': 'IPv4',
             'tcp.remote.host': 'localhost',
             'out.host': 'localhost',
-            'error.type': error.name,
-            'error.msg': error.message,
-            'error.stack': error.stack
+            [ERROR_TYPE]: error.name,
+            [ERROR_MESSAGE]: error.message,
+            [ERROR_STACK]: error.message
           })
           expect(traces[0][0].metrics).to.deep.include({
             'out.port': port,

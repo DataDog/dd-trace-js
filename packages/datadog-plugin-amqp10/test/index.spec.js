@@ -1,6 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let tracer
@@ -91,9 +92,9 @@ describe('Plugin', () => {
                 const span = traces[0][0]
 
                 expect(span.error).to.equal(1)
-                expect(span.meta).to.have.property('error.type', error.name)
-                expect(span.meta).to.have.property('error.msg', error.message)
-                expect(span.meta).to.have.property('error.stack', error.stack)
+                expect(span.meta).to.have.property(ERROR_TYPE, error.name)
+                expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(span.meta).to.have.property(ERROR_STACK, error.stack)
               }, 2)
               .then(done)
               .catch(done)

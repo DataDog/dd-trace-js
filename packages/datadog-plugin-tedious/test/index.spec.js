@@ -2,6 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const semver = require('semver')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const MSSQL_USERNAME = 'sa'
 const MSSQL_PASSWORD = 'DD_HUNTER2'
@@ -262,9 +263,9 @@ describe('Plugin', () => {
 
         agent
           .use(traces => {
-            expect(traces[0][0].meta).to.have.property('error.type', error.name)
-            expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
-            expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
           })
           .then(done)
           .catch(done)
@@ -283,9 +284,9 @@ describe('Plugin', () => {
         agent
           .use(traces => {
             expect(error.message).to.equal('Canceled.')
-            expect(traces[0][0].meta).to.have.property('error.type', error.name)
-            expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
-            expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
           })
           .then(done)
           .catch(done)

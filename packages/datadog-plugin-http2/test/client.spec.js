@@ -7,6 +7,7 @@ const path = require('path')
 const tags = require('../../../ext/tags')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -510,9 +511,9 @@ describe('Plugin', () => {
 
             agent
               .use(traces => {
-                expect(traces[0][0].meta).to.have.property('error.type', error.name)
-                expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-                expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+                expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
               })
               .then(done)
               .catch(done)

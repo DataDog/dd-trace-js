@@ -3,6 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup, sort } = require('./spec_helpers')
 const semver = require('semver')
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   // TODO: use the Request class directly for generic tests
@@ -68,9 +69,9 @@ describe('Plugin', () => {
             })
 
             expect(span.meta).to.include({
-              'error.type': error.name,
-              'error.msg': error.message,
-              'error.stack': error.stack
+              [ERROR_TYPE]: error.name,
+              [ERROR_MESSAGE]: error.message,
+              [ERROR_STACK]: error.stack
             })
           }).then(done, done)
 

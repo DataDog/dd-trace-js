@@ -3,6 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { promisify } = require('util')
 const { storage } = require('../../datadog-core')
+const { ERROR_TYPE, ERROR_MESSAGE } = require('../../dd-trace/src/plugins/util/test')
 
 describe('Plugin', () => {
   let dns
@@ -74,8 +75,8 @@ describe('Plugin', () => {
           expect(traces[0][0].meta).to.deep.include({
             'span.kind': 'client',
             'dns.hostname': 'fakedomain.faketld',
-            'error.type': 'Error',
-            'error.msg': 'getaddrinfo ENOTFOUND fakedomain.faketld'
+            [ERROR_TYPE]: 'Error',
+            [ERROR_MESSAGE]: 'getaddrinfo ENOTFOUND fakedomain.faketld'
           })
         })
         .then(done)

@@ -16,6 +16,9 @@ const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
 const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
 const SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN
 const PROCESS_ID = constants.PROCESS_ID
+const ERROR_MESSAGE = constants.ERROR_MESSAGE
+const ERROR_STACK = constants.ERROR_STACK
+const ERROR_TYPE = constants.ERROR_TYPE
 
 const spanId = id('0234567812345678')
 
@@ -232,9 +235,9 @@ describe('format', () => {
       spanContext._tags['error'] = error
       trace = format(span)
 
-      expect(trace.meta['error.msg']).to.equal(error.message)
-      expect(trace.meta['error.type']).to.equal(error.name)
-      expect(trace.meta['error.stack']).to.equal(error.stack)
+      expect(trace.meta[ERROR_MESSAGE]).to.equal(error.message)
+      expect(trace.meta[ERROR_TYPE]).to.equal(error.name)
+      expect(trace.meta[ERROR_STACK]).to.equal(error.stack)
     })
 
     it('should skip error properties without a value', () => {
@@ -245,9 +248,9 @@ describe('format', () => {
       spanContext._tags['error'] = error
       trace = format(span)
 
-      expect(trace.meta['error.msg']).to.equal(error.message)
-      expect(trace.meta).to.not.have.property('error.type')
-      expect(trace.meta).to.not.have.property('error.stack')
+      expect(trace.meta[ERROR_MESSAGE]).to.equal(error.message)
+      expect(trace.meta).to.not.have.property(ERROR_TYPE)
+      expect(trace.meta).to.not.have.property(ERROR_STACK)
     })
 
     it('should extract the origin', () => {
@@ -301,9 +304,9 @@ describe('format', () => {
     })
 
     it('should set the error flag when there is an error-related tag', () => {
-      spanContext._tags['error.type'] = 'Error'
-      spanContext._tags['error.msg'] = 'boom'
-      spanContext._tags['error.stack'] = ''
+      spanContext._tags[ERROR_TYPE] = 'Error'
+      spanContext._tags[ERROR_MESSAGE] = 'boom'
+      spanContext._tags[ERROR_STACK] = ''
 
       trace = format(span)
 
@@ -311,9 +314,9 @@ describe('format', () => {
     })
 
     it('should not set the error flag for internal spans with error tags', () => {
-      spanContext._tags['error.type'] = 'Error'
-      spanContext._tags['error.msg'] = 'boom'
-      spanContext._tags['error.stack'] = ''
+      spanContext._tags[ERROR_TYPE] = 'Error'
+      spanContext._tags[ERROR_MESSAGE] = 'boom'
+      spanContext._tags[ERROR_STACK] = ''
       spanContext._name = 'fs.operation'
 
       trace = format(span)
