@@ -99,6 +99,7 @@ class JestPlugin extends Plugin {
         return
       }
       const testConfiguration = {
+        url: this.config.url,
         site: this.config.site,
         env: this.tracer._env,
         service: this.config.service || this.tracer._service,
@@ -130,6 +131,7 @@ class JestPlugin extends Plugin {
           return onError(gitUploadError)
         }
         const testConfiguration = {
+          url: this.config.url,
           site: this.config.site,
           env: this.tracer._env,
           service: this.config.service || this.tracer._service,
@@ -142,11 +144,11 @@ class JestPlugin extends Plugin {
           runtimeVersion,
           branch: gitBranch
         }
-        getSkippableSuites(testConfiguration, (err, skippableTests) => {
+        getSkippableSuites(testConfiguration, (err, skippableSuites) => {
           if (err) {
             onError(err)
           } else {
-            onResponse(skippableTests)
+            onResponse(skippableSuites)
           }
         })
       })

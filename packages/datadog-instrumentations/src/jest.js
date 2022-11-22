@@ -1,8 +1,8 @@
 'use strict'
-const istanbul = require('istanbul-lib-coverage')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const { getCoveredFilenamesFromCoverage } = require('../../dd-trace/src/plugins/util/test')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -32,21 +32,6 @@ const {
 const { getFormattedJestTestParameters, getJestTestName } = require('../../datadog-plugin-jest/src/util')
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
-
-function extractCoverageInformation (coverage, rootDir) {
-  const coverageMap = istanbul.createCoverageMap(coverage)
-
-  return coverageMap
-    .files()
-    .filter(filename => {
-      const fileCoverage = coverageMap.fileCoverageFor(filename)
-      const lineCoverage = fileCoverage.getLineCoverage()
-      const isAnyLineExecuted = Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
-
-      return isAnyLineExecuted
-    })
-    .map(filename => filename.replace(`${rootDir}/`, ''))
-}
 
 const specStatusToTestStatus = {
   'pending': 'skip',
@@ -263,6 +248,9 @@ function jestAdapterWrapper (jestAdapter) {
   const adapter = jestAdapter.default ? jestAdapter.default : jestAdapter
   const newAdapter = shimmer.wrap(adapter, function () {
     const environment = arguments[2]
+    if (!environment) {
+      return adapter.apply(this, arguments)
+    }
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
       testSuiteStartCh.publish({
@@ -279,8 +267,11 @@ function jestAdapterWrapper (jestAdapter) {
         }
         testSuiteFinishCh.publish({ status, errorMessage })
         if (environment.global.__coverage__) {
-          const coverageFiles = extractCoverageInformation(environment.global.__coverage__, environment.rootDir)
-          if (coverageFiles.length) {
+          const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
+            .map(filename => getTestSuitePath(filename, environment.rootDir))
+
+          if (coverageFiles && environment.testEnvironmentOptions &&
+            environment.testEnvironmentOptions._ddTestCodeCoverageEnabled) {
             testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
           }
         }
@@ -313,6 +304,11 @@ function configureTestEnvironment (readConfigsResult) {
   })
   sessionAsyncResource.runInAsyncScope(() => {
     testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
+  })
+  // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
+  // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
+  configs.forEach(config => {
+    config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
   })
   if (isCodeCoverageEnabled) {
     const globalConfig = {
