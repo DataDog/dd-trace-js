@@ -6,7 +6,7 @@ const kinds = require('../../../../../ext/kinds')
 const tags = require('../../../../../ext/tags')
 const { incomingHttpRequestEnd } = require('../../../src/appsec/gateway/channels')
 const { USER_REJECT } = require('../../../../../ext/priority')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../../../dd-trace/src/constants')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER

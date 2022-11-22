@@ -170,7 +170,7 @@ describe('Plugin', () => {
             'out.host': 'localhost',
             [ERROR_TYPE]: error.name,
             [ERROR_MESSAGE]: error.message,
-            [ERROR_STACK]: error.message
+            [ERROR_STACK]: error.stack
           })
           expect(traces[0][0].metrics).to.deep.include({
             'out.port': port,

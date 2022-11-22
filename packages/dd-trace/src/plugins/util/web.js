@@ -11,7 +11,7 @@ const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
 const BlockList = require('./ip_blocklist')
 const { incomingHttpRequestEnd } = require('../../appsec/gateway/channels')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER

@@ -173,7 +173,7 @@ describe('Tracer', () => {
         expect(tags).to.include({
           [ERROR_TYPE]: error.name,
           [ERROR_MESSAGE]: error.message,
-          [ERROR_STACK]: ERROR_STACK
+          [ERROR_STACK]: error.stack
         })
       })
     })
