@@ -1,49 +1,26 @@
-const { channel } = require('diagnostics_channel')
-
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 
 const {
-  CI_APP_ORIGIN,
   TEST_STATUS,
   JEST_TEST_RUNNER,
   finishAllTraceSpans,
   getTestEnvironmentMetadata,
   getTestParentSpan,
-  getTestCommonTags,
   getTestSessionCommonTags,
   getTestSuiteCommonTags,
   TEST_PARAMETERS,
   getCodeOwnersFileEntries,
-  getCodeOwnersForFilename,
-  TEST_CODE_OWNERS,
   TEST_SESSION_ID,
   TEST_SUITE_ID,
   TEST_COMMAND,
   TEST_ITR_TESTS_SKIPPED,
   TEST_CODE_COVERAGE_LINES_TOTAL
 } = require('../../dd-trace/src/plugins/util/test')
-
-const { getSkippableSuites } = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-skippable-suites')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
-
-function getTestSpanMetadata (tracer, test) {
-  const childOf = getTestParentSpan(tracer)
-
-  const { suite, name, runner, testParameters } = test
-
-  const commonTags = getTestCommonTags(name, suite, tracer._version)
-
-  return {
-    childOf,
-    ...commonTags,
-    [JEST_TEST_RUNNER]: runner,
-    [TEST_PARAMETERS]: testParameters
-  }
-}
 
 class JestPlugin extends CiPlugin {
   static get name () {
@@ -52,16 +29,6 @@ class JestPlugin extends CiPlugin {
 
   constructor (...args) {
     super(...args)
-
-    const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
-    // `gitMetadataPromise` is used to wait until git metadata is uploaded to
-    // proceed with calculating the suites to skip
-    // TODO: add timeout after which the promise is resolved
-    const gitMetadataPromise = new Promise(resolve => {
-      gitMetadataUploadFinishCh.subscribe(err => {
-        resolve(err)
-      })
-    })
 
     // Used to handle the end of a jest worker to be able to flush
     const handler = ([message]) => {
@@ -79,50 +46,6 @@ class JestPlugin extends CiPlugin {
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
     this.codeOwnersEntries = getCodeOwnersFileEntries()
-
-    const {
-      'git.repository_url': repositoryUrl,
-      'git.commit.sha': sha,
-      'os.version': osVersion,
-      'os.platform': osPlatform,
-      'os.architecture': osArchitecture,
-      'runtime.name': runtimeName,
-      'runtime.version': runtimeVersion,
-      'git.branch': gitBranch
-    } = this.testEnvironmentMetadata
-
-    this.addSub('ci:jest:test-suite:skippable', ({ onResponse, onError }) => {
-      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
-        return onResponse([])
-      }
-      // we only request after git upload has happened, if it didn't fail
-      gitMetadataPromise.then((gitUploadError) => {
-        if (gitUploadError) {
-          return onError(gitUploadError)
-        }
-        const testConfiguration = {
-          url: this.config.url,
-          site: this.config.site,
-          env: this.tracer._env,
-          service: this.config.service || this.tracer._service,
-          repositoryUrl,
-          sha,
-          osVersion,
-          osPlatform,
-          osArchitecture,
-          runtimeName,
-          runtimeVersion,
-          branch: gitBranch
-        }
-        getSkippableSuites(testConfiguration, (err, skippableSuites) => {
-          if (err) {
-            onError(err)
-          } else {
-            onResponse(skippableSuites)
-          }
-        })
-      })
-    })
 
     this.addSub('ci:jest:session:start', (command) => {
       if (!this.config.isAgentlessEnabled) {
@@ -264,31 +187,16 @@ class JestPlugin extends CiPlugin {
       suiteTags[TEST_COMMAND] = testSuiteSpan.context()._tags[TEST_COMMAND]
     }
 
-    const {
-      childOf,
-      ...testSpanMetadata
-    } = getTestSpanMetadata(this.tracer, test)
+    const { suite, name, runner, testParameters } = test
 
-    const codeOwners = getCodeOwnersForFilename(test.suite, this.codeOwnersEntries)
-
-    if (codeOwners) {
-      testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
+    const extraTags = {
+      [JEST_TEST_RUNNER]: runner,
+      [TEST_PARAMETERS]: testParameters,
+      [COMPONENT]: this.constructor.name,
+      ...suiteTags
     }
 
-    const testSpan = this.tracer
-      .startSpan('jest.test', {
-        childOf,
-        tags: {
-          [COMPONENT]: this.constructor.name,
-          ...this.testEnvironmentMetadata,
-          ...testSpanMetadata,
-          ...suiteTags
-        }
-      })
-
-    testSpan.context()._trace.origin = CI_APP_ORIGIN
-
-    return testSpan
+    return super.startTestSpan(name, suite, extraTags)
   }
 }
 

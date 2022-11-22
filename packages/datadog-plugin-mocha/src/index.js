@@ -2,22 +2,14 @@
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { channel } = require('diagnostics_channel')
 
 const {
-  CI_APP_ORIGIN,
-  TEST_CODE_OWNERS,
-  TEST_SUITE,
   TEST_STATUS,
   TEST_PARAMETERS,
   finishAllTraceSpans,
-  getTestEnvironmentMetadata,
   getTestSuitePath,
   getTestParentSpan,
   getTestParametersString,
-  getCodeOwnersFileEntries,
-  getCodeOwnersForFilename,
-  getTestCommonTags,
   getTestSessionCommonTags,
   getTestSuiteCommonTags,
   TEST_SUITE_ID,
@@ -25,26 +17,6 @@ const {
   TEST_COMMAND
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
-
-const { getSkippableSuites } = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-skippable-suites')
-const {
-  getItrConfiguration
-} = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-itr-configuration')
-
-function getTestSpanMetadata (tracer, test, sourceRoot) {
-  const childOf = getTestParentSpan(tracer)
-
-  const { file: testSuiteAbsolutePath } = test
-  const fullTestName = test.fullTitle()
-  const testSuite = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
-
-  const commonTags = getTestCommonTags(fullTestName, testSuite, tracer._version)
-
-  return {
-    childOf,
-    ...commonTags
-  }
-}
 
 class MochaPlugin extends CiPlugin {
   static get name () {
@@ -204,31 +176,21 @@ class MochaPlugin extends CiPlugin {
       testSuiteTags[TEST_COMMAND] = this.command
     }
 
-    const { childOf, ...testSpanMetadata } = getTestSpanMetadata(this.tracer, test, this.sourceRoot)
+    const { file: testSuiteAbsolutePath } = test
+    const fullTestName = test.fullTitle()
+    const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
+
+    const extraTags = {
+      ...testSuiteTags,
+      [COMPONENT]: this.constructor.name
+    }
 
     const testParametersString = getTestParametersString(this._testNameToParams, test.title)
     if (testParametersString) {
-      testSpanMetadata[TEST_PARAMETERS] = testParametersString
-    }
-    const codeOwners = getCodeOwnersForFilename(testSpanMetadata[TEST_SUITE], this.codeOwnersEntries)
-
-    if (codeOwners) {
-      testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
+      extraTags[TEST_PARAMETERS] = testParametersString
     }
 
-    const testSpan = this.tracer
-      .startSpan('mocha.test', {
-        childOf,
-        tags: {
-          [COMPONENT]: this.constructor.name,
-          ...this.testEnvironmentMetadata,
-          ...testSpanMetadata,
-          ...testSuiteTags
-        }
-      })
-    testSpan.context()._trace.origin = CI_APP_ORIGIN
-
-    return testSpan
+    return super.startTestSpan(fullTestName, testSuite, extraTags)
   }
 }
 

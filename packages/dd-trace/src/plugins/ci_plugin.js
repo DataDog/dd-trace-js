@@ -1,6 +1,14 @@
 const { channel } = require('diagnostics_channel')
 
-const { getTestEnvironmentMetadata, getCodeOwnersFileEntries } = require('./util/test')
+const {
+  getTestEnvironmentMetadata,
+  getCodeOwnersFileEntries,
+  getTestParentSpan,
+  getTestCommonTags,
+  getCodeOwnersForFilename,
+  TEST_CODE_OWNERS,
+  CI_APP_ORIGIN
+} = require('./util/test')
 const { getItrConfiguration } = require('../ci-visibility/intelligent-test-runner/get-itr-configuration')
 const { getSkippableSuites } = require('../ci-visibility/intelligent-test-runner/get-skippable-suites')
 
@@ -66,7 +74,6 @@ module.exports = class CiPlugin extends Plugin {
       })
     })
 
-    // jest one
     this.addSub(`ci:${this.constructor.name}:test-suite:skippable`, ({ onDone }) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
         return onDone({ skippableSuites: [] })
@@ -94,5 +101,32 @@ module.exports = class CiPlugin extends Plugin {
         })
       })
     })
+  }
+
+  startTestSpan (name, suite, extraTags) {
+    const childOf = getTestParentSpan(this.tracer)
+    const testCommonTags = getTestCommonTags(name, suite, this.tracer._version)
+
+    const testTags = {
+      ...testCommonTags,
+      ...extraTags
+    }
+
+    const codeOwners = getCodeOwnersForFilename(suite, this.codeOwnersEntries)
+
+    if (codeOwners) {
+      testTags[TEST_CODE_OWNERS] = codeOwners
+    }
+
+    const testSpan = this.tracer
+      .startSpan('jest.test', {
+        childOf,
+        tags: {
+          ...this.testEnvironmentMetadata,
+          ...testTags
+        }
+      })
+
+    testSpan.context()._trace.origin = CI_APP_ORIGIN
   }
 }
