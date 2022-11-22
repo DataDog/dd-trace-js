@@ -144,11 +144,11 @@ class JestPlugin extends Plugin {
           runtimeVersion,
           branch: gitBranch
         }
-        getSkippableSuites(testConfiguration, (err, skippableTests) => {
+        getSkippableSuites(testConfiguration, (err, skippableSuites) => {
           if (err) {
             onError(err)
           } else {
-            onResponse(skippableTests)
+            onResponse(skippableSuites)
           }
         })
       })

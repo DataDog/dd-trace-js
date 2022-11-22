@@ -2,6 +2,7 @@
 
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
+const { channel } = require('diagnostics_channel')
 
 const {
   CI_APP_ORIGIN,
@@ -23,6 +24,11 @@ const {
   TEST_SESSION_ID,
   TEST_COMMAND
 } = require('../../dd-trace/src/plugins/util/test')
+
+const { getSkippableSuites } = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-skippable-suites')
+const {
+  getItrConfiguration
+} = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-itr-configuration')
 
 function getTestSpanMetadata (tracer, test, sourceRoot) {
   const childOf = getTestParentSpan(tracer)
@@ -47,11 +53,105 @@ class MochaPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
+    const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
+    // `gitMetadataPromise` is used to wait until git metadata is uploaded to
+    // proceed with calculating the suites to skip
+    // TODO: add timeout after which the promise is resolved
+    const gitMetadataPromise = new Promise(resolve => {
+      gitMetadataUploadFinishCh.subscribe(err => {
+        resolve(err)
+      })
+    })
+
     this._testSuites = new Map()
     this._testNameToParams = {}
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('mocha', this.config)
     this.sourceRoot = process.cwd()
     this.codeOwnersEntries = getCodeOwnersFileEntries(this.sourceRoot)
+
+    const {
+      'git.repository_url': repositoryUrl,
+      'git.commit.sha': sha,
+      'os.version': osVersion,
+      'os.platform': osPlatform,
+      'os.architecture': osArchitecture,
+      'runtime.name': runtimeName,
+      'runtime.version': runtimeVersion,
+      'git.branch': branch
+    } = this.testEnvironmentMetadata
+
+    const testConfiguration = {
+      repositoryUrl,
+      sha,
+      osVersion,
+      osPlatform,
+      osArchitecture,
+      runtimeName,
+      runtimeVersion,
+      branch
+    }
+
+    this.addSub('ci:mocha:test-suite:skippable', ({ onDone }) => {
+      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
+        onDone(null, [])
+        return
+      }
+      // we only request after git upload has happened, if it didn't fail
+      gitMetadataPromise.then((gitUploadError) => {
+        if (gitUploadError) {
+          return onDone(gitUploadError)
+        }
+        if (!this.itrConfig || !this.itrConfig.isSuitesSkippingEnabled) {
+          return onDone(null, [])
+        }
+        getSkippableSuites({
+          ...testConfiguration,
+          url: this.config.url,
+          site: this.config.site,
+          env: this.tracer._env,
+          service: this.config.service || this.tracer._service
+        }, onDone)
+      })
+    })
+
+    this.addSub('ci:mocha:configuration', ({ onDone }) => {
+      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
+        onDone(null, {})
+        return
+      }
+      getItrConfiguration({
+        ...testConfiguration,
+        url: this.config.url,
+        site: this.config.site,
+        env: this.tracer._env,
+        service: this.config.service || this.tracer._service
+      }, (err, itrConfig) => {
+        if (err) {
+          onDone(err)
+        } else {
+          this.itrConfig = itrConfig
+          onDone(null)
+        }
+      })
+    })
+
+    this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
+      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
+        return
+      }
+      if (!this.itrConfig || !this.itrConfig.isCodeCoverageEnabled) {
+        return
+      }
+      const testSuiteSpan = this._testSuites.get(suiteFile)
+
+      const relativeCoverageFiles = [...coverageFiles, suiteFile]
+        .map(filename => getTestSuitePath(filename, this.sourceRoot))
+
+      this.tracer._exporter.exportCoverage({
+        span: testSuiteSpan,
+        coverageFiles: relativeCoverageFiles
+      })
+    })
 
     this.addSub('ci:mocha:session:start', (command) => {
       if (!this.config.isAgentlessEnabled) {
@@ -161,13 +261,13 @@ class MochaPlugin extends Plugin {
         finishAllTraceSpans(this.testSessionSpan)
       }
       this.tracer._exporter._writer.flush()
+      this.itrConfig = null
     })
   }
 
   startTestSpan (test) {
     const testSuiteTags = {}
     const testSuiteSpan = this._testSuites.get(test.parent.file)
-
     if (testSuiteSpan) {
       const testSuiteId = testSuiteSpan.context()._spanId.toString(10)
       testSuiteTags[TEST_SUITE_ID] = testSuiteId
