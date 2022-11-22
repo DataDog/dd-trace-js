@@ -20,6 +20,7 @@ module.exports = {
   'bunyan': () => require('../bunyan'),
   'cassandra-driver': () => require('../cassandra-driver'),
   'child_process': () => require('../child-process'),
+  'node:child_process': () => require('../child-process'),
   'connect': () => require('../connect'),
   'couchbase': () => require('../couchbase'),
   'crypto': () => require('../crypto'),
