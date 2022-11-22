@@ -60,6 +60,7 @@ module.exports = {
   'mysql2': () => require('../mysql2'),
   'net': () => require('../net'),
   'next': () => require('../next'),
+  'node:fs': () => require('../fs'),
   'oracledb': () => require('../oracledb'),
   'paperplane': () => require('../paperplane'),
   'pg': () => require('../pg'),
