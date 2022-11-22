@@ -84,7 +84,7 @@ module.exports = class CiPlugin extends Plugin {
           return onDone({ err: gitUploadError })
         }
         if (!this.itrConfig || !this.itrConfig.isSuitesSkippingEnabled) {
-          return onDone(null, [])
+          return onDone({ skippableSuites: [] })
         }
         getSkippableSuites({
           ...testConfiguration,
@@ -119,7 +119,7 @@ module.exports = class CiPlugin extends Plugin {
     }
 
     const testSpan = this.tracer
-      .startSpan('jest.test', {
+      .startSpan(`${this.constructor.name}.test`, {
         childOf,
         tags: {
           ...this.testEnvironmentMetadata,
@@ -128,5 +128,7 @@ module.exports = class CiPlugin extends Plugin {
       })
 
     testSpan.context()._trace.origin = CI_APP_ORIGIN
+
+    return testSpan
   }
 }
