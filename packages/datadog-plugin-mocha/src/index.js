@@ -24,6 +24,7 @@ const {
   TEST_SESSION_ID,
   TEST_COMMAND
 } = require('../../dd-trace/src/plugins/util/test')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 
 const { getSkippableSuites } = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-skippable-suites')
 const {
@@ -164,6 +165,7 @@ class MochaPlugin extends Plugin {
       this.testSessionSpan = this.tracer.startSpan('mocha.test_session', {
         childOf,
         tags: {
+          [COMPONENT]: this.constructor.name,
           ...this.testEnvironmentMetadata,
           ...testSessionSpanMetadata
         }
@@ -183,6 +185,7 @@ class MochaPlugin extends Plugin {
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testSessionSpan,
         tags: {
+          [COMPONENT]: this.constructor.name,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
         }
@@ -295,6 +298,7 @@ class MochaPlugin extends Plugin {
       .startSpan('mocha.test', {
         childOf,
         tags: {
+          [COMPONENT]: this.constructor.name,
           ...this.testEnvironmentMetadata,
           ...testSpanMetadata,
           ...testSuiteTags
