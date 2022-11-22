@@ -2,7 +2,7 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK } = require('../../dd-trace/src/plugins/util/test')
+const { ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let cassandra

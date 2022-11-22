@@ -3,7 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { promisify } = require('util')
 const { storage } = require('../../datadog-core')
-const { ERROR_TYPE, ERROR_MESSAGE } = require('../../dd-trace/src/plugins/util/test')
+const { ERROR_TYPE, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let dns
