@@ -2,7 +2,9 @@
 
 const path = require('path')
 const fs = require('fs')
+const { channel } = require('diagnostics_channel')
 
+const msgpack = require('msgpack-lite')
 const nock = require('nock')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -23,6 +25,8 @@ const {
   TEST_CODE_OWNERS,
   LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
+
+const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
 
 const { version: ddTraceVersion } = require('../../../package.json')
 
@@ -87,7 +91,7 @@ describe('Plugin', () => {
       // before subsequent calls in whichever manner best suits your needs.
       const mochaTestFiles = fs.readdirSync(__dirname).filter(name => name.startsWith('mocha-'))
       mochaTestFiles.forEach((testFile) => {
-        delete require.cache[require.resolve(path.join(__dirname, testFile))]
+        delete require.cache[require.resolve(`./${testFile}`)]
       })
       return agent.close({ ritmReset: false, wipe: true })
     })
@@ -97,11 +101,17 @@ describe('Plugin', () => {
         .get('/')
         .reply(200, 'OK')
 
-      const loadArguments = [['mocha', 'http'], { isAgentlessEnabled: true }]
+      const loadArguments = [['mocha', 'http']]
 
+      const isAgentlessTest = this.currentTest.parent.title === 'agentless'
       // we need the ci visibility init for this test
-      if (this.currentTest.title === 'works with test suite level visibility') {
+      if (isAgentlessTest) {
         process.env.DD_API_KEY = 'key'
+        process.env.DD_APP_KEY = 'app-key'
+        process.env.DD_ENV = 'ci'
+        process.env.DD_SITE = 'datad0g.com'
+        process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
+        loadArguments.push({ isAgentlessEnabled: true, isIntelligentTestRunnerEnabled: true })
         loadArguments.push({ experimental: { exporter: 'datadog' } })
       }
 
@@ -460,54 +470,6 @@ describe('Plugin', () => {
         mocha.run()
       })
 
-      it('works with test suite level visibility', function (done) {
-        const testFilePaths = fs.readdirSync(__dirname)
-          .filter(name => name.startsWith('mocha-test-suite-level'))
-          .map(relativePath => path.join(__dirname, relativePath))
-
-        const suites = [
-          'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-after-each.js',
-          'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-skip-describe.js',
-          'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-test.js',
-          'packages/datadog-plugin-mocha/test/mocha-test-suite-level-pass.js'
-        ]
-
-        agent.use(agentlessPayload => {
-          const events = agentlessPayload.events.map(event => event.content)
-
-          if (events[0].type === 'test') {
-            throw new Error() // we don't want to assert on tests
-          }
-
-          const testSessionEvent = events.find(span => span.type === 'test_session_end')
-          const testSuiteEvents = events.filter(span => span.type === 'test_suite_end')
-
-          expect(testSessionEvent.meta[TEST_STATUS]).to.equal('fail')
-          expect(testSuiteEvents.length).to.equal(4)
-
-          expect(
-            testSuiteEvents.every(
-              span => span.test_session_id.toString() === testSessionEvent.test_session_id.toString()
-            )
-          ).to.be.true
-          expect(testSuiteEvents.every(suite => suite.test_suite_id !== undefined)).to.be.true
-          expect(testSuiteEvents.every(suite => suites.includes(suite.meta[TEST_SUITE]))).to.be.true
-
-          const failedSuites = testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'fail')
-          expect(testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'pass')).to.have.length(1)
-          expect(failedSuites).to.have.length(3)
-          expect(failedSuites.every(suite => suite.meta[ERROR_MESSAGE] !== undefined)).to.be.true
-        }).then(() => done()).catch(done)
-
-        const mocha = new Mocha({
-          reporter: function () {} // silent on internal tests
-        })
-        testFilePaths.forEach(filePath => {
-          mocha.addFile(filePath)
-        })
-        mocha.run()
-      })
-
       it('works when skipping suites', function (done) {
         const testFilePath = path.join(__dirname, 'mocha-test-skip-describe.js')
 
@@ -533,6 +495,312 @@ describe('Plugin', () => {
         })
         mocha.addFile(testFilePath)
         mocha.run()
+      })
+
+      describe('agentless', () => {
+        beforeEach(() => {
+          delete global.__coverage__
+          delete require.cache[require.resolve('./fixtures/coverage.json')]
+          // we have to mock the __coverage__ global variable that `nyc` adds
+          global.__coverage__ = require('./fixtures/coverage.json')
+        })
+        it('works with test suite level visibility', function (done) {
+          const testFilePaths = fs.readdirSync(__dirname)
+            .filter(name => name.startsWith('mocha-test-suite-level'))
+            .map(relativePath => path.join(__dirname, relativePath))
+
+          const suites = [
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-after-each.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-skip-describe.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-test.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-pass.js'
+          ]
+
+          agent.use(agentlessPayload => {
+            const events = agentlessPayload.events.map(event => event.content)
+
+            if (events[0].type === 'test') {
+              throw new Error() // we don't want to assert on tests
+            }
+
+            const testSessionEvent = events.find(span => span.type === 'test_session_end')
+            const testSuiteEvents = events.filter(span => span.type === 'test_suite_end')
+
+            expect(testSessionEvent.meta[TEST_STATUS]).to.equal('fail')
+            expect(testSuiteEvents.length).to.equal(4)
+
+            expect(
+              testSuiteEvents.every(
+                span => span.test_session_id.toString() === testSessionEvent.test_session_id.toString()
+              )
+            ).to.be.true
+            expect(testSuiteEvents.every(suite => suite.test_suite_id !== undefined)).to.be.true
+            expect(testSuiteEvents.every(suite => suites.includes(suite.meta[TEST_SUITE]))).to.be.true
+
+            const failedSuites = testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'fail')
+            expect(testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'pass')).to.have.length(1)
+            expect(failedSuites).to.have.length(3)
+            expect(failedSuites.every(suite => suite.meta[ERROR_MESSAGE] !== undefined)).to.be.true
+          }).then(() => done()).catch(done)
+
+          const mocha = new Mocha({
+            reporter: function () {} // silent on internal tests
+          })
+          testFilePaths.forEach(filePath => {
+            mocha.addFile(filePath)
+          })
+          mocha.run()
+        })
+        it('can report code coverage', function (done) {
+          gitMetadataUploadFinishCh.publish()
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  code_coverage: true,
+                  tests_skipping: true
+                }
+              }
+            }))
+
+          nock(`http://127.0.0.1:${agent.server.address().port}`)
+            .post('/api/v2/citestcov')
+            .reply(202, function () {
+              const contentTypeHeader = this.req.headers['content-type']
+              const contentDisposition = this.req.requestBodyBuffers[1].toString()
+              const eventContentDisposition = this.req.requestBodyBuffers[6].toString()
+              const eventPayload = this.req.requestBodyBuffers[8].toString()
+              const coveragePayload = msgpack.decode(this.req.requestBodyBuffers[3])
+
+              expect(contentTypeHeader).to.contain('multipart/form-data')
+              expect(coveragePayload.version).to.equal(1)
+              const coverageFiles = coveragePayload.files.map(file => file.filename)
+
+              expect(coverageFiles)
+                .to.include('sum.js')
+              expect(coverageFiles)
+                .to.include('subtract.js')
+              expect(coverageFiles)
+                .to.include('packages/datadog-plugin-mocha/test/mocha-test-code-coverage.js')
+              expect(contentDisposition).to.contain(
+                'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"'
+              )
+              expect(eventContentDisposition).to.contain(
+                'Content-Disposition: form-data; name="event"; filename="event.json"'
+              )
+              expect(eventPayload).to.equal(JSON.stringify({ dummy: true }))
+              done()
+            })
+
+          const testFilePath = path.join(__dirname, 'mocha-test-code-coverage.js')
+
+          const mocha = new Mocha({
+            reporter: function () {} // silent on internal tests
+          })
+          mocha.addFile(testFilePath)
+
+          mocha.run()
+        })
+        it('does not report code coverage if disabled by API', function (done) {
+          gitMetadataUploadFinishCh.publish()
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  code_coverage: false,
+                  tests_skipping: true
+                }
+              }
+            }))
+
+          const scope = nock(`http://127.0.0.1:${agent.server.address().port}`)
+            .post('/api/v2/citestcov')
+            .reply(202, function () {
+              done(new Error('Code coverage should not be uploaded when not enabled'))
+            })
+
+          const testFilePath = path.join(__dirname, 'mocha-test-code-coverage.js')
+
+          const mocha = new Mocha({
+            reporter: function () {} // silent on internal tests
+          })
+          mocha.addFile(testFilePath)
+
+          mocha.run(() => {
+            expect(scope.isDone()).to.be.false
+            done()
+          })
+        })
+        it('can skip suites received by the intelligent test runner API', function (done) {
+          gitMetadataUploadFinishCh.publish()
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  code_coverage: true,
+                  tests_skipping: true
+                }
+              }
+            }))
+
+          const scope = nock('https://api.datad0g.com/')
+            .post('/api/v2/ci/tests/skippable')
+            .reply(200, JSON.stringify({
+              data: [{
+                type: 'suite',
+                attributes: {
+                  suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-1.js'
+                }
+              }]
+            }))
+
+          const testAssertion = agent.use(agentlessPayload => {
+            const events = agentlessPayload.events.map(event => event.content)
+            expect(events[0].type).to.equal('test')
+            expect(events[0].meta[TEST_SUITE]).to.equal('packages/datadog-plugin-mocha/test/mocha-test-itr-2.js')
+            expect(events[0].meta[TEST_STATUS]).to.equal('pass')
+          })
+
+          const suiteAssertion = agent.use(agentlessPayload => {
+            const events = agentlessPayload.events.map(event => event.content)
+            const testSuite = events.find(
+              event =>
+                event.type === 'test_suite_end' &&
+                event.meta[TEST_SUITE] === 'packages/datadog-plugin-mocha/test/mocha-test-itr-2.js'
+            )
+            expect(testSuite.meta[TEST_STATUS]).to.equal('pass')
+          })
+
+          Promise.all([testAssertion, suiteAssertion])
+            .then(() => done())
+            .catch(done)
+
+          const testFilePath = path.join(__dirname, 'mocha-test-itr-1.js')
+          const testFilePath2 = path.join(__dirname, 'mocha-test-itr-2.js')
+
+          const mocha = new Mocha({
+            reporter: function () {} // silent on internal tests
+          })
+          mocha.addFile(testFilePath)
+          mocha.addFile(testFilePath2)
+
+          mocha.run(() => {
+            expect(scope.isDone()).to.be.true
+          })
+        })
+        it('does not skip tests if git metadata is not uploaded', function (done) {
+          gitMetadataUploadFinishCh.publish(new Error('error uploading'))
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  code_coverage: true,
+                  tests_skipping: true
+                }
+              }
+            }))
+
+          const scope = nock('https://api.datad0g.com/')
+            .post('/api/v2/ci/tests/skippable')
+            .reply(200, JSON.stringify({
+              data: [{
+                type: 'suite',
+                attributes: {
+                  suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-1.js'
+                }
+              }]
+            }))
+
+          const events = [
+            { suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-2.js', status: 'pass' },
+            { suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-1.js', status: 'pass' }
+          ]
+
+          const testAssertions = events.map(({ status, suite }) => {
+            return agent.use(agentlessPayload => {
+              const events = agentlessPayload.events.map(event => event.content)
+              expect(events[0].type).to.equal('test')
+              expect(events[0].meta[TEST_SUITE]).to.equal(suite)
+              expect(events[0].meta[TEST_STATUS]).to.equal(status)
+            })
+          })
+
+          Promise.all(testAssertions)
+            .then(() => done())
+            .catch(done)
+
+          const testFilePath = path.join(__dirname, 'mocha-test-itr-1.js')
+          const testFilePath2 = path.join(__dirname, 'mocha-test-itr-2.js')
+
+          const mocha = new Mocha({
+            reporter: function () {} // silent on internal tests
+          })
+          mocha.addFile(testFilePath)
+          mocha.addFile(testFilePath2)
+
+          mocha.run(() => {
+            expect(scope.isDone()).to.be.false // skippable API is not called
+          })
+        })
+        it('does not skip tests if tests skipping is disabled by API', function (done) {
+          gitMetadataUploadFinishCh.publish()
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  code_coverage: true,
+                  tests_skipping: false
+                }
+              }
+            }))
+
+          const scope = nock('https://api.datad0g.com/')
+            .post('/api/v2/ci/tests/skippable')
+            .reply(200, JSON.stringify({
+              data: [{
+                type: 'suite',
+                attributes: {
+                  suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-1.js'
+                }
+              }]
+            }))
+
+          const events = [
+            { suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-2.js', status: 'pass' },
+            { suite: 'packages/datadog-plugin-mocha/test/mocha-test-itr-1.js', status: 'pass' }
+          ]
+
+          const testAssertions = events.map(({ status, suite }) => {
+            return agent.use(agentlessPayload => {
+              const events = agentlessPayload.events.map(event => event.content)
+              expect(events[0].type).to.equal('test')
+              expect(events[0].meta[TEST_SUITE]).to.equal(suite)
+              expect(events[0].meta[TEST_STATUS]).to.equal(status)
+            })
+          })
+
+          Promise.all(testAssertions)
+            .then(() => done())
+            .catch(done)
+
+          const testFilePath = path.join(__dirname, 'mocha-test-itr-1.js')
+          const testFilePath2 = path.join(__dirname, 'mocha-test-itr-2.js')
+
+          const mocha = new Mocha({
+            reporter: function () {} // silent on internal tests
+          })
+          mocha.addFile(testFilePath)
+          mocha.addFile(testFilePath2)
+
+          mocha.run(() => {
+            expect(scope.isDone()).to.be.false // skippable API is not called
+          })
+        })
       })
     })
   })

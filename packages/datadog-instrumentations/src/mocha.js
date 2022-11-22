@@ -1,5 +1,15 @@
+const { createCoverageMap } = require('istanbul-lib-coverage')
+
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
+const {
+  getCoveredFilenamesFromCoverage,
+  resetCoverage,
+  mergeCoverage,
+  getTestSuitePath,
+  fromCoverageMapToCoverage
+} = require('../../dd-trace/src/plugins/util/test')
 
 const testStartCh = channel('ci:mocha:test:start')
 const errorCh = channel('ci:mocha:test:error')
@@ -7,12 +17,16 @@ const skipCh = channel('ci:mocha:test:skip')
 const testFinishCh = channel('ci:mocha:test:finish')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 
+const configurationCh = channel('ci:mocha:configuration')
+const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
+
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
 
 const testSuiteStartCh = channel('ci:mocha:test-suite:start')
 const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
+const testSuiteCodeCoverageCh = channel('ci:mocha:test-suite:code-coverage')
 
 // TODO: remove when root hooks and fixtures are implemented
 const patched = new WeakSet()
@@ -20,6 +34,11 @@ const patched = new WeakSet()
 const testToAr = new WeakMap()
 const originalFns = new WeakMap()
 const testFileToSuiteAr = new Map()
+
+// We'll preserve the original coverage here
+const originalCoverageMap = createCoverageMap()
+
+let suitesToSkip = []
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -46,13 +65,13 @@ function getSuitesByTestFile (root) {
 }
 
 function getTestStatus (test) {
-  if (test.pending) {
+  if (test.isPending()) {
     return 'skip'
   }
-  if (test.state !== 'failed' && !test.timedOut) {
-    return 'pass'
+  if (test.isFailed() || test.timedOut) {
+    return 'fail'
   }
-  return 'fail'
+  return 'pass'
 }
 
 function isRetry (test) {
@@ -93,6 +112,8 @@ function mochaHook (Runner) {
       }
       testFileToSuiteAr.clear()
       testSessionFinishCh.publish(status)
+      // restore the original coverage
+      global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }))
 
     this.once('start', testRunAsyncResource.bind(function () {
@@ -140,9 +161,21 @@ function mochaHook (Runner) {
         })
       }
 
+      if (global.__coverage__) {
+        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+
+        testSuiteCodeCoverageCh.publish({
+          coverageFiles,
+          suiteFile: suite.file
+        })
+        // We need to reset coverage to get a code coverage per suite
+        // Before that, we preserve the original coverage
+        mergeCoverage(global.__coverage__, originalCoverageMap)
+        resetCoverage(global.__coverage__)
+      }
+
       const asyncResource = testFileToSuiteAr.get(suite.file)
       asyncResource.runInAsyncScope(() => {
-        // get suite status
         testSuiteFinishCh.publish(status)
       })
     })
@@ -229,7 +262,8 @@ function mochaHook (Runner) {
           skipCh.publish(test)
         })
       } else {
-        // if there is no async resource, the test has been skipped through `test.skip``
+        // if there is no async resource, the test has been skipped through `test.skip`
+        // or the parent suite is skipped
         const skippedTestAsyncResource = new AsyncResource('bound-anonymous-fn')
         if (test.fn) {
           testToAr.set(test.fn, skippedTestAsyncResource)
@@ -241,6 +275,11 @@ function mochaHook (Runner) {
         })
       }
     })
+
+    // We remove the suites that we skip through ITR
+    this.suite.suites = this.suite.suites.filter(suite =>
+      !suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
+    )
 
     return run.apply(this, arguments)
   })
@@ -265,6 +304,48 @@ function mochaEachHook (mochaEach) {
     }
   })
 }
+
+addHook({
+  name: 'mocha',
+  versions: ['>=5.2.0'],
+  file: 'lib/mocha.js'
+}, (Mocha) => {
+  const mochaRunAsyncResource = new AsyncResource('bound-anonymous-fn')
+
+  /**
+   * Get ITR configuration and skippable suites
+   * If ITR is disabled, `onDone` is called immediately on the subscriber
+   */
+  shimmer.wrap(Mocha.prototype, 'run', run => function () {
+    const onReceivedSkippableSuites = (err, skippableSuites) => {
+      if (err) {
+        log.error(err)
+        suitesToSkip = []
+      } else {
+        suitesToSkip = skippableSuites
+      }
+      run.apply(this, arguments)
+    }
+
+    const onReceivedConfiguration = (err) => {
+      if (err) {
+        log.error(err)
+        return run.apply(this, arguments)
+      }
+
+      skippableSuitesCh.publish({
+        onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
+      })
+    }
+
+    mochaRunAsyncResource.runInAsyncScope(() => {
+      configurationCh.publish({
+        onDone: mochaRunAsyncResource.bind(onReceivedConfiguration)
+      })
+    })
+  })
+  return Mocha
+})
 
 addHook({
   name: 'mocha',
