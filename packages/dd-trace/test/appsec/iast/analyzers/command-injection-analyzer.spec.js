@@ -1,3 +1,5 @@
+'use strict'
+
 require('../../../../../dd-trace/test/setup/tap')
 
 const { testThatRequestHasVulnerability, testThatRequestHasNotVulnerability } = require('../utils')
