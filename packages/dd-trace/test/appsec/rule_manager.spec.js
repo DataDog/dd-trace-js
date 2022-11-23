@@ -2,6 +2,7 @@
 
 const { applyRules, clearAllRules } = require('../../src/appsec/rule_manager')
 const callbacks = require('../../src/appsec/callbacks')
+const Gateway = require('../../src/appsec/gateway/engine')
 
 const rules = [{ a: 'thatsarule' }, { b: 'thatsanotherone' }]
 
@@ -41,8 +42,11 @@ describe('AppSec Rule Manager', () => {
       expect(callbacks.DDWAF).to.have.been.calledOnce
       expect(FakeDDWAF).to.have.been.calledOnce
 
+      sinon.stub(Gateway.manager, 'clear')
+
       clearAllRules()
 
+      expect(Gateway.manager.clear).to.have.been.calledOnce
       expect(FakeDDWAF.prototype.clear).to.have.been.calledOnce
 
       applyRules(rules)
