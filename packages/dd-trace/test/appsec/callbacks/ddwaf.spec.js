@@ -431,15 +431,12 @@ describe('WAFCallback', () => {
 
     describe('clear', () => {
       it('should clear the context', () => {
-        sinon.stub(Gateway.manager, 'clear')
-
         waf.wafContextCache.set(waf, {})
 
         waf.clear()
 
         expect(waf.ddwaf.dispose).to.have.been.calledOnce
         expect(waf.wafContextCache.get(waf)).to.be.undefined
-        expect(Gateway.manager.clear).to.have.been.calledOnce
       })
     })
   })
