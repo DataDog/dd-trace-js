@@ -10,7 +10,7 @@ const { fileURLToPath } = require('url')
 const savedDependencies = new Set()
 const detectedDependencyNames = new Set()
 const FILE_URI_START = `file://`
-const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
+const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 
 let immediate, config, application, host
 
@@ -67,7 +67,7 @@ function start (_config, _application, _host) {
   config = _config
   application = _application
   host = _host
-  moduleLoadEndChannel.subscribe(onModuleLoad)
+  moduleLoadStartChannel.subscribe(onModuleLoad)
 }
 
 function isDependency (filename, request) {
@@ -80,8 +80,8 @@ function stop () {
   host = null
   detectedDependencyNames.clear()
   savedDependencies.clear()
-  if (moduleLoadEndChannel.hasSubscribers) {
-    moduleLoadEndChannel.unsubscribe(onModuleLoad)
+  if (moduleLoadStartChannel.hasSubscribers) {
+    moduleLoadStartChannel.unsubscribe(onModuleLoad)
   }
 }
 module.exports = { start, stop }

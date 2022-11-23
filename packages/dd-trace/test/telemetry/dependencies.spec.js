@@ -1,7 +1,7 @@
 const proxyquire = require('proxyquire')
 const path = require('path')
 const dc = require('diagnostics_channel')
-const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
+const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const originalSetImmediate = global.setImmediate
 describe('dependencies', () => {
   describe('start', () => {
@@ -42,45 +42,45 @@ describe('dependencies', () => {
 
     it('should not fail with invalid data', () => {
       dependencies.start(config, application, host)
-      moduleLoadEndChannel.publish(null)
-      moduleLoadEndChannel.publish({})
-      moduleLoadEndChannel.publish({ filename: 'filename' })
-      moduleLoadEndChannel.publish({ request: 'request' })
-      moduleLoadEndChannel.publish(undefined)
-      moduleLoadEndChannel.publish()
+      moduleLoadStartChannel.publish(null)
+      moduleLoadStartChannel.publish({})
+      moduleLoadStartChannel.publish({ filename: 'filename' })
+      moduleLoadStartChannel.publish({ request: 'request' })
+      moduleLoadStartChannel.publish(undefined)
+      moduleLoadStartChannel.publish()
     })
 
     it('should not call to sendData with core library', () => {
       dependencies.start(config, application, host)
-      moduleLoadEndChannel.publish({ request: 'crypto', filename: 'crypto' })
+      moduleLoadStartChannel.publish({ request: 'crypto', filename: 'crypto' })
       expect(sendData).not.to.have.been.called
     })
 
     it('should not call to sendData without node_modules in path', () => {
       const filename = path.join(basepathWithoutNodeModules, 'custom.js')
       dependencies.start(config, application, host)
-      moduleLoadEndChannel.publish({ request: 'custom-module', filename })
+      moduleLoadStartChannel.publish({ request: 'custom-module', filename })
       expect(sendData).not.to.have.been.called
     })
 
     it('should not call to sendData without node_modules in file URI', () => {
       const filename = [fileURIWithoutNodeModules, 'custom.js'].join('/')
       dependencies.start(config, application, host)
-      moduleLoadEndChannel.publish({ request: 'custom-module', filename })
+      moduleLoadStartChannel.publish({ request: 'custom-module', filename })
       expect(sendData).not.to.have.been.called
     })
 
     it('should not call to sendData without node_modules in path when request does not come in message', () => {
       const filename = path.join(basepathWithoutNodeModules, 'custom.js')
       dependencies.start(config, application, host)
-      moduleLoadEndChannel.publish({ filename })
+      moduleLoadStartChannel.publish({ filename })
       expect(sendData).not.to.have.been.called
     })
 
     it('should not call to sendData without node_modules in path when request does not come in message', () => {
       const filename = [fileURIWithoutNodeModules, 'custom.js'].join('/')
       dependencies.start(config, application, host)
-      moduleLoadEndChannel.publish({ filename })
+      moduleLoadStartChannel.publish({ filename })
       expect(sendData).not.to.have.been.called
     })
 
@@ -89,7 +89,7 @@ describe('dependencies', () => {
       requirePackageJson.callsFake(function () { throw new Error() })
       const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
       dependencies.start(config, application, host)
-      moduleLoadEndChannel.publish({ request, filename })
+      moduleLoadStartChannel.publish({ request, filename })
       expect(sendData).not.to.have.been.called
     })
 
@@ -98,7 +98,7 @@ describe('dependencies', () => {
       requirePackageJson.returns({ version: '1.0.0' })
       const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
       dependencies.start(config, application, host)
-      moduleLoadEndChannel.publish({ request, filename })
+      moduleLoadStartChannel.publish({ request, filename })
       expect(sendData).to.have.been.calledOnce
     })
 
@@ -107,7 +107,7 @@ describe('dependencies', () => {
       requirePackageJson.returns({ version: '1.0.0' })
       const filename = [fileURIWithoutNodeModules, 'node_modules', request, 'index.js'].join('/')
       dependencies.start(config, application, host)
-      moduleLoadEndChannel.publish({ request, filename })
+      moduleLoadStartChannel.publish({ request, filename })
       expect(sendData).to.have.been.calledOnce
     })
 
@@ -117,7 +117,7 @@ describe('dependencies', () => {
       requirePackageJson.returns({ version: packageVersion })
       const filename = [fileURIWithoutNodeModules, 'node_modules', request, 'index.js'].join('/')
       dependencies.start(config, application, host)
-      moduleLoadEndChannel.publish({ filename })
+      moduleLoadStartChannel.publish({ filename })
       const expectedDependencies = {
         dependencies: [
           { name: request, version: packageVersion }
@@ -133,7 +133,7 @@ describe('dependencies', () => {
       requirePackageJson.returns({ version: packageVersion })
       const filename = [fileURIWithoutNodeModules, 'node_modules', request, 'index.js'].join('/')
       dependencies.start(config, application, host)
-      moduleLoadEndChannel.publish({ filename })
+      moduleLoadStartChannel.publish({ filename })
       const expectedDependencies = {
         dependencies: [
           { name: request, version: packageVersion }
@@ -150,7 +150,7 @@ describe('dependencies', () => {
       const filename = 'file:' + path.sep + path.sep +
         path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
       dependencies.start(config, application, host)
-      moduleLoadEndChannel.publish({ filename })
+      moduleLoadStartChannel.publish({ filename })
       const expectedDependencies = {
         dependencies: [
           { name: request, version: packageVersion }
@@ -167,8 +167,8 @@ describe('dependencies', () => {
       const filename1 = [fileURIWithoutNodeModules, 'node_modules', moduleName, 'index1.js'].join('/')
       const filename2 = [fileURIWithoutNodeModules, 'node_modules', moduleName, 'index2.js'].join('/')
       dependencies.start(config, application, host)
-      moduleLoadEndChannel.publish({ request: moduleName, filename: filename1 })
-      moduleLoadEndChannel.publish({ request: moduleName, filename: filename2 })
+      moduleLoadStartChannel.publish({ request: moduleName, filename: filename1 })
+      moduleLoadStartChannel.publish({ request: moduleName, filename: filename2 })
       const expectedDependencies = {
         dependencies: [
           { name: moduleName, version: packageVersion }
@@ -183,9 +183,9 @@ describe('dependencies', () => {
       requirePackageJson.returns({ version: '1.0.0' })
       const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
       dependencies.start(config, application, host)
-      moduleLoadEndChannel.publish({ request, filename })
-      moduleLoadEndChannel.publish({ request, filename })
-      moduleLoadEndChannel.publish({ request, filename })
+      moduleLoadStartChannel.publish({ request, filename })
+      moduleLoadStartChannel.publish({ request, filename })
+      moduleLoadStartChannel.publish({ request, filename })
       expect(sendData).to.have.been.calledOnce
     })
 
@@ -208,7 +208,7 @@ describe('dependencies', () => {
       for (let i = 0; i < 1200; i++) {
         const request = requestPrefix + i
         const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
-        moduleLoadEndChannel.publish({ request, filename })
+        moduleLoadStartChannel.publish({ request, filename })
       }
       const interval = setInterval(() => {
         if (atLeastOneTimeout && timeouts.length === 0) {
