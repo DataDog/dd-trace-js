@@ -12,8 +12,11 @@ describe('sql-injection-analyzer', () => {
     }
   }
 
-  const sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
+  const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
     '../taint-tracking/operations': TaintTrackingMock
+  })
+  const sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
+    './injection-analyzer': InjectionAnalyzer
   })
 
   it('should subscribe to mysql, mysql2 and pg start query channel', () => {
@@ -58,10 +61,13 @@ describe('sql-injection-analyzer', () => {
       '../overhead-controller': { hasQuota: () => true },
       '../vulnerability-reporter': { addVulnerability }
     })
+    const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
+      '../taint-tracking/operations': TaintTrackingMock,
+      './vulnerability-analyzer': ProxyAnalyzer
+    })
     const proxiedSqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer',
       {
-        './vulnerability-analyzer': ProxyAnalyzer,
-        '../taint-tracking/operations': TaintTrackingMock
+        './injection-analyzer': InjectionAnalyzer
       })
     proxiedSqlInjectionAnalyzer.analyze(TAINTED_QUERY)
     expect(addVulnerability).to.have.been.calledOnce
