@@ -1,26 +1,12 @@
 'use strict'
-const Analyzer = require('./vulnerability-analyzer')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
-const { isTainted, getRanges } = require('../taint-tracking/operations')
+const InjectionAnalyzer = require('./injection-analyzer')
 
-class PathTraversalAnalyzer extends Analyzer {
+class PathTraversalAnalyzer extends InjectionAnalyzer {
   constructor () {
     super('PATH_TRAVERSAL')
     this.addSub('datadog:fs:access', obj => this.analyze(obj.arguments))
-  }
-
-  _isVulnerable (value, ctx) {
-    let ret = false
-    if (typeof value === 'string') {
-      ret = isTainted(ctx, value)
-    }
-    return ret
-  }
-
-  _getEvidence (value, ctx) {
-    const ranges = getRanges(ctx, value)
-    return { value, ranges }
   }
 
   analyze (value) {
