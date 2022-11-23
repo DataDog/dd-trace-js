@@ -10,8 +10,39 @@ const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking
 const { testThatRequestHasVulnerability } = require('../utils')
 const fs = require('fs')
 
+const iastContext = {
+  rootSpan: {
+    context () {
+      return {
+        toSpanId () {
+          return '123'
+        }
+      }
+    }
+  }
+}
+
+const TaintTrackingMock = {
+  isTainted: sinon.stub()
+}
+
+const getIastContext = sinon.stub()
+const hasQuota = sinon.stub()
+const addVulnerability = sinon.stub()
+
+const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
+  '../iast-context': { getIastContext },
+  '../overhead-controller': { hasQuota },
+  '../vulnerability-reporter': { addVulnerability }
+})
+
+const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
+  './vulnerability-analyzer': ProxyAnalyzer,
+  '../taint-tracking/operations': TaintTrackingMock
+})
+
 describe('path-traversal-analyzer', () => {
-  it('Analyzer should be subscribe to proper channel', () => {
+  it('Analyzer should be subscribed to proper channel', () => {
     expect(pathTraversalAnalyzer._subscriptions).to.have.lengthOf(1)
     expect(pathTraversalAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:fs:access')
   })
@@ -41,43 +72,26 @@ describe('path-traversal-analyzer', () => {
   })
 
   it('if context and value are valid it should call isTainted', () => {
-    const isTainted = sinon.stub()
-    isTainted.returns(false)
+    // const isTainted = sinon.stub()
     const iastContext = {}
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
-      '../taint-tracking/operations': { isTainted }
+      './injection-analyzer': InjectionAnalyzer
     })
-
+    TaintTrackingMock.isTainted.returns(false)
     const result = proxyPathAnalyzer._isVulnerable('test', iastContext)
     expect(result).to.be.false
-    expect(isTainted).to.have.been.calledOnce
+    expect(TaintTrackingMock.isTainted).to.have.been.calledOnce
   })
 
   it('Should report proper vulnerability type', () => {
-    const addVulnerability = sinon.stub()
-    const iastContext = {
-      rootSpan: {
-        context () {
-          return {
-            toSpanId () {
-              return '123'
-            }
-          }
-        }
-      }
-    }
-    const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
-      '../iast-context': {
-        getIastContext: () => iastContext
-      },
-      '../overhead-controller': { hasQuota: () => true },
-      '../vulnerability-reporter': { addVulnerability }
+    const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
+      './injection-analyzer': InjectionAnalyzer,
+      '../iast-context': { getIastContext: () => iastContext }
     })
-    const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer',
-      { './vulnerability-analyzer': ProxyAnalyzer,
-        '../taint-tracking/operations': { isTainted: () => true },
-        '../iast-context': { getIastContext: () => iastContext }
-      })
+
+    getIastContext.returns(iastContext)
+    hasQuota.returns(true)
+    TaintTrackingMock.isTainted.returns(true)
 
     proxyPathAnalyzer.analyze(['test'])
     expect(addVulnerability).to.have.been.calledOnce
@@ -85,36 +99,15 @@ describe('path-traversal-analyzer', () => {
   })
 
   it('Should report 1st argument', () => {
-    const addVulnerability = sinon.stub()
-    const iastContext = {
-      rootSpan: {
-        context () {
-          return {
-            toSpanId () {
-              return '123'
-            }
-          }
-        }
-      }
-    }
-    const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
-      '../iast-context': {
-        getIastContext: () => iastContext
-      },
-      '../overhead-controller': { hasQuota: () => true },
-      '../vulnerability-reporter': { addVulnerability }
-    })
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer',
-      { './vulnerability-analyzer': ProxyAnalyzer,
-        '../iast-context': { getIastContext: () => iastContext },
-        '../taint-tracking/operations': {
-          isTainted: (ctx, value) => {
-            if (value.includes('tainted')) {
-              return true
-            }
-          }
-        }
+      { './injection-analyzer': InjectionAnalyzer,
+        '../iast-context': { getIastContext: () => iastContext }
       })
+
+    addVulnerability.reset()
+    getIastContext.returns(iastContext)
+    TaintTrackingMock.isTainted.returns(true)
+    hasQuota.returns(true)
 
     proxyPathAnalyzer.analyze(['taintedArg1', 'taintedArg2'])
     expect(addVulnerability).to.have.been.calledOnce
@@ -122,36 +115,17 @@ describe('path-traversal-analyzer', () => {
   })
 
   it('Should report 2nd argument', () => {
-    const addVulnerability = sinon.stub()
-    const iastContext = {
-      rootSpan: {
-        context () {
-          return {
-            toSpanId () {
-              return '123'
-            }
-          }
-        }
-      }
-    }
-    const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
-      '../iast-context': {
-        getIastContext: () => iastContext
-      },
-      '../overhead-controller': { hasQuota: () => true },
-      '../vulnerability-reporter': { addVulnerability }
+    const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
+      './injection-analyzer': InjectionAnalyzer,
+      '../iast-context': { getIastContext: () => iastContext }
     })
-    const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer',
-      { './vulnerability-analyzer': ProxyAnalyzer,
-        '../iast-context': { getIastContext: () => iastContext },
-        '../taint-tracking/operations': {
-          isTainted: (ctx, value) => {
-            if (value.includes('tainted')) {
-              return true
-            }
-          }
-        }
-      })
+
+    addVulnerability.reset()
+    TaintTrackingMock.isTainted.reset()
+    getIastContext.returns(iastContext)
+    TaintTrackingMock.isTainted.onFirstCall().returns(false)
+    TaintTrackingMock.isTainted.onSecondCall().returns(true)
+    hasQuota.returns(true)
 
     proxyPathAnalyzer.analyze(['arg1', 'taintedArg2'])
     expect(addVulnerability).to.have.been.calledOnce
