@@ -294,8 +294,6 @@ describe('Plugin', function () {
 
       describe('agentless', () => {
         it('can report code coverage', function (done) {
-          gitMetadataUploadFinishCh.publish()
-
           nock('https://api.datad0g.com/')
             .post('/api/v2/libraries/tests/services/setting')
             .reply(200, JSON.stringify({
@@ -337,17 +335,17 @@ describe('Plugin', function () {
           const options = {
             ...jestCommonOptions,
             testRegex: 'jest-coverage.js',
-            coverage: true
+            coverage: true,
+            runInBand: true
           }
 
           jestExecutable.runCLI(
             options,
             options.projects
           )
+          gitMetadataUploadFinishCh.publish()
         })
         it('does not report code coverage if not enabled by the API', function (done) {
-          gitMetadataUploadFinishCh.publish()
-
           nock('https://api.datad0g.com/')
             .post('/api/v2/libraries/tests/services/setting')
             .reply(200, JSON.stringify({
@@ -378,9 +376,9 @@ describe('Plugin', function () {
             expect(scope.isDone()).to.be.false
             done()
           })
+          gitMetadataUploadFinishCh.publish()
         })
         it('should create spans for the test session and test suite', (done) => {
-          gitMetadataUploadFinishCh.publish()
           const events = [
             { type: 'test_session_end', status: 'pass' },
             {
@@ -434,10 +432,9 @@ describe('Plugin', function () {
             options,
             options.projects
           )
+          gitMetadataUploadFinishCh.publish()
         })
         it('can skip suites received by the intelligent test runner API', (done) => {
-          gitMetadataUploadFinishCh.publish()
-
           nock('https://api.datad0g.com/')
             .post('/api/v2/libraries/tests/services/setting')
             .reply(200, JSON.stringify({
@@ -481,10 +478,9 @@ describe('Plugin', function () {
             options,
             options.projects
           )
+          gitMetadataUploadFinishCh.publish()
         })
         it('does not skip tests if git metadata is not uploaded', function (done) {
-          gitMetadataUploadFinishCh.publish(new Error('error uploading'))
-
           nock('https://api.datad0g.com/')
             .post('/api/v2/libraries/tests/services/setting')
             .reply(200, JSON.stringify({
@@ -543,10 +539,9 @@ describe('Plugin', function () {
             options,
             options.projects
           )
+          gitMetadataUploadFinishCh.publish(new Error('error uploading'))
         })
         it('does not skip tests if test skipping is disabled via API', (done) => {
-          gitMetadataUploadFinishCh.publish()
-
           nock('https://api.datad0g.com/')
             .post('/api/v2/libraries/tests/services/setting')
             .reply(200, JSON.stringify({
@@ -605,6 +600,73 @@ describe('Plugin', function () {
             options,
             options.projects
           )
+          gitMetadataUploadFinishCh.publish()
+        })
+        it('reports code coverage also when there are suites to skip', (done) => {
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, JSON.stringify({
+              data: {
+                attributes: {
+                  code_coverage: true,
+                  tests_skipping: true
+                }
+              }
+            }))
+
+          nock('https://api.datad0g.com/')
+            .post('/api/v2/ci/tests/skippable')
+            .reply(200, JSON.stringify({
+              data: [{
+                type: 'suite',
+                attributes: {
+                  suite: 'packages/datadog-plugin-jest/test/jest-itr-skip.js'
+                }
+              }]
+            }))
+
+          nock(`http://127.0.0.1:${agent.server.address().port}`)
+            .post('/api/v2/citestcov')
+            .reply(202, function () {
+              const contentTypeHeader = this.req.headers['content-type']
+              const contentDisposition = this.req.requestBodyBuffers[1].toString()
+              const eventContentDisposition = this.req.requestBodyBuffers[6].toString()
+              const eventPayload = this.req.requestBodyBuffers[8].toString()
+              const coveragePayload = msgpack.decode(this.req.requestBodyBuffers[3])
+
+              expect(contentTypeHeader).to.contain('multipart/form-data')
+              expect(coveragePayload.version).to.equal(1)
+              const coverageFiles = coveragePayload.files.map(file => file.filename)
+
+              expect(coverageFiles)
+                .to.include('packages/datadog-plugin-jest/test/sum-coverage-test.js')
+              expect(coverageFiles)
+                .to.include('packages/datadog-plugin-jest/test/jest-itr-pass.js')
+              expect(contentDisposition).to.contain(
+                'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"'
+              )
+              expect(eventContentDisposition).to.contain(
+                'Content-Disposition: form-data; name="event"; filename="event.json"'
+              )
+              expect(eventPayload).to.equal(JSON.stringify({ dummy: true }))
+              done()
+            })
+            .post('/api/v2/citestcov')
+            .reply(202, function () {
+              throw new Error('There should only be a single coverage payload')
+            })
+
+          const options = {
+            ...jestCommonOptions,
+            testRegex: /jest-itr-/,
+            coverage: true
+          }
+
+          jestExecutable.runCLI(
+            options,
+            options.projects
+          )
+          gitMetadataUploadFinishCh.publish()
         })
       })
     })
