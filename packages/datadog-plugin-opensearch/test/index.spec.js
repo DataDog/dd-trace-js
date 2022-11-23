@@ -63,6 +63,7 @@ describe('Plugin', () => {
                 'opensearch.body',
                 '{"query":{"match_all":{}}}'
               )
+              expect(traces[0][0].meta).to.have.property('component', 'opensearch')
             })
             .then(done)
             .catch(done)
@@ -91,6 +92,7 @@ describe('Plugin', () => {
                 '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]'
               )
               expect(traces[0][0].meta).to.have.property('opensearch.params', '{"size":100}')
+              expect(traces[0][0].meta).to.have.property('component', 'opensearch')
             })
             .then(done)
             .catch(done)
@@ -131,6 +133,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('service', 'test-opensearch')
               expect(traces[0][0]).to.have.property('resource', 'HEAD /')
               expect(traces[0][0]).to.have.property('type', 'elasticsearch')
+              expect(traces[0][0].meta).to.have.property('component', 'opensearch')
             })
             .then(done)
             .catch(done)
@@ -163,6 +166,7 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('error.type', error.name)
             expect(traces[0][0].meta).to.have.property('error.msg', error.message)
             expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+            expect(traces[0][0].meta).to.have.property('component', 'opensearch')
           })
             .then(done)
             .catch(done)
@@ -239,6 +243,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('opensearch.params', 'foo')
               expect(traces[0][0].meta).to.have.property('opensearch.method', 'POST')
+              expect(traces[0][0].meta).to.have.property('component', 'opensearch')
             })
             .then(done)
             .catch(done)

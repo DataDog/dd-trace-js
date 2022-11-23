@@ -9,7 +9,11 @@ const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
 
+let isEnabled = false
+
 function enable (config) {
+  if (isEnabled) return
+
   try {
     // TODO: enable dc_blocking: config.appsec.blocking === true
 
@@ -36,6 +40,8 @@ function enable (config) {
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_ENDPOINT)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
+
+  isEnabled = true
 }
 
 function incomingHttpStartTranslator (data) {
@@ -107,6 +113,8 @@ function incomingHttpEndTranslator (data) {
 }
 
 function disable () {
+  isEnabled = false
+
   RuleManager.clearAllRules()
 
   // Channel#unsubscribe() is undefined for non active channels

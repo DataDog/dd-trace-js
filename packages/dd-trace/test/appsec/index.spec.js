@@ -48,7 +48,8 @@ describe('AppSec Index', () => {
   })
 
   describe('enable', () => {
-    it('should enable AppSec', () => {
+    it('should enable AppSec only once', () => {
+      AppSec.enable(config)
       AppSec.enable(config)
 
       expect(fs.readFileSync).to.have.been.calledOnceWithExactly('./path/rules.json')

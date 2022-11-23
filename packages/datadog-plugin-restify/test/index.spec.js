@@ -45,6 +45,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
                 expect(traces[0][0].meta).to.have.property('http.method', 'GET')
                 expect(traces[0][0].meta).to.have.property('http.status_code', '404')
+                expect(traces[0][0].meta).to.have.property('component', 'restify')
               })
               .then(done)
               .catch(done)
@@ -70,6 +71,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
                 expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                expect(traces[0][0].meta).to.have.property('component', 'restify')
               })
               .then(done)
               .catch(done)
@@ -137,6 +139,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
                 expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                expect(traces[0][0].meta).to.have.property('component', 'restify')
               })
               .then(done)
               .catch(done)
@@ -201,6 +204,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('error.msg', 'uncaught')
                 expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/error`)
                 expect(traces[0][0].meta).to.have.property('http.status_code', '599')
+                expect(traces[0][0].meta).to.have.property('component', 'restify')
               })
               .then(done)
               .catch(done)

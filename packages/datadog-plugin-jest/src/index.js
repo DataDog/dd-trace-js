@@ -28,6 +28,7 @@ const { getSkippableSuites } = require('../../dd-trace/src/ci-visibility/intelli
 const {
   getItrConfiguration
 } = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-itr-configuration')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
@@ -144,11 +145,11 @@ class JestPlugin extends Plugin {
           runtimeVersion,
           branch: gitBranch
         }
-        getSkippableSuites(testConfiguration, (err, skippableTests) => {
+        getSkippableSuites(testConfiguration, (err, skippableSuites) => {
           if (err) {
             onError(err)
           } else {
-            onResponse(skippableTests)
+            onResponse(skippableSuites)
           }
         })
       })
@@ -165,6 +166,7 @@ class JestPlugin extends Plugin {
       const testSessionSpan = this.tracer.startSpan('jest.test_session', {
         childOf,
         tags: {
+          [COMPONENT]: this.constructor.name,
           ...this.testEnvironmentMetadata,
           ...testSessionSpanMetadata
         }
@@ -222,6 +224,7 @@ class JestPlugin extends Plugin {
       const testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
         childOf: testSessionSpanContext,
         tags: {
+          [COMPONENT]: this.constructor.name,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
         }
@@ -307,6 +310,7 @@ class JestPlugin extends Plugin {
       .startSpan('jest.test', {
         childOf,
         tags: {
+          [COMPONENT]: this.constructor.name,
           ...this.testEnvironmentMetadata,
           ...testSpanMetadata,
           ...suiteTags

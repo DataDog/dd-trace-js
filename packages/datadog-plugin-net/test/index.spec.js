@@ -84,6 +84,7 @@ describe('Plugin', () => {
             service: 'test',
             resource: `localhost:${port}`,
             meta: {
+              'component': 'net',
               'span.kind': 'client',
               'tcp.family': 'IPv4',
               'tcp.remote.host': 'localhost',
@@ -114,6 +115,7 @@ describe('Plugin', () => {
             service: 'test',
             resource: `localhost:${port}`,
             meta: {
+              'component': 'net',
               'span.kind': 'client',
               'tcp.family': 'IPv4',
               'tcp.remote.host': 'localhost',
@@ -137,6 +139,7 @@ describe('Plugin', () => {
         service: 'test',
         resource: '/tmp/dd-trace.sock',
         meta: {
+          'component': 'net',
           'span.kind': 'client',
           'ipc.path': '/tmp/dd-trace.sock'
         },
@@ -163,6 +166,7 @@ describe('Plugin', () => {
             resource: `localhost:${port}`
           })
           expect(traces[0][0].meta).to.deep.include({
+            'component': 'net',
             'span.kind': 'client',
             'tcp.family': 'IPv4',
             'tcp.remote.host': 'localhost',
