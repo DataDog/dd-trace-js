@@ -1,6 +1,7 @@
 'use strict'
 
 const callbacks = require('./callbacks')
+const Gateway = require('./gateway/engine')
 
 const appliedCallbacks = new Map()
 
@@ -14,6 +15,8 @@ function applyRules (rules, config) {
 }
 
 function clearAllRules () {
+  Gateway.manager.clear()
+
   for (const [key, callback] of appliedCallbacks) {
     callback.clear()
 
