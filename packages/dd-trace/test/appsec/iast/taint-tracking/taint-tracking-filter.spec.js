@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../../../dd-trace/test/setup/tap')
+
 describe('IAST TaintTrackingFilter', () => {
   let filter
 

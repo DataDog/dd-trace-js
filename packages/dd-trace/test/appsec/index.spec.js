@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../dd-trace/test/setup/tap')
+
 const fs = require('fs')
 const proxyquire = require('proxyquire')
 const log = require('../../src/log')

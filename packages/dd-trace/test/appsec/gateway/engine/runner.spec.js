@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../../../dd-trace/test/setup/tap')
+
 const Runner = require('../../../../src/appsec/gateway/engine/runner')
 const als = require('../../../../src/appsec/gateway/als')
 

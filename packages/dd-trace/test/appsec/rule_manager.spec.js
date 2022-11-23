@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../dd-trace/test/setup/tap')
+
 const { applyRules, clearAllRules } = require('../../src/appsec/rule_manager')
 const callbacks = require('../../src/appsec/callbacks')
 const Gateway = require('../../src/appsec/gateway/engine')

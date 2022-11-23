@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../../dd-trace/test/setup/tap')
+
 const Capabilities = require('../../../src/appsec/remote_config/capabilities')
 
 const noop = () => {}

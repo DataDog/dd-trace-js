@@ -1,3 +1,5 @@
+require('../../../../../dd-trace/test/setup/tap')
+
 const { testThatRequestHasVulnerability, testThatRequestHasNotVulnerability } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')

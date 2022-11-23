@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../../../dd-trace/test/setup/tap')
+
 const Engine = require('../../../../src/appsec/gateway/engine')
 const { SubscriptionManager, Context } = require('../../../../src/appsec/gateway/engine/engine')
 const als = require('../../../../src/appsec/gateway/als')

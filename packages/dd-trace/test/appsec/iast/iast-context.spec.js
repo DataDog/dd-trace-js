@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../../dd-trace/test/setup/tap')
+
 const iastContextHandler = require('../../../src/appsec/iast/iast-context')
 
 describe('IAST context', () => {

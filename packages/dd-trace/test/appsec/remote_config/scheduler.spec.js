@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../../dd-trace/test/setup/tap')
+
 const Scheduler = require('../../../src/appsec/remote_config/scheduler')
 
 const INTERVAL = 5e3

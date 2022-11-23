@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../../dd-trace/test/setup/tap')
+
 let config
 let rc
 let RemoteConfigManager

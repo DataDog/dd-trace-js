@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../../../dd-trace/test/setup/tap')
+
 const proxyquire = require('proxyquire')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const taintTrackingOperations = require('../../../../src/appsec/iast/taint-tracking/operations')

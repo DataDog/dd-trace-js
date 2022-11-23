@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../dd-trace/test/setup/tap')
+
 const proxyquire = require('proxyquire')
 const Engine = require('../../src/appsec/gateway/engine')
 const { Context } = require('../../src/appsec/gateway/engine/engine')

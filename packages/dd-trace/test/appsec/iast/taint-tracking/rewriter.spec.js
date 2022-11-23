@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../../../dd-trace/test/setup/tap')
+
 const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 

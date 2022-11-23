@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../../dd-trace/test/setup/tap')
+
 const pathLine = require('../../../src/appsec/iast/path-line')
 const path = require('path')
 class CallSiteMock {

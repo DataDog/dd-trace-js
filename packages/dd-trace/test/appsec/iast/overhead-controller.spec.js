@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../../dd-trace/test/setup/tap')
+
 const overheadController = require('../../../src/appsec/iast/overhead-controller')
 // const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
 const DatadogSpanContext = require('../../../src/opentracing/span_context')

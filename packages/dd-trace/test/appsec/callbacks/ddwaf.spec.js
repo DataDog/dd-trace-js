@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../../dd-trace/test/setup/tap')
+
 const WAFCallback = require('../../../src/appsec/callbacks/ddwaf')
 const Gateway = require('../../../src/appsec/gateway/engine')
 const Reporter = require('../../../src/appsec/reporter')
