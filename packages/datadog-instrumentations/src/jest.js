@@ -239,6 +239,20 @@ function cliWrapper (cli) {
 }
 
 addHook({
+  name: '@jest/reporters',
+  file: 'build/CoverageReporter.js',
+  versions: ['>=24.8.0']
+}, (coverageReporter) => {
+  const CoverageReporter = coverageReporter.default ? coverageReporter.default : coverageReporter
+
+  shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => async function () {
+    return
+  })
+
+  return coverageReporter
+})
+
+addHook({
   name: '@jest/core',
   file: 'build/cli/index.js',
   versions: ['>=24.8.0']
