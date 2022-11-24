@@ -6,14 +6,16 @@ const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 
 describe('IAST TaintTracking Operations', () => {
   let taintTrackingOperations
-
+  let taintTrackingImpl
+  let taintedUtilsMock
   const taintedUtils = {
     createTransaction: id => id,
     removeTransaction: id => id,
     newTaintedString: (id) => id,
     isTainted: id => id,
     getRanges: id => id,
-    concat: (id) => id
+    concat: (id) => id,
+    trim: (id) => id
   }
 
   const store = {}
@@ -25,9 +27,15 @@ describe('IAST TaintTracking Operations', () => {
   }
 
   beforeEach(() => {
-    taintTrackingOperations = proxyquire('../../../../src/appsec/iast/taint-tracking/operations', {
-      '@datadog/native-iast-taint-tracking': sinon.spy(taintedUtils),
+    taintedUtilsMock = sinon.spy(taintedUtils)
+    taintTrackingImpl = proxyquire('../../../../src/appsec/iast/taint-tracking/taint-tracking-impl', {
+      '@datadog/native-iast-taint-tracking': taintedUtilsMock,
       '../../../../../datadog-core': datadogCore
+    })
+    taintTrackingOperations = proxyquire('../../../../src/appsec/iast/taint-tracking/operations', {
+      '@datadog/native-iast-taint-tracking': taintedUtilsMock,
+      '../../../../../datadog-core': datadogCore,
+      './taint-tracking-impl': taintTrackingImpl
     })
   })
 
@@ -248,6 +256,76 @@ describe('IAST TaintTracking Operations', () => {
       const res = global._ddiast.plusOperator('helloworld', 'hello', 'world')
       expect(taintedUtils.concat).not.to.be.called
       expect(res).equal('helloworld')
+    })
+  })
+
+  describe('trim', () => {
+    beforeEach(() => {
+      iastContextFunctions.saveIastContext(store, {}, { [taintTrackingOperations.IAST_TRANSACTION_ID]: 'id' })
+      taintTrackingOperations.enableTaintOperations()
+    })
+
+    it('Should call taintedUtils.trim method', () => {
+      const a = 'hello   '
+      const fn = a.trim
+      global._ddiast.trim(fn.call(a), fn, a)
+      expect(taintedUtils.trim).to.be.called
+    })
+
+    it('Should call taintedUtils.trimStart method', () => {
+      const a = 'hello   '
+      const fn = a.trimStart
+      global._ddiast.trim(fn.call(a), fn, a)
+      expect(taintedUtils.trim).to.be.called
+    })
+
+    it('Should call taintedUtils.trimEnd method', () => {
+      const a = 'hello   '
+      const fn = a.trimEnd
+      global._ddiast.trimEnd(fn.call(a), fn, a)
+      expect(taintedUtils.trimEnd).to.be.called
+    })
+
+    it('Should not call taintedUtils.trim method if invoked trim is not from an string', () => {
+      const a = { trim: function (a) { return a } }
+      const fn = a.trim
+      const result = global._ddiast.trim(fn.call(a, 'hello'), fn, a, 'hello')
+      expect(taintedUtils.trim).not.to.be.called
+      expect(result).eq('hello')
+    })
+
+    it('Should not call taintedUtils.trim method if there is not an active transaction', () => {
+      iastContextFunctions.saveIastContext(store, {}, { [taintTrackingOperations.IAST_TRANSACTION_ID]: null })
+      const a = 'hello   '
+      const fn = a.trim
+      global._ddiast.trim(fn.call(a), fn, a)
+      expect(taintedUtils.trim).not.to.be.called
+    })
+
+    it('Should not call taintedUtils.trim method if an Error happens', () => {
+      const datadogCoreErr = {
+        storage: {
+          getStore: () => { throw new Error() }
+        }
+      }
+      const taintTrackingImpl = proxyquire('../../../../src/appsec/iast/taint-tracking/taint-tracking-impl', {
+        '@datadog/native-iast-taint-tracking': taintedUtilsMock,
+        '../../../../../datadog-core': datadogCoreErr
+      })
+      const taintTrackingOperations = proxyquire('../../../../src/appsec/iast/taint-tracking/operations', {
+        '@datadog/native-iast-taint-tracking': taintedUtilsMock,
+        '../../../../../datadog-core': datadogCoreErr,
+        './taint-tracking-impl': taintTrackingImpl
+      })
+
+      iastContextFunctions.saveIastContext(store, {}, { [taintTrackingOperations.IAST_TRANSACTION_ID]: 'id' })
+      taintTrackingOperations.enableTaintOperations()
+
+      const a = 'hello   '
+      const fn = a.trim
+      const result = global._ddiast.trim(fn.call(a), fn, a)
+      expect(taintedUtils.trim).not.to.be.called
+      expect(result).eq(a.trim())
     })
   })
 })
