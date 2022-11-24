@@ -29,9 +29,7 @@ class WAFCallback {
 
     this.wafTimeout = wafTimeout
 
-    const version = this.ddwaf.constructor.version()
-
-    Reporter.metricsQueue.set('_dd.appsec.waf.version', version)
+    Reporter.metricsQueue.set('_dd.appsec.waf.version', this.ddwaf.constructor.version())
 
     const { loaded, failed, errors } = this.ddwaf.rulesInfo
 
