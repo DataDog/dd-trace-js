@@ -31,7 +31,7 @@ class WAFCallback {
 
     const version = this.ddwaf.constructor.version()
 
-    Reporter.metricsQueue.set('_dd.appsec.waf.version', `${version.major}.${version.minor}.${version.patch}`)
+    Reporter.metricsQueue.set('_dd.appsec.waf.version', version)
 
     const { loaded, failed, errors } = this.ddwaf.rulesInfo
 

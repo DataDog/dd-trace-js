@@ -79,7 +79,7 @@ describe('WAFCallback', () => {
 
       const ddwaf = {
         constructor: {
-          version: sinon.stub().returns({ major: 1, minor: 2, patch: 3 })
+          version: sinon.stub().returns('1.2.3')
         },
         rulesInfo: {
           loaded: 3,
@@ -156,7 +156,7 @@ describe('WAFCallback', () => {
     beforeEach(() => {
       sinon.stub(WAFCallback, 'loadDDWAF').returns({
         constructor: {
-          version: sinon.stub().returns({ major: 1, minor: 2, patch: 3 })
+          version: sinon.stub().returns('1.2.3')
         },
         rulesInfo: {
           loaded: rules.rules.length,
