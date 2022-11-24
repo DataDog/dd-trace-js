@@ -16,6 +16,7 @@ require('dd-trace').init(options)
 if (process.env.STEALTHY_REQUIRE === 'true') {
   // emulate stealthy-require
   for (const key in require.cache) {
+    if (key.endsWith('dd-trace/packages/datadog-core/index.js')) continue
     delete require.cache[key]
   }
 

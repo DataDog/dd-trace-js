@@ -56,13 +56,14 @@ describe('Gateway Index', () => {
       const context = store.get('context')
 
       sinon.spy(context, 'setValue')
-      sinon.spy(context, 'dispatch')
+      sinon.stub(context, 'dispatch').returns('result')
 
       Engine.manager.addresses.add('a')
       Engine.manager.addresses.add('b')
 
-      Engine.propagate({ 'a': 1, 'b': 2 })
+      const result = Engine.propagate({ 'a': 1, 'b': 2 })
 
+      expect(result).to.equal('result')
       expect(context.setValue).to.have.been.calledTwice
       expect(context.setValue.firstCall).to.have.been.calledWith('a', 1)
       expect(context.setValue.secondCall).to.have.been.calledWith('b', 2)
@@ -73,13 +74,14 @@ describe('Gateway Index', () => {
       const context = new Context()
 
       sinon.spy(context, 'setValue')
-      sinon.spy(context, 'dispatch')
+      sinon.stub(context, 'dispatch').returns('result')
 
       Engine.manager.addresses.add('a')
       Engine.manager.addresses.add('b')
 
-      Engine.propagate({ 'a': 1, 'b': 2 }, context)
+      const result = Engine.propagate({ 'a': 1, 'b': 2 }, context)
 
+      expect(result).to.equal('result')
       expect(context.setValue).to.have.been.calledTwice
       expect(context.setValue.firstCall).to.have.been.calledWith('a', 1)
       expect(context.setValue.secondCall).to.have.been.calledWith('b', 2)
@@ -91,12 +93,13 @@ describe('Gateway Index', () => {
       const context = store.get('context')
 
       sinon.spy(context, 'setValue')
-      sinon.spy(context, 'dispatch')
+      sinon.stub(context, 'dispatch').returns('result')
 
       Engine.manager.addresses.add('b')
 
-      Engine.propagate({ 'a': 1, 'b': 2 })
+      const result = Engine.propagate({ 'a': 1, 'b': 2 })
 
+      expect(result).to.equal('result')
       expect(context.setValue).to.have.been.calledOnce
       expect(context.setValue.firstCall).to.have.been.calledWith('b', 2)
       expect(context.dispatch).to.have.been.calledOnce

@@ -144,8 +144,7 @@ describe('startup', () => {
       proc = await spawnProc(startupTestFile, {
         cwd,
         env: {
-          STEALTHY_REQUIRE: 'true',
-          DD_TRACE_TELEMETRY_ENABLED: 'false'
+          STEALTHY_REQUIRE: 'true'
         }
       })
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {

@@ -266,14 +266,16 @@ function jestAdapterWrapper (jestAdapter) {
           status = 'fail'
         }
         testSuiteFinishCh.publish({ status, errorMessage })
-        if (environment.global.__coverage__) {
-          const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
-            .map(filename => getTestSuitePath(filename, environment.rootDir))
 
-          if (coverageFiles && environment.testEnvironmentOptions &&
-            environment.testEnvironmentOptions._ddTestCodeCoverageEnabled) {
+        const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
+          .map(filename => getTestSuitePath(filename, environment.rootDir))
+
+        if (coverageFiles &&
+          environment.testEnvironmentOptions &&
+          environment.testEnvironmentOptions._ddTestCodeCoverageEnabled) {
+          asyncResource.runInAsyncScope(() => {
             testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
-          }
+          })
         }
         return suiteResults
       })
@@ -296,12 +298,6 @@ addHook({
 
 function configureTestEnvironment (readConfigsResult) {
   const { configs } = readConfigsResult
-  configs.forEach(config => {
-    skippableSuites.forEach((suite) => {
-      config.testMatch.push(`!**/${suite}`)
-    })
-    skippableSuites = []
-  })
   sessionAsyncResource.runInAsyncScope(() => {
     testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
   })
@@ -310,6 +306,7 @@ function configureTestEnvironment (readConfigsResult) {
   configs.forEach(config => {
     config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
   })
+
   if (isCodeCoverageEnabled) {
     const globalConfig = {
       ...readConfigsResult.globalConfig,
@@ -337,6 +334,39 @@ function jestConfigSyncWrapper (jestConfig) {
   })
   return jestConfig
 }
+
+/**
+ * Hook to remove the test paths (test suite) that are part of `skippableSuites`
+ */
+addHook({
+  name: '@jest/core',
+  versions: ['>=24.8.0'],
+  file: 'build/SearchSource.js'
+}, searchSourcePackage => {
+  const SearchSource = searchSourcePackage.default ? searchSourcePackage.default : searchSourcePackage
+
+  shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
+    if (!skippableSuites.length) {
+      return getTestPaths.apply(this, arguments)
+    }
+
+    const [{ rootDir }] = arguments
+
+    const testPaths = await getTestPaths.apply(this, arguments)
+    const { tests } = testPaths
+
+    const filteredTests = tests.filter(({ path: testPath }) => {
+      const relativePath = testPath.replace(`${rootDir}/`, '')
+      return !skippableSuites.includes(relativePath)
+    })
+
+    skippableSuites = []
+
+    return { ...testPaths, tests: filteredTests }
+  })
+
+  return searchSourcePackage
+})
 
 // from 25.1.0 on, readConfigs becomes async
 addHook({
