@@ -248,11 +248,12 @@ addHook({
    * If ITR is active, we're running fewer tests, so of course the total code coverage is reduced.
    * This calculation adds no value, so we'll skip it.
    */
-  if (isSuitesSkippingEnabled) {
-    shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => async function () {
+  shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => async function () {
+    if (isSuitesSkippingEnabled) {
       return Promise.resolve()
-    })
-  }
+    }
+    return addUntestedFiles.apply(this, arguments)
+  })
 
   return coverageReporter
 })
