@@ -35,7 +35,7 @@ function propagate (data, context = getContext()) {
     }
   }
 
-  context.dispatch()
+  return context.dispatch()
 }
 
 module.exports = {
