@@ -95,6 +95,11 @@ class Config {
       process.env.DD_RUNTIME_METRICS_ENABLED,
       false
     )
+    const DD_DBM_PROPAGATION_MODE = coalesce(
+      options.dbmPropagationMode,
+      process.env.DD_DBM_PROPAGATION_MODE,
+      'disabled'
+    )
     const DD_AGENT_HOST = coalesce(
       options.hostname,
       process.env.DD_AGENT_HOST,
@@ -316,6 +321,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
+    this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
     this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)

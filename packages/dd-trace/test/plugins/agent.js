@@ -70,6 +70,7 @@ module.exports = {
 
     tracer.init(Object.assign({}, {
       service: 'test',
+      env: 'tester',
       port,
       flushInterval: 0,
       plugins: false
