@@ -73,7 +73,7 @@ function getCommitsToExclude ({ url, repositoryUrl }, callback) {
 
   request(localCommitData, options, (err, response, statusCode) => {
     if (err) {
-      const error = new Error(`search_commits returned an error: status code ${statusCode}`)
+      const error = new Error(`search_commits returned a status code ${statusCode}: ${err.message}`)
       return callback(error)
     }
     let commitsToExclude
@@ -129,7 +129,7 @@ function uploadPackFile ({ url, packFileToUpload, repositoryUrl, headCommit }, c
   }
   request(form, options, (err, _, statusCode) => {
     if (err) {
-      const error = new Error(`Could not upload packfiles: status code ${statusCode}`)
+      const error = new Error(`Could not upload packfiles: status code ${statusCode}: ${err.message}`)
       return callback(error)
     }
     callback(null)
