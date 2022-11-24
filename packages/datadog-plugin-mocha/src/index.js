@@ -181,8 +181,7 @@ class MochaPlugin extends CiPlugin {
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
 
     const extraTags = {
-      ...testSuiteTags,
-      [COMPONENT]: this.constructor.name
+      ...testSuiteTags
     }
 
     const testParametersString = getTestParametersString(this._testNameToParams, test.title)

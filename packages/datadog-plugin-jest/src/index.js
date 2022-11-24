@@ -192,7 +192,6 @@ class JestPlugin extends CiPlugin {
     const extraTags = {
       [JEST_TEST_RUNNER]: runner,
       [TEST_PARAMETERS]: testParameters,
-      [COMPONENT]: this.constructor.name,
       ...suiteTags
     }
 

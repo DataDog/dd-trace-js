@@ -11,6 +11,7 @@ const {
 } = require('./util/test')
 const { getItrConfiguration } = require('../ci-visibility/intelligent-test-runner/get-itr-configuration')
 const { getSkippableSuites } = require('../ci-visibility/intelligent-test-runner/get-skippable-suites')
+const { COMPONENT } = require('../constants')
 
 const Plugin = require('./plugin')
 
@@ -103,12 +104,13 @@ module.exports = class CiPlugin extends Plugin {
     })
   }
 
-  startTestSpan (name, suite, extraTags) {
-    const childOf = getTestParentSpan(this.tracer)
+  startTestSpan (name, suite, extraTags, childOf) {
+    const parent = childOf || getTestParentSpan(this.tracer)
     const testCommonTags = getTestCommonTags(name, suite, this.tracer._version)
 
     const testTags = {
       ...testCommonTags,
+      [COMPONENT]: this.constructor.name,
       ...extraTags
     }
 
@@ -120,7 +122,7 @@ module.exports = class CiPlugin extends Plugin {
 
     const testSpan = this.tracer
       .startSpan(`${this.constructor.name}.test`, {
-        childOf,
+        childOf: parent,
         tags: {
           ...this.testEnvironmentMetadata,
           ...testTags
