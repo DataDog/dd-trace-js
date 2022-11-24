@@ -207,8 +207,6 @@ function cliWrapper (cli) {
       }
     }
 
-    skippableSuites = skippableSuites.slice(0, -10)
-
     const isTestsSkipped = !!skippableSuites.length
 
     const processArgv = process.argv.slice(2).join(' ')
