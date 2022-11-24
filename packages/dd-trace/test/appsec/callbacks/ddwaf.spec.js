@@ -396,8 +396,9 @@ describe('WAFCallback', () => {
 
         const store = new Map()
 
-        waf.applyResult({ data, totalRuntime: 1337e3, durationExt: 42e3 }, store)
+        const result = waf.applyResult({ data, totalRuntime: 1337e3, durationExt: 42e3, actions: ['block'] }, store)
 
+        expect(result).to.deep.equal(['block'])
         expect(Reporter.reportMetrics).to.have.been.calledOnceWithExactly({
           duration: 1337,
           durationExt: 42,
