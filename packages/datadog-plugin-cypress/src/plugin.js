@@ -62,7 +62,7 @@ module.exports = (on, config) => {
         activeSpan = tracer.startSpan('cypress.test', {
           childOf,
           tags: {
-            [COMPONENT]: this.constructor.name,
+            [COMPONENT]: 'cypress',
             [ORIGIN_KEY]: CI_APP_ORIGIN,
             ...testSpanMetadata,
             ...testEnvironmentMetadata
