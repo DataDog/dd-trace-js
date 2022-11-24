@@ -85,10 +85,11 @@ describe('request', function () {
 
     request(Buffer.from(''), {
       path: '/path',
-      method: 'PUT'
+      method: 'PUT',
+      port: 80
     }, err => {
       expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('Error from the endpoint: 400 Bad Request')
+      expect(err.message).to.equal('Error from localhost:80/path: 400 Bad Request.')
       done()
     })
   })
