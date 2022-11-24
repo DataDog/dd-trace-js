@@ -603,6 +603,13 @@ describe('Plugin', function () {
           gitMetadataUploadFinishCh.publish()
         })
         it('reports code coverage also when there are suites to skip', (done) => {
+          // trick to check what jest prints in the stdout
+          let buffer = ''
+          const oldStdout = process.stdout.write
+          process.stdout.write = (input) => {
+            buffer += input
+          }
+
           nock('https://api.datad0g.com/')
             .post('/api/v2/libraries/tests/services/setting')
             .reply(200, JSON.stringify({
@@ -649,6 +656,8 @@ describe('Plugin', function () {
                 'Content-Disposition: form-data; name="event"; filename="event.json"'
               )
               expect(eventPayload).to.equal(JSON.stringify({ dummy: true }))
+              process.stdout.write = oldStdout
+              expect(buffer).not.to.include('Coverage summary')
               done()
             })
             .post('/api/v2/citestcov')
