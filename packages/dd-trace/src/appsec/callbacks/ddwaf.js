@@ -29,9 +29,7 @@ class WAFCallback {
 
     this.wafTimeout = wafTimeout
 
-    const version = this.ddwaf.constructor.version()
-
-    Reporter.metricsQueue.set('_dd.appsec.waf.version', `${version.major}.${version.minor}.${version.patch}`)
+    Reporter.metricsQueue.set('_dd.appsec.waf.version', this.ddwaf.constructor.version())
 
     const { loaded, failed, errors } = this.ddwaf.rulesInfo
 
@@ -121,6 +119,8 @@ class WAFCallback {
     if (result.data && result.data !== '[]') {
       Reporter.reportAttack(result.data, store)
     }
+
+    return result.actions
   }
 
   clear () {
