@@ -79,7 +79,7 @@ describe('WAFCallback', () => {
 
       const ddwaf = {
         constructor: {
-          version: sinon.stub().returns({ major: 1, minor: 2, patch: 3 })
+          version: sinon.stub().returns('1.2.3')
         },
         rulesInfo: {
           loaded: 3,
@@ -89,7 +89,7 @@ describe('WAFCallback', () => {
           }
         },
         createContext: sinon.spy(() => ({
-          run: sinon.stub().returns({ action: 'monitor', data: '[]' }),
+          run: sinon.stub().returns({ status: 'match', data: '[]' }),
           dispose: sinon.stub(),
           get disposed () {
             return this.dispose.called
@@ -156,14 +156,14 @@ describe('WAFCallback', () => {
     beforeEach(() => {
       sinon.stub(WAFCallback, 'loadDDWAF').returns({
         constructor: {
-          version: sinon.stub().returns({ major: 1, minor: 2, patch: 3 })
+          version: sinon.stub().returns('1.2.3')
         },
         rulesInfo: {
           loaded: rules.rules.length,
           failed: 0
         },
         createContext: sinon.spy(() => ({
-          run: sinon.stub().returns({ action: 'monitor', data: '[]' }),
+          run: sinon.stub().returns({ status: 'match', data: '[]' }),
           dispose: sinon.stub(),
           get disposed () {
             return this.dispose.called
@@ -197,7 +197,7 @@ describe('WAFCallback', () => {
 
         expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, 5e3)
         expect(waf.applyResult).to.have.been.calledOnceWithExactly({
-          action: 'monitor',
+          status: 'match',
           data: '[]',
           durationExt: 10
         }, store)
@@ -214,7 +214,7 @@ describe('WAFCallback', () => {
 
         expect(wafContext.run).to.have.been.calledOnceWithExactly({ a: 1, b: 2 }, 5e3)
         expect(waf.applyResult).to.have.been.calledOnceWithExactly({
-          action: 'monitor',
+          status: 'match',
           data: '[]',
           durationExt: 10
         }, store)
@@ -231,7 +231,7 @@ describe('WAFCallback', () => {
         expect(waf.ddwaf.createContext).to.have.been.calledOnce
         expect(waf.wafContextCache.set).to.not.have.been.called
         expect(waf.applyResult).to.have.been.calledOnceWithExactly({
-          action: 'monitor',
+          status: 'match',
           data: '[]',
           durationExt: 10
         }, store)
@@ -246,7 +246,7 @@ describe('WAFCallback', () => {
         expect(waf.ddwaf.createContext).to.have.been.calledOnce
         expect(waf.wafContextCache.set).to.not.have.been.called
         expect(waf.applyResult).to.have.been.calledOnceWithExactly({
-          action: 'monitor',
+          status: 'match',
           data: '[]',
           durationExt: 10
         }, undefined)
@@ -281,7 +281,7 @@ describe('WAFCallback', () => {
         expect(newWafContext.dispose).to.have.been.calledOnce
 
         expect(waf.applyResult).to.have.been.calledOnceWithExactly({
-          action: 'monitor',
+          status: 'match',
           data: '[]',
           durationExt: 10
         }, store)
@@ -396,8 +396,9 @@ describe('WAFCallback', () => {
 
         const store = new Map()
 
-        waf.applyResult({ data, totalRuntime: 1337e3, durationExt: 42e3 }, store)
+        const result = waf.applyResult({ data, totalRuntime: 1337e3, durationExt: 42e3, actions: ['block'] }, store)
 
+        expect(result).to.deep.equal(['block'])
         expect(Reporter.reportMetrics).to.have.been.calledOnceWithExactly({
           duration: 1337,
           durationExt: 42,
