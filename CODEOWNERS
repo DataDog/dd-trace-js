@@ -1,1 +1,2 @@
 * @DataDog/dd-trace-js
+/packages/dd-trace/src/appsec/ @DataDog/appsec-js
