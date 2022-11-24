@@ -207,6 +207,11 @@ class Config {
       false
     )
 
+    const DD_REMOTE_CONFIGURATION_POLLING_INTERVAL = coalesce(
+      parseInt(process.env.DD_REMOTE_CONFIGURATION_POLLING_INTERVAL),
+      5
+    )
+
     let appsec = options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
 
     if (typeof appsec === 'boolean') {
@@ -367,6 +372,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.telemetryEnabled = DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED)
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
+    this.rcPollingInterval = DD_REMOTE_CONFIGURATION_POLLING_INTERVAL
     this.appsec = {
       enabled: DD_APPSEC_ENABLED,
       rules: DD_APPSEC_RULES,
