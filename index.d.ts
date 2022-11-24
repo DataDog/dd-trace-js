@@ -167,6 +167,11 @@ export declare interface SpanContext extends opentracing.SpanContext {
    * Returns the string representation of the internal span ID.
    */
   toSpanId(): string;
+
+  /**
+   * Returns the string representation used for DBM integration.
+   */
+  toTraceparent(): string;
 }
 
 /**
@@ -462,6 +467,12 @@ export declare interface TracerOptions {
    * @default true
    */
   orphanable?: boolean
+
+  /**
+   * Enables DBM to APM link using tag injection.
+   * @default 'disabled'
+   */
+  dbmPropagationMode?: 'disabled' | 'service' | 'full'
 
   /**
    * Configuration of the AppSec protection. Can be a boolean as an alias to `appsec.enabled`.
