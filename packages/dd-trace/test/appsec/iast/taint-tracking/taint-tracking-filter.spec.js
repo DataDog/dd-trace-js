@@ -10,7 +10,7 @@ describe('IAST TaintTrackingFilter', () => {
       filter = require('../../../../src/appsec/iast/taint-tracking/filter')
     })
 
-    afterEach(sinon.restore)
+    afterEach(() => { sinon.restore() })
 
     it('Filename outside node_modules is private', () => {
       const filename = 'test.js'
