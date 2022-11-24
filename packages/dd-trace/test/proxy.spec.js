@@ -16,6 +16,7 @@ describe('TracerProxy', () => {
   let appsec
   let telemetry
   let iast
+  let remoteConfig
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
@@ -77,6 +78,10 @@ describe('TracerProxy', () => {
       enable: sinon.spy()
     }
 
+    remoteConfig = {
+      enable: sinon.spy()
+    }
+
     NoopProxy = proxyquire('../src/noop/proxy', {
       './tracer': NoopTracer
     })
@@ -90,7 +95,8 @@ describe('TracerProxy', () => {
       './profiler': profiler,
       './appsec': appsec,
       './appsec/iast': iast,
-      './telemetry': telemetry
+      './telemetry': telemetry,
+      './appsec/remote_config': remoteConfig
     })
 
     proxy = new Proxy()
@@ -109,6 +115,7 @@ describe('TracerProxy', () => {
 
         expect(Config).to.have.been.calledWith(options)
         expect(DatadogTracer).to.have.been.calledWith(config)
+        expect(remoteConfig.enable).to.have.been.calledOnceWith(config)
       })
 
       it('should not initialize twice', () => {
@@ -116,6 +123,7 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(DatadogTracer).to.have.been.calledOnce
+        expect(remoteConfig.enable).to.have.been.calledOnce
       })
 
       it('should not initialize when disabled', () => {
@@ -140,12 +148,20 @@ describe('TracerProxy', () => {
         expect(metrics.start).to.have.been.called
       })
 
-      it('should enable appsec when configured', () => {
+      it('should enable appsec when explicitly configured to true', () => {
         config.appsec = { enabled: true }
 
         proxy.init()
 
         expect(appsec.enable).to.have.been.called
+      })
+
+      it('should not enable appsec when explicitly configured to false', () => {
+        config.appsec = { enabled: false }
+
+        proxy.init()
+
+        expect(appsec.enable).to.not.have.been.called
       })
 
       it('should enable iast when configured', () => {
@@ -198,7 +214,8 @@ describe('TracerProxy', () => {
           './metrics': metrics,
           './log': log,
           './profiler': null, // this will cause the import failure error
-          './appsec': appsec
+          './appsec': appsec,
+          './appsec/remote_config': remoteConfig
         })
 
         const profilerImportFailureProxy = new ProfilerImportFailureProxy()

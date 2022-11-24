@@ -129,8 +129,6 @@ class WAFCallback {
     this.ddwaf.dispose()
 
     this.wafContextCache = new WeakMap()
-
-    Gateway.manager.clear()
   }
 }
 

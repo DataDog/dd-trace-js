@@ -1,5 +1,7 @@
 'use strict'
 
+const { AUTO_KEEP } = require('../../../../ext/priority')
+
 class DatadogSpanContext {
   constructor (props) {
     props = props || {}
@@ -26,6 +28,13 @@ class DatadogSpanContext {
 
   toSpanId () {
     return this._spanId.toString(10)
+  }
+
+  toTraceparent () {
+    const sampling = this._sampling.priority >= AUTO_KEEP ? '01' : '00'
+    const traceId = this._traceId.toString(16).padStart(32, '0')
+    const spanId = this._spanId.toString(16).padStart(16, '0')
+    return `01-${traceId}-${spanId}-${sampling}`
   }
 }
 

@@ -1,8 +1,8 @@
 'use strict'
-const istanbul = require('istanbul-lib-coverage')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const { getCoveredFilenamesFromCoverage } = require('../../dd-trace/src/plugins/util/test')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -32,21 +32,6 @@ const {
 const { getFormattedJestTestParameters, getJestTestName } = require('../../datadog-plugin-jest/src/util')
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
-
-function extractCoverageInformation (coverage, rootDir) {
-  const coverageMap = istanbul.createCoverageMap(coverage)
-
-  return coverageMap
-    .files()
-    .filter(filename => {
-      const fileCoverage = coverageMap.fileCoverageFor(filename)
-      const lineCoverage = fileCoverage.getLineCoverage()
-      const isAnyLineExecuted = Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
-
-      return isAnyLineExecuted
-    })
-    .map(filename => filename.replace(`${rootDir}/`, ''))
-}
 
 const specStatusToTestStatus = {
   'pending': 'skip',
@@ -263,6 +248,9 @@ function jestAdapterWrapper (jestAdapter) {
   const adapter = jestAdapter.default ? jestAdapter.default : jestAdapter
   const newAdapter = shimmer.wrap(adapter, function () {
     const environment = arguments[2]
+    if (!environment) {
+      return adapter.apply(this, arguments)
+    }
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
       testSuiteStartCh.publish({
@@ -278,11 +266,16 @@ function jestAdapterWrapper (jestAdapter) {
           status = 'fail'
         }
         testSuiteFinishCh.publish({ status, errorMessage })
-        if (environment.global.__coverage__) {
-          const coverageFiles = extractCoverageInformation(environment.global.__coverage__, environment.rootDir)
-          if (coverageFiles.length) {
+
+        const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
+          .map(filename => getTestSuitePath(filename, environment.rootDir))
+
+        if (coverageFiles &&
+          environment.testEnvironmentOptions &&
+          environment.testEnvironmentOptions._ddTestCodeCoverageEnabled) {
+          asyncResource.runInAsyncScope(() => {
             testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
-          }
+          })
         }
         return suiteResults
       })
@@ -305,15 +298,15 @@ addHook({
 
 function configureTestEnvironment (readConfigsResult) {
   const { configs } = readConfigsResult
-  configs.forEach(config => {
-    skippableSuites.forEach((suite) => {
-      config.testMatch.push(`!**/${suite}`)
-    })
-    skippableSuites = []
-  })
   sessionAsyncResource.runInAsyncScope(() => {
     testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
   })
+  // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
+  // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
+  configs.forEach(config => {
+    config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
+  })
+
   if (isCodeCoverageEnabled) {
     const globalConfig = {
       ...readConfigsResult.globalConfig,
@@ -341,6 +334,39 @@ function jestConfigSyncWrapper (jestConfig) {
   })
   return jestConfig
 }
+
+/**
+ * Hook to remove the test paths (test suite) that are part of `skippableSuites`
+ */
+addHook({
+  name: '@jest/core',
+  versions: ['>=24.8.0'],
+  file: 'build/SearchSource.js'
+}, searchSourcePackage => {
+  const SearchSource = searchSourcePackage.default ? searchSourcePackage.default : searchSourcePackage
+
+  shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
+    if (!skippableSuites.length) {
+      return getTestPaths.apply(this, arguments)
+    }
+
+    const [{ rootDir }] = arguments
+
+    const testPaths = await getTestPaths.apply(this, arguments)
+    const { tests } = testPaths
+
+    const filteredTests = tests.filter(({ path: testPath }) => {
+      const relativePath = testPath.replace(`${rootDir}/`, '')
+      return !skippableSuites.includes(relativePath)
+    })
+
+    skippableSuites = []
+
+    return { ...testPaths, tests: filteredTests }
+  })
+
+  return searchSourcePackage
+})
 
 // from 25.1.0 on, readConfigs becomes async
 addHook({

@@ -67,7 +67,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'select current_timestamp from dual')
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
@@ -93,7 +93,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'select current_timestamp from dual')
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
@@ -127,7 +127,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'invalid')
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
@@ -186,7 +186,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'select current_timestamp from dual')
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
@@ -211,7 +211,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'invalid')
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)

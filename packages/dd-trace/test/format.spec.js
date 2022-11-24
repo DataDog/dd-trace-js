@@ -15,6 +15,7 @@ const SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM
 const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
 const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
 const SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN
+const PROCESS_ID = constants.PROCESS_ID
 
 const spanId = id('0234567812345678')
 
@@ -257,20 +258,10 @@ describe('format', () => {
       expect(trace.meta[ORIGIN_KEY]).to.equal('synthetics')
     })
 
-    it('should add runtime tags', () => {
-      spanContext._tags['service.name'] = 'test'
-
+    it('should add the language tag for a basic span', () => {
       trace = format(span)
 
       expect(trace.meta['language']).to.equal('javascript')
-    })
-
-    it('should add runtime tags only for the root service', () => {
-      spanContext._tags['service.name'] = 'other'
-
-      trace = format(span)
-
-      expect(trace.meta).to.not.have.property('language')
     })
 
     describe('when there is an `error` tag ', () => {
@@ -412,6 +403,11 @@ describe('format', () => {
       spanContext._tags['span.kind'] = 'server'
       trace = format(span)
       expect(trace.metrics[MEASURED]).to.equal(0)
+    })
+
+    it('should possess a process_id tag', () => {
+      trace = format(span)
+      expect(trace.metrics[PROCESS_ID]).to.equal(process.pid)
     })
   })
 })

@@ -95,6 +95,11 @@ class Config {
       process.env.DD_RUNTIME_METRICS_ENABLED,
       false
     )
+    const DD_DBM_PROPAGATION_MODE = coalesce(
+      options.dbmPropagationMode,
+      process.env.DD_DBM_PROPAGATION_MODE,
+      'disabled'
+    )
     const DD_AGENT_HOST = coalesce(
       options.hostname,
       process.env.DD_AGENT_HOST,
@@ -113,6 +118,7 @@ class Config {
       null
     )
     const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
+    const DD_CIVISIBILITY_AGENTLESS_ENABLED = process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
 
     const DD_CIVISIBILITY_ITR_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_ITR_ENABLED,
@@ -201,15 +207,20 @@ class Config {
       false
     )
 
-    let appsec = options.appsec || (options.experimental && options.experimental.appsec)
+    let appsec = options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
+
+    if (typeof appsec === 'boolean') {
+      appsec = {
+        enabled: appsec
+      }
+    } else if (appsec == null) {
+      appsec = {}
+    }
 
     const DD_APPSEC_ENABLED = coalesce(
-      appsec && (appsec === true || appsec.enabled === true), // TODO: remove when enabled by default
-      process.env.DD_APPSEC_ENABLED,
-      false
+      appsec.enabled,
+      process.env.DD_APPSEC_ENABLED && isTrue(process.env.DD_APPSEC_ENABLED)
     )
-
-    appsec = appsec || {}
 
     const DD_APPSEC_RULES = coalesce(
       appsec.rules,
@@ -310,6 +321,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
+    this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
     this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
@@ -356,7 +368,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
     this.appsec = {
-      enabled: isTrue(DD_APPSEC_ENABLED),
+      enabled: DD_APPSEC_ENABLED,
       rules: DD_APPSEC_RULES,
       rateLimit: DD_APPSEC_TRACE_RATE_LIMIT,
       wafTimeout: DD_APPSEC_WAF_TIMEOUT,
@@ -369,8 +381,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS
     }
-    this.isGitUploadEnabled = isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED)
-    this.isIntelligentTestRunnerEnabled = isTrue(DD_CIVISIBILITY_ITR_ENABLED)
+
+    const isCiVisibilityAgentlessEnabled = isTrue(DD_CIVISIBILITY_AGENTLESS_ENABLED)
+    this.isIntelligentTestRunnerEnabled = isCiVisibilityAgentlessEnabled && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
+    this.isGitUploadEnabled = this.isIntelligentTestRunnerEnabled ||
+      (isCiVisibilityAgentlessEnabled && isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
+
     this.stats = {
       enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
     }
