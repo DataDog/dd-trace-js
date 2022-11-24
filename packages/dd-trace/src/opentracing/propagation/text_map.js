@@ -130,11 +130,7 @@ class TextMapPropagator {
 
   _injectTraceparent (spanContext, carrier) {
     if (!this._config.experimental.traceparent) return
-
-    const sampling = spanContext._sampling.priority >= AUTO_KEEP ? '01' : '00'
-    const traceId = spanContext._traceId.toString(16).padStart(32, '0')
-    const spanId = spanContext._spanId.toString(16).padStart(16, '0')
-    carrier[traceparentKey] = `01-${traceId}-${spanId}-${sampling}`
+    carrier[traceparentKey] = spanContext.toTraceparent()
   }
 
   _extractSpanContext (carrier) {

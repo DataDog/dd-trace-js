@@ -1,5 +1,6 @@
 'use strict'
 
+const { expect } = require('chai')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 
@@ -241,6 +242,162 @@ describe('Plugin', () => {
 
             client.end((err) => {
               if (err) throw err
+            })
+          })
+        })
+      })
+      describe('with DBM propagation enabled with service using plugin configurations', () => {
+        before(() => {
+          return agent.load('pg', [{ dbmPropagationMode: 'service', service: 'serviced' }])
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(done => {
+          pg = require(`../../../versions/pg@${version}`).get()
+
+          client = new pg.Client({
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres'
+          })
+          client.connect(err => done(err))
+        })
+
+        it('should contain comment in query text', done => {
+          const client = new pg.Client({
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres'
+          })
+
+          client.connect(err => done(err))
+
+          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+            if (err) return done(err)
+
+            client.end((err) => {
+              if (err) return done(err)
+            })
+          })
+          if (client.queryQueue[0] !== undefined) {
+            try {
+              expect(client.queryQueue[0].text).to.equal(
+                `/*dddbs='serviced',dde='tester',ddps='test',ddpv='8.4.0'*/ SELECT $1::text as message`)
+            } catch (e) {
+              done(e)
+            }
+          }
+        })
+        it('trace query resource should not be changed when propagation is enabled', done => {
+          agent.use(traces => {
+            expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
+            done()
+          })
+          client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+            if (err) return done(err)
+            client.end((err) => {
+              if (err) return done(err)
+            })
+          })
+        })
+      })
+      describe('DBM propagation should handle special characters', () => {
+        let clientDBM
+        before(() => {
+          return agent.load('pg', [{ dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' }])
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+        beforeEach(done => {
+          pg = require(`../../../versions/pg@${version}`).get()
+
+          clientDBM = new pg.Client({
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres'
+          })
+
+          clientDBM.connect(err => done(err))
+        })
+        it('DBM propagation should handle special characters', done => {
+          clientDBM.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
+            if (err) return done(err)
+
+            clientDBM.end((err) => {
+              if (err) return done(err)
+            })
+          })
+
+          if (clientDBM.queryQueue[0] !== undefined) {
+            try {
+              expect(clientDBM.queryQueue[0].text).to.equal(
+                `/*dddbs='~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E',dde='tester',` +
+                `ddps='test',ddpv='8.4.0'*/ SELECT $1::text as message`)
+              done()
+            } catch (e) {
+              done(e)
+            }
+          }
+        })
+      })
+      describe('with DBM propagation enabled with full using tracer configurations', () => {
+        const tracer = require('../../dd-trace')
+        before(() => {
+          return agent.load('pg')
+        })
+        beforeEach(done => {
+          pg = require(`../../../versions/pg@${version}`).get()
+
+          tracer.init()
+          tracer.use('pg', {
+            dbmPropagationMode: 'full',
+            service: 'post'
+          })
+
+          client = new pg.Client({
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres'
+          })
+          client.connect(err => done(err))
+        })
+
+        it('query text should contain traceparent', done => {
+          let queryText = ''
+          agent.use(traces => {
+            const traceId = traces[0][0].trace_id.toString(16).padStart(32, '0')
+            const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
+
+            expect(queryText).to.equal(
+              `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0',` +
+              `traceparent='01-${traceId}-${spanId}-00'*/ SELECT $1::text as message`)
+          }).then(done, done)
+
+          client.query('SELECT $1::text as message', ['Hello World!'], (err, result) => {
+            if (err) return done(err)
+
+            client.end((err) => {
+              if (err) return done(err)
+            })
+          })
+          queryText = client.queryQueue[0].text
+        })
+        it('query should inject _dd.dbm_trace_injected into span', done => {
+          agent.use(traces => {
+            expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
+            done()
+          })
+
+          client.query('SELECT $1::text as message', ['Hello World!'], (err, result) => {
+            if (err) return done(err)
+
+            client.end((err) => {
+              if (err) return done(err)
             })
           })
         })
