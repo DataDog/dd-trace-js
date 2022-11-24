@@ -27,7 +27,7 @@ describe('IAST Rewriter', () => {
       })
     })
 
-    afterEach(sinon.restore)
+    afterEach(() => { sinon.restore() })
 
     it('Should wrap module compile method on taint tracking enable', () => {
       rewriter.enableRewriter()

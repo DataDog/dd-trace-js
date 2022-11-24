@@ -33,7 +33,7 @@ describe('IAST TaintTracking Operations', () => {
     })
   })
 
-  afterEach(sinon.restore)
+  afterEach(() => { sinon.restore() })
 
   it('Addon should return a TaintedUtils instance', () => {
     let TaintedUtils = null

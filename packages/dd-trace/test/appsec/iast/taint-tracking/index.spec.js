@@ -30,7 +30,7 @@ describe('IAST TaintTracking', () => {
     })
   })
 
-  afterEach(sinon.restore)
+  afterEach(() => { sinon.restore() })
 
   it('Should enable rewriter, taint tracking operations and plugin', () => {
     taintTracking.enableTaintTracking()

@@ -24,7 +24,7 @@ describe('IAST Taint tracking plugin', () => {
     })
   })
 
-  afterEach(sinon.restore)
+  afterEach(() => { sinon.restore() })
 
   it('Should subscribe to body parser and qs channel', () => {
     expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(2)
