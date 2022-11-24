@@ -30,6 +30,7 @@ let span: Span;
 let context: SpanContext;
 let traceId: string;
 let spanId: string;
+let traceparent: string;
 let promise: Promise<void>;
 
 ddTrace.init();
@@ -82,6 +83,7 @@ tracer.init({
   },
   reportHostname: true,
   logLevel: 'debug',
+  dbmPropagationMode: 'full',
   appsec: true
 });
 
@@ -327,6 +329,7 @@ context = tracer.extract(HTTP_HEADERS, carrier);
 
 traceId = context.toTraceId();
 spanId = context.toSpanId();
+traceparent = context.toTraceparent();
 
 const scope = tracer.scope()
 
