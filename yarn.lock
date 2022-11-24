@@ -196,17 +196,17 @@
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-iast-rewriter@^0.1.0-beta.3":
-  version "0.1.0-beta.3"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-0.1.0-beta.3.tgz#a75fe7f9177dc8a0e47fcc74a9b74bac346fdb9f"
-  integrity sha512-Fw2Xu9iPAIL0FQ4vblgaXTi7ziyScXQhfpHAZrJ1+aGmjSx5LS6hO0nmlxjVPBfR7YjlRl+FrF0ZspLaL+BZpA==
+"@datadog/native-iast-rewriter@1.0.0":
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-1.0.0.tgz#02bf338055cdcd3c5b3e8d528afe6d967985cf11"
+  integrity sha512-DGN4cQd30mUaAB349gKeoDTt7acviBERnNYlyk8G+PlobuomTSEohJri5Jo4X+/5oRJPJngGX2VBq7YwMHiing==
   dependencies:
     node-gyp-build "^4.5.0"
 
-"@datadog/native-iast-taint-tracking@^0.1.0-beta.2":
-  version "0.1.0-beta.2"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-0.1.0-beta.2.tgz#dd8d834be6c2a359bc37127ecb8fa1bb8f174aeb"
-  integrity sha512-8qP9uMxut0sxXmN5vjTZSDIP28W5Aip4Nhbw21XVFQyWmLgs2DiJ4teJnejLpMY1u7CWHPKv0Jd6/rv4Xs0f3A==
+"@datadog/native-iast-taint-tracking@1.0.0":
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-1.0.0.tgz#d875cf0a3ef3907c27311386f85b3f3a9d99431b"
+  integrity sha512-fS7XoRE5T4JQ7UzWjNT/wZQhS6nmLDwt12IDcSBZfRRJ2VyFth5GvOlQtCPa6Q0k7WMIrt9UXIl/v807cVq1SQ==
   dependencies:
     node-gyp-build "^3.9.0"
 
