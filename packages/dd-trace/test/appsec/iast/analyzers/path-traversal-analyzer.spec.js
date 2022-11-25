@@ -131,11 +131,32 @@ describe('path-traversal-analyzer', () => {
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { evidence: { value: 'taintedArg2' } })
   })
+
+  it('Should not report the vulnerability if it comes from send module', () => {
+    const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
+      './injection-analyzer': InjectionAnalyzer,
+      '../iast-context': { getIastContext: () => iastContext }
+    })
+
+    proxyPathAnalyzer._getLocation = function () {
+      return { path: 'node_modules/send/send.js', line: 3 }
+    }
+
+    addVulnerability.reset()
+    TaintTrackingMock.isTainted.reset()
+    getIastContext.returns(iastContext)
+    TaintTrackingMock.isTainted.returns(true)
+    hasQuota.returns(true)
+
+    proxyPathAnalyzer.analyze(['arg1'])
+    expect(addVulnerability).to.be.callCount(0)
+  })
 })
 
 describe('integration test', () => {
   testThatRequestHasVulnerability(function () {
     const store = storage.getStore()
+
     const iastCtx = iastContextFunctions.getIastContext(store)
     let path = __filename
     path = newTaintedString(iastCtx, __filename, 'param', 'Request')

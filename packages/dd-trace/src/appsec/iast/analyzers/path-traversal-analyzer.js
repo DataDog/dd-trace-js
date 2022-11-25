@@ -7,6 +7,19 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
   constructor () {
     super('PATH_TRAVERSAL')
     this.addSub('datadog:fs:access', obj => this.analyze(obj.arguments))
+    this.exclusionList = [ 'node_modules/send/' ]
+  }
+
+  _isExcluded (location) {
+    let ret = false
+    if (location) {
+      ret = this.exclusionList.find(elem => {
+        if (location.path.includes(elem)) {
+          return true
+        }
+      })
+    }
+    return ret
   }
 
   analyze (value) {
