@@ -35,9 +35,7 @@ function getCommonRequestOptions (url) {
       'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY
     },
     timeout: 15000,
-    protocol: url.protocol,
-    hostname: url.hostname,
-    port: url.port
+    url
   }
 }
 
@@ -71,16 +69,16 @@ function getCommitsToExclude ({ url, repositoryUrl }, callback) {
     }))
   })
 
-  request(localCommitData, options, (err, response, statusCode) => {
+  request(localCommitData, options, (err, response) => {
     if (err) {
-      const error = new Error(`search_commits returned an error: status code ${statusCode}`)
+      const error = new Error(`Error fetching commits to exclude: ${err.message}`)
       return callback(error)
     }
     let commitsToExclude
     try {
       commitsToExclude = sanitizeCommits(JSON.parse(response).data)
     } catch (e) {
-      return callback(new Error(`Can't parse search_commits response: ${e.message}`))
+      return callback(new Error(`Can't parse commits to exclude response: ${e.message}`))
     }
     callback(null, commitsToExclude, headCommit)
   })
@@ -129,7 +127,7 @@ function uploadPackFile ({ url, packFileToUpload, repositoryUrl, headCommit }, c
   }
   request(form, options, (err, _, statusCode) => {
     if (err) {
-      const error = new Error(`Could not upload packfiles: status code ${statusCode}`)
+      const error = new Error(`Could not upload packfiles: status code ${statusCode}: ${err.message}`)
       return callback(error)
     }
     callback(null)
