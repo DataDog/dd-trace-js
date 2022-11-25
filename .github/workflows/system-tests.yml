@@ -39,6 +39,19 @@ jobs:
       - name: Run
         run: ./run.sh
 
+      - name: Upload results CI Visibility
+        if: ${{ always() }}
+        run: ./utils/scripts/upload_results_CI_visibility.sh dev js-tracer ${{ github.run_id }}-${{ github.run_attempt }}
+        env:
+          DD_API_KEY: ${{ secrets.DD_CI_API_KEY }}
+
+      - name: Update CI Visibility dashboard
+        if: always() && github.ref == 'refs/heads/master'
+        run: ./utils/scripts/upload_results_CI_visibility.sh dev js-tracer ${{ github.run_id }}-${{ github.run_attempt }}
+        env:
+          DD_API_KEY: ${{ secrets.DD_CI_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DD_CI_APP_KEY }}
+
       - name: Compress artifact
         if: ${{ always() }}
         run: tar -czvf artifact.tar.gz $(ls | grep logs)
