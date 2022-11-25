@@ -85,12 +85,13 @@ describe('git_metadata', () => {
   it('should fail and not continue if first query results in anything other than 200', (done) => {
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')
-      .reply(500)
+      .reply(404, 'Not found SHA')
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
     gitMetadata.sendGitMetadata('test.com', (err) => {
-      expect(err.message).to.contain('search_commits returned an error: status code 500')
+      // eslint-disable-next-line
+      expect(err.message).to.contain('Error fetching commits to exclude: Error from https://api.test.com//api/v2/git/repository/search_commits: 404 Not Found. Response from the endpoint: "Not found SHA"')
       // to check that it is not called
       expect(scope.isDone()).to.be.false
       expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
@@ -106,7 +107,7 @@ describe('git_metadata', () => {
       .reply(204)
 
     gitMetadata.sendGitMetadata('test.com', (err) => {
-      expect(err.message).to.contain("Can't parse search_commits response: Invalid commit type response")
+      expect(err.message).to.contain("Can't parse commits to exclude response: Invalid commit type response")
       // to check that it is not called
       expect(scope.isDone()).to.be.false
       expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
