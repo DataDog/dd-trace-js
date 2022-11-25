@@ -36,9 +36,7 @@ function getItrConfiguration ({
       'dd-application-key': appKey,
       'Content-Type': 'application/json'
     },
-    protocol: intakeUrl.protocol,
-    hostname: intakeUrl.hostname,
-    port: intakeUrl.port
+    url: intakeUrl
   }
 
   const data = JSON.stringify({
