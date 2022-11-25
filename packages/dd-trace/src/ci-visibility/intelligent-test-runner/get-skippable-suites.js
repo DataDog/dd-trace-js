@@ -34,9 +34,7 @@ function getSkippableSuites ({
       'Content-Type': 'application/json'
     },
     timeout: 15000,
-    protocol: intakeUrl.protocol,
-    hostname: intakeUrl.hostname,
-    port: intakeUrl.port
+    url: intakeUrl
   }
 
   const data = JSON.stringify({
