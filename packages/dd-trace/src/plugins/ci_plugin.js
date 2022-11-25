@@ -29,43 +29,14 @@ module.exports = class CiPlugin extends Plugin {
       })
     })
 
-    this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.name, this.config)
     this.codeOwnersEntries = getCodeOwnersFileEntries()
-
-    const {
-      'git.repository_url': repositoryUrl,
-      'git.commit.sha': sha,
-      'os.version': osVersion,
-      'os.platform': osPlatform,
-      'os.architecture': osArchitecture,
-      'runtime.name': runtimeName,
-      'runtime.version': runtimeVersion,
-      'git.branch': branch
-    } = this.testEnvironmentMetadata
-
-    const testConfiguration = {
-      repositoryUrl,
-      sha,
-      osVersion,
-      osPlatform,
-      osArchitecture,
-      runtimeName,
-      runtimeVersion,
-      branch
-    }
 
     this.addSub(`ci:${this.constructor.name}:configuration`, ({ onDone }) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
         onDone({ config: {} })
         return
       }
-      getItrConfiguration({
-        ...testConfiguration,
-        url: this.config.url,
-        site: this.config.site,
-        env: this.tracer._env,
-        service: this.config.service || this.tracer._service
-      }, (err, config) => {
+      getItrConfiguration(this.testConfiguration, (err, config) => {
         if (err) {
           onDone({ err })
         } else {
@@ -87,13 +58,7 @@ module.exports = class CiPlugin extends Plugin {
         if (!this.itrConfig || !this.itrConfig.isSuitesSkippingEnabled) {
           return onDone({ skippableSuites: [] })
         }
-        getSkippableSuites({
-          ...testConfiguration,
-          url: this.config.url,
-          site: this.config.site,
-          env: this.tracer._env,
-          service: this.config.service || this.tracer._service
-        }, (err, skippableSuites) => {
+        getSkippableSuites(this.testConfiguration, (err, skippableSuites) => {
           if (err) {
             onDone({ err })
           } else {
@@ -102,6 +67,37 @@ module.exports = class CiPlugin extends Plugin {
         })
       })
     })
+  }
+
+  configure (config) {
+    super.configure(config)
+    this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.name, this.config)
+
+    const {
+      'git.repository_url': repositoryUrl,
+      'git.commit.sha': sha,
+      'os.version': osVersion,
+      'os.platform': osPlatform,
+      'os.architecture': osArchitecture,
+      'runtime.name': runtimeName,
+      'runtime.version': runtimeVersion,
+      'git.branch': branch
+    } = this.testEnvironmentMetadata
+
+    this.testConfiguration = {
+      repositoryUrl,
+      sha,
+      osVersion,
+      osPlatform,
+      osArchitecture,
+      runtimeName,
+      runtimeVersion,
+      branch,
+      url: this.config.url,
+      site: this.config.site,
+      env: this.tracer._env,
+      service: this.config.service || this.tracer._service
+    }
   }
 
   startTestSpan (name, suite, extraTags, childOf) {
