@@ -8,6 +8,7 @@ module.exports = {
   '@grpc/grpc-js': () => require('../grpc'),
   '@hapi/hapi': () => require('../hapi'),
   '@jest/core': () => require('../jest'),
+  '@jest/reporters': () => require('../jest'),
   '@koa/router': () => require('../koa'),
   '@node-redis/client': () => require('../redis'),
   '@opensearch-project/opensearch': () => require('../opensearch'),
