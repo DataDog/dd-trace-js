@@ -23,6 +23,7 @@ const jestConfigurationCh = channel('ci:jest:configuration')
 
 let skippableSuites = []
 let isCodeCoverageEnabled = false
+let isSuitesSkippingEnabled = false
 
 const {
   getTestSuitePath,
@@ -181,8 +182,6 @@ function cliWrapper (cli) {
       jestConfigurationCh.publish({ onResponse, onError })
     })
 
-    let isSuitesSkippingEnabled = false
-
     try {
       const config = await configurationPromise
       isCodeCoverageEnabled = config.isCodeCoverageEnabled
@@ -237,6 +236,27 @@ function cliWrapper (cli) {
 
   return cli
 }
+
+addHook({
+  name: '@jest/reporters',
+  file: 'build/CoverageReporter.js',
+  versions: ['>=24.8.0']
+}, (coverageReporter) => {
+  const CoverageReporter = coverageReporter.default ? coverageReporter.default : coverageReporter
+
+  /**
+   * If ITR is active, we're running fewer tests, so of course the total code coverage is reduced.
+   * This calculation adds no value, so we'll skip it.
+   */
+  shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => async function () {
+    if (isSuitesSkippingEnabled) {
+      return Promise.resolve()
+    }
+    return addUntestedFiles.apply(this, arguments)
+  })
+
+  return coverageReporter
+})
 
 addHook({
   name: '@jest/core',
@@ -314,6 +334,16 @@ function configureTestEnvironment (readConfigsResult) {
     }
     readConfigsResult.globalConfig = globalConfig
   }
+  if (isSuitesSkippingEnabled) {
+    // If suite skipping is enabled, the code coverage results are not going to be relevant,
+    // so we do not show them.
+    const globalConfig = {
+      ...readConfigsResult.globalConfig,
+      coverageReporters: ['none']
+    }
+    readConfigsResult.globalConfig = globalConfig
+  }
+
   return readConfigsResult
 }
 
