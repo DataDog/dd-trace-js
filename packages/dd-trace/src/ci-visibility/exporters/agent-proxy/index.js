@@ -3,7 +3,7 @@
 const AgentWriter = require('../../../exporters/agent/writer')
 const AgentlessWriter = require('../agentless/writer')
 const CoverageWriter = require('../agentless/coverage-writer')
-const AgentInfoExporter = require('../../../exporters/common/exporter-agent-info')
+const AgentInfoExporter = require('../../../exporters/common/agent-info-exporter')
 const log = require('../../../log')
 
 const AGENT_EVP_PROXY_PATH = '/evp_proxy/v2'
@@ -18,7 +18,7 @@ class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
   constructor (config) {
     super(config)
 
-    this.coverageBuffer = []
+    this._coverageBuffer = []
 
     this.getAgentInfo((err, agentInfo) => {
       let isEvpCompatible = false
@@ -51,7 +51,7 @@ class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
           headers
         })
         // coverages will never be used, so we discard them
-        this.coverageBuffer = []
+        this._coverageBuffer = []
       }
       this.exportUncodedTraces()
       this.exportUncodedCoverages()
@@ -67,19 +67,27 @@ class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
     })
   }
 
-  exportUncodedCoverages () {
-    this.coverageBuffer.forEach(oldCoveragePayload => {
-      this.exportCoverage(oldCoveragePayload)
+  exportUncodedTraces () {
+    this.getUncodedTraces().forEach(uncodedTrace => {
+      this.export(uncodedTrace)
     })
-    this.coverageBuffer = []
+    this.resetUncodedTraces()
   }
 
-  exportCoverage ({ span, coverageFiles }) {
+  exportUncodedCoverages () {
+    this._coverageBuffer.forEach(oldCoveragePayload => {
+      this.exportCoverage(oldCoveragePayload)
+    })
+    this._coverageBuffer = []
+  }
+
+  exportCoverage (coveragePayload) {
     // until we know what writer to use, we just store coverage payloads
     if (!this._coverageWriter) {
-      this.coverageBuffer.push({ span, coverageFiles })
+      this._coverageBuffer.push(coveragePayload)
       return
     }
+    const { span, coverageFiles } = coveragePayload
     const formattedCoverage = {
       traceId: span.context()._traceId,
       spanId: span.context()._spanId,

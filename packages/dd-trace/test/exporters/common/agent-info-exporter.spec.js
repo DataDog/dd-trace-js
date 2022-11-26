@@ -1,8 +1,7 @@
 'use strict'
 
-const AgentInfoExporter = require('../../../src/exporters/common/exporter-agent-info')
+const AgentInfoExporter = require('../../../src/exporters/common/agent-info-exporter')
 const nock = require('nock')
-const { expect } = require('chai')
 
 describe('AgentInfoExporter', () => {
   const writer = {
