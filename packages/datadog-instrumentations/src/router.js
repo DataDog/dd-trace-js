@@ -3,11 +3,12 @@
 const METHODS = require('methods').concat('all')
 const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 
 function createWrapRouterMethod (name) {
   const enterChannel = channel(`apm:${name}:middleware:enter`)
   const exitChannel = channel(`apm:${name}:middleware:exit`)
+  const finishChannel = channel(`apm:${name}:middleware:finish`)
   const errorChannel = channel(`apm:${name}:middleware:error`)
   const nextChannel = channel(`apm:${name}:middleware:next`)
 
@@ -21,7 +22,6 @@ function createWrapRouterMethod (name) {
       if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
 
       const matchers = layerMatchers.get(layer)
-      const middlewareResource = new AsyncResource('bound-anonymous-fn')
       const lastIndex = arguments.length - 1
       const name = original._name || original.name
       const req = arguments[arguments.length > 3 ? 1 : 0]
@@ -31,32 +31,32 @@ function createWrapRouterMethod (name) {
         arguments[lastIndex] = wrapNext(req, next)
       }
 
-      return middlewareResource.runInAsyncScope(() => {
-        let route
+      let route
 
-        if (matchers) {
-          // Try to guess which path actually matched
-          for (let i = 0; i < matchers.length; i++) {
-            if (matchers[i].test(layer)) {
-              route = matchers[i].path
+      if (matchers) {
+        // Try to guess which path actually matched
+        for (let i = 0; i < matchers.length; i++) {
+          if (matchers[i].test(layer)) {
+            route = matchers[i].path
 
-              break
-            }
+            break
           }
         }
+      }
 
-        enterChannel.publish({ name, req, route })
+      enterChannel.publish({ name, req, route })
 
-        try {
-          return original.apply(this, arguments)
-        } catch (error) {
-          errorChannel.publish({ req, error })
-          nextChannel.publish({ req })
-          exitChannel.publish({ req })
+      try {
+        return original.apply(this, arguments)
+      } catch (error) {
+        errorChannel.publish({ req, error })
+        nextChannel.publish({ req })
+        finishChannel.publish({ req })
 
-          throw error
-        }
-      })
+        throw error
+      } finally {
+        exitChannel.publish({ req })
+      }
     })
 
     // This is a workaround for the `loopback` library so that it can find the correct express layer
@@ -95,7 +95,7 @@ function createWrapRouterMethod (name) {
       }
 
       nextChannel.publish({ req })
-      exitChannel.publish({ req })
+      finishChannel.publish({ req })
 
       next.apply(this, arguments)
     }

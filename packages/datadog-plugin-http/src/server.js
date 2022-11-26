@@ -14,12 +14,15 @@ class HttpServerPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
+    this._storeStack = []
+
     this.addSub('apm:http:server:request:start', ({ req, res }) => {
       const store = storage.getStore()
       const span = web.startSpan(this.tracer, this.config, req, res, 'web.request')
 
       span.setTag(COMPONENT, this.constructor.name)
 
+      this._storeStack.push(store)
       this.enter(span, { ...store, req })
 
       const context = web.getContext(req)
@@ -36,6 +39,10 @@ class HttpServerPlugin extends Plugin {
 
     this.addSub('apm:http:server:request:error', (error) => {
       web.addError(error)
+    })
+
+    this.addSub('apm:http:server:request:exit', ({ req }) => {
+      this.enter(this._storeStack.pop())
     })
 
     this.addSub('apm:http:server:request:finish', ({ req }) => {
