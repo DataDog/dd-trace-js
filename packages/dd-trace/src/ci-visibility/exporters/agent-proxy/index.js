@@ -8,6 +8,10 @@ const log = require('../../../log')
 
 const AGENT_EVP_PROXY_PATH = '/evp_proxy/v2'
 
+function getIsEvpCompatible (err, agentInfo) {
+  return !err && agentInfo.endpoints.some(url => url.includes(AGENT_EVP_PROXY_PATH))
+}
+
 /**
  * AgentProxyCiVisibilityExporter extends from AgentInfoExporter
  * to get the agent information. If the agent is event platform proxy compatible,
@@ -19,20 +23,10 @@ class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
     super(config)
 
     this._coverageBuffer = []
+    const { tags, prioritySampler, lookup, protocolVersion, headers } = config
 
     this.getAgentInfo((err, agentInfo) => {
-      let isEvpCompatible = false
-      const { tags, prioritySampler, lookup, protocolVersion, headers } = config
-      if (err) {
-        isEvpCompatible = false
-      } else {
-        const {
-          endpoints
-        } = agentInfo
-        isEvpCompatible = endpoints.some(url => url.includes(AGENT_EVP_PROXY_PATH))
-      }
-
-      if (isEvpCompatible) {
+      if (getIsEvpCompatible(err, agentInfo)) {
         this._writer = new AgentlessWriter({
           url: this._url,
           tags,

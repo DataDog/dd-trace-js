@@ -22,18 +22,23 @@ class Writer extends BaseWriter {
 
   _sendPayload (data, _, done) {
     const options = {
-      path: `${this._evpProxyPrefix}/api/v2/citestcycle`,
+      path: `/api/v2/citestcycle`,
       method: 'POST',
       headers: {
         'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
-        'Content-Type': 'application/msgpack',
-        'X-Datadog-EVP-Subdomain': 'citestcycle-intake'
+        'Content-Type': 'application/msgpack'
       },
-      timeout: 15000,
       url: this._url
     }
 
+    if (this._evpProxyPrefix) {
+      options.path = `${this._evpProxyPrefix}/api/v2/citestcycle`
+      delete options.headers['dd-api-key']
+      options.headers['X-Datadog-EVP-Subdomain'] = 'citestcycle-intake'
+    }
+
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
+
     request(data, options, (err, res) => {
       if (err) {
         log.error(err)
