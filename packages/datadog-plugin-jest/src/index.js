@@ -48,9 +48,6 @@ class JestPlugin extends CiPlugin {
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
     this.addSub('ci:jest:session:start', (command) => {
-      if (!this.config.isAgentlessEnabled) {
-        return
-      }
       const store = storage.getStore()
       const childOf = getTestParentSpan(this.tracer)
       const testSessionSpanMetadata = getTestSessionCommonTags(command, this.tracer._version)
@@ -67,9 +64,6 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:session:finish', ({ status, isTestsSkipped, testCodeCoverageLinesTotal }) => {
-      if (!this.config.isAgentlessEnabled) {
-        return
-      }
       const testSessionSpan = storage.getStore().span
       testSessionSpan.setTag(TEST_STATUS, status)
       if (isTestsSkipped) {
@@ -87,9 +81,6 @@ class JestPlugin extends CiPlugin {
     // This subscriber changes the configuration objects from jest to inject the trace id
     // of the test session to the processes that run the test suites.
     this.addSub('ci:jest:session:configuration', configs => {
-      if (!this.config.isAgentlessEnabled) {
-        return
-      }
       const testSessionSpan = storage.getStore().span
       configs.forEach(config => {
         config._ddTestSessionId = testSessionSpan.context()._traceId.toString(10)
@@ -98,10 +89,6 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions }) => {
-      if (!this.config.isAgentlessEnabled) {
-        return
-      }
-
       const { _ddTestSessionId: testSessionId, _ddTestCommand: testCommand } = testEnvironmentOptions
 
       const store = storage.getStore()
@@ -125,9 +112,6 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage }) => {
-      if (!this.config.isAgentlessEnabled) {
-        return
-      }
       const testSuiteSpan = storage.getStore().span
       testSuiteSpan.setTag(TEST_STATUS, status)
       if (errorMessage) {
@@ -140,7 +124,7 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:test-suite:code-coverage', (coverageFiles) => {
-      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
+      if (!this.config.isIntelligentTestRunnerEnabled) {
         return
       }
       const testSuiteSpan = storage.getStore().span

@@ -147,10 +147,6 @@ module.exports = class PluginManager {
       sharedConfig.clientIpHeader = clientIpHeader
     }
 
-    if (experimental) {
-      sharedConfig.isAgentlessEnabled = experimental.exporter === 'datadog'
-    }
-
     sharedConfig.isIntelligentTestRunnerEnabled = isIntelligentTestRunnerEnabled
 
     sharedConfig.dbmPropagationMode = dbmPropagationMode
