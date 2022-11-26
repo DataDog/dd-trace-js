@@ -21,18 +21,19 @@ function fetchAgentInfo (url, callback) {
 }
 
 /**
- * Exporter that queries /info from the agent and gives you the response.
+ * Exporter that exposes a way to query /info endpoint from the agent and gives you the response.
  * While this._writer is not initialized, exported traces are stored as is.
  */
 class AgentInfoExporter {
   constructor (tracerConfig) {
-    const { url, hostname, port } = tracerConfig
+    this._config = tracerConfig
+    const { url, hostname, port } = this._config
     this._url = url || new URL(format({
       protocol: 'http:',
       hostname: hostname || 'localhost',
       port
     }))
-    this.traceBuffer = []
+    this._traceBuffer = []
   }
 
   getAgentInfo (onReceivedInfo) {
@@ -57,27 +58,25 @@ class AgentInfoExporter {
   export (trace) {
     // until we know what writer to use, we just store traces
     if (!this._writer) {
-      this.traceBuffer.push(trace)
+      this._traceBuffer.push(trace)
       return
     }
-
     this._export(trace)
   }
 
-  exportUncodedTraces () {
-    this.traceBuffer.forEach(oldTrace => {
-      this.export(oldTrace)
-    })
-    this.traceBuffer = []
+  getUncodedTraces () {
+    return this._traceBuffer
+  }
+
+  resetUncodedTraces () {
+    this._traceBuffer = []
   }
 
   setUrl (url) {
+    url = new URL(url)
+    this._url = url
     try {
-      if (this._writer) {
-        url = new URL(url)
-        this._url = url
-        this._writer.setUrl(url)
-      }
+      this._writer.setUrl(url)
     } catch (e) {
       log.error(e)
     }
