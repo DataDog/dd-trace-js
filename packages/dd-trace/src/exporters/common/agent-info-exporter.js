@@ -55,15 +55,6 @@ class AgentInfoExporter {
     }
   }
 
-  export (trace) {
-    // until we know what writer to use, we just store traces
-    if (!this._writer) {
-      this._traceBuffer.push(trace)
-      return
-    }
-    this._export(trace)
-  }
-
   getUncodedTraces () {
     return this._traceBuffer
   }

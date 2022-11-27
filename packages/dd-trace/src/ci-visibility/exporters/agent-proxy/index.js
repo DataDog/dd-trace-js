@@ -12,10 +12,17 @@ function getIsEvpCompatible (err, agentInfo) {
   return !err && agentInfo.endpoints.some(url => url.includes(AGENT_EVP_PROXY_PATH))
 }
 
+const getIsTestSessionTrace = (trace) => {
+  return trace.some(span =>
+    span.type === 'test_session_end' || span.type === 'test_suite_end'
+  )
+}
+
+
 /**
  * AgentProxyCiVisibilityExporter extends from AgentInfoExporter
  * to get the agent information. If the agent is event platform proxy compatible,
- * it will initialise the CI Visibility writers.
+ * it will initialize the CI Visibility writers.
  * If it isn't, it will fall back to the agent writer.
  */
 class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
@@ -24,9 +31,12 @@ class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
 
     this._coverageBuffer = []
     const { tags, prioritySampler, lookup, protocolVersion, headers } = config
+    this._isInitialized = false
 
     this.getAgentInfo((err, agentInfo) => {
-      if (getIsEvpCompatible(err, agentInfo)) {
+      this._isInitialized = true
+      this._isEvpCompatible = getIsEvpCompatible(err, agentInfo)
+      if (this._isEvpCompatible) {
         this._writer = new AgentlessWriter({
           url: this._url,
           tags,
@@ -75,12 +85,29 @@ class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
     this._coverageBuffer = []
   }
 
+  export (trace) {
+    // Until it's initialized, we just store the traces as is
+    if (!this._isInitialized) {
+      this._traceBuffer.push(trace)
+      return
+    }
+    if (!this._isEvpCompatible && getIsTestSessionTrace(trace)) {
+      return
+    }
+    this._export(trace)
+  }
+
   exportCoverage (coveragePayload) {
-    // until we know what writer to use, we just store coverage payloads
-    if (!this._coverageWriter) {
+    // Until it's initialized, we just store the coverages as is
+    if (!this._isInitialized) {
       this._coverageBuffer.push(coveragePayload)
       return
     }
+    // We can't process coverages if it's not evp compatible
+    if (!this._isEvpCompatible) {
+      return
+    }
+
     const { span, coverageFiles } = coveragePayload
     const formattedCoverage = {
       traceId: span.context()._traceId,

@@ -22,7 +22,7 @@ class Writer extends BaseWriter {
 
   _sendPayload (data, _, done) {
     const options = {
-      path: `/api/v2/citestcycle`,
+      path: '/api/v2/citestcycle',
       method: 'POST',
       headers: {
         'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
