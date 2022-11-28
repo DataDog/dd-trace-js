@@ -3,6 +3,7 @@
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
+const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
 const modules = semver.satisfies(process.versions.node, '>=14')
   ? ['@node-redis/client', '@redis/client']
@@ -57,8 +58,8 @@ describe('Plugin', () => {
           let error
 
           const promise = agent.use(traces => {
-            expect(traces[0][0].meta).to.have.property('error.type', error.name)
-            expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
             expect(traces[0][0].meta).to.have.property('component', 'redis')
             // stack trace is not available in newer versions
           })
