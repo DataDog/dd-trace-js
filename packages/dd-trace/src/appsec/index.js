@@ -3,6 +3,7 @@
 const fs = require('fs')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
+const remoteConfig = require('./remote_config')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('./gateway/channels')
 const Gateway = require('./gateway/engine')
 const addresses = require('./addresses')
@@ -21,12 +22,14 @@ function enable (config) {
     rules = JSON.parse(rules)
 
     RuleManager.applyRules(rules, config.appsec)
+    remoteConfig.enableAsmData()
   } catch (err) {
     log.error('Unable to start AppSec')
     log.error(err)
 
     // abort AppSec start
     RuleManager.clearAllRules()
+    remoteConfig.disableAsmData()
     return
   }
 
@@ -116,6 +119,7 @@ function disable () {
   isEnabled = false
 
   RuleManager.clearAllRules()
+  remoteConfig.disableAsmData()
 
   // Channel#unsubscribe() is undefined for non active channels
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)

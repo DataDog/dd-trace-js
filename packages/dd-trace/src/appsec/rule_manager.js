@@ -14,6 +14,12 @@ function applyRules (rules, config) {
   appliedCallbacks.set(rules, callback)
 }
 
+function updateRuleData (ruleData) {
+  for (const callback of appliedCallbacks.values()) {
+    callback.updateRuleData(ruleData)
+  }
+}
+
 function clearAllRules () {
   Gateway.manager.clear()
 
@@ -26,5 +32,6 @@ function clearAllRules () {
 
 module.exports = {
   applyRules,
-  clearAllRules
+  clearAllRules,
+  updateRuleData
 }

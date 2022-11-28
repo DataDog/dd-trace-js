@@ -2,9 +2,12 @@
 
 const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
+const RuleManager = require('../rule_manager')
+
+let rc
 
 function enable (config) {
-  const rc = new RemoteConfigManager(config)
+  rc = new RemoteConfigManager(config)
 
   if (config.appsec.enabled === undefined) { // only activate ASM_FEATURES when conf is not set locally
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
@@ -29,6 +32,20 @@ function enable (config) {
   }
 }
 
+function enableAsmData () {
+  rc.on('ASM_DATA', _asmDataListener)
+}
+
+function disableAsmData () {
+  rc.off('ASM_DATA', _asmDataListener)
+}
+
+function _asmDataListener (_, ruleData) {
+  RuleManager.updateRuleData(ruleData)
+}
+
 module.exports = {
-  enable
+  enable,
+  enableAsmData,
+  disableAsmData
 }

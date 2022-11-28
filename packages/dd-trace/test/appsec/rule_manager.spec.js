@@ -1,10 +1,11 @@
 'use strict'
 
-const { applyRules, clearAllRules } = require('../../src/appsec/rule_manager')
+const { applyRules, clearAllRules, updateRuleData } = require('../../src/appsec/rule_manager')
 const callbacks = require('../../src/appsec/callbacks')
 const Gateway = require('../../src/appsec/gateway/engine')
 
 const rules = [{ a: 'thatsarule' }, { b: 'thatsanotherone' }]
+const ruleData = [{ x: 'ruleData' }]
 
 describe('AppSec Rule Manager', () => {
   let FakeDDWAF
@@ -13,6 +14,7 @@ describe('AppSec Rule Manager', () => {
     FakeDDWAF = sinon.spy()
 
     FakeDDWAF.prototype.clear = sinon.spy()
+    FakeDDWAF.prototype.updateRuleData = sinon.spy()
 
     sinon.stub(callbacks, 'DDWAF').get(() => FakeDDWAF)
   })
@@ -53,6 +55,15 @@ describe('AppSec Rule Manager', () => {
 
       expect(callbacks.DDWAF).to.have.been.calledTwice
       expect(FakeDDWAF).to.have.been.calledTwice
+    })
+  })
+
+  describe('updateRuleData', () => {
+    it('should call updateRuleData on all applied rules', () => {
+      applyRules(rules)
+      updateRuleData(ruleData)
+
+      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledOnceWithExactly(ruleData)
     })
   })
 })

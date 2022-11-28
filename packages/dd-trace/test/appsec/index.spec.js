@@ -4,6 +4,7 @@ const fs = require('fs')
 const proxyquire = require('proxyquire')
 const log = require('../../src/log')
 const RuleManager = require('../../src/appsec/rule_manager')
+const remoteConfig = require('../../src/appsec/remote_config')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../src/appsec/gateway/channels')
 const Gateway = require('../../src/appsec/gateway/engine')
 const addresses = require('../../src/appsec/addresses')
@@ -49,11 +50,14 @@ describe('AppSec Index', () => {
 
   describe('enable', () => {
     it('should enable AppSec only once', () => {
+      sinon.spy(remoteConfig, 'enableAsmData')
+
       AppSec.enable(config)
       AppSec.enable(config)
 
       expect(fs.readFileSync).to.have.been.calledOnceWithExactly('./path/rules.json')
       expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] }, config.appsec)
+      expect(remoteConfig.enableAsmData).to.have.been.calledOnce
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
@@ -93,12 +97,14 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
 
       sinon.stub(RuleManager, 'clearAllRules')
+      sinon.spy(remoteConfig, 'disableAsmData')
       sinon.spy(incomingHttpRequestStart, 'unsubscribe')
       sinon.spy(incomingHttpRequestEnd, 'unsubscribe')
 
       AppSec.disable()
 
       expect(RuleManager.clearAllRules).to.have.been.calledOnce
+      expect(remoteConfig.disableAsmData).to.have.been.calledOnce
       expect(incomingHttpRequestStart.unsubscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.unsubscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
