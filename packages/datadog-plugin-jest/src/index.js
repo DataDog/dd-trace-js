@@ -68,6 +68,8 @@ class JestPlugin extends CiPlugin {
       testSessionSpan.setTag(TEST_STATUS, status)
       if (isTestsSkipped) {
         testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
+      } else {
+        testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'false')
       }
       if (testCodeCoverageLinesTotal !== undefined) {
         testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
