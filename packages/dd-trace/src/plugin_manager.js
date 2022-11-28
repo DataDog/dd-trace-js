@@ -124,7 +124,6 @@ module.exports = class PluginManager {
       clientIpHeader,
       isIntelligentTestRunnerEnabled,
       site,
-      experimental,
       url,
       dbmPropagationMode
     } = this._tracerConfig

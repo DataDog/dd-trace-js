@@ -18,7 +18,6 @@ const getIsTestSessionTrace = (trace) => {
   )
 }
 
-
 /**
  * AgentProxyCiVisibilityExporter extends from AgentInfoExporter
  * to get the agent information. If the agent is event platform proxy compatible,

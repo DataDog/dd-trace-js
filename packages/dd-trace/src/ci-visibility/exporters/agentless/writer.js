@@ -29,9 +29,7 @@ class Writer extends BaseWriter {
         'Content-Type': 'application/msgpack'
       },
       url: this._url,
-      timeout: 15000 // intake will never take this, but some testing
-      // can do heavy sync operations. If we don't set this high enough,
-      // we will timeout
+      timeout: 15000
     }
 
     if (this._evpProxyPrefix) {

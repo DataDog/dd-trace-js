@@ -28,9 +28,7 @@ class Writer extends BaseWriter {
         ...form.getHeaders()
       },
       url: this._url,
-      timeout: 15000 // intake will never take this long, but some testing (like UI)
-      // can do heavy sync operations. If we don't set this high enough,
-      // we will timeout even if the backend responds swiftly.
+      timeout: 15000
     }
 
     if (this._evpProxyPrefix) {

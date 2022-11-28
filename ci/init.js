@@ -26,7 +26,6 @@ so dd-trace will not be initialized.`)
     shouldInit = false
   }
 } else {
-  // we'll attempt CI Visibility protocol over the agent
   options.experimental = {
     exporter: 'agent_proxy'
   }

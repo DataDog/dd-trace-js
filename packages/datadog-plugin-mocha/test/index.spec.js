@@ -101,16 +101,19 @@ describe('Plugin', () => {
       const loadArguments = [['mocha', 'http']]
 
       const isAgentlessTest = this.currentTest.parent.title === 'agentless'
-      // we need the ci visibility init for this test
-      // TODO: add tests here to test EVP proxy
+      const isEvpProxy = this.currentTest.parent.title === 'evp proxy'
+
       if (isAgentlessTest) {
         process.env.DD_API_KEY = 'key'
         process.env.DD_APP_KEY = 'app-key'
         process.env.DD_ENV = 'ci'
         process.env.DD_SITE = 'datad0g.com'
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
-        loadArguments.push({ isAgentlessEnabled: true, isIntelligentTestRunnerEnabled: true })
+        loadArguments.push({ isIntelligentTestRunnerEnabled: true })
         loadArguments.push({ experimental: { exporter: 'datadog' } })
+      } else if (isEvpProxy) {
+        loadArguments.push({ service: 'test' })
+        loadArguments.push({ experimental: { exporter: 'agent_proxy' } })
       }
 
       return agent.load(...loadArguments).then(() => {
@@ -810,6 +813,59 @@ describe('Plugin', () => {
           mocha.run(() => {
             expect(scope.isDone()).to.be.false // skippable API is not called
           })
+        })
+      })
+
+      describe('evp proxy', () => {
+        it.only('works with test suite level visibility', function (done) {
+          const testFilePaths = fs.readdirSync(__dirname)
+            .filter(name => name.startsWith('mocha-test-suite-level'))
+            .map(relativePath => path.join(__dirname, relativePath))
+
+          const suites = [
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-after-each.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-skip-describe.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-test.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-pass.js'
+          ]
+
+          agent.use((agentlessPayload, request) => {
+            expect(request.headers['x-datadog-evp-subdomain']).to.equal('citestcycle-intake')
+            expect(request.path).to.equal('/evp_proxy/v2/api/v2/citestcycle')
+
+            const events = agentlessPayload.events.map(event => event.content)
+
+            if (events[0].type === 'test') {
+              throw new Error() // we don't want to assert on tests
+            }
+
+            const testSessionEvent = events.find(span => span.type === 'test_session_end')
+            const testSuiteEvents = events.filter(span => span.type === 'test_suite_end')
+
+            expect(testSessionEvent.meta[TEST_STATUS]).to.equal('fail')
+            expect(testSuiteEvents.length).to.equal(4)
+
+            expect(
+              testSuiteEvents.every(
+                span => span.test_session_id.toString() === testSessionEvent.test_session_id.toString()
+              )
+            ).to.be.true
+            expect(testSuiteEvents.every(suite => suite.test_suite_id !== undefined)).to.be.true
+            expect(testSuiteEvents.every(suite => suites.includes(suite.meta[TEST_SUITE]))).to.be.true
+
+            const failedSuites = testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'fail')
+            expect(testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'pass')).to.have.length(1)
+            expect(failedSuites).to.have.length(3)
+            expect(failedSuites.every(suite => suite.meta[ERROR_MESSAGE] !== undefined)).to.be.true
+          }).then(() => done()).catch(done)
+
+          const mocha = new Mocha({
+            reporter: function () {} // silent on internal tests
+          })
+          testFilePaths.forEach(filePath => {
+            mocha.addFile(filePath)
+          })
+          mocha.run()
         })
       })
     })
