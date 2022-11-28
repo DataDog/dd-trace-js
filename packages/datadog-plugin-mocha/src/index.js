@@ -146,7 +146,7 @@ class MochaPlugin extends CiPlugin {
         finishAllTraceSpans(this.testSessionSpan)
       }
       this.itrConfig = null
-      if (this.tracer._exporter.writer) {
+      if (this.tracer._exporter._writer) {
         this.tracer._exporter._writer.flush()
       }
     })
