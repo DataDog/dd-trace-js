@@ -1,23 +1,15 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { channel } = require('diagnostics_channel')
 
 const {
-  CI_APP_ORIGIN,
-  TEST_CODE_OWNERS,
-  TEST_SUITE,
   TEST_STATUS,
   TEST_PARAMETERS,
   finishAllTraceSpans,
-  getTestEnvironmentMetadata,
   getTestSuitePath,
   getTestParentSpan,
   getTestParametersString,
-  getCodeOwnersFileEntries,
-  getCodeOwnersForFilename,
-  getTestCommonTags,
   getTestSessionCommonTags,
   getTestSuiteCommonTags,
   TEST_SUITE_ID,
@@ -26,27 +18,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
-const { getSkippableSuites } = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-skippable-suites')
-const {
-  getItrConfiguration
-} = require('../../dd-trace/src/ci-visibility/intelligent-test-runner/get-itr-configuration')
-
-function getTestSpanMetadata (tracer, test, sourceRoot) {
-  const childOf = getTestParentSpan(tracer)
-
-  const { file: testSuiteAbsolutePath } = test
-  const fullTestName = test.fullTitle()
-  const testSuite = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
-
-  const commonTags = getTestCommonTags(fullTestName, testSuite, tracer._version)
-
-  return {
-    childOf,
-    ...commonTags
-  }
-}
-
-class MochaPlugin extends Plugin {
+class MochaPlugin extends CiPlugin {
   static get name () {
     return 'mocha'
   }
@@ -54,87 +26,9 @@ class MochaPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
-    // `gitMetadataPromise` is used to wait until git metadata is uploaded to
-    // proceed with calculating the suites to skip
-    // TODO: add timeout after which the promise is resolved
-    const gitMetadataPromise = new Promise(resolve => {
-      gitMetadataUploadFinishCh.subscribe(err => {
-        resolve(err)
-      })
-    })
-
     this._testSuites = new Map()
     this._testNameToParams = {}
-    this.testEnvironmentMetadata = getTestEnvironmentMetadata('mocha', this.config)
     this.sourceRoot = process.cwd()
-    this.codeOwnersEntries = getCodeOwnersFileEntries(this.sourceRoot)
-
-    const {
-      'git.repository_url': repositoryUrl,
-      'git.commit.sha': sha,
-      'os.version': osVersion,
-      'os.platform': osPlatform,
-      'os.architecture': osArchitecture,
-      'runtime.name': runtimeName,
-      'runtime.version': runtimeVersion,
-      'git.branch': branch
-    } = this.testEnvironmentMetadata
-
-    const testConfiguration = {
-      repositoryUrl,
-      sha,
-      osVersion,
-      osPlatform,
-      osArchitecture,
-      runtimeName,
-      runtimeVersion,
-      branch
-    }
-
-    this.addSub('ci:mocha:test-suite:skippable', ({ onDone }) => {
-      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
-        onDone(null, [])
-        return
-      }
-      // we only request after git upload has happened, if it didn't fail
-      gitMetadataPromise.then((gitUploadError) => {
-        if (gitUploadError) {
-          return onDone(gitUploadError)
-        }
-        if (!this.itrConfig || !this.itrConfig.isSuitesSkippingEnabled) {
-          return onDone(null, [])
-        }
-        getSkippableSuites({
-          ...testConfiguration,
-          url: this.config.url,
-          site: this.config.site,
-          env: this.tracer._env,
-          service: this.config.service || this.tracer._service
-        }, onDone)
-      })
-    })
-
-    this.addSub('ci:mocha:configuration', ({ onDone }) => {
-      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
-        onDone(null, {})
-        return
-      }
-      getItrConfiguration({
-        ...testConfiguration,
-        url: this.config.url,
-        site: this.config.site,
-        env: this.tracer._env,
-        service: this.config.service || this.tracer._service
-      }, (err, itrConfig) => {
-        if (err) {
-          onDone(err)
-        } else {
-          this.itrConfig = itrConfig
-          onDone(null)
-        }
-      })
-    })
 
     this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
       if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
@@ -282,31 +176,20 @@ class MochaPlugin extends Plugin {
       testSuiteTags[TEST_COMMAND] = this.command
     }
 
-    const { childOf, ...testSpanMetadata } = getTestSpanMetadata(this.tracer, test, this.sourceRoot)
+    const { file: testSuiteAbsolutePath } = test
+    const fullTestName = test.fullTitle()
+    const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
+
+    const extraTags = {
+      ...testSuiteTags
+    }
 
     const testParametersString = getTestParametersString(this._testNameToParams, test.title)
     if (testParametersString) {
-      testSpanMetadata[TEST_PARAMETERS] = testParametersString
-    }
-    const codeOwners = getCodeOwnersForFilename(testSpanMetadata[TEST_SUITE], this.codeOwnersEntries)
-
-    if (codeOwners) {
-      testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
+      extraTags[TEST_PARAMETERS] = testParametersString
     }
 
-    const testSpan = this.tracer
-      .startSpan('mocha.test', {
-        childOf,
-        tags: {
-          [COMPONENT]: this.constructor.name,
-          ...this.testEnvironmentMetadata,
-          ...testSpanMetadata,
-          ...testSuiteTags
-        }
-      })
-    testSpan.context()._trace.origin = CI_APP_ORIGIN
-
-    return testSpan
+    return super.startTestSpan(fullTestName, testSuite, extraTags)
   }
 }
 
