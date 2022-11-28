@@ -50,7 +50,7 @@ function wrapRun (pl, isLatestVersion) {
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
-      runStartCh.publish({ pickleName: this.pickle.name, pickleUri: this.pickle.uri })
+      runStartCh.publish({ testName: this.pickle.name, fullTestSuite: this.pickle.uri })
       try {
         const promise = run.apply(this, arguments)
         promise.finally(() => {
