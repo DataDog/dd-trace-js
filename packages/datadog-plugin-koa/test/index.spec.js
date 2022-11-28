@@ -4,6 +4,7 @@ const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
 const getPort = require('get-port')
 const semver = require('semver')
+const { ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
@@ -566,7 +567,7 @@ describe('Plugin', () => {
                 expect(spans[1]).to.have.property('resource')
                 expect(spans[1].resource).to.match(/^dispatch/)
                 expect(spans[1].meta).to.include({
-                  'error.type': error.name,
+                  [ERROR_TYPE]: error.name,
                   'component': 'koa'
                 })
                 expect(spans[1].error).to.equal(1)

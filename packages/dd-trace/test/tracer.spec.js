@@ -5,6 +5,7 @@ const { storage } = require('../../datadog-core')
 const Config = require('../src/config')
 const tags = require('../../../ext/tags')
 const { expect } = require('chai')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -128,9 +129,9 @@ describe('Tracer', () => {
       } catch (e) {
         expect(span.finish).to.have.been.called
         expect(tags).to.include({
-          'error.type': e.name,
-          'error.msg': e.message,
-          'error.stack': e.stack
+          [ERROR_TYPE]: e.name,
+          [ERROR_MESSAGE]: e.message,
+          [ERROR_STACK]: e.stack
         })
       }
     })
@@ -170,9 +171,9 @@ describe('Tracer', () => {
 
         expect(span.finish).to.have.been.called
         expect(tags).to.include({
-          'error.type': error.name,
-          'error.msg': error.message,
-          'error.stack': error.stack
+          [ERROR_TYPE]: error.name,
+          [ERROR_MESSAGE]: error.message,
+          [ERROR_STACK]: error.stack
         })
       })
     })
@@ -217,9 +218,9 @@ describe('Tracer', () => {
           .catch(e => {
             expect(span.finish).to.have.been.called
             expect(tags).to.include({
-              'error.type': e.name,
-              'error.msg': e.message,
-              'error.stack': e.stack
+              [ERROR_TYPE]: e.name,
+              [ERROR_MESSAGE]: e.message,
+              [ERROR_STACK]: e.stack
             })
             done()
           })
