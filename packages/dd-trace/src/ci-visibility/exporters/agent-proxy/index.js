@@ -85,6 +85,11 @@ class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
     this._coverageBuffer = []
   }
 
+  /**
+   * TODO: add test to check that suite traces are not being processed if
+   * evp is not compatible
+   */
+
   export (trace) {
     // Until it's initialized, we just store the traces as is
     if (!this._isInitialized) {
@@ -97,6 +102,10 @@ class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
     this._export(trace)
   }
 
+  /**
+   * TODO: add test to check that suite traces are not being processed if
+   * evp is not compatible
+   */
   exportCoverage (coveragePayload) {
     // Until it's initialized, we just store the coverages as is
     if (!this._isInitialized) {

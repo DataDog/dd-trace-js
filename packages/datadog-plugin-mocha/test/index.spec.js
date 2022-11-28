@@ -102,6 +102,7 @@ describe('Plugin', () => {
 
       const isAgentlessTest = this.currentTest.parent.title === 'agentless'
       // we need the ci visibility init for this test
+      // TODO: add tests here to test EVP proxy
       if (isAgentlessTest) {
         process.env.DD_API_KEY = 'key'
         process.env.DD_APP_KEY = 'app-key'

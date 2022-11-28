@@ -27,7 +27,10 @@ class Writer extends BaseWriter {
         'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
         ...form.getHeaders()
       },
-      url: this._url
+      url: this._url,
+      timeout: 15000 // intake will never take this long, but some testing (like UI)
+      // can do heavy sync operations. If we don't set this high enough,
+      // we will timeout even if the backend responds swiftly.
     }
 
     if (this._evpProxyPrefix) {

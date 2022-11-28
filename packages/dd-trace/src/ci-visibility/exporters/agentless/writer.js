@@ -28,7 +28,10 @@ class Writer extends BaseWriter {
         'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
         'Content-Type': 'application/msgpack'
       },
-      url: this._url
+      url: this._url,
+      timeout: 15000 // intake will never take this, but some testing
+      // can do heavy sync operations. If we don't set this high enough,
+      // we will timeout
     }
 
     if (this._evpProxyPrefix) {
