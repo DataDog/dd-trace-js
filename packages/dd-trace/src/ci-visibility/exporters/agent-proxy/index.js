@@ -29,7 +29,6 @@ class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
 
     this._coverageBuffer = []
     const { tags, prioritySampler, lookup, protocolVersion, headers } = config
-    this._isInitialized = false
 
     this.getAgentInfo((err, agentInfo) => {
       this._isInitialized = true

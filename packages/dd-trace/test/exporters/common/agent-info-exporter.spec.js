@@ -48,7 +48,7 @@ describe('AgentInfoExporter', () => {
     })
   })
 
-  it('should export if a writer is initialised', () => {
+  it('should export if a writer is initialized', (done) => {
     nock('http://localhost:8126')
       .get('/info')
       .reply(200, JSON.stringify({
@@ -60,12 +60,14 @@ describe('AgentInfoExporter', () => {
 
     agentInfoExporter.getAgentInfo(() => {
       agentInfoExporter._writer = writer
+      agentInfoExporter._isInitialized = true
       agentInfoExporter.export(trace)
       expect(writer.append).to.have.been.calledWith(trace)
       expect(writer.flush).not.to.have.been.called
       expect(agentInfoExporter.getUncodedTraces()).not.to.include(trace)
       setTimeout(() => {
         expect(writer.flush).to.have.been.called
+        done()
       }, flushInterval)
     })
   })

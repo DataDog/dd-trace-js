@@ -34,10 +34,19 @@ class AgentInfoExporter {
       port
     }))
     this._traceBuffer = []
+    this._isInitialized = false
   }
 
   getAgentInfo (onReceivedInfo) {
     fetchAgentInfo(this._url, onReceivedInfo)
+  }
+
+  export (trace) {
+    if (!this._isInitialized) {
+      this._traceBuffer.push(trace)
+      return
+    }
+    this._export(trace)
   }
 
   _export (payload, writer = this._writer, timerKey = '_timer') {
