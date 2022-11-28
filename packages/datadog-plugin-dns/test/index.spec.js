@@ -3,6 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { promisify } = require('util')
 const { storage } = require('../../datadog-core')
+const { ERROR_TYPE, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let dns
@@ -77,8 +78,8 @@ describe('Plugin', () => {
             'component': 'dns',
             'span.kind': 'client',
             'dns.hostname': 'fakedomain.faketld',
-            'error.type': 'Error',
-            'error.msg': 'getaddrinfo ENOTFOUND fakedomain.faketld'
+            [ERROR_TYPE]: 'Error',
+            [ERROR_MESSAGE]: 'getaddrinfo ENOTFOUND fakedomain.faketld'
           })
         })
         .then(done)

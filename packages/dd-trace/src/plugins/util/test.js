@@ -41,10 +41,6 @@ const TEST_COMMAND = 'test.command'
 const TEST_SESSION_ID = 'test_session_id'
 const TEST_SUITE_ID = 'test_suite_id'
 
-const ERROR_TYPE = 'error.type'
-const ERROR_MESSAGE = 'error.msg'
-const ERROR_STACK = 'error.stack'
-
 const CI_APP_ORIGIN = 'ciapp-test'
 
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
@@ -66,9 +62,6 @@ module.exports = {
   TEST_SKIP_REASON,
   TEST_IS_RUM_ACTIVE,
   TEST_SOURCE_FILE,
-  ERROR_TYPE,
-  ERROR_MESSAGE,
-  ERROR_STACK,
   CI_APP_ORIGIN,
   LIBRARY_VERSION,
   getTestEnvironmentMetadata,

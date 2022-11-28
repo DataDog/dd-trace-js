@@ -9,7 +9,7 @@ const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const log = require('../../dd-trace/src/log')
 const url = require('url')
-const { COMPONENT } = require('../../dd-trace/src/constants')
+const { COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
@@ -93,9 +93,9 @@ function errorHandler (err) {
 
   if (err) {
     span.addTags({
-      'error.type': err.name,
-      'error.msg': err.message,
-      'error.stack': err.stack
+      [ERROR_TYPE]: err.name,
+      [ERROR_MESSAGE]: err.message,
+      [ERROR_STACK]: err.stack
     })
   } else {
     span.setTag('error', 1)
