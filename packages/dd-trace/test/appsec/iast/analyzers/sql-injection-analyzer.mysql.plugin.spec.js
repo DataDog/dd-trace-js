@@ -1,4 +1,6 @@
-const { testThatRequestHasVulnerability, testThatRequestHasNotVulnerability } = require('../utils')
+'use strict'
+
+const { testThatRequestHasVulnerability, testThatRequestHasNoVulnerability } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
@@ -21,13 +23,11 @@ describe('sql-injection-analyzer with mysql', () => {
       })
 
       afterEach((done) => {
-        connection.end(() => {
-          done()
-        })
+        connection.end(done)
       })
 
       describe('has vulnerability', () => {
-        testThatRequestHasVulnerability(function () {
+        testThatRequestHasVulnerability(() => {
           return new Promise((resolve, reject) => {
             const store = storage.getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
@@ -44,8 +44,8 @@ describe('sql-injection-analyzer with mysql', () => {
         }, 'SQL_INJECTION')
       })
 
-      describe('not has vulnerability', () => {
-        testThatRequestHasNotVulnerability(function () {
+      describe('has no vulnerability', () => {
+        testThatRequestHasNoVulnerability(() => {
           return new Promise((resolve, reject) => {
             const sql = 'SELECT 1'
             connection.query(sql, function (err) {
