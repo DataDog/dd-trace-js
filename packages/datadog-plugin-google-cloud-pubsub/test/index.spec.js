@@ -3,6 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const id = require('../../dd-trace/src/id')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
 const TIMEOUT = 30000
@@ -59,9 +60,9 @@ describe('Plugin', () => {
               error: 1,
               meta: {
                 'pubsub.method': 'createTopic',
-                'error.msg': error.message,
-                'error.type': error.name,
-                'error.stack': error.stack,
+                [ERROR_MESSAGE]: error.message,
+                [ERROR_TYPE]: error.name,
+                [ERROR_STACK]: error.stack,
                 'component': 'google-cloud-pubsub'
               }
             })
@@ -106,9 +107,9 @@ describe('Plugin', () => {
               error: 1,
               meta: {
                 'pubsub.method': 'publish',
-                'error.msg': error.message,
-                'error.type': error.name,
-                'error.stack': error.stack,
+                [ERROR_MESSAGE]: error.message,
+                [ERROR_TYPE]: error.name,
+                [ERROR_STACK]: error.stack,
                 'component': 'google-cloud-pubsub'
               }
             })
@@ -187,9 +188,9 @@ describe('Plugin', () => {
               name: 'pubsub.receive',
               error: 1,
               meta: {
-                'error.msg': error.message,
-                'error.type': error.name,
-                'error.stack': error.stack,
+                [ERROR_MESSAGE]: error.message,
+                [ERROR_TYPE]: error.name,
+                [ERROR_STACK]: error.stack,
                 'component': 'google-cloud-pubsub'
               }
             })

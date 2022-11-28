@@ -8,7 +8,7 @@ const msgpack = require('msgpack-lite')
 const nock = require('nock')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -17,9 +17,6 @@ const {
   TEST_SOURCE_FILE,
   TEST_STATUS,
   TEST_PARAMETERS,
-  ERROR_TYPE,
-  ERROR_MESSAGE,
-  ERROR_STACK,
   CI_APP_ORIGIN,
   TEST_FRAMEWORK_VERSION,
   TEST_CODE_OWNERS,
