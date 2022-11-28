@@ -21,9 +21,7 @@ class CucumberPlugin extends CiPlugin {
     super(...args)
 
     this.addSub('ci:cucumber:session:finish', () => {
-      if (this.tracer._exporter._writer) {
-        this.tracer._exporter._writer.flush()
-      }
+      this.tracer._exporter.flush()
     })
 
     this.addSub('ci:cucumber:run:start', ({ testName, fullTestSuite }) => {

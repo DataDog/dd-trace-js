@@ -115,6 +115,19 @@ class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
     this._export(formattedCoverage, this._coverageWriter, '_coverageTimer')
   }
 
+  flush (done = () => {}) {
+    if (!this._isInitialized) {
+      return done()
+    }
+    this._writer.flush(() => {
+      if (this._coverageWriter) {
+        this._coverageWriter.flush(done)
+      } else {
+        done()
+      }
+    })
+  }
+
   setUrl (url, coverageUrl = url) {
     super.setUrl(url)
     try {

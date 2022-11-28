@@ -59,6 +59,15 @@ class AgentlessCiVisibilityExporter {
     }
   }
 
+  flush (done = () => {}) {
+    if (!this._isInitialized) {
+      return done()
+    }
+    this._writer.flush(() => {
+      this._coverageWriter.flush(done)
+    })
+  }
+
   setUrl (url, coverageUrl = url) {
     try {
       url = new URL(url)
