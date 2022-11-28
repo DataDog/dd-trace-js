@@ -27,8 +27,8 @@ class Writer extends BaseWriter {
         'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY,
         ...form.getHeaders()
       },
-      url: this._url,
-      timeout: 15000
+      timeout: 15000,
+      url: this._url
     }
 
     if (this._evpProxyPrefix) {

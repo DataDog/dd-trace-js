@@ -817,7 +817,7 @@ describe('Plugin', () => {
       })
 
       describe('evp proxy', () => {
-        it.only('works with test suite level visibility', function (done) {
+        it('works with test suite level visibility', function (done) {
           const testFilePaths = fs.readdirSync(__dirname)
             .filter(name => name.startsWith('mocha-test-suite-level'))
             .map(relativePath => path.join(__dirname, relativePath))

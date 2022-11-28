@@ -9,6 +9,8 @@ const AgentWriter = require('../../../../src/exporters/agent/writer')
 describe('AgentProxyCiVisibilityExporter', () => {
   const flushInterval = 100
   const port = 8126
+  const queryDelay = 1000
+  const tags = {}
 
   it('should query /info right when it is instantiated', (done) => {
     const scope = nock('http://localhost:8126')
@@ -17,7 +19,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         endpoints: ['/evp_proxy/v2']
       }))
 
-    const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port })
+    const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
 
     expect(agentProxyCiVisibilityExporter).not.to.be.null
     expect(scope.isDone()).to.be.true
@@ -25,14 +27,13 @@ describe('AgentProxyCiVisibilityExporter', () => {
   })
 
   it('should store traces and coverages as is until the query to /info is resolved', () => {
-    const queryDelay = 1000
     nock('http://localhost:8126')
       .get('/info')
       .delay(queryDelay)
       .reply(200, JSON.stringify({
         endpoints: ['/evp_proxy/v2/']
       }))
-    const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port })
+    const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
 
     const trace = [{ span_id: '1234' }]
     const coverage = [{ span: {}, coverageFiles: [] }]
@@ -54,34 +55,102 @@ describe('AgentProxyCiVisibilityExporter', () => {
     }, queryDelay + 100)
   })
 
-  it('should initialise agentless and coverage writers if the agent is evp proxy compatible', () => {
-    const queryDelay = 1000
-    nock('http://localhost:8126')
-      .get('/info')
-      .delay(queryDelay)
-      .reply(200, JSON.stringify({
-        endpoints: ['/evp_proxy/v2/']
-      }))
-    const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port })
-    setTimeout(() => {
-      expect(agentProxyCiVisibilityExporter._writer).to.be.instanceOf(AgentlessWriter)
-      expect(agentProxyCiVisibilityExporter._coverageWriter).to.be.instanceOf(CoverageWriter)
-    }, queryDelay + 100)
+  describe('agent is evp compatible', () => {
+    beforeEach(() => {
+      nock('http://localhost:8126')
+        .get('/info')
+        .delay(queryDelay)
+        .reply(200, JSON.stringify({
+          endpoints: ['/evp_proxy/v2/']
+        }))
+    })
+    it('should initialise AgentlessWriter and CoverageWriter', () => {
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      setTimeout(() => {
+        expect(agentProxyCiVisibilityExporter._writer).to.be.instanceOf(AgentlessWriter)
+        expect(agentProxyCiVisibilityExporter._coverageWriter).to.be.instanceOf(CoverageWriter)
+      }, queryDelay + 100)
+    })
+    it('should process test suite level visibility spans', () => {
+      const mockWriter = {
+        append: sinon.spy(),
+        flush: sinon.spy()
+      }
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      setTimeout(() => {
+        agentProxyCiVisibilityExporter._writer = mockWriter
+        const testSuiteTrace = [{ type: 'test_suite_end' }]
+        const testSessionTrace = [{ type: 'test_session_end' }]
+        agentProxyCiVisibilityExporter.export(testSuiteTrace)
+        agentProxyCiVisibilityExporter.export(testSessionTrace)
+        expect(mockWriter.append).to.have.been.calledWith(testSuiteTrace)
+        expect(mockWriter.append).to.have.been.calledWith(testSessionTrace)
+      }, queryDelay + 100)
+    })
+    it('should process coverages', () => {
+      const mockWriter = {
+        append: sinon.spy(),
+        flush: sinon.spy()
+      }
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      setTimeout(() => {
+        agentProxyCiVisibilityExporter._coverageWriter = mockWriter
+        const coverage = { span: { context: () => ({ _traceId: '1', _spanId: '1' }) }, coverageFiles: [] }
+        agentProxyCiVisibilityExporter.exportCoverage(coverage)
+        expect(mockWriter.append).to.have.been.calledWith(coverage)
+      }, queryDelay + 100)
+    })
   })
 
-  it('should initialise the agent writer if the agent is not evp proxy compatible', () => {
-    const queryDelay = 1000
-    nock('http://localhost:8126')
-      .get('/info')
-      .delay(queryDelay)
-      .reply(200, JSON.stringify({
-        endpoints: ['/v0.4/traces']
-      }))
-    const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port })
-    setTimeout(() => {
-      expect(agentProxyCiVisibilityExporter._writer).to.be.instanceOf(AgentWriter)
-      expect(agentProxyCiVisibilityExporter._coverageWriter).to.be.null
-    }, queryDelay + 100)
+  describe('agent is not evp compatible', () => {
+    beforeEach(() => {
+      nock('http://localhost:8126')
+        .get('/info')
+        .delay(queryDelay)
+        .reply(200, JSON.stringify({
+          endpoints: ['/v0.4/traces']
+        }))
+    })
+    it('should initialise AgentWriter', () => {
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      setTimeout(() => {
+        expect(agentProxyCiVisibilityExporter._writer).to.be.instanceOf(AgentWriter)
+        expect(agentProxyCiVisibilityExporter._coverageWriter).to.be.null
+      }, queryDelay + 100)
+    })
+    it('should not process test suite level visibility spans', () => {
+      const mockWriter = {
+        append: sinon.spy(),
+        flush: sinon.spy()
+      }
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      setTimeout(() => {
+        agentProxyCiVisibilityExporter._writer = mockWriter
+        const testSuiteTrace = [{ type: 'test_suite_end' }]
+        const testSessionTrace = [{ type: 'test_session_end' }]
+        agentProxyCiVisibilityExporter.export(testSuiteTrace)
+        agentProxyCiVisibilityExporter.export(testSessionTrace)
+        expect(mockWriter.append).not.to.have.been.called
+      }, queryDelay + 100)
+    })
+
+    it('should not process coverages', () => {
+      const mockWriter = {
+        append: sinon.spy(),
+        flush: sinon.spy()
+      }
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      setTimeout(() => {
+        agentProxyCiVisibilityExporter._writer = mockWriter
+        agentProxyCiVisibilityExporter._coverageWriter = mockWriter
+        const testSuiteTrace = [{ type: 'test_suite_end' }]
+        const testSessionTrace = [{ type: 'test_session_end' }]
+        agentProxyCiVisibilityExporter.export(testSuiteTrace)
+        agentProxyCiVisibilityExporter.export(testSessionTrace)
+        agentProxyCiVisibilityExporter.exportCoverage({ span: {}, coverageFiles: [] })
+        expect(mockWriter.append).not.to.have.been.called
+      }, queryDelay + 100)
+    })
   })
 
   describe('export', () => {
@@ -93,17 +162,22 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
       nock('http://localhost:8126')
         .get('/info')
+        .delay(queryDelay)
         .reply(200, JSON.stringify({
           endpoints: ['/evp_proxy/v2/']
         }))
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, flushInterval })
-      agentProxyCiVisibilityExporter._writer = mockWriter
-      const trace = [{ span_id: '1234' }]
-      agentProxyCiVisibilityExporter.export(trace)
-      expect(mockWriter.append).to.have.been.calledWith(trace)
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, flushInterval, tags })
+
       setTimeout(() => {
-        expect(mockWriter.flush).to.have.been.called()
-      }, flushInterval)
+        agentProxyCiVisibilityExporter._writer = mockWriter
+        agentProxyCiVisibilityExporter._coverageWriter = mockWriter
+        const trace = [{ span_id: '1234' }]
+        agentProxyCiVisibilityExporter.export(trace)
+        expect(mockWriter.append).to.have.been.calledWith(trace)
+        setTimeout(() => {
+          expect(mockWriter.flush).to.have.been.called()
+        }, flushInterval)
+      }, queryDelay + 100)
     })
 
     it('should flush after the flush interval if a coverage has been exported', () => {
@@ -114,19 +188,24 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
       nock('http://localhost:8126')
         .get('/info')
+        .delay(queryDelay)
         .reply(200, JSON.stringify({
           endpoints: ['/evp_proxy/v2/']
         }))
 
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, flushInterval })
-      agentProxyCiVisibilityExporter._coverageWriter = mockWriter
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, flushInterval, tags })
 
-      const coverage = { span: { context: () => ({ _traceId: '1', _spanId: '1' }) }, coverageFiles: [] }
-      agentProxyCiVisibilityExporter.exportCoverage(coverage)
-      expect(mockWriter.append).to.have.been.calledWith({ traceId: '1', spanId: '1', files: [] })
       setTimeout(() => {
-        expect(mockWriter.flush).to.have.been.called()
-      }, flushInterval)
+        agentProxyCiVisibilityExporter._writer = mockWriter
+        agentProxyCiVisibilityExporter._coverageWriter = mockWriter
+
+        const coverage = { span: { context: () => ({ _traceId: '1', _spanId: '1' }) }, coverageFiles: [] }
+        agentProxyCiVisibilityExporter.exportCoverage(coverage)
+        expect(mockWriter.append).to.have.been.calledWith({ traceId: '1', spanId: '1', files: [] })
+        setTimeout(() => {
+          expect(mockWriter.flush).to.have.been.called()
+        }, flushInterval)
+      }, queryDelay + 100)
     })
   })
 
@@ -143,7 +222,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         .reply(200, JSON.stringify({
           endpoints: ['/evp_proxy/v2/']
         }))
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port })
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
       agentProxyCiVisibilityExporter._writer = mockWriter
       agentProxyCiVisibilityExporter._coverageWriter = mockCoverageWriter
       agentProxyCiVisibilityExporter.setUrl('http://example2.com')

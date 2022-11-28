@@ -19,10 +19,9 @@ const getIsTestSessionTrace = (trace) => {
 }
 
 /**
- * AgentProxyCiVisibilityExporter extends from AgentInfoExporter
- * to get the agent information. If the agent is event platform proxy compatible,
- * it will initialize the CI Visibility writers.
- * If it isn't, it will fall back to the agent writer.
+ * AgentProxyCiVisibilityExporter extends from AgentInfoExporter to get the agent information.
+ * If the agent is event platform proxy compatible,
+ * it will initialize the AgentlessWriter and CoverageWriter, else it will fall back to AgentWriter.
  */
 class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
   constructor (config) {
@@ -84,11 +83,6 @@ class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
     this._coverageBuffer = []
   }
 
-  /**
-   * TODO: add test to check that suite traces are not being processed if
-   * evp is not compatible
-   */
-
   export (trace) {
     // Until it's initialized, we just store the traces as is
     if (!this._isInitialized) {
@@ -101,10 +95,6 @@ class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
     this._export(trace)
   }
 
-  /**
-   * TODO: add test to check that suite traces are not being processed if
-   * evp is not compatible
-   */
   exportCoverage (coveragePayload) {
     // Until it's initialized, we just store the coverages as is
     if (!this._isInitialized) {
