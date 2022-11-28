@@ -3,6 +3,7 @@
 const { expect } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
@@ -66,9 +67,9 @@ describe('Plugin', () => {
               })
 
               expect(span.meta).to.include({
-                'error.type': error.name,
-                'error.msg': error.message,
-                'error.stack': error.stack,
+                [ERROR_TYPE]: error.name,
+                [ERROR_MESSAGE]: error.message,
+                [ERROR_STACK]: error.stack,
                 'component': 'kafkajs'
               })
             })
@@ -163,9 +164,9 @@ describe('Plugin', () => {
               name: 'kafka.consume',
               service: 'test-kafka',
               meta: {
-                'error.type': fakeError.name,
-                'error.msg': fakeError.message,
-                'error.stack': fakeError.stack,
+                [ERROR_TYPE]: fakeError.name,
+                [ERROR_MESSAGE]: fakeError.message,
+                [ERROR_STACK]: fakeError.stack,
                 'component': 'kafkajs'
               },
               resource: testTopic,
