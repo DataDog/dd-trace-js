@@ -3,6 +3,7 @@
 const { expect } = require('chai')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const clients = {
   pg: pg => pg.Client
@@ -104,9 +105,9 @@ describe('Plugin', () => {
             let error
 
             agent.use(traces => {
-              expect(traces[0][0].meta).to.have.property('error.type', error.name)
-              expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-              expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
               expect(traces[0][0].meta).to.have.property('component', 'pg')
 
               done()
@@ -125,9 +126,9 @@ describe('Plugin', () => {
             let error
 
             agent.use(traces => {
-              expect(traces[0][0].meta).to.have.property('error.type', error.name)
-              expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-              expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
               expect(traces[0][0].meta).to.have.property('component', 'pg')
 
               done()
