@@ -263,7 +263,7 @@ function coverageReporterWrapper (coverageReporter) {
 addHook({
   name: '@jest/reporters',
   file: 'build/coverage_reporter.js',
-  versions: ['>=24.8.0']
+  versions: ['>=24.8.0 <26.6.2']
 }, coverageReporterWrapper)
 
 addHook({
