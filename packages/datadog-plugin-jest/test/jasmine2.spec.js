@@ -4,7 +4,7 @@ const path = require('path')
 
 const nock = require('nock')
 
-const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const {
   TEST_FRAMEWORK,
@@ -16,7 +16,6 @@ const {
   CI_APP_ORIGIN,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
-  ERROR_MESSAGE,
   TEST_CODE_OWNERS,
   LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
@@ -95,7 +94,8 @@ describe('Plugin', () => {
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-jasmine2',
               [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/dd-trace-js']), // reads from dd-trace-js
-              [LIBRARY_VERSION]: ddTraceVersion
+              [LIBRARY_VERSION]: ddTraceVersion,
+              [COMPONENT]: 'jest'
             })
             if (extraTags) {
               expect(testSpan.meta).to.contain(extraTags)
@@ -150,7 +150,8 @@ describe('Plugin', () => {
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
               [TEST_TYPE]: 'test',
-              [JEST_TEST_RUNNER]: 'jest-jasmine2'
+              [JEST_TEST_RUNNER]: 'jest-jasmine2',
+              [COMPONENT]: 'jest'
             })
             expect(testSpan.meta[ERROR_MESSAGE]).to.equal(error)
             expect(testSpan.type).to.equal('test')
@@ -195,7 +196,8 @@ describe('Plugin', () => {
               [TEST_STATUS]: status,
               [TEST_FRAMEWORK]: 'jest',
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
-              [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js'
+              [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
+              [COMPONENT]: 'jest'
             })
           }, { timeoutMs: 30000 })
         })

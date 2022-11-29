@@ -2,6 +2,7 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const withTopologies = fn => {
   withVersions('mongodb-core', ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {
@@ -85,6 +86,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('db.name', `test.${collection}`)
                 expect(span.meta).to.have.property('out.host', 'localhost')
+                expect(span.meta).to.have.property('component', 'mongodb')
               })
               .then(done)
               .catch(done)
@@ -182,9 +184,10 @@ describe('Plugin', () => {
 
             agent
               .use(traces => {
-                expect(traces[0][0].meta).to.have.property('error.type', error.name)
-                expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-                expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+                expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(traces[0][0].meta).to.have.property('component', 'mongodb')
               })
               .then(done)
               .catch(done)
@@ -277,9 +280,10 @@ describe('Plugin', () => {
 
             agent
               .use(traces => {
-                expect(traces[0][0].meta).to.have.property('error.type', error.name)
-                expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-                expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+                expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(traces[0][0].meta).to.have.property('component', 'mongodb')
               })
               .then(done)
               .catch(done)

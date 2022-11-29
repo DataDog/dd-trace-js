@@ -4,6 +4,7 @@ const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
 const getPort = require('get-port')
 const semver = require('semver')
+const { ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
@@ -52,10 +53,12 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
               expect(spans[0].meta).to.have.property('http.method', 'GET')
               expect(spans[0].meta).to.have.property('http.status_code', '200')
+              expect(spans[0].meta).to.have.property('component', 'koa')
 
               expect(spans[1]).to.have.property('name', 'koa.middleware')
               expect(spans[1]).to.have.property('service', 'test')
               expect(spans[1]).to.have.property('resource', 'handle')
+              expect(spans[1].meta).to.have.property('component', 'koa')
             })
             .then(done)
             .catch(done)
@@ -87,10 +90,12 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
               expect(spans[0].meta).to.have.property('http.method', 'GET')
               expect(spans[0].meta).to.have.property('http.status_code', '200')
+              expect(spans[0].meta).to.have.property('component', 'koa')
 
               expect(spans[1]).to.have.property('name', 'koa.middleware')
               expect(spans[1]).to.have.property('service', 'test')
               expect(spans[1]).to.have.property('resource', 'converted')
+              expect(spans[1].meta).to.have.property('component', 'koa')
             })
             .then(done)
             .catch(done)
@@ -562,7 +567,8 @@ describe('Plugin', () => {
                 expect(spans[1]).to.have.property('resource')
                 expect(spans[1].resource).to.match(/^dispatch/)
                 expect(spans[1].meta).to.include({
-                  'error.type': error.name
+                  [ERROR_TYPE]: error.name,
+                  'component': 'koa'
                 })
                 expect(spans[1].error).to.equal(1)
               })
@@ -644,6 +650,7 @@ describe('Plugin', () => {
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
                 expect(spans[0].meta).to.have.property('http.status_code', '200')
+                expect(spans[0].meta).to.have.property('component', 'koa')
 
                 expect(spans).to.have.length(1)
               })
@@ -677,6 +684,7 @@ describe('Plugin', () => {
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
                 expect(spans[0].meta).to.have.property('http.status_code', '200')
+                expect(spans[0].meta).to.have.property('component', 'koa')
 
                 expect(spans).to.have.length(1)
               })
@@ -800,6 +808,7 @@ describe('Plugin', () => {
                   expect(spans[0]).to.have.property('resource', 'GET /user/:id')
                   expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
                   expect(spans[0].error).to.equal(1)
+                  expect(spans[0].meta).to.have.property('component', 'koa')
                 })
                 .then(done)
                 .catch(done)

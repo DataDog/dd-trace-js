@@ -6,6 +6,7 @@ const path = require('path')
 
 describe('Config', () => {
   let Config
+  let log
   let pkg
   let env
   let fs
@@ -18,6 +19,12 @@ describe('Config', () => {
     pkg = {
       name: '',
       version: ''
+    }
+
+    log = {
+      use: sinon.spy(),
+      toggle: sinon.spy(),
+      warn: sinon.spy()
     }
 
     env = process.env
@@ -37,6 +44,7 @@ describe('Config', () => {
 
     Config = proxyquire('../src/config', {
       './pkg': pkg,
+      './log': log,
       fs,
       os
     })
@@ -74,7 +82,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
-    expect(config).to.have.nested.property('appsec.enabled', false)
+    expect(config).to.have.nested.property('appsec.enabled', undefined)
     const rulePath = path.join(__dirname, '..', 'src', 'appsec', 'recommended.json')
     expect(config).to.have.nested.property('appsec.rules', rulePath)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
@@ -82,6 +90,16 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
     expect(config).to.have.nested.property('iast.enabled', false)
+  })
+
+  it('should support logging', () => {
+    const config = new Config({
+      logger: {},
+      debug: true
+    })
+
+    expect(log.use).to.have.been.calledWith(config.logger)
+    expect(log.toggle).to.have.been.calledWith(config.debug)
   })
 
   it('should initialize from the default service', () => {
@@ -291,7 +309,7 @@ describe('Config', () => {
           maxContextOperations: 5
         }
       },
-      appsec: true
+      appsec: false
     })
 
     expect(config).to.have.property('protocolVersion', '0.5')
@@ -324,7 +342,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
-    expect(config).to.have.nested.property('appsec.enabled', true)
+    expect(config).to.have.nested.property('appsec.enabled', false)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 50)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 4)
@@ -740,6 +758,47 @@ describe('Config', () => {
         const config = new Config({ hostname: 'example.com' })
 
         expect(config.url).to.be.undefined
+      })
+    })
+  })
+
+  context('ci visibility config', () => {
+    beforeEach(() => {
+      delete process.env.DD_CIVISIBILITY_ITR_ENABLED
+      delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
+      delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
+    })
+    context('agentless is enabled', () => {
+      beforeEach(() => {
+        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
+      })
+      it('should activate git upload if the env var is passed', () => {
+        process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'true'
+        const config = new Config()
+        expect(config).to.have.property('isGitUploadEnabled', true)
+      })
+      it('should activate intelligent test runner if the env var is passed', () => {
+        process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
+        const config = new Config()
+        expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
+      })
+      it('should activate git upload automatically if intelligent test runner is activated', () => {
+        process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
+        const config = new Config()
+        expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
+        expect(config).to.have.property('isGitUploadEnabled', true)
+      })
+    })
+    context('agentless is disabled', () => {
+      beforeEach(() => {
+        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'false'
+      })
+      it('should not activate intelligent test runner or git metadata upload', () => {
+        process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
+        process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'true'
+        const config = new Config()
+        expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
+        expect(config).to.have.property('isGitUploadEnabled', false)
       })
     })
   })

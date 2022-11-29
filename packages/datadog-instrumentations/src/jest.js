@@ -1,8 +1,8 @@
 'use strict'
-const istanbul = require('istanbul-lib-coverage')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const { getCoveredFilenamesFromCoverage } = require('../../dd-trace/src/plugins/util/test')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -23,6 +23,7 @@ const jestConfigurationCh = channel('ci:jest:configuration')
 
 let skippableSuites = []
 let isCodeCoverageEnabled = false
+let isSuitesSkippingEnabled = false
 
 const {
   getTestSuitePath,
@@ -32,21 +33,6 @@ const {
 const { getFormattedJestTestParameters, getJestTestName } = require('../../datadog-plugin-jest/src/util')
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
-
-function extractCoverageInformation (coverage, rootDir) {
-  const coverageMap = istanbul.createCoverageMap(coverage)
-
-  return coverageMap
-    .files()
-    .filter(filename => {
-      const fileCoverage = coverageMap.fileCoverageFor(filename)
-      const lineCoverage = fileCoverage.getLineCoverage()
-      const isAnyLineExecuted = Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
-
-      return isAnyLineExecuted
-    })
-    .map(filename => filename.replace(`${rootDir}/`, ''))
-}
 
 const specStatusToTestStatus = {
   'pending': 'skip',
@@ -186,38 +172,42 @@ addHook({
 
 function cliWrapper (cli) {
   const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
-    let onResponse, onError
-    const configurationPromise = new Promise((resolve, reject) => {
-      onResponse = resolve
-      onError = reject
+    let onDone
+    const configurationPromise = new Promise((resolve) => {
+      onDone = resolve
     })
 
     sessionAsyncResource.runInAsyncScope(() => {
-      jestConfigurationCh.publish({ onResponse, onError })
+      jestConfigurationCh.publish({ onDone })
     })
 
-    let isSuitesSkippingEnabled = false
-
     try {
-      const config = await configurationPromise
+      const { err, config } = await configurationPromise
+      if (err) {
+        log.error(err)
+      }
       isCodeCoverageEnabled = config.isCodeCoverageEnabled
       isSuitesSkippingEnabled = config.isSuitesSkippingEnabled
     } catch (e) {
-      // ignore error
+      log.error(e)
     }
 
     if (isSuitesSkippingEnabled) {
-      const skippableSuitesPromise = new Promise((resolve, reject) => {
-        onResponse = resolve
-        onError = reject
+      const skippableSuitesPromise = new Promise((resolve) => {
+        onDone = resolve
       })
 
       sessionAsyncResource.runInAsyncScope(() => {
-        skippableSuitesCh.publish({ onResponse, onError })
+        skippableSuitesCh.publish({ onDone })
       })
 
       try {
-        skippableSuites = await skippableSuitesPromise
+        const { err, skippableSuites: receivedSkippableSuites } = await skippableSuitesPromise
+        if (err) {
+          log.error(err)
+        } else {
+          skippableSuites = receivedSkippableSuites
+        }
       } catch (e) {
         log.error(e)
       }
@@ -254,6 +244,27 @@ function cliWrapper (cli) {
 }
 
 addHook({
+  name: '@jest/reporters',
+  file: 'build/CoverageReporter.js',
+  versions: ['>=24.8.0']
+}, (coverageReporter) => {
+  const CoverageReporter = coverageReporter.default ? coverageReporter.default : coverageReporter
+
+  /**
+   * If ITR is active, we're running fewer tests, so of course the total code coverage is reduced.
+   * This calculation adds no value, so we'll skip it.
+   */
+  shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => async function () {
+    if (isSuitesSkippingEnabled) {
+      return Promise.resolve()
+    }
+    return addUntestedFiles.apply(this, arguments)
+  })
+
+  return coverageReporter
+})
+
+addHook({
   name: '@jest/core',
   file: 'build/cli/index.js',
   versions: ['>=24.8.0']
@@ -263,6 +274,9 @@ function jestAdapterWrapper (jestAdapter) {
   const adapter = jestAdapter.default ? jestAdapter.default : jestAdapter
   const newAdapter = shimmer.wrap(adapter, function () {
     const environment = arguments[2]
+    if (!environment) {
+      return adapter.apply(this, arguments)
+    }
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
       testSuiteStartCh.publish({
@@ -278,11 +292,16 @@ function jestAdapterWrapper (jestAdapter) {
           status = 'fail'
         }
         testSuiteFinishCh.publish({ status, errorMessage })
-        if (environment.global.__coverage__) {
-          const coverageFiles = extractCoverageInformation(environment.global.__coverage__, environment.rootDir)
-          if (coverageFiles.length) {
+
+        const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
+          .map(filename => getTestSuitePath(filename, environment.rootDir))
+
+        if (coverageFiles &&
+          environment.testEnvironmentOptions &&
+          environment.testEnvironmentOptions._ddTestCodeCoverageEnabled) {
+          asyncResource.runInAsyncScope(() => {
             testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
-          }
+          })
         }
         return suiteResults
       })
@@ -305,15 +324,15 @@ addHook({
 
 function configureTestEnvironment (readConfigsResult) {
   const { configs } = readConfigsResult
-  configs.forEach(config => {
-    skippableSuites.forEach((suite) => {
-      config.testMatch.push(`!**/${suite}`)
-    })
-    skippableSuites = []
-  })
   sessionAsyncResource.runInAsyncScope(() => {
     testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
   })
+  // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
+  // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
+  configs.forEach(config => {
+    config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
+  })
+
   if (isCodeCoverageEnabled) {
     const globalConfig = {
       ...readConfigsResult.globalConfig,
@@ -321,6 +340,16 @@ function configureTestEnvironment (readConfigsResult) {
     }
     readConfigsResult.globalConfig = globalConfig
   }
+  if (isSuitesSkippingEnabled) {
+    // If suite skipping is enabled, the code coverage results are not going to be relevant,
+    // so we do not show them.
+    const globalConfig = {
+      ...readConfigsResult.globalConfig,
+      coverageReporters: ['none']
+    }
+    readConfigsResult.globalConfig = globalConfig
+  }
+
   return readConfigsResult
 }
 
@@ -341,6 +370,39 @@ function jestConfigSyncWrapper (jestConfig) {
   })
   return jestConfig
 }
+
+/**
+ * Hook to remove the test paths (test suite) that are part of `skippableSuites`
+ */
+addHook({
+  name: '@jest/core',
+  versions: ['>=24.8.0'],
+  file: 'build/SearchSource.js'
+}, searchSourcePackage => {
+  const SearchSource = searchSourcePackage.default ? searchSourcePackage.default : searchSourcePackage
+
+  shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
+    if (!skippableSuites.length) {
+      return getTestPaths.apply(this, arguments)
+    }
+
+    const [{ rootDir }] = arguments
+
+    const testPaths = await getTestPaths.apply(this, arguments)
+    const { tests } = testPaths
+
+    const filteredTests = tests.filter(({ path: testPath }) => {
+      const relativePath = testPath.replace(`${rootDir}/`, '')
+      return !skippableSuites.includes(relativePath)
+    })
+
+    skippableSuites = []
+
+    return { ...testPaths, tests: filteredTests }
+  })
+
+  return searchSourcePackage
+})
 
 // from 25.1.0 on, readConfigs becomes async
 addHook({

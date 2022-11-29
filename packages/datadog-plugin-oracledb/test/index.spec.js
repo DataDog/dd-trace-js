@@ -1,6 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const hostname = process.env.CI ? 'oracledb' : 'localhost'
 const config = {
@@ -67,7 +68,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'select current_timestamp from dual')
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
@@ -93,7 +94,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'select current_timestamp from dual')
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
@@ -127,15 +128,15 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'invalid')
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
                 expect(traces[0][0].meta).to.have.property('db.port', url.port)
               }
-              expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-              expect(traces[0][0].meta).to.have.property('error.type', error.name)
-              expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
             }).then(done, done)
 
             connection.execute('invalid', err => {
@@ -186,7 +187,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'select current_timestamp from dual')
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
@@ -211,15 +212,15 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'invalid')
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
                 expect(traces[0][0].meta).to.have.property('db.port', url.port)
               }
-              expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-              expect(traces[0][0].meta).to.have.property('error.type', error.name)
-              expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
             })
 
             connection.execute('invalid').catch(err => {

@@ -4,6 +4,7 @@ const axios = require('axios')
 const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let tracer
@@ -99,6 +100,7 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
             expect(traces[0][0].meta).to.have.property('http.method', 'GET')
             expect(traces[0][0].meta).to.have.property('http.status_code')
+            expect(traces[0][0].meta).to.have.property('component', 'hapi')
             expect(Number(traces[0][0].meta['http.status_code'])).to.be.within(200, 299)
           })
           .then(done)
@@ -301,9 +303,10 @@ describe('Plugin', () => {
         agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('error', 1)
-            expect(traces[0][0].meta).to.have.property('error.type', error.name)
-            expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-            expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+            expect(traces[0][0].meta).to.have.property('component', 'hapi')
           })
           .then(done)
           .catch(done)

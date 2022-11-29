@@ -5,6 +5,7 @@ const dns = require('dns')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const { Int64BE } = require('int64-buffer') // TODO remove dependency
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let net
@@ -84,6 +85,7 @@ describe('Plugin', () => {
             service: 'test',
             resource: `localhost:${port}`,
             meta: {
+              'component': 'net',
               'span.kind': 'client',
               'tcp.family': 'IPv4',
               'tcp.remote.host': 'localhost',
@@ -114,6 +116,7 @@ describe('Plugin', () => {
             service: 'test',
             resource: `localhost:${port}`,
             meta: {
+              'component': 'net',
               'span.kind': 'client',
               'tcp.family': 'IPv4',
               'tcp.remote.host': 'localhost',
@@ -137,6 +140,7 @@ describe('Plugin', () => {
         service: 'test',
         resource: '/tmp/dd-trace.sock',
         meta: {
+          'component': 'net',
           'span.kind': 'client',
           'ipc.path': '/tmp/dd-trace.sock'
         },
@@ -163,13 +167,14 @@ describe('Plugin', () => {
             resource: `localhost:${port}`
           })
           expect(traces[0][0].meta).to.deep.include({
+            'component': 'net',
             'span.kind': 'client',
             'tcp.family': 'IPv4',
             'tcp.remote.host': 'localhost',
             'out.host': 'localhost',
-            'error.type': error.name,
-            'error.msg': error.message,
-            'error.stack': error.stack
+            [ERROR_TYPE]: error.name,
+            [ERROR_MESSAGE]: error.message,
+            [ERROR_STACK]: error.stack
           })
           expect(traces[0][0].metrics).to.deep.include({
             'out.port': port,

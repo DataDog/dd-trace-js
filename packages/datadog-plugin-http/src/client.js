@@ -9,6 +9,7 @@ const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const log = require('../../dd-trace/src/log')
 const url = require('url')
+const { COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
@@ -31,12 +32,14 @@ class HttpClientPlugin extends Plugin {
       const host = options.port ? `${hostname}:${options.port}` : hostname
       const path = options.path ? options.path.split(/[?#]/)[0] : '/'
       const uri = `${protocol}//${host}${path}`
+      const allowed = this.config.filter(uri)
 
       const method = (options.method || 'GET').toUpperCase()
-      const childOf = store ? store.span : store
+      const childOf = store && allowed ? store.span : null
       const span = this.tracer.startSpan('http.request', {
         childOf,
         tags: {
+          [COMPONENT]: this.constructor.name,
           'span.kind': 'client',
           'service.name': getServiceName(this.tracer, this.config, options),
           'resource.name': method,
@@ -45,6 +48,11 @@ class HttpClientPlugin extends Plugin {
           'http.url': uri
         }
       })
+
+      // TODO: Figure out a better way to do this for any span.
+      if (!allowed) {
+        span._spanContext._trace.record = false
+      }
 
       if (!(hasAmazonSignature(options) || !this.config.propagationFilter(uri))) {
         this.tracer.inject(span, HTTP_HEADERS, options.headers)
@@ -85,9 +93,9 @@ function errorHandler (err) {
 
   if (err) {
     span.addTags({
-      'error.type': err.name,
-      'error.msg': err.message,
-      'error.stack': err.stack
+      [ERROR_TYPE]: err.name,
+      [ERROR_MESSAGE]: err.message,
+      [ERROR_STACK]: err.stack
     })
   } else {
     span.setTag('error', 1)
@@ -116,12 +124,14 @@ function addRequestHeaders (req, span, config) {
 
 function normalizeClientConfig (config) {
   const validateStatus = getStatusValidator(config)
+  const filter = getFilter(config)
   const propagationFilter = getFilter({ blocklist: config.propagationBlocklist })
   const headers = getHeaders(config)
   const hooks = getHooks(config)
 
   return Object.assign({}, config, {
     validateStatus,
+    filter,
     propagationFilter,
     headers,
     hooks

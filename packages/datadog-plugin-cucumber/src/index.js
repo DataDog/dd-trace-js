@@ -1,24 +1,18 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 
 const {
-  CI_APP_ORIGIN,
   TEST_SKIP_REASON,
-  ERROR_MESSAGE,
   TEST_STATUS,
-  TEST_CODE_OWNERS,
   finishAllTraceSpans,
-  getTestEnvironmentMetadata,
-  getTestSuitePath,
-  getCodeOwnersFileEntries,
-  getCodeOwnersForFilename,
-  getTestCommonTags
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
+const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 
-class CucumberPlugin extends Plugin {
+class CucumberPlugin extends CiPlugin {
   static get name () {
     return 'cucumber'
   }
@@ -26,36 +20,18 @@ class CucumberPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    const testEnvironmentMetadata = getTestEnvironmentMetadata('cucumber', this.config)
-    const sourceRoot = process.cwd()
-    const codeOwnersEntries = getCodeOwnersFileEntries(sourceRoot)
-
     this.addSub('ci:cucumber:session:finish', () => {
       this.tracer._exporter._writer.flush()
     })
 
-    this.addSub('ci:cucumber:run:start', ({ pickleName, pickleUri }) => {
+    this.addSub('ci:cucumber:run:start', ({ testName, fullTestSuite }) => {
       const store = storage.getStore()
       const childOf = store ? store.span : store
-      const testSuite = getTestSuitePath(pickleUri, sourceRoot)
+      const testSuite = getTestSuitePath(fullTestSuite, process.cwd())
 
-      const commonTags = getTestCommonTags(pickleName, testSuite, this.tracer._version)
+      const testSpan = this.startTestSpan(testName, testSuite, childOf)
 
-      const codeOwners = getCodeOwnersForFilename(testSuite, codeOwnersEntries)
-      if (codeOwners) {
-        commonTags[TEST_CODE_OWNERS] = codeOwners
-      }
-
-      const span = this.tracer.startSpan('cucumber.test', {
-        childOf,
-        tags: {
-          ...commonTags,
-          ...testEnvironmentMetadata
-        }
-      })
-
-      span.context()._trace.origin = CI_APP_ORIGIN
-      this.enter(span, store)
+      this.enter(testSpan, store)
     })
 
     this.addSub('ci:cucumber:run-step:start', ({ resource }) => {
@@ -64,6 +40,7 @@ class CucumberPlugin extends Plugin {
       const span = this.tracer.startSpan('cucumber.step', {
         childOf,
         tags: {
+          [COMPONENT]: this.constructor.name,
           'cucumber.step': resource,
           [RESOURCE_NAME]: resource
         }
@@ -97,6 +74,10 @@ class CucumberPlugin extends Plugin {
         span.setTag('error', err)
       }
     })
+  }
+
+  startTestSpan (testName, testSuite, childOf) {
+    return super.startTestSpan(testName, testSuite, {}, childOf)
   }
 }
 

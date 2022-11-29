@@ -1,6 +1,8 @@
 Component,Origin,License,Copyright
 require,@datadog/native-appsec,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/native-metrics,Apache license 2.0,Copyright 2018 Datadog Inc.
+require,@datadog/native-iast-rewriter,Apache license 2.0,Copyright 2018 Datadog Inc.
+require,@datadog/native-iast-taint-tracking,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/pprof,Apache license 2.0,Copyright 2019 Google Inc.
 require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
 require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
@@ -20,6 +22,7 @@ require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk
 require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
+require,protobufjs,BSD-3-Clause,Copyright 2016 Daniel Wirtz
 require,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
 require,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,@types/node,MIT,Copyright Authors

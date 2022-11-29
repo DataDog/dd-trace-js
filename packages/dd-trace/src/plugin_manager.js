@@ -124,7 +124,9 @@ module.exports = class PluginManager {
       clientIpHeader,
       isIntelligentTestRunnerEnabled,
       site,
-      experimental
+      experimental,
+      url,
+      dbmPropagationMode
     } = this._tracerConfig
 
     const sharedConfig = {}
@@ -151,11 +153,14 @@ module.exports = class PluginManager {
 
     sharedConfig.isIntelligentTestRunnerEnabled = isIntelligentTestRunnerEnabled
 
+    sharedConfig.dbmPropagationMode = dbmPropagationMode
+
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
     }
 
     sharedConfig.site = site
+    sharedConfig.url = url
 
     return sharedConfig
   }

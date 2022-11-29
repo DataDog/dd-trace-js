@@ -1,45 +1,24 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 
 const {
-  CI_APP_ORIGIN,
-  TEST_CODE_OWNERS,
-  TEST_SUITE,
   TEST_STATUS,
   TEST_PARAMETERS,
   finishAllTraceSpans,
-  getTestEnvironmentMetadata,
   getTestSuitePath,
   getTestParentSpan,
   getTestParametersString,
-  getCodeOwnersFileEntries,
-  getCodeOwnersForFilename,
-  getTestCommonTags,
   getTestSessionCommonTags,
   getTestSuiteCommonTags,
   TEST_SUITE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND
 } = require('../../dd-trace/src/plugins/util/test')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 
-function getTestSpanMetadata (tracer, test, sourceRoot) {
-  const childOf = getTestParentSpan(tracer)
-
-  const { file: testSuiteAbsolutePath } = test
-  const fullTestName = test.fullTitle()
-  const testSuite = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
-
-  const commonTags = getTestCommonTags(fullTestName, testSuite, tracer._version)
-
-  return {
-    childOf,
-    ...commonTags
-  }
-}
-
-class MochaPlugin extends Plugin {
+class MochaPlugin extends CiPlugin {
   static get name () {
     return 'mocha'
   }
@@ -49,9 +28,25 @@ class MochaPlugin extends Plugin {
 
     this._testSuites = new Map()
     this._testNameToParams = {}
-    this.testEnvironmentMetadata = getTestEnvironmentMetadata('mocha', this.config)
     this.sourceRoot = process.cwd()
-    this.codeOwnersEntries = getCodeOwnersFileEntries(this.sourceRoot)
+
+    this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
+      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
+        return
+      }
+      if (!this.itrConfig || !this.itrConfig.isCodeCoverageEnabled) {
+        return
+      }
+      const testSuiteSpan = this._testSuites.get(suiteFile)
+
+      const relativeCoverageFiles = [...coverageFiles, suiteFile]
+        .map(filename => getTestSuitePath(filename, this.sourceRoot))
+
+      this.tracer._exporter.exportCoverage({
+        span: testSuiteSpan,
+        coverageFiles: relativeCoverageFiles
+      })
+    })
 
     this.addSub('ci:mocha:session:start', (command) => {
       if (!this.config.isAgentlessEnabled) {
@@ -64,6 +59,7 @@ class MochaPlugin extends Plugin {
       this.testSessionSpan = this.tracer.startSpan('mocha.test_session', {
         childOf,
         tags: {
+          [COMPONENT]: this.constructor.name,
           ...this.testEnvironmentMetadata,
           ...testSessionSpanMetadata
         }
@@ -83,6 +79,7 @@ class MochaPlugin extends Plugin {
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testSessionSpan,
         tags: {
+          [COMPONENT]: this.constructor.name,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
         }
@@ -161,13 +158,13 @@ class MochaPlugin extends Plugin {
         finishAllTraceSpans(this.testSessionSpan)
       }
       this.tracer._exporter._writer.flush()
+      this.itrConfig = null
     })
   }
 
   startTestSpan (test) {
     const testSuiteTags = {}
     const testSuiteSpan = this._testSuites.get(test.parent.file)
-
     if (testSuiteSpan) {
       const testSuiteId = testSuiteSpan.context()._spanId.toString(10)
       testSuiteTags[TEST_SUITE_ID] = testSuiteId
@@ -179,30 +176,20 @@ class MochaPlugin extends Plugin {
       testSuiteTags[TEST_COMMAND] = this.command
     }
 
-    const { childOf, ...testSpanMetadata } = getTestSpanMetadata(this.tracer, test, this.sourceRoot)
+    const { file: testSuiteAbsolutePath } = test
+    const fullTestName = test.fullTitle()
+    const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
+
+    const extraTags = {
+      ...testSuiteTags
+    }
 
     const testParametersString = getTestParametersString(this._testNameToParams, test.title)
     if (testParametersString) {
-      testSpanMetadata[TEST_PARAMETERS] = testParametersString
-    }
-    const codeOwners = getCodeOwnersForFilename(testSpanMetadata[TEST_SUITE], this.codeOwnersEntries)
-
-    if (codeOwners) {
-      testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
+      extraTags[TEST_PARAMETERS] = testParametersString
     }
 
-    const testSpan = this.tracer
-      .startSpan('mocha.test', {
-        childOf,
-        tags: {
-          ...this.testEnvironmentMetadata,
-          ...testSpanMetadata,
-          ...testSuiteTags
-        }
-      })
-    testSpan.context()._trace.origin = CI_APP_ORIGIN
-
-    return testSpan
+    return super.startTestSpan(fullTestName, testSuite, extraTags)
   }
 }
 

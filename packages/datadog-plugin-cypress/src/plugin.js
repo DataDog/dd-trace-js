@@ -10,7 +10,7 @@ const {
   getTestCommonTags
 } = require('../../dd-trace/src/plugins/util/test')
 
-const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 
 const CYPRESS_STATUS_TO_TEST_STATUS = {
   passed: 'pass',
@@ -62,6 +62,7 @@ module.exports = (on, config) => {
         activeSpan = tracer.startSpan('cypress.test', {
           childOf,
           tags: {
+            [COMPONENT]: 'cypress',
             [ORIGIN_KEY]: CI_APP_ORIGIN,
             ...testSpanMetadata,
             ...testEnvironmentMetadata
