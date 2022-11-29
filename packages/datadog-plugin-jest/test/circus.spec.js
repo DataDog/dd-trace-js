@@ -100,7 +100,7 @@ describe('Plugin', function () {
       })
     })
     describe('jest with jest-circus', () => {
-      it.only('should create test spans for sync, async, integration, parameterized and retried tests', (done) => {
+      it('should create test spans for sync, async, integration, parameterized and retried tests', (done) => {
         const tests = [
           {
             name: 'jest-test-suite tracer and active span are available',
@@ -157,7 +157,7 @@ describe('Plugin', function () {
               expect(testSpan.meta).to.contain(extraTags)
             }
             if (error) {
-              expect(testSpan.meta['error.message']).to.include(error)
+              expect(testSpan.meta[ERROR_MESSAGE]).to.include(error)
             }
             if (name === 'jest-test-suite can do integration http') {
               const httpSpan = trace[0].find(span => span.name === 'http.request')
