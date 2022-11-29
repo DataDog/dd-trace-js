@@ -2,6 +2,8 @@ const http = require('http')
 const tracer = require('dd-trace')
 
 describe('jest-test-suite', () => {
+  // eslint-disable-next-line
+  jest.setTimeout(400)
   it('tracer and active span are available', () => {
     expect(global._ddtrace).not.toEqual(undefined)
     const testSpan = tracer.scope().active()
@@ -12,7 +14,7 @@ describe('jest-test-suite', () => {
     setTimeout(() => {
       expect(100).toEqual(100)
       done()
-    }, 100)
+    }, 50)
   })
   it('done fail', (done) => {
     setTimeout(() => {
@@ -22,13 +24,13 @@ describe('jest-test-suite', () => {
       } catch (e) {
         done(e)
       }
-    }, 100)
+    }, 50)
   })
   it('done fail uncaught', (done) => {
     setTimeout(() => {
       expect(100).toEqual(200)
       done()
-    }, 100)
+    }, 50)
   })
   it('can do integration http', (done) => {
     const req = http.request('http://test:123', (res) => {
@@ -49,7 +51,7 @@ describe('jest-test-suite', () => {
       setTimeout(() => {
         expect(100).toEqual(100)
         resolve()
-      }, 100)
+      }, 50)
     )
   })
   it('promise fails', () => {
@@ -57,7 +59,7 @@ describe('jest-test-suite', () => {
       setTimeout(() => {
         expect(100).toEqual(200)
         resolve()
-      }, 100)
+      }, 50)
     )
   })
   // eslint-disable-next-line
