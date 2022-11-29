@@ -33,7 +33,7 @@ class Config {
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
     const version = coalesce(options.version, DD_VERSION)
-    const functionName = process.env.AWS_LAMBDA_FUNCTION_NAME
+    const functionname = process.env.AWS_LAMBDA_FUNCTION_NAME
     // Must be longer than one minute so pad with five seconds
     const flushInterval = coalesce(options.interval, 65 * 1000)
     const uploadTimeout = coalesce(options.uploadTimeout,
@@ -47,13 +47,13 @@ class Config {
     this.service = service
     this.env = env
     this.host = host
-    this.functionName = functionName
+    this.functionname = functionname
 
     this.version = version
     this.tags = Object.assign(
       tagger.parse(DD_TAGS),
       tagger.parse(options.tags),
-      tagger.parse({ env, host, service, version, functionName })
+      tagger.parse({ env, host, service, version, functionname })
     )
     this.logger = ensureLogger(options.logger)
     this.flushInterval = flushInterval
