@@ -83,7 +83,7 @@ class Profiler extends EventEmitter {
   _capture (timeout) {
     if (!this._enabled) return
     this._lastStart = new Date()
-    if (!this._timer || timeout !== this._config.flushInterval) {
+    if (!this._timer || timeout !== this._timeoutInterval) {
       this._timer = setTimeout(() => this._collect(), timeout)
       this._timer.unref()
     } else {
