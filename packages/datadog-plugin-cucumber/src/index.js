@@ -5,13 +5,12 @@ const { storage } = require('../../datadog-core')
 
 const {
   TEST_SKIP_REASON,
-  ERROR_MESSAGE,
   TEST_STATUS,
   finishAllTraceSpans,
   getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
-const { COMPONENT } = require('../../dd-trace/src/constants')
+const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 
 class CucumberPlugin extends CiPlugin {
   static get name () {

@@ -6,7 +6,7 @@ const proxyquire = require('proxyquire').noPreserveCache()
 const nock = require('nock')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const { SAMPLING_PRIORITY } = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
 const {
@@ -17,7 +17,6 @@ const {
   TEST_SOURCE_FILE,
   TEST_STATUS,
   CI_APP_ORIGIN,
-  ERROR_MESSAGE,
   TEST_SKIP_REASON,
   TEST_FRAMEWORK_VERSION,
   LIBRARY_VERSION
