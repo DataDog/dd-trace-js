@@ -45,7 +45,7 @@ describe('Plugin', function () {
 
   this.timeout(testTimeout)
 
-  withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
+  withVersions('jest', ['jest-environment-node'], (version, moduleName) => {
     afterEach(() => {
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       delete process.env.DD_API_KEY
@@ -100,7 +100,7 @@ describe('Plugin', function () {
       })
     })
     describe('jest with jest-circus', () => {
-      it('should create test spans for sync, async, integration, parameterized and retried tests', (done) => {
+      it.only('should create test spans for sync, async, integration, parameterized and retried tests', (done) => {
         const tests = [
           {
             name: 'jest-test-suite tracer and active span are available',
@@ -123,7 +123,7 @@ describe('Plugin', function () {
           },
           { name: 'jest-test-suite promise passes', status: 'pass' },
           { name: 'jest-test-suite promise fails', status: 'fail' },
-          { name: 'jest-test-suite timeout', status: 'fail', error: 'Exceeded timeout' },
+          { name: 'jest-test-suite timeout', status: 'fail', error: 'dsd timeout' }, // will error
           { name: 'jest-test-suite passes', status: 'pass' },
           { name: 'jest-test-suite fails', status: 'fail' },
           { name: 'jest-test-suite does not crash with missing stack', status: 'fail' },
@@ -157,7 +157,7 @@ describe('Plugin', function () {
               expect(testSpan.meta).to.contain(extraTags)
             }
             if (error) {
-              expect(testSpan.meta[ERROR_MESSAGE]).to.include(error)
+              expect(testSpan.meta['error.message']).to.include(error)
             }
             if (name === 'jest-test-suite can do integration http') {
               const httpSpan = trace[0].find(span => span.name === 'http.request')
@@ -173,7 +173,13 @@ describe('Plugin', function () {
             expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: assertionTimeout })
+          }, {
+            timeoutMs: testTimeout,
+            traceMatch: (traces) => {
+              const spans = traces.flatMap(span => span)
+              return spans.find(span => span.meta[TEST_NAME] === name)
+            }
+          })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)

@@ -35,13 +35,29 @@ module.exports = {
 
     agent.put('/v0.4/traces', (req, res) => {
       res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
-      handlers.forEach(handler => handler(req.body))
+      handlers.forEach(({ handler, traceMatch }) => {
+        if (traceMatch) {
+          if (traceMatch(req.body)) {
+            handler(req.body)
+          }
+        } else {
+          handler(req.body)
+        }
+      })
     })
 
     // CI Visibility Agentless intake
     agent.post('/api/v2/citestcycle', (req, res) => {
       res.status(200).send('OK')
-      handlers.forEach(handler => handler(req.body))
+      handlers.forEach(({ handler, traceMatch }) => {
+        if (traceMatch) {
+          if (traceMatch(req.body)) {
+            handler(req.body)
+          }
+        } else {
+          handler(req.body)
+        }
+      })
     })
 
     const port = await getPort()
@@ -132,20 +148,22 @@ module.exports = {
     }, timeoutMs)
 
     let error
+    let handlerPayload
 
     const handler = function () {
       try {
         callback.apply(null, arguments)
-        handlers.delete(handler)
+        handlers.delete(handlerPayload)
         clearTimeout(timeout)
         deferred.resolve()
       } catch (e) {
         error = error || e
       }
     }
+    handlerPayload = { handler, traceMatch: options.traceMatch }
 
     handler.promise = promise
-    handlers.add(handler)
+    handlers.add(handlerPayload)
 
     return promise
   },
