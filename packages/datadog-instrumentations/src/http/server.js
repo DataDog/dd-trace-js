@@ -48,7 +48,14 @@ function wrapEmit (emit) {
     if (eventName === 'request') {
       res.req = req
 
-      startServerCh.publish({ req, res })
+      const abortController = new AbortController()
+
+      startServerCh.publish({ req, res, abortController })
+
+      if (abortController.signal.aborted) {
+        // TODO: what if res.end is called twice ?
+        return res.end()
+      }
 
       try {
         return emit.apply(this, arguments)
