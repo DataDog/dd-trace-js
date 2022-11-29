@@ -5,7 +5,7 @@ const semver = require('semver')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const appServer = require('./app/app-server')
-const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -15,8 +15,6 @@ const {
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,
   CI_APP_ORIGIN,
-  ERROR_TYPE,
-  ERROR_MESSAGE,
   TEST_FRAMEWORK_VERSION,
   TEST_CODE_OWNERS,
   LIBRARY_VERSION
@@ -55,64 +53,62 @@ describe('Plugin', function () {
           },
           quiet: true
         })
-        const passingTestPromise = agent
-          .use(traces => {
-            const testSpan = traces[0][0]
-            expect(testSpan.name).to.equal('cypress.test')
-            expect(testSpan.resource).to.equal(
-              'cypress/integration/integration-test.js.can visit a page renders a hello world'
-            )
-            expect(testSpan.type).to.equal('test')
-            expect(testSpan.meta).to.contain({
-              language: 'javascript',
-              addTags: 'custom',
-              addTagsBeforeEach: 'custom',
-              addTagsAfterEach: 'custom',
-              [TEST_FRAMEWORK]: 'cypress',
-              [TEST_NAME]: 'can visit a page renders a hello world',
-              [TEST_STATUS]: 'pass',
-              [TEST_SUITE]: 'cypress/integration/integration-test.js',
-              [TEST_SOURCE_FILE]: 'cypress/integration/integration-test.js',
-              [TEST_TYPE]: 'test',
-              [ORIGIN_KEY]: CI_APP_ORIGIN,
-              [TEST_IS_RUM_ACTIVE]: 'true',
-              [TEST_CODE_OWNERS]: JSON.stringify(['@datadog']),
-              [LIBRARY_VERSION]: ddTraceVersion,
-              [COMPONENT]: 'cypress'
-            })
-            expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
+        const passingTestPromise = agent.use(traces => {
+          const testSpan = traces[0][0]
+          expect(testSpan.name).to.equal('cypress.test')
+          expect(testSpan.resource).to.equal(
+            'cypress/integration/integration-test.js.can visit a page renders a hello world'
+          )
+          expect(testSpan.type).to.equal('test')
+          expect(testSpan.meta).to.contain({
+            language: 'javascript',
+            addTags: 'custom',
+            addTagsBeforeEach: 'custom',
+            addTagsAfterEach: 'custom',
+            [TEST_FRAMEWORK]: 'cypress',
+            [TEST_NAME]: 'can visit a page renders a hello world',
+            [TEST_STATUS]: 'pass',
+            [TEST_SUITE]: 'cypress/integration/integration-test.js',
+            [TEST_SOURCE_FILE]: 'cypress/integration/integration-test.js',
+            [TEST_TYPE]: 'test',
+            [ORIGIN_KEY]: CI_APP_ORIGIN,
+            [TEST_IS_RUM_ACTIVE]: 'true',
+            [TEST_CODE_OWNERS]: JSON.stringify(['@datadog']),
+            [LIBRARY_VERSION]: ddTraceVersion,
+            [COMPONENT]: 'cypress'
           })
-        const failingTestPromise = agent
-          .use(traces => {
-            const testSpan = traces[0][0]
-            expect(testSpan.name).to.equal('cypress.test')
-            expect(testSpan.resource).to.equal(
-              'cypress/integration/integration-test.js.can visit a page will fail'
-            )
-            expect(testSpan.type).to.equal('test')
-            expect(testSpan.meta).to.contain({
-              language: 'javascript',
-              addTags: 'custom',
-              addTagsBeforeEach: 'custom',
-              addTagsAfterEach: 'custom',
-              [TEST_FRAMEWORK]: 'cypress',
-              [TEST_NAME]: 'can visit a page will fail',
-              [TEST_STATUS]: 'fail',
-              [TEST_SUITE]: 'cypress/integration/integration-test.js',
-              [TEST_SOURCE_FILE]: 'cypress/integration/integration-test.js',
-              [TEST_TYPE]: 'test',
-              [ORIGIN_KEY]: CI_APP_ORIGIN,
-              [ERROR_TYPE]: 'AssertionError',
-              [TEST_IS_RUM_ACTIVE]: 'true',
-              [COMPONENT]: 'cypress'
-            })
-            expect(testSpan.meta).to.not.contain({
-              addTagsAfterFailure: 'custom'
-            })
-            expect(testSpan.meta[ERROR_MESSAGE]).to.contain(
-              "expected '<div.hello-world>' to have text 'Bye World', but the text was 'Hello World'"
-            )
+          expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
+        }, { timeoutMs: 20000 })
+        const failingTestPromise = agent.use(traces => {
+          const testSpan = traces[0][0]
+          expect(testSpan.name).to.equal('cypress.test')
+          expect(testSpan.resource).to.equal(
+            'cypress/integration/integration-test.js.can visit a page will fail'
+          )
+          expect(testSpan.type).to.equal('test')
+          expect(testSpan.meta).to.contain({
+            language: 'javascript',
+            addTags: 'custom',
+            addTagsBeforeEach: 'custom',
+            addTagsAfterEach: 'custom',
+            [TEST_FRAMEWORK]: 'cypress',
+            [TEST_NAME]: 'can visit a page will fail',
+            [TEST_STATUS]: 'fail',
+            [TEST_SUITE]: 'cypress/integration/integration-test.js',
+            [TEST_SOURCE_FILE]: 'cypress/integration/integration-test.js',
+            [TEST_TYPE]: 'test',
+            [ORIGIN_KEY]: CI_APP_ORIGIN,
+            [ERROR_TYPE]: 'AssertionError',
+            [TEST_IS_RUM_ACTIVE]: 'true',
+            [COMPONENT]: 'cypress'
           })
+          expect(testSpan.meta).to.not.contain({
+            addTagsAfterFailure: 'custom'
+          })
+          expect(testSpan.meta[ERROR_MESSAGE]).to.contain(
+            "expected '<div.hello-world>' to have text 'Bye World', but the text was 'Hello World'"
+          )
+        }, { timeoutMs: 20000 })
         Promise.all([passingTestPromise, failingTestPromise]).then(() => done()).catch(done)
       })
     })
