@@ -4,7 +4,7 @@ const path = require('path')
 
 const nock = require('nock')
 
-const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const {
   TEST_FRAMEWORK,
@@ -16,7 +16,6 @@ const {
   CI_APP_ORIGIN,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
-  ERROR_MESSAGE,
   TEST_CODE_OWNERS,
   LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
