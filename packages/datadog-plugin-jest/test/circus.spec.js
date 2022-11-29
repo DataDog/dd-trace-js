@@ -167,7 +167,7 @@ describe('Plugin', function () {
             expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: testTimeout })
+          }, { timeoutMs: testTimeout / 2 })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -213,7 +213,7 @@ describe('Plugin', function () {
               `packages/datadog-plugin-jest/test/jest-hook-failure.js.${name}`
             )
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          })
+          }, { timeoutMs: testTimeout / 2 })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -251,7 +251,7 @@ describe('Plugin', function () {
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
               [COMPONENT]: 'jest'
             })
-          })
+          }, { timeoutMs: testTimeout / 2 })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -278,7 +278,7 @@ describe('Plugin', function () {
               [TEST_STATUS]: 'pass',
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-inject-globals.js'
             })
-          }).then(() => done()).catch(done)
+          }, { timeoutMs: testTimeout / 2 }).then(() => done()).catch(done)
 
           const options = {
             ...jestCommonOptions,
@@ -419,7 +419,7 @@ describe('Plugin', function () {
                 expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
                 expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
               }
-            })
+            }, { timeoutMs: testTimeout / 2 })
           })
 
           Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -465,7 +465,7 @@ describe('Plugin', function () {
               [TEST_STATUS]: 'pass',
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-itr-pass.js'
             })
-          }).then(() => {
+          }, { timeoutMs: testTimeout / 2 }).then(() => {
             expect(scope.isDone()).to.be.true
             done()
           }).catch(done)
@@ -525,7 +525,7 @@ describe('Plugin', function () {
                 [TEST_STATUS]: status,
                 [TEST_SUITE]: suite
               })
-            })
+            }, { timeoutMs: testTimeout / 2 })
           })
 
           Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -586,7 +586,7 @@ describe('Plugin', function () {
                 [TEST_STATUS]: status,
                 [TEST_SUITE]: suite
               })
-            })
+            }, { timeoutMs: testTimeout / 2 })
           })
 
           Promise.all(assertionPromises).then(() => done()).catch(done)
