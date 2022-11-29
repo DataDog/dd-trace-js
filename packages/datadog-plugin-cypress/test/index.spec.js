@@ -22,6 +22,8 @@ const {
 
 const { version: ddTraceVersion } = require('../../../package.json')
 
+const testTimeout = 60000
+
 describe('Plugin', function () {
   let cypressExecutable
   let appPort
@@ -42,7 +44,7 @@ describe('Plugin', function () {
     afterEach(done => appServer.close(done))
 
     describe('cypress', function () {
-      this.timeout(120000)
+      this.timeout(testTimeout)
       it('instruments tests', function (done) {
         process.env.DD_TRACE_AGENT_PORT = agentListenPort
         cypressExecutable.run({
@@ -78,7 +80,7 @@ describe('Plugin', function () {
             [COMPONENT]: 'cypress'
           })
           expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-        }, { timeoutMs: 20000 })
+        }, { timeoutMs: testTimeout })
         const failingTestPromise = agent.use(traces => {
           const testSpan = traces[0][0]
           expect(testSpan.name).to.equal('cypress.test')
@@ -108,7 +110,7 @@ describe('Plugin', function () {
           expect(testSpan.meta[ERROR_MESSAGE]).to.contain(
             "expected '<div.hello-world>' to have text 'Bye World', but the text was 'Hello World'"
           )
-        }, { timeoutMs: 20000 })
+        }, { timeoutMs: testTimeout })
         Promise.all([passingTestPromise, failingTestPromise]).then(() => done()).catch(done)
       })
     })
