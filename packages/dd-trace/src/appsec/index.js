@@ -107,7 +107,7 @@ function incomingHttpEndTranslator (data) {
     payload[addresses.HTTP_INCOMING_COOKIES] = {}
 
     for (const k of Object.keys(data.req.cookies)) {
-      payload[addresses.HTTP_INCOMING_COOKIES][k] = [ data.req.cookies[k] ]
+      payload[addresses.HTTP_INCOMING_COOKIES][k] = [data.req.cookies[k]]
     }
   }
 
