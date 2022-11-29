@@ -112,7 +112,7 @@ module.exports = {
 
   // Register handler to be executed each agent call, multiple times
   subscribe (handler) {
-    handlers.add(handler)
+    handlers.add({ handler })
   },
 
   // Remove a handler
@@ -160,7 +160,7 @@ module.exports = {
         error = error || e
       }
     }
-    handlerPayload = { handler, traceMatch: options.traceMatch }
+    handlerPayload = { handler, traceMatch: options && options.traceMatch }
 
     handler.promise = promise
     handlers.add(handlerPayload)
