@@ -45,7 +45,7 @@ describe('Plugin', function () {
 
   this.timeout(testTimeout)
 
-  withVersions('jest', ['jest-environment-node'], (version, moduleName) => {
+  withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       delete process.env.DD_API_KEY
