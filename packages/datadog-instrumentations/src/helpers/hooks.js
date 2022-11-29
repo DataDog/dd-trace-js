@@ -9,6 +9,7 @@ module.exports = {
   '@hapi/hapi': () => require('../hapi'),
   '@jest/core': () => require('../jest'),
   '@jest/reporters': () => require('../jest'),
+  'stealthy-require': () => require('../stealthy-require'),
   '@koa/router': () => require('../koa'),
   '@node-redis/client': () => require('../redis'),
   '@opensearch-project/opensearch': () => require('../opensearch'),
