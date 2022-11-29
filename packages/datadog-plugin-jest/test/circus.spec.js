@@ -174,7 +174,7 @@ describe('Plugin', function () {
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           }, {
-            timeoutMs: testTimeout,
+            timeoutMs: assertionTimeout,
             traceMatch: (traces) => {
               const spans = traces.flatMap(span => span)
               return spans.find(span => span.meta[TEST_NAME] === name)

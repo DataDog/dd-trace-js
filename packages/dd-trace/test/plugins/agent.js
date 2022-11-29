@@ -148,9 +148,9 @@ module.exports = {
     }, timeoutMs)
 
     let error
-    let handlerPayload
+    const handlerPayload = { handler, traceMatch: options && options.traceMatch }
 
-    const handler = function () {
+    function handler () {
       try {
         callback.apply(null, arguments)
         handlers.delete(handlerPayload)
@@ -160,7 +160,6 @@ module.exports = {
         error = error || e
       }
     }
-    handlerPayload = { handler, traceMatch: options && options.traceMatch }
 
     handler.promise = promise
     handlers.add(handlerPayload)
