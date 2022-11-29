@@ -7,7 +7,7 @@ const nock = require('nock')
 const semver = require('semver')
 const msgpack = require('msgpack-lite')
 
-const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const {
   TEST_FRAMEWORK,
@@ -19,7 +19,6 @@ const {
   TEST_STATUS,
   CI_APP_ORIGIN,
   JEST_TEST_RUNNER,
-  ERROR_MESSAGE,
   TEST_PARAMETERS,
   TEST_CODE_OWNERS,
   LIBRARY_VERSION,
@@ -32,11 +31,13 @@ const { version: ddTraceVersion } = require('../../../package.json')
 
 const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
 
+const testTimeout = 20000
+
 describe('Plugin', function () {
   let jestExecutable
   let jestCommonOptions
 
-  this.timeout(20000)
+  this.timeout(testTimeout)
 
   withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {
@@ -82,7 +83,7 @@ describe('Plugin', function () {
         jestCommonOptions = {
           projects: [__dirname],
           testPathIgnorePatterns: ['/node_modules/'],
-          coverageReporters: [],
+          coverageReporters: ['none'],
           reporters: [],
           silent: true,
           testEnvironment: path.join(__dirname, 'env.js'),
@@ -166,7 +167,7 @@ describe('Plugin', function () {
             expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: 10000 })
+          }, { timeoutMs: testTimeout })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
