@@ -17,8 +17,6 @@ function enable (config) {
   if (isEnabled) return
 
   try {
-    // TODO: enable dc_blocking: config.appsec.blocking === true
-
     let rules = fs.readFileSync(config.appsec.rules || path.join(__dirname, 'recommended.json'))
     rules = JSON.parse(rules)
 
