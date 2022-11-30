@@ -252,6 +252,16 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 \\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?\
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
     )
+    const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = coalesce(
+      maybeFile(appsec.blockedTemplateHtml),
+      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML),
+      path.join(__dirname, 'appsec', 'templates', 'blocked.html')
+    )
+    const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = coalesce(
+      maybeFile(appsec.blockedTemplateJson),
+      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON),
+      path.join(__dirname, 'appsec', 'templates', 'blocked.json')
+    )
 
     const iastOptions = options.experimental && options.experimental.iast
     const DD_IAST_ENABLED = coalesce(
@@ -374,7 +384,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       rateLimit: DD_APPSEC_TRACE_RATE_LIMIT,
       wafTimeout: DD_APPSEC_WAF_TIMEOUT,
       obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
-      obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP
+      obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
+      blockedTemplateHtml: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
+      blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     }
     this.iast = {
       enabled: isTrue(DD_IAST_ENABLED),
