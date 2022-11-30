@@ -7,6 +7,8 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 const fsChannel = channel('datadog:fs:access')
+const hookChannel = channel('apm:fs:hook')
+
 const onePathMethods = ['access', 'appendFile', 'chmod', 'lchown', 'mkdir', 'mkdtemp', 'mkdtempSync', 'open',
   'openSync', 'opendir', 'readdir', 'readFile', 'readlink', 'realpath', 'rm', 'rmdir', 'stat', 'truncate', 'unlink',
   'utimes', 'writeFile', 'watch']
@@ -22,6 +24,9 @@ addHook({ name: 'fs' }, fs => {
 
   shimmer.massWrap(fs.promises, onePathMethods, wrapFsMethod(fsChannel, 1))
   shimmer.massWrap(fs.promises, twoPathMethods, wrapFsMethod(fsChannel, 2))
+  if (hookChannel.hasSubscribers) {
+    hookChannel.publish(fs)
+  }
   return fs
 })
 
