@@ -382,10 +382,10 @@ export declare interface TracerOptions {
     runtimeId?: boolean
 
     /**
-     * Whether to write traces to log output, rather than send to an agent
+     * Whether to write traces to log output or agentless, rather than send to an agent
      * @default false
      */
-    exporter?: 'log' | 'agent'
+    exporter?: 'log' | 'agent' | 'datadog'
 
     /**
      * Whether to enable the experimental `getRumData` method.
