@@ -9,7 +9,6 @@ addHook({
     const ddTraceCache = Object.entries(requireCache).reduce((acc, [path, cache]) => {
       if (path.includes('dd-trace')) {
         acc[path] = cache
-        return acc
       }
       return acc
     }, {})
@@ -20,9 +19,7 @@ addHook({
       return callback.apply(this, arguments)
     }
 
-    const result = stealthyRequire.apply(this, arguments)
-
-    return result
+    return stealthyRequire.apply(this, arguments)
   })
 })
 function restoreCache (origin, target) {
