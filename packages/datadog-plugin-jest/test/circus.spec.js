@@ -31,6 +31,12 @@ const { version: ddTraceVersion } = require('../../../package.json')
 
 const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
 
+/**
+ * The assertion timeout needs to be less than the test timeout,
+ * otherwise failing tests will always fail due to a timeout,
+ * which is less useful than having an assertion error message.
+ */
+const assertionTimeout = 15000
 const testTimeout = 20000
 
 describe('Plugin', function () {
@@ -167,7 +173,7 @@ describe('Plugin', function () {
             expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: testTimeout })
+          }, { timeoutMs: assertionTimeout })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -213,7 +219,7 @@ describe('Plugin', function () {
               `packages/datadog-plugin-jest/test/jest-hook-failure.js.${name}`
             )
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: testTimeout })
+          }, { timeoutMs: assertionTimeout })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -251,7 +257,7 @@ describe('Plugin', function () {
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
               [COMPONENT]: 'jest'
             })
-          }, { timeoutMs: testTimeout })
+          }, { timeoutMs: assertionTimeout })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -278,7 +284,7 @@ describe('Plugin', function () {
               [TEST_STATUS]: 'pass',
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-inject-globals.js'
             })
-          }, { timeoutMs: testTimeout }).then(() => done()).catch(done)
+          }, { timeoutMs: assertionTimeout }).then(() => done()).catch(done)
 
           const options = {
             ...jestCommonOptions,
@@ -419,7 +425,7 @@ describe('Plugin', function () {
                 expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
                 expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
               }
-            }, { timeoutMs: testTimeout })
+            }, { timeoutMs: assertionTimeout })
           })
 
           Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -465,7 +471,7 @@ describe('Plugin', function () {
               [TEST_STATUS]: 'pass',
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-itr-pass.js'
             })
-          }, { timeoutMs: testTimeout }).then(() => {
+          }, { timeoutMs: assertionTimeout }).then(() => {
             expect(scope.isDone()).to.be.true
             done()
           }).catch(done)
@@ -525,7 +531,7 @@ describe('Plugin', function () {
                 [TEST_STATUS]: status,
                 [TEST_SUITE]: suite
               })
-            }, { timeoutMs: testTimeout })
+            }, { timeoutMs: assertionTimeout })
           })
 
           Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -586,7 +592,7 @@ describe('Plugin', function () {
                 [TEST_STATUS]: status,
                 [TEST_SUITE]: suite
               })
-            }, { timeoutMs: testTimeout })
+            }, { timeoutMs: assertionTimeout })
           })
 
           Promise.all(assertionPromises).then(() => done()).catch(done)
