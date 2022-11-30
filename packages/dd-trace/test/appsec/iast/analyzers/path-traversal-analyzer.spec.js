@@ -8,7 +8,7 @@ const proxyquire = require('proxyquire')
 const pathTraversalAnalyzer = require('../../../../src/appsec/iast/analyzers/path-traversal-analyzer')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const { testThatRequestHasVulnerability } = require('../utils')
-const fs = require('fs')
+const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
 
 const iastContext = {
   rootSpan: {
@@ -134,11 +134,26 @@ describe('path-traversal-analyzer', () => {
 })
 
 describe('integration test', () => {
-  testThatRequestHasVulnerability(function () {
-    const store = storage.getStore()
-    const iastCtx = iastContextFunctions.getIastContext(store)
-    let path = __filename
-    path = newTaintedString(iastCtx, __filename, 'param', 'Request')
-    fs.openSync(path, 'r')
-  }, 'PATH_TRAVERSAL')
+  beforeEach(() => {
+    clearCache()
+  })
+  describe('not promise method', () => {
+    testThatRequestHasVulnerability(function () {
+      const store = storage.getStore()
+      const iastCtx = iastContextFunctions.getIastContext(store)
+      let path = __filename
+      path = newTaintedString(iastCtx, __filename, 'param', 'Request')
+      require('fs').openSync(path, 'r')
+    }, 'PATH_TRAVERSAL')
+  })
+
+  describe('promised method', () => {
+    testThatRequestHasVulnerability(async function () {
+      const store = storage.getStore()
+      const iastCtx = iastContextFunctions.getIastContext(store)
+      let path = __filename
+      path = newTaintedString(iastCtx, __filename, 'param', 'Request')
+      await require('fs').promises.open(path, 'r')
+    }, 'PATH_TRAVERSAL')
+  })
 })
