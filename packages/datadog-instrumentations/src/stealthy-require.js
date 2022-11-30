@@ -3,7 +3,7 @@ const shimmer = require('../../datadog-shimmer')
 
 addHook({
   name: 'stealthy-require',
-  versions: ['>=0.1.0']
+  versions: ['>=1.0.0']
 }, (stealthyRequire) => {
   return shimmer.wrap(stealthyRequire, function (requireCache) {
     const ddTraceCache = Object.entries(requireCache).reduce((acc, [path, cache]) => {
