@@ -243,11 +243,7 @@ function cliWrapper (cli) {
   return cli
 }
 
-addHook({
-  name: '@jest/reporters',
-  file: 'build/CoverageReporter.js',
-  versions: ['>=24.8.0']
-}, (coverageReporter) => {
+function coverageReporterWrapper (coverageReporter) {
   const CoverageReporter = coverageReporter.default ? coverageReporter.default : coverageReporter
 
   /**
@@ -262,7 +258,19 @@ addHook({
   })
 
   return coverageReporter
-})
+}
+
+addHook({
+  name: '@jest/reporters',
+  file: 'build/coverage_reporter.js',
+  versions: ['>=24.8.0 <26.6.2']
+}, coverageReporterWrapper)
+
+addHook({
+  name: '@jest/reporters',
+  file: 'build/CoverageReporter.js',
+  versions: ['>=26.6.2']
+}, coverageReporterWrapper)
 
 addHook({
   name: '@jest/core',
