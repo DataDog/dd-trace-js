@@ -522,8 +522,6 @@ class FsPlugin extends Plugin {
 
     super.configure(config)
 
-    this._unpatch()
-
     if (this._enabled) {
       this._patch()
     }
