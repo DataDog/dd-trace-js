@@ -99,6 +99,7 @@
 							<ul class="tsd-index-list">
 								<li class="tsd-kind-method tsd-parent-kind-interface tsd-is-overwrite"><a href="spancontext.html#tospanid" class="tsd-kind-icon">to<wbr>Span<wbr>Id</a></li>
 								<li class="tsd-kind-method tsd-parent-kind-interface tsd-is-overwrite"><a href="spancontext.html#totraceid" class="tsd-kind-icon">to<wbr>Trace<wbr>Id</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-interface"><a href="spancontext.html#totraceparent" class="tsd-kind-icon">to<wbr>Traceparent</a></li>
 							</ul>
 						</section>
 					</div>
@@ -117,7 +118,7 @@
 							<aside class="tsd-sources">
 								<p>Overrides SpanContext.toSpanId</p>
 								<ul>
-									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d281069/index.d.ts#L169">index.d.ts:169</a></li>
+									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d13b340/index.d.ts#L169">index.d.ts:169</a></li>
 								</ul>
 							</aside>
 							<div class="tsd-comment tsd-typography">
@@ -140,12 +141,34 @@
 							<aside class="tsd-sources">
 								<p>Overrides SpanContext.toTraceId</p>
 								<ul>
-									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d281069/index.d.ts#L164">index.d.ts:164</a></li>
+									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d13b340/index.d.ts#L164">index.d.ts:164</a></li>
 								</ul>
 							</aside>
 							<div class="tsd-comment tsd-typography">
 								<div class="lead">
 									<p>Returns the string representation of the internal trace ID.</p>
+								</div>
+							</div>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span></h4>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-interface">
+					<a name="totraceparent" class="tsd-anchor"></a>
+					<h3>to<wbr>Traceparent</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-interface">
+						<li class="tsd-signature tsd-kind-icon">to<wbr>Traceparent<span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">string</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+								<ul>
+									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/d13b340/index.d.ts#L174">index.d.ts:174</a></li>
+								</ul>
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Returns the string representation used for DBM integration.</p>
 								</div>
 							</div>
 							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span></h4>
@@ -183,6 +206,9 @@
 							</li>
 							<li class=" tsd-kind-method tsd-parent-kind-interface tsd-is-overwrite">
 								<a href="spancontext.html#totraceid" class="tsd-kind-icon">to<wbr>Trace<wbr>Id</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-interface">
+								<a href="spancontext.html#totraceparent" class="tsd-kind-icon">to<wbr>Traceparent</a>
 							</li>
 						</ul>
 					</li>

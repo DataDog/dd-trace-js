@@ -561,6 +561,12 @@ opentracing.initGlobalTracer(tracer)</code></pre>
 							<td>-</td>
 							<td>A regex to redact sensitive data by its value in attack reports.</td>
 						</tr>
+						<tr>
+							<td>dbmPropagationMode</td>
+							<td><code>DD_DBM_PROPAGATION_MODE</code></td>
+							<td><code>&#39;disabled&#39;</code></td>
+							<td>To enable DBM to APM link using tag injection, can be set to &#39;service&#39; or &#39;full&#39;. <code>&#39;service&#39;</code> will enable the connection between DB and APM services; while <code>&#39;full&#39;</code> will enable connection between database spans with database query events. This is currently available for Postgres.</td>
+						</tr>
 				</tbody></table>
 				<h3 id="custom-logging">Custom Logging</h3>
 				<p>By default, logging from this library is disabled. In order to get debugging information and errors sent to logs, the <code>debug</code> options should be set to <code>true</code> in the <a href="./interfaces/tracer.html#init">init()</a> method.</p>
