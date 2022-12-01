@@ -468,44 +468,6 @@ function patchDirFunctions (fs, tracer, config) {
   shimmer.wrap(fs.Dir.prototype, Symbol.asyncIterator, createWrapDirAsyncIterator(config, tracer, this))
 }
 
-function unpatchClassicFunctions (fs) {
-  for (const name in fs) {
-    if (!fs[name]) continue
-    const tagMakerName = name.endsWith('Sync') ? name.substr(0, name.length - 4) : name
-    if (tagMakerName in tagMakers) {
-      shimmer.unwrap(fs, name)
-    }
-  }
-}
-
-function unpatchFileHandle (fs) {
-  getFileHandlePrototype(fs).then(fileHandlePrototype => {
-    for (const name of Reflect.ownKeys(fileHandlePrototype)) {
-      if (typeof name !== 'string' || name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
-        continue
-      }
-      shimmer.unwrap(fileHandlePrototype, name)
-    }
-    delete fileHandlePrototype[kHandle]
-  })
-}
-
-function unpatchPromiseFunctions (fs) {
-  for (const name in fs.promises) {
-    if (name in tagMakers) {
-      shimmer.unwrap(fs.promises, name)
-    }
-  }
-}
-
-function unpatchDirFunctions (fs) {
-  shimmer.unwrap(fs.Dir.prototype, 'close')
-  shimmer.unwrap(fs.Dir.prototype, 'closeSync')
-  shimmer.unwrap(fs.Dir.prototype, 'read')
-  shimmer.unwrap(fs.Dir.prototype, 'readSync')
-  shimmer.unwrap(fs.Dir.prototype, Symbol.asyncIterator)
-}
-
 const hookChannel = channel('apm:fs:hook')
 
 hookChannel.subscribe(fs => {
@@ -551,22 +513,6 @@ class FsPlugin extends Plugin {
     if (realpathSyncNative) {
       fs.realpathSync.native = createWrap(tracer, config, 'realpath.native', createPathTags)(realpathSyncNative)
     }
-  }
-
-  _unpatch () {
-    const fs = fsInstance
-    unpatchClassicFunctions.call(this, fs)
-    if (fs.promises) {
-      unpatchFileHandle.call(this, fs)
-      unpatchPromiseFunctions.call(this, fs)
-    }
-    if (fs.Dir) {
-      unpatchDirFunctions.call(this, fs)
-    }
-    shimmer.unwrap(fs, 'createReadStream')
-    shimmer.unwrap(fs, 'createWriteStream')
-    shimmer.unwrap(fs, 'existsSync')
-    shimmer.unwrap(fs, 'exists')
   }
 }
 
