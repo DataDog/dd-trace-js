@@ -71,14 +71,19 @@ describe('coverage-ci-visibility', () => {
   })
 
   it('should be able to make multiple payloads', () => {
+    let form, decodedCoverages
     encoder.encode(formattedCoverage)
-    encoder.makePayload()
-
-    encoder.encode(formattedCoverage)
-    const form = encoder.makePayload()
-    const decodedCoverages = msgpack.decode(form._data[3])
+    form = encoder.makePayload()
+    decodedCoverages = msgpack.decode(form._data[3])
     expect(decodedCoverages.version).to.equal(2)
     expect(decodedCoverages.coverages).to.have.length(1)
     expect(decodedCoverages.coverages[0]).to.contain({ test_session_id: 1, test_suite_id: 2 })
+
+    encoder.encode(formattedCoverage2)
+    form = encoder.makePayload()
+    decodedCoverages = msgpack.decode(form._data[3])
+    expect(decodedCoverages.version).to.equal(2)
+    expect(decodedCoverages.coverages).to.have.length(1)
+    expect(decodedCoverages.coverages[0]).to.contain({ test_session_id: 3, test_suite_id: 4 })
   })
 })

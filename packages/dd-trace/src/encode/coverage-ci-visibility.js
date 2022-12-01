@@ -101,8 +101,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     const form = this.form
 
     this.form = new FormData()
-
-    this._coveragesCount = 0
+    this.reset()
 
     return form
   }
