@@ -12,6 +12,8 @@ const hookChannel = channel('apm:fs:hook')
 const onePathMethods = ['access', 'appendFile', 'chmod', 'lchown', 'mkdir', 'mkdtemp', 'mkdtempSync', 'open',
   'openSync', 'opendir', 'readdir', 'readFile', 'readlink', 'realpath', 'rm', 'rmdir', 'stat', 'truncate', 'unlink',
   'utimes', 'writeFile', 'watch']
+const onePathPromiseMethods = ['access', 'open', 'opendir', 'truncate', 'rm', 'rmdir', 'mkdir', 'readdir', 'readlink',
+  'stat', 'unlink', 'chmod', 'lchown', 'utimes', 'realpath', 'mkdtemp', 'writeFile', 'appendFile', 'readFile', 'watch']
 const onePathMethodsSync = ['accessSync', 'appendFileSync', 'chmodSync', 'chownSync', 'lchownSync', 'mkdirSync',
   'opendirSync', 'readdirSync', 'readFileSync', 'readlinkSync', 'realpathSync', 'rmSync', 'rmdirSync', 'statSync',
   'truncateSync', 'unlinkSync', 'utimesSync', 'writeFileSync']
@@ -19,17 +21,10 @@ const twoPathMethods = ['copyFile', 'link', 'rename', 'symlink']
 const twoPathMethodsSync = ['copyFileSync', 'linkSync', 'renameSync', 'symlinkSync']
 
 addHook({ name: 'fs' }, fs => {
-  const allOnePathMethods = onePathMethods.concat(onePathMethodsSync)
-  const allTwoPathMethods = twoPathMethods.concat(twoPathMethodsSync)
-  const allFsProperties = Object.keys(fs)
-  const allFsPromisesProperties = Object.keys(fs.promises)
-  shimmer.massWrap(fs, allFsProperties.filter(name => allOnePathMethods.includes(name)), wrapFsMethod(fsChannel, 1))
-  shimmer.massWrap(fs, allFsProperties.filter(name => allTwoPathMethods.includes(name)), wrapFsMethod(fsChannel, 2))
-
-  shimmer.massWrap(fs.promises, allFsPromisesProperties.filter(name => onePathMethods.includes(name)),
-    wrapFsMethod(fsChannel, 1))
-  shimmer.massWrap(fs.promises, allFsPromisesProperties.filter(name => twoPathMethods.includes(name)),
-    wrapFsMethod(fsChannel, 2))
+  shimmer.massWrap(fs, onePathMethods.concat(onePathMethodsSync), wrapFsMethod(fsChannel, 1))
+  shimmer.massWrap(fs, twoPathMethods.concat(twoPathMethodsSync), wrapFsMethod(fsChannel, 2))
+  shimmer.massWrap(fs.promises, onePathPromiseMethods, wrapFsMethod(fsChannel, 1))
+  shimmer.massWrap(fs.promises, twoPathMethods, wrapFsMethod(fsChannel, 2))
 
   if (hookChannel.hasSubscribers) {
     hookChannel.publish(fs)
