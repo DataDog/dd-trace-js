@@ -68,7 +68,7 @@ function wrapNext (req, next) {
   }
 }
 
-addHook({ name: 'restify', versions: ['>=3'], file: 'lib/server.js' }, Server => {
+addHook({ name: 'restify', versions: ['>=3 <=8.6.1'], file: 'lib/server.js' }, Server => {
   shimmer.wrap(Server.prototype, '_setupRequest', wrapSetupRequest)
   shimmer.massWrap(Server.prototype, handlers, wrapHandler)
   shimmer.massWrap(Server.prototype, methods, wrapMethod)
