@@ -418,7 +418,6 @@ describe('Plugin', function () {
 
           const assertionPromises = events.map(({ name, suite, status, type, spanResourceMatch }) => {
             return agent.use(agentlessPayload => {
-              // debugger
               const { events } = agentlessPayload
               const span = events.find(event => event.type === type).content
               expect(span.meta[TEST_STATUS]).to.equal(status)
