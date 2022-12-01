@@ -21,10 +21,17 @@ const twoPathMethods = ['copyFile', 'link', 'rename', 'symlink']
 const twoPathMethodsSync = ['copyFileSync', 'linkSync', 'renameSync', 'symlinkSync']
 
 addHook({ name: 'fs' }, fs => {
-  shimmer.massWrap(fs, onePathMethods.concat(onePathMethodsSync), wrapFsMethod(fsChannel, 1))
-  shimmer.massWrap(fs, twoPathMethods.concat(twoPathMethodsSync), wrapFsMethod(fsChannel, 2))
-  shimmer.massWrap(fs.promises, onePathPromiseMethods, wrapFsMethod(fsChannel, 1))
-  shimmer.massWrap(fs.promises, twoPathMethods, wrapFsMethod(fsChannel, 2))
+  const fsKeys = Object.keys(fs)
+  shimmer.massWrap(fs, onePathMethods.concat(onePathMethodsSync).filter(key => fsKeys.includes(key)),
+    wrapFsMethod(fsChannel, 1))
+  shimmer.massWrap(fs, twoPathMethods.concat(twoPathMethodsSync).filter(key => fsKeys.includes(key)),
+    wrapFsMethod(fsChannel, 2))
+
+  const fsPromisesKeys = Object.keys(fs.promises)
+  shimmer.massWrap(fs.promises, onePathPromiseMethods.filter(key => fsPromisesKeys.includes(key)),
+    wrapFsMethod(fsChannel, 1))
+  shimmer.massWrap(fs.promises, twoPathMethods.filter(key => fsPromisesKeys.includes(key)),
+    wrapFsMethod(fsChannel, 2))
 
   if (hookChannel.hasSubscribers) {
     hookChannel.publish(fs)
