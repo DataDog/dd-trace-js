@@ -265,7 +265,11 @@ const web = {
 
   // Extract the parent span from the headers and start a new span as its child
   startChildSpan (tracer, name, headers) {
-    const childOf = tracer.scope().active() || tracer.extract(FORMAT_HTTP_HEADERS, headers)
+    const activeSpan = tracer.scope().active()
+    const spanContext = activeSpan && activeSpan.context()
+    const isLambda = spanContext && spanContext._name === 'aws.lambda'
+
+    const childOf = (isLambda && activeSpan) || tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
     const span = tracer.startSpan(name, { childOf })
 
