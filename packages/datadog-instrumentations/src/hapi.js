@@ -142,19 +142,19 @@ function reply (request, h) {
   }
 }
 
-addHook({ name: '@hapi/hapi', versions: ['>=17.9'] }, hapi => {
+addHook({ name: '@hapi/hapi', versions: ['>=17.9 <=20.2.1'] }, hapi => {
   shimmer.massWrap(hapi, ['server', 'Server'], wrapServer)
 
   return hapi
 })
 
-addHook({ name: '@hapi/hapi', versions: ['>=17.9'], file: 'lib/core.js' }, Core => {
+addHook({ name: '@hapi/hapi', versions: ['>=17.9 <=20.2.1'], file: 'lib/core.js' }, Core => {
   shimmer.wrap(Core.prototype, '_dispatch', wrapDispatch)
 
   return Core
 })
 
-addHook({ name: '@hapi/hapi', versions: ['>=17.9'], file: 'lib/route.js' }, Route => {
+addHook({ name: '@hapi/hapi', versions: ['>=17.9 <=20.2.1'], file: 'lib/route.js' }, Route => {
   shimmer.wrap(Route.prototype, 'rebuild', wrapRebuild)
 
   return Route
