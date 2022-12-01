@@ -22,8 +22,9 @@ addHook({ name: 'fs' }, fs => {
   shimmer.massWrap(fs, onePathMethods.concat(onePathMethodsSync), wrapFsMethod(fsChannel, 1))
   shimmer.massWrap(fs, twoPathMethods.concat(twoPathMethodsSync), wrapFsMethod(fsChannel, 2))
 
-  shimmer.massWrap(fs.promises, onePathMethods, wrapFsMethod(fsChannel, 1))
-  shimmer.massWrap(fs.promises, twoPathMethods, wrapFsMethod(fsChannel, 2))
+  // TODO do not merge this file, only to check that fs plugin test works
+  // shimmer.massWrap(fs.promises, onePathMethods, wrapFsMethod(fsChannel, 1))
+  // shimmer.massWrap(fs.promises, twoPathMethods, wrapFsMethod(fsChannel, 2))2))
   if (hookChannel.hasSubscribers) {
     hookChannel.publish(fs)
   }
