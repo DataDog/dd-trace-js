@@ -17,7 +17,7 @@ let listener = null
 let tracer = null
 let plugins = []
 
-const isMatchingTrace = (spans, spanResourceMatch) => {
+function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
     return true
   }
