@@ -123,7 +123,7 @@ describe('Plugin', function () {
           },
           { name: 'jest-test-suite promise passes', status: 'pass' },
           { name: 'jest-test-suite promise fails', status: 'fail' },
-          { name: 'jest-test-suite timeout', status: 'fail', error: 'dsd timeout' }, // will error
+          { name: 'jest-test-suite timeout', status: 'fail', error: 'Exceeded timeout' },
           { name: 'jest-test-suite passes', status: 'pass' },
           { name: 'jest-test-suite fails', status: 'fail' },
           { name: 'jest-test-suite does not crash with missing stack', status: 'fail' },
@@ -175,10 +175,7 @@ describe('Plugin', function () {
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           }, {
             timeoutMs: assertionTimeout,
-            traceMatch: (traces) => {
-              const spans = traces.flatMap(span => span)
-              return spans.find(span => span.meta[TEST_NAME] === name)
-            }
+            spanResourceMatch: new RegExp(`${name}$`)
           })
         })
 
@@ -225,7 +222,10 @@ describe('Plugin', function () {
               `packages/datadog-plugin-jest/test/jest-hook-failure.js.${name}`
             )
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: assertionTimeout })
+          }, {
+            timeoutMs: assertionTimeout,
+            spanResourceMatch: new RegExp(`${name}$`)
+          })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -263,7 +263,10 @@ describe('Plugin', function () {
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
               [COMPONENT]: 'jest'
             })
-          }, { timeoutMs: assertionTimeout })
+          }, {
+            timeoutMs: assertionTimeout,
+            spanResourceMatch: new RegExp(`${name}$`)
+          })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -393,22 +396,29 @@ describe('Plugin', function () {
         })
         it('should create spans for the test session and test suite', (done) => {
           const events = [
-            { type: 'test_session_end', status: 'pass' },
+            {
+              type: 'test_session_end',
+              status: 'pass',
+              spanResourceMatch: /^test_session/
+            },
             {
               type: 'test_suite_end',
               status: 'pass',
-              suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js'
+              suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js',
+              spanResourceMatch: /^test_suite/
             },
             {
               name: 'jest-test-suite-visibility works',
               suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js',
               status: 'pass',
-              type: 'test'
+              type: 'test',
+              spanResourceMatch: /jest-test-suite-visibility works$/
             }
           ]
 
-          const assertionPromises = events.map(({ name, suite, status, type }) => {
+          const assertionPromises = events.map(({ name, suite, status, type, spanResourceMatch }) => {
             return agent.use(agentlessPayload => {
+              // debugger
               const { events } = agentlessPayload
               const span = events.find(event => event.type === type).content
               expect(span.meta[TEST_STATUS]).to.equal(status)
@@ -431,7 +441,7 @@ describe('Plugin', function () {
                 expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
                 expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
               }
-            }, { timeoutMs: assertionTimeout })
+            }, { timeoutMs: assertionTimeout, spanResourceMatch })
           })
 
           Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -537,7 +547,7 @@ describe('Plugin', function () {
                 [TEST_STATUS]: status,
                 [TEST_SUITE]: suite
               })
-            }, { timeoutMs: assertionTimeout })
+            }, { timeoutMs: assertionTimeout, spanResourceMatch: new RegExp(`${name}$`) })
           })
 
           Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -598,7 +608,7 @@ describe('Plugin', function () {
                 [TEST_STATUS]: status,
                 [TEST_SUITE]: suite
               })
-            }, { timeoutMs: assertionTimeout })
+            }, { timeoutMs: assertionTimeout, spanResourceMatch: new RegExp(`${name}$`) })
           })
 
           Promise.all(assertionPromises).then(() => done()).catch(done)
