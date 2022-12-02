@@ -1,7 +1,6 @@
 'use strict'
 
 const path = require('path')
-const { expect } = require('chai')
 const agent = require('../../packages/dd-trace/test/plugins/agent')
 
 describe('lambda', () => {
