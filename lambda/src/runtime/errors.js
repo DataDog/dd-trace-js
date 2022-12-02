@@ -12,23 +12,9 @@ class ExtendedError extends Error {
   }
 }
 
-class ImportModuleError extends ExtendedError {}
-class HandlerNotFound extends ExtendedError {}
-class MalformedHandlerName extends ExtendedError {}
 class ImpendingTimeout extends ExtendedError {}
 ImpendingTimeout.prototype.name = 'Impending Timeout'
 
-const errorClasses = [
-  ImportModuleError,
-  HandlerNotFound,
-  MalformedHandlerName
-]
-
-errorClasses.forEach((e) => { e.prototype.name = `Runtime.${e.name}` })
-
 module.exports = {
-  ImportModuleError,
-  HandlerNotFound,
-  MalformedHandlerName,
   ImpendingTimeout
 }
