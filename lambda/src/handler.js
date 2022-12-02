@@ -1,25 +1,10 @@
 'use strict'
 
-const { ImpendingTimeout, isError } = require('./runtime/errors')
+const { ImpendingTimeout } = require('./runtime/errors')
 
 const globalTracer = global._ddtrace
 const tracer = globalTracer._tracer
-
-/**
- * Adds error tags to a span given the error.
- *
- * @param {*} span span to add error tags to.
- * @param {*} error
- */
-function addError (span, error) {
-  if (isError(error)) {
-    span.addTags({
-      'error.type': error.name,
-      'error.msg': error.message,
-      'error.stack': error.stack
-    })
-  }
-}
+let __lambdaTimeout
 
 /**
  * Calls `crashFlush` when the remaining time is about to end.
@@ -32,7 +17,8 @@ function checkTimeout (context) {
   if (apmFlushDeadline && apmFlushDeadline <= remainingTimeInMillis) {
     remainingTimeInMillis = apmFlushDeadline
   }
-  setTimeout(() => {
+
+  __lambdaTimeout = setTimeout(() => {
     crashFlush()
   }, remainingTimeInMillis - 50)
 }
@@ -48,8 +34,7 @@ function checkTimeout (context) {
 function crashFlush () {
   const activeSpan = tracer.scope().active()
   const error = new ImpendingTimeout('Datadog detected an impending timeout')
-  addError(activeSpan, error)
-  activeSpan.setTag('error', 1)
+  activeSpan.setTag('error', error)
   tracer._processor.killAll()
   activeSpan.finish()
 }
@@ -65,6 +50,10 @@ exports.datadog = function datadog (lambdaHandler) {
     const patched = lambdaHandler.apply(this, args)
     checkTimeout(context)
 
+    if (patched) {
+      // clear the timeout as soon as a result is returned
+      patched.then((_) => clearTimeout(__lambdaTimeout))
+    }
     return patched
   }
 }
