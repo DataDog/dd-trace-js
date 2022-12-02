@@ -52,8 +52,7 @@ jobs:
       DOCKER_IMAGE_TAG: ${{ github.sha }}
       BUILDX_PLATFORMS: linux/amd64
     steps:
- 
-      - name: Checkout system tests
+       - name: Checkout system tests
         uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f # 2.3.4
         with:
           repository: 'DataDog/system-tests'
