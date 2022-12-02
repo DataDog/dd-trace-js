@@ -15,7 +15,7 @@ export declare interface Tracer extends opentracing.Tracer {
    * @param {SpanOptions} [options] Options for the newly created span.
    * @returns {Span} A new Span object.
    */
-  startSpan(name: string, options?: SpanOptions): Span;
+  startSpan (name: string, options?: SpanOptions): Span;
 
   /**
    * Injects the given SpanContext instance for cross-process propagation
@@ -27,7 +27,7 @@ export declare interface Tracer extends opentracing.Tracer {
    * @param  {string} format The format of the carrier.
    * @param  {any} carrier The carrier object.
    */
-  inject(spanContext: SpanContext | Span, format: string, carrier: any): void;
+  inject (spanContext: SpanContext | Span, format: string, carrier: any): void;
 
   /**
    * Returns a SpanContext instance extracted from `carrier` in the given
@@ -38,31 +38,31 @@ export declare interface Tracer extends opentracing.Tracer {
    *         The extracted SpanContext, or null if no such SpanContext could
    *         be found in `carrier`
    */
-  extract(format: string, carrier: any): SpanContext | null;
+  extract (format: string, carrier: any): SpanContext | null;
 
   /**
    * Initializes the tracer. This should be called before importing other libraries.
    */
-  init(options?: TracerOptions): this;
+  init (options?: TracerOptions): this;
 
   /**
    * Sets the URL for the trace agent. This should only be called _after_
    * init() is called, only in cases where the URL needs to be set after
    * initialization.
    */
-  setUrl(url: string): this;
+  setUrl (url: string): this;
 
   /**
    * Enable and optionally configure a plugin.
    * @param plugin The name of a built-in plugin.
    * @param config Configuration options. Can also be `false` to disable the plugin.
    */
-  use<P extends keyof Plugins>(plugin: P, config?: Plugins[P] | boolean): this;
+  use<P extends keyof Plugins> (plugin: P, config?: Plugins[P] | boolean): this;
 
   /**
    * Returns a reference to the current scope.
    */
-  scope(): Scope;
+  scope (): Scope;
 
   /**
    * Instruments a function by automatically creating a span activated on its
@@ -81,8 +81,8 @@ export declare interface Tracer extends opentracing.Tracer {
    * If the `orphanable` option is set to false, the function will not be traced
    * unless there is already an active span or `childOf` option.
    */
-  trace<T>(name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
-  trace<T>(name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
+  trace<T> (name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
+  trace<T> (name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
 
   /**
    * Wrap a function to automatically create a span activated on its
@@ -98,23 +98,23 @@ export declare interface Tracer extends opentracing.Tracer {
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
    */
-  wrap<T = (...args: any[]) => any>(name: string, fn: T, requiresParent?: boolean): T;
-  wrap<T = (...args: any[]) => any>(name: string, options: TraceOptions & SpanOptions, fn: T): T;
-  wrap<T = (...args: any[]) => any>(name: string, options: (...args: any[]) => TraceOptions & SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any> (name: string, fn: T, requiresParent?: boolean): T;
+  wrap<T = (...args: any[]) => any> (name: string, options: TraceOptions & SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any> (name: string, options: (...args: any[]) => TraceOptions & SpanOptions, fn: T): T;
 
   /**
    * Create and return a string that can be included in the <head> of a
    * document to enable RUM tracing to include it. The resulting string
    * should not be cached.
    */
-  getRumData(): string;
+  getRumData (): string;
 
   /**
    * Links an authenticated user to the current trace.
    * @param {User} user Properties of the authenticated user. Accepts custom fields.
    * @returns {Tracer} The Tracer instance for chaining.
    */
-  setUser(user: User): Tracer;
+  setUser (user: User): Tracer;
 }
 
 export declare interface TraceOptions extends Analyzable {
@@ -144,7 +144,7 @@ export declare interface TraceOptions extends Analyzable {
  * have children.
  */
 export declare interface Span extends opentracing.Span {
-  context(): SpanContext;
+  context (): SpanContext;
 }
 
 /**
@@ -161,17 +161,17 @@ export declare interface SpanContext extends opentracing.SpanContext {
   /**
    * Returns the string representation of the internal trace ID.
    */
-  toTraceId(): string;
+  toTraceId (): string;
 
   /**
    * Returns the string representation of the internal span ID.
    */
-  toSpanId(): string;
+  toSpanId (): string;
 
   /**
    * Returns the string representation used for DBM integration.
    */
-  toTraceparent(): string;
+  toTraceparent (): string;
 }
 
 /**
@@ -329,7 +329,7 @@ export declare interface TracerOptions {
    *  Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces.
    * @default 1000
    */
-   flushMinSpans?: number;
+  flushMinSpans?: number;
 
   /**
    * Whether to enable runtime metrics.
@@ -396,7 +396,7 @@ export declare interface TracerOptions {
     /**
      * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
      */
-    iast?: boolean  | {
+    iast?: boolean | {
       /**
        * Whether to enable IAST.
        * @default false
@@ -516,7 +516,7 @@ export declare interface TracerOptions {
 /**
  * User object that can be passed to `tracer.setUser()`.
  */
- export declare interface User {
+export declare interface User {
   /**
    * Unique identifier of the user.
    * Mandatory.
@@ -588,7 +588,7 @@ export declare interface Scope {
    *
    * @returns {Span} The active span.
    */
-  active(): Span | null;
+  active (): Span | null;
 
   /**
    * Activate a span in the scope of a function.
@@ -597,7 +597,7 @@ export declare interface Scope {
    * @param {Function} fn Function that will have the span activated on its scope.
    * @returns The return value of the provided function.
    */
-  activate<T>(span: Span, fn: ((...args: any[]) => T)): T;
+  activate<T> (span: Span, fn: ((...args: any[]) => T)): T;
 
   /**
    * Binds a target to the provided span, or the active span if omitted.
@@ -606,9 +606,9 @@ export declare interface Scope {
    * @param {Span} [span=scope.active()] The span to activate.
    * @returns The bound target.
    */
-  bind<T extends (...args: any[]) => void>(fn: T, span?: Span | null): T;
-  bind<V, T extends (...args: any[]) => V>(fn: T, span?: Span | null): T;
-  bind<T>(fn: Promise<T>, span?: Span | null): Promise<T>;
+  bind<T extends (...args: any[]) => void> (fn: T, span?: Span | null): T;
+  bind<V, T extends (...args: any[]) => V> (fn: T, span?: Span | null): T;
+  bind<T> (fn: Promise<T>, span?: Span | null): Promise<T>;
   bind(emitter: EventEmitter, span?: Span | null): EventEmitter;
 }
 
@@ -1229,7 +1229,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [mariadb](https://github.com/mariadb-corporation/mariadb-connector-nodejs) module.
    */
-   interface mariadb extends mysql {}
+  interface mariadb extends mysql {}
 
   /**
    * This plugin automatically instruments the
@@ -1253,7 +1253,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [moleculer](https://moleculer.services/) module.
    */
-   interface moleculer extends Moleculer {
+  interface moleculer extends Moleculer {
     /**
      * Configuration for Moleculer clients. Set to false to disable client
      * instrumentation.
@@ -1307,7 +1307,7 @@ declare namespace plugins {
     /**
      * Hooks to run before spans are finished.
      */
-     hooks?: {
+    hooks?: {
       /**
        * Hook to execute just before the request span finishes.
        */
@@ -1336,7 +1336,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [paperplane](https://github.com/articulate/paperplane) module.
    */
-   interface paperplane extends HttpServer {}
+  interface paperplane extends HttpServer {}
 
   /**
    * This plugin automatically instruments the

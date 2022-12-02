@@ -308,7 +308,7 @@ span = tracer.startSpan('test', {
 });
 
 tracer.trace('test', () => {})
-tracer.trace('test', { tags: { foo: 'bar' }}, () => {})
+tracer.trace('test', { tags: { foo: 'bar' } }, () => {})
 tracer.trace('test', { service: 'foo', resource: 'bar', type: 'baz' }, () => {})
 tracer.trace('test', { measured: true }, () => {})
 tracer.trace('test', (span: Span) => {})
