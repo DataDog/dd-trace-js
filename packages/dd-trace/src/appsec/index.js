@@ -46,9 +46,8 @@ function enable (config) {
   isEnabled = true
 }
 
-function incomingHttpStartTranslator (data) {
-  // TODO: get span from datadog-core storage instead
-  const topSpan = web.root(data.req)
+function incomingHttpStartTranslator ({ req, res, abortController }) {
+  const topSpan = web.root(req)
   if (topSpan) {
     topSpan.addTags({
       '_dd.appsec.enabled': 1,

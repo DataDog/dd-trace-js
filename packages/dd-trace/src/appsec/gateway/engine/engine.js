@@ -28,7 +28,7 @@ class SubscriptionManager {
       const list = this.addressToSubscriptions.get(address)
 
       if (list === undefined) {
-        this.addressToSubscriptions.set(address, [ subscription ])
+        this.addressToSubscriptions.set(address, [subscription])
       } else {
         list.push(subscription)
       }
@@ -101,6 +101,10 @@ class Context {
     this.store = new Map()
     this.allAddresses = new Set()
     this.newAddresses = new Set()
+  }
+
+  needsAddress (address) {
+    return
   }
 
   setValue (address, value) {
