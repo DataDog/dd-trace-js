@@ -21,7 +21,11 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
+      - name: Npm pack for injection image
+        run: |
+          npm pack
+
       - uses: ./.github/actions/injection
         with:
             init-image-version: ${GITHUB_SHA}
