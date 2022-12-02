@@ -319,8 +319,6 @@ const web = {
   },
 
   finishAll (context) {
-    const { req, res } = context
-
     for (const beforeEnd of context.beforeEnd) {
       beforeEnd()
     }
