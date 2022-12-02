@@ -30,7 +30,7 @@ jobs:
         with:
             init-image-version: ${GITHUB_SHA}
 
-  injection-tests:
+  lib-injection-tests:
     needs:
       - build-and-publish-init-image
     runs-on: ubuntu-latest

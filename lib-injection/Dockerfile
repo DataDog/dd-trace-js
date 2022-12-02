@@ -1,6 +1,6 @@
 FROM scratch AS nodejs_agent
 COPY . /
-RUN ls /
+
 
 FROM node:16-alpine AS build
 
@@ -12,8 +12,8 @@ RUN addgroup -g 10000 -S datadog \
 
 WORKDIR /operator-build
 COPY --from=nodejs_agent . .
-RUN ls 
 
+COPY . .
 RUN chmod 755 npm_dd_trace.sh
 RUN ./npm_dd_trace.sh
 
