@@ -14,6 +14,7 @@ class RouterPlugin extends WebPlugin {
   constructor (...args) {
     super(...args)
 
+    this._storeStack = []
     this._contexts = new WeakMap()
 
     this.addSub(`apm:${this.constructor.name}:middleware:enter`, ({ req, name, route }) => {
@@ -28,6 +29,7 @@ class RouterPlugin extends WebPlugin {
         context.middleware.push(span)
       }
 
+      this._storeStack.push(storage.getStore())
       this.enter(span)
 
       web.patch(req)
@@ -42,12 +44,16 @@ class RouterPlugin extends WebPlugin {
       context.stack.pop()
     })
 
-    this.addSub(`apm:${this.constructor.name}:middleware:exit`, ({ req }) => {
+    this.addSub(`apm:${this.constructor.name}:middleware:finish`, ({ req }) => {
       const context = this._contexts.get(req)
 
       if (!context || context.middleware.length === 0) return
 
       context.middleware.pop().finish()
+    })
+
+    this.addSub(`apm:${this.constructor.name}:middleware:exit`, ({ req }) => {
+      this.enter(this._storeStack.pop())
     })
 
     this.addSub(`apm:${this.constructor.name}:middleware:error`, ({ req, error }) => {
