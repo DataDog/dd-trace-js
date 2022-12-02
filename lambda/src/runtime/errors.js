@@ -5,18 +5,6 @@
  */
 'use strict'
 
-function isError (obj) {
-  return (
-    obj &&
-    obj.name &&
-    obj.message &&
-    obj.stack &&
-    typeof obj.name === 'string' &&
-    typeof obj.message === 'string' &&
-    typeof obj.stack === 'string'
-  )
-}
-
 class ExtendedError extends Error {
   constructor (reason) {
     super(reason)
@@ -40,7 +28,6 @@ errorClasses.forEach((e) => { e.prototype.name = `Runtime.${e.name}` })
 
 module.exports = {
   ImportModuleError,
-  isError,
   HandlerNotFound,
   MalformedHandlerName,
   ImpendingTimeout
