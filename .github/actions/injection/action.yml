@@ -15,5 +15,5 @@ runs:
         docker buildx create --name lib-injection
         docker buildx use lib-injection
         docker run --rm --privileged multiarch/qemu-user-static --reset -p yes # https://stackoverflow.com/questions/72167570/docker-buildx-nodejs-fail
-        docker buildx build --platform=linux/amd64,linux/arm/v7,linux/arm64/v8 -t ghcr.io/datadog/dd-trace-js/dd-lib-js-init:${{ inputs.init-image-version }} --push k8s/auto-inst
+        docker buildx build --platform=linux/amd64,linux/arm/v7,linux/arm64/v8 -t ghcr.io/datadog/dd-trace-js/dd-lib-js-init:${{ inputs.init-image-version }} --push lib-injection
 

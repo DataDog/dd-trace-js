@@ -8,7 +8,27 @@ on:
     - cron: '0 4 * * *'
 
 jobs:
-  injection-tests-nodejs:
+
+  build-and-publish-init-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+          uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f # 2.3.4
+
+      - name: Log in to the Container registry
+          uses: docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b
+          with:
+            registry: ghcr.io
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - uses: ./.github/actions/injection
+        with:
+            init-image-version: ${GITHUB_SHA}
+
+  injection-tests:
+    needs:
+      - build-and-publish-init-image
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,14 +44,10 @@ jobs:
       WEBLOG_VARIANT: ${{ matrix.weblog-variant }}
       LIBRARY_INJECTION_CONNECTION: ${{ matrix.lib-injection-connection }}
       LIBRARY_INJECTION_ADMISSION_CONTROLLER: ${{ matrix.lib-injection-use-admission-controller }}
-      DOCKER_REGISTRY_IMAGES_PATH: ghcr.io/datadog/system-tests
+      DOCKER_REGISTRY_IMAGES_PATH: ghcr.io/datadog
       DOCKER_IMAGE_TAG: ${{ github.sha }}
       BUILDX_PLATFORMS: linux/amd64
     steps:
-      - name: Checkout nodejs tracer
-        uses: actions/checkout@v3
-        with:
-          path: './dd-trace-js'
  
       - name: Checkout system tests
         uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f # 2.3.4
@@ -58,14 +74,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Copy js tracer
-        run: |
-          cp -R dd-trace-js system-tests/binaries/
-
-      - name: Build and push images
+      - name: Build and push test images
         run: |
           cd system-tests   
-          ./lib-injection/run.sh build-and-push-test-app-image build-and-push-init-image  
+          ./lib-injection/run.sh build-and-push-test-app-image  
           ./lib-injection/build.sh
  
       - name: Run lib injection tests
