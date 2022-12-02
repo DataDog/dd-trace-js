@@ -108,22 +108,19 @@ const registerLambdaHook = () => {
 
   const lambdaStylePath = path.resolve(lambdaTaskRoot, moduleRoot, _module)
   const lambdaFilePath = _getLambdaFilePath(lambdaStylePath)
+  Hook([lambdaFilePath], (moduleExports) => {
+    require('./patch')
 
-  if (fs.existsSync(lambdaFilePath)) { // remove this line by identifying file?
-    Hook([lambdaFilePath], (moduleExports) => {
-      require('./patch')
-
-      for (const { hook } of instrumentations[lambdaFilePath]) {
-        try {
-          moduleExports = hook(moduleExports)
-        } catch (e) {
-          log.error(e)
-        }
+    for (const { hook } of instrumentations[lambdaFilePath]) {
+      try {
+        moduleExports = hook(moduleExports)
+      } catch (e) {
+        log.error(e)
       }
+    }
 
-      return moduleExports
-    })
-  }
+    return moduleExports
+  })
 }
 
 module.exports = {
