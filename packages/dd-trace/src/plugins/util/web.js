@@ -10,7 +10,6 @@ const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
 const BlockList = require('./ip_blocklist')
-const { incomingHttpRequestEnd } = require('../../appsec/gateway/channels')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
 
 const WEB = types.WEB
@@ -328,10 +327,6 @@ const web = {
 
     web.finishMiddleware(context)
 
-    if (incomingHttpRequestEnd.hasSubscribers) {
-      incomingHttpRequestEnd.publish({ req, res })
-    }
-
     web.finishSpan(context)
   },
 
@@ -571,7 +566,7 @@ const privateCIDRs = [
 const privateIPMatcher = new BlockList()
 
 for (const cidr of privateCIDRs) {
-  const [ address, prefix ] = cidr.split('/')
+  const [address, prefix] = cidr.split('/')
 
   privateIPMatcher.addSubnet(address, parseInt(prefix), net.isIPv6(address) ? 'ipv6' : 'ipv4')
 }
