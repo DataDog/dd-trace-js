@@ -103,10 +103,6 @@ class Context {
     this.newAddresses = new Set()
   }
 
-  needsAddress (address) {
-    return
-  }
-
   setValue (address, value) {
     if (this.allAddresses.size >= MAX_CONTEXT_SIZE) return this
 
