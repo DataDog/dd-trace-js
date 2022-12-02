@@ -56,37 +56,12 @@ function _extractModuleNameAndHandlerPath (handler) {
 }
 
 /**
- * Resolve the user's handler function from its module.
- *
- * @param {*} userApp
- * @param {string} handlerPath
- * @returns the handler function if exists, else `undefined`.
- *
- * ```js
- * const userApp = { module: { nested: { handler: () => {} } } }
- * const handlerPath = 'module.nested.handler'
- * _resolveHandler(userApp, handlerPath)
- * // => () => {}
- * ```
+ * Returns the correct path of the file to be patched
+ * when required.
+ * 
+ * @param {*} lambdaStylePath the path comprised of the `LAMBDA_TASK_ROOT`, the root of the module of the Lambda handler, and the module name.
+ * @returns the lambdaStylePath with the appropiate extension for the hook.
  */
-function _resolveHandler (userApp, handlerPath) {
-  return _getNestedProperty(userApp, handlerPath)
-}
-
-/**
- * Given an object with nested properties, return the desired
- * nested property.
- *
- * @param {*} object an object with nested properties.
- * @param {string} nestedProperty the property to return its value.
- * @returns the value of the nested property if exists, else `undefined`.
- */
-const _getNestedProperty = (object, nestedProperty) => {
-  return nestedProperty.split('.').reduce((nested, key) => {
-    return nested && nested[key]
-  }, object)
-}
-
 function _getLambdaFilePath (lambdaStylePath) {
   let lambdaFilePath = lambdaStylePath
   if (fs.existsSync(lambdaStylePath + '.js')) {
@@ -99,6 +74,10 @@ function _getLambdaFilePath (lambdaStylePath) {
   return lambdaFilePath
 }
 
+/**
+ * Register a hook for the Lambda handler to be executed when
+ * the file is required.
+ */
 const registerLambdaHook = () => {
   const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
   const originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
@@ -126,7 +105,6 @@ const registerLambdaHook = () => {
 module.exports = {
   _extractModuleRootAndHandler,
   _extractModuleNameAndHandlerPath,
-  _resolveHandler,
   _getLambdaFilePath,
   registerLambdaHook
 }
