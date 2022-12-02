@@ -11,7 +11,7 @@ runs:
     - name: Build injection image and push to github packages
       shell: bash
       run: |
-        mv dd-trace-*.tgz k8s/auto-inst/dd-trace.tgz
+        mv dd-trace-*.tgz lib-injection/dd-trace.tgz
         docker buildx create --name lib-injection
         docker buildx use lib-injection
         docker run --rm --privileged multiarch/qemu-user-static --reset -p yes # https://stackoverflow.com/questions/72167570/docker-buildx-nodejs-fail
