@@ -87,3 +87,14 @@ jobs:
         run: |
           cd system-tests   
           ./lib-injection/run-lib-injection.sh
+
+      - name: Compress logs
+        if: ${{ always() }}
+        run: tar -czvf artifact.tar.gz $(ls | grep logs)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        if: ${{ always() }}
+        with:
+          name: library-injection_nodejs_${{ matrix.weblog-variant }}_${{ matrix.lib-injection-connection }}_${{ matrix.lib-injection-use-admission-controller }}
+          path: artifact.tar.gz
