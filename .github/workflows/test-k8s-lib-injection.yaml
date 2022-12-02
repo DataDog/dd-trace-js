@@ -85,11 +85,11 @@ jobs:
         run: |
           ./lib-injection/run-lib-injection.sh
 
-      - name: Compress logs
+      - name: Compress lib injection logs
         if: ${{ always() }}
         run: tar -czvf artifact.tar.gz $(ls | grep logs)
 
-      - name: Upload artifact
+      - name: Upload lib injection logs
         uses: actions/upload-artifact@v3
         if: ${{ always() }}
         with:
