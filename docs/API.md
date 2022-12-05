@@ -387,7 +387,7 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 | appsec.wafTimeout           | `DD_APPSEC_WAF_TIMEOUT`                        | `5000`  | Limits the WAF synchronous execution time (in microseconds). |
 | appsec.obfuscatorKeyRegex   | `DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP`   | -       | A regex to redact sensitive data by its key in attack reports. |
 | appsec.obfuscatorValueRegex | `DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP` | -       | A regex to redact sensitive data by its value in attack reports. |
-| dbmPropagationMode           | `DD_DBM_PROPAGATION_MODE`                        | `'disabled'`  | To enable DBM to APM link using tag injection, can be set to 'service' or 'full'. `'service'` will enable the connection between DB and APM services; while `'full'` will enable connection between database spans with database query events. This is currently available for Postgres.|
+| dbmPropagationMode           | `DD_DBM_PROPAGATION_MODE`                        | `'disabled'`  | To enable DBM to APM link using tag injection, can be set to 'service' or 'full'. `'service'` will enable the connection between DB and APM services; while `'full'` will enable connection between database spans with database query events. This is currently available for Postgres and MySQL.|
 
 <h3 id="custom-logging">Custom Logging</h3>
 
