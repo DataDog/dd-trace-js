@@ -8,10 +8,12 @@ class MySQLPlugin extends DatabasePlugin {
 
   start ({ sql, conf: dbConfig }) {
     const service = getServiceName(this.config, dbConfig)
+    const sqlStatement = sql[0].sql ? sql[0].sql : sql[0]
+    const originalStatement = sqlStatement
 
     this.startSpan(`${this.system}.query`, {
       service,
-      resource: sql,
+      resource: originalStatement,
       type: 'sql',
       kind: 'client',
       meta: {
@@ -22,6 +24,11 @@ class MySQLPlugin extends DatabasePlugin {
         'out.port': dbConfig.port
       }
     })
+
+    if (sql[0].sql !== undefined) {
+      const key = 'sql'
+      sql[0][key] = this.injectDbmQuery(sql[0].sql)
+    } else sql[0] = this.injectDbmQuery(sql[0])
   }
 }
 
