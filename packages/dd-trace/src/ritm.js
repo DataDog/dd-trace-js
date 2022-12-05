@@ -74,6 +74,8 @@ function Hook (modules, options, onrequire) {
       filename,
       request
     }
+    // If it's already patched, just return it as-is.
+    if (patched) return origRequire.apply(this, arguments)
 
     if (moduleLoadStartChannel.hasSubscribers) {
       moduleLoadStartChannel.publish(payload)
@@ -83,9 +85,6 @@ function Hook (modules, options, onrequire) {
     if (moduleLoadEndChannel.hasSubscribers) {
       moduleLoadEndChannel.publish(payload)
     }
-
-    // If it's already patched, just return it as-is.
-    if (patched) return exports
 
     // The module has already been loaded,
     // so the patching mark can be cleaned up.
