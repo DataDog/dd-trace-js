@@ -67,15 +67,17 @@ function Hook (modules, options, onrequire) {
     // Check if this module has a patcher in-progress already.
     // Otherwise, mark this module as patching in-progress.
     const patched = patching[filename]
-    if (!patched) {
+    if (patched) {
+      // If it's already patched, just return it as-is.
+      return origRequire.apply(this, arguments)
+    } else {
       patching[filename] = true
     }
+
     const payload = {
       filename,
       request
     }
-    // If it's already patched, just return it as-is.
-    if (patched) return origRequire.apply(this, arguments)
 
     if (moduleLoadStartChannel.hasSubscribers) {
       moduleLoadStartChannel.publish(payload)
