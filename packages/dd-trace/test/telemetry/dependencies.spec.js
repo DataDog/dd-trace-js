@@ -96,27 +96,16 @@ describe('dependencies', () => {
       '../index.js',
       `..${path.sep}index.js`,
       './index.js', `.${path.sep}index.js`,
-      './index.js', `.${path.sep}index.js`,
       path.join(basepathWithoutNodeModules, 'index.js'),
       '/some/absolute/path/index.js']
     requests.forEach(request => {
       it(`should not call to sendData with file paths request: ${request}`, () => {
-        // const request = '../index.js'
         requirePackageJson.returns({ version: '1.0.0' })
         const filename = path.join(basepathWithoutNodeModules, 'node_modules', 'custom-module', 'index.js')
         dependencies.start(config, application, host)
         moduleLoadStartChannel.publish({ request, filename })
         expect(sendData).not.to.have.been.called
       })
-    })
-
-    it('should not call to sendData with relative parent  request with system sep', () => {
-      const request = '..' + path.sep + 'index.js'
-      requirePackageJson.returns({ version: '1.0.0' })
-      const filename = path.join(basepathWithoutNodeModules, 'node_modules', 'custom-module', 'index.js')
-      dependencies.start(config, application, host)
-      moduleLoadStartChannel.publish({ request, filename })
-      expect(sendData).not.to.have.been.called
     })
 
     it('should call sendData', () => {

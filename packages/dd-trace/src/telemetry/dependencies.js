@@ -71,7 +71,17 @@ function start (_config, _application, _host) {
 }
 
 function isDependency (filename, request) {
-  return request.indexOf(`..${path.sep}`) !== 0 && request.indexOf(`.${path.sep}`) !== 0 && request.indexOf(path.sep) !== 0
+  const result = isDependencyWithSeparator(filename, request, '/')
+  if (result && path.sep !== '/') {
+    return isDependencyWithSeparator(filename, request, path.sep)
+  }
+  return result
+}
+function isDependencyWithSeparator (filename, request, sep) {
+  return request.indexOf(`..${sep}`) !== 0 &&
+    request.indexOf(`.${sep}`) !== 0 &&
+    request.indexOf(sep) !== 0 &&
+    request.indexOf(`:${sep}`) !== 1
 }
 
 function stop () {
