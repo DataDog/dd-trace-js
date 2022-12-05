@@ -37,6 +37,8 @@ describe('AppSec Index', () => {
 
     sinon.stub(fs, 'readFileSync').returns('{"rules": [{"a": 1}]}')
     sinon.stub(RuleManager, 'applyRules')
+    sinon.stub(remoteConfig, 'enableAsmData')
+    sinon.stub(remoteConfig, 'disableAsmData')
     sinon.stub(Reporter, 'setRateLimit')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
@@ -50,8 +52,6 @@ describe('AppSec Index', () => {
 
   describe('enable', () => {
     it('should enable AppSec only once', () => {
-      sinon.spy(remoteConfig, 'enableAsmData')
-
       AppSec.enable(config)
       AppSec.enable(config)
 
@@ -82,6 +82,7 @@ describe('AppSec Index', () => {
       expect(log.error).to.have.been.calledTwice
       expect(log.error.firstCall).to.have.been.calledWithExactly('Unable to start AppSec')
       expect(log.error.secondCall).to.have.been.calledWithExactly(err)
+      expect(remoteConfig.disableAsmData).to.have.been.calledOnce
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
       expect(Gateway.manager.addresses).to.be.empty
@@ -97,7 +98,6 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
 
       sinon.stub(RuleManager, 'clearAllRules')
-      sinon.spy(remoteConfig, 'disableAsmData')
       sinon.spy(incomingHttpRequestStart, 'unsubscribe')
       sinon.spy(incomingHttpRequestEnd, 'unsubscribe')
 
