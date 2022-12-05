@@ -71,7 +71,7 @@ function start (_config, _application, _host) {
 }
 
 function isDependency (filename, request) {
-  return request.indexOf(`.${path.sep}`) !== 0 && request.indexOf(path.sep) !== 0
+  return request.indexOf(`..${path.sep}`) !== 0 && request.indexOf(`.${path.sep}`) !== 0 && request.indexOf(path.sep) !== 0
 }
 
 function stop () {
