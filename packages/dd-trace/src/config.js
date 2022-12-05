@@ -255,12 +255,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = coalesce(
       maybeFile(appsec.blockedTemplateHtml),
       maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML),
-      path.join(__dirname, 'appsec', 'templates', 'blocked.html')
+      fs.readFileSync(path.join(__dirname, 'appsec', 'templates', 'blocked.html'), 'utf8')
     )
     const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = coalesce(
       maybeFile(appsec.blockedTemplateJson),
       maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON),
-      path.join(__dirname, 'appsec', 'templates', 'blocked.json')
+      fs.readFileSync(path.join(__dirname, 'appsec', 'templates', 'blocked.json'), 'utf8')
     )
 
     const iastOptions = options.experimental && options.experimental.iast
