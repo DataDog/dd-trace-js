@@ -10,6 +10,8 @@ const Gateway = require('./gateway/engine')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
+const { extractIp } = require('./ip_extractor')
+const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 
 let isEnabled = false
 let config
@@ -50,12 +52,15 @@ function enable (_config) {
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
   const topSpan = web.root(req)
-  if (topSpan) {
-    topSpan.addTags({
-      '_dd.appsec.enabled': 1,
-      '_dd.runtime_family': 'nodejs'
-    })
-  }
+  if (!topSpan) return
+
+  const clientIp = extractIp(config, req)
+
+  topSpan.addTags({
+    '_dd.appsec.enabled': 1,
+    '_dd.runtime_family': 'nodejs',
+    [HTTP_CLIENT_IP]: clientIp
+  })
 }
 
 function incomingHttpEndTranslator (data) {
