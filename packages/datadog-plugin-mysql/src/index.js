@@ -24,11 +24,12 @@ class MySQLPlugin extends DatabasePlugin {
         'out.port': dbConfig.port
       }
     })
-
-    if (sql[0].sql !== undefined) {
-      const key = 'sql'
-      sql[0][key] = this.injectDbmQuery(sql[0].sql)
-    } else sql[0] = this.injectDbmQuery(sql[0])
+    if (this.config.dbmPropagationMode !== 'disabled') {
+      if (sql[0].sql !== undefined) {
+        const key = 'sql'
+        sql[0][key] = this.injectDbmQuery(sql[0].sql)
+      } else sql[0] = this.injectDbmQuery(sql[0])
+    }
   }
 }
 
