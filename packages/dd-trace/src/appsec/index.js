@@ -61,16 +61,15 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     '_dd.runtime_family': 'nodejs',
     [HTTP_CLIENT_IP]: clientIp
   })
+
+  const store = Gateway.startContext()
+
+  store.set('req', req)
+  store.set('res', res)
 }
 
 function incomingHttpEndTranslator (data) {
-  const store = Gateway.startContext()
-
-  store.set('req', data.req)
-  store.set('res', data.res)
-
-  const context = store.get('context')
-
+  const context = Gateway.getContext()
   if (!context) return
 
   const requestHeaders = Object.assign({}, data.req.headers)
