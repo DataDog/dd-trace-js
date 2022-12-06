@@ -32,7 +32,8 @@ describe('Plugin', () => {
     reporters: [],
     silent: true,
     cache: false,
-    maxWorkers: '50%'
+    maxWorkers: '50%',
+    testEnvironment: 'node'
   }
 
   withVersions('jest', ['jest-jasmine2'], (version) => {
@@ -57,7 +58,7 @@ describe('Plugin', () => {
       })
     })
     describe('jest with jasmine', function () {
-      this.timeout(60000)
+      this.timeout(15000)
       it('instruments async, sync and integration tests', function (done) {
         const tests = [
           {
@@ -104,18 +105,18 @@ describe('Plugin', () => {
               expect(testSpan.meta[ERROR_MESSAGE]).to.include(error)
             }
             // TODO: add assertions on http spans when stealthy-require issue is resolved
-            // if (name === 'jest-test-suite can do integration http') {
-            //   const httpSpan = trace[0].find(span => span.name === 'http.request')
-            //   expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-            //   expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
-            //   expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
-            // }
+            if (name === 'jest-test-suite can do integration http') {
+              const httpSpan = trace[0].find(span => span.name === 'http.request')
+              expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+              expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
+              expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
+            }
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('jest.test')
             expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: 30000, spanResourceMatch: new RegExp(`${name}$`) })
+          }, { timeoutMs: 8000, spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -162,7 +163,7 @@ describe('Plugin', () => {
               `packages/datadog-plugin-jest/test/jest-hook-failure.js.${name}`
             )
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: 30000, spanResourceMatch: new RegExp(`${name}$`) })
+          }, { timeoutMs: 8000, spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -200,7 +201,7 @@ describe('Plugin', () => {
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
               [COMPONENT]: 'jest'
             })
-          }, { timeoutMs: 30000, spanResourceMatch: new RegExp(`${name}$`) })
+          }, { timeoutMs: 8000, spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
