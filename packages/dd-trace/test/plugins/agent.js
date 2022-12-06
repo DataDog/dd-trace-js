@@ -17,6 +17,13 @@ let listener = null
 let tracer = null
 let plugins = []
 
+function isMatchingTrace (spans, spanResourceMatch) {
+  if (!spanResourceMatch) {
+    return true
+  }
+  return !!spans.find(span => spanResourceMatch.test(span.resource))
+}
+
 module.exports = {
   // Load the plugin on the tracer with an optional config and start a mock agent.
   async load (pluginName, config, tracerConfig = {}) {
@@ -35,13 +42,25 @@ module.exports = {
 
     agent.put('/v0.4/traces', (req, res) => {
       res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
-      handlers.forEach(handler => handler(req.body))
+      handlers.forEach(({ handler, spanResourceMatch }) => {
+        const trace = req.body
+        const spans = trace.flatMap(span => span)
+        if (isMatchingTrace(spans, spanResourceMatch)) {
+          handler(trace)
+        }
+      })
     })
 
     // CI Visibility Agentless intake
     agent.post('/api/v2/citestcycle', (req, res) => {
       res.status(200).send('OK')
-      handlers.forEach(handler => handler(req.body))
+      handlers.forEach(({ handler, spanResourceMatch }) => {
+        const { events } = req.body
+        const spans = events.map(event => event.content)
+        if (isMatchingTrace(spans, spanResourceMatch)) {
+          handler(req.body)
+        }
+      })
     })
 
     const port = await getPort()
@@ -96,7 +115,7 @@ module.exports = {
 
   // Register handler to be executed each agent call, multiple times
   subscribe (handler) {
-    handlers.add(handler)
+    handlers.add({ handler })
   },
 
   // Remove a handler
@@ -132,11 +151,12 @@ module.exports = {
     }, timeoutMs)
 
     let error
+    const handlerPayload = { handler, spanResourceMatch: options && options.spanResourceMatch }
 
-    const handler = function () {
+    function handler () {
       try {
         callback.apply(null, arguments)
-        handlers.delete(handler)
+        handlers.delete(handlerPayload)
         clearTimeout(timeout)
         deferred.resolve()
       } catch (e) {
@@ -145,7 +165,7 @@ module.exports = {
     }
 
     handler.promise = promise
-    handlers.add(handler)
+    handlers.add(handlerPayload)
 
     return promise
   },
