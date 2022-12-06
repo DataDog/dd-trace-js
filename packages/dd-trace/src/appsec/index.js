@@ -12,16 +12,17 @@ const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
 
 let isEnabled = false
+let config
 
-function enable (config) {
+function enable (_config) {
   if (isEnabled) return
 
   try {
-    let rules = fs.readFileSync(config.appsec.rules || path.join(__dirname, 'recommended.json'))
+    let rules = fs.readFileSync(_config.appsec.rules || path.join(__dirname, 'recommended.json'))
     rules = JSON.parse(rules)
 
-    RuleManager.applyRules(rules, config.appsec)
-    remoteConfig.enableAsmData(config.appsec)
+    RuleManager.applyRules(rules, _config.appsec)
+    remoteConfig.enableAsmData(_config.appsec)
   } catch (err) {
     log.error('Unable to start AppSec')
     log.error(err)
@@ -32,7 +33,7 @@ function enable (config) {
     return
   }
 
-  Reporter.setRateLimit(config.appsec.rateLimit)
+  Reporter.setRateLimit(_config.appsec.rateLimit)
 
   incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
   incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
@@ -44,6 +45,7 @@ function enable (config) {
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
 
   isEnabled = true
+  config = _config
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
