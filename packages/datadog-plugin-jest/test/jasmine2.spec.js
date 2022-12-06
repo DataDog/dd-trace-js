@@ -115,7 +115,7 @@ describe('Plugin', () => {
             expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: 30000 })
+          }, { timeoutMs: 30000, spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -162,7 +162,7 @@ describe('Plugin', () => {
               `packages/datadog-plugin-jest/test/jest-hook-failure.js.${name}`
             )
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: 30000 })
+          }, { timeoutMs: 30000, spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -200,7 +200,7 @@ describe('Plugin', () => {
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
               [COMPONENT]: 'jest'
             })
-          }, { timeoutMs: 30000 })
+          }, { timeoutMs: 30000, spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
