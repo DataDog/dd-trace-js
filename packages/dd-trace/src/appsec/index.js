@@ -12,6 +12,7 @@ const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
 const { extractIp } = require('./ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
+const { block } = require('./blocking')
 
 let isEnabled = false
 let config
@@ -66,6 +67,23 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
 
   store.set('req', req)
   store.set('res', res)
+
+  const context = store.get('context')
+
+  if (clientIp) {
+    const results = Gateway.propagate({
+      [addresses.HTTP_CLIENT_IP]: clientIp
+    }, context)
+
+    if (!results) return
+
+    for (const entry of results) {
+      if (entry && entry.includes('block')) {
+        block(config, req, res, topSpan, abortController)
+        break
+      }
+    }
+  }
 }
 
 function incomingHttpEndTranslator (data) {
