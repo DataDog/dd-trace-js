@@ -139,6 +139,7 @@ function incomingHttpEndTranslator (data) {
 
 function disable () {
   isEnabled = false
+  config = null
 
   RuleManager.clearAllRules()
   remoteConfig.disableAsmData()
