@@ -18,6 +18,12 @@ global.proxyquire = proxyquire
 global.withVersions = withVersions
 global.withExports = withExports
 
+if (typeof global.describe.skip !== 'function') {
+  global.describe.skip = function (name, fn, opts = {}) {
+    return global.describe(name, fn, { skip: true, ...opts })
+  }
+}
+
 process.env.DD_TRACE_TELEMETRY_ENABLED = 'false'
 
 function loadInst (plugin) {
