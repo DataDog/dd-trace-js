@@ -138,7 +138,7 @@ describe('Plugin', () => {
             )
             expect(testSpan.meta[LIBRARY_VERSION]).to.equal(ddTraceVersion)
             expect(testSpan.meta[COMPONENT]).to.equal('mocha')
-          })
+          }, { spanResourceMatch: new RegExp(`${testName}$`) })
         })
         Promise.all(assertionPromises)
           .then(() => done())
@@ -201,7 +201,7 @@ describe('Plugin', () => {
             expect(testSpan.meta[TEST_NAME]).to.equal(testName)
             expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
             expect(testSpan.meta[COMPONENT]).to.equal('mocha')
-          })
+          }, { spanResourceMatch: new RegExp(`${testName}$`) })
         })
         Promise.all(assertionPromises)
           .then(() => done())
@@ -358,7 +358,7 @@ describe('Plugin', () => {
             expect(testSpan.meta[TEST_NAME]).to.equal(name)
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
             expect(testSpan.meta[COMPONENT]).to.equal('mocha')
-          })
+          }, { spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises)
@@ -414,7 +414,7 @@ describe('Plugin', () => {
               expect(testSpan.meta[ERROR_TYPE]).to.equal('Error')
               expect(testSpan.meta[ERROR_STACK]).not.to.be.undefined
             }
-          })
+          }, { spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises)
@@ -492,7 +492,7 @@ describe('Plugin', () => {
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
             expect(testSpan.meta[TEST_NAME]).to.equal(testName)
             expect(testSpan.meta[COMPONENT]).to.equal('mocha')
-          })
+          }, { spanResourceMatch: new RegExp(`${testName}$`) })
         })
 
         Promise.all(assertionPromises)
