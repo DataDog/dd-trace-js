@@ -153,20 +153,11 @@ describe('plugins/util/web', () => {
         })
       })
 
-      it('should set the parent from the active context if it is an aws.lambda span', () => {
+      it('should set the parent from the active context if any', () => {
         tracer.trace('aws.lambda', parentSpan => {
           web.instrument(tracer, config, req, res, 'test.request', span => {
             expect(span.context()._traceId.toString(10)).to.equal(parentSpan.context()._traceId.toString(10))
             expect(span.context()._parentId.toString(10)).to.equal(parentSpan.context()._spanId.toString(10))
-          })
-        })
-      })
-
-      it('should not set the parent from the active context only it is not an aws.lambda span', () => {
-        tracer.trace('other', parentSpan => {
-          web.instrument(tracer, config, req, res, 'test.request', span => {
-            expect(span.context()._traceId.toString(10)).to.not.equal(parentSpan.context()._traceId.toString(10))
-            expect(span.context()._parentId).to.be.null
           })
         })
       })
