@@ -92,8 +92,10 @@ function Hook (modules, options, onrequire) {
       if (!hooks) return exports // abort if module name isn't on whitelist
       name = filename
     } else {
-      const inLambdaFunction = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
-      const stat = inLambdaFunction ? { name: filename } : parse(filename)
+      const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+      const hasLambdaHandler = process.env.DD_LAMBDA_HANDLER !== undefined
+      // verify that environment is AWS Lambda and has the handler set
+      const stat = inAWSLambda && hasLambdaHandler ? { name: filename } : parse(filename)
       if (!stat) return exports // abort if filename could not be parsed
       name = stat.name
       basedir = stat.basedir
