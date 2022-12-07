@@ -10,9 +10,15 @@
 const fs = require('fs')
 const path = require('path')
 
+const log = require('../../../packages/dd-trace/src/log')
 const Hook = require('../../../packages/datadog-instrumentations/src/helpers/hook')
 const instrumentations = require('../../../packages/datadog-instrumentations/src/helpers/instrumentations')
-const log = require('../../../packages/dd-trace/src/log')
+const {
+  filename,
+  getVersion,
+  matchVersion,
+  pathSepExpr
+} = require('../../../packages/datadog-instrumentations/src/helpers/register')
 
 /**
  * Breaks the full handler string into two pieces: the module root
@@ -83,24 +89,50 @@ const registerLambdaHook = () => {
   const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
   const originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
 
-  const [moduleRoot, moduleAndHandler] = _extractModuleRootAndHandler(originalLambdaHandler)
-  const [_module] = _extractModuleNameAndHandlerPath(moduleAndHandler)
+  if (originalLambdaHandler !== undefined) {
+    const [moduleRoot, moduleAndHandler] = _extractModuleRootAndHandler(originalLambdaHandler)
+    const [_module] = _extractModuleNameAndHandlerPath(moduleAndHandler)
 
-  const lambdaStylePath = path.resolve(lambdaTaskRoot, moduleRoot, _module)
-  const lambdaFilePath = _getLambdaFilePath(lambdaStylePath)
-  Hook([lambdaFilePath], (moduleExports) => {
-    require('./patch')
+    const lambdaStylePath = path.resolve(lambdaTaskRoot, moduleRoot, _module)
+    const lambdaFilePath = _getLambdaFilePath(lambdaStylePath)
 
-    for (const { hook } of instrumentations[lambdaFilePath]) {
-      try {
-        moduleExports = hook(moduleExports)
-      } catch (e) {
-        log.error(e)
+    Hook([lambdaFilePath], (moduleExports) => {
+      require('./patch')
+
+      for (const { hook } of instrumentations[lambdaFilePath]) {
+        try {
+          moduleExports = hook(moduleExports)
+        } catch (e) {
+          log.error(e)
+        }
       }
-    }
 
-    return moduleExports
-  })
+      return moduleExports
+    })
+  } else {
+    const moduleToPatch = 'datadog-lambda-js'
+    Hook([moduleToPatch], (moduleExports, moduleName, moduleBaseDir) => {
+      moduleName = moduleName.replace(pathSepExpr, '/')
+
+      require('./patch')
+
+      for (const { name, file, versions, hook } of instrumentations[moduleToPatch]) {
+        const fullFilename = filename(name, file)
+        if (moduleName === fullFilename) {
+          const version = getVersion(moduleBaseDir)
+          if (matchVersion(version, versions)) {
+            try {
+              moduleExports = hook(moduleExports)
+            } catch (e) {
+              log.error(e)
+            }
+          }
+        }
+      }
+
+      return moduleExports
+    })
+  }
 }
 
 module.exports = {
