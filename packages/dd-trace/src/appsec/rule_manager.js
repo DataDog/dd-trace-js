@@ -4,6 +4,7 @@ const callbacks = require('./callbacks')
 const Gateway = require('./gateway/engine')
 
 const appliedCallbacks = new Map()
+const appliedAsmData = new Map()
 
 function applyRules (rules, config) {
   if (appliedCallbacks.has(rules)) return
@@ -14,10 +15,42 @@ function applyRules (rules, config) {
   appliedCallbacks.set(rules, callback)
 }
 
-function updateRuleData (ruleData) {
-  for (const callback of appliedCallbacks.values()) {
-    callback.updateRuleData(ruleData)
+function updateAsmData (action, asmData, asmDataId) {
+  if (action === 'unapply') {
+    appliedAsmData.delete(asmDataId)
+  } else {
+    appliedAsmData.set(asmDataId, asmData)
   }
+
+  const mergedRuleData = mergeRuleData(appliedAsmData.values())
+  for (const callback of appliedCallbacks.values()) {
+    callback.updateRuleData(mergedRuleData)
+  }
+}
+
+function mergeRuleData (asmDataValues) {
+  const mergedRulesData = new Map()
+  for (const asmData of asmDataValues) {
+    if (!asmData.rules_data) continue
+    for (const rulesData of asmData.rules_data) {
+      const key = `${rulesData.id}+${rulesData.type}`
+      if (mergedRulesData.has(key)) {
+        const existingRulesData = mergedRulesData.get(key)
+        rulesData.data = rulesData.data.reduce((existingEntries, rulesDataEntry) => {
+          const existingEntry = existingEntries.find((entry) => entry.value === rulesDataEntry.value)
+          if (existingEntry && !('expiration' in existingEntry)) return existingEntries
+          if ('expiration' in rulesDataEntry && rulesDataEntry.expiration > existingEntry.expiration) {
+            existingEntry.expiration = rulesDataEntry.expiration
+          } else {
+            existingEntries.push(rulesDataEntry)
+          }
+          return existingEntries
+        }, existingRulesData.data)
+      }
+      mergedRulesData.set(key, rulesData)
+    }
+  }
+  return [...mergedRulesData.values()]
 }
 
 function clearAllRules () {
@@ -28,10 +61,11 @@ function clearAllRules () {
 
     appliedCallbacks.delete(key)
   }
+  appliedAsmData.clear()
 }
 
 module.exports = {
   applyRules,
   clearAllRules,
-  updateRuleData
+  updateAsmData
 }

@@ -40,8 +40,8 @@ function disableAsmData () {
   rc.off('ASM_DATA', _asmDataListener)
 }
 
-function _asmDataListener (_, ruleData) {
-  RuleManager.updateRuleData(ruleData)
+function _asmDataListener (action, ruleData, ruleId) {
+  RuleManager.updateAsmData(action, ruleData, ruleId)
 }
 
 module.exports = {

@@ -1,11 +1,10 @@
 'use strict'
 
-const { applyRules, clearAllRules, updateRuleData } = require('../../src/appsec/rule_manager')
+const { applyRules, clearAllRules, updateAsmData } = require('../../src/appsec/rule_manager')
 const callbacks = require('../../src/appsec/callbacks')
 const Gateway = require('../../src/appsec/gateway/engine')
 
 const rules = [{ a: 'thatsarule' }, { b: 'thatsanotherone' }]
-const ruleData = [{ x: 'ruleData' }]
 
 describe('AppSec Rule Manager', () => {
   let FakeDDWAF
@@ -58,12 +57,166 @@ describe('AppSec Rule Manager', () => {
     })
   })
 
-  describe('updateRuleData', () => {
-    it('should call updateRuleData on all applied rules', () => {
-      applyRules(rules)
-      updateRuleData(ruleData)
+  describe('updateAsmData', () => {
+    it('should call updateAsmData on all applied rules', () => {
+      const rulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc' }
+        ]
+      }]
 
-      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledOnceWithExactly(ruleData)
+      applyRules(rules)
+      updateAsmData('apply', { rules_data: rulesData }, '1')
+
+      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledOnceWithExactly(rulesData)
+    })
+
+    it('should merge rules data with same dataId and no expiration', () => {
+      const oneRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc' }
+        ]
+      }]
+
+      const anotherRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'def' }
+        ]
+      }]
+
+      const expectedMergedRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc' },
+          { value: 'def' }
+        ]
+      }]
+
+      applyRules(rules)
+      updateAsmData('apply', { rules_data: oneRulesData }, 'id1')
+      updateAsmData('apply', { rules_data: anotherRulesData }, 'id2')
+
+      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledTwice
+      expect(FakeDDWAF.prototype.updateRuleData.lastCall.args[0]).to.deep.equal(expectedMergedRulesData)
+    })
+
+    it('should merge rules data with different dataId and no expiration', () => {
+      const oneRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc' }
+        ]
+      }]
+
+      const anotherRulesData = [{
+        id: 'dataB',
+        type: 'dataType',
+        data: [
+          { value: 'def' }
+        ]
+      }]
+
+      const expectedMergedRulesData = [
+        {
+          id: 'dataA',
+          type: 'dataType',
+          data: [
+            { value: 'abc' }
+          ]
+        },
+        {
+          id: 'dataB',
+          type: 'dataType',
+          data: [
+            { value: 'def' }
+          ]
+        }
+      ]
+
+      applyRules(rules)
+      updateAsmData('apply', { rules_data: oneRulesData }, 'id1')
+      updateAsmData('apply', { rules_data: anotherRulesData }, 'id2')
+
+      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledTwice
+      expect(FakeDDWAF.prototype.updateRuleData.lastCall.args[0]).to.deep.equal(expectedMergedRulesData)
+    })
+
+    it('should merge rules data with different expiration', () => {
+      const oneRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc', expiration: 100 }
+        ]
+      }]
+
+      const anotherRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc', expiration: 200 }
+        ]
+      }]
+
+      const expectedMergedRulesData = [
+        {
+          id: 'dataA',
+          type: 'dataType',
+          data: [
+            { value: 'abc', expiration: 200 }
+          ]
+        }
+      ]
+
+      applyRules(rules)
+      updateAsmData('apply', { rules_data: oneRulesData }, 'id1')
+      updateAsmData('apply', { rules_data: anotherRulesData }, 'id2')
+
+      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledTwice
+      expect(FakeDDWAF.prototype.updateRuleData.lastCall.args[0]).to.deep.equal(expectedMergedRulesData)
+    })
+
+    it('should merge rules data with and without expiration', () => {
+      const oneRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc' }
+        ]
+      }]
+
+      const anotherRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc', expiration: 200 }
+        ]
+      }]
+
+      const expectedMergedRulesData = [
+        {
+          id: 'dataA',
+          type: 'dataType',
+          data: [
+            { value: 'abc' }
+          ]
+        }
+      ]
+
+      applyRules(rules)
+      updateAsmData('apply', { rules_data: oneRulesData }, 'id1')
+      updateAsmData('apply', { rules_data: anotherRulesData }, 'id2')
+
+      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledTwice
+      expect(FakeDDWAF.prototype.updateRuleData.lastCall).calledWithExactly(expectedMergedRulesData)
     })
   })
 })
