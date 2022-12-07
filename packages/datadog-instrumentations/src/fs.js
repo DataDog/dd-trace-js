@@ -11,8 +11,9 @@ const shimmer = require('../../datadog-shimmer')
 const startChannel = channel('apm:fs:operation:start')
 const finishChannel = channel('apm:fs:operation:finish')
 const errorChannel = channel('apm:fs:operation:error')
+const ddFhSym = Symbol('ddFileHandle')
+let kHandle, kDirReadPromisified, kDirClosePromisified
 
-// TODO: unwatchFile, watch, watchFile
 const paramsByMethod = {
   access: ['path', 'mode'],
   appendFile: ['path', 'data', 'options'],
@@ -57,6 +58,34 @@ const paramsByMethod = {
   writev: ['fd']
 }
 
+const watchMethods = {
+  unwatchFile: ['path', 'listener'],
+  watch: ['path', 'options', 'listener'],
+  watchFile: ['path', 'options', 'listener']
+}
+
+const paramsByFileHandleMethods = {
+  appendFile: ['data', 'options'],
+  chmod: ['mode'],
+  chown: ['uid', 'gid'],
+  close: [],
+  createReadStream: ['options'],
+  createWriteStream: ['options'],
+  datasync: [],
+  read: ['buffer', 'offset', 'length', 'position'],
+  readableWebStream: [],
+  readFile: ['options'],
+  readLines: ['options'],
+  readv: ['buffers', 'position'],
+  stat: ['options'],
+  sync: [],
+  truncate: ['len'],
+  utimes: ['atime', 'mtime'],
+  write: ['buffer', 'offset', 'length', 'position'],
+  writeFile: ['data', 'options'],
+  writev: ['buffers', 'position']
+}
+
 addHook({ name: 'fs' }, fs => {
   const asyncMethods = Object.keys(paramsByMethod)
   const syncMethods = asyncMethods.map(name => `${name}Sync`)
@@ -71,19 +100,84 @@ addHook({ name: 'fs' }, fs => {
 
   wrap(fs, 'createReadStream', createWrapCreateStream())
   wrap(fs, 'createWriteStream', createWrapCreateStream())
+  if (fs.Dir) {
+    wrap(fs.Dir.prototype, 'close', createWrapFunction('dir.'))
+    wrap(fs.Dir.prototype, 'closeSync', createWrapFunction('dir.'))
+    wrap(fs.Dir.prototype, 'read', createWrapFunction('dir.'))
+    wrap(fs.Dir.prototype, 'readSync', createWrapFunction('dir.'))
+    wrap(fs.Dir.prototype, Symbol.asyncIterator, createWrapDirAsyncIterator())
+  }
 
-  wrap(fs.Dir.prototype, 'close', createWrapFunction('dir.'))
-  wrap(fs.Dir.prototype, 'closeSync', createWrapFunction('dir.'))
-  wrap(fs.Dir.prototype, 'read', createWrapFunction('dir.'))
-  wrap(fs.Dir.prototype, 'readSync', createWrapFunction('dir.'))
-  // shimmer.wrap(fs.Dir.prototype, Symbol.asyncIterator, createWrapDirAsyncIterator(config, tracer, this))
+  wrap(fs, 'unwatchFile', creaetWatchWrapFunction())
+  wrap(fs, 'watch', creaetWatchWrapFunction())
+  wrap(fs, 'watchFile', creaetWatchWrapFunction())
 
-  // shimmer.wrap(fs, 'watch', wrapWatch)
-  // shimmer.wrap(fs, 'watchFile', wrapWatch)
-  // shimmer.wrap(fs, 'unwatchFile', wrapWatch)
-
+  wrapFileHandle(fs)
   return fs
 })
+
+async function wrapFileHandle (fs) {
+  const fileHandlePrototype = await getFileHandlePrototype(fs)
+  const desc = Reflect.getOwnPropertyDescriptor(fileHandlePrototype, kHandle)
+  if (!desc || !desc.get) {
+    Reflect.defineProperty(fileHandlePrototype, kHandle, {
+      get () {
+        return this[ddFhSym]
+      },
+      set (h) {
+        this[ddFhSym] = h
+        wrap(this, 'close', createWrapFunction('filehandle.'))
+      },
+      configurable: true
+    })
+  }
+  for (const name of Reflect.ownKeys(fileHandlePrototype)) {
+    if (typeof name !== 'string' || name === 'constructor' || name === 'fd' || name === 'getAsyncId') {
+      continue
+    }
+    wrap(fileHandlePrototype, name, createWrapFunction('filehandle.'))
+  }
+}
+
+async function getFileHandlePrototype (fs) {
+  const fh = await fs.promises.open(__filename, 'r')
+  if (!kHandle) {
+    kHandle = Reflect.ownKeys(fh).find(key => typeof key === 'symbol' && key.toString().includes('kHandle'))
+  }
+  fh.close()
+
+  return Object.getPrototypeOf(fh)
+}
+
+function getSymbolName (sym) {
+  return sym.description || sym.toString()
+}
+function initDirAsyncIteratorProperties (iterator) {
+  const keys = Reflect.ownKeys(iterator)
+  for (const key of keys) {
+    if (kDirReadPromisified && kDirClosePromisified) break
+    if (typeof key !== 'symbol') continue
+    if (!kDirReadPromisified && getSymbolName(key).includes('kDirReadPromisified')) {
+      kDirReadPromisified = key
+    }
+    if (!kDirClosePromisified && getSymbolName(key).includes('kDirClosePromisified')) {
+      kDirClosePromisified = key
+    }
+  }
+}
+
+function createWrapDirAsyncIterator () {
+  return function wrapDirAsyncIterator (asyncIterator) {
+    return function wrappedAsyncIterator () {
+      if (!kDirReadPromisified || !kDirClosePromisified) {
+        initDirAsyncIteratorProperties(this)
+      }
+      wrap(this, kDirReadPromisified, createWrapFunction('dir.', 'read'))
+      wrap(this, kDirClosePromisified, createWrapFunction('dir.', 'close'))
+      return asyncIterator.apply(this, arguments)
+    }
+  }
+}
 
 function createWrapCreateStream () {
   return function wrapCreateStream (original) {
@@ -131,7 +225,38 @@ function createWrapCreateStream () {
   }
 }
 
-// TODO: equivalent of datadog:fs:access
+function getMethodParamsRelationByPrefix (prefix) {
+  if (prefix === 'filehandle.') {
+    return paramsByFileHandleMethods
+  }
+  return paramsByMethod
+}
+
+function creaetWatchWrapFunction (override = '') {
+  return function wrapFunction (original) {
+    const name = override || original.name
+    const method = name
+    const operation = name
+    return function () {
+      if (!startChannel.hasSubscribers) return original.apply(this, arguments)
+      const message = getMessage(method, watchMethods[operation], arguments, this)
+      const innerResource = new AsyncResource('bound-anonymous-fn')
+      return innerResource.runInAsyncScope(() => {
+        startChannel.publish(message)
+        try {
+          const result = original.apply(this, arguments)
+          finishChannel.publish()
+          return result
+        } catch (error) {
+          errorChannel.publish(error)
+          finishChannel.publish()
+          throw error
+        }
+      })
+    }
+  }
+}
+
 function createWrapFunction (prefix = '', override = '') {
   return function wrapFunction (original) {
     const name = override || original.name
@@ -144,7 +269,7 @@ function createWrapFunction (prefix = '', override = '') {
       const lastIndex = arguments.length - 1
       const cb = typeof arguments[lastIndex] === 'function' && arguments[lastIndex]
       const innerResource = new AsyncResource('bound-anonymous-fn')
-      const message = getMessage(method, paramsByMethod[operation], arguments, this)
+      const message = getMessage(method, getMethodParamsRelationByPrefix(prefix)[operation], arguments, this)
 
       if (cb) {
         const outerResource = new AsyncResource('bound-anonymous-fn')
@@ -194,18 +319,24 @@ function createWrapFunction (prefix = '', override = '') {
   }
 }
 
-// TODO: the operation should be the fs operation name not the method name
 function getMessage (operation, params, args, self) {
   const metadata = {}
-
-  for (let i = 0; i < params.length; i++) {
-    if (!params[i] || typeof args[i] === 'function') continue
-    metadata[params[i]] = args[i]
+  if (params) {
+    for (let i = 0; i < params.length; i++) {
+      if (!params[i] || typeof args[i] === 'function') continue
+      metadata[params[i]] = args[i]
+    }
   }
 
-  // For `Dir` the path is available on `this.path`
-  if (self && self.path) {
-    metadata.path = self.path
+  if (self) {
+    // For `Dir` the path is available on `this.path`
+    if (self.path) {
+      metadata.path = self.path
+    }
+    // For FileHandle fs is available on `this.fd`
+    if (self.fd) {
+      metadata.fd = self.fd
+    }
   }
 
   return { operation, ...metadata }

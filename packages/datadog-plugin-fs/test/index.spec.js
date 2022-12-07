@@ -13,15 +13,13 @@ const util = require('util')
 const hasWritev = semver.satisfies(process.versions.node, '>=12.9.0')
 const hasOSymlink = realFS.constants.O_SYMLINK
 
-// TODO remove skips
-
 describe('Plugin', () => {
   describe('fs', () => {
     let fs
     let tmpdir
     let tracer
     afterEach(() => agent.close({ ritmReset: false }))
-    beforeEach(() => agent.load('fs').then(() => {
+    beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')
       fs = require('fs')
     }))
@@ -82,16 +80,6 @@ describe('Plugin', () => {
             if (err) done(err)
           })
         })
-      })
-    })
-
-    // Tests are flaky, so only run a small subset as a safety net that the
-    // basics work.
-    describe('with parent span', () => {
-      beforeEach((done) => {
-        const parentSpan = tracer.startSpan('parent')
-        parentSpan.finish()
-        tracer.scope().activate(parentSpan, done)
       })
 
       describe('open', () => {
@@ -1316,6 +1304,50 @@ describe('Plugin', () => {
         })
       })
 
+      describe('watch', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource: 'watchFile',
+            meta: {
+              'file.path': __filename
+            }
+          })
+          const listener = () => {}
+          const watcher = fs.watchFile(__filename, listener)
+          fs.unwatchFile(__filename, listener)
+          watcher.unref()
+        })
+      })
+
+      describe('unwatchFile', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource: 'unwatchFile',
+            meta: {
+              'file.path': __filename
+            }
+          })
+          const listener = () => {}
+          const watcher = fs.watchFile(__filename, listener)
+          fs.unwatchFile(__filename, listener)
+          watcher.unref()
+        })
+      })
+
+      describe('watch', () => {
+        it('should be instrumented', (done) => {
+          expectOneSpan(agent, done, {
+            resource: 'watch',
+            meta: {
+              'file.path': __filename
+            }
+          })
+          const listener = () => {}
+          const watcher = fs.watch(__filename, listener)
+          watcher.close()
+        })
+      })
+
       describe('existsSync', () => {
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
@@ -1329,7 +1361,7 @@ describe('Plugin', () => {
       })
 
       if (realFS.Dir) {
-        describe.skip('Dir', () => {
+        describe('Dir', () => {
           let dirname
           let dir
           beforeEach(async () => {
@@ -1369,7 +1401,7 @@ describe('Plugin', () => {
               testHandleErrors(fs, 'dir.close', async (_1, _2, _3, cb) => {
                 dir.closeSync()
                 try {
-                  // await for Node >=15.4 that returns and rejects a promise instead of throwing
+                // await for Node >=15.4 that returns and rejects a promise instead of throwing
                   await dir.close()
                 } catch (e) {
                   cb(e)
@@ -1538,7 +1570,7 @@ describe('Plugin', () => {
             })
 
             // https://github.com/nodejs/node/issues/31361
-            it.skip('should handle errors', () =>
+            it('should handle errors', () =>
               testFileHandleErrors(fs, 'appendFile', ['some more data'], filehandle, agent))
           })
 
@@ -1554,7 +1586,7 @@ describe('Plugin', () => {
             })
 
             // https://github.com/nodejs/node/issues/31361
-            it.skip('should handle errors', () =>
+            it('should handle errors', () =>
               testFileHandleErrors(fs, 'writeFile', ['some more data'], filehandle, agent))
           })
 
@@ -1570,7 +1602,7 @@ describe('Plugin', () => {
             })
 
             // https://github.com/nodejs/node/issues/31361
-            it.skip('should handle errors', () =>
+            it('should handle errors', () =>
               testFileHandleErrors(fs, 'readFile', [], filehandle, agent))
           })
 
@@ -1586,7 +1618,7 @@ describe('Plugin', () => {
             })
 
             // https://github.com/nodejs/node/issues/31361
-            it.skip('should handle errors', () =>
+            it('should handle errors', () =>
               testFileHandleErrors(fs, 'write', ['some more data'], filehandle, agent))
           })
 
@@ -1603,7 +1635,7 @@ describe('Plugin', () => {
               })
 
               // https://github.com/nodejs/node/issues/31361
-              it.skip('should handle errors', () =>
+              it('should handle errors', () =>
                 testFileHandleErrors(fs, 'writev', [[Buffer.from('some more data')]], filehandle, agent))
             })
           }
@@ -1620,7 +1652,7 @@ describe('Plugin', () => {
             })
 
             // https://github.com/nodejs/node/issues/31361
-            it.skip('should handle errors', () =>
+            it('should handle errors', () =>
               testFileHandleErrors(fs, 'read', [Buffer.alloc(5), 0, 5, 0], filehandle, agent))
           })
 
@@ -1642,7 +1674,7 @@ describe('Plugin', () => {
             })
 
             // https://github.com/nodejs/node/issues/31361
-            it.skip('should handle errors', () =>
+            it('should handle errors', () =>
               testFileHandleErrors(fs, 'chmod', [mode], filehandle, agent))
           })
 
@@ -1668,7 +1700,7 @@ describe('Plugin', () => {
             })
 
             // https://github.com/nodejs/node/issues/31361
-            it.skip('should handle errors', () =>
+            it('should handle errors', () =>
               testFileHandleErrors(fs, 'chown', [uid, gid], filehandle, agent))
           })
 
@@ -1684,8 +1716,8 @@ describe('Plugin', () => {
             })
 
             // https://github.com/nodejs/node/issues/31361
-            it.skip('should handle errors', () =>
-              testHandleErrors(fs, 'stat', [], filehandle, agent))
+            it('should handle errors', () =>
+              testFileHandleErrors(fs, 'stat', [], filehandle, agent))
           })
 
           describe('sync', () => {
@@ -1700,8 +1732,8 @@ describe('Plugin', () => {
             })
 
             // https://github.com/nodejs/node/issues/31361
-            it.skip('should handle errors', () =>
-              testHandleErrors(fs, 'sync', [], filehandle, agent))
+            it('should handle errors', () =>
+              testFileHandleErrors(fs, 'sync', [], filehandle, agent))
           })
 
           describe('datasync', () => {
@@ -1716,8 +1748,8 @@ describe('Plugin', () => {
             })
 
             // https://github.com/nodejs/node/issues/31361
-            it.skip('should handle errors', () =>
-              testHandleErrors(fs, 'datasync', [], filehandle, agent))
+            it('should handle errors', () =>
+              testFileHandleErrors(fs, 'datasync', [], filehandle, agent))
           })
 
           describe('truncate', () => {
@@ -1732,8 +1764,8 @@ describe('Plugin', () => {
             })
 
             // https://github.com/nodejs/node/issues/31361
-            it.skip('should handle errors', () =>
-              testHandleErrors(fs, 'truncate', [5], filehandle, agent))
+            it('should handle errors', () =>
+              testFileHandleErrors(fs, 'truncate', [5], filehandle, agent))
           })
 
           describe('utimes', () => {
@@ -1748,8 +1780,8 @@ describe('Plugin', () => {
             })
 
             // https://github.com/nodejs/node/issues/31361
-            it.skip('should handle errors', () =>
-              testHandleErrors(fs, 'utimes', [Date.now(), Date.now()], filehandle, agent))
+            it('should handle errors', () =>
+              testFileHandleErrors(fs, 'utimes', [Date.now(), Date.now()], filehandle, agent))
           })
 
           describe('close', () => {
@@ -1762,10 +1794,6 @@ describe('Plugin', () => {
               })
               filehandle.close().catch(done)
             })
-
-            // https://github.com/nodejs/node/issues/31361
-            it.skip('should handle errors', () =>
-              testFileHandleErrors(fs, 'close', [], filehandle, agent))
           })
         })
       }
