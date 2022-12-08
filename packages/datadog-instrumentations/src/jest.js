@@ -176,6 +176,9 @@ function cliWrapper (cli) {
     const configurationPromise = new Promise((resolve) => {
       onDone = resolve
     })
+    if (!jestConfigurationCh.hasSubscribers) {
+      return runCLI.apply(this, arguments)
+    }
 
     sessionAsyncResource.runInAsyncScope(() => {
       jestConfigurationCh.publish({ onDone })
