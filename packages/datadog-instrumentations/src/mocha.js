@@ -317,6 +317,9 @@ addHook({
    * If ITR is disabled, `onDone` is called immediately on the subscriber
    */
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
+    if (!configurationCh.hasSubscribers) {
+      return run.apply(this, arguments)
+    }
     const onReceivedSkippableSuites = ({ err, skippableSuites }) => {
       if (err) {
         log.error(err)
@@ -330,6 +333,9 @@ addHook({
     const onReceivedConfiguration = ({ err }) => {
       if (err) {
         log.error(err)
+        return run.apply(this, arguments)
+      }
+      if (!skippableSuitesCh.hasSubscribers) {
         return run.apply(this, arguments)
       }
 
