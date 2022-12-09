@@ -41,7 +41,9 @@ describe('Plugin', function () {
       })
     })
     afterEach(() => agent.close({ ritmReset: false }))
-    afterEach(done => appServer.close(done))
+    afterEach(done => {
+      appServer.close(done)
+    })
 
     describe('cypress', function () {
       this.timeout(testTimeout)

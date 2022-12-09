@@ -19,7 +19,7 @@ describe('Plugin', () => {
 
       beforeEach(done => {
         LimitdClient = require(`../../../versions/limitd-client@${version}`).get()
-        limitd = new LimitdClient('limitd://127.0.0.1:9231', done)
+        limitd = new LimitdClient('limitd://127.0.0.1:9231', () => done())
       })
 
       afterEach(() => {
