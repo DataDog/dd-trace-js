@@ -44,6 +44,7 @@ describe('Plugin', function () {
   let jestCommonOptions
 
   this.timeout(testTimeout)
+  this.retries(2)
 
   withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {

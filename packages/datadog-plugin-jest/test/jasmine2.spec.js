@@ -22,7 +22,8 @@ const {
 
 const { version: ddTraceVersion } = require('../../../package.json')
 
-describe('Plugin', () => {
+describe('Plugin', function () {
+  this.retries(2)
   let jestExecutable
 
   const jestCommonOptions = {
@@ -59,7 +60,6 @@ describe('Plugin', () => {
     })
     describe('jest with jasmine', function () {
       this.timeout(20000)
-      this.retries(2)
       it('instruments async, sync and integration tests', function (done) {
         const tests = [
           {
