@@ -1,5 +1,6 @@
 'use strict'
 
+const tracer = require('../../../../../init')
 const expect = require('chai').expect
 const sinon = require('sinon')
 const express = require('express')
@@ -61,6 +62,7 @@ describe('exporters/agent', function () {
   let docker
   let http
   let computeRetries
+  let startSpan
 
   function verifyRequest (req, profiles, start, end) {
     expect(req.headers).to.have.property('datadog-container-id', docker.id())
@@ -127,12 +129,14 @@ describe('exporters/agent', function () {
 
         listener = app.listen(port, '127.0.0.1', done)
         listener.on('connection', socket => sockets.push(socket))
+        startSpan = sinon.spy(tracer._tracer, 'startSpan')
       })
     })
 
     afterEach(done => {
       listener.close(done)
       sockets.forEach(socket => socket.end())
+      tracer._tracer.startSpan.restore()
     })
 
     it('should send profiles as pprof to the intake', async () => {
@@ -166,6 +170,13 @@ describe('exporters/agent', function () {
         })
 
         exporter.export({ profiles, start, end, tags }).catch(reject)
+      })
+
+      startSpan.getCalls().forEach(call => {
+        const [name, { tags }] = call.args
+        if (name === 'http.request' && tags && tags['http.url'] && tags['http.url'].endsWith('/profiling/v1/input')) {
+          throw new Error('traced profiling endpoint call')
+        }
       })
     })
 
