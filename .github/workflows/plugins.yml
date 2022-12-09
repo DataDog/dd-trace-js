@@ -227,18 +227,10 @@ jobs:
     env:
       PLUGINS: cypress
     steps:
-      # Cypress system dependencies https://docs.cypress.io/guides/continuous-integration/introduction#Dependencies
-      - run: |
-          sudo apt-get install libgtk2.0-0 libgtk-3-0 libgbm-dev libnotify-dev libgconf-2-4 libnss3 libxss1 libasound2 libxtst6 xauth xvfb
-      # https://docs.cypress.io/guides/continuous-integration/introduction#Xvfb
-      - run: |
-          Xvfb :99 &
-          export DISPLAY=:99
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:plugins:ci
-      - run: pkill Xvfb
       - uses: codecov/codecov-action@v2
 
   # dns:
