@@ -2,6 +2,8 @@
 
 const TracingPlugin = require('./tracing')
 
+// const transportProtocols = ['ip_tcp', 'ip_udp', 'unix', 'pipe', 'inproc', 'other']
+
 // TODO: Exit span on finish when AsyncResource instances are removed.
 class OutgoingPlugin extends TracingPlugin {
   constructor (...args) {
@@ -23,7 +25,7 @@ class OutgoingPlugin extends TracingPlugin {
 
     span.addTags({
       'out.host': hostname,
-      'out.port': port
+      'network.destination.port': port
     })
   }
 }

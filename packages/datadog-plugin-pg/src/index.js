@@ -22,7 +22,7 @@ class PGPlugin extends DatabasePlugin {
         'db.name': params.database,
         'db.user': params.user,
         'out.host': params.host,
-        'out.port': params.port
+        'network.destination.port': params.port
       }
     })
 

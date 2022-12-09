@@ -20,7 +20,7 @@ class RedisPlugin extends CachePlugin {
         'db.name': db || '0',
         'redis.raw_command': formatCommand(command, args),
         'out.host': connectionOptions.host,
-        'out.port': connectionOptions.port
+        'network.destination.port': connectionOptions.port
       }
     })
   }

@@ -20,7 +20,7 @@ class Amqp10ProducerPlugin extends ProducerPlugin {
         'amqp.link.target.address': target,
         'amqp.link.role': 'sender',
         'out.host': address.host,
-        'out.port': address.port,
+        'network.destination.port': address.port,
         'amqp.link.name': link.name,
         'amqp.link.handle': link.handle,
         'amqp.connection.host': address.host,

@@ -24,7 +24,7 @@ class RheaProducerPlugin extends ProducerPlugin {
         'amqp.link.target.address': name,
         'amqp.link.role': 'sender',
         'out.host': host,
-        'out.port': port
+        'network.destination.port': port
       }
     })
   }

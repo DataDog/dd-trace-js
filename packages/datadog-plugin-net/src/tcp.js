@@ -37,7 +37,7 @@ class NetTCPPlugin extends ClientPlugin {
       metrics: {
         'tcp.remote.port': port,
         'tcp.local.port': 0,
-        'out.port': port
+        'network.destination.port': port
       }
     })
   }

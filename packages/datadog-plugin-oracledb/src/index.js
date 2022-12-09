@@ -20,7 +20,7 @@ class OracledbPlugin extends DatabasePlugin {
         'db.user': this.config.user,
         'db.instance': url.pathname && url.pathname.substring(1),
         'db.hostname': url.hostname,
-        'db.port': url.port
+        'network.destination.port': url.port
       }
     })
   }

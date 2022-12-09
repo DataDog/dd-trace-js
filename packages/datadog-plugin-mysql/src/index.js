@@ -19,7 +19,7 @@ class MySQLPlugin extends DatabasePlugin {
         'db.user': dbConfig.user,
         'db.name': dbConfig.database,
         'out.host': dbConfig.host,
-        'out.port': dbConfig.port
+        'network.destination.port': dbConfig.port
       }
     })
   }

@@ -19,7 +19,7 @@ class AmqplibClientPlugin extends ClientPlugin {
       kind: 'client',
       meta: {
         'out.host': stream._host,
-        'out.port': stream.remotePort,
+        'network.destination.port': stream.remotePort,
         'amqp.queue': fields.queue,
         'amqp.exchange': fields.exchange,
         'amqp.routingKey': fields.routingKey,

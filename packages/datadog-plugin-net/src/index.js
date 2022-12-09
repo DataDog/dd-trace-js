@@ -53,7 +53,7 @@ class NetPlugin extends Plugin {
           'tcp.remote.port': port,
           'tcp.family': `IPv${family}`,
           'out.host': host,
-          'out.port': port,
+          'network.destination.port': port,
           'span.kind': 'client',
           'service.name': this.config.service || this.tracer._service
         }

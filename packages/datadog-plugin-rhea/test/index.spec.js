@@ -65,7 +65,7 @@ describe('Plugin', () => {
                   'component': 'rhea'
                 })
                 expect(span.metrics).to.include({
-                  'out.port': 5673
+                  'network.destination.port': 5673
                 })
               })
                 .then(done, done)

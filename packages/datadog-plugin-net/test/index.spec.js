@@ -93,7 +93,7 @@ describe('Plugin', () => {
               'out.host': 'localhost'
             },
             metrics: {
-              'out.port': port,
+              'network.destination.port': port,
               'tcp.remote.port': port,
               'tcp.local.port': socket.localPort
             },
@@ -124,7 +124,7 @@ describe('Plugin', () => {
               'out.host': 'localhost'
             },
             metrics: {
-              'out.port': port,
+              'network.destination.port': port,
               'tcp.remote.port': port,
               'tcp.local.port': socket.localPort
             },
@@ -177,7 +177,7 @@ describe('Plugin', () => {
             [ERROR_STACK]: error.stack
           })
           expect(traces[0][0].metrics).to.deep.include({
-            'out.port': port,
+            'network.destination.port': port,
             'tcp.remote.port': port
           })
           expect(traces[0][0].parent_id.toString()).to.equal(parent.context().toSpanId())

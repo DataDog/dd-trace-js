@@ -15,7 +15,8 @@ class DNSLookupServicePlugin extends ClientPlugin {
         'dns.address': address
       },
       metrics: {
-        'dns.port': port
+        'dns.port': port,
+        'network.destination.port': port
       }
     })
   }

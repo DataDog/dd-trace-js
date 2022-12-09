@@ -16,7 +16,7 @@ class MemcachedPlugin extends CachePlugin {
       meta: {
         'memcached.command': query.command,
         'out.host': address[0],
-        'out.port': address[1]
+        'network.destination.port': address[1]
       }
     })
   }

@@ -19,7 +19,7 @@ class MongodbCorePlugin extends DatabasePlugin {
         'db.name': ns,
         'mongodb.query': query,
         'out.host': options.host,
-        'out.port': options.port
+        'network.destination.port': options.port
       }
     })
   }

@@ -21,7 +21,7 @@ class CassandraDriverPlugin extends DatabasePlugin {
         'cassandra.query': query,
         'cassandra.keyspace': keyspace,
         'out.host': connectionOptions.host,
-        'out.port': connectionOptions.port
+        'network.destination.port': connectionOptions.port
       }
     })
   }
