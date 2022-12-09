@@ -1,24 +1,30 @@
 'use strict'
 
 const { fork } = require('child_process')
+const path = require('path')
+
 const {
   FakeAgent,
   createSandbox
 } = require('./helpers')
-const path = require('path')
 const { assert } = require('chai')
+const semver = require('semver')
 const getPort = require('get-port')
+
+// TODO: remove when 2.x support is removed.
+// This is done because newest versions of mocha and jest do not support node@12
+const isOldNode = semver.satisfies(process.version, '<=12')
 
 const tests = [
   {
     name: 'mocha',
-    dependencies: ['mocha', 'chai'],
+    dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai'],
     testFile: 'ci-visibility/run-mocha.js',
     expectedStdout: '1 passing'
   },
   {
     name: 'jest',
-    dependencies: ['jest', 'chai'],
+    dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai'],
     testFile: 'ci-visibility/run-jest.js',
     expectedStdout: 'Test Suites: 1 passed'
   }
