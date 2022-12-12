@@ -5,7 +5,6 @@ const path = require('path')
 const { channel } = require('diagnostics_channel')
 const nock = require('nock')
 const semver = require('semver')
-const msgpack = require('msgpack-lite')
 
 const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
