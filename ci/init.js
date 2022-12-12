@@ -30,6 +30,10 @@ but neither DD_API_KEY nor DATADOG_API_KEY are set in your environment, \
 so dd-trace will not be initialized.`)
     shouldInit = false
   }
+} else {
+  options.experimental = {
+    exporter: 'agent_proxy'
+  }
 }
 
 // TODO: remove this in a later major version since we now recommend using
