@@ -75,7 +75,7 @@ module.exports = {
     // We additionally pass the request for further inspection
     agent.post('/evp_proxy/v2/api/v2/citestcycle', (req, res) => {
       res.status(200).send('OK')
-      handlers.forEach(handler => handler(req.body, req))
+      handlers.forEach(({ handler }) => handler(req.body, req))
     })
 
     const port = await getPort()
