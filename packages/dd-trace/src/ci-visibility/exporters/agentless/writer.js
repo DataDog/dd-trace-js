@@ -12,11 +12,12 @@ function safeJSONStringify (value) {
 }
 
 class Writer extends BaseWriter {
-  constructor ({ url, tags }) {
+  constructor ({ url, tags, evpProxyPrefix = '' }) {
     super(...arguments)
     const { 'runtime-id': runtimeId, env, service } = tags
     this._url = url
     this._encoder = new AgentlessCiVisibilityEncoder(this, { runtimeId, env, service })
+    this._evpProxyPrefix = evpProxyPrefix
   }
 
   _sendPayload (data, _, done) {
@@ -31,7 +32,14 @@ class Writer extends BaseWriter {
       url: this._url
     }
 
+    if (this._evpProxyPrefix) {
+      options.path = `${this._evpProxyPrefix}/api/v2/citestcycle`
+      delete options.headers['dd-api-key']
+      options.headers['X-Datadog-EVP-Subdomain'] = 'citestcycle-intake'
+    }
+
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
+
     request(data, options, (err, res) => {
       if (err) {
         log.error(err)

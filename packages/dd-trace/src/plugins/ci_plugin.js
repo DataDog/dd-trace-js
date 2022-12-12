@@ -32,7 +32,7 @@ module.exports = class CiPlugin extends Plugin {
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
     this.addSub(`ci:${this.constructor.name}:configuration`, ({ onDone }) => {
-      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
+      if (!this.config.isIntelligentTestRunnerEnabled) {
         onDone({ config: {} })
         return
       }
@@ -47,7 +47,7 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.name}:test-suite:skippable`, ({ onDone }) => {
-      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
+      if (!this.config.isIntelligentTestRunnerEnabled) {
         return onDone({ skippableSuites: [] })
       }
       // we only request after git upload has happened, if it didn't fail
