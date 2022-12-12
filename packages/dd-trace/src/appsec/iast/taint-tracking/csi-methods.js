@@ -20,7 +20,7 @@ const prototypes = csiMethodDefinition
   .filter(proto => proto)
 
 function isValidCsiMethod (fn) {
-  return prototypes.indexOf(fn) === -1
+  return prototypes.indexOf(fn) !== -1
 }
 
 const csiMethods = csiMethodDefinition.map(method => {

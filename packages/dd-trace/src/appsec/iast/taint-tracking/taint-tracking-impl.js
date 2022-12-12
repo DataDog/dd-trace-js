@@ -22,10 +22,13 @@ function notString () {
   return [...arguments].some(p => typeof p !== 'string')
 }
 
-function getCsiFn (cb) {
+const defaultFilter = (res, fn, target) => notString(res, target) || !isValidCsiMethod(fn)
+
+function getCsiFn (cb, filter) {
+  filter = filter || defaultFilter
   return function csiCall (res, fn, target) {
     try {
-      if (notString(res, target) || isValidCsiMethod(fn)) { return res }
+      if (filter(res, fn, target)) { return res }
       const transactionId = getTransactionId()
       if (transactionId) {
         const [,, ...rest] = arguments
@@ -38,20 +41,12 @@ function getCsiFn (cb) {
   }
 }
 
-const TaintTracking = {
-  plusOperator: function (res, op1, op2) {
-    try {
-      if (notString(res) || (notString(op1) && notString(op2))) { return res }
+function getPlusOperatorFn (cb) {
+  return getCsiFn(cb, (res, op1, op2) => notString(res) || (notString(op1) && notString(op2)))
+}
 
-      const transactionId = getTransactionId()
-      if (transactionId) {
-        return TaintedUtils.concat(transactionId, res, op1, op2)
-      }
-    } catch (e) {
-      log.debug(e)
-    }
-    return res
-  },
+const TaintTracking = {
+  plusOperator: getPlusOperatorFn((transactionId, res, op1, op2) => TaintedUtils.concat(transactionId, res, op1, op2)),
   trim: getCsiFn((transactionId, res, target) => TaintedUtils.trim(transactionId, res, target)),
   trimEnd: getCsiFn((transactionId, res, target) => TaintedUtils.trimEnd(transactionId, res, target))
 }
