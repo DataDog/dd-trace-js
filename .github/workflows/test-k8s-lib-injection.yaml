@@ -22,6 +22,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set Docker Image Tag
+        id: set_names
+        run: |
+          echo "::set-output name=image_name::$(echo ${GITHUB_HEAD_REF-${GITHUB_REF#refs/heads/}} | tr / -)"
+
       - name: Npm pack for injection image
         run: |
           npm pack
@@ -29,6 +34,11 @@ jobs:
       - uses: ./.github/actions/injection
         with:
             init-image-version: ${GITHUB_SHA}
+
+      - uses: ./.github/actions/injection
+        if: ${{ steps.set_names.outputs.image_name }} == 'robertomonteromiguel-lib_injection_system_tests_integration'
+        with:
+            init-image-version: latest_snapshot
 
   lib-injection-tests:
     needs:
