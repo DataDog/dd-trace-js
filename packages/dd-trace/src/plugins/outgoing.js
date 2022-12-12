@@ -1,6 +1,6 @@
 'use strict'
 
-import { ipVersion } from 'ip-address-validator';
+const { isIP } = require('net')
 
 const TracingPlugin = require('./tracing')
 
@@ -44,7 +44,7 @@ class OutgoingPlugin extends TracingPlugin {
       }
     }
     // ipVersion returns 4, 6 or undefined depending on if input string is IPV4, IPV6, or not a valid IP
-    else if (ipVersion(host) != undefined) {
+    else if (isIP(host)) {
       const hostIP = host
       return {
         'network.destination.ip': hostIP,
