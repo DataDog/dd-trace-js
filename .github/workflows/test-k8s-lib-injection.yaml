@@ -35,10 +35,10 @@ jobs:
         with:
             init-image-version: ${GITHUB_SHA}
 
-      - uses: ./.github/actions/injection
+      - name: Push snapshot image
+        run: |
+          docker buildx build --platform=linux/amd64,linux/arm/v7,linux/arm64/v8 -t ghcr.io/datadog/dd-trace-js/dd-lib-js-init:latest_snapshot --push lib-injection
         if: ${{ steps.set_names.outputs.image_name }} == 'robertomonteromiguel-lib_injection_system_tests_integration'
-        with:
-            init-image-version: latest_snapshot
 
   lib-injection-tests:
     needs:
