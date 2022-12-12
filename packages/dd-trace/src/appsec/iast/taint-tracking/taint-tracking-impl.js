@@ -1,6 +1,7 @@
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../iast-context')
+const { prototypes } = require('./csi-methods')
 
 const log = require('../../../log')
 
@@ -14,12 +15,6 @@ function getTransactionId () {
   const iastContext = iastContextFunctions.getIastContext(store)
   return iastContext && iastContext[iastContextFunctions.IAST_TRANSACTION_ID]
 }
-
-const prototypes = [
-  String.prototype.trim,
-  String.prototype.trimStart,
-  String.prototype.trimEnd
-]
 
 function notString () {
   return [...arguments].some(p => typeof p !== 'string')

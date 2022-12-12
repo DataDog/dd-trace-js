@@ -4,13 +4,7 @@ const Module = require('module')
 const shimmer = require('../../../../../datadog-shimmer')
 const log = require('../../../log')
 const { isPrivateModule, isNotLibraryFile } = require('./filter')
-
-const csiMethods = [
-  { src: 'plusOperator', operator: true },
-  { src: 'trim' },
-  { src: 'trimStart', dst: 'trim' },
-  { src: 'trimEnd' }
-]
+const { csiMethods } = require('./csi-methods')
 
 let rewriter
 let getPrepareStackTrace
