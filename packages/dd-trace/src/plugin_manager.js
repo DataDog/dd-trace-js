@@ -124,7 +124,6 @@ module.exports = class PluginManager {
       clientIpHeader,
       isIntelligentTestRunnerEnabled,
       site,
-      experimental,
       url,
       dbmPropagationMode
     } = this._tracerConfig
@@ -145,10 +144,6 @@ module.exports = class PluginManager {
 
     if (clientIpHeader !== undefined) {
       sharedConfig.clientIpHeader = clientIpHeader
-    }
-
-    if (experimental) {
-      sharedConfig.isAgentlessEnabled = experimental.exporter === 'datadog'
     }
 
     sharedConfig.isIntelligentTestRunnerEnabled = isIntelligentTestRunnerEnabled
