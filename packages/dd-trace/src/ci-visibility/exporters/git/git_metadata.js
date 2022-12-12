@@ -137,8 +137,8 @@ function uploadPackFile ({ url, packFileToUpload, repositoryUrl, headCommit }, c
 /**
  * This function uploads git metadata to CI Visibility's backend.
 */
-function sendGitMetadata (site, callback) {
-  const url = new URL(`https://api.${site}`)
+function sendGitMetadata (intakeUrl, site, callback) {
+  const url = intakeUrl || new URL(`https://api.${site}`)
 
   const repositoryUrl = getRepositoryUrl()
 

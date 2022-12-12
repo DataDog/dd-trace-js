@@ -5,12 +5,17 @@ const options = {
   testPathIgnorePatterns: ['/node_modules/'],
   cache: false,
   maxWorkers: '50%',
-  testRegex: 'test/ci-visibility-test.js'
+  testRegex: /test\/ci-visibility-test/,
+  coverage: true,
+  passWithNoTests: true,
+  runInBand: true
 }
 
 jest.runCLI(
   options,
   options.projects
 ).then(() => {
-  process.send('finished')
+  if (process.send) {
+    process.send('finished')
+  }
 })

@@ -63,7 +63,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.isGitUploadEnabled) {
-        sendGitMetadata(config.site, (err) => {
+        sendGitMetadata(config.url, config.site, (err) => {
           if (err) {
             log.error(`Error uploading git metadata: ${err.message}`)
           } else {
