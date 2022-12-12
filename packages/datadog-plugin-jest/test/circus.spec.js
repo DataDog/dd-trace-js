@@ -2,7 +2,6 @@
 const fs = require('fs')
 const path = require('path')
 
-const { channel } = require('diagnostics_channel')
 const nock = require('nock')
 const semver = require('semver')
 
@@ -27,8 +26,6 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { version: ddTraceVersion } = require('../../../package.json')
-
-const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
 
 /**
  * The assertion timeout needs to be less than the test timeout,
@@ -373,7 +370,6 @@ describe('Plugin', function () {
             options,
             options.projects
           )
-          gitMetadataUploadFinishCh.publish()
         })
       })
 
