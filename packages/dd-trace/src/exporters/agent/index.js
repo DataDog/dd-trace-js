@@ -55,6 +55,10 @@ class AgentExporter {
       }, flushInterval).unref()
     }
   }
+
+  flush (done = () => {}) {
+    this._writer.flush(done)
+  }
 }
 
 module.exports = AgentExporter

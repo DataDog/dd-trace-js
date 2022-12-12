@@ -31,9 +31,17 @@ module.exports = {
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
     agent.use((req, res, next) => {
-      if (!req.body.length) return res.status(200).send()
-      req.body = msgpack.decode(req.body, { codec })
+      if (req.is('application/msgpack')) {
+        if (!req.body.length) return res.status(200).send()
+        req.body = msgpack.decode(req.body, { codec })
+      }
       next()
+    })
+
+    agent.get('/info', (req, res) => {
+      res.status(202).send({
+        endpoints: ['/evp_proxy/v2']
+      })
     })
 
     agent.put('/v0.5/traces', (req, res) => {
@@ -61,6 +69,13 @@ module.exports = {
           handler(req.body)
         }
       })
+    })
+
+    // EVP proxy endpoint
+    // We additionally pass the request for further inspection
+    agent.post('/evp_proxy/v2/api/v2/citestcycle', (req, res) => {
+      res.status(200).send('OK')
+      handlers.forEach(({ handler }) => handler(req.body, req))
     })
 
     const port = await getPort()
