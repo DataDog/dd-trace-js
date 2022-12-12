@@ -11,11 +11,11 @@ describe('IAST TaintTracking Operations', () => {
   const taintedUtils = {
     createTransaction: id => id,
     removeTransaction: id => id,
-    newTaintedString: (id) => id,
+    newTaintedString: id => id,
     isTainted: id => id,
     getRanges: id => id,
-    concat: (id) => id,
-    trim: (id) => id
+    concat: id => id,
+    trim: id => id
   }
 
   const store = {}

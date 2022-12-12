@@ -1,7 +1,9 @@
+'use strict'
+
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../iast-context')
-const { prototypes } = require('./csi-methods')
+const { isValidCsiMethod } = require('./csi-methods')
 
 const log = require('../../../log')
 
@@ -23,7 +25,7 @@ function notString () {
 function getCsiFn (cb) {
   return function csiCall (res, fn, target) {
     try {
-      if (notString(res, target) || prototypes.indexOf(fn) === -1) { return res }
+      if (notString(res, target) || isValidCsiMethod(fn)) { return res }
       const transactionId = getTransactionId()
       if (transactionId) {
         const [,, ...rest] = arguments

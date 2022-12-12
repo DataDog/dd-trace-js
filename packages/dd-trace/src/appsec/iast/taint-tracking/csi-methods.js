@@ -1,3 +1,5 @@
+'use strict'
+
 const csiMethodDefinition = [
   { src: 'plusOperator', operator: true },
   { src: String.prototype.trim },
@@ -17,6 +19,10 @@ const prototypes = csiMethodDefinition
   .map(method => isFunction(method.src) ? method.src : null)
   .filter(proto => proto)
 
+function isValidCsiMethod (fn) {
+  return prototypes.indexOf(fn) === -1
+}
+
 const csiMethods = csiMethodDefinition.map(method => {
   const csiMethod = {
     src: getCsiMethodName(method.src)
@@ -31,6 +37,6 @@ const csiMethods = csiMethodDefinition.map(method => {
 })
 
 module.exports = {
-  prototypes,
+  isValidCsiMethod,
   csiMethods
 }
