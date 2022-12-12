@@ -328,4 +328,13 @@ describe('IAST TaintTracking Operations', () => {
       expect(result).eq(a.trim())
     })
   })
+
+  describe('TaintTrackingDummy', () => {
+    it('should have the same properties as TaintTracking', () => {
+      const tt = taintTrackingImpl.TaintTracking
+      const dummy = taintTrackingImpl.TaintTrackingDummy
+
+      expect(dummy).to.have.all.keys(Object.keys(tt))
+    })
+  })
 })
