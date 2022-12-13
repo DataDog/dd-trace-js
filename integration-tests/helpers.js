@@ -119,10 +119,12 @@ async function createSandbox (dependencies = [], isGitRepo = false) {
   await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder })
   await exec(`cp -R ./integration-tests/* ${folder}`)
   if (isGitRepo) {
-    await exec('git config --global user.email "john@doe.com"')
-    await exec('git config --global user.name "John Doe"')
+    await exec('git init', { cwd: folder })
+    await exec('echo "node_modules/" > .gitignore', { cwd: folder })
+    await exec('git config user.email "john@doe.com"', { cwd: folder })
+    await exec('git config user.name "John Doe"', { cwd: folder })
     await exec(
-      `git init && git add -A && git commit -m "first commit" && git remote add origin git@git.com:datadog/example`,
+      'git add -A && git commit -m "first commit" --no-verify && git remote add origin git@git.com:datadog/example',
       { cwd: folder }
     )
   }
