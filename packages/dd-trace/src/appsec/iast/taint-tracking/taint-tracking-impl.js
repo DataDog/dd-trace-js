@@ -24,7 +24,7 @@ function getFilteredCsiFn (cb, filter) {
       if (filter(res, fn, target)) { return res }
       const transactionId = getTransactionId()
       if (transactionId) {
-        return cb(transactionId, res, ...rest)
+        return cb(transactionId, res, target, ...rest)
       }
     } catch (e) {
       log.debug(e)
@@ -42,7 +42,13 @@ function isValidCsiMethod (fn, ...protos) {
 }
 
 function getCsiFn (cb, ...protos) {
-  return getFilteredCsiFn(cb, (res, fn, target) => notString(res, target) || !isValidCsiMethod(fn, ...protos))
+  let filter
+  if (protos.length === 1) {
+    filter = (res, fn, target) => notString(res, target) || fn !== protos[0]
+  } else {
+    filter = (res, fn, target) => notString(res, target) || !isValidCsiMethod(fn, ...protos)
+  }
+  return getFilteredCsiFn(cb, filter)
 }
 
 function getPlusOperatorFn (cb) {

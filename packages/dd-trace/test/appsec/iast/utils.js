@@ -1,3 +1,9 @@
+'use strict'
+
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
+
 const getPort = require('get-port')
 const agent = require('../../plugins/agent')
 const axios = require('axios')
@@ -106,4 +112,12 @@ function testThatRequestHasNoVulnerability (app, vulnerability) {
   testInRequest(app, tests)
 }
 
-module.exports = { testThatRequestHasNoVulnerability, testThatRequestHasVulnerability, testInRequest }
+function copyFileToTmp (src) {
+  const prefix = Math.floor(Math.random() * 1000000)
+  const srcName = `dd-iast-${prefix}-${path.basename(src)}`
+  const dest = path.join(os.tmpdir(), srcName)
+  fs.copyFileSync(src, dest)
+  return dest
+}
+
+module.exports = { testThatRequestHasNoVulnerability, testThatRequestHasVulnerability, testInRequest, copyFileToTmp }
