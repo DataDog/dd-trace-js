@@ -36,24 +36,26 @@ function mergeRuleData (asmDataValues) {
       const key = `${rulesData.id}+${rulesData.type}`
       if (mergedRulesData.has(key)) {
         const existingRulesData = mergedRulesData.get(key)
-        rulesData.data.reduce((existingEntries, rulesDataEntry) => {
-          const existingEntry = existingEntries.find((entry) => entry.value === rulesDataEntry.value)
-          if (existingEntry && !('expiration' in existingEntry)) return existingEntries
-          if (existingEntry && 'expiration' in rulesDataEntry && rulesDataEntry.expiration > existingEntry.expiration) {
-            existingEntry.expiration = rulesDataEntry.expiration
-          } else if (existingEntry && !('expiration' in rulesDataEntry)) {
-            delete existingEntry.expiration
-          } else if (!existingEntry) {
-            existingEntries.push({ ...rulesDataEntry })
-          }
-          return existingEntries
-        }, existingRulesData.data)
+        rulesData.data.reduce(rulesReducer, existingRulesData.data)
       } else {
         mergedRulesData.set(key, copyRulesData(rulesData))
       }
     }
   }
   return [...mergedRulesData.values()]
+}
+
+function rulesReducer (existingEntries, rulesDataEntry) {
+  const existingEntry = existingEntries.find((entry) => entry.value === rulesDataEntry.value)
+  if (existingEntry && !('expiration' in existingEntry)) return existingEntries
+  if (existingEntry && 'expiration' in rulesDataEntry && rulesDataEntry.expiration > existingEntry.expiration) {
+    existingEntry.expiration = rulesDataEntry.expiration
+  } else if (existingEntry && !('expiration' in rulesDataEntry)) {
+    delete existingEntry.expiration
+  } else if (!existingEntry) {
+    existingEntries.push({ ...rulesDataEntry })
+  }
+  return existingEntries
 }
 
 function copyRulesData (rulesData) {
