@@ -32,12 +32,16 @@ function enable (config) {
   }
 }
 
-function enableAsmData () {
-  rc.on('ASM_DATA', _asmDataListener)
+function enableAsmData (appsecConfig) {
+  if (appsecConfig && appsecConfig.rules === undefined) {
+    rc.on('ASM_DATA', _asmDataListener)
+  }
 }
 
 function disableAsmData () {
-  rc.off('ASM_DATA', _asmDataListener)
+  if (rc) {
+    rc.off('ASM_DATA', _asmDataListener)
+  }
 }
 
 function _asmDataListener (action, ruleData, ruleId) {

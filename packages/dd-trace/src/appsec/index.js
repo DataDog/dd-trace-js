@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('fs')
+const path = require('path')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
 const remoteConfig = require('./remote_config')
@@ -18,11 +19,11 @@ function enable (config) {
   try {
     // TODO: enable dc_blocking: config.appsec.blocking === true
 
-    let rules = fs.readFileSync(config.appsec.rules)
+    let rules = fs.readFileSync(config.appsec.rules || path.join(__dirname, 'recommended.json'))
     rules = JSON.parse(rules)
 
     RuleManager.applyRules(rules, config.appsec)
-    remoteConfig.enableAsmData()
+    remoteConfig.enableAsmData(config.appsec)
   } catch (err) {
     log.error('Unable to start AppSec')
     log.error(err)
