@@ -22,8 +22,8 @@ const commands = [
   'ls -la  ',
   'ls -la',
   ' ls -la  人 ',
-  ' ls -la  // ',
-  ' ls -la  " '
+  ' ls -la  𠆢𠆢𠆢 ',
+  ' ls -ls �'
 ]
 
 const propagationFunctionsFile = path.join(__dirname, 'resources/propagationFunctions.js')
