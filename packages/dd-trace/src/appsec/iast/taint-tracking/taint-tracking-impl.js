@@ -24,7 +24,7 @@ function getFilteredCsiFn (cb, filter) {
       if (filter(res, fn, target)) { return res }
       const transactionId = getTransactionId()
       if (transactionId) {
-        return cb(transactionId, res, target, ...rest)
+        return cb(transactionId, res, fn, target, ...rest)
       }
     } catch (e) {
       log.debug(e)
@@ -44,34 +44,29 @@ function isValidCsiMethod (fn, ...protos) {
 function getCsiFn (cb, ...protos) {
   let filter
   if (protos.length === 1) {
-    filter = (res, fn, target) => notString(res, target) || fn !== protos[0]
+    const protoFn = protos[0]
+    filter = (res, fn, target) => notString(res, target) || fn !== protoFn
   } else {
     filter = (res, fn, target) => notString(res, target) || !isValidCsiMethod(fn, ...protos)
   }
   return getFilteredCsiFn(cb, filter)
 }
 
-const TaintTracking = {
-  plusOperator: function (res, op1, op2) {
-    try {
-      if (notString(res) || (notString(op1) && notString(op2))) { return res }
-      const transactionId = getTransactionId()
-      if (transactionId) {
-        return TaintedUtils.concat(transactionId, res, op1, op2)
-      }
-    } catch (e) {
-      log.debug(e)
-    }
-    return res
-  },
+function getPlusOperatorFn (cb) {
+  return getFilteredCsiFn(cb, (res, op1, op2) => notString(res) || (notString(op1) && notString(op2)))
+}
 
+const TaintTracking = {
+  plusOperator: getPlusOperatorFn(
+    (transactionId, res, op1, op2) => TaintedUtils.concat(transactionId, res, op1, op2)
+  ),
   trim: getCsiFn(
-    (transactionId, res, target) => TaintedUtils.trim(transactionId, res, target),
+    (transactionId, res, fn, target) => TaintedUtils.trim(transactionId, res, target),
     String.prototype.trim,
     String.prototype.trimStart
   ),
   trimEnd: getCsiFn(
-    (transactionId, res, target) => TaintedUtils.trimEnd(transactionId, res, target),
+    (transactionId, res, fn, target) => TaintedUtils.trimEnd(transactionId, res, target),
     String.prototype.trimEnd
   )
 }
