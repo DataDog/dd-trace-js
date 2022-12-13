@@ -51,14 +51,20 @@ function getCsiFn (cb, ...protos) {
   return getFilteredCsiFn(cb, filter)
 }
 
-function getPlusOperatorFn (cb) {
-  return getFilteredCsiFn(cb, (res, op1, op2) => notString(res) || (notString(op1) && notString(op2)))
-}
-
 const TaintTracking = {
-  plusOperator: getPlusOperatorFn(
-    (transactionId, res, op1, op2) => TaintedUtils.concat(transactionId, res, op1, op2)
-  ),
+  plusOperator: function (res, op1, op2) {
+    try {
+      if (notString(res) || (notString(op1) && notString(op2))) { return res }
+      const transactionId = getTransactionId()
+      if (transactionId) {
+        return TaintedUtils.concat(transactionId, res, op1, op2)
+      }
+    } catch (e) {
+      log.debug(e)
+    }
+    return res
+  },
+
   trim: getCsiFn(
     (transactionId, res, target) => TaintedUtils.trim(transactionId, res, target),
     String.prototype.trim,

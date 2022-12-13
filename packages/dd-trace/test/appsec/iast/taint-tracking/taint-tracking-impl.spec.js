@@ -13,7 +13,8 @@ const { expect } = require('chai')
 const propagationFns = [
   'trimStr',
   'trimStartStr',
-  'trimEndStr'
+  'trimEndStr',
+  'concatSuffix'
 ]
 
 const commands = [
@@ -49,12 +50,12 @@ describe('TaintTracking', () => {
               const iastContext = iastContextFunctions.getIastContext(store)
               const commandTainted = newTaintedString(iastContext, command, 'param', 'Request')
 
-              expect(isTainted(iastContext, commandTainted)).to.be.true
-
               const propFnInstrumented = require(instrumentedFunctionsFile)[propFn]
               const proFnOriginal = require(propagationFunctionsFile)[propFn]
 
               const commandTrimmed = propFnInstrumented(commandTainted)
+              expect(isTainted(iastContext, commandTrimmed)).to.be.true
+
               const commandTrimmedOrig = proFnOriginal(commandTainted)
               expect(commandTrimmed).eq(commandTrimmedOrig)
 
