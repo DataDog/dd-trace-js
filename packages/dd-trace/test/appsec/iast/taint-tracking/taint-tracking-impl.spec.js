@@ -11,10 +11,12 @@ const { clearCache } = require('../../../../src/appsec/iast/vulnerability-report
 const { expect } = require('chai')
 
 const propagationFns = [
+  'concatSuffix',
+  'insertStr',
+  'appendStr',
   'trimStr',
   'trimStartStr',
-  'trimEndStr',
-  'concatSuffix'
+  'trimEndStr'
 ]
 
 const commands = [
@@ -51,17 +53,17 @@ describe('TaintTracking', () => {
               const commandTainted = newTaintedString(iastContext, command, 'param', 'Request')
 
               const propFnInstrumented = require(instrumentedFunctionsFile)[propFn]
-              const proFnOriginal = require(propagationFunctionsFile)[propFn]
+              const propFnOriginal = require(propagationFunctionsFile)[propFn]
 
-              const commandTrimmed = propFnInstrumented(commandTainted)
-              expect(isTainted(iastContext, commandTrimmed)).to.be.true
+              const commandResult = propFnInstrumented(commandTainted)
+              expect(isTainted(iastContext, commandResult)).to.be.true
 
-              const commandTrimmedOrig = proFnOriginal(commandTainted)
-              expect(commandTrimmed).eq(commandTrimmedOrig)
+              const commandResultOrig = propFnOriginal(commandTainted)
+              expect(commandResult).eq(commandResultOrig)
 
               try {
                 const childProcess = require('child_process')
-                childProcess.execSync(commandTrimmed, { stdio: 'ignore' })
+                childProcess.execSync(commandResult, { stdio: 'ignore' })
               } catch (e) {
                 // do nothing
               }
