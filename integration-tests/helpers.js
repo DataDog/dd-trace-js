@@ -109,7 +109,7 @@ function spawnProc (filename, options = {}) {
   })
 }
 
-async function createSandbox (dependencies = []) {
+async function createSandbox (dependencies = [], isGitRepo = false) {
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, 'dd-trace.tgz')
   const allDependencies = [`file:${out}`].concat(dependencies)
@@ -118,6 +118,14 @@ async function createSandbox (dependencies = []) {
   await exec(`yarn pack --filename ${out}`) // TODO: cache this
   await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder })
   await exec(`cp -R ./integration-tests/* ${folder}`)
+  if (isGitRepo) {
+    await exec('git config --global user.email "john@doe.com"')
+    await exec('git config --global user.name "John Doe"')
+    await exec(
+      `git init && git add -A && git commit -m "first commit" && git remote add origin git@git.com:datadog/example`,
+      { cwd: folder }
+    )
+  }
 
   return {
     folder,
