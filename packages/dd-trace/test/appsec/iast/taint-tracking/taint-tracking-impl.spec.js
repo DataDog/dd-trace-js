@@ -32,17 +32,17 @@ const commands = [
 const propagationFunctionsFile = path.join(__dirname, 'resources/propagationFunctions.js')
 
 describe('TaintTracking', () => {
+  let instrumentedFunctionsFile
+  beforeEach(() => {
+    instrumentedFunctionsFile = copyFileToTmp(propagationFunctionsFile)
+  })
+
+  afterEach(() => {
+    fs.unlinkSync(instrumentedFunctionsFile)
+    clearCache()
+  })
+
   describe('should propagate strings', () => {
-    let instrumentedFunctionsFile
-    beforeEach(() => {
-      instrumentedFunctionsFile = copyFileToTmp(propagationFunctionsFile)
-    })
-
-    afterEach(() => {
-      fs.unlinkSync(instrumentedFunctionsFile)
-      clearCache()
-    })
-
     propagationFns.forEach((propFn) => {
       describe(`using ${propFn}()`, () => {
         commands.forEach((command) => {
@@ -70,6 +70,15 @@ describe('TaintTracking', () => {
             }, 'COMMAND_INJECTION')
           })
         })
+      })
+    })
+  })
+
+  describe('should not catch original Error', () => {
+    propagationFns.slice(3).forEach((propFn) => {
+      it(`invoking ${propFn} with null argument`, () => {
+        const propFnInstrumented = require(instrumentedFunctionsFile)[propFn]
+        expect(() => propFnInstrumented(null)).to.throw()
       })
     })
   })
