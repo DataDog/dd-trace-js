@@ -184,6 +184,41 @@ describe('AppSec Rule Manager', () => {
       expect(FakeDDWAF.prototype.updateRuleData.lastCall.args[0]).to.deep.equal(expectedMergedRulesData)
     })
 
+    it('should merge rules data with different expiration different order', () => {
+      const oneRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc', expiration: 200 }
+        ]
+      }]
+
+      const anotherRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc', expiration: 100 }
+        ]
+      }]
+
+      const expectedMergedRulesData = [
+        {
+          id: 'dataA',
+          type: 'dataType',
+          data: [
+            { value: 'abc', expiration: 200 }
+          ]
+        }
+      ]
+
+      applyRules(rules)
+      updateAsmData('apply', { rules_data: oneRulesData }, 'id1')
+      updateAsmData('apply', { rules_data: anotherRulesData }, 'id2')
+
+      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledTwice
+      expect(FakeDDWAF.prototype.updateRuleData.lastCall.args[0]).to.deep.equal(expectedMergedRulesData)
+    })
+
     it('should merge rules data with and without expiration', () => {
       const oneRulesData = [{
         id: 'dataA',
@@ -198,6 +233,41 @@ describe('AppSec Rule Manager', () => {
         type: 'dataType',
         data: [
           { value: 'abc', expiration: 200 }
+        ]
+      }]
+
+      const expectedMergedRulesData = [
+        {
+          id: 'dataA',
+          type: 'dataType',
+          data: [
+            { value: 'abc' }
+          ]
+        }
+      ]
+
+      applyRules(rules)
+      updateAsmData('apply', { rules_data: oneRulesData }, 'id1')
+      updateAsmData('apply', { rules_data: anotherRulesData }, 'id2')
+
+      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledTwice
+      expect(FakeDDWAF.prototype.updateRuleData.lastCall).calledWithExactly(expectedMergedRulesData)
+    })
+
+    it('should merge rules data with and without expiration different order', () => {
+      const oneRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc', expiration: 200 }
+        ]
+      }]
+
+      const anotherRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc' }
         ]
       }]
 

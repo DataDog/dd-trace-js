@@ -39,9 +39,11 @@ function mergeRuleData (asmDataValues) {
         rulesData.data = rulesData.data.reduce((existingEntries, rulesDataEntry) => {
           const existingEntry = existingEntries.find((entry) => entry.value === rulesDataEntry.value)
           if (existingEntry && !('expiration' in existingEntry)) return existingEntries
-          if ('expiration' in rulesDataEntry && rulesDataEntry.expiration > existingEntry.expiration) {
+          if (existingEntry && 'expiration' in rulesDataEntry && rulesDataEntry.expiration > existingEntry.expiration) {
             existingEntry.expiration = rulesDataEntry.expiration
-          } else {
+          } else if (existingEntry && !('expiration' in rulesDataEntry)) {
+            delete existingEntry.expiration
+          } else if (!existingEntry) {
             existingEntries.push(rulesDataEntry)
           }
           return existingEntries
