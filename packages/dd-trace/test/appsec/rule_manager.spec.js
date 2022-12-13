@@ -288,5 +288,50 @@ describe('AppSec Rule Manager', () => {
       expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledTwice
       expect(FakeDDWAF.prototype.updateRuleData.lastCall).calledWithExactly(expectedMergedRulesData)
     })
+
+    it('should merge and unapply rules data', () => {
+      const oneRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc', expiration: 200 }
+        ]
+      }]
+
+      const twoRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc' }
+        ]
+      }]
+
+      const threeRulesData = [{
+        id: 'dataA',
+        type: 'dataType',
+        data: [
+          { value: 'abc', expiration: 100 }
+        ]
+      }]
+
+      const expectedMergedRulesData = [
+        {
+          id: 'dataA',
+          type: 'dataType',
+          data: [
+            { value: 'abc', expiration: 200 }
+          ]
+        }
+      ]
+
+      applyRules(rules)
+      updateAsmData('apply', { rules_data: oneRulesData }, 'id1')
+      updateAsmData('apply', { rules_data: twoRulesData }, 'id2')
+      updateAsmData('apply', { rules_data: threeRulesData }, 'id3')
+      updateAsmData('unapply', null, 'id2')
+
+      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.callCount(4)
+      expect(FakeDDWAF.prototype.updateRuleData.lastCall).calledWithExactly(expectedMergedRulesData)
+    })
   })
 })

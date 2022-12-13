@@ -5,6 +5,7 @@ let rc
 let RemoteConfigManager
 let appsec
 let remoteConfig
+let RuleManager
 
 describe('Remote Config enable', () => {
   beforeEach(() => {
@@ -26,9 +27,14 @@ describe('Remote Config enable', () => {
       disable: sinon.spy()
     }
 
+    RuleManager = {
+      updateAsmData: sinon.stub()
+    }
+
     remoteConfig = proxyquire('../src/appsec/remote_config', {
       './manager': RemoteConfigManager,
-      '..': appsec
+      '..': appsec,
+      '../rule_manager': RuleManager
     })
   })
 
@@ -87,6 +93,34 @@ describe('Remote Config enable', () => {
 
       expect(appsec.enable).to.not.have.been.called
       expect(appsec.disable).to.not.have.been.called
+    })
+  })
+
+  describe('ASM_DATA remote config listener', () => {
+    let listener
+
+    beforeEach(() => {
+      config.appsec = { enabled: undefined }
+
+      remoteConfig.enable(config)
+      remoteConfig.enableAsmData()
+
+      listener = rc.on.secondCall.args[1]
+    })
+
+    it('should call RuleManager.updateAsmData', () => {
+      const ruleData = {
+        rules_data: [{
+          data: [
+            { value: 'user1' }
+          ],
+          id: 'blocked_users',
+          type: 'data_with_expiration'
+        }]
+      }
+      listener('apply', ruleData, 'asm_data')
+
+      expect(RuleManager.updateAsmData).to.have.been.calledOnceWithExactly('apply', ruleData, 'asm_data')
     })
   })
 })

@@ -36,7 +36,7 @@ function mergeRuleData (asmDataValues) {
       const key = `${rulesData.id}+${rulesData.type}`
       if (mergedRulesData.has(key)) {
         const existingRulesData = mergedRulesData.get(key)
-        rulesData.data = rulesData.data.reduce((existingEntries, rulesDataEntry) => {
+        rulesData.data.reduce((existingEntries, rulesDataEntry) => {
           const existingEntry = existingEntries.find((entry) => entry.value === rulesDataEntry.value)
           if (existingEntry && !('expiration' in existingEntry)) return existingEntries
           if (existingEntry && 'expiration' in rulesDataEntry && rulesDataEntry.expiration > existingEntry.expiration) {
@@ -44,17 +44,29 @@ function mergeRuleData (asmDataValues) {
           } else if (existingEntry && !('expiration' in rulesDataEntry)) {
             delete existingEntry.expiration
           } else if (!existingEntry) {
-            existingEntries.push(rulesDataEntry)
+            existingEntries.push({ ...rulesDataEntry })
           }
           return existingEntries
         }, existingRulesData.data)
+      } else {
+        mergedRulesData.set(key, copyRulesData(rulesData))
       }
-      mergedRulesData.set(key, rulesData)
     }
   }
   return [...mergedRulesData.values()]
 }
 
+function copyRulesData (rulesData) {
+  const copy = { ...rulesData }
+  if (copy.data) {
+    const data = []
+    copy.data.forEach(item => {
+      data.push({ ...item })
+    })
+    copy.data = data
+  }
+  return copy
+}
 function clearAllRules () {
   Gateway.manager.clear()
 
