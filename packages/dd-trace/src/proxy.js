@@ -30,7 +30,9 @@ class Tracer extends NoopProxy {
     try {
       const config = new Config(options) // TODO: support dynamic config
 
-      remoteConfig.enable(config)
+      if (!config.isCiVisibility) {
+        remoteConfig.enable(config)
+      }
 
       if (config.profiling.enabled) {
         // do not stop tracer initialization if the profiler fails to be imported
