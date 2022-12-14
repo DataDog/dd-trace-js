@@ -112,9 +112,9 @@ function testThatRequestHasNoVulnerability (app, vulnerability) {
   testInRequest(app, tests)
 }
 
+let index = 0
 function copyFileToTmp (src) {
-  const prefix = Math.floor(Math.random() * 1000000)
-  const srcName = `dd-iast-${prefix}-${path.basename(src)}`
+  const srcName = `dd-iast-${index++}-${path.basename(src)}`
   const dest = path.join(os.tmpdir(), srcName)
   fs.copyFileSync(src, dest)
   return dest

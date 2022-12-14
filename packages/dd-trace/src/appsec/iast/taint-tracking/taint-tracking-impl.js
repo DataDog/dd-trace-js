@@ -37,7 +37,7 @@ function notString () {
   return Array.prototype.some.call(arguments, (p) => typeof p !== 'string')
 }
 
-function isValidCsiMethod (fn, ...protos) {
+function isValidCsiMethod (fn, protos) {
   return protos.some(proto => fn === proto)
 }
 
@@ -49,7 +49,7 @@ function getCsiFn (cb, ...protos) {
     const protoFn = protos[0]
     filter = (res, fn, target) => notString(res, target) || fn !== protoFn
   } else {
-    filter = (res, fn, target) => notString(res, target) || !isValidCsiMethod(fn, ...protos)
+    filter = (res, fn, target) => notString(res, target) || !isValidCsiMethod(fn, protos)
   }
   return getFilteredCsiFn(cb, filter)
 }

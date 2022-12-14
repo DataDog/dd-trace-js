@@ -30,6 +30,7 @@ const commands = [
 ]
 
 const propagationFunctionsFile = path.join(__dirname, 'resources/propagationFunctions.js')
+const propagationFunctions = require(propagationFunctionsFile)
 
 describe('TaintTracking', () => {
   let instrumentedFunctionsFile
@@ -53,7 +54,7 @@ describe('TaintTracking', () => {
               const commandTainted = newTaintedString(iastContext, command, 'param', 'Request')
 
               const propFnInstrumented = require(instrumentedFunctionsFile)[propFn]
-              const propFnOriginal = require(propagationFunctionsFile)[propFn]
+              const propFnOriginal = propagationFunctions[propFn]
 
               const commandResult = propFnInstrumented(commandTainted)
               expect(isTainted(iastContext, commandResult)).to.be.true
