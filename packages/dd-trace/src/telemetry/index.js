@@ -76,9 +76,30 @@ function createAppObject () {
 }
 
 function createHostObject () {
+  let osName = os.type()
+  if (osName === 'Linux' || osName === 'Darwin'){
+    return {
+      hostname: os.hostname(),
+      os: osName,
+      architecture: os.arch(),
+      kernel_version: os.version(),
+      kernel_release: os.release(),
+      kernel_name: osName
+    }
+  }
+
+  else if (osName === 'Windows_NT') {
+    return {
+      hostname: os.hostname(),
+      os: osName,
+      os_version: os.version(),
+      architecture: os.arch()
+    }
+  }
+
   return {
     hostname: os.hostname(), // TODO is this enough?
-    container_id: containerId
+    os: osName
   }
 }
 
