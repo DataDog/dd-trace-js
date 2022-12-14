@@ -4,7 +4,6 @@ const { fork, exec } = require('child_process')
 const path = require('path')
 
 const {
-  FakeAgent,
   createSandbox
 } = require('./helpers')
 const { FakeCiVisIntake } = require('./ci-visibility-intake')
@@ -44,6 +43,29 @@ const tests = [
   }
 ]
 
+function getAgentlessConfig (port) {
+  return {
+    ...process.env,
+    DD_API_KEY: '1',
+    DD_APP_KEY: '1',
+    DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
+    DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
+    DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 1,
+    DD_CIVISIBILITY_ITR_ENABLED: 1,
+    NODE_OPTIONS: '-r dd-trace/ci/init'
+  }
+}
+
+function getEvpProxyConfig (port) {
+  return {
+    ...process.env,
+    DD_TRACE_AGENT_PORT: port,
+    DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 1,
+    DD_CIVISIBILITY_ITR_ENABLED: 1,
+    NODE_OPTIONS: '-r dd-trace/ci/init'
+  }
+}
+
 tests.forEach(({
   name,
   dependencies,
@@ -72,9 +94,7 @@ tests.forEach(({
 
     beforeEach(async function () {
       const port = await getPort()
-      const isAgentlessTest = this.currentTest.parent.title === 'agentless'
-      const Receiver = isAgentlessTest ? FakeCiVisIntake : FakeAgent
-      receiver = await new Receiver(port).start()
+      receiver = await new FakeCiVisIntake(port).start()
     })
 
     afterEach(async () => {
@@ -84,7 +104,8 @@ tests.forEach(({
     })
 
     it('can run tests and report spans', (done) => {
-      receiver.assertMessageReceived(({ payload }) => {
+      receiver.setInfoResponse({ endpoints: [] })
+      receiver.assertPayloadReceived(({ payload }) => {
         const testSpans = payload.flatMap(trace => trace)
         const resourceNames = testSpans.map(span => span.resource)
 
@@ -98,7 +119,7 @@ tests.forEach(({
         assert.isTrue(areAllTestSpans)
         assert.include(testOutput, expectedStdout)
         done()
-      }, 15000).catch(([e]) => done(e))
+      }, ({ url }) => url === '/v0.4/traces').catch(([e]) => done(e))
 
       childProcess = fork(startupTestFile, {
         cwd,
@@ -184,19 +205,21 @@ tests.forEach(({
           assert.propertyVal(headers, 'dd-api-key', '1')
         }, ({ url }) => url === '/api/v2/git/repository/packfile')
 
+        const eventsRequest = receiver.assertPayloadReceived(({ payload }) => {
+          const eventTypes = payload.events.map(event => event.type)
+          assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_session_end'])
+          const numSuites = eventTypes.reduce(
+            (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+          )
+          assert.equal(numSuites, 2)
+        }, ({ url }) => url === '/api/v2/citestcycle')
+
         childProcess = fork(startupTestFile, {
           cwd,
-          env: {
-            DD_API_KEY: '1',
-            DD_APP_KEY: '1',
-            DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
-            DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${receiver.port}`,
-            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 1,
-            NODE_OPTIONS: '-r dd-trace/ci/init'
-          },
+          env: getAgentlessConfig(receiver.port),
           stdio: 'pipe'
         })
-        Promise.all([searchCommitsRequest, packfileRequest]).then(() => done()).catch(done)
+        Promise.all([searchCommitsRequest, packfileRequest, eventsRequest]).then(() => done()).catch(done)
       })
       it('can report code coverage', (done) => {
         const itrConfigRequest = receiver.assertPayloadReceived(({ headers }) => {
@@ -220,24 +243,24 @@ tests.forEach(({
           assert.exists(coveragePayload.content.trace_id)
         }, ({ url }) => url === '/api/v2/citestcov')
 
+        const eventsRequest = receiver.assertPayloadReceived(({ payload }) => {
+          const eventTypes = payload.events.map(event => event.type)
+          assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_session_end'])
+          const numSuites = eventTypes.reduce(
+            (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+          )
+          assert.equal(numSuites, 2)
+        }, ({ url }) => url === '/api/v2/citestcycle')
+
         childProcess = exec(
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: {
-              ...process.env,
-              DD_API_KEY: '1',
-              DD_APP_KEY: '1',
-              DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
-              DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${receiver.port}`,
-              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 1,
-              DD_CIVISIBILITY_ITR_ENABLED: 1,
-              NODE_OPTIONS: '-r dd-trace/ci/init'
-            },
+            env: getAgentlessConfig(receiver.port),
             stdio: 'inherit'
           }
         )
-        Promise.all([itrConfigRequest, codeCovRequest]).then(() => done()).catch(done)
+        Promise.all([itrConfigRequest, codeCovRequest, eventsRequest]).then(() => done()).catch(done)
       })
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
@@ -260,16 +283,7 @@ tests.forEach(({
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: {
-              ...process.env,
-              DD_API_KEY: '1',
-              DD_APP_KEY: '1',
-              DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
-              DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${receiver.port}`,
-              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 1,
-              DD_CIVISIBILITY_ITR_ENABLED: 1,
-              NODE_OPTIONS: '-r dd-trace/ci/init'
-            },
+            env: getAgentlessConfig(receiver.port),
             stdio: 'inherit'
           }
         )
@@ -312,16 +326,7 @@ tests.forEach(({
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: {
-              ...process.env,
-              DD_API_KEY: '1',
-              DD_APP_KEY: '1',
-              DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
-              DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${receiver.port}`,
-              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 1,
-              DD_CIVISIBILITY_ITR_ENABLED: 1,
-              NODE_OPTIONS: '-r dd-trace/ci/init'
-            },
+            env: getAgentlessConfig(receiver.port),
             stdio: 'inherit'
           }
         )
@@ -357,16 +362,7 @@ tests.forEach(({
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: {
-              ...process.env,
-              DD_API_KEY: '1',
-              DD_APP_KEY: '1',
-              DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
-              DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${receiver.port}`,
-              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 1,
-              DD_CIVISIBILITY_ITR_ENABLED: 1,
-              NODE_OPTIONS: '-r dd-trace/ci/init'
-            },
+            env: getAgentlessConfig(receiver.port),
             stdio: 'inherit'
           }
         )
@@ -404,16 +400,275 @@ tests.forEach(({
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: {
-              ...process.env,
-              DD_API_KEY: '1',
-              DD_APP_KEY: '1',
-              DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
-              DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${receiver.port}`,
-              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 1,
-              DD_CIVISIBILITY_ITR_ENABLED: 1,
-              NODE_OPTIONS: '-r dd-trace/ci/init'
-            },
+            env: getAgentlessConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+      })
+    })
+
+    describe('evp proxy', () => {
+      it('does not do any ITR request if the agent is not EVP compatible', (done) => {
+        receiver.assertPayloadReceived(() => {
+          const error = new Error('should not request search_commits')
+          done(error)
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/search_commits')
+        receiver.assertPayloadReceived(() => {
+          const error = new Error('should not request search_commits')
+          done(error)
+        }, ({ url }) => url === '/api/v2/git/repository/search_commits')
+        receiver.assertPayloadReceived(() => {
+          const error = new Error('should not request setting')
+          done(error)
+        }, ({ url }) => url === '/api/v2/libraries/tests/services/setting')
+        receiver.assertPayloadReceived(() => {
+          const error = new Error('should not request setting')
+          done(error)
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting')
+
+        const traceRequest = receiver.assertPayloadReceived(({ payload }) => {
+          const testSpans = payload.flatMap(trace => trace)
+          const resourceNames = testSpans.map(span => span.resource)
+
+          assert.includeMembers(resourceNames,
+            [
+              'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
+              'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
+            ]
+          )
+        }, ({ url }) => url === '/v0.4/traces')
+
+        receiver.setInfoResponse({ endpoints: [] })
+
+        childProcess = fork(startupTestFile, {
+          cwd,
+          env: getEvpProxyConfig(receiver.port),
+          stdio: 'pipe'
+        })
+
+        Promise.all([traceRequest]).then(() => done()).catch(done)
+      })
+      it('can report git metadata', (done) => {
+        const infoRequest = receiver.assertPayloadReceived(({ headers }) => {
+          assert.notProperty(headers, 'dd-api-key')
+        }, ({ url }) => url === '/info')
+
+        const searchCommitsRequest = receiver.assertPayloadReceived(({ headers }) => {
+          assert.notProperty(headers, 'dd-api-key')
+          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'api')
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/search_commits')
+
+        const packfileRequest = receiver.assertPayloadReceived(({ headers }) => {
+          assert.notProperty(headers, 'dd-api-key')
+          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'api')
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/packfile')
+
+        const eventsRequest = receiver.assertPayloadReceived(({ payload }) => {
+          const eventTypes = payload.events.map(event => event.type)
+          assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_session_end'])
+          const numSuites = eventTypes.reduce(
+            (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+          )
+          assert.equal(numSuites, 2)
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle')
+
+        childProcess = fork(startupTestFile, {
+          cwd,
+          env: getEvpProxyConfig(receiver.port),
+          stdio: 'pipe'
+        })
+
+        Promise.all([searchCommitsRequest, packfileRequest, infoRequest, eventsRequest]).then(() => done()).catch(done)
+      })
+      it('can report code coverage', (done) => {
+        const itrConfigRequest = receiver.assertPayloadReceived(({ headers }) => {
+          assert.notProperty(headers, 'dd-api-key', '1')
+          assert.notProperty(headers, 'dd-application-key', '1')
+          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'api')
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting')
+
+        const codeCovRequest = receiver.assertPayloadReceived(({ headers, payload }) => {
+          const [coveragePayload] = payload
+          assert.notProperty(headers, 'dd-api-key', '1')
+          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'event-platform-intake')
+
+          assert.propertyVal(coveragePayload, 'name', 'coverage1')
+          assert.propertyVal(coveragePayload, 'filename', 'coverage1.msgpack')
+          assert.propertyVal(coveragePayload, 'type', 'application/msgpack')
+          assert.include(coveragePayload.content, {
+            version: 1
+          })
+          const allCoverageFiles = payload.flatMap(coverage => coverage.content.files).map(file => file.filename)
+          assert.includeMembers(allCoverageFiles, expectedCoverageFiles)
+          assert.exists(coveragePayload.content.span_id)
+          assert.exists(coveragePayload.content.trace_id)
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcov')
+
+        const eventsRequest = receiver.assertPayloadReceived(({ payload }) => {
+          const eventTypes = payload.events.map(event => event.type)
+          assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_session_end'])
+          const numSuites = eventTypes.reduce(
+            (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+          )
+          assert.equal(numSuites, 2)
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle')
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getEvpProxyConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+        Promise.all([itrConfigRequest, codeCovRequest, eventsRequest]).then(() => done()).catch(done)
+      })
+      it('does not report code coverage if disabled by the API', (done) => {
+        receiver.setSettings({
+          code_coverage: false,
+          tests_skipping: false
+        })
+
+        receiver.assertPayloadReceived(() => {
+          const error = new Error('it should not report code coverage')
+          done(error)
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcov')
+
+        receiver.assertPayloadReceived(({ headers, payload }) => {
+          assert.notProperty(headers, 'dd-api-key', '1')
+          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
+          const eventTypes = payload.events.map(event => event.type)
+          assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_suite_end'])
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle').then(() => done()).catch(done)
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getEvpProxyConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+      })
+      it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
+        const skippableRequest = receiver.assertPayloadReceived(({ headers }) => {
+          assert.notProperty(headers, 'dd-api-key', '1')
+          assert.notProperty(headers, 'dd-application-key', '1')
+          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'api')
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable')
+
+        const coverageRequest = receiver.assertPayloadReceived(({ payload, headers }) => {
+          const [coveragePayload] = payload
+          assert.notProperty(headers, 'dd-api-key', '1')
+          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'event-platform-intake')
+          assert.propertyVal(coveragePayload, 'name', 'coverage1')
+          assert.propertyVal(coveragePayload, 'filename', 'coverage1.msgpack')
+          assert.propertyVal(coveragePayload, 'type', 'application/msgpack')
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcov')
+
+        const eventsRequest = receiver.assertPayloadReceived(({ headers, payload }) => {
+          assert.notProperty(headers, 'dd-api-key', '1')
+          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
+          const eventTypes = payload.events.map(event => event.type)
+          const skippedTest = payload.events.find(event =>
+            event.content.resource === 'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests'
+          )
+          assert.notExists(skippedTest)
+          assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_session_end'])
+          const numSuites = eventTypes.reduce(
+            (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+          )
+          assert.equal(numSuites, 1)
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle')
+
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test/ci-visibility-test.js'
+          }
+        }])
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getEvpProxyConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+        Promise.all([skippableRequest, eventsRequest, coverageRequest]).then(() => done()).catch(done)
+      })
+      it('does not skip tests if git metadata upload fails', (done) => {
+        receiver.assertPayloadReceived(() => {
+          const error = new Error('should not request skippable')
+          done(error)
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable')
+
+        receiver.assertPayloadReceived(({ headers, payload }) => {
+          assert.notProperty(headers, 'dd-api-key', '1')
+          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
+          const eventTypes = payload.events.map(event => event.type)
+          // because they are not skipped
+          assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_session_end'])
+          const numSuites = eventTypes.reduce(
+            (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+          )
+          assert.equal(numSuites, 2)
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle').then(() => done()).catch(done)
+
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test/ci-visibility-test.js'
+          }
+        }])
+
+        receiver.setGitUploadStatus(404)
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getEvpProxyConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+      })
+      it('does not skip tests if test skipping is disabled by the API', (done) => {
+        receiver.assertPayloadReceived(() => {
+          const error = new Error('should not request skippable')
+          done(error)
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable')
+
+        receiver.assertPayloadReceived(({ headers, payload }) => {
+          assert.notProperty(headers, 'dd-api-key', '1')
+          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
+          const eventTypes = payload.events.map(event => event.type)
+          // because they are not skipped
+          assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_session_end'])
+          const numSuites = eventTypes.reduce(
+            (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+          )
+          assert.equal(numSuites, 2)
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle').then(() => done()).catch(done)
+
+        receiver.setSettings({
+          code_coverage: true,
+          tests_skipping: false
+        })
+
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test/ci-visibility-test.js'
+          }
+        }])
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getEvpProxyConfig(receiver.port),
             stdio: 'inherit'
           }
         )
