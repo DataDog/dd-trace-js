@@ -33,7 +33,7 @@ function enable (config) {
 }
 
 function enableAsmData (appsecConfig) {
-  if (appsecConfig && appsecConfig.rules === undefined) {
+  if (rc && appsecConfig && appsecConfig.rules === undefined) {
     rc.on('ASM_DATA', _asmDataListener)
   }
 }
