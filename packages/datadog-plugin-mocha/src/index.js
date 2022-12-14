@@ -31,9 +31,6 @@ class MochaPlugin extends CiPlugin {
     this.sourceRoot = process.cwd()
 
     this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
-      if (!this.config.isIntelligentTestRunnerEnabled) {
-        return
-      }
       if (!this.itrConfig || !this.itrConfig.isCodeCoverageEnabled) {
         return
       }

@@ -125,10 +125,12 @@ class JestPlugin extends CiPlugin {
       finishAllTraceSpans(testSuiteSpan)
     })
 
+    /**
+     * This can't use `this._itrConfig` like `ci:mocha:test-suite:code-coverage`
+     * because this subscription happens in a different process from the one
+     * fetching the ITR config.
+     */
     this.addSub('ci:jest:test-suite:code-coverage', (coverageFiles) => {
-      if (!this.config.isIntelligentTestRunnerEnabled) {
-        return
-      }
       const testSuiteSpan = storage.getStore().span
       this.tracer._exporter.exportCoverage({ span: testSuiteSpan, coverageFiles })
     })
