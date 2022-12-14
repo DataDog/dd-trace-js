@@ -44,14 +44,11 @@ describe('Plugin', function () {
 
   withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {
-      delete process.env.DD_CIVISIBILITY_ITR_ENABLED
-      delete process.env.DD_API_KEY
       const jestTestFile = fs.readdirSync(__dirname).filter(name => name.startsWith('jest-'))
       jestTestFile.forEach((testFile) => {
         delete require.cache[require.resolve(path.join(__dirname, testFile))]
       })
       delete require.cache[require.resolve(path.join(__dirname, 'env.js'))]
-      delete global._ddtrace
       nock.cleanAll()
       return agent.close({ ritmReset: false, wipe: true })
     })
@@ -61,28 +58,18 @@ describe('Plugin', function () {
         .get('/')
         .reply(200, 'OK')
 
-      const loadArguments = [['jest', 'http']]
+      process.env.DD_API_KEY = 'key'
+      process.env.DD_APP_KEY = 'app-key'
+      const isAgentlessTest = this.currentTest.parent.title === 'reporting through agentless'
+      const isEvpProxyTest = this.currentTest.parent.title === 'reporting through evp proxy'
 
-      const isAgentlessTest = this.currentTest.parent.title === 'agentless'
-      const isEvpProxyTest = this.currentTest.parent.title === 'evp proxy'
+      const exporter = isAgentlessTest ? 'datadog' : 'agent_proxy'
 
-      // we need the ci visibility init for the coverage test
-      if (isAgentlessTest) {
-        process.env.DD_API_KEY = 'key'
-        process.env.DD_APP_KEY = 'app-key'
-        process.env.DD_ENV = 'ci'
-        process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
-        process.env.DD_SITE = 'datad0g.com'
-        loadArguments.push({ service: 'test', isIntelligentTestRunnerEnabled: true })
-        loadArguments.push({ experimental: { exporter: 'datadog' } })
-      } else if (isEvpProxyTest) {
-        loadArguments.push({ service: 'test' })
-        loadArguments.push({ experimental: { exporter: 'agent_proxy' } })
-      } else {
-        loadArguments.push({ service: 'test' })
+      if (!isEvpProxyTest) {
+        agent.setAvailableEndpoints([])
       }
 
-      return agent.load(...loadArguments).then(() => {
+      return agent.load(['jest', 'http'], { service: 'test' }, { experimental: { exporter } }).then(() => {
         global.__libraryName__ = moduleName
         global.__libraryVersion__ = version
         jestExecutable = require(`../../../versions/jest@${version}`).get()
@@ -309,127 +296,77 @@ describe('Plugin', function () {
         })
       }
 
-      describe('agentless', () => {
-        it('should create spans for the test session and test suite', (done) => {
-          const events = [
-            {
-              type: 'test_session_end',
-              status: 'pass',
-              spanResourceMatch: /^test_session/
-            },
-            {
-              type: 'test_suite_end',
-              status: 'pass',
-              suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js',
-              spanResourceMatch: /^test_suite/
-            },
-            {
-              name: 'jest-test-suite-visibility works',
-              suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js',
-              status: 'pass',
-              type: 'test',
-              spanResourceMatch: /jest-test-suite-visibility works$/
-            }
-          ]
+      const initOptions = ['agentless', 'evp proxy']
 
-          const assertionPromises = events.map(({ name, suite, status, type, spanResourceMatch }) => {
-            return agent.use(agentlessPayload => {
-              const { events } = agentlessPayload
-              const span = events.find(event => event.type === type).content
-              expect(span.meta[TEST_STATUS]).to.equal(status)
-              expect(span.meta[COMPONENT]).to.equal('jest')
-              if (type === 'test_session_end') {
-                expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
-                expect(span[TEST_SUITE_ID]).to.equal(undefined)
-                expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+      initOptions.forEach(option => {
+        describe(`reporting through ${option}`, () => {
+          it('should create events for session, suite and test', (done) => {
+            const events = [
+              {
+                type: 'test_session_end',
+                status: 'pass',
+                spanResourceMatch: /^test_session/
+              },
+              {
+                type: 'test_suite_end',
+                status: 'pass',
+                suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js',
+                spanResourceMatch: /^test_suite/
+              },
+              {
+                name: 'jest-test-suite-visibility works',
+                suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js',
+                status: 'pass',
+                type: 'test',
+                spanResourceMatch: /jest-test-suite-visibility works$/
               }
-              if (type === 'test_suite_end') {
-                expect(span.meta[TEST_SUITE]).to.equal(suite)
-                expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
-                expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
-                expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
-              }
-              if (type === 'test') {
-                expect(span.meta[TEST_SUITE]).to.equal(suite)
-                expect(span.meta[TEST_NAME]).to.equal(name)
-                expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
-                expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
-                expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
-              }
-            }, { timeoutMs: assertionTimeout, spanResourceMatch })
-          })
+            ]
 
-          Promise.all(assertionPromises).then(() => done()).catch(done)
-
-          const options = {
-            ...jestCommonOptions,
-            testRegex: 'jest-test-suite.js'
-          }
-
-          jestExecutable.runCLI(
-            options,
-            options.projects
-          )
-        })
-      })
-
-      describe('evp proxy', () => {
-        it('can report test suite level visibility spans', (done) => {
-          const events = [
-            { type: 'test_session_end', status: 'pass' },
-            {
-              type: 'test_suite_end',
-              status: 'pass',
-              suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js'
-            },
-            {
-              name: 'jest-test-suite-visibility works',
-              suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js',
-              status: 'pass',
-              type: 'test'
-            }
-          ]
-
-          const assertionPromises = events.map(({ name, suite, status, type }) => {
-            return agent.use((agentlessPayload, request) => {
-              expect(request.headers['x-datadog-evp-subdomain']).to.equal('citestcycle-intake')
-              expect(request.path).to.equal('/evp_proxy/v2/api/v2/citestcycle')
-              const { events } = agentlessPayload
-              const span = events.find(event => event.type === type).content
-              expect(span.meta[TEST_STATUS]).to.equal(status)
-              expect(span.meta[COMPONENT]).to.equal('jest')
-              if (type === 'test_session_end') {
-                expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
-                expect(span[TEST_SUITE_ID]).to.equal(undefined)
-                expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
-              }
-              if (type === 'test_suite_end') {
-                expect(span.meta[TEST_SUITE]).to.equal(suite)
-                expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
-                expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
-                expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
-              }
-              if (type === 'test') {
-                expect(span.meta[TEST_SUITE]).to.equal(suite)
-                expect(span.meta[TEST_NAME]).to.equal(name)
-                expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
-                expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
-                expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
-              }
+            const assertionPromises = events.map(({ name, suite, status, type, spanResourceMatch }) => {
+              return agent.use((agentlessPayload, request) => {
+                if (option === 'evp proxy') {
+                  expect(request.headers['x-datadog-evp-subdomain']).to.equal('citestcycle-intake')
+                  expect(request.path).to.equal('/evp_proxy/v2/api/v2/citestcycle')
+                } else {
+                  expect(request.path).to.equal('/api/v2/citestcycle')
+                }
+                const { events } = agentlessPayload
+                const span = events.find(event => event.type === type).content
+                expect(span.meta[TEST_STATUS]).to.equal(status)
+                expect(span.meta[COMPONENT]).to.equal('jest')
+                if (type === 'test_session_end') {
+                  expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
+                  expect(span[TEST_SUITE_ID]).to.equal(undefined)
+                  expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+                }
+                if (type === 'test_suite_end') {
+                  expect(span.meta[TEST_SUITE]).to.equal(suite)
+                  expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
+                  expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
+                  expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+                }
+                if (type === 'test') {
+                  expect(span.meta[TEST_SUITE]).to.equal(suite)
+                  expect(span.meta[TEST_NAME]).to.equal(name)
+                  expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
+                  expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
+                  expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+                }
+              }, { timeoutMs: assertionTimeout, spanResourceMatch })
             })
+
+            Promise.all(assertionPromises).then(() => done()).catch(done)
+
+            const options = {
+              ...jestCommonOptions,
+              testRegex: 'jest-test-suite.js'
+            }
+
+            jestExecutable.runCLI(
+              options,
+              options.projects
+            )
           })
-
-          Promise.all(assertionPromises).then(() => done()).catch(done)
-
-          const options = {
-            ...jestCommonOptions,
-            testRegex: 'jest-test-suite.js'
-          }
-
-          jestExecutable.runCLI(
-            options,
-            options.projects
-          )
         })
       })
     })
