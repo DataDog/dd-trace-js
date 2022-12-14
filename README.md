@@ -15,6 +15,7 @@
 Most of the documentation for `dd-trace` is available on these webpages:
 
 - [Tracing Node.js Applications](https://docs.datadoghq.com/tracing/languages/nodejs/) - most project documentation, including setup instructions
+- [Configuring the NodeJS Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs) - environment variables and config options
 - [API Documentation](https://datadog.github.io/dd-trace-js) - method signatures, plugin list, and some usage examples
 - [APM Terms and Concepts](https://docs.datadoghq.com/tracing/visualization/) - a glossary of concepts applicable across all languages
 
