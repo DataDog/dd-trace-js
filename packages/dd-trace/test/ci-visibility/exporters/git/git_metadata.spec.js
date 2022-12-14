@@ -57,7 +57,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
@@ -73,7 +73,7 @@ describe('git_metadata', () => {
 
     getCommitsToUploadStub.returns([])
 
-    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
       expect(err).to.be.null
       // to check that it is not called
       expect(scope.isDone()).to.be.false
@@ -89,7 +89,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
       // eslint-disable-next-line
       expect(err.message).to.contain('Error fetching commits to exclude: Error from https://api.test.com//api/v2/git/repository/search_commits: 404 Not Found. Response from the endpoint: "Not found SHA"')
       // to check that it is not called
@@ -106,7 +106,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
       expect(err.message).to.contain("Can't parse commits to exclude response: Invalid commit type response")
       // to check that it is not called
       expect(scope.isDone()).to.be.false
@@ -122,7 +122,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(502)
 
-    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
       expect(err.message).to.contain('Could not upload packfiles: status code 502')
       expect(scope.isDone()).to.be.true
       done()
@@ -149,7 +149,7 @@ describe('git_metadata', () => {
       secondTemporaryPackFile
     ])
 
-    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
@@ -168,7 +168,7 @@ describe('git_metadata', () => {
       'not there either'
     ])
 
-    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
       expect(err.message).to.contain('Could not read "not-there"')
       expect(scope.isDone()).to.be.false
       done()
@@ -184,7 +184,7 @@ describe('git_metadata', () => {
 
     generatePackFilesForCommitsStub.returns([])
 
-    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
       expect(err.message).to.contain('Failed to generate packfiles')
       expect(scope.isDone()).to.be.false
       done()
@@ -200,7 +200,7 @@ describe('git_metadata', () => {
 
     getRepositoryUrlStub.returns('')
 
-    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
       expect(err.message).to.contain('Repository URL is empty')
       expect(scope.isDone()).to.be.false
       done()
@@ -218,28 +218,26 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
     })
   })
 
-  it('works when a url is passed', (done) => {
-    const scope = nock('https://www.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .replyWithError('Server unavailable')
-      .post('/api/v2/git/repository/search_commits')
+  it('should append evp proxy prefix if configured', (done) => {
+    const scope = nock('https://api.test.com')
+      .post('/evp_proxy/v2/api/v2/git/repository/search_commits')
       .reply(200, JSON.stringify({ data: [] }))
-      .post('/api/v2/git/repository/packfile')
-      .replyWithError('Server unavailable')
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
+      .post('/evp_proxy/v2/api/v2/git/repository/packfile')
+      .reply(204, function (uri, body) {
+        expect(this.req.headers['x-datadog-evp-subdomain']).to.equal('api')
+        done()
+      })
 
-    gitMetadata.sendGitMetadata(new URL('https://www.test.com'), 'test.com', (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), true, (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
-      done()
     })
   })
 })
