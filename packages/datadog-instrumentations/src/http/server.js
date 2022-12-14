@@ -52,12 +52,10 @@ function wrapEmit (emit) {
 
       startServerCh.publish({ req, res, abortController })
 
-      if (abortController.signal.aborted) {
-        // TODO: what if res.end is called twice ?
-        return res.end()
-      }
-
       try {
+        if (abortController.signal.aborted) {
+          return res.end()
+        }
         return emit.apply(this, arguments)
       } catch (err) {
         errorServerCh.publish(err)
