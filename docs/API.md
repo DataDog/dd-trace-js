@@ -13,12 +13,12 @@ APM provides out-of-the-box instrumentation for many popular frameworks and libr
 Built-in plugins can be configured individually:
 
 ```javascript
-const tracer = require('dd-trace').init()
+const tracer = require("dd-trace").init();
 
 // enable and configure postgresql integration
-tracer.use('pg', {
-  service: 'pg-cluster'
-})
+tracer.use("pg", {
+  service: "pg-cluster",
+});
 ```
 
 <h5 id="amqplib"></h5>
@@ -97,54 +97,54 @@ tracer.use('pg', {
 <h5 id="winston"></h5>
 <h3 id="integrations-list">Available Plugins</h3>
 
-* [amqp10](./interfaces/plugins.amqp10.html)
-* [amqplib](./interfaces/plugins.amqplib.html)
-* [aws-sdk](./interfaces/plugins.aws_sdk.html)
-* [bluebird](./interfaces/plugins.bluebird.html)
-* [couchbase](./interfaces/plugins.couchbase.html)
-* [cucumber](./interfaces/plugins.cucumber.html)
-* [bunyan](./interfaces/plugins.bunyan.html)
-* [cassandra-driver](./interfaces/plugins.cassandra_driver.html)
-* [connect](./interfaces/plugins.connect.html)
-* [dns](./interfaces/plugins.dns.html)
-* [elasticsearch](./interfaces/plugins.elasticsearch.html)
-* [express](./interfaces/plugins.express.html)
-* [fastify](./interfaces/plugins.fastify.html)
-* [fs](./interfaces/plugins.fs.html)
-* [generic-pool](./interfaces/plugins.generic_pool.html)
-* [google-cloud-pubsub](./interfaces/plugins.google_cloud_pubsub.html)
-* [graphql](./interfaces/plugins.graphql.html)
-* [grpc](./interfaces/plugins.grpc.html)
-* [hapi](./interfaces/plugins.hapi.html)
-* [http](./interfaces/plugins.http.html)
-* [http2](./interfaces/plugins.http2.html)
-* [ioredis](./interfaces/plugins.ioredis.html)
-* [jest](./interfaces/plugins.jest.html)
-* [kafkajs](./interfaces/plugins.kafkajs.html)
-* [knex](./interfaces/plugins.knex.html)
-* [koa](./interfaces/plugins.koa.html)
-* [mariadb](./interfaces/plugins.mariadb.html)
-* [microgateway--core](./interfaces/plugins.microgateway_core.html)
-* [mocha](./interfaces/plugins.mocha.html)
-* [mongodb-core](./interfaces/plugins.mongodb_core.html)
-* [mysql](./interfaces/plugins.mysql.html)
-* [mysql2](./interfaces/plugins.mysql2.html)
-* [net](./interfaces/plugins.net.html)
-* [next](./interfaces/plugins.next.html)
-* [opensearch](./interfaces/plugins.opensearch.html)
-* [oracledb](./interfaces/plugins.oracledb.html)
-* [paperplane](./interfaces/plugins.paperplane.html)
-* [pino](./interfaces/plugins.pino.html)
-* [pg](./interfaces/plugins.pg.html)
-* [promise](./interfaces/plugins.promise.html)
-* [promise-js](./interfaces/plugins.promise_js.html)
-* [q](./interfaces/plugins.q.html)
-* [redis](./interfaces/plugins.redis.html)
-* [restify](./interfaces/plugins.restify.html)
-* [router](./interfaces/plugins.router.html)
-* [tedious](./interfaces/plugins.tedious.html)
-* [when](./interfaces/plugins.when.html)
-* [winston](./interfaces/plugins.winston.html)
+- [amqp10](./interfaces/plugins.amqp10.html)
+- [amqplib](./interfaces/plugins.amqplib.html)
+- [aws-sdk](./interfaces/plugins.aws_sdk.html)
+- [bluebird](./interfaces/plugins.bluebird.html)
+- [couchbase](./interfaces/plugins.couchbase.html)
+- [cucumber](./interfaces/plugins.cucumber.html)
+- [bunyan](./interfaces/plugins.bunyan.html)
+- [cassandra-driver](./interfaces/plugins.cassandra_driver.html)
+- [connect](./interfaces/plugins.connect.html)
+- [dns](./interfaces/plugins.dns.html)
+- [elasticsearch](./interfaces/plugins.elasticsearch.html)
+- [express](./interfaces/plugins.express.html)
+- [fastify](./interfaces/plugins.fastify.html)
+- [fs](./interfaces/plugins.fs.html)
+- [generic-pool](./interfaces/plugins.generic_pool.html)
+- [google-cloud-pubsub](./interfaces/plugins.google_cloud_pubsub.html)
+- [graphql](./interfaces/plugins.graphql.html)
+- [grpc](./interfaces/plugins.grpc.html)
+- [hapi](./interfaces/plugins.hapi.html)
+- [http](./interfaces/plugins.http.html)
+- [http2](./interfaces/plugins.http2.html)
+- [ioredis](./interfaces/plugins.ioredis.html)
+- [jest](./interfaces/plugins.jest.html)
+- [kafkajs](./interfaces/plugins.kafkajs.html)
+- [knex](./interfaces/plugins.knex.html)
+- [koa](./interfaces/plugins.koa.html)
+- [mariadb](./interfaces/plugins.mariadb.html)
+- [microgateway--core](./interfaces/plugins.microgateway_core.html)
+- [mocha](./interfaces/plugins.mocha.html)
+- [mongodb-core](./interfaces/plugins.mongodb_core.html)
+- [mysql](./interfaces/plugins.mysql.html)
+- [mysql2](./interfaces/plugins.mysql2.html)
+- [net](./interfaces/plugins.net.html)
+- [next](./interfaces/plugins.next.html)
+- [opensearch](./interfaces/plugins.opensearch.html)
+- [oracledb](./interfaces/plugins.oracledb.html)
+- [paperplane](./interfaces/plugins.paperplane.html)
+- [pino](./interfaces/plugins.pino.html)
+- [pg](./interfaces/plugins.pg.html)
+- [promise](./interfaces/plugins.promise.html)
+- [promise-js](./interfaces/plugins.promise_js.html)
+- [q](./interfaces/plugins.q.html)
+- [redis](./interfaces/plugins.redis.html)
+- [restify](./interfaces/plugins.restify.html)
+- [router](./interfaces/plugins.router.html)
+- [tedious](./interfaces/plugins.tedious.html)
+- [when](./interfaces/plugins.when.html)
+- [winston](./interfaces/plugins.winston.html)
 
 <h2 id="manual-instrumentation">Manual Instrumentation</h2>
 
@@ -163,10 +163,10 @@ This method allows you to trace a specific operation at the moment it is execute
 To trace synchronously, simply call `tracer.trace()` without passing a function to the callback.
 
 ```javascript
-function handle (err) {
-  tracer.trace('web.request', span => {
+function handle(err) {
+  tracer.trace("web.request", (span) => {
     // some code
-  })
+  });
 }
 ```
 
@@ -177,11 +177,11 @@ If an error is thrown in the callback, it will be automatically added to the spa
 The most basic approach to trace asynchronous operations is to pass a function to the callback provided to the method.
 
 ```javascript
-function handle (err) {
-  tracer.trace('web.request', (span, cb) => {
+function handle(err) {
+  tracer.trace("web.request", (span, cb) => {
     // some code
-    cb(err)
-  })
+    cb(err);
+  });
 }
 ```
 
@@ -192,12 +192,12 @@ Errors passed to the callback will automatically be added to the span.
 For promises, the span will be finished afer the promise has been either resolved or rejected.
 
 ```javascript
-function handle () {
-  return tracer.trace('web.request', () => {
+function handle() {
+  return tracer.trace("web.request", () => {
     return new Promise((resolve, reject) => {
       // some code
-    })
-  })
+    });
+  });
 }
 ```
 
@@ -208,10 +208,10 @@ Any error from rejected promises will automatically be added to the span.
 For promises, the span lifecycle will be according to the returned promise.
 
 ```javascript
-async function handle () {
-  return await tracer.trace('web.request', async () => {
+async function handle() {
+  return await tracer.trace("web.request", async () => {
     // some code
-  })
+  });
 }
 ```
 
@@ -222,11 +222,11 @@ Any error from the awaited handler will automatically be added to the span.
 This method works very similarly to `tracer.trace()` except it wraps a function so that `tracer.trace()` is called automatically every time the function is called. This makes it easier to patch entire functions that have already been defined, or that are returned from code that cannot be edited easily.
 
 ```javascript
-function handle () {
+function handle() {
   // some code
 }
 
-const handleWithTrace = tracer.wrap('web.request', handle)
+const handleWithTrace = tracer.wrap("web.request", handle);
 ```
 
 Similar to `tracer.trace()`, it handles synchronous calls, callbacks, promises and async/await. The only difference being that if the last argument of the wrapped function is a callback, the span will only be finished when that callback is called.
@@ -234,19 +234,19 @@ Similar to `tracer.trace()`, it handles synchronous calls, callbacks, promises a
 For example:
 
 ```javascript
-function handle (a, b, c, callback) {
+function handle(a, b, c, callback) {
   // some code
-  callback()
+  callback();
 }
 
-const handleWithTrace = tracer.wrap('web.request', handle)
+const handleWithTrace = tracer.wrap("web.request", handle);
 ```
 
 <h3 id="scope-manager">tracer.scope()</h3>
 
 In order to provide context propagation, this library includes a scope manager available with `tracer.scope()`. A scope is basically a wrapper around a span that can cross both synchronous and asynchronous contexts.
 
-In most cases, it's not necessary to interact with the scope manager since `tracer.trace()` activates the span on its scope, and uses the  active span on the current scope if available as its parent. This should only be used directly for edge cases, like an internal queue of functions that are executed on a timer for example in which case the scope is lost.
+In most cases, it's not necessary to interact with the scope manager since `tracer.trace()` activates the span on its scope, and uses the active span on the current scope if available as its parent. This should only be used directly for edge cases, like an internal queue of functions that are executed on a timer for example in which case the scope is lost.
 
 The scope manager contains 3 APIs available on `tracer.scope()`:
 
@@ -261,34 +261,34 @@ provided function. Any asynchronous context created from whithin that function
 will also have the same scope.
 
 ```javascript
-const tracer = require('dd-trace').init()
-const scope = tracer.scope()
-const log = console.log
+const tracer = require("dd-trace").init();
+const scope = tracer.scope();
+const log = console.log;
 
-const requestSpan = tracer.startSpan('web.request')
-const promise = Promise.resolve()
+const requestSpan = tracer.startSpan("web.request");
+const promise = Promise.resolve();
 
 scope.activate(requestSpan, () => {
-  log(scope.active()) // requestSpan because in new scope
+  log(scope.active()); // requestSpan because in new scope
 
-  someFunction() // requestSpan because called in scope
+  someFunction(); // requestSpan because called in scope
 
   setTimeout(() => {
-    log(scope.active()) // requestSpan because setTimeout called in scope
-  })
+    log(scope.active()); // requestSpan because setTimeout called in scope
+  });
 
   promise.then(() => {
-    log(scope.active()) // requestSpan because then() called in scope
-  })
-})
+    log(scope.active()); // requestSpan because then() called in scope
+  });
+});
 
-function someFunction () {
-  log(scope.active())
+function someFunction() {
+  log(scope.active());
 }
 
-log(scope.active()) // null
+log(scope.active()); // null
 
-someFunction() // null because called outside the scope
+someFunction(); // null because called outside the scope
 ```
 
 <h4>scope.bind(target, [span])</h4>
@@ -300,12 +300,12 @@ When a span is provided, the target is always bound to that span. Explicitly
 passing `null` as the span will actually bind to `null` or no span. When a span
 is not provided, the binding uses the following rules:
 
-* Functions are bound to the span that is active when `scope.bind(fn)` is called.
-* Promise handlers are bound to the active span in the scope where `.then()` was
-called. This also applies to any equivalent method such as `.catch()`.
-* Event emitter listeners are bound to the active span in the scope where
-`.addEventListener()` was called. This also applies to any equivalent method
-such as `.on()`
+- Functions are bound to the span that is active when `scope.bind(fn)` is called.
+- Promise handlers are bound to the active span in the scope where `.then()` was
+  called. This also applies to any equivalent method such as `.catch()`.
+- Event emitter listeners are bound to the active span in the scope where
+  `.addEventListener()` was called. This also applies to any equivalent method
+  such as `.on()`
 
 **Note**: Native promises and promises from `bluebird`, `q` and `when` are
 already bound by default and don't need to be explicitly bound.
@@ -315,53 +315,53 @@ already bound by default and don't need to be explicitly bound.
 <h6>Function binding</h6>
 
 ```javascript
-const tracer = require('dd-trace').init()
-const scope = tracer.scope()
-const log = console.log
+const tracer = require("dd-trace").init();
+const scope = tracer.scope();
+const log = console.log;
 
-const outerSpan = tracer.startSpan('web.request')
+const outerSpan = tracer.startSpan("web.request");
 
 scope.activate(outerSpan, () => {
-  const innerSpan = tracer.startSpan('web.middleware')
+  const innerSpan = tracer.startSpan("web.middleware");
 
   const boundToInner = scope.bind(() => {
-    log(scope.active())
-  }, innerSpan)
+    log(scope.active());
+  }, innerSpan);
 
   const boundToOuter = scope.bind(() => {
-    log(scope.active())
-  })
+    log(scope.active());
+  });
 
-  boundToInner() // innerSpan because explicitly bound
-  boundToOuter() // outerSpan because implicitly bound
-})
+  boundToInner(); // innerSpan because explicitly bound
+  boundToOuter(); // outerSpan because implicitly bound
+});
 ```
 
 <h6>Promise binding</h6>
 
 ```javascript
-const tracer = require('dd-trace').init()
-const scope = tracer.scope()
-const log = console.log
+const tracer = require("dd-trace").init();
+const scope = tracer.scope();
+const log = console.log;
 
-const outerSpan = tracer.startSpan('web.request')
-const innerPromise = Promise.resolve()
-const outerPromise = Promise.resolve()
+const outerSpan = tracer.startSpan("web.request");
+const innerPromise = Promise.resolve();
+const outerPromise = Promise.resolve();
 
 scope.activate(outerSpan, () => {
-  const innerSpan = tracer.startSpan('web.middleware')
+  const innerSpan = tracer.startSpan("web.middleware");
 
-  scope.bind(innerPromise, innerSpan)
-  scope.bind(outerPromise)
+  scope.bind(innerPromise, innerSpan);
+  scope.bind(outerPromise);
 
   innerPromise.then(() => {
-    log(scope.active()) // innerSpan because explicitly bound
-  })
+    log(scope.active()); // innerSpan because explicitly bound
+  });
 
   outerPromise.then(() => {
-    log(scope.active()) // outerSpan because implicitly bound on `then()` call
-  })
-})
+    log(scope.active()); // outerSpan because implicitly bound on `then()` call
+  });
+});
 ```
 
 **Note**: `async/await` cannot be bound and always execute in the scope where
@@ -371,99 +371,58 @@ wrapped by a function.
 <h6>Event emitter binding</h6>
 
 ```javascript
-const tracer = require('dd-trace').init()
-const scope = tracer.scope()
-const log = console.log
-const EventEmitter = require('events').EventEmitter
+const tracer = require("dd-trace").init();
+const scope = tracer.scope();
+const log = console.log;
+const EventEmitter = require("events").EventEmitter;
 
-const outerSpan = tracer.startSpan('web.request')
-const innerEmitter = new EventEmitter()
-const outerEmitter = new EventEmitter()
+const outerSpan = tracer.startSpan("web.request");
+const innerEmitter = new EventEmitter();
+const outerEmitter = new EventEmitter();
 
 scope.activate(outerSpan, async () => {
-  const innerSpan = tracer.startSpan('web.middleware')
+  const innerSpan = tracer.startSpan("web.middleware");
 
-  scope.bind(innerEmitter, innerSpan)
-  scope.bind(outerEmitter)
+  scope.bind(innerEmitter, innerSpan);
+  scope.bind(outerEmitter);
 
-  innerEmitter.on('request', () => {
-    log(scope.active()) // innerSpan because explicitly bound
-  })
+  innerEmitter.on("request", () => {
+    log(scope.active()); // innerSpan because explicitly bound
+  });
 
-  outerEmitter.on('request', () => {
-    log(scope.active()) // outerSpan because implicitly bound on `then()` call
-  })
-})
+  outerEmitter.on("request", () => {
+    log(scope.active()); // outerSpan because implicitly bound on `then()` call
+  });
+});
 
-innerEmitter.emit('request')
-outerEmitter.emit('request')
+innerEmitter.emit("request");
+outerEmitter.emit("request");
 ```
 
 See the [API documentation](./interfaces/scope.html) for more details.
-
 
 <h2 id="opentracing-api">OpenTracing Compatibility</h2>
 
 This library is OpenTracing compliant. Use the [OpenTracing API](https://doc.esdoc.org/github.com/opentracing/opentracing-javascript/) and the Datadog Tracer (dd-trace) library to measure execution times for specific pieces of code. In the following example, a Datadog Tracer is initialized and used as a global tracer:
 
 ```javascript
-const tracer = require('dd-trace').init()
-const opentracing = require('opentracing')
+const tracer = require("dd-trace").init();
+const opentracing = require("opentracing");
 
-opentracing.initGlobalTracer(tracer)
+opentracing.initGlobalTracer(tracer);
 ```
 
 The following tags are available to override Datadog specific options:
 
-* `service.name`: The service name to be used for this span. The service name from the tracer will be used if this is not provided.
-* `resource.name`: The resource name to be used for this span. The operation name will be used if this is not provided.
-* `span.type`: The span type to be used for this span. Will fallback to `custom` if not provided.
+- `service.name`: The service name to be used for this span. The service name from the tracer will be used if this is not provided.
+- `resource.name`: The resource name to be used for this span. The operation name will be used if this is not provided.
+- `span.type`: The span type to be used for this span. Will fallback to `custom` if not provided.
 
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 
 <h3 id="tracer-settings">Tracer settings</h3>
 
-Options can be configured as a parameter to the [init()](./interfaces/tracer.html#init) method or as environment variables.
-
-| Config          | Environment Variable               | Default     | Description |
-| --------------- | ---------------------------------- | ----------- | ----------- |
-| -               | `DD_TRACE_ENABLED`                 | `true`         | Whether to enable dd-trace. Setting this to `false` will disable all features of the library. |
-| -               | `DD_TRACE_DEBUG`                   | `false`        | Enable debug logging. |
-| -               | `DD_TRACING_ENABLED`               | `true`         | Whether to enable tracing. |
-| service         | `DD_SERVICE`                       | -              | The service name to be used for this program. Defaults to value of the `name` field in `package.json`. |
-| version         | `DD_VERSION`                       | -              | The version number of the application. Defaults to value of the `version` field in `package.json`. |
-| url             | `DD_TRACE_AGENT_URL`               | -              | The url of the trace agent that the tracer will submit to. Takes priority over hostname and port, if set. |
-| hostname        | `DD_TRACE_AGENT_HOSTNAME`          | `localhost`    | The address of the agent that the tracer will submit to. |
-| port            | `DD_TRACE_AGENT_PORT`              | `8126`         | The port of the trace agent that the tracer will submit to. |
-| dogstatsd.port  | `DD_DOGSTATSD_PORT`                | `8125`         | The port of the Dogstatsd agent that metrics will be submitted to. |
-| env             | `DD_ENV`                           | -              | Set an application’s environment e.g. `prod`, `pre-prod`, `stage`. |
-| logInjection    | `DD_LOGS_INJECTION`                | `false`        | Enable automatic injection of trace IDs in logs for supported logging libraries. |
-| tags            | `DD_TAGS`                          | `{}`           | Set global tags that should be applied to all spans and metrics. When passed as an environment variable, the format is `key:value,key:value` |
-| sampleRate      | `DD_TRACE_SAMPLE_RATE`             | -              | Controls the ingestion sample rate (between 0 and 1) between the agent and the backend. Defaults to deferring the decision to the agent. |
-| rateLimit       | `DD_TRACE_RATE_LIMIT`              | -              | Global rate limit that is applied on the global sample rate and all rules, and controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent. |
-| samplingRules   | `DD_TRACE_SAMPLING_RULES`          | `[]`           | Sampling rules to apply to priority samplin. Each rule is a JSON, consisting of `service` and `name`, which are regexes to match against a trace's `service` and `name`, and a corresponding `sampleRate`. If not specified, will defer to global sampling rate for all spans. |
-| spanSamplingRules | `DD_SPAN_SAMPLING_RULES`         | `[]`           | Span sampling rules for ingesting single spans, in cases where the whole trace is dropped. |
-| -               | `DD_SPAN_SAMPLING_RULES_FILE`      | -              | Points to a JSON file that contains the span sampling rules. `DD_SPAN_SAMPLING_RULES` takes precedence over this variable.
-| flushInterval   | -                                  | `2000`         | Interval in milliseconds at which the tracer will submit traces to the agent. |
-| flushMinSpans   | `DD_TRACE_PARTIAL_FLUSH_MIN_SPANS` | `1000`         | Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces. |
-| -               | `DD_TRACE_CLIENT_IP_HEADER`        | -              | Custom header name to source the `http.client_ip` tag from. |
-| -               | `DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP` | -      | A regex to redact sensitive data from incoming requests' querystring reported in the `http.url` tag (matches will be replaced with `<redacted>`). Can be an empty string to disable redaction or `.*` to redact all querystring. **WARNING: this regex will execute for every incoming request on an unsafe input (url), please make sure you use a safe regex.** |
-| lookup          | -                                  | `dns.lookup()` | Custom function for DNS lookups when sending requests to the agent. |
-| protocolVersion | `DD_TRACE_AGENT_PROTOCOL_VERSION`  | `0.4`          | Protocol version to use for requests to the agent. The version configured must be supported by the agent version installed or all traces will be dropped. |
-| runtimeMetrics  | `DD_RUNTIME_METRICS_ENABLED`      | `false`        | Whether to enable capturing runtime metrics. Port 8125 (or configured with `dogstatsd.port`) must be opened on the agent for UDP. |
-| profiling       | `DD_PROFILING_ENABLED`             | `false`        | Whether to enable profiling. |
-| reportHostname  | `DD_TRACE_REPORT_HOSTNAME`         | `false`        | Whether to report the system's hostname for each trace. When disabled, the hostname of the agent will be used instead. |
-| experimental    | -                                  | `{}`           | Experimental features can be enabled all at once using boolean `true` or individually using key/value pairs. Please contact us to learn more about the available experimental features. |
-| plugins         | -                                  | `true`         | Whether or not to enable automatic instrumentation of external libraries using the built-in plugins. |
-| -               | `DD_TRACE_DISABLED_PLUGINS`        | -              | A comma-separated string of integration names automatically disabled when tracer is initialized. Environment variable only e.g. `DD_TRACE_DISABLED_PLUGINS=express,dns`. |
-| logLevel        | `DD_TRACE_LOG_LEVEL`               | `debug`        | A string for the minimum log level for the tracer to use when debug logging is enabled, e.g. `'error'`, `'debug'`. |
-| startupLogs     | `DD_TRACE_STARTUP_LOGS`            | `false`        | Enable tracer startup configuration and diagnostic log. |
-| appsec.enabled              | `DD_APPSEC_ENABLED`                            | `false` | Enable AppSec protection. |
-| appsec.rules                | `DD_APPSEC_RULES`                              | -       | A path to a custom AppSec rules file. |
-| appsec.wafTimeout           | `DD_APPSEC_WAF_TIMEOUT`                        | `5000`  | Limits the WAF synchronous execution time (in microseconds). |
-| appsec.obfuscatorKeyRegex   | `DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP`   | -       | A regex to redact sensitive data by its key in attack reports. |
-| appsec.obfuscatorValueRegex | `DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP` | -       | A regex to redact sensitive data by its value in attack reports. |
-| dbmPropagationMode           | `DD_DBM_PROPAGATION_MODE`                        | `'disabled'`  | To enable DBM to APM link using tag injection, can be set to 'service' or 'full'. `'service'` will enable the connection between DB and APM services; while `'full'` will enable connection between database spans with database query events. This is currently available for Postgres.|
+Options can be configured as a parameter to the [init()](./interfaces/tracer.html#init) method or as environment variables. These are documented over on [Configuring the NodeJS Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs).
 
 <h3 id="custom-logging">Custom Logging</h3>
 
@@ -474,21 +433,21 @@ The tracer will then log debug information to `console.log()` and errors to `con
 For example:
 
 ```javascript
-const bunyan = require('bunyan')
+const bunyan = require("bunyan");
 const logger = bunyan.createLogger({
-  name: 'dd-trace',
-  level: 'trace'
-})
+  name: "dd-trace",
+  level: "trace",
+});
 
-const tracer = require('dd-trace').init({
+const tracer = require("dd-trace").init({
   logger: {
-    error: err => logger.error(err),
-    warn: message => logger.warn(message),
-    info: message => logger.info(message),
-    debug: message => logger.trace(message),
+    error: (err) => logger.error(err),
+    warn: (message) => logger.warn(message),
+    info: (message) => logger.info(message),
+    debug: (message) => logger.trace(message),
   },
-  debug: true
-})
+  debug: true,
+});
 ```
 
 <h3 id="span-hooks">Span Hooks</h3>
@@ -498,15 +457,15 @@ In some cases, it's necessary to update the metadata of a span created by one of
 For example:
 
 ```javascript
-const tracer = require('dd-trace').init()
+const tracer = require("dd-trace").init();
 
-tracer.use('express', {
+tracer.use("express", {
   hooks: {
     request: (span, req, res) => {
-      span.setTag('customer.id', req.query.id)
-    }
-  }
-})
+      span.setTag("customer.id", req.query.id);
+    },
+  },
+});
 ```
 
 Right now this functionality is limited to Web frameworks.
@@ -521,21 +480,21 @@ You have to pass an object with at least an `id` property.
 For example:
 
 ```javascript
-const tracer = require('dd-trace').init()
+const tracer = require("dd-trace").init();
 
-function handle () {
+function handle() {
   tracer.setUser({
-    id: '123456789', // *REQUIRED* Unique identifier of the user.
+    id: "123456789", // *REQUIRED* Unique identifier of the user.
 
     // All other fields are optional.
-    email: 'jane.doe@example.com', // Email of the user.
-    name: 'Jane Doe', // User-friendly name of the user.
-    session_id: '987654321', // Session ID of the user.
-    role: 'admin', // Role the user is making the request under.
-    scope: 'read:message, write:files', // Scopes or granted authorizations the user currently possesses.
+    email: "jane.doe@example.com", // Email of the user.
+    name: "Jane Doe", // User-friendly name of the user.
+    session_id: "987654321", // Session ID of the user.
+    role: "admin", // Role the user is making the request under.
+    scope: "read:message, write:files", // Scopes or granted authorizations the user currently possesses.
 
     // Arbitrary fields are also accepted to attach custom data to the user (RBAC, Oauth, etc…)
-    custom_tag: 'custom data'
-  })
+    custom_tag: "custom data",
+  });
 }
 ```
