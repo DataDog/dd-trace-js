@@ -73,6 +73,22 @@ describe('AgentProxyCiVisibilityExporter', () => {
         done()
       }, queryDelay + 20)
     })
+    it('should upload git metadata if configured', (done) => {
+      const scope = nock('http://localhost:8126')
+        .post('/evp_proxy/v2/api/v2/git/repository/search_commits')
+        .reply(200, JSON.stringify({ data: [] }))
+        .post('/evp_proxy/v2/api/v2/git/repository/packfile')
+        .reply(204)
+
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
+        port, tags, isGitUploadEnabled: true
+      })
+      agentProxyCiVisibilityExporter._gitUploadPromise.then(() => {
+        expect(scope.isDone()).to.be.true
+        done()
+      })
+    })
+
     it('should process test suite level visibility spans', (done) => {
       const mockWriter = {
         append: sinon.spy(),

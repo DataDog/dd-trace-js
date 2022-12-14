@@ -1,132 +1,104 @@
 'use strict'
-const proxyquire = require('proxyquire')
+const { expect } = require('chai')
+const nock = require('nock')
 
-describe('CI Visibility Exporter', () => {
+const AgentlessCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agentless')
+
+describe('CI Visibility Agentless Exporter', () => {
   const url = new URL('http://www.example.com')
-  const flushInterval = 1000
-  let writer, Writer, coverageWriter, CoverageWriter, Exporter, exporter
 
   beforeEach(() => {
-    writer = {
-      append: sinon.spy(),
-      flush: sinon.spy(),
-      setUrl: sinon.spy()
-    }
-    Writer = sinon.stub().returns(writer)
+    nock.cleanAll()
+  })
 
-    coverageWriter = {
-      append: sinon.spy(),
-      flush: sinon.spy(),
-      setUrl: sinon.spy()
-    }
+  before(() => {
+    process.env.DD_API_KEY = '1'
+    process.env.DD_APP_KEY = '1'
+  })
 
-    CoverageWriter = sinon.stub().returns(coverageWriter)
+  after(() => {
+    delete process.env.DD_API_KEY
+    delete process.env.DD_APP_KEY
+  })
 
-    Exporter = proxyquire('../../../../src/ci-visibility/exporters/agentless', {
-      './writer': Writer,
-      './coverage-writer': CoverageWriter
+  it('uploads git metadata if configured to do so', (done) => {
+    const scope = nock('http://www.example.com')
+      .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({
+        data: []
+      }))
+      .post('/api/v2/git/repository/packfile')
+      .reply(202, '')
+
+    const agentlessExporter = new AgentlessCiVisibilityExporter({ url, isGitUploadEnabled: true, tags: {} })
+    agentlessExporter._gitUploadPromise.then(() => {
+      expect(scope.isDone()).to.be.true
+      done()
     })
   })
 
-  describe('when interval is set to a positive number', function () {
-    this.timeout(5000)
-    it('should not flush if export has not been called', (done) => {
-      exporter = new Exporter({ url, flushInterval })
-      setTimeout(() => {
-        expect(writer.flush).not.to.have.been.called
-        done()
-      }, flushInterval)
-    })
-
-    it('should flush after the configured interval if a payload has been exported', (done) => {
-      exporter = new Exporter({ url, flushInterval })
-      exporter.export([{}])
-      setTimeout(() => {
-        expect(writer.flush).to.have.been.called
-        done()
-      }, flushInterval)
-      expect(writer.flush).not.to.have.been.called
-    })
-  })
-
-  describe('when export is called', () => {
-    it('should append a span', () => {
-      const span = {}
-      exporter = new Exporter({ url, flushInterval })
-      exporter.export([span])
-
-      expect(writer.append).to.have.been.calledWith([span])
-    })
-  })
-
-  describe('when interval is set to 0', () => {
-    it('should flush right away', () => {
-      const span = {}
-      exporter = new Exporter({ url, flushInterval: 0 })
-      exporter.export([span])
-      expect(writer.flush).to.have.been.called
-    })
+  it('can use CI Vis protocol right away', () => {
+    const agentlessExporter = new AgentlessCiVisibilityExporter({ url, isGitUploadEnabled: true, tags: {} })
+    expect(agentlessExporter.canReportCodeCoverage()).to.be.true
+    expect(agentlessExporter.canReportSessionTraces()).to.be.true
   })
 
   describe('when ITR is enabled', () => {
-    it('should append a code coverage payload when exportCoverage is called', () => {
-      const span = {
-        context: () => ({ _traceId: '1', _spanId: '2' })
-      }
-      const payload = { span, coverageFiles: ['file.js'] }
-
-      exporter = new Exporter({ url, flushInterval: 0, isIntelligentTestRunnerEnabled: true })
-
-      exporter.exportCoverage(payload)
-      expect(coverageWriter.append).to.have.been.calledWith({
-        traceId: '1',
-        spanId: '2',
-        files: ['file.js']
+    it('can request ITR configuration right away', (done) => {
+      const scope = nock('http://www.example.com')
+        .post('/api/v2/libraries/tests/services/setting')
+        .reply(200, JSON.stringify({
+          data: {
+            attributes: {
+              code_coverage: true,
+              tests_skipping: true
+            }
+          }
+        }))
+      const agentlessExporter = new AgentlessCiVisibilityExporter({
+        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
       })
-      expect(coverageWriter.flush).to.have.been.called
-    })
-    it('should flush after the configured flush interval', function (done) {
-      this.timeout(3000)
-      exporter = new Exporter({ url, flushInterval, isIntelligentTestRunnerEnabled: true })
-
-      const span = {
-        context: () => ({ _traceId: '1', _spanId: '2' })
-      }
-      const payload = { span, coverageFiles: ['file.js'] }
-
-      exporter.exportCoverage(payload)
-
-      setTimeout(() => {
-        expect(coverageWriter.flush).to.have.been.called
+      expect(agentlessExporter.shouldRequestItrConfiguration()).to.be.true
+      agentlessExporter.getItrConfiguration({}, () => {
+        expect(scope.isDone()).to.be.true
+        expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.true
         done()
-      }, flushInterval)
-      expect(coverageWriter.append).to.have.been.called
-      expect(coverageWriter.flush).not.to.have.been.called
+      })
+    })
+    it('will not allow skippable request if ITR configuration fails', (done) => {
+      // request will fail
+      delete process.env.DD_APP_KEY
+
+      const scope = nock('http://www.example.com')
+        .post('/api/v2/libraries/tests/services/setting')
+        .reply(200, JSON.stringify({
+          data: {
+            attributes: {
+              code_coverage: true,
+              tests_skipping: true
+            }
+          }
+        }))
+
+      const agentlessExporter = new AgentlessCiVisibilityExporter({
+        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
+      })
+      expect(agentlessExporter.shouldRequestItrConfiguration()).to.be.true
+      agentlessExporter.getItrConfiguration({}, ({ err }) => {
+        expect(scope.isDone()).not.to.be.true
+        expect(err.message).to.contain('App key or API key undefined')
+        expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.false
+        done()
+      })
     })
   })
 
   describe('url', () => {
     it('sets the default if URL param is not specified', () => {
       const site = 'd4tad0g.com'
-      exporter = new Exporter({ site })
-      expect(exporter._url.href).to.equal(`https://citestcycle-intake.${site}/`)
-      expect(exporter._coverageUrl.href).to.equal(`https://event-platform-intake.${site}/`)
-    })
-    it('should set the input URL', () => {
-      exporter = new Exporter({ url })
-      expect(exporter._url).to.deep.equal(url)
-      expect(exporter._coverageUrl).to.deep.equal(url)
-    })
-    describe('setUrl', () => {
-      it('should update the URL on self and writer', () => {
-        exporter = new Exporter({ url })
-        const newUrl = new URL('http://www.real.com')
-        exporter.setUrl(newUrl)
-        expect(exporter._url).to.deep.equal(newUrl)
-        expect(exporter._coverageUrl).to.deep.equal(newUrl)
-        expect(writer.setUrl).to.have.been.calledWith(newUrl)
-        expect(coverageWriter.setUrl).to.have.been.calledWith(newUrl)
-      })
+      const agentlessExporter = new AgentlessCiVisibilityExporter({ site, tags: {} })
+      expect(agentlessExporter._url.href).to.equal(`https://citestcycle-intake.${site}/`)
+      expect(agentlessExporter._coverageUrl.href).to.equal(`https://event-platform-intake.${site}/`)
     })
   })
 })
