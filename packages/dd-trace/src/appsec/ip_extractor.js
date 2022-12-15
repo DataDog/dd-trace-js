@@ -39,8 +39,8 @@ for (const cidr of privateCIDRs) {
 
 function extractIp (config, req) {
   const headers = req.headers
-
   if (config.clientIpHeader) {
+    if (!headers) return
     const header = headers[config.clientIpHeader]
     if (!header) return
 
@@ -48,10 +48,11 @@ function extractIp (config, req) {
   }
 
   const foundHeaders = []
-
-  for (let i = 0; i < ipHeaderList.length; i++) {
-    if (headers[ipHeaderList[i]]) {
-      foundHeaders.push(ipHeaderList[i])
+  if (headers) {
+    for (let i = 0; i < ipHeaderList.length; i++) {
+      if (headers[ipHeaderList[i]]) {
+        foundHeaders.push(ipHeaderList[i])
+      }
     }
   }
 
