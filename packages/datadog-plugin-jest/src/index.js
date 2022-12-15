@@ -15,6 +15,8 @@ const {
   TEST_SUITE_ID,
   TEST_COMMAND,
   TEST_ITR_TESTS_SKIPPED,
+  TEST_SESSION_ITR_CODE_COVERAGE_ENABLED,
+  TEST_SESSION_ITR_SKIPPING_ENABLED,
   TEST_CODE_COVERAGE_LINES_TOTAL
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -63,14 +65,20 @@ class JestPlugin extends CiPlugin {
       this.enter(testSessionSpan, store)
     })
 
-    this.addSub('ci:jest:session:finish', ({ status, isTestsSkipped, testCodeCoverageLinesTotal }) => {
+    this.addSub('ci:jest:session:finish', ({
+      status,
+      isSuitesSkipped,
+      isSuitesSkippingEnabled,
+      isCodeCoverageEnabled,
+      testCodeCoverageLinesTotal
+    }) => {
       const testSessionSpan = storage.getStore().span
+
       testSessionSpan.setTag(TEST_STATUS, status)
-      if (isTestsSkipped) {
-        testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
-      } else {
-        testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'false')
-      }
+      testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
+      testSessionSpan.setTag(TEST_SESSION_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
+      testSessionSpan.setTag(TEST_SESSION_ITR_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+
       if (testCodeCoverageLinesTotal !== undefined) {
         testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
       }
