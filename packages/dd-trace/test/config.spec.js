@@ -2,8 +2,6 @@
 
 const { expect } = require('chai')
 
-const path = require('path')
-
 describe('Config', () => {
   let Config
   let log
@@ -83,8 +81,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', undefined)
-    const rulePath = path.join(__dirname, '..', 'src', 'appsec', 'recommended.json')
-    expect(config).to.have.nested.property('appsec.rules', rulePath)
+    expect(config).to.have.nested.property('appsec.rules', undefined)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)

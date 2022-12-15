@@ -223,7 +223,7 @@ class RemoteConfigManager extends EventEmitter {
     for (const item of list) {
       try {
         // TODO: do we want to pass old and new config ?
-        this.emit(item.product, action, item.file)
+        this.emit(item.product, action, item.file, item.id)
 
         item.apply_state = 2
       } catch (err) {
