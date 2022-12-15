@@ -9,7 +9,7 @@ describe('Plugin', () => {
   let stream
   let span
 
-  function setup (version) {
+  function setupTest (version) {
     const bunyan = require(`../../../versions/bunyan@${version}`).get()
 
     span = tracer.startSpan('test')
@@ -38,7 +38,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          setup(version)
+          setupTest(version)
         })
 
         it('should not alter the default behavior', () => {
@@ -60,7 +60,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          setup(version)
+          setupTest(version)
         })
 
         it('should add the trace identifiers to logger instances', () => {
