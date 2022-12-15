@@ -111,7 +111,10 @@ function mochaHook (Runner) {
         status = 'fail'
       }
       testFileToSuiteAr.clear()
-      testSessionFinishCh.publish(status)
+
+      const isSuitesSkipped = !!suitesToSkip.length
+
+      testSessionFinishCh.publish({ status, isSuitesSkipped })
       // restore the original coverage
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }))

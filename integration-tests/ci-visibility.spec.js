@@ -3,14 +3,21 @@
 const { fork, exec } = require('child_process')
 const path = require('path')
 
+const { assert } = require('chai')
+const semver = require('semver')
+const getPort = require('get-port')
+
 const {
   FakeAgent,
   createSandbox
 } = require('./helpers')
 const { FakeCiVisIntake } = require('./ci-visibility-intake')
-const { assert } = require('chai')
-const semver = require('semver')
-const getPort = require('get-port')
+
+const {
+  TEST_SESSION_ITR_CODE_COVERAGE_ENABLED,
+  TEST_SESSION_ITR_SKIPPING_ENABLED,
+  TEST_ITR_TESTS_SKIPPED
+} = require('../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
 // This is done because newest versions of mocha and jest do not support node@12
@@ -254,6 +261,10 @@ tests.forEach(({
           assert.propertyVal(headers, 'dd-api-key', '1')
           const eventTypes = payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_suite_end'])
+          const testSession = payload.events.find(event => event.type === 'test_session_end').content
+          assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+          assert.propertyVal(testSession.meta, TEST_SESSION_ITR_CODE_COVERAGE_ENABLED, 'false')
+          assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'false')
         }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
         childProcess = exec(
@@ -300,6 +311,10 @@ tests.forEach(({
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
           assert.equal(numSuites, 1)
+          const testSession = payload.events.find(event => event.type === 'test_session_end').content
+          assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
+          assert.propertyVal(testSession.meta, TEST_SESSION_ITR_CODE_COVERAGE_ENABLED, 'true')
+          assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'true')
         }, ({ url }) => url === '/api/v2/citestcycle')
 
         receiver.setSuitesToSkip([{
@@ -342,6 +357,10 @@ tests.forEach(({
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
           assert.equal(numSuites, 2)
+          const testSession = payload.events.find(event => event.type === 'test_session_end').content
+          assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+          assert.propertyVal(testSession.meta, TEST_SESSION_ITR_CODE_COVERAGE_ENABLED, 'true')
+          assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'true')
         }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
         receiver.setSuitesToSkip([{
