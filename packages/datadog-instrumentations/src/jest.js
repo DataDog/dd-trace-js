@@ -216,7 +216,7 @@ function cliWrapper (cli) {
       }
     }
 
-    const isTestsSkipped = !!skippableSuites.length
+    const isSuitesSkipped = !!skippableSuites.length
 
     const processArgv = process.argv.slice(2).join(' ')
     sessionAsyncResource.runInAsyncScope(() => {
@@ -229,13 +229,20 @@ function cliWrapper (cli) {
 
     let testCodeCoverageLinesTotal
     try {
-      testCodeCoverageLinesTotal = coverageMap.getCoverageSummary().lines.pct
+      const { pct, total } = coverageMap.getCoverageSummary().lines
+      testCodeCoverageLinesTotal = total !== 0 ? pct : 0
     } catch (e) {
       // ignore errors
     }
 
     sessionAsyncResource.runInAsyncScope(() => {
-      testSessionFinishCh.publish({ status: success ? 'pass' : 'fail', isTestsSkipped, testCodeCoverageLinesTotal })
+      testSessionFinishCh.publish({
+        status: success ? 'pass' : 'fail',
+        isSuitesSkipped,
+        isSuitesSkippingEnabled,
+        isCodeCoverageEnabled,
+        testCodeCoverageLinesTotal
+      })
     })
 
     return result
@@ -354,9 +361,11 @@ function configureTestEnvironment (readConfigsResult) {
   if (isSuitesSkippingEnabled) {
     // If suite skipping is enabled, the code coverage results are not going to be relevant,
     // so we do not show them.
+    // Also, we might skip every test, so we need to pass `passWithNoTests`
     const globalConfig = {
       ...readConfigsResult.globalConfig,
-      coverageReporters: ['none']
+      coverageReporters: ['none'],
+      passWithNoTests: true
     }
     readConfigsResult.globalConfig = globalConfig
   }
