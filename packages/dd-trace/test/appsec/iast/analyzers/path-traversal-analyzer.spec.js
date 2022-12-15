@@ -134,7 +134,7 @@ describe('path-traversal-analyzer', () => {
 })
 
 describe('integration test', () => {
-  testThatRequestHasVulnerability(function () {
+  testThatRequestHasVulnerability(() => {
     const store = storage.getStore()
     const iastCtx = iastContextFunctions.getIastContext(store)
     let path = __filename
