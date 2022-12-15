@@ -21,7 +21,7 @@ describe('Plugin', () => {
       })
 
       withExports('pino', version, ['default', 'pino'], '>=6.8.0', getExport => {
-        function setup (options = {}) {
+        function setupTest (options = {}) {
           const pino = getExport()
 
           span = tracer.startSpan('test')
@@ -48,7 +48,7 @@ describe('Plugin', () => {
           })
 
           beforeEach(function () {
-            setup()
+            setupTest()
 
             if (!logger) {
               this.skip()
@@ -70,7 +70,7 @@ describe('Plugin', () => {
 
           if (semver.intersects(version, '>=5')) {
             it('should not alter the default behavior with pretty print', () => {
-              setup({ prettyPrint: true })
+              setupTest({ prettyPrint: true })
 
               tracer.scope().activate(span, () => {
                 logger.info('message')
@@ -93,7 +93,7 @@ describe('Plugin', () => {
           })
 
           beforeEach(function () {
-            setup()
+            setupTest()
 
             if (!logger) {
               this.skip()
@@ -166,7 +166,7 @@ describe('Plugin', () => {
 
               sinon.spy(opts, 'mixin')
 
-              setup(opts)
+              setupTest(opts)
 
               tracer.scope().activate(span, () => {
                 logger.info('message')
@@ -192,7 +192,7 @@ describe('Plugin', () => {
           //       and we cannot control the version of pino-pretty internally required by pino
           if (semver.intersects(version, '>=5')) {
             it('should add the trace identifiers to logger instances with pretty print', () => {
-              setup({ prettyPrint: true })
+              setupTest({ prettyPrint: true })
 
               tracer.scope().activate(span, () => {
                 logger.info('message')
