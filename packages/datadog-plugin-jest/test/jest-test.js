@@ -78,6 +78,7 @@ describe('jest-test-suite', () => {
   it('fails', () => {
     expect(true).toEqual(false)
   })
+  // eslint-disable-next-line mocha/handle-done-callback
   it('does not crash with missing stack', (done) => {
     setTimeout(() => {
       const error = new Error('fail')
