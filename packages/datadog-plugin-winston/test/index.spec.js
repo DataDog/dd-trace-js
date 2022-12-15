@@ -45,7 +45,7 @@ describe('Plugin', () => {
   let span
   let logServer
 
-  async function setup (version, winstonConfiguration) {
+  async function setupTest (version, winstonConfiguration) {
     span = tracer.startSpan('test')
 
     winston = proxyquire(`../../../versions/winston@${version}`, {}).get()
@@ -114,7 +114,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          return setup(version)
+          return setupTest(version)
         })
 
         afterEach(() => logServer.close())
@@ -142,7 +142,7 @@ describe('Plugin', () => {
 
         describe('without formatting', () => {
           beforeEach(() => {
-            return setup(version)
+            return setupTest(version)
           })
 
           afterEach(() => logServer.close())
@@ -271,9 +271,9 @@ describe('Plugin', () => {
               const splatConfiguration = {
                 format: winston.format.combine(...[winston.format.splat(), winston.format.json()])
               }
-              return setup(version, splatConfiguration)
+              return setupTest(version, splatConfiguration)
             } else {
-              return setup(version)
+              return setupTest(version)
             }
           })
 
