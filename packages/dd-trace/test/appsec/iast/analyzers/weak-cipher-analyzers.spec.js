@@ -62,7 +62,7 @@ describe('weak-cipher-analyzer', () => {
   })
 
   describe('full feature', () => {
-    testThatRequestHasVulnerability(function () {
+    testThatRequestHasVulnerability(() => {
       const crypto = require('crypto')
       const key = '1111111111111111'
       const iv = 'abcdefgh'
