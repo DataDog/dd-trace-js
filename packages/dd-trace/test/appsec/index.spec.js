@@ -226,7 +226,6 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(Gateway.propagate).to.have.been.calledOnce
       expect(Gateway.propagate).to.have.been.calledOnceWith({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
@@ -289,7 +288,6 @@ describe('AppSec Index', () => {
       expect(Gateway.startContext).to.have.been.calledOnce
       expect(store.get('req')).to.equal(req)
       expect(store.get('res')).to.equal(res)
-      expect(Gateway.propagate).to.have.been.calledOnce
       expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
@@ -360,7 +358,6 @@ describe('AppSec Index', () => {
       expect(Gateway.startContext).to.have.been.calledOnce
       expect(store.get('req')).to.equal(req)
       expect(store.get('res')).to.equal(res)
-      expect(Gateway.propagate).to.have.been.calledOnce
       expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
