@@ -5,6 +5,7 @@ let rc
 let RemoteConfigManager
 let appsec
 let remoteConfig
+let RuleManager
 
 describe('Remote Config enable', () => {
   beforeEach(() => {
@@ -26,9 +27,14 @@ describe('Remote Config enable', () => {
       disable: sinon.spy()
     }
 
+    RuleManager = {
+      updateAsmData: sinon.stub()
+    }
+
     remoteConfig = proxyquire('../src/appsec/remote_config', {
       './manager': RemoteConfigManager,
-      '..': appsec
+      '..': appsec,
+      '../rule_manager': RuleManager
     })
   })
 
@@ -87,6 +93,65 @@ describe('Remote Config enable', () => {
 
       expect(appsec.enable).to.not.have.been.called
       expect(appsec.disable).to.not.have.been.called
+    })
+  })
+
+  describe('ASM_DATA remote config', () => {
+    describe('listener', () => {
+      let listener
+
+      beforeEach(() => {
+        config.appsec = { enabled: undefined }
+
+        remoteConfig.enable(config)
+        remoteConfig.enableAsmData(config.appsec)
+
+        listener = rc.on.secondCall.args[1]
+      })
+
+      it('should call RuleManager.updateAsmData', () => {
+        const ruleData = {
+          rules_data: [{
+            data: [
+              { value: 'user1' }
+            ],
+            id: 'blocked_users',
+            type: 'data_with_expiration'
+          }]
+        }
+        listener('apply', ruleData, 'asm_data')
+
+        expect(RuleManager.updateAsmData).to.have.been.calledOnceWithExactly('apply', ruleData, 'asm_data')
+      })
+    })
+
+    describe('enable', () => {
+      it('should not not fail if remote config is not enabled before', () => {
+        config.appsec = {}
+        remoteConfig.enableAsmData(config.appsec)
+        expect(rc.on).to.not.have.been.calledWith('ASM_DATA')
+      })
+
+      it('should not activate if rules is configured', () => {
+        config.appsec = { enabled: true, rules: './path/rules.json' }
+        remoteConfig.enable(config)
+        remoteConfig.enableAsmData(config.appsec)
+        expect(rc.on).to.not.have.been.calledWith('ASM_DATA')
+      })
+
+      it('should activate if appsec is manually enabled', () => {
+        config.appsec = { enabled: true }
+        remoteConfig.enable(config)
+        remoteConfig.enableAsmData(config.appsec)
+        expect(rc.on).to.have.been.calledOnceWith('ASM_DATA')
+      })
+
+      it('should activate if appsec enabled is not defined', () => {
+        config.appsec = {}
+        remoteConfig.enable(config)
+        remoteConfig.enableAsmData(config.appsec)
+        expect(rc.on.lastCall).to.have.been.calledWith('ASM_DATA')
+      })
     })
   })
 })

@@ -3,7 +3,6 @@
 const fs = require('fs')
 const os = require('os')
 const URL = require('url').URL
-const path = require('path')
 const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
@@ -221,8 +220,7 @@ class Config {
 
     const DD_APPSEC_RULES = coalesce(
       appsec.rules,
-      process.env.DD_APPSEC_RULES,
-      path.join(__dirname, 'appsec', 'recommended.json')
+      process.env.DD_APPSEC_RULES
     )
     const DD_APPSEC_TRACE_RATE_LIMIT = coalesce(
       parseInt(appsec.rateLimit),
