@@ -1,7 +1,8 @@
 'use strict'
 
 const { expect } = require('chai')
-
+const realFs = require('fs')
+const path = require('path')
 describe('Config', () => {
   let Config
   let log
@@ -65,7 +66,6 @@ describe('Config', () => {
     expect(config).to.have.property('flushInterval', 2000)
     expect(config).to.have.property('flushMinSpans', 1000)
     expect(config).to.have.property('queryStringObfuscation').with.length(626)
-    expect(config).to.have.property('clientIpHeaderDisabled', true)
     expect(config).to.have.property('clientIpHeader', null)
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.property('runtimeMetrics', false)
@@ -175,7 +175,6 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('queryStringObfuscation', '.*')
-    expect(config).to.have.property('clientIpHeaderDisabled', false)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
@@ -534,7 +533,11 @@ describe('Config', () => {
       rateLimit: 42,
       wafTimeout: 42,
       obfuscatorKeyRegex: '.*',
-      obfuscatorValueRegex: '.*'
+      obfuscatorValueRegex: '.*',
+      blockedTemplateHtml:
+        realFs.readFileSync(path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.html')).toString(),
+      blockedTemplateJson:
+        realFs.readFileSync(path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.json')).toString()
     })
   })
 
