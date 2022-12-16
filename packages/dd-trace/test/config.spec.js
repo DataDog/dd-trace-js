@@ -535,9 +535,9 @@ describe('Config', () => {
       obfuscatorKeyRegex: '.*',
       obfuscatorValueRegex: '.*',
       blockedTemplateHtml:
-        realFs.readFileSync(path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.html')).toString(),
+        path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.html'),
       blockedTemplateJson:
-        realFs.readFileSync(path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.json')).toString()
+        path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.json')
     })
   })
 

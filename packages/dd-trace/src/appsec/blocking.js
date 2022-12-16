@@ -1,5 +1,7 @@
 'use strict'
 
+const fs = require('fs')
+let templateHtml, templateJson
 function block (config, req, res, topSpan, abortController) {
   let type
   let body
@@ -9,9 +11,15 @@ function block (config, req, res, topSpan, abortController) {
 
   if (accept && accept.includes('text/html') && !accept.includes('application/json')) {
     type = 'text/html'
-    body = config.appsec.blockedTemplateHtml
+    if (!templateHtml) {
+      templateHtml = fs.readFileSync(config.appsec.blockedTemplateHtml)
+    }
+    body = templateHtml
   } else {
     type = 'application/json'
+    if (!templateJson) {
+      templateJson = fs.readFileSync(config.appsec.blockedTemplateJson)
+    }
     body = config.appsec.blockedTemplateJson
   }
 

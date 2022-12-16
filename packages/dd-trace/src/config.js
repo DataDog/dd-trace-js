@@ -26,6 +26,16 @@ function maybeFile (filepath) {
   }
 }
 
+function maybePath (filepath) {
+  if (!filepath) return
+  try {
+    fs.openSync(filepath, 'r')
+    return filepath
+  } catch (e) {
+    return undefined
+  }
+}
+
 function safeJsonParse (input) {
   try {
     return JSON.parse(input)
@@ -254,14 +264,14 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
     )
     const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = coalesce(
-      maybeFile(appsec.blockedTemplateHtml),
-      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML),
-      fs.readFileSync(path.join(__dirname, 'appsec', 'templates', 'blocked.html'), 'utf8')
+      maybePath(appsec.blockedTemplateHtml),
+      maybePath(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML),
+      path.join(__dirname, 'appsec', 'templates', 'blocked.html')
     )
     const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = coalesce(
-      maybeFile(appsec.blockedTemplateJson),
-      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON),
-      fs.readFileSync(path.join(__dirname, 'appsec', 'templates', 'blocked.json'), 'utf8')
+      maybePath(appsec.blockedTemplateJson),
+      maybePath(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON),
+      path.join(__dirname, 'appsec', 'templates', 'blocked.json')
     )
 
     const iastOptions = options.experimental && options.experimental.iast
