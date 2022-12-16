@@ -460,3 +460,34 @@ addHook({
   versions: ['>=24.8.0'],
   file: 'build/jasmineAsyncInstall.js'
 }, jasmineAsyncInstallWraper)
+
+const CHILD_WORKER_TIMEOUT_SECONDS = 15
+
+addHook({
+  name: 'jest-worker',
+  versions: ['>=24.8.0'],
+  file: 'build/base/BaseWorkerPool.js'
+}, (baseWorkerPool) => {
+  const BaseWorkerPool = baseWorkerPool.default ? baseWorkerPool.default : baseWorkerPool
+  shimmer.wrap(BaseWorkerPool.prototype, 'end', end => async function () {
+    let timeoutId
+
+    // before we call end, we give CHILD_WORKER_TIMEOUT grace period (more than the jest default)
+    const killPromise = new Promise((resolve) => {
+      timeoutId = setTimeout(() => {
+        resolve()
+      }, CHILD_WORKER_TIMEOUT_SECONDS * 1000)
+    })
+
+    const workersPromise = Promise.all(this._workers.map(worker =>
+      worker.waitForExit()
+    ))
+
+    await Promise.race([workersPromise, killPromise])
+
+    clearTimeout(timeoutId)
+
+    return end.apply(this, arguments)
+  })
+  return baseWorkerPool
+})
