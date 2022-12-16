@@ -8,7 +8,9 @@ const semver = require('semver')
 const getPort = require('get-port')
 
 const {
-  createSandbox
+  createSandbox,
+  getCiVisAgentlessConfig,
+  getCiVisEvpProxyConfig
 } = require('./helpers')
 const { FakeCiVisIntake } = require('./ci-visibility-intake')
 
@@ -49,29 +51,6 @@ const tests = [
     runTestsWithCoverageCommand: 'node ./ci-visibility/run-jest.js'
   }
 ]
-
-function getAgentlessConfig (port) {
-  return {
-    ...process.env,
-    DD_API_KEY: '1',
-    DD_APP_KEY: '1',
-    DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
-    DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
-    DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 1,
-    DD_CIVISIBILITY_ITR_ENABLED: 1,
-    NODE_OPTIONS: '-r dd-trace/ci/init'
-  }
-}
-
-function getEvpProxyConfig (port) {
-  return {
-    ...process.env,
-    DD_TRACE_AGENT_PORT: port,
-    DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 1,
-    DD_CIVISIBILITY_ITR_ENABLED: 1,
-    NODE_OPTIONS: '-r dd-trace/ci/init'
-  }
-}
 
 tests.forEach(({
   name,
@@ -204,39 +183,46 @@ tests.forEach(({
         })
       })
       it('can report git metadata', (done) => {
-        const searchCommitsRequest = receiver.assertPayloadReceived(({ headers }) => {
-          assert.propertyVal(headers, 'dd-api-key', '1')
-        }, ({ url }) => url === '/api/v2/git/repository/search_commits')
+        const searchCommitsRequestPromise = receiver.messageReceived(
+          ({ url }) => url === '/api/v2/git/repository/search_commits'
+        )
+        const packfileRequestPromise = receiver.messageReceived(({ url }) => url === '/api/v2/git/repository/packfile')
+        const eventsRequestPromise = receiver.messageReceived(({ url }) => url === '/api/v2/citestcycle')
 
-        const packfileRequest = receiver.assertPayloadReceived(({ headers }) => {
-          assert.propertyVal(headers, 'dd-api-key', '1')
-        }, ({ url }) => url === '/api/v2/git/repository/packfile')
+        Promise.all([
+          searchCommitsRequestPromise,
+          packfileRequestPromise,
+          eventsRequestPromise
+        ]).then(([searchCommitRequest, packfileRequest, eventsRequest]) => {
+          assert.propertyVal(searchCommitRequest.headers, 'dd-api-key', '1')
+          assert.propertyVal(packfileRequest.headers, 'dd-api-key', '1')
 
-        const eventsRequest = receiver.assertPayloadReceived(({ payload }) => {
-          const eventTypes = payload.events.map(event => event.type)
+          const eventTypes = eventsRequest.payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_session_end'])
           const numSuites = eventTypes.reduce(
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
           assert.equal(numSuites, 2)
-        }, ({ url }) => url === '/api/v2/citestcycle')
+
+          done()
+        }).catch(done)
 
         childProcess = fork(startupTestFile, {
           cwd,
-          env: getAgentlessConfig(receiver.port),
+          env: getCiVisAgentlessConfig(receiver.port),
           stdio: 'pipe'
         })
-        Promise.all([searchCommitsRequest, packfileRequest, eventsRequest]).then(() => done()).catch(done)
       })
       it('can report code coverage', (done) => {
-        const itrConfigRequest = receiver.assertPayloadReceived(({ headers }) => {
-          assert.propertyVal(headers, 'dd-api-key', '1')
-          assert.propertyVal(headers, 'dd-application-key', '1')
-        }, ({ url }) => url === '/api/v2/libraries/tests/services/setting')
+        const itrConfigRequestPromise = receiver.messageReceived(({ url }) => url === '/api/v2/libraries/tests/services/setting')
+        const codeCovRequestPromise = receiver.messageReceived(({ url }) => url === '/api/v2/citestcov')
 
-        const codeCovRequest = receiver.assertPayloadReceived(({ headers, payload }) => {
-          const [coveragePayload] = payload
-          assert.propertyVal(headers, 'dd-api-key', '1')
+        Promise.all([itrConfigRequestPromise, codeCovRequestPromise]).then(([itrConfigRequest, codeCovRequest]) => {
+          assert.propertyVal(itrConfigRequest.headers, 'dd-api-key', '1')
+          assert.propertyVal(itrConfigRequest.headers, 'dd-application-key', '1')
+
+          const [coveragePayload] = codeCovRequest.payload
+          assert.propertyVal(codeCovRequest.headers, 'dd-api-key', '1')
 
           assert.propertyVal(coveragePayload, 'name', 'coverage1')
           assert.propertyVal(coveragePayload, 'filename', 'coverage1.msgpack')
@@ -244,11 +230,12 @@ tests.forEach(({
           assert.include(coveragePayload.content, {
             version: 1
           })
-          const allCoverageFiles = payload.flatMap(coverage => coverage.content.files).map(file => file.filename)
+          const allCoverageFiles = codeCovRequest.payload.flatMap(coverage => coverage.content.files).map(file => file.filename)
           assert.includeMembers(allCoverageFiles, expectedCoverageFiles)
           assert.exists(coveragePayload.content.span_id)
           assert.exists(coveragePayload.content.trace_id)
-        }, ({ url }) => url === '/api/v2/citestcov')
+          done()
+        }).catch(done)
 
         const eventsRequest = receiver.assertPayloadReceived(({ payload }) => {
           const eventTypes = payload.events.map(event => event.type)
@@ -263,7 +250,7 @@ tests.forEach(({
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: getAgentlessConfig(receiver.port),
+            env: getCiVisAgentlessConfig(receiver.port),
             stdio: 'inherit'
           }
         )
@@ -294,7 +281,7 @@ tests.forEach(({
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: getAgentlessConfig(receiver.port),
+            env: getCiVisAgentlessConfig(receiver.port),
             stdio: 'inherit'
           }
         )
@@ -341,7 +328,7 @@ tests.forEach(({
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: getAgentlessConfig(receiver.port),
+            env: getCiVisAgentlessConfig(receiver.port),
             stdio: 'inherit'
           }
         )
@@ -381,7 +368,7 @@ tests.forEach(({
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: getAgentlessConfig(receiver.port),
+            env: getCiVisAgentlessConfig(receiver.port),
             stdio: 'inherit'
           }
         )
@@ -419,7 +406,7 @@ tests.forEach(({
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: getAgentlessConfig(receiver.port),
+            env: getCiVisAgentlessConfig(receiver.port),
             stdio: 'inherit'
           }
         )
@@ -462,7 +449,7 @@ tests.forEach(({
 
           childProcess = fork(startupTestFile, {
             cwd,
-            env: getEvpProxyConfig(receiver.port),
+            env: getCiVisEvpProxyConfig(receiver.port),
             stdio: 'pipe'
           })
 
@@ -495,7 +482,7 @@ tests.forEach(({
 
         childProcess = fork(startupTestFile, {
           cwd,
-          env: getEvpProxyConfig(receiver.port),
+          env: getCiVisEvpProxyConfig(receiver.port),
           stdio: 'pipe'
         })
 
@@ -538,7 +525,7 @@ tests.forEach(({
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: getEvpProxyConfig(receiver.port),
+            env: getCiVisEvpProxyConfig(receiver.port),
             stdio: 'inherit'
           }
         )
@@ -566,7 +553,7 @@ tests.forEach(({
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: getEvpProxyConfig(receiver.port),
+            env: getCiVisEvpProxyConfig(receiver.port),
             stdio: 'inherit'
           }
         )
@@ -613,7 +600,7 @@ tests.forEach(({
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: getEvpProxyConfig(receiver.port),
+            env: getCiVisEvpProxyConfig(receiver.port),
             stdio: 'inherit'
           }
         )
@@ -650,7 +637,7 @@ tests.forEach(({
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: getEvpProxyConfig(receiver.port),
+            env: getCiVisEvpProxyConfig(receiver.port),
             stdio: 'inherit'
           }
         )
@@ -689,7 +676,7 @@ tests.forEach(({
           runTestsWithCoverageCommand,
           {
             cwd,
-            env: getEvpProxyConfig(receiver.port),
+            env: getCiVisEvpProxyConfig(receiver.port),
             stdio: 'inherit'
           }
         )
