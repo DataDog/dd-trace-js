@@ -20,7 +20,7 @@ function block (config, req, res, topSpan, abortController) {
     if (!templateJson) {
       templateJson = fs.readFileSync(config.appsec.blockedTemplateJson)
     }
-    body = config.appsec.blockedTemplateJson
+    body = templateJson
   }
 
   topSpan.addTags({

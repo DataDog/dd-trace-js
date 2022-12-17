@@ -1,14 +1,20 @@
 'use strict'
 
 const fs = require('fs')
+const path = require('path')
 const proxyquire = require('proxyquire')
 const log = require('../../src/log')
 const RuleManager = require('../../src/appsec/rule_manager')
 const remoteConfig = require('../../src/appsec/remote_config')
+const appsec = require('../../src/appsec')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../src/appsec/gateway/channels')
 const Gateway = require('../../src/appsec/gateway/engine')
 const addresses = require('../../src/appsec/addresses')
 const Reporter = require('../../src/appsec/reporter')
+const agent = require('../plugins/agent')
+const Config = require('../../src/config')
+const axios = require('axios')
+const getPort = require('get-port')
 
 describe('AppSec Index', () => {
   let config
@@ -379,6 +385,126 @@ describe('AppSec Index', () => {
         'server.request.cookies': { d: [ '4' ], e: [ '5' ] }
       }, context)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, context)
+    })
+  })
+})
+describe('IP blocking', () => {
+  const invalidIp = '1.2.3.4'
+  const validIp = '4.3.2.1'
+  const ruleData = {
+    rules_data: [{
+      data: [
+        { value: invalidIp }
+      ],
+      id: 'blocked_ips',
+      type: 'data_with_expiration'
+    }]
+  }
+  let http, appListener, port
+  beforeEach(() => {
+    return getPort().then(newPort => {
+      port = newPort
+    })
+  })
+  beforeEach(() => {
+    return agent.load('http')
+      .then(() => {
+        http = require('http')
+      })
+  })
+  beforeEach(done => {
+    const server = new http.Server((req, res) => {
+      res.writeHead(200)
+      res.end(JSON.stringify({ message: 'OK' }))
+    })
+    appListener = server
+      .listen(port, 'localhost', () => done())
+  })
+  beforeEach(() => {
+    appsec.enable(new Config({
+      appsec: {
+        enabled: true
+      }
+    }))
+    RuleManager.updateAsmData('apply', ruleData, 'asm_data')
+  })
+  describe('do not block the request', () => {
+    it('should not block the request by default', async () => {
+      await axios.get(`http://localhost:${port}/`).then((res) => {
+        expect(res.status).to.be.equal(200)
+      })
+    })
+  })
+
+  afterEach(() => {
+    appListener && appListener.close()
+    return agent.close({ ritmReset: false })
+  })
+  const ipHeaderList = [
+    'x-forwarded-for',
+    'x-real-ip',
+    'client-ip',
+    'x-forwarded',
+    'x-cluster-client-ip',
+    'forwarded-for',
+    'forwarded',
+    'via',
+    'true-client-ip'
+  ]
+  ipHeaderList.forEach(ipHeader => {
+    describe(`not block - ip in header ${ipHeader}`, () => {
+      it('should not block the request with valid X-Forwarded-For ip', async () => {
+        await axios.get(`http://localhost:${port}/`, {
+          headers: {
+            [ipHeader]: validIp
+          }
+        }).then((res) => {
+          expect(res.status).to.be.equal(200)
+        })
+      })
+    })
+
+    describe(`block - ip in header ${ipHeader}`, () => {
+      const templatesPath = path.join(__dirname, '..', '..', 'src', 'appsec', 'templates')
+      const htmlDefaultContent = fs.readFileSync(path.join(templatesPath, 'blocked.html'), 'utf8').toString()
+      const jsonDefaultContent = JSON.parse(
+        fs.readFileSync(path.join(templatesPath, 'blocked.json'), 'utf8').toString()
+      )
+
+      it('should block the request with JSON content if no headers', async () => {
+        await axios.get(`http://localhost:${port}/`, {
+          headers: {
+            [ipHeader]: invalidIp
+          }
+        }).catch((err) => {
+          expect(err.response.status).to.be.equal(403)
+          expect(err.response.data).to.deep.equal(jsonDefaultContent)
+        })
+      })
+
+      it('should block the request with JSON content if accept */*', async () => {
+        await axios.get(`http://localhost:${port}/`, {
+          headers: {
+            [ipHeader]: invalidIp,
+            'Accept': '*/*'
+          }
+        }).catch((err) => {
+          expect(err.response.status).to.be.equal(403)
+          expect(err.response.data).to.deep.equal(jsonDefaultContent)
+        })
+      })
+
+      it('should block the request with html content if accept text/html', async () => {
+        await axios.get(`http://localhost:${port}/`, {
+          headers: {
+            [ipHeader]: invalidIp,
+            'Accept': 'text/html'
+          }
+        }).catch((err) => {
+          expect(err.response.status).to.be.equal(403)
+          expect(err.response.data).to.be.equal(htmlDefaultContent)
+        })
+      })
     })
   })
 })
