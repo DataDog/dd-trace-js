@@ -17,7 +17,6 @@ class OracledbPlugin extends DatabasePlugin {
       type: 'sql',
       kind: 'client',
       meta: {
-        'sql.query': query,
         'db.user': this.config.user,
         'db.instance': url.pathname && url.pathname.substring(1),
         'db.hostname': url.hostname,

@@ -41,6 +41,14 @@ describe('Exporter', () => {
     })
   })
 
+  it('should support IPv6', () => {
+    const stats = { enabled: true }
+    exporter = new Exporter({ hostname: '::1', flushInterval, stats }, prioritySampler)
+    expect(Writer).to.have.been.calledWithMatch({
+      url: new URL('http://[::1]')
+    })
+  })
+
   describe('when interval is set to a positive number', () => {
     beforeEach(() => {
       exporter = new Exporter({ url, flushInterval }, prioritySampler)

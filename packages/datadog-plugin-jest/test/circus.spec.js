@@ -2,12 +2,10 @@
 const fs = require('fs')
 const path = require('path')
 
-const { channel } = require('diagnostics_channel')
 const nock = require('nock')
 const semver = require('semver')
-const msgpack = require('msgpack-lite')
 
-const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const {
   TEST_FRAMEWORK,
@@ -19,7 +17,6 @@ const {
   TEST_STATUS,
   CI_APP_ORIGIN,
   JEST_TEST_RUNNER,
-  ERROR_MESSAGE,
   TEST_PARAMETERS,
   TEST_CODE_OWNERS,
   LIBRARY_VERSION,
@@ -30,13 +27,20 @@ const {
 
 const { version: ddTraceVersion } = require('../../../package.json')
 
-const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
+/**
+ * The assertion timeout needs to be less than the test timeout,
+ * otherwise failing tests will always fail due to a timeout,
+ * which is less useful than having an assertion error message.
+ */
+const assertionTimeout = 15000
+const testTimeout = 20000
 
 describe('Plugin', function () {
   let jestExecutable
   let jestCommonOptions
 
-  this.timeout(20000)
+  this.timeout(testTimeout)
+  this.retries(2)
 
   withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {
@@ -60,6 +64,7 @@ describe('Plugin', function () {
       const loadArguments = [['jest', 'http']]
 
       const isAgentlessTest = this.currentTest.parent.title === 'agentless'
+      const isEvpProxyTest = this.currentTest.parent.title === 'evp proxy'
 
       // we need the ci visibility init for the coverage test
       if (isAgentlessTest) {
@@ -68,8 +73,11 @@ describe('Plugin', function () {
         process.env.DD_ENV = 'ci'
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
         process.env.DD_SITE = 'datad0g.com'
-        loadArguments.push({ service: 'test', isAgentlessEnabled: true, isIntelligentTestRunnerEnabled: true })
+        loadArguments.push({ service: 'test', isIntelligentTestRunnerEnabled: true })
         loadArguments.push({ experimental: { exporter: 'datadog' } })
+      } else if (isEvpProxyTest) {
+        loadArguments.push({ service: 'test' })
+        loadArguments.push({ experimental: { exporter: 'agent_proxy' } })
       } else {
         loadArguments.push({ service: 'test' })
       }
@@ -82,7 +90,7 @@ describe('Plugin', function () {
         jestCommonOptions = {
           projects: [__dirname],
           testPathIgnorePatterns: ['/node_modules/'],
-          coverageReporters: [],
+          coverageReporters: ['none'],
           reporters: [],
           silent: true,
           testEnvironment: path.join(__dirname, 'env.js'),
@@ -143,7 +151,8 @@ describe('Plugin', function () {
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-circus',
               [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/dd-trace-js']), // reads from dd-trace-js
-              [LIBRARY_VERSION]: ddTraceVersion
+              [LIBRARY_VERSION]: ddTraceVersion,
+              [COMPONENT]: 'jest'
             })
             if (extraTags) {
               expect(testSpan.meta).to.contain(extraTags)
@@ -165,7 +174,10 @@ describe('Plugin', function () {
             expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: 10000 })
+          }, {
+            timeoutMs: assertionTimeout,
+            spanResourceMatch: new RegExp(`${name}$`)
+          })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -200,7 +212,8 @@ describe('Plugin', function () {
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
               [TEST_TYPE]: 'test',
-              [JEST_TEST_RUNNER]: 'jest-circus'
+              [JEST_TEST_RUNNER]: 'jest-circus',
+              [COMPONENT]: 'jest'
             })
             expect(testSpan.meta[ERROR_MESSAGE]).to.equal(error)
             expect(testSpan.type).to.equal('test')
@@ -210,6 +223,9 @@ describe('Plugin', function () {
               `packages/datadog-plugin-jest/test/jest-hook-failure.js.${name}`
             )
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
+          }, {
+            timeoutMs: assertionTimeout,
+            spanResourceMatch: new RegExp(`${name}$`)
           })
         })
 
@@ -245,8 +261,12 @@ describe('Plugin', function () {
               [TEST_STATUS]: status,
               [TEST_FRAMEWORK]: 'jest',
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
-              [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js'
+              [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
+              [COMPONENT]: 'jest'
             })
+          }, {
+            timeoutMs: assertionTimeout,
+            spanResourceMatch: new RegExp(`${name}$`)
           })
         })
 
@@ -274,7 +294,7 @@ describe('Plugin', function () {
               [TEST_STATUS]: 'pass',
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-inject-globals.js'
             })
-          }).then(() => done()).catch(done)
+          }, { timeoutMs: assertionTimeout }).then(() => done()).catch(done)
 
           const options = {
             ...jestCommonOptions,
@@ -290,39 +310,60 @@ describe('Plugin', function () {
       }
 
       describe('agentless', () => {
-        it('can report code coverage', function (done) {
-          gitMetadataUploadFinishCh.publish()
-          nock(`http://127.0.0.1:${agent.server.address().port}`)
-            .post('/api/v2/citestcov')
-            .reply(202, function () {
-              const contentTypeHeader = this.req.headers['content-type']
-              const contentDisposition = this.req.requestBodyBuffers[1].toString()
-              const eventContentDisposition = this.req.requestBodyBuffers[6].toString()
-              const eventPayload = this.req.requestBodyBuffers[8].toString()
-              const coveragePayload = msgpack.decode(this.req.requestBodyBuffers[3])
+        it('should create spans for the test session and test suite', (done) => {
+          const events = [
+            {
+              type: 'test_session_end',
+              status: 'pass',
+              spanResourceMatch: /^test_session/
+            },
+            {
+              type: 'test_suite_end',
+              status: 'pass',
+              suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js',
+              spanResourceMatch: /^test_suite/
+            },
+            {
+              name: 'jest-test-suite-visibility works',
+              suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js',
+              status: 'pass',
+              type: 'test',
+              spanResourceMatch: /jest-test-suite-visibility works$/
+            }
+          ]
 
-              expect(contentTypeHeader).to.contain('multipart/form-data')
-              expect(coveragePayload.version).to.equal(1)
-              const coverageFiles = coveragePayload.files.map(file => file.filename)
+          const assertionPromises = events.map(({ name, suite, status, type, spanResourceMatch }) => {
+            return agent.use(agentlessPayload => {
+              const { events } = agentlessPayload
+              const span = events.find(event => event.type === type).content
+              expect(span.meta[TEST_STATUS]).to.equal(status)
+              expect(span.meta[COMPONENT]).to.equal('jest')
+              if (type === 'test_session_end') {
+                expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
+                expect(span[TEST_SUITE_ID]).to.equal(undefined)
+                expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+              }
+              if (type === 'test_suite_end') {
+                expect(span.meta[TEST_SUITE]).to.equal(suite)
+                expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
+                expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
+                expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+              }
+              if (type === 'test') {
+                expect(span.meta[TEST_SUITE]).to.equal(suite)
+                expect(span.meta[TEST_NAME]).to.equal(name)
+                expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
+                expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
+                expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+              }
+            }, { timeoutMs: assertionTimeout, spanResourceMatch })
+          })
 
-              expect(coverageFiles)
-                .to.include('packages/datadog-plugin-jest/test/sum-coverage-test.js')
-              expect(coverageFiles)
-                .to.include('packages/datadog-plugin-jest/test/jest-coverage.js')
-              expect(contentDisposition).to.contain(
-                'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"'
-              )
-              expect(eventContentDisposition).to.contain(
-                'Content-Disposition: form-data; name="event"; filename="event.json"'
-              )
-              expect(eventPayload).to.equal(JSON.stringify({ dummy: true }))
-              done()
-            })
+          Promise.all(assertionPromises).then(() => done()).catch(done)
 
           const options = {
             ...jestCommonOptions,
-            testRegex: 'jest-coverage.js',
-            coverage: true
+            testRegex: 'jest-test-suite.js'
           }
 
           jestExecutable.runCLI(
@@ -330,8 +371,10 @@ describe('Plugin', function () {
             options.projects
           )
         })
-        it('should create spans for the test session and test suite', (done) => {
-          gitMetadataUploadFinishCh.publish()
+      })
+
+      describe('evp proxy', () => {
+        it('can report test suite level visibility spans', (done) => {
           const events = [
             { type: 'test_session_end', status: 'pass' },
             {
@@ -348,10 +391,13 @@ describe('Plugin', function () {
           ]
 
           const assertionPromises = events.map(({ name, suite, status, type }) => {
-            return agent.use(agentlessPayload => {
+            return agent.use((agentlessPayload, request) => {
+              expect(request.headers['x-datadog-evp-subdomain']).to.equal('citestcycle-intake')
+              expect(request.path).to.equal('/evp_proxy/v2/api/v2/citestcycle')
               const { events } = agentlessPayload
               const span = events.find(event => event.type === type).content
               expect(span.meta[TEST_STATUS]).to.equal(status)
+              expect(span.meta[COMPONENT]).to.equal('jest')
               if (type === 'test_session_end') {
                 expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
                 expect(span[TEST_SUITE_ID]).to.equal(undefined)
@@ -378,175 +424,6 @@ describe('Plugin', function () {
           const options = {
             ...jestCommonOptions,
             testRegex: 'jest-test-suite.js'
-          }
-
-          jestExecutable.runCLI(
-            options,
-            options.projects
-          )
-        })
-        it('can skip suites received by the intelligent test runner API', (done) => {
-          gitMetadataUploadFinishCh.publish()
-
-          nock('https://api.datad0g.com/')
-            .post('/api/v2/libraries/tests/services/setting')
-            .reply(200, JSON.stringify({
-              data: {
-                attributes: {
-                  code_coverage: true,
-                  tests_skipping: true
-                }
-              }
-            }))
-
-          const scope = nock('https://api.datad0g.com/')
-            .post('/api/v2/ci/tests/skippable')
-            .reply(200, JSON.stringify({
-              data: [{
-                type: 'suite',
-                attributes: {
-                  suite: 'packages/datadog-plugin-jest/test/jest-itr-skip.js'
-                }
-              }]
-            }))
-
-          agent.use(agentlessPayload => {
-            const { events: [{ content: testSpan }] } = agentlessPayload
-            expect(testSpan.meta).to.contain({
-              [TEST_NAME]: 'jest-itr-pass will be run',
-              [TEST_STATUS]: 'pass',
-              [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-itr-pass.js'
-            })
-          }).then(() => {
-            expect(scope.isDone()).to.be.true
-            done()
-          }).catch(done)
-
-          const options = {
-            ...jestCommonOptions,
-            testRegex: /jest-itr-/
-          }
-
-          jestExecutable.runCLI(
-            options,
-            options.projects
-          )
-        })
-        it('does not skip tests if git metadata is not uploaded', function (done) {
-          gitMetadataUploadFinishCh.publish(new Error('error uploading'))
-
-          nock('https://api.datad0g.com/')
-            .post('/api/v2/libraries/tests/services/setting')
-            .reply(200, JSON.stringify({
-              data: {
-                attributes: {
-                  code_coverage: true,
-                  tests_skipping: true
-                }
-              }
-            }))
-
-          nock('https://api.datad0g.com/')
-            .post('/api/v2/ci/tests/skippable')
-            .reply(200, JSON.stringify({
-              data: [{
-                type: 'suite',
-                attributes: {
-                  suite: 'packages/datadog-plugin-jest/test/jest-itr-skip.js'
-                }
-              }]
-            }))
-
-          const tests = [
-            {
-              name: 'jest-itr-skip will be skipped through ITR',
-              status: 'pass',
-              suite: 'packages/datadog-plugin-jest/test/jest-itr-skip.js'
-            },
-            {
-              name: 'jest-itr-pass will be run',
-              status: 'pass',
-              suite: 'packages/datadog-plugin-jest/test/jest-itr-pass.js'
-            }
-          ]
-          const assertionPromises = tests.map(({ name, status, suite }) => {
-            return agent.use(agentlessPayload => {
-              const { events: [{ content: testSpan }] } = agentlessPayload
-              expect(testSpan.meta).to.contain({
-                [TEST_NAME]: name,
-                [TEST_STATUS]: status,
-                [TEST_SUITE]: suite
-              })
-            })
-          })
-
-          Promise.all(assertionPromises).then(() => done()).catch(done)
-
-          const options = {
-            ...jestCommonOptions,
-            testRegex: /jest-itr-/,
-            runInBand: true
-          }
-
-          jestExecutable.runCLI(
-            options,
-            options.projects
-          )
-        })
-        it('does not skip tests if test skipping is disabled via API', (done) => {
-          gitMetadataUploadFinishCh.publish()
-
-          nock('https://api.datad0g.com/')
-            .post('/api/v2/libraries/tests/services/setting')
-            .reply(200, JSON.stringify({
-              data: {
-                attributes: {
-                  code_coverage: true,
-                  tests_skipping: false
-                }
-              }
-            }))
-
-          nock('https://api.datad0g.com/')
-            .post('/api/v2/ci/tests/skippable')
-            .reply(200, JSON.stringify({
-              data: [{
-                type: 'suite',
-                attributes: {
-                  suite: 'packages/datadog-plugin-jest/test/jest-itr-skip.js'
-                }
-              }]
-            }))
-
-          const tests = [
-            {
-              name: 'jest-itr-skip will be skipped through ITR',
-              status: 'pass',
-              suite: 'packages/datadog-plugin-jest/test/jest-itr-skip.js'
-            },
-            {
-              name: 'jest-itr-pass will be run',
-              status: 'pass',
-              suite: 'packages/datadog-plugin-jest/test/jest-itr-pass.js'
-            }
-          ]
-          const assertionPromises = tests.map(({ name, status, suite }) => {
-            return agent.use(agentlessPayload => {
-              const { events: [{ content: testSpan }] } = agentlessPayload
-              expect(testSpan.meta).to.contain({
-                [TEST_NAME]: name,
-                [TEST_STATUS]: status,
-                [TEST_SUITE]: suite
-              })
-            })
-          })
-
-          Promise.all(assertionPromises).then(() => done()).catch(done)
-
-          const options = {
-            ...jestCommonOptions,
-            testRegex: /jest-itr-/,
-            runInBand: true
           }
 
           jestExecutable.runCLI(

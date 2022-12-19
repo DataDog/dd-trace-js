@@ -4,7 +4,7 @@ const path = require('path')
 
 const nock = require('nock')
 
-const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const {
   TEST_FRAMEWORK,
@@ -16,14 +16,14 @@ const {
   CI_APP_ORIGIN,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
-  ERROR_MESSAGE,
   TEST_CODE_OWNERS,
   LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { version: ddTraceVersion } = require('../../../package.json')
 
-describe('Plugin', () => {
+describe('Plugin', function () {
+  this.retries(2)
   let jestExecutable
 
   const jestCommonOptions = {
@@ -33,7 +33,8 @@ describe('Plugin', () => {
     reporters: [],
     silent: true,
     cache: false,
-    maxWorkers: '50%'
+    maxWorkers: '50%',
+    testEnvironment: 'node'
   }
 
   withVersions('jest', ['jest-jasmine2'], (version) => {
@@ -42,7 +43,7 @@ describe('Plugin', () => {
       jestTestFile.forEach((testFile) => {
         delete require.cache[require.resolve(path.join(__dirname, testFile))]
       })
-      return agent.close({ ritmReset: false, wipe: true })
+      return agent.close()
     })
     beforeEach(() => {
       // for http integration tests
@@ -58,7 +59,7 @@ describe('Plugin', () => {
       })
     })
     describe('jest with jasmine', function () {
-      this.timeout(60000)
+      this.timeout(20000)
       it('instruments async, sync and integration tests', function (done) {
         const tests = [
           {
@@ -95,7 +96,8 @@ describe('Plugin', () => {
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-jasmine2',
               [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/dd-trace-js']), // reads from dd-trace-js
-              [LIBRARY_VERSION]: ddTraceVersion
+              [LIBRARY_VERSION]: ddTraceVersion,
+              [COMPONENT]: 'jest'
             })
             if (extraTags) {
               expect(testSpan.meta).to.contain(extraTags)
@@ -103,6 +105,7 @@ describe('Plugin', () => {
             if (error) {
               expect(testSpan.meta[ERROR_MESSAGE]).to.include(error)
             }
+            // TODO: add assertions on http spans when stealthy-require issue is resolved
             if (name === 'jest-test-suite can do integration http') {
               const httpSpan = trace[0].find(span => span.name === 'http.request')
               expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
@@ -114,7 +117,7 @@ describe('Plugin', () => {
             expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: 30000 })
+          }, { timeoutMs: 10000, spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -150,7 +153,8 @@ describe('Plugin', () => {
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
               [TEST_TYPE]: 'test',
-              [JEST_TEST_RUNNER]: 'jest-jasmine2'
+              [JEST_TEST_RUNNER]: 'jest-jasmine2',
+              [COMPONENT]: 'jest'
             })
             expect(testSpan.meta[ERROR_MESSAGE]).to.equal(error)
             expect(testSpan.type).to.equal('test')
@@ -160,7 +164,7 @@ describe('Plugin', () => {
               `packages/datadog-plugin-jest/test/jest-hook-failure.js.${name}`
             )
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: 30000 })
+          }, { timeoutMs: 10000, spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -195,9 +199,10 @@ describe('Plugin', () => {
               [TEST_STATUS]: status,
               [TEST_FRAMEWORK]: 'jest',
               [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
-              [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js'
+              [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
+              [COMPONENT]: 'jest'
             })
-          }, { timeoutMs: 30000 })
+          }, { timeoutMs: 10000, spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)

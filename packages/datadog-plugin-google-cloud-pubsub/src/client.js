@@ -14,7 +14,6 @@ class GoogleCloudPubsubClientPlugin extends ClientPlugin {
       resource: [cfg.method, cfg.reqOpts.name].filter(x => x).join(' '),
       kind: 'client',
       meta: {
-        'component': '@google-cloud/pubsub',
         'pubsub.method': cfg.method,
         'gcloud.project_id': projectId
       }

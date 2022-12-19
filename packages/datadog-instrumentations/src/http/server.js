@@ -2,12 +2,12 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
 const startServerCh = channel('apm:http:server:request:start')
+const exitServerCh = channel('apm:http:server:request:exit')
 const errorServerCh = channel('apm:http:server:request:error')
 const finishServerCh = channel('apm:http:server:request:finish')
 
@@ -45,18 +45,17 @@ function wrapEmit (emit) {
     if (eventName === 'request') {
       res.req = req
 
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-      return asyncResource.runInAsyncScope(() => {
-        startServerCh.publish({ req, res })
+      startServerCh.publish({ req, res })
 
-        try {
-          return emit.apply(this, arguments)
-        } catch (err) {
-          errorServerCh.publish(err)
+      try {
+        return emit.apply(this, arguments)
+      } catch (err) {
+        errorServerCh.publish(err)
 
-          throw err
-        }
-      })
+        throw err
+      } finally {
+        exitServerCh.publish({ req })
+      }
     }
     return emit.apply(this, arguments)
   }

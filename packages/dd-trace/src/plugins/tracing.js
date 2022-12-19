@@ -3,6 +3,7 @@
 const Plugin = require('./plugin')
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
+const { COMPONENT } = require('../constants')
 
 class TracingPlugin extends Plugin {
   constructor (...args) {
@@ -72,6 +73,7 @@ class TracingPlugin extends Plugin {
     const span = this.tracer.startSpan(name, {
       childOf,
       tags: {
+        [COMPONENT]: this.component,
         'service.name': service || this.tracer._service,
         'resource.name': resource,
         'span.kind': kind,

@@ -12,10 +12,11 @@ function safeJSONStringify (value) {
 }
 
 class Writer extends BaseWriter {
-  constructor ({ url }) {
+  constructor ({ url, evpProxyPrefix = '' }) {
     super(...arguments)
     this._url = url
     this._encoder = new CoverageCIVisibilityEncoder(this)
+    this._evpProxyPrefix = evpProxyPrefix
   }
 
   _sendPayload (form, _, done) {
@@ -28,6 +29,12 @@ class Writer extends BaseWriter {
       },
       timeout: 15000,
       url: this._url
+    }
+
+    if (this._evpProxyPrefix) {
+      options.path = `${this._evpProxyPrefix}/api/v2/citestcov`
+      delete options.headers['dd-api-key']
+      options.headers['X-Datadog-EVP-Subdomain'] = 'event-platform-intake'
     }
 
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)

@@ -1,28 +1,36 @@
 'use strict'
 
 const fs = require('fs')
+const path = require('path')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
+const remoteConfig = require('./remote_config')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('./gateway/channels')
 const Gateway = require('./gateway/engine')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
 
+let isEnabled = false
+
 function enable (config) {
+  if (isEnabled) return
+
   try {
     // TODO: enable dc_blocking: config.appsec.blocking === true
 
-    let rules = fs.readFileSync(config.appsec.rules)
+    let rules = fs.readFileSync(config.appsec.rules || path.join(__dirname, 'recommended.json'))
     rules = JSON.parse(rules)
 
     RuleManager.applyRules(rules, config.appsec)
+    remoteConfig.enableAsmData(config.appsec)
   } catch (err) {
     log.error('Unable to start AppSec')
     log.error(err)
 
     // abort AppSec start
     RuleManager.clearAllRules()
+    remoteConfig.disableAsmData()
     return
   }
 
@@ -36,6 +44,8 @@ function enable (config) {
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_ENDPOINT)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
+
+  isEnabled = true
 }
 
 function incomingHttpStartTranslator (data) {
@@ -107,7 +117,10 @@ function incomingHttpEndTranslator (data) {
 }
 
 function disable () {
+  isEnabled = false
+
   RuleManager.clearAllRules()
+  remoteConfig.disableAsmData()
 
   // Channel#unsubscribe() is undefined for non active channels
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)

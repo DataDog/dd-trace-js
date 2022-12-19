@@ -6,6 +6,7 @@ const Readable = require('stream').Readable
 const getService = require('./service')
 const loader = require('../../../versions/@grpc/proto-loader').get()
 const pkgs = ['grpc', '@grpc/grpc-js']
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let grpc
@@ -217,6 +218,7 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'bidi_streaming')
                   expect(traces[0][0].meta).to.have.property('span.kind', 'client')
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
+                  expect(traces[0][0].meta).to.have.property('component', 'grpc')
                 })
             })
 
@@ -277,8 +279,8 @@ describe('Plugin', () => {
                 .use(traces => {
                   expect(traces[0][0]).to.have.property('error', 1)
                   expect(traces[0][0].meta).to.include({
-                    'error.msg': '2 UNKNOWN: foobar',
-                    'error.type': 'Error',
+                    [ERROR_MESSAGE]: '2 UNKNOWN: foobar',
+                    [ERROR_TYPE]: 'Error',
                     'grpc.method.name': 'getUnary',
                     'grpc.method.service': 'TestService',
                     'grpc.method.package': 'test',
@@ -287,7 +289,7 @@ describe('Plugin', () => {
                     'span.kind': 'client',
                     'component': 'grpc'
                   })
-                  expect(traces[0][0].meta).to.have.property('error.stack')
+                  expect(traces[0][0].meta).to.have.property(ERROR_STACK)
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 2)
                 })
             })
@@ -305,7 +307,7 @@ describe('Plugin', () => {
                 .use(traces => {
                   expect(traces[0][0]).to.have.property('error', 1)
                   expect(traces[0][0].meta).to.include({
-                    'error.type': 'Error',
+                    [ERROR_TYPE]: 'Error',
                     'grpc.method.name': 'getUnary',
                     'grpc.method.service': 'TestService',
                     'grpc.method.package': 'test',
@@ -314,8 +316,8 @@ describe('Plugin', () => {
                     'span.kind': 'client',
                     'component': 'grpc'
                   })
-                  expect(traces[0][0].meta).to.have.property('error.stack')
-                  expect(traces[0][0].meta['error.msg']).to.match(/^13 INTERNAL:.+$/)
+                  expect(traces[0][0].meta).to.have.property(ERROR_STACK)
+                  expect(traces[0][0].meta[ERROR_MESSAGE]).to.match(/^13 INTERNAL:.+$/)
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 13)
                 })
             })

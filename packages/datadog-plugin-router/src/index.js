@@ -4,6 +4,7 @@ const web = require('../../dd-trace/src/plugins/util/web')
 const WebPlugin = require('../../datadog-plugin-web/src')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { storage } = require('../../datadog-core')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class RouterPlugin extends WebPlugin {
   static get name () {
@@ -13,6 +14,7 @@ class RouterPlugin extends WebPlugin {
   constructor (...args) {
     super(...args)
 
+    this._storeStack = []
     this._contexts = new WeakMap()
 
     this.addSub(`apm:${this.constructor.name}:middleware:enter`, ({ req, name, route }) => {
@@ -27,6 +29,7 @@ class RouterPlugin extends WebPlugin {
         context.middleware.push(span)
       }
 
+      this._storeStack.push(storage.getStore())
       this.enter(span)
 
       web.patch(req)
@@ -41,12 +44,16 @@ class RouterPlugin extends WebPlugin {
       context.stack.pop()
     })
 
-    this.addSub(`apm:${this.constructor.name}:middleware:exit`, ({ req }) => {
+    this.addSub(`apm:${this.constructor.name}:middleware:finish`, ({ req }) => {
       const context = this._contexts.get(req)
 
       if (!context || context.middleware.length === 0) return
 
       context.middleware.pop().finish()
+    })
+
+    this.addSub(`apm:${this.constructor.name}:middleware:exit`, ({ req }) => {
+      this.enter(this._storeStack.pop())
     })
 
     this.addSub(`apm:${this.constructor.name}:middleware:error`, ({ req, error }) => {
@@ -97,6 +104,7 @@ class RouterPlugin extends WebPlugin {
     const span = this.tracer.startSpan(`${this.constructor.name}.middleware`, {
       childOf,
       tags: {
+        [COMPONENT]: this.constructor.name,
         'resource.name': name || '<anonymous>'
       }
     })

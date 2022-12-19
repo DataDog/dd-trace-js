@@ -4,6 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
 const Readable = require('stream').Readable
 const pkgs = ['grpc', '@grpc/grpc-js']
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let grpc
@@ -119,6 +120,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'server_streaming')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
+              expect(traces[0][0].meta).to.have.property('component', 'grpc')
             })
         })
 
@@ -144,6 +146,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'bidi_streaming')
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
+              expect(traces[0][0].meta).to.have.property('component', 'grpc')
             })
         })
 
@@ -207,8 +210,8 @@ describe('Plugin', () => {
           return agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0].meta).to.have.property('error.msg', 'foobar')
-              expect(traces[0][0].meta).to.have.property('error.type', 'Error')
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'foobar')
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, 'Error')
               expect(traces[0][0].meta).to.not.have.property('grpc.status.code')
             })
         })
@@ -239,10 +242,11 @@ describe('Plugin', () => {
           return agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0].meta).to.have.property('error.msg', 'foobar')
-              expect(traces[0][0].meta['error.stack']).to.match(/^Error: foobar\n {4}at Object.getUnary.*/)
-              expect(traces[0][0].meta).to.have.property('error.type', 'Error')
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'foobar')
+              expect(traces[0][0].meta[ERROR_STACK]).to.match(/^Error: foobar\n {4}at Object.getUnary.*/)
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, 'Error')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
+              expect(traces[0][0].meta).to.have.property('component', 'grpc')
             })
         })
 
@@ -264,9 +268,9 @@ describe('Plugin', () => {
           return agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0].meta).to.have.property('error.msg', 'foobar')
-              expect(traces[0][0].meta['error.stack']).to.equal(error.stack)
-              expect(traces[0][0].meta).to.have.property('error.type', 'Error')
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'foobar')
+              expect(traces[0][0].meta[ERROR_STACK]).to.equal(error.stack)
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, 'Error')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
             })
         })

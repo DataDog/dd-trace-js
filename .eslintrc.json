@@ -4,10 +4,15 @@
   },
   "extends": [
     "eslint:recommended",
-    "standard"
+    "standard",
+    "plugin:mocha/recommended"
+  ],
+  "plugins": [
+    "mocha"
   ],
   "env": {
-    "node" : true
+    "node": true,
+    "es2020": true
   },
   "rules": {
     "max-len": [2, 120, 2],
@@ -17,6 +22,15 @@
     "object-curly-spacing": [2, "always"],
     "import/no-extraneous-dependencies": 2,
     "standard/no-callback-literal": 0,
-    "no-prototype-builtins": 0
+    "no-prototype-builtins": 0,
+    "mocha/no-mocha-arrows": 0,
+    "mocha/no-setup-in-describe": 0,
+    "mocha/no-sibling-hooks": 0,
+    "mocha/no-top-level-hooks": 0,
+    "mocha/max-top-level-suites": 0,
+    "mocha/no-identical-title": 0,
+    "mocha/no-global-tests": 0,
+    "mocha/no-exports": 0,
+    "mocha/no-skipped-tests": 0
   }
 }

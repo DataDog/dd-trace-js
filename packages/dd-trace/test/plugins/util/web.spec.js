@@ -6,6 +6,7 @@ const kinds = require('../../../../../ext/kinds')
 const tags = require('../../../../../ext/tags')
 const { incomingHttpRequestEnd } = require('../../../src/appsec/gateway/channels')
 const { USER_REJECT } = require('../../../../../ext/priority')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../../../dd-trace/src/constants')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -93,34 +94,6 @@ describe('plugins/util/web', () => {
       expect(config.validateStatus(200)).to.equal(false)
       expect(config).to.have.property('hooks')
       expect(config.hooks.request()).to.equal('test')
-    })
-
-    it('should use the server config if set', () => {
-      const config = web.normalizeConfig({
-        server: {
-          headers: ['test'],
-          validateStatus: code => false,
-          hooks: {
-            request: () => 'test'
-          }
-        }
-      })
-
-      expect(config.headers).to.include('test')
-      expect(config.validateStatus(200)).to.equal(false)
-      expect(config).to.have.property('hooks')
-      expect(config.hooks.request()).to.equal('test')
-    })
-
-    it('should prioritize the server config over the shared config', () => {
-      const config = web.normalizeConfig({
-        headers: ['foo'],
-        server: {
-          headers: ['bar']
-        }
-      })
-
-      expect(config.headers).to.include('bar')
     })
 
     describe('queryStringObfuscation', () => {
@@ -707,9 +680,9 @@ describe('plugins/util/web', () => {
         sinon.spy(span, 'finish')
         web.finish(req, error)
 
-        expect(tags['error.type']).to.equal(error.name)
-        expect(tags['error.msg']).to.equal(error.message)
-        expect(tags['error.stack']).to.equal(error.stack)
+        expect(tags[ERROR_TYPE]).to.equal(error.name)
+        expect(tags[ERROR_MESSAGE]).to.equal(error.message)
+        expect(tags[ERROR_STACK]).to.equal(error.stack)
 
         done()
       }

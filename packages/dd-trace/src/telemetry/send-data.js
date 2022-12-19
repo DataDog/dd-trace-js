@@ -3,9 +3,11 @@ let seqId = 0
 function sendData (config, application, host, reqType, payload = {}) {
   const {
     hostname,
-    port
+    port,
+    url
   } = config
   const options = {
+    url,
     hostname,
     port,
     method: 'POST',

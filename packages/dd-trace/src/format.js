@@ -17,6 +17,10 @@ const MEASURED = tags.MEASURED
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
 const TOP_LEVEL_KEY = constants.TOP_LEVEL_KEY
+const PROCESS_ID = constants.PROCESS_ID
+const ERROR_MESSAGE = constants.ERROR_MESSAGE
+const ERROR_STACK = constants.ERROR_STACK
+const ERROR_TYPE = constants.ERROR_TYPE
 
 const map = {
   'service.name': 'service',
@@ -89,9 +93,9 @@ function extractTags (trace, span) {
           extractError(trace, tags[tag])
         }
         break
-      case 'error.type':
-      case 'error.msg':
-      case 'error.stack':
+      case ERROR_TYPE:
+      case ERROR_MESSAGE:
+      case ERROR_STACK:
         // HACK: remove when implemented in the backend
         if (context._name !== 'fs.operation') {
           trace.error = 1
@@ -103,12 +107,10 @@ function extractTags (trace, span) {
     }
   }
 
-  if (span.tracer()._service === tags['service.name']) {
-    addTag(trace.meta, trace.metrics, 'language', 'javascript')
-  }
-
   setSingleSpanIngestionTags(trace, context._sampling.spanSampling)
 
+  addTag(trace.meta, trace.metrics, 'language', 'javascript')
+  addTag(trace.meta, trace.metrics, PROCESS_ID, process.pid)
   addTag(trace.meta, trace.metrics, SAMPLING_PRIORITY_KEY, priority)
   addTag(trace.meta, trace.metrics, ORIGIN_KEY, origin)
   addTag(trace.meta, trace.metrics, HOSTNAME_KEY, hostname)
@@ -144,9 +146,9 @@ function extractError (trace, error) {
   trace.error = 1
 
   if (isError(error)) {
-    addTag(trace.meta, trace.metrics, 'error.msg', error.message)
-    addTag(trace.meta, trace.metrics, 'error.type', error.name)
-    addTag(trace.meta, trace.metrics, 'error.stack', error.stack)
+    addTag(trace.meta, trace.metrics, ERROR_MESSAGE, error.message)
+    addTag(trace.meta, trace.metrics, ERROR_TYPE, error.name)
+    addTag(trace.meta, trace.metrics, ERROR_STACK, error.stack)
   }
 }
 

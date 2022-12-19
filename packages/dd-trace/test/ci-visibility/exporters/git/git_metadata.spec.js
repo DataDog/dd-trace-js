@@ -57,7 +57,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata('test.com', (err) => {
+    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
@@ -73,7 +73,7 @@ describe('git_metadata', () => {
 
     getCommitsToUploadStub.returns([])
 
-    gitMetadata.sendGitMetadata('test.com', (err) => {
+    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
       expect(err).to.be.null
       // to check that it is not called
       expect(scope.isDone()).to.be.false
@@ -85,12 +85,13 @@ describe('git_metadata', () => {
   it('should fail and not continue if first query results in anything other than 200', (done) => {
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')
-      .reply(500)
+      .reply(404, 'Not found SHA')
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata('test.com', (err) => {
-      expect(err.message).to.contain('search_commits returned an error: status code 500')
+    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
+      // eslint-disable-next-line
+      expect(err.message).to.contain('Error fetching commits to exclude: Error from https://api.test.com//api/v2/git/repository/search_commits: 404 Not Found. Response from the endpoint: "Not found SHA"')
       // to check that it is not called
       expect(scope.isDone()).to.be.false
       expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
@@ -105,8 +106,8 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata('test.com', (err) => {
-      expect(err.message).to.contain("Can't parse search_commits response: Invalid commit type response")
+    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
+      expect(err.message).to.contain("Can't parse commits to exclude response: Invalid commit type response")
       // to check that it is not called
       expect(scope.isDone()).to.be.false
       expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
@@ -121,7 +122,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(502)
 
-    gitMetadata.sendGitMetadata('test.com', (err) => {
+    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
       expect(err.message).to.contain('Could not upload packfiles: status code 502')
       expect(scope.isDone()).to.be.true
       done()
@@ -148,7 +149,7 @@ describe('git_metadata', () => {
       secondTemporaryPackFile
     ])
 
-    gitMetadata.sendGitMetadata('test.com', (err) => {
+    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
@@ -167,7 +168,7 @@ describe('git_metadata', () => {
       'not there either'
     ])
 
-    gitMetadata.sendGitMetadata('test.com', (err) => {
+    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
       expect(err.message).to.contain('Could not read "not-there"')
       expect(scope.isDone()).to.be.false
       done()
@@ -183,7 +184,7 @@ describe('git_metadata', () => {
 
     generatePackFilesForCommitsStub.returns([])
 
-    gitMetadata.sendGitMetadata('test.com', (err) => {
+    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
       expect(err.message).to.contain('Failed to generate packfiles')
       expect(scope.isDone()).to.be.false
       done()
@@ -199,7 +200,7 @@ describe('git_metadata', () => {
 
     getRepositoryUrlStub.returns('')
 
-    gitMetadata.sendGitMetadata('test.com', (err) => {
+    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
       expect(err.message).to.contain('Repository URL is empty')
       expect(scope.isDone()).to.be.false
       done()
@@ -217,7 +218,25 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata('test.com', (err) => {
+    gitMetadata.sendGitMetadata(null, 'test.com', (err) => {
+      expect(err).to.be.null
+      expect(scope.isDone()).to.be.true
+      done()
+    })
+  })
+
+  it('works when a url is passed', (done) => {
+    const scope = nock('https://www.test.com')
+      .post('/api/v2/git/repository/search_commits')
+      .replyWithError('Server unavailable')
+      .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({ data: [] }))
+      .post('/api/v2/git/repository/packfile')
+      .replyWithError('Server unavailable')
+      .post('/api/v2/git/repository/packfile')
+      .reply(204)
+
+    gitMetadata.sendGitMetadata(new URL('https://www.test.com'), 'test.com', (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()

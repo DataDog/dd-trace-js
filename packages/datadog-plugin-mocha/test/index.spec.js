@@ -6,7 +6,7 @@ const fs = require('fs')
 const nock = require('nock')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -15,9 +15,6 @@ const {
   TEST_SOURCE_FILE,
   TEST_STATUS,
   TEST_PARAMETERS,
-  ERROR_TYPE,
-  ERROR_MESSAGE,
-  ERROR_STACK,
   CI_APP_ORIGIN,
   TEST_FRAMEWORK_VERSION,
   TEST_CODE_OWNERS,
@@ -87,7 +84,7 @@ describe('Plugin', () => {
       // before subsequent calls in whichever manner best suits your needs.
       const mochaTestFiles = fs.readdirSync(__dirname).filter(name => name.startsWith('mocha-'))
       mochaTestFiles.forEach((testFile) => {
-        delete require.cache[require.resolve(path.join(__dirname, testFile))]
+        delete require.cache[require.resolve(`./${testFile}`)]
       })
       return agent.close({ ritmReset: false, wipe: true })
     })
@@ -97,12 +94,22 @@ describe('Plugin', () => {
         .get('/')
         .reply(200, 'OK')
 
-      const loadArguments = [['mocha', 'http'], { isAgentlessEnabled: true }]
+      const loadArguments = [['mocha', 'http']]
 
-      // we need the ci visibility init for this test
-      if (this.currentTest.title === 'works with test suite level visibility') {
+      const isAgentlessTest = this.currentTest.parent.title === 'agentless'
+      const isEvpProxy = this.currentTest.parent.title === 'evp proxy'
+
+      if (isAgentlessTest) {
         process.env.DD_API_KEY = 'key'
+        process.env.DD_APP_KEY = 'app-key'
+        process.env.DD_ENV = 'ci'
+        process.env.DD_SITE = 'datad0g.com'
+        process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
+        loadArguments.push({ isIntelligentTestRunnerEnabled: true })
         loadArguments.push({ experimental: { exporter: 'datadog' } })
+      } else if (isEvpProxy) {
+        loadArguments.push({ service: 'test' })
+        loadArguments.push({ experimental: { exporter: 'agent_proxy' } })
       }
 
       return agent.load(...loadArguments).then(() => {
@@ -130,7 +137,8 @@ describe('Plugin', () => {
               JSON.stringify(['@DataDog/dd-trace-js']) // reads from dd-trace-js
             )
             expect(testSpan.meta[LIBRARY_VERSION]).to.equal(ddTraceVersion)
-          })
+            expect(testSpan.meta[COMPONENT]).to.equal('mocha')
+          }, { spanResourceMatch: new RegExp(`${testName}$`) })
         })
         Promise.all(assertionPromises)
           .then(() => done())
@@ -149,6 +157,7 @@ describe('Plugin', () => {
           .use(traces => {
             const testSpan = traces[0][0]
             expect(testSpan.meta).to.contain({
+              [COMPONENT]: 'mocha',
               language: 'javascript',
               service: 'test',
               [TEST_NAME]: 'mocha-test-fail can fail',
@@ -191,7 +200,8 @@ describe('Plugin', () => {
             expect(testSpan.meta[TEST_STATUS]).to.equal('skip')
             expect(testSpan.meta[TEST_NAME]).to.equal(testName)
             expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-          })
+            expect(testSpan.meta[COMPONENT]).to.equal('mocha')
+          }, { spanResourceMatch: new RegExp(`${testName}$`) })
         })
         Promise.all(assertionPromises)
           .then(() => done())
@@ -233,6 +243,7 @@ describe('Plugin', () => {
               expect(testSpan.type).to.equal('test')
               expect(testSpan.name).to.equal('mocha.test')
               expect(testSpan.resource).to.equal(`${testSuite}.${test.root} ${test.testName}`)
+              expect(testSpan.meta[COMPONENT]).to.equal('mocha')
             }).then(done, done)
 
           const mocha = new Mocha({
@@ -265,6 +276,7 @@ describe('Plugin', () => {
             expect(testSpan.type).to.equal('test')
             expect(testSpan.name).to.equal('mocha.test')
             expect(testSpan.resource).to.equal(`${testSuite}.mocha-parameterized can do parameterized`)
+            expect(testSpan.meta[COMPONENT]).to.equal('mocha')
           }).then(done, done)
 
         const mocha = new Mocha({
@@ -286,6 +298,7 @@ describe('Plugin', () => {
           expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
           expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
           expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
+          expect(testSpan.meta[COMPONENT]).to.equal('mocha')
           expect(testSpan.meta).to.contain({
             language: 'javascript',
             service: 'test',
@@ -312,6 +325,7 @@ describe('Plugin', () => {
           expect(testSpan.meta).to.contain({
             [ERROR_TYPE]: 'TypeError'
           })
+          expect(testSpan.meta[COMPONENT]).to.equal('mocha')
           expect(testSpan.meta[ERROR_TYPE]).to.equal('TypeError')
           const beginning = `mocha-fail-hook-sync "before each" hook for "will not run but be reported as failed": `
           expect(testSpan.meta[ERROR_MESSAGE].startsWith(beginning)).to.equal(true)
@@ -343,7 +357,8 @@ describe('Plugin', () => {
             const testSpan = trace[0][0]
             expect(testSpan.meta[TEST_NAME]).to.equal(name)
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
-          })
+            expect(testSpan.meta[COMPONENT]).to.equal('mocha')
+          }, { spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises)
@@ -393,12 +408,13 @@ describe('Plugin', () => {
             const testSpan = trace[0][0]
             expect(testSpan.meta[TEST_NAME]).to.equal(name)
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
+            expect(testSpan.meta[COMPONENT]).to.equal('mocha')
             if (errorMsg) {
               expect(testSpan.meta[ERROR_MESSAGE].startsWith(errorMsg)).to.equal(true)
               expect(testSpan.meta[ERROR_TYPE]).to.equal('Error')
               expect(testSpan.meta[ERROR_STACK]).not.to.be.undefined
             }
-          })
+          }, { spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises)
@@ -425,6 +441,7 @@ describe('Plugin', () => {
           expect(testSpan.meta[ERROR_STACK].startsWith('AssertionError: expected true to equal false')).to.equal(true)
           expect(testSpan.meta[TEST_STATUS]).to.equal('fail')
           expect(testSpan.meta[TEST_NAME]).to.equal('mocha-test-done-fail can do badly setup failed tests with done')
+          expect(testSpan.meta[COMPONENT]).to.equal('mocha')
         }).then(done, done)
         const mocha = new Mocha({
           reporter: function () {} // silent on internal tests
@@ -446,6 +463,7 @@ describe('Plugin', () => {
             const testSpan = trace[0][0]
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
             expect(testSpan.meta[TEST_NAME]).to.equal(testName)
+            expect(testSpan.meta[COMPONENT]).to.equal('mocha')
           })
         })
 
@@ -457,54 +475,6 @@ describe('Plugin', () => {
           reporter: function () {} // silent on internal tests
         })
         mocha.addFile(testFilePath)
-        mocha.run()
-      })
-
-      it('works with test suite level visibility', function (done) {
-        const testFilePaths = fs.readdirSync(__dirname)
-          .filter(name => name.startsWith('mocha-test-suite-level'))
-          .map(relativePath => path.join(__dirname, relativePath))
-
-        const suites = [
-          'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-after-each.js',
-          'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-skip-describe.js',
-          'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-test.js',
-          'packages/datadog-plugin-mocha/test/mocha-test-suite-level-pass.js'
-        ]
-
-        agent.use(agentlessPayload => {
-          const events = agentlessPayload.events.map(event => event.content)
-
-          if (events[0].type === 'test') {
-            throw new Error() // we don't want to assert on tests
-          }
-
-          const testSessionEvent = events.find(span => span.type === 'test_session_end')
-          const testSuiteEvents = events.filter(span => span.type === 'test_suite_end')
-
-          expect(testSessionEvent.meta[TEST_STATUS]).to.equal('fail')
-          expect(testSuiteEvents.length).to.equal(4)
-
-          expect(
-            testSuiteEvents.every(
-              span => span.test_session_id.toString() === testSessionEvent.test_session_id.toString()
-            )
-          ).to.be.true
-          expect(testSuiteEvents.every(suite => suite.test_suite_id !== undefined)).to.be.true
-          expect(testSuiteEvents.every(suite => suites.includes(suite.meta[TEST_SUITE]))).to.be.true
-
-          const failedSuites = testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'fail')
-          expect(testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'pass')).to.have.length(1)
-          expect(failedSuites).to.have.length(3)
-          expect(failedSuites.every(suite => suite.meta[ERROR_MESSAGE] !== undefined)).to.be.true
-        }).then(() => done()).catch(done)
-
-        const mocha = new Mocha({
-          reporter: function () {} // silent on internal tests
-        })
-        testFilePaths.forEach(filePath => {
-          mocha.addFile(filePath)
-        })
         mocha.run()
       })
 
@@ -521,7 +491,8 @@ describe('Plugin', () => {
             const testSpan = trace[0][0]
             expect(testSpan.meta[TEST_STATUS]).to.equal(status)
             expect(testSpan.meta[TEST_NAME]).to.equal(testName)
-          })
+            expect(testSpan.meta[COMPONENT]).to.equal('mocha')
+          }, { spanResourceMatch: new RegExp(`${testName}$`) })
         })
 
         Promise.all(assertionPromises)
@@ -533,6 +504,115 @@ describe('Plugin', () => {
         })
         mocha.addFile(testFilePath)
         mocha.run()
+      })
+
+      describe('agentless', () => {
+        beforeEach(() => {
+          delete global.__coverage__
+          delete require.cache[require.resolve('./fixtures/coverage.json')]
+          // we have to mock the __coverage__ global variable that `nyc` adds
+          global.__coverage__ = require('./fixtures/coverage.json')
+        })
+        it('works with test suite level visibility', function (done) {
+          const testFilePaths = fs.readdirSync(__dirname)
+            .filter(name => name.startsWith('mocha-test-suite-level'))
+            .map(relativePath => path.join(__dirname, relativePath))
+
+          const suites = [
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-after-each.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-skip-describe.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-test.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-pass.js'
+          ]
+
+          agent.use(agentlessPayload => {
+            const events = agentlessPayload.events.map(event => event.content)
+
+            if (events[0].type === 'test') {
+              throw new Error() // we don't want to assert on tests
+            }
+
+            const testSessionEvent = events.find(span => span.type === 'test_session_end')
+            const testSuiteEvents = events.filter(span => span.type === 'test_suite_end')
+
+            expect(testSessionEvent.meta[TEST_STATUS]).to.equal('fail')
+            expect(testSuiteEvents.length).to.equal(4)
+
+            expect(
+              testSuiteEvents.every(
+                span => span.test_session_id.toString() === testSessionEvent.test_session_id.toString()
+              )
+            ).to.be.true
+            expect(testSuiteEvents.every(suite => suite.test_suite_id !== undefined)).to.be.true
+            expect(testSuiteEvents.every(suite => suites.includes(suite.meta[TEST_SUITE]))).to.be.true
+
+            const failedSuites = testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'fail')
+            expect(testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'pass')).to.have.length(1)
+            expect(failedSuites).to.have.length(3)
+            expect(failedSuites.every(suite => suite.meta[ERROR_MESSAGE] !== undefined)).to.be.true
+          }).then(() => done()).catch(done)
+
+          const mocha = new Mocha({
+            reporter: function () {} // silent on internal tests
+          })
+          testFilePaths.forEach(filePath => {
+            mocha.addFile(filePath)
+          })
+          mocha.run()
+        })
+      })
+
+      describe('evp proxy', () => {
+        it('works with test suite level visibility', function (done) {
+          const testFilePaths = fs.readdirSync(__dirname)
+            .filter(name => name.startsWith('mocha-test-suite-level'))
+            .map(relativePath => path.join(__dirname, relativePath))
+
+          const suites = [
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-after-each.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-skip-describe.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-test.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-pass.js'
+          ]
+
+          agent.use((agentlessPayload, request) => {
+            expect(request.headers['x-datadog-evp-subdomain']).to.equal('citestcycle-intake')
+            expect(request.path).to.equal('/evp_proxy/v2/api/v2/citestcycle')
+
+            const events = agentlessPayload.events.map(event => event.content)
+
+            if (events[0].type === 'test') {
+              throw new Error() // we don't want to assert on tests
+            }
+
+            const testSessionEvent = events.find(span => span.type === 'test_session_end')
+            const testSuiteEvents = events.filter(span => span.type === 'test_suite_end')
+
+            expect(testSessionEvent.meta[TEST_STATUS]).to.equal('fail')
+            expect(testSuiteEvents.length).to.equal(4)
+
+            expect(
+              testSuiteEvents.every(
+                span => span.test_session_id.toString() === testSessionEvent.test_session_id.toString()
+              )
+            ).to.be.true
+            expect(testSuiteEvents.every(suite => suite.test_suite_id !== undefined)).to.be.true
+            expect(testSuiteEvents.every(suite => suites.includes(suite.meta[TEST_SUITE]))).to.be.true
+
+            const failedSuites = testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'fail')
+            expect(testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'pass')).to.have.length(1)
+            expect(failedSuites).to.have.length(3)
+            expect(failedSuites.every(suite => suite.meta[ERROR_MESSAGE] !== undefined)).to.be.true
+          }).then(() => done()).catch(done)
+
+          const mocha = new Mocha({
+            reporter: function () {} // silent on internal tests
+          })
+          testFilePaths.forEach(filePath => {
+            mocha.addFile(filePath)
+          })
+          mocha.run()
+        })
       })
     })
   })

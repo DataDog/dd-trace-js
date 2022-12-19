@@ -7,6 +7,7 @@ const os = require('os')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxy = require('./proxy')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let Gateway
@@ -85,6 +86,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('http.url', `http://localhost:${gatewayPort}/v1/foo`)
               expect(spans[0].meta).to.have.property('http.method', 'GET')
               expect(spans[0].meta).to.have.property('http.status_code', '200')
+              expect(spans[0].meta).to.have.property('component', 'microgateway')
             })
             .then(done)
             .catch(done)
@@ -130,9 +132,10 @@ describe('Plugin', () => {
 
               expect(spans[0]).to.have.property('name', 'microgateway.request')
               expect(spans[0]).to.have.property('resource', 'GET /v1')
-              expect(spans[0].meta).to.have.property('error.type', error.name)
-              expect(spans[0].meta).to.have.property('error.msg', error.message)
-              expect(spans[0].meta).to.have.property('error.stack', error.stack)
+              expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
+              expect(spans[0].meta).to.have.property('component', 'microgateway')
             })
             .then(done)
             .catch(done)
@@ -158,9 +161,10 @@ describe('Plugin', () => {
 
               expect(spans[0]).to.have.property('name', 'microgateway.request')
               expect(spans[0]).to.have.property('resource', 'GET /v1')
-              expect(spans[0].meta).to.have.property('error.type', error.name)
-              expect(spans[0].meta).to.have.property('error.msg', error.message)
-              expect(spans[0].meta).to.have.property('error.stack', error.stack)
+              expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
+              expect(spans[0].meta).to.have.property('component', 'microgateway')
             })
             .then(done)
             .catch(done)

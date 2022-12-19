@@ -71,6 +71,15 @@ describe('SpanProcessor', () => {
   it('should skip traces with unfinished spans', () => {
     trace.started = [activeSpan, finishedSpan]
     trace.finished = [finishedSpan]
+    processor.process(finishedSpan)
+
+    expect(exporter.export).not.to.have.been.called
+  })
+
+  it('should skip unrecorded traces', () => {
+    trace.record = false
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
     processor.process(activeSpan)
 
     expect(exporter.export).not.to.have.been.called

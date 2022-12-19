@@ -9,6 +9,7 @@ const { expect } = require('chai')
 const { storage } = require('../../datadog-core')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -69,6 +70,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
                 expect(traces[0][0].meta).to.have.property('http.method', 'GET')
                 expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+                expect(traces[0][0].meta).to.have.property('component', 'http')
               })
               .then(done)
               .catch(done)
@@ -124,6 +126,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
                 expect(traces[0][0].meta).to.have.property('http.method', 'CONNECT')
                 expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+                expect(traces[0][0].meta).to.have.property('component', 'http')
               })
               .then(done)
               .catch(done)
@@ -167,6 +170,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
                 expect(traces[0][0].meta).to.have.property('http.method', 'GET')
                 expect(traces[0][0].meta).to.have.property('http.status_code', '101')
+                expect(traces[0][0].meta).to.have.property('component', 'http')
               })
               .then(done)
               .catch(done)
@@ -608,9 +612,10 @@ describe('Plugin', () => {
 
             agent
               .use(traces => {
-                expect(traces[0][0].meta).to.have.property('error.type', error.name)
-                expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-                expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+                expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(traces[0][0].meta).to.have.property('component', 'http')
               })
               .then(done)
               .catch(done)
@@ -686,10 +691,11 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 expect(traces[0][0]).to.have.property('error', 1)
-                expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-                expect(traces[0][0].meta).to.have.property('error.type', error.name)
-                expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
                 expect(traces[0][0].meta).to.not.have.property('http.status_code')
+                expect(traces[0][0].meta).to.have.property('component', 'http')
               })
               .then(done)
               .catch(done)
@@ -1218,6 +1224,52 @@ describe('Plugin', () => {
               const req = http.request({
                 port,
                 path: '/users'
+              })
+
+              req.end()
+            })
+          })
+        })
+      })
+
+      describe('with blocklist configuration', () => {
+        let config
+
+        beforeEach(() => {
+          config = {
+            server: false,
+            client: {
+              blocklist: [/\/user/]
+            }
+          }
+
+          return agent.load('http', config)
+            .then(() => {
+              http = require(protocol)
+              express = require('express')
+            })
+        })
+
+        it('should skip recording if the url matches an item in the blocklist', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            const timer = setTimeout(done, 100)
+
+            agent
+              .use(() => {
+                clearTimeout(timer)
+                done(new Error('Blocklisted requests should not be recorded.'))
+              })
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => {})
               })
 
               req.end()

@@ -122,4 +122,16 @@ describe('config', () => {
 
     expect(config.tags).to.include({ env, service, version })
   })
+
+  it('should support IPv6 hostname', () => {
+    const options = {
+      hostname: '::1'
+    }
+
+    const config = new Config(options)
+    const exporterUrl = config.exporters[0]._url.toString()
+    const expectedUrl = new URL('http://[::1]:8126').toString()
+
+    expect(exporterUrl).to.equal(expectedUrl)
+  })
 })

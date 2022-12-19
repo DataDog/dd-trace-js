@@ -9,6 +9,7 @@ const handleChannel = channel('apm:restify:request:handle')
 const errorChannel = channel('apm:restify:middleware:error')
 const enterChannel = channel('apm:restify:middleware:enter')
 const exitChannel = channel('apm:restify:middleware:exit')
+const finishChannel = channel('apm:restify:middleware:finish')
 const nextChannel = channel('apm:restify:middleware:next')
 
 function wrapSetupRequest (setupRequest) {
@@ -53,8 +54,10 @@ function wrapFn (fn) {
     } catch (error) {
       errorChannel.publish({ req, error })
       nextChannel.publish({ req })
-      exitChannel.publish({ req })
+      finishChannel.publish({ req })
       throw error
+    } finally {
+      exitChannel.publish({ req })
     }
   }
 }
@@ -62,7 +65,7 @@ function wrapFn (fn) {
 function wrapNext (req, next) {
   return function () {
     nextChannel.publish({ req })
-    exitChannel.publish({ req })
+    finishChannel.publish({ req })
 
     next.apply(this, arguments)
   }

@@ -6,11 +6,14 @@ const { request } = require('http')
 // TODO: avoid using dd-trace internals. Make this a separate module?
 const docker = require('../../exporters/common/docker')
 const FormData = require('../../exporters/common/form-data')
+const { storage } = require('../../../../datadog-core')
 const version = require('../../../../../package.json').version
 
 const containerId = docker.id()
 
 function sendRequest (options, form, callback) {
+  const store = storage.getStore()
+  storage.enterWith({ noop: true })
   const req = request(options, res => {
     if (res.statusCode >= 400) {
       const error = new Error(`HTTP Error ${res.statusCode}`)
@@ -22,6 +25,7 @@ function sendRequest (options, form, callback) {
   })
   req.on('error', callback)
   if (form) form.pipe(req)
+  storage.enterWith(store)
 }
 
 function getBody (stream, callback) {

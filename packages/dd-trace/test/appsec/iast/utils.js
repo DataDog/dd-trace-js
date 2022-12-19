@@ -1,3 +1,9 @@
+'use strict'
+
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
+
 const getPort = require('get-port')
 const agent = require('../../plugins/agent')
 const axios = require('axios')
@@ -52,23 +58,26 @@ function testInRequest (app, tests) {
   tests(config)
 }
 
+function prepareTests () {
+  beforeEach(() => {
+    iast.enable(new Config({
+      experimental: {
+        iast: {
+          enabled: true,
+          requestSampling: 100
+        }
+      }
+    }))
+  })
+
+  afterEach(() => {
+    iast.disable()
+  })
+}
+
 function testThatRequestHasVulnerability (app, vulnerability) {
   function tests (config) {
-    beforeEach(() => {
-      iast.enable(new Config({
-        experimental: {
-          iast: {
-            enabled: true,
-            requestSampling: 100
-          }
-        }
-      }))
-    })
-
-    afterEach(() => {
-      iast.disable()
-    })
-
+    prepareTests()
     it(`should have ${vulnerability} vulnerability`, function (done) {
       agent
         .use(traces => {
@@ -83,4 +92,32 @@ function testThatRequestHasVulnerability (app, vulnerability) {
   testInRequest(app, tests)
 }
 
-module.exports = { testThatRequestHasVulnerability, testInRequest }
+function testThatRequestHasNoVulnerability (app, vulnerability) {
+  function tests (config) {
+    prepareTests()
+
+    it(`should not have ${vulnerability} vulnerability`, function (done) {
+      agent
+        .use(traces => {
+          // iastJson == undefiend is valid
+          const iastJson = traces[0][0].meta['_dd.iast.json'] || ''
+          expect(iastJson).to.not.include(`"${vulnerability}"`)
+        })
+        .then(done)
+        .catch(done)
+      axios.get(`http://localhost:${config.port}/`).catch(done)
+    })
+  }
+
+  testInRequest(app, tests)
+}
+
+let index = 0
+function copyFileToTmp (src) {
+  const srcName = `dd-iast-${index++}-${path.basename(src)}`
+  const dest = path.join(os.tmpdir(), srcName)
+  fs.copyFileSync(src, dest)
+  return dest
+}
+
+module.exports = { testThatRequestHasNoVulnerability, testThatRequestHasVulnerability, testInRequest, copyFileToTmp }

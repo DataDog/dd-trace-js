@@ -66,7 +66,13 @@ function request (data, options, callback) {
       if (res.statusCode >= 200 && res.statusCode <= 299) {
         callback(null, responseData, res.statusCode)
       } else {
-        const error = new Error(`Error from the endpoint: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`)
+        const fullUrl = `${options.url || options.hostname || `localhost:${options.port}`}${options.path}`
+        // eslint-disable-next-line
+        let errorMessage = `Error from ${fullUrl}: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}.`
+        if (responseData) {
+          errorMessage += ` Response from the endpoint: "${responseData}"`
+        }
+        const error = new Error(errorMessage)
         error.status = res.statusCode
 
         callback(error, null, res.statusCode)

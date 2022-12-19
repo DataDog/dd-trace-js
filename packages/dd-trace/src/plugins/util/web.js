@@ -11,6 +11,7 @@ const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
 const BlockList = require('./ip_blocklist')
 const { incomingHttpRequestEnd } = require('../../appsec/gateway/channels')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -51,8 +52,6 @@ const ends = new WeakMap()
 const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
-    config = config.server || config
-
     const headers = getHeadersToRecord(config)
     const validateStatus = getStatusValidator(config)
     const hooks = getHooks(config)
@@ -60,14 +59,15 @@ const web = {
     const middleware = getMiddlewareSetting(config)
     const queryStringObfuscation = getQsObfuscator(config)
 
-    return Object.assign({}, config, {
+    return {
+      ...config,
       headers,
       validateStatus,
       hooks,
       filter,
       middleware,
       queryStringObfuscation
-    })
+    }
   },
 
   setFramework (req, name, config) {
@@ -77,6 +77,7 @@ const web = {
     if (!span) return
 
     span.context()._name = `${name}.request`
+    span.context()._tags['component'] = name
 
     web.setConfig(req, config)
   },
@@ -204,9 +205,9 @@ const web = {
     if (span) {
       if (error) {
         span.addTags({
-          'error.type': error.name,
-          'error.msg': error.message,
-          'error.stack': error.stack
+          [ERROR_TYPE]: error.name,
+          [ERROR_MESSAGE]: error.message,
+          [ERROR_STACK]: error.stack
         })
       }
 
@@ -276,7 +277,7 @@ const web = {
     const context = contexts.get(req)
     const span = context.span
     const error = context.error
-    const hasExistingError = span.context()._tags['error'] || span.context()._tags['error.msg']
+    const hasExistingError = span.context()._tags['error'] || span.context()._tags[ERROR_MESSAGE]
 
     if (!hasExistingError && !context.config.validateStatus(statusCode)) {
       span.setTag(ERROR, error || true)

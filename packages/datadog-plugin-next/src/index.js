@@ -3,6 +3,7 @@
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class NextPlugin extends Plugin {
   static get name () {
@@ -20,6 +21,7 @@ class NextPlugin extends Plugin {
       const span = this.tracer.startSpan('next.request', {
         childOf,
         tags: {
+          [COMPONENT]: this.constructor.name,
           'service.name': this.config.service || this.tracer._service,
           'resource.name': req.method,
           'span.type': 'web',
@@ -67,6 +69,7 @@ class NextPlugin extends Plugin {
       const req = this._requests.get(span)
 
       span.addTags({
+        [COMPONENT]: this.constructor.name,
         'resource.name': `${req.method} ${page}`.trim(),
         'next.page': page
       })

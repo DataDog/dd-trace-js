@@ -3,6 +3,7 @@
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class NetPlugin extends Plugin {
   static get name () {
@@ -19,6 +20,7 @@ class NetPlugin extends Plugin {
       const span = this.tracer.startSpan('ipc.connect', {
         childOf,
         tags: {
+          [COMPONENT]: this.constructor.name,
           'resource.name': options.path,
           'ipc.path': options.path,
           'span.kind': 'client',
@@ -45,6 +47,7 @@ class NetPlugin extends Plugin {
       const span = this.tracer.startSpan('tcp.connect', {
         childOf,
         tags: {
+          [COMPONENT]: this.constructor.name,
           'resource.name': [host, port].filter(val => val).join(':'),
           'tcp.remote.host': host,
           'tcp.remote.port': port,
@@ -67,6 +70,7 @@ class NetPlugin extends Plugin {
     this.addSub(`apm:net:tcp:connection`, ({ socket }) => {
       const span = storage.getStore().span
       span.addTags({
+        [COMPONENT]: this.constructor.name,
         'tcp.local.address': socket.localAddress,
         'tcp.local.port': socket.localPort
       })

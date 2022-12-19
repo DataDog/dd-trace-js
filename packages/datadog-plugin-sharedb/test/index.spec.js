@@ -1,6 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let ShareDB
@@ -46,6 +47,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('sharedb.action', 'fetch')
+              expect(traces[0][0].meta).to.have.property('component', 'sharedb')
             })
               .then(done)
               .catch(done)
@@ -95,6 +97,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('sharedb.action', 'query-fetch')
+              expect(traces[0][0].meta).to.have.property('component', 'sharedb')
             })
               .then(done)
               .catch(done)
@@ -252,9 +255,10 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'server')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('sharedb.action', 'fetch')
-              expect(traces[0][0].meta).to.have.property('error.type', 'Error')
-              expect(traces[0][0].meta).to.have.property('error.msg', 'Snapshot Fetch Failure')
-              expect(traces[0][0].meta).to.have.property('error.stack')
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, 'Error')
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'Snapshot Fetch Failure')
+              expect(traces[0][0].meta).to.have.property(ERROR_STACK)
+              expect(traces[0][0].meta).to.have.property('component', 'sharedb')
             })
               .then(done)
               .catch(done)

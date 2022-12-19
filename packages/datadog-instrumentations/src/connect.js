@@ -1,12 +1,13 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 
 const enterChannel = channel('apm:connect:middleware:enter')
 const exitChannel = channel('apm:connect:middleware:exit')
 const errorChannel = channel('apm:connect:middleware:error')
 const nextChannel = channel('apm:connect:middleware:next')
+const finishChannel = channel('apm:connect:middleware:finish')
 const handleChannel = channel('apm:connect:request:handle')
 
 function wrapConnect (connect) {
@@ -61,7 +62,6 @@ function wrapLayerHandle (layer) {
   return shimmer.wrap(original, function () {
     if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
 
-    const middlewareResource = new AsyncResource('bound-anonymous-fn')
     const lastIndex = arguments.length - 1
     const name = original._name || original.name
     const req = arguments[arguments.length > 3 ? 1 : 0]
@@ -71,21 +71,21 @@ function wrapLayerHandle (layer) {
       arguments[lastIndex] = wrapNext(req, next)
     }
 
-    return middlewareResource.runInAsyncScope(() => {
-      const route = layer.route
+    const route = layer.route
 
-      enterChannel.publish({ name, req, route })
+    enterChannel.publish({ name, req, route })
 
-      try {
-        return original.apply(this, arguments)
-      } catch (error) {
-        errorChannel.publish({ req, error })
-        nextChannel.publish({ req })
-        exitChannel.publish({ req })
+    try {
+      return original.apply(this, arguments)
+    } catch (error) {
+      errorChannel.publish({ req, error })
+      nextChannel.publish({ req })
+      finishChannel.publish({ req })
 
-        throw error
-      }
-    })
+      throw error
+    } finally {
+      exitChannel.publish({ req })
+    }
   })
 }
 
@@ -96,7 +96,7 @@ function wrapNext (req, next) {
     }
 
     nextChannel.publish({ req })
-    exitChannel.publish({ req })
+    finishChannel.publish({ req })
 
     next.apply(this, arguments)
   }

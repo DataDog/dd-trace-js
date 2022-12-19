@@ -71,7 +71,17 @@ function start (_config, _application, _host) {
 }
 
 function isDependency (filename, request) {
-  return request.indexOf(`.${path.sep}`) !== 0 && request.indexOf(path.sep) !== 0
+  const isDependencyWithSlash = isDependencyWithSeparator(filename, request, '/')
+  if (isDependencyWithSlash && process.platform === 'win32') {
+    return isDependencyWithSeparator(filename, request, path.sep)
+  }
+  return isDependencyWithSlash
+}
+function isDependencyWithSeparator (filename, request, sep) {
+  return request.indexOf(`..${sep}`) !== 0 &&
+    request.indexOf(`.${sep}`) !== 0 &&
+    request.indexOf(sep) !== 0 &&
+    request.indexOf(`:${sep}`) !== 1
 }
 
 function stop () {

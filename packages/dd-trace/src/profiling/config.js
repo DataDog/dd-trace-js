@@ -2,7 +2,7 @@
 
 const coalesce = require('koalas')
 const os = require('os')
-const { URL } = require('url')
+const { URL, format } = require('url')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
@@ -33,6 +33,7 @@ class Config {
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
     const version = coalesce(options.version, DD_VERSION)
+    const functionname = process.env.AWS_LAMBDA_FUNCTION_NAME
     // Must be longer than one minute so pad with five seconds
     const flushInterval = coalesce(options.interval, 65 * 1000)
     const uploadTimeout = coalesce(options.uploadTimeout,
@@ -46,12 +47,13 @@ class Config {
     this.service = service
     this.env = env
     this.host = host
+    this.functionname = functionname
 
     this.version = version
     this.tags = Object.assign(
       tagger.parse(DD_TAGS),
       tagger.parse(options.tags),
-      tagger.parse({ env, host, service, version })
+      tagger.parse({ env, host, service, version, functionname })
     )
     this.logger = ensureLogger(options.logger)
     this.flushInterval = flushInterval
@@ -59,10 +61,13 @@ class Config {
     this.sourceMap = sourceMap
     this.endpointCollection = endpointCollection
 
-    const hostname = coalesce(options.hostname, DD_AGENT_HOST, 'localhost')
-    const port = coalesce(options.port, DD_TRACE_AGENT_PORT, 8126)
-    this.url = new URL(coalesce(options.url, DD_TRACE_AGENT_URL,
-      `http://${hostname || 'localhost'}:${port || 8126}`))
+    const hostname = coalesce(options.hostname, DD_AGENT_HOST) || 'localhost'
+    const port = coalesce(options.port, DD_TRACE_AGENT_PORT) || 8126
+    this.url = new URL(coalesce(options.url, DD_TRACE_AGENT_URL, format({
+      protocol: 'http:',
+      hostname,
+      port
+    })))
 
     this.exporters = ensureExporters(options.exporters || [
       new AgentExporter(this)

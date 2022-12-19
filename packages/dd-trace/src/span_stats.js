@@ -65,8 +65,8 @@ class SpanAggStats {
       TopLevelHits: this.topLevelHits,
       Errors: this.errors,
       Duration: this.duration,
-      OkSummary: this.okDistribution.toProto(),
-      ErrorSummary: this.errorDistribution.toProto()
+      OkSummary: this.okDistribution.toProto(), // TODO: custom proto encoding
+      ErrorSummary: this.errorDistribution.toProto() // TODO: custom proto encoding
     }
   }
 }

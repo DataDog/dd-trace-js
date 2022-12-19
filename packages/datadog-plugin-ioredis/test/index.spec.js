@@ -2,6 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let Redis
@@ -33,6 +34,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('service', 'test-redis')
               expect(traces[0][0]).to.have.property('resource', 'get')
               expect(traces[0][0]).to.have.property('type', 'redis')
+              expect(traces[0][0].meta).to.have.property('component', 'ioredis')
               expect(traces[0][0].meta).to.have.property('db.name', '0')
               expect(traces[0][0].meta).to.have.property('db.type', 'redis')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
@@ -64,9 +66,10 @@ describe('Plugin', () => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0].meta).to.have.property('error.type', error.name)
-              expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-              expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+              expect(traces[0][0].meta).to.have.property('component', 'ioredis')
             })
             .then(done)
             .catch(done)
@@ -90,6 +93,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
               expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
+              expect(traces[0][0].meta).to.have.property('component', 'ioredis')
               expect(traces[0][0].metrics).to.have.property('out.port', 6379)
             })
             .then(done)

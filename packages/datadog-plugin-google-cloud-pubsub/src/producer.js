@@ -15,7 +15,6 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       resource: `${cfg.method} ${topic}`,
       kind: 'producer',
       meta: {
-        'component': '@google-cloud/pubsub',
         'gcloud.project_id': projectId,
         'pubsub.method': cfg.method, // TODO: remove
         'pubsub.topic': topic

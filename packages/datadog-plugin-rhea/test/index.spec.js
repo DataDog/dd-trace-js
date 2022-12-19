@@ -2,6 +2,7 @@
 
 const { expect } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let tracer
@@ -60,7 +61,8 @@ describe('Plugin', () => {
                   'amqp.link.target.address': 'amq.topic',
                   'amqp.link.role': 'sender',
                   'amqp.delivery.state': 'accepted',
-                  'out.host': 'localhost'
+                  'out.host': 'localhost',
+                  'component': 'rhea'
                 })
                 expect(span.metrics).to.include({
                   'out.port': 5673
@@ -108,7 +110,8 @@ describe('Plugin', () => {
                 expect(span.meta).to.include({
                   'span.kind': 'consumer',
                   'amqp.link.source.address': 'amq.topic',
-                  'amqp.link.role': 'receiver'
+                  'amqp.link.role': 'receiver',
+                  'component': 'rhea'
                 })
               })
                 .then(done, done)
@@ -277,9 +280,10 @@ describe('Plugin', () => {
                   const span = traces[0][0]
                   expect(span.error).to.equal(1)
                   expect(span.meta).to.include({
-                    'error.msg': 'this is an error',
-                    'error.type': 'Error',
-                    'error.stack': error.stack
+                    [ERROR_MESSAGE]: 'this is an error',
+                    [ERROR_TYPE]: 'Error',
+                    [ERROR_STACK]: error.stack,
+                    'component': 'rhea'
                   })
                   Session.prototype.on_transfer = onTransfer
                 }).then(done, done)
@@ -481,9 +485,10 @@ describe('Plugin', () => {
                 'span.kind': 'producer',
                 'amqp.link.target.address': 'amq.topic',
                 'amqp.link.role': 'sender',
-                'error.type': 'Error',
-                'error.msg': 'fake protocol error',
-                'error.stack': err.stack
+                [ERROR_TYPE]: 'Error',
+                [ERROR_MESSAGE]: 'fake protocol error',
+                [ERROR_STACK]: err.stack,
+                'component': 'rhea'
               })
             }).then(done, done)
             connection.output = function () {
@@ -509,9 +514,10 @@ describe('Plugin', () => {
                 'span.kind': 'consumer',
                 'amqp.link.source.address': 'amq.topic',
                 'amqp.link.role': 'receiver',
-                'error.type': 'Error',
-                'error.msg': 'fake protocol error',
-                'error.stack': err.stack
+                [ERROR_TYPE]: 'Error',
+                [ERROR_MESSAGE]: 'fake protocol error',
+                [ERROR_STACK]: err.stack,
+                'component': 'rhea'
               })
             }).then(done, done)
             client.on('message', msg => {
@@ -543,7 +549,8 @@ function expectReceiving (agent, deliveryState, topic) {
     const expectedMeta = {
       'span.kind': 'consumer',
       'amqp.link.source.address': topic,
-      'amqp.link.role': 'receiver'
+      'amqp.link.role': 'receiver',
+      'component': 'rhea'
     }
     if (deliveryState) {
       expectedMeta['amqp.delivery.state'] = deliveryState
@@ -567,7 +574,8 @@ function expectSending (agent, deliveryState, topic) {
     const expectedMeta = {
       'span.kind': 'producer',
       'amqp.link.target.address': topic,
-      'amqp.link.role': 'sender'
+      'amqp.link.role': 'sender',
+      'component': 'rhea'
     }
     if (deliveryState) {
       expectedMeta['amqp.delivery.state'] = deliveryState
