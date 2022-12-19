@@ -5,6 +5,8 @@
 [![npm dev](https://img.shields.io/npm/v/dd-trace/dev?color=orange&label=dd-trace%40dev&logo=npm)](https://www.npmjs.com/package/dd-trace/v/dev)
 [![codecov](https://codecov.io/gh/DataDog/dd-trace-js/branch/master/graph/badge.svg)](https://codecov.io/gh/DataDog/dd-trace-js)
 
+<img align="right" src="https://user-images.githubusercontent.com/551402/208212084-1d0c07e2-4135-4c61-b2da-8f2fddbc66ed.png" alt="Bits the dog  JavaScript" width="200px"/>
+
 `dd-trace` is an npm package that you can install in your Node.js application to capture APM (Application Performance Monitoring) data. In Datadog terminology this library is called a Tracer. This data is then sent off to a process which collects and aggregates the data, called an Agent. Finally the data is sent off to the Datadog servers where it's stored and made available for querying in a myriad of ways, such as displaying in a dashboard or triggering alerts.
 
 ![Tracer, Agent, Datadog relationship diagram](./docs/relationship.png)
