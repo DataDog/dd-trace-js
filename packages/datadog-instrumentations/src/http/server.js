@@ -31,7 +31,7 @@ function wrapResponseEmit (emit) {
       return emit.apply(this, arguments)
     }
 
-    if (['finish','close'].includes(eventName) && !requestFinishedSet.has(this)) {
+    if (['finish', 'close'].includes(eventName) && !requestFinishedSet.has(this)) {
       finishServerCh.publish({ req: this.req })
       requestFinishedSet.add(this)
     }
