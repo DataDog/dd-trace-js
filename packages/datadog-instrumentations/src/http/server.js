@@ -11,6 +11,8 @@ const exitServerCh = channel('apm:http:server:request:exit')
 const errorServerCh = channel('apm:http:server:request:error')
 const finishServerCh = channel('apm:http:server:request:finish')
 
+const requestFinishedSet = new WeakSet()
+
 addHook({ name: 'https' }, http => {
   // http.ServerResponse not present on https
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
@@ -29,8 +31,9 @@ function wrapResponseEmit (emit) {
       return emit.apply(this, arguments)
     }
 
-    if (eventName === 'close') {
+    if (['finish','close'].includes(eventName) && !requestFinishedSet.has(this.req)) {
       finishServerCh.publish({ req: this.req })
+      requestFinishedSet.add(this.req)
     }
 
     return emit.apply(this, arguments)
