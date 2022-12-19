@@ -10,7 +10,7 @@ function isString (value) {
   return typeof value === 'string' || value instanceof String
 }
 
-addHook({ name: 'ldapjs', versions: ['>=1'] }, ldapjs => {
+addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
   const ldapSearchCh = channel('datadog:ldapjs:client:search')
 
   shimmer.wrap(ldapjs.Client.prototype, 'search', search => function () {

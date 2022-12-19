@@ -483,6 +483,22 @@ jobs:
       - run: yarn test:plugins:upstream
       - uses: codecov/codecov-action@v2
 
+  ldapjs:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: ldapjs
+    services:
+      openldap:
+        image: bitnami/openldap:latest
+        ports:
+          - '1389:1389'
+          - '1636:1636'
+        env:
+          LDAP_ADMIN_USERNAME: 'admin'
+          LDAP_ADMIN_PASSWORD: 'adminpassword'
+          LDAP_USERS: 'user01,user02'
+          LDAP_PASSWORDS: 'password1,password2'
+
   limitd-client:
     runs-on: ubuntu-latest
     services:
