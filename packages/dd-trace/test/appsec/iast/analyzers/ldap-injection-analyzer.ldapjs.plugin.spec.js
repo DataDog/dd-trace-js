@@ -22,22 +22,22 @@ describe('ldap-injection-analyzer with ldapjs', () => {
         })
         client.bind(`cn=admin,${base}`, 'adminpassword', (err) => {})
       })
-      
+
       afterEach((done) => {
         client.unbind(done)
       })
-      
+
       describe('has vulnerability', () => {
         testThatRequestHasVulnerability(() => {
           return new Promise((resolve, reject) => {
             const store = storage.getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
-            
+
             let filter = '(objectClass=*)'
             filter = newTaintedString(iastCtx, filter, 'param', 'Request')
 
             client.search(base, filter, (err, searchRes) => {
-              searchRes.on('end', resolve);
+              searchRes.on('end', resolve)
               searchRes.on('error', reject)
             })
           })
@@ -47,9 +47,9 @@ describe('ldap-injection-analyzer with ldapjs', () => {
       describe('has no vulnerability', () => {
         testThatRequestHasNoVulnerability(() => {
           return new Promise((resolve, reject) => {
-            let filter = '(objectClass=*)'
+            const filter = '(objectClass=*)'
             client.search(base, filter, (err, searchRes) => {
-              searchRes.on('end', resolve);
+              searchRes.on('end', resolve)
               searchRes.on('error', reject)
             })
           })
