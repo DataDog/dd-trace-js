@@ -20,7 +20,9 @@ describe('ldap-injection-analyzer with ldapjs', () => {
         client = ldapjs.createClient({
           url: 'ldap://localhost:1389'
         })
-        client.bind(`cn=admin,${base}`, 'adminpassword', (err) => {})
+        return new Promise((resolve) => {
+          client.bind(`cn=admin,${base}`, 'adminpassword', resolve)
+        })
       })
 
       afterEach((done) => {
@@ -50,6 +52,29 @@ describe('ldap-injection-analyzer with ldapjs', () => {
             const filter = '(objectClass=*)'
             client.search(base, filter, (err, searchRes) => {
               searchRes.on('end', resolve)
+              searchRes.on('error', reject)
+            })
+          })
+        }, 'LDAP_INJECTION')
+      })
+
+      describe('context is not null after search end event', () => {
+        testThatRequestHasVulnerability(() => {
+          return new Promise((resolve, reject) => {
+            const store = storage.getStore()
+            const iastCtx = iastContextFunctions.getIastContext(store)
+
+            let filter = '(objectClass=*)'
+            filter = newTaintedString(iastCtx, filter, 'param', 'Request')
+
+            client.search(base, filter, (err, searchRes) => {
+              searchRes.on('end', () => {
+                const storeEnd = storage.getStore()
+                const iastCtxEnd = iastContextFunctions.getIastContext(storeEnd)
+                expect(iastCtxEnd).to.not.be.undefined
+
+                resolve()
+              })
               searchRes.on('error', reject)
             })
           })
