@@ -9,7 +9,8 @@ function noop (res) { return res }
 const TaintTrackingDummy = {
   plusOperator: noop,
   trim: noop,
-  trimEnd: noop
+  trimEnd: noop,
+  concat: noop
 }
 
 function getTransactionId () {
@@ -76,6 +77,10 @@ const TaintTracking = {
   trimEnd: getCsiFn(
     (transactionId, res, target) => TaintedUtils.trimEnd(transactionId, res, target),
     String.prototype.trimEnd
+  ),
+  concat: getCsiFn(
+    (transactionId, res, target, ...rest) => TaintedUtils.concat(transactionId, res, target, ...rest),
+    String.prototype.concat
   )
 }
 
