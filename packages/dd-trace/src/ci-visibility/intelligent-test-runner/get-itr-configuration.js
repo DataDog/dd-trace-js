@@ -66,7 +66,7 @@ function getItrConfiguration ({
 
   request(data, options, (err, res) => {
     if (err) {
-      done({ err })
+      done({ err, itrConfig: {} })
     } else {
       try {
         const {
@@ -80,7 +80,7 @@ function getItrConfiguration ({
 
         done({ itrConfig: { isCodeCoverageEnabled, isSuitesSkippingEnabled } })
       } catch (err) {
-        done({ err })
+        done({ err, itrConfig: {} })
       }
     }
   })

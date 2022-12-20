@@ -291,7 +291,29 @@ describe('CI Visibility Exporter', () => {
         expect(ciVisibilityExporter._coverageWriter.append).not.to.be.called
       })
     })
-    context('is initialized and can use CI Vis protocol', () => {
+    context('is initialized, can use CI Vis protocol but code coverage is disabled', () => {
+      it('should not export coverages', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy(),
+          setUrl: sinon.spy()
+        }
+        const coverage = {
+          span: {
+            context: () => ({})
+          }
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._coverageWriter = writer
+        ciVisibilityExporter._canUseCiVisProtocol = true
+
+        ciVisibilityExporter.exportCoverage(coverage)
+        expect(ciVisibilityExporter._coverageBuffer).not.to.include(coverage)
+        expect(ciVisibilityExporter._coverageWriter.append).not.to.be.called
+      })
+    })
+    context('is initialized, can use CI Vis protocol and code coverage is enabled', () => {
       it('should export coverages', () => {
         const writer = {
           append: sinon.spy(),
@@ -307,6 +329,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._coverageWriter = writer
         ciVisibilityExporter._canUseCiVisProtocol = true
+        ciVisibilityExporter._itrConfig = { isCodeCoverageEnabled: true }
 
         ciVisibilityExporter.exportCoverage(coverage)
         expect(ciVisibilityExporter._coverageBuffer).not.to.include(coverage)

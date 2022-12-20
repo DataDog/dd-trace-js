@@ -63,7 +63,9 @@ class CiVisibilityExporter extends AgentInfoExporter {
   }
 
   canReportCodeCoverage () {
-    return this._canUseCiVisProtocol
+    return this._canUseCiVisProtocol &&
+      this._itrConfig &&
+      this._itrConfig.isCodeCoverageEnabled
   }
 
   // We can't call the skippable endpoint until git upload has finished,
@@ -139,8 +141,6 @@ class CiVisibilityExporter extends AgentInfoExporter {
     this._export(trace)
   }
 
-  // TODO: CHECK IF _ITRCONFIG includes isCodeCoverageEnabled
-  // this does not work for jest, because it runs in a different process
   exportCoverage (coveragePayload) {
     // Until it's initialized, we just store the coverages as is
     if (!this._isInitialized) {
@@ -172,6 +172,13 @@ class CiVisibilityExporter extends AgentInfoExporter {
         done()
       }
     })
+  }
+
+  exportUncodedCoverages () {
+    this._coverageBuffer.forEach(oldCoveragePayload => {
+      this.exportCoverage(oldCoveragePayload)
+    })
+    this._coverageBuffer = []
   }
 
   setUrl (url, coverageUrl = url) {

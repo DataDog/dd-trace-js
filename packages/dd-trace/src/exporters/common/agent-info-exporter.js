@@ -67,6 +67,13 @@ class AgentInfoExporter {
     return this._traceBuffer
   }
 
+  exportUncodedTraces () {
+    this.getUncodedTraces().forEach(uncodedTrace => {
+      this.export(uncodedTrace)
+    })
+    this.resetUncodedTraces()
+  }
+
   resetUncodedTraces () {
     this._traceBuffer = []
   }

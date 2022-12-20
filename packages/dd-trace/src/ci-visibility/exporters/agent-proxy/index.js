@@ -27,8 +27,8 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
     this.getAgentInfo((err, agentInfo) => {
       this._isInitialized = true
       const isEvpCompatible = getIsEvpCompatible(err, agentInfo)
-      this._isUsingEvpProxy = true
       if (isEvpCompatible) {
+        this._isUsingEvpProxy = true
         this._writer = new AgentlessWriter({
           url: this._url,
           tags,
@@ -56,20 +56,6 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       this.exportUncodedTraces()
       this.exportUncodedCoverages()
     })
-  }
-
-  exportUncodedTraces () {
-    this.getUncodedTraces().forEach(uncodedTrace => {
-      this.export(uncodedTrace)
-    })
-    this.resetUncodedTraces()
-  }
-
-  exportUncodedCoverages () {
-    this._coverageBuffer.forEach(oldCoveragePayload => {
-      this.exportCoverage(oldCoveragePayload)
-    })
-    this._coverageBuffer = []
   }
 }
 

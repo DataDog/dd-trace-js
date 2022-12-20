@@ -39,7 +39,6 @@ describe('CI Visibility Agentless Exporter', () => {
 
   it('can use CI Vis protocol right away', () => {
     const agentlessExporter = new AgentlessCiVisibilityExporter({ url, isGitUploadEnabled: true, tags: {} })
-    expect(agentlessExporter.canReportCodeCoverage()).to.be.true
     expect(agentlessExporter.canReportSessionTraces()).to.be.true
   })
 
@@ -61,10 +60,32 @@ describe('CI Visibility Agentless Exporter', () => {
       expect(agentlessExporter.shouldRequestItrConfiguration()).to.be.true
       agentlessExporter.getItrConfiguration({}, () => {
         expect(scope.isDone()).to.be.true
+        expect(agentlessExporter.canReportCodeCoverage()).to.be.true
         expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.true
         done()
       })
     })
+    it('can report code coverages if enabled by the API', (done) => {
+      const scope = nock('http://www.example.com')
+        .post('/api/v2/libraries/tests/services/setting')
+        .reply(200, JSON.stringify({
+          data: {
+            attributes: {
+              code_coverage: true,
+              tests_skipping: true
+            }
+          }
+        }))
+      const agentlessExporter = new AgentlessCiVisibilityExporter({
+        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
+      })
+      agentlessExporter.getItrConfiguration({}, () => {
+        expect(scope.isDone()).to.be.true
+        expect(agentlessExporter.canReportCodeCoverage()).to.be.true
+        done()
+      })
+    })
+
     it('will not allow skippable request if ITR configuration fails', (done) => {
       // request will fail
       delete process.env.DD_APP_KEY

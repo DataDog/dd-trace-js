@@ -115,6 +115,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
       setTimeout(() => {
         agentProxyCiVisibilityExporter._coverageWriter = mockWriter
         const coverage = { span: { context: () => ({ _traceId: '1', _spanId: '1' }) }, coverageFiles: [] }
+        agentProxyCiVisibilityExporter._itrConfig = { isCodeCoverageEnabled: true }
         agentProxyCiVisibilityExporter.exportCoverage(coverage)
         expect(mockWriter.append).to.have.been.calledWith({ spanId: '1', traceId: '1', files: [] })
         done()
@@ -224,6 +225,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         agentProxyCiVisibilityExporter._coverageWriter = mockWriter
 
         const coverage = { span: { context: () => ({ _traceId: '1', _spanId: '1' }) }, coverageFiles: [] }
+        agentProxyCiVisibilityExporter._itrConfig = { isCodeCoverageEnabled: true }
         agentProxyCiVisibilityExporter.exportCoverage(coverage)
         expect(mockWriter.append).to.have.been.calledWith({ traceId: '1', spanId: '1', files: [] })
         setTimeout(() => {

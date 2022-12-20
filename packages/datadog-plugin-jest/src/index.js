@@ -126,7 +126,7 @@ class JestPlugin extends CiPlugin {
     })
 
     /**
-     * This can't use `this._itrConfig` like `ci:mocha:test-suite:code-coverage`
+     * This can't use `this.itrConfig` like `ci:mocha:test-suite:code-coverage`
      * because this subscription happens in a different process from the one
      * fetching the ITR config.
      */
