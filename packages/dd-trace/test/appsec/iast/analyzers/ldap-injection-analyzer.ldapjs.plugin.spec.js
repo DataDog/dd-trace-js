@@ -80,6 +80,33 @@ describe('ldap-injection-analyzer with ldapjs', () => {
           })
         }, 'LDAP_INJECTION')
       })
+
+      describe('remove listener should work as expected', () => {
+        testThatRequestHasVulnerability(() => {
+          return new Promise((resolve, reject) => {
+            const store = storage.getStore()
+            const iastCtx = iastContextFunctions.getIastContext(store)
+
+            let filter = '(objectClass=*)'
+            filter = newTaintedString(iastCtx, filter, 'param', 'Request')
+
+            let searchResOnEndInvocations = 0
+            client.search(base, filter, (err, searchRes) => {
+              const onSearchEnd = () => {
+                searchResOnEndInvocations++
+                searchRes.off('end', onSearchEnd)
+                searchRes.emit('end')
+
+                // if .off method wouldn't work the test will never reach this lines because it will loop forever :S
+                expect(searchResOnEndInvocations).to.be.eq(1)
+                resolve()
+              }
+
+              searchRes.on('end', onSearchEnd)
+            })
+          })
+        }, 'LDAP_INJECTION')
+      })
     })
   })
 })

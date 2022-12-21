@@ -22,12 +22,44 @@ function getCallbackArgIndex (args) {
   return callbackIndex
 }
 
+const emitters = new WeakMap()
+
+function wrapEmitter (corkedEmitter) {
+  shimmer.wrap(corkedEmitter, 'on', on => function (name, fn) {
+    if (typeof fn === 'function') {
+      const callbackResource = new AsyncResource('bound-anonymous-fn')
+      const bindedFn = callbackResource.bind(fn)
+
+      let callbackMap = emitters[this]
+      if (!callbackMap) {
+        callbackMap = new WeakMap()
+        emitters[this] = callbackMap
+      }
+      callbackMap[fn] = bindedFn
+      arguments[1] = bindedFn
+    }
+    on.apply(this, arguments)
+  })
+
+  const removeListener = off => function (name, fn) {
+    if (typeof fn === 'function') {
+      const emitterOn = emitters[this] && emitters[this][fn]
+      if (emitterOn) {
+        arguments[1] = emitterOn
+      }
+    }
+    off.apply(this, arguments)
+  }
+  shimmer.wrap(corkedEmitter, 'off', removeListener)
+  shimmer.wrap(corkedEmitter, 'removeListener', removeListener)
+}
+
 addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
   const ldapSearchCh = channel('datadog:ldapjs:client:search')
 
   shimmer.wrap(ldapjs.Client.prototype, 'search', search => function (base, options) {
     if (ldapSearchCh.hasSubscribers) {
-      let filter = null
+      let filter
       if (isString(options)) {
         filter = options
       } else if (typeof options === 'object' && options.filter) {
@@ -48,13 +80,7 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
         const callback = arguments[callbackIndex]
         arguments[callbackIndex] = shimmer.wrap(callback, function (err, corkedEmitter) {
           if (typeof corkedEmitter === 'object' && typeof corkedEmitter['on'] === 'function') {
-            arguments[1] = shimmer.wrap(corkedEmitter, 'on', on => function (name, fn) {
-              if (typeof fn === 'function') {
-                const callbackResource = new AsyncResource('bound-anonymous-fn')
-                arguments[1] = callbackResource.bind(fn)
-              }
-              on.apply(this, arguments)
-            })
+            wrapEmitter(corkedEmitter)
           }
           callback.apply(this, arguments)
         })
