@@ -6,7 +6,6 @@ const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
 const agent = require('../../../plugins/agent')
-const { emit } = require('process')
 
 const base = 'dc=example,dc=org'
 

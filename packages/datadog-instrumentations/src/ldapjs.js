@@ -73,17 +73,15 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
   })
 
   shimmer.wrap(ldapjs.Client.prototype, '_send', _send => function () {
-    if (ldapSearchCh.hasSubscribers) {
-      const callbackIndex = getCallbackArgIndex(arguments)
-      if (callbackIndex > -1) {
-        const callback = arguments[callbackIndex]
-        arguments[callbackIndex] = shimmer.wrap(callback, function (err, corkedEmitter) {
-          if (typeof corkedEmitter === 'object' && typeof corkedEmitter['on'] === 'function') {
-            wrapEmitter(corkedEmitter)
-          }
-          callback.apply(this, arguments)
-        })
-      }
+    const callbackIndex = getCallbackArgIndex(arguments)
+    if (callbackIndex > -1) {
+      const callback = arguments[callbackIndex]
+      arguments[callbackIndex] = shimmer.wrap(callback, function (err, corkedEmitter) {
+        if (typeof corkedEmitter === 'object' && typeof corkedEmitter['on'] === 'function') {
+          wrapEmitter(corkedEmitter)
+        }
+        callback.apply(this, arguments)
+      })
     }
 
     return _send.apply(this, arguments)
