@@ -29,6 +29,8 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
   finish (message) {
     const span = this.activeSpan
+    
+    if (!span) { return }
 
     if (message.message._handled) {
       span.setTag('pubsub.ack', 1)
