@@ -235,15 +235,16 @@ testFrameworks.forEach(({
           assert.propertyVal(coveragePayload, 'filename', 'coverage1.msgpack')
           assert.propertyVal(coveragePayload, 'type', 'application/msgpack')
           assert.include(coveragePayload.content, {
-            version: 1
+            version: 2
           })
-          const allCoverageFiles = codeCovRequest.payload
-            .flatMap(coverage => coverage.content.files)
+          const allCoverageFiles = coveragePayload
+            .flatMap(coverage => coverage.content.coverages)
+            .flatMap(file => file.files)
             .map(file => file.filename)
 
           assert.includeMembers(allCoverageFiles, expectedCoverageFiles)
-          assert.exists(coveragePayload.content.span_id)
-          assert.exists(coveragePayload.content.trace_id)
+          assert.exists(coveragePayload.content.coverages[0].test_session_id)
+          assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_session_end'])
