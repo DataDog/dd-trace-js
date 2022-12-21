@@ -30,12 +30,12 @@ function wrapEmitter (corkedEmitter) {
       const callbackResource = new AsyncResource('bound-anonymous-fn')
       const bindedFn = callbackResource.bind(fn)
 
-      let callbackMap = emitters[this]
+      let callbackMap = emitters.get(this)
       if (!callbackMap) {
         callbackMap = new WeakMap()
-        emitters[this] = callbackMap
+        emitters.set(this, callbackMap)
       }
-      callbackMap[fn] = bindedFn
+      callbackMap.set(fn, bindedFn)
       arguments[1] = bindedFn
     }
     on.apply(this, arguments)
@@ -43,7 +43,7 @@ function wrapEmitter (corkedEmitter) {
 
   const removeListener = off => function (name, fn) {
     if (typeof fn === 'function') {
-      const emitterOn = emitters[this] && emitters[this][fn]
+      const emitterOn = emitters.get(this) && emitters.get(this).get(fn)
       if (emitterOn) {
         arguments[1] = emitterOn
       }
