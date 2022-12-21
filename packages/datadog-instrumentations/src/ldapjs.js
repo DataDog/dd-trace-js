@@ -22,28 +22,27 @@ function getCallbackArgIndex (args) {
   return callbackIndex
 }
 
-const emitters = new WeakMap()
-
 function wrapEmitter (corkedEmitter) {
-  shimmer.wrap(corkedEmitter, 'on', on => function (name, fn) {
-    if (typeof fn === 'function') {
-      const callbackResource = new AsyncResource('bound-anonymous-fn')
-      const bindedFn = callbackResource.bind(fn)
+  const callbackMap = new WeakMap()
 
-      let callbackMap = emitters.get(this)
-      if (!callbackMap) {
-        callbackMap = new WeakMap()
-        emitters.set(this, callbackMap)
+  const addListener = on => function (name, fn) {
+    if (typeof fn === 'function') {
+      let bindedFn = callbackMap.get(fn)
+      if (!bindedFn) {
+        const callbackResource = new AsyncResource('bound-anonymous-fn')
+        bindedFn = callbackResource.bind(fn)
+        callbackMap.set(fn, bindedFn)
       }
-      callbackMap.set(fn, bindedFn)
       arguments[1] = bindedFn
     }
     on.apply(this, arguments)
-  })
+  }
+  shimmer.wrap(corkedEmitter, 'on', addListener)
+  shimmer.wrap(corkedEmitter, 'addListener', addListener)
 
   const removeListener = off => function (name, fn) {
     if (typeof fn === 'function') {
-      const emitterOn = emitters.get(this) && emitters.get(this).get(fn)
+      const emitterOn = callbackMap.get(fn)
       if (emitterOn) {
         arguments[1] = emitterOn
       }
