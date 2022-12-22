@@ -17,7 +17,7 @@ const skipCh = channel('ci:mocha:test:skip')
 const testFinishCh = channel('ci:mocha:test:finish')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 
-const configurationCh = channel('ci:mocha:configuration')
+const itrConfigurationCh = channel('ci:mocha:itr-configuration')
 const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
 
 const testSessionStartCh = channel('ci:mocha:session:start')
@@ -320,7 +320,7 @@ addHook({
    * If ITR is disabled, `onDone` is called immediately on the subscriber
    */
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
-    if (!configurationCh.hasSubscribers) {
+    if (!itrConfigurationCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
     const onReceivedSkippableSuites = ({ err, skippableSuites }) => {
@@ -348,7 +348,7 @@ addHook({
     }
 
     mochaRunAsyncResource.runInAsyncScope(() => {
-      configurationCh.publish({
+      itrConfigurationCh.publish({
         onDone: mochaRunAsyncResource.bind(onReceivedConfiguration)
       })
     })
