@@ -90,7 +90,7 @@ function createWrapRouterMethod (name) {
 
   function wrapNext (req, next) {
     return function (error) {
-      if (error) {
+      if (error && error !== 'route' && error !== 'router') {
         errorChannel.publish({ req, error })
       }
 
