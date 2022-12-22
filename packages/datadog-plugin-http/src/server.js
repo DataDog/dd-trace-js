@@ -42,7 +42,8 @@ class HttpServerPlugin extends Plugin {
     })
 
     this.addSub('apm:http:server:request:exit', ({ req }) => {
-      this.enter(this._parentStore)
+      const span = this._parentStore && this._parentStore.span
+      this.enter(span, this._parentStore)
       this._parentStore = undefined
     })
 
