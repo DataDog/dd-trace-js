@@ -150,6 +150,7 @@ module.exports = {
    * @param {(traces: Array<Array<object>>) => void} callback - A function that tests trace data as it's received.
    * @param {Object} [options] - An options object
    * @param {number} [options.timeoutMs=1000] - The timeout in ms.
+   * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
    * @returns {Promise<void>} A promise resolving if expectations are met
    */
   use (callback, options) {
@@ -177,7 +178,12 @@ module.exports = {
         clearTimeout(timeout)
         deferred.resolve()
       } catch (e) {
-        error = error || e
+        if (options && options.rejectFirst) {
+          clearTimeout(timeout)
+          deferred.reject(e)
+        } else {
+          error = error || e
+        }
       }
     }
 
