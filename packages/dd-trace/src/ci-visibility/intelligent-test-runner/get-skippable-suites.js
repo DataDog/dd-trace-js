@@ -35,7 +35,7 @@ function getSkippableSuites ({
       process.env.DD_APPLICATION_KEY
 
     if (!apiKey || !appKey) {
-      return done({ err: new Error('App key or API key undefined') })
+      return done(new Error('App key or API key undefined'))
     }
     options.headers['dd-api-key'] = apiKey
     options.headers['dd-application-key'] = appKey
@@ -63,7 +63,7 @@ function getSkippableSuites ({
 
   request(data, options, (err, res) => {
     if (err) {
-      done({ err })
+      done(err)
     } else {
       let skippableSuites = []
       try {
@@ -71,9 +71,9 @@ function getSkippableSuites ({
           .data
           .filter(({ type }) => type === 'suite')
           .map(({ attributes: { suite } }) => suite)
-        done({ err: null, skippableSuites })
+        done(null, skippableSuites)
       } catch (err) {
-        done({ err })
+        done(err)
       }
     }
   })

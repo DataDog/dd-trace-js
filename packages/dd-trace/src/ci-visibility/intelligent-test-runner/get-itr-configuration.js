@@ -36,7 +36,7 @@ function getItrConfiguration ({
       process.env.DD_APPLICATION_KEY
 
     if (!apiKey || !appKey) {
-      return done({ err: new Error('App key or API key undefined') })
+      return done(new Error('App key or API key undefined'))
     }
     options.headers['dd-api-key'] = apiKey
     options.headers['dd-application-key'] = appKey
@@ -66,7 +66,7 @@ function getItrConfiguration ({
 
   request(data, options, (err, res) => {
     if (err) {
-      done({ err, itrConfig: {} })
+      done(err)
     } else {
       try {
         const {
@@ -78,9 +78,9 @@ function getItrConfiguration ({
           }
         } = JSON.parse(res)
 
-        done({ itrConfig: { isCodeCoverageEnabled, isSuitesSkippingEnabled } })
+        done(null, { isCodeCoverageEnabled, isSuitesSkippingEnabled })
       } catch (err) {
-        done({ err, itrConfig: {} })
+        done(err)
       }
     }
   })

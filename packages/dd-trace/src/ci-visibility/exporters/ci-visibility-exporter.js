@@ -72,11 +72,11 @@ class CiVisibilityExporter extends AgentInfoExporter {
   // hence the this._gitUploadPromise.then
   getSkippableSuites (testConfiguration, callback) {
     if (!this.shouldRequestSkippableSuites()) {
-      return callback({ skippableSuites: [] })
+      return callback(null, [])
     }
     this._gitUploadPromise.then(gitUploadError => {
       if (gitUploadError) {
-        return callback({ err: gitUploadError, skippableSuites: [] })
+        return callback(gitUploadError, [])
       }
       const configuration = {
         url: this._url,
@@ -86,9 +86,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         isEvpProxy: !!this._isUsingEvpProxy,
         ...testConfiguration
       }
-      getSkippableSuitesRequest(configuration, ({ err, skippableSuites }) => {
-        callback({ err, skippableSuites })
-      })
+      getSkippableSuitesRequest(configuration, callback)
     })
   }
 
@@ -98,11 +96,11 @@ class CiVisibilityExporter extends AgentInfoExporter {
    */
   getItrConfiguration (testConfiguration, callback) {
     if (!this.shouldRequestItrConfiguration()) {
-      return callback({ itrConfig: {} })
+      return callback(null, {})
     }
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
       if (!canUseCiVisProtocol) {
-        return callback({ itrConfig: {} })
+        return callback(null, {})
       }
       const configuration = {
         url: this._url,
@@ -111,9 +109,9 @@ class CiVisibilityExporter extends AgentInfoExporter {
         isEvpProxy: !!this._isUsingEvpProxy,
         ...testConfiguration
       }
-      getItrConfigurationRequest(configuration, ({ err, itrConfig }) => {
+      getItrConfigurationRequest(configuration, (err, itrConfig) => {
         this._itrConfig = itrConfig
-        callback({ err, itrConfig })
+        callback(err, itrConfig)
       })
     })
   }

@@ -408,45 +408,47 @@ tests.forEach(({
     })
 
     describe('evp proxy', () => {
-      it('does not do any ITR request if the agent is not EVP compatible', (done) => {
-        receiver.assertPayloadReceived(() => {
-          const error = new Error('should not request search_commits')
-          done(error)
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/search_commits')
-        receiver.assertPayloadReceived(() => {
-          const error = new Error('should not request search_commits')
-          done(error)
-        }, ({ url }) => url === '/api/v2/git/repository/search_commits')
-        receiver.assertPayloadReceived(() => {
-          const error = new Error('should not request setting')
-          done(error)
-        }, ({ url }) => url === '/api/v2/libraries/tests/services/setting')
-        receiver.assertPayloadReceived(() => {
-          const error = new Error('should not request setting')
-          done(error)
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting')
+      context('if the agent is not event platform proxy compatible', () => {
+        it('does not do any intelligent test runner request', (done) => {
+          receiver.assertPayloadReceived(() => {
+            const error = new Error('should not request search_commits')
+            done(error)
+          }, ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/search_commits')
+          receiver.assertPayloadReceived(() => {
+            const error = new Error('should not request search_commits')
+            done(error)
+          }, ({ url }) => url === '/api/v2/git/repository/search_commits')
+          receiver.assertPayloadReceived(() => {
+            const error = new Error('should not request setting')
+            done(error)
+          }, ({ url }) => url === '/api/v2/libraries/tests/services/setting')
+          receiver.assertPayloadReceived(() => {
+            const error = new Error('should not request setting')
+            done(error)
+          }, ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting')
 
-        const traceRequest = receiver.assertPayloadReceived(({ payload }) => {
-          const testSpans = payload.flatMap(trace => trace)
-          const resourceNames = testSpans.map(span => span.resource)
+          const traceRequest = receiver.assertPayloadReceived(({ payload }) => {
+            const testSpans = payload.flatMap(trace => trace)
+            const resourceNames = testSpans.map(span => span.resource)
 
-          assert.includeMembers(resourceNames,
-            [
-              'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
-              'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
-            ]
-          )
-        }, ({ url }) => url === '/v0.4/traces')
+            assert.includeMembers(resourceNames,
+              [
+                'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
+                'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
+              ]
+            )
+          }, ({ url }) => url === '/v0.4/traces')
 
-        receiver.setInfoResponse({ endpoints: [] })
+          receiver.setInfoResponse({ endpoints: [] })
 
-        childProcess = fork(startupTestFile, {
-          cwd,
-          env: getEvpProxyConfig(receiver.port),
-          stdio: 'pipe'
+          childProcess = fork(startupTestFile, {
+            cwd,
+            env: getEvpProxyConfig(receiver.port),
+            stdio: 'pipe'
+          })
+
+          Promise.all([traceRequest]).then(() => done()).catch(done)
         })
-
-        Promise.all([traceRequest]).then(() => done()).catch(done)
       })
       it('can report git metadata', (done) => {
         const infoRequest = receiver.assertPayloadReceived(({ headers }) => {

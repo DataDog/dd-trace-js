@@ -105,7 +105,7 @@ describe('CI Visibility Agentless Exporter', () => {
         url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
       })
       expect(agentlessExporter.shouldRequestItrConfiguration()).to.be.true
-      agentlessExporter.getItrConfiguration({}, ({ err }) => {
+      agentlessExporter.getItrConfiguration({}, (err) => {
         expect(scope.isDone()).not.to.be.true
         expect(err.message).to.contain('App key or API key undefined')
         expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.false

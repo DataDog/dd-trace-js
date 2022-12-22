@@ -16,7 +16,7 @@ module.exports = class CiPlugin extends Plugin {
     super(...args)
 
     this.addSub(`ci:${this.constructor.name}:itr-configuration`, ({ onDone }) => {
-      this.tracer._exporter.getItrConfiguration(this.testConfiguration, ({ err, itrConfig }) => {
+      this.tracer._exporter.getItrConfiguration(this.testConfiguration, (err, itrConfig) => {
         if (!err) {
           this.itrConfig = itrConfig
         }
@@ -25,7 +25,9 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.name}:test-suite:skippable`, ({ onDone }) => {
-      this.tracer._exporter.getSkippableSuites(this.testConfiguration, onDone)
+      this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites) => {
+        onDone({ err, skippableSuites })
+      })
     })
   }
 

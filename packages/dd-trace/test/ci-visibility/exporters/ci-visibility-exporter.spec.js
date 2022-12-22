@@ -59,9 +59,9 @@ describe('CI Visibility Exporter', () => {
           .reply(200)
 
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
-        ciVisibilityExporter.getItrConfiguration({}, ({ err, itrConfig }) => {
+        ciVisibilityExporter.getItrConfiguration({}, (err, itrConfig) => {
           expect(itrConfig).to.eql({})
-          expect(err).to.be.undefined
+          expect(err).to.be.null
           expect(scope.isDone()).not.to.be.true
           done()
         })
@@ -82,7 +82,7 @@ describe('CI Visibility Exporter', () => {
 
         const ciVisibilityExporter = new CiVisibilityExporter({ port, isIntelligentTestRunnerEnabled: true })
 
-        ciVisibilityExporter.getItrConfiguration({}, ({ err, itrConfig }) => {
+        ciVisibilityExporter.getItrConfiguration({}, (err, itrConfig) => {
           expect(itrConfig).to.eql({
             isCodeCoverageEnabled: true,
             isSuitesSkippingEnabled: true
@@ -125,7 +125,8 @@ describe('CI Visibility Exporter', () => {
           .reply(200)
 
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
-        ciVisibilityExporter.getSkippableSuites({}, ({ skippableSuites }) => {
+        ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
+          expect(err).to.be.null
           expect(skippableSuites).to.eql([])
           expect(scope.isDone()).not.to.be.true
           done()
@@ -143,7 +144,8 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._resolveCanUseCiVisProtocol(false)
         ciVisibilityExporter._resolveGit()
 
-        ciVisibilityExporter.getSkippableSuites({}, ({ skippableSuites }) => {
+        ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
+          expect(err).to.be.null
           expect(skippableSuites).to.eql([])
           expect(scope.isDone()).not.to.be.true
           done()
@@ -168,7 +170,8 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._itrConfig = { isSuitesSkippingEnabled: true }
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
 
-        ciVisibilityExporter.getSkippableSuites({}, ({ skippableSuites }) => {
+        ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
+          expect(err).to.be.null
           expect(skippableSuites).to.eql(['ci-visibility/test/ci-visibility-test.js'])
           expect(scope.isDone()).to.be.true
           done()
@@ -187,7 +190,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._itrConfig = { isSuitesSkippingEnabled: true }
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
 
-        ciVisibilityExporter.getSkippableSuites({}, ({ err, skippableSuites }) => {
+        ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
           expect(err.message).to.include('could not upload git metadata')
           expect(skippableSuites).to.eql([])
           expect(scope.isDone()).not.to.be.true
