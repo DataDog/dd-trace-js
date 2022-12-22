@@ -760,40 +760,38 @@ describe('Config', () => {
   })
 
   context('ci visibility config', () => {
+    let options = {}
     beforeEach(() => {
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
-      delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
+      options = {}
     })
-    context('agentless is enabled', () => {
+    context('ci visibility mode is enabled', () => {
       beforeEach(() => {
-        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
+        options = { isCiVisibility: true }
       })
       it('should activate git upload if the env var is passed', () => {
         process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'true'
-        const config = new Config()
+        const config = new Config(options)
         expect(config).to.have.property('isGitUploadEnabled', true)
       })
       it('should activate intelligent test runner if the env var is passed', () => {
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
-        const config = new Config()
+        const config = new Config(options)
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
       })
       it('should activate git upload automatically if intelligent test runner is activated', () => {
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
-        const config = new Config()
+        const config = new Config(options)
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
         expect(config).to.have.property('isGitUploadEnabled', true)
       })
     })
-    context('agentless is disabled', () => {
-      beforeEach(() => {
-        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'false'
-      })
+    context('ci visibility mode is not enabled', () => {
       it('should not activate intelligent test runner or git metadata upload', () => {
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
         process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'true'
-        const config = new Config()
+        const config = new Config(options)
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
         expect(config).to.have.property('isGitUploadEnabled', false)
       })
