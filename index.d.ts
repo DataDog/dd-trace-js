@@ -1254,7 +1254,12 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [mongodb-core](https://github.com/mongodb-js/mongodb-core) module.
    */
-  interface mongodb_core extends Instrumentation {}
+  interface mongodb_core extends Instrumentation {
+    /**
+     * Whether to include the query contents in the resource name.
+     */
+    queryInResourceName?: boolean;
+  }
 
   /**
    * This plugin automatically instruments the
