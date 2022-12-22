@@ -1,7 +1,6 @@
 const { URL, format } = require('url')
 
 const request = require('./request')
-const log = require('../../log')
 
 function fetchAgentInfo (url, callback) {
   request('', {
@@ -68,18 +67,15 @@ class AgentInfoExporter {
     return this._traceBuffer
   }
 
-  resetUncodedTraces () {
-    this._traceBuffer = []
+  exportUncodedTraces () {
+    this.getUncodedTraces().forEach(uncodedTrace => {
+      this.export(uncodedTrace)
+    })
+    this.resetUncodedTraces()
   }
 
-  setUrl (url) {
-    url = new URL(url)
-    this._url = url
-    try {
-      this._writer.setUrl(url)
-    } catch (e) {
-      log.error(e)
-    }
+  resetUncodedTraces () {
+    this._traceBuffer = []
   }
 }
 

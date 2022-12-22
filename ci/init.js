@@ -10,7 +10,8 @@ const options = {
   startupLogs: false,
   tags: {
     [ORIGIN_KEY]: 'ciapp-test'
-  }
+  },
+  isCiVisibility: true
 }
 
 let shouldInit = true

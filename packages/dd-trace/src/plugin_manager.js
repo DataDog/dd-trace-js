@@ -121,7 +121,6 @@ module.exports = class PluginManager {
       serviceMapping,
       clientIpHeaderDisabled,
       clientIpHeader,
-      isIntelligentTestRunnerEnabled,
       site,
       queryStringObfuscation,
       url,
@@ -145,8 +144,6 @@ module.exports = class PluginManager {
     if (clientIpHeader !== undefined) {
       sharedConfig.clientIpHeader = clientIpHeader
     }
-
-    sharedConfig.isIntelligentTestRunnerEnabled = isIntelligentTestRunnerEnabled
 
     sharedConfig.dbmPropagationMode = dbmPropagationMode
 
