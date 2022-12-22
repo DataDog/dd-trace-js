@@ -75,7 +75,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
       [addresses.HTTP_CLIENT_IP]: clientIp
     }, context)
 
-    if (!results) return
+    if (!results || !abortController) return
 
     for (const entry of results) {
       if (entry && entry.includes('block')) {
