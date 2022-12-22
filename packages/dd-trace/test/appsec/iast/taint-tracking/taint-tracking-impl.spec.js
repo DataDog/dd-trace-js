@@ -20,7 +20,12 @@ const propagationFns = [
   'trimProtoStr',
   'concatStr',
   'concatTaintedStr',
-  'concatProtoStr'
+  'concatProtoStr',
+  'substringStr',
+  'substrStr',
+  'sliceStr',
+  'replaceStr',
+  'replaceRegexStr'
 ]
 
 const commands = [

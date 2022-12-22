@@ -5,7 +5,11 @@ const csiMethods = [
   { src: 'trim' },
   { src: 'trimStart', dst: 'trim' },
   { src: 'trimEnd' },
-  { src: 'concat' }
+  { src: 'concat' },
+  { src: 'substring' },
+  { src: 'substr' },
+  { src: 'slice' },
+  { src: 'replace' }
 ]
 
 module.exports = {

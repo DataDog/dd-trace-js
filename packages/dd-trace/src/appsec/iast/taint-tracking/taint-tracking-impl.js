@@ -10,7 +10,11 @@ const TaintTrackingDummy = {
   plusOperator: noop,
   trim: noop,
   trimEnd: noop,
-  concat: noop
+  concat: noop,
+  substring: noop,
+  substr: noop,
+  slice: noop,
+  replace: noop
 }
 
 function getTransactionId () {
@@ -81,6 +85,22 @@ const TaintTracking = {
   concat: getCsiFn(
     (transactionId, res, target, ...rest) => TaintedUtils.concat(transactionId, res, target, ...rest),
     String.prototype.concat
+  ),
+  substring: getCsiFn(
+    (transactionId, res, target, ...rest) => TaintedUtils.substring(transactionId, res, target, ...rest),
+    String.prototype.substring
+  ),
+  substr: getCsiFn(
+    (transactionId, res, target, ...rest) => TaintedUtils.substr(transactionId, res, target, ...rest),
+    String.prototype.substr
+  ),
+  slice: getCsiFn(
+    (transactionId, res, target, ...rest) => TaintedUtils.slice(transactionId, res, target, ...rest),
+    String.prototype.slice
+  ),
+  replace: getCsiFn(
+    (transactionId, res, target, ...rest) => TaintedUtils.replace(transactionId, res, target, ...rest),
+    String.prototype.replace
   )
 }
 
