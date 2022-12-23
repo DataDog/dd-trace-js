@@ -24,7 +24,7 @@ const {
 // This is done because newest versions of mocha and jest do not support node@12
 const isOldNode = semver.satisfies(process.version, '<=12')
 
-const tests = [
+const testFrameworks = [
   {
     name: 'mocha',
     dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc'],
@@ -52,7 +52,7 @@ const tests = [
   }
 ]
 
-tests.forEach(({
+testFrameworks.forEach(({
   name,
   dependencies,
   testFile,
@@ -91,7 +91,7 @@ tests.forEach(({
 
     it('can run tests and report spans', (done) => {
       receiver.setInfoResponse({ endpoints: [] })
-      receiver.assertPayloadReceived(({ payload }) => {
+      receiver.payloadReceived(({ url }) => url === '/v0.4/traces').then(({ payload }) => {
         const testSpans = payload.flatMap(trace => trace)
         const resourceNames = testSpans.map(span => span.resource)
 
@@ -105,7 +105,7 @@ tests.forEach(({
         assert.isTrue(areAllTestSpans)
         assert.include(testOutput, expectedStdout)
         done()
-      }, ({ url }) => url === '/v0.4/traces').catch(([e]) => done(e))
+      })
 
       childProcess = fork(startupTestFile, {
         cwd,
@@ -122,10 +122,10 @@ tests.forEach(({
         testOutput += chunk.toString()
       })
     })
-    const inputs = ['DD_TRACING_ENABLED', 'DD_TRACE_ENABLED']
+    const envVarSettings = ['DD_TRACING_ENABLED', 'DD_TRACE_ENABLED']
 
-    inputs.forEach(input => {
-      context(`when ${input}=false`, () => {
+    envVarSettings.forEach(envVar => {
+      context(`when ${envVar}=false`, () => {
         it('does not report spans but still runs tests', (done) => {
           receiver.assertMessageReceived(() => {
             done(new Error('Should not create spans'))
@@ -136,7 +136,7 @@ tests.forEach(({
             env: {
               DD_TRACE_AGENT_PORT: receiver.port,
               NODE_OPTIONS: '-r dd-trace/ci/init',
-              [input]: 'false'
+              [envVar]: 'false'
             },
             stdio: 'pipe'
           })
@@ -183,11 +183,11 @@ tests.forEach(({
         })
       })
       it('can report git metadata', (done) => {
-        const searchCommitsRequestPromise = receiver.messageReceived(
+        const searchCommitsRequestPromise = receiver.payloadReceived(
           ({ url }) => url === '/api/v2/git/repository/search_commits'
         )
-        const packfileRequestPromise = receiver.messageReceived(({ url }) => url === '/api/v2/git/repository/packfile')
-        const eventsRequestPromise = receiver.messageReceived(({ url }) => url === '/api/v2/citestcycle')
+        const packfileRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/git/repository/packfile')
+        const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle')
 
         Promise.all([
           searchCommitsRequestPromise,
@@ -214,10 +214,17 @@ tests.forEach(({
         })
       })
       it('can report code coverage', (done) => {
-        const itrConfigRequestPromise = receiver.messageReceived(({ url }) => url === '/api/v2/libraries/tests/services/setting')
-        const codeCovRequestPromise = receiver.messageReceived(({ url }) => url === '/api/v2/citestcov')
+        const itrConfigRequestPromise = receiver.payloadReceived(
+          ({ url }) => url === '/api/v2/libraries/tests/services/setting'
+        )
+        const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
+        const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle')
 
-        Promise.all([itrConfigRequestPromise, codeCovRequestPromise]).then(([itrConfigRequest, codeCovRequest]) => {
+        Promise.all([
+          itrConfigRequestPromise,
+          codeCovRequestPromise,
+          eventsRequestPromise
+        ]).then(([itrConfigRequest, codeCovRequest, eventsRequest]) => {
           assert.propertyVal(itrConfigRequest.headers, 'dd-api-key', '1')
           assert.propertyVal(itrConfigRequest.headers, 'dd-application-key', '1')
 
@@ -230,21 +237,22 @@ tests.forEach(({
           assert.include(coveragePayload.content, {
             version: 1
           })
-          const allCoverageFiles = codeCovRequest.payload.flatMap(coverage => coverage.content.files).map(file => file.filename)
+          const allCoverageFiles = codeCovRequest.payload
+            .flatMap(coverage => coverage.content.files)
+            .map(file => file.filename)
+
           assert.includeMembers(allCoverageFiles, expectedCoverageFiles)
           assert.exists(coveragePayload.content.span_id)
           assert.exists(coveragePayload.content.trace_id)
-          done()
-        }).catch(done)
 
-        const eventsRequest = receiver.assertPayloadReceived(({ payload }) => {
-          const eventTypes = payload.events.map(event => event.type)
+          const eventTypes = eventsRequest.payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_session_end'])
           const numSuites = eventTypes.reduce(
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
           assert.equal(numSuites, 2)
-        }, ({ url }) => url === '/api/v2/citestcycle')
+          done()
+        }).catch(done)
 
         childProcess = exec(
           runTestsWithCoverageCommand,
@@ -254,7 +262,6 @@ tests.forEach(({
             stdio: 'inherit'
           }
         )
-        Promise.all([itrConfigRequest, codeCovRequest, eventsRequest]).then(() => done()).catch(done)
       })
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
@@ -287,23 +294,33 @@ tests.forEach(({
         )
       })
       it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
-        const skippableRequest = receiver.assertPayloadReceived(({ headers }) => {
-          assert.propertyVal(headers, 'dd-api-key', '1')
-          assert.propertyVal(headers, 'dd-application-key', '1')
-        }, ({ url }) => url === '/api/v2/ci/tests/skippable')
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test/ci-visibility-test.js'
+          }
+        }])
 
-        const coverageRequest = receiver.assertPayloadReceived(({ payload, headers }) => {
-          const [coveragePayload] = payload
-          assert.propertyVal(headers, 'dd-api-key', '1')
+        const skippableRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/ci/tests/skippable')
+        const coverageRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
+        const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle')
+
+        Promise.all([
+          skippableRequestPromise,
+          coverageRequestPromise,
+          eventsRequestPromise
+        ]).then(([skippableRequest, coverageRequest, eventsRequest]) => {
+          assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
+          assert.propertyVal(skippableRequest.headers, 'dd-application-key', '1')
+          const [coveragePayload] = coverageRequest.payload
+          assert.propertyVal(coverageRequest.headers, 'dd-api-key', '1')
           assert.propertyVal(coveragePayload, 'name', 'coverage1')
           assert.propertyVal(coveragePayload, 'filename', 'coverage1.msgpack')
           assert.propertyVal(coveragePayload, 'type', 'application/msgpack')
-        }, ({ url }) => url === '/api/v2/citestcov')
 
-        const eventsRequest = receiver.assertPayloadReceived(({ headers, payload }) => {
-          assert.propertyVal(headers, 'dd-api-key', '1')
-          const eventTypes = payload.events.map(event => event.type)
-          const skippedTest = payload.events.find(event =>
+          assert.propertyVal(eventsRequest.headers, 'dd-api-key', '1')
+          const eventTypes = eventsRequest.payload.events.map(event => event.type)
+          const skippedTest = eventsRequest.payload.events.find(event =>
             event.content.resource === 'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests'
           )
           assert.notExists(skippedTest)
@@ -312,18 +329,12 @@ tests.forEach(({
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
           assert.equal(numSuites, 1)
-          const testSession = payload.events.find(event => event.type === 'test_session_end').content
+          const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
           assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
           assert.propertyVal(testSession.meta, TEST_SESSION_ITR_CODE_COVERAGE_ENABLED, 'true')
           assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'true')
-        }, ({ url }) => url === '/api/v2/citestcycle')
-
-        receiver.setSuitesToSkip([{
-          type: 'suite',
-          attributes: {
-            suite: 'ci-visibility/test/ci-visibility-test.js'
-          }
-        }])
+          done()
+        })
         childProcess = exec(
           runTestsWithCoverageCommand,
           {
@@ -332,9 +343,17 @@ tests.forEach(({
             stdio: 'inherit'
           }
         )
-        Promise.all([skippableRequest, eventsRequest, coverageRequest]).then(() => done()).catch(done)
       })
       it('does not skip tests if git metadata upload fails', (done) => {
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test/ci-visibility-test.js'
+          }
+        }])
+
+        receiver.setGitUploadStatus(404)
+
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
           done(error)
@@ -355,15 +374,6 @@ tests.forEach(({
           assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'true')
         }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
-        receiver.setSuitesToSkip([{
-          type: 'suite',
-          attributes: {
-            suite: 'ci-visibility/test/ci-visibility-test.js'
-          }
-        }])
-
-        receiver.setGitUploadStatus(404)
-
         childProcess = exec(
           runTestsWithCoverageCommand,
           {
@@ -374,6 +384,18 @@ tests.forEach(({
         )
       })
       it('does not skip tests if test skipping is disabled by the API', (done) => {
+        receiver.setSettings({
+          code_coverage: true,
+          tests_skipping: false
+        })
+
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test/ci-visibility-test.js'
+          }
+        }])
+
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
           done(error)
@@ -390,18 +412,6 @@ tests.forEach(({
           assert.equal(numSuites, 2)
         }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
-        receiver.setSettings({
-          code_coverage: true,
-          tests_skipping: false
-        })
-
-        receiver.setSuitesToSkip([{
-          type: 'suite',
-          attributes: {
-            suite: 'ci-visibility/test/ci-visibility-test.js'
-          }
-        }])
-
         childProcess = exec(
           runTestsWithCoverageCommand,
           {
@@ -416,6 +426,8 @@ tests.forEach(({
     describe('evp proxy', () => {
       context('if the agent is not event platform proxy compatible', () => {
         it('does not do any intelligent test runner request', (done) => {
+          receiver.setInfoResponse({ endpoints: [] })
+
           receiver.assertPayloadReceived(() => {
             const error = new Error('should not request search_commits')
             done(error)
@@ -433,7 +445,7 @@ tests.forEach(({
             done(error)
           }, ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting')
 
-          const traceRequest = receiver.assertPayloadReceived(({ payload }) => {
+          receiver.assertPayloadReceived(({ payload }) => {
             const testSpans = payload.flatMap(trace => trace)
             const resourceNames = testSpans.map(span => span.resource)
 
@@ -443,62 +455,73 @@ tests.forEach(({
                 'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
               ]
             )
-          }, ({ url }) => url === '/v0.4/traces')
-
-          receiver.setInfoResponse({ endpoints: [] })
+          }, ({ url }) => url === '/v0.4/traces').then(() => done()).catch(done)
 
           childProcess = fork(startupTestFile, {
             cwd,
             env: getCiVisEvpProxyConfig(receiver.port),
             stdio: 'pipe'
           })
-
-          Promise.all([traceRequest]).then(() => done()).catch(done)
         })
       })
       it('can report git metadata', (done) => {
-        const infoRequest = receiver.assertPayloadReceived(({ headers }) => {
-          assert.notProperty(headers, 'dd-api-key')
-        }, ({ url }) => url === '/info')
+        const infoRequestPromise = receiver.payloadReceived(({ url }) => url === '/info')
+        const searchCommitsRequestPromise = receiver.payloadReceived(
+          ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/search_commits'
+        )
+        const packFileRequestPromise = receiver.payloadReceived(
+          ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/packfile'
+        )
+        const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle')
 
-        const searchCommitsRequest = receiver.assertPayloadReceived(({ headers }) => {
-          assert.notProperty(headers, 'dd-api-key')
-          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'api')
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/search_commits')
+        Promise.all([
+          infoRequestPromise,
+          searchCommitsRequestPromise,
+          packFileRequestPromise,
+          eventsRequestPromise
+        ]).then(([infoRequest, searchCommitsRequest, packfileRequest, eventsRequest]) => {
+          assert.notProperty(infoRequest.headers, 'dd-api-key')
 
-        const packfileRequest = receiver.assertPayloadReceived(({ headers }) => {
-          assert.notProperty(headers, 'dd-api-key')
-          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'api')
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/packfile')
+          assert.notProperty(searchCommitsRequest.headers, 'dd-api-key')
+          assert.propertyVal(searchCommitsRequest.headers, 'x-datadog-evp-subdomain', 'api')
 
-        const eventsRequest = receiver.assertPayloadReceived(({ payload }) => {
-          const eventTypes = payload.events.map(event => event.type)
+          assert.notProperty(packfileRequest.headers, 'dd-api-key')
+          assert.propertyVal(packfileRequest.headers, 'x-datadog-evp-subdomain', 'api')
+
+          const eventTypes = eventsRequest.payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_session_end'])
           const numSuites = eventTypes.reduce(
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
           assert.equal(numSuites, 2)
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle')
+          done()
+        })
 
         childProcess = fork(startupTestFile, {
           cwd,
           env: getCiVisEvpProxyConfig(receiver.port),
           stdio: 'pipe'
         })
-
-        Promise.all([searchCommitsRequest, packfileRequest, infoRequest, eventsRequest]).then(() => done()).catch(done)
       })
       it('can report code coverage', (done) => {
-        const itrConfigRequest = receiver.assertPayloadReceived(({ headers }) => {
-          assert.notProperty(headers, 'dd-api-key', '1')
-          assert.notProperty(headers, 'dd-application-key', '1')
-          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'api')
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting')
+        const itrConfigRequestPromise = receiver.payloadReceived(
+          ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting'
+        )
+        const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/evp_proxy/v2/api/v2/citestcov')
+        const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle')
 
-        const codeCovRequest = receiver.assertPayloadReceived(({ headers, payload }) => {
-          const [coveragePayload] = payload
-          assert.notProperty(headers, 'dd-api-key', '1')
-          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'event-platform-intake')
+        Promise.all([
+          itrConfigRequestPromise,
+          codeCovRequestPromise,
+          eventsRequestPromise
+        ]).then(([itrConfigRequest, codeCovRequest, eventsRequest]) => {
+          assert.notProperty(itrConfigRequest.headers, 'dd-api-key')
+          assert.notProperty(itrConfigRequest.headers, 'dd-application-key')
+          assert.propertyVal(itrConfigRequest.headers, 'x-datadog-evp-subdomain', 'api')
+
+          const [coveragePayload] = codeCovRequest.payload
+          assert.notProperty(codeCovRequest.headers, 'dd-api-key')
+          assert.propertyVal(codeCovRequest.headers, 'x-datadog-evp-subdomain', 'event-platform-intake')
 
           assert.propertyVal(coveragePayload, 'name', 'coverage1')
           assert.propertyVal(coveragePayload, 'filename', 'coverage1.msgpack')
@@ -506,20 +529,22 @@ tests.forEach(({
           assert.include(coveragePayload.content, {
             version: 1
           })
-          const allCoverageFiles = payload.flatMap(coverage => coverage.content.files).map(file => file.filename)
+          const allCoverageFiles = codeCovRequest.payload
+            .flatMap(coverage => coverage.content.files)
+            .map(file => file.filename)
+
           assert.includeMembers(allCoverageFiles, expectedCoverageFiles)
           assert.exists(coveragePayload.content.span_id)
           assert.exists(coveragePayload.content.trace_id)
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcov')
 
-        const eventsRequest = receiver.assertPayloadReceived(({ payload }) => {
-          const eventTypes = payload.events.map(event => event.type)
+          const eventTypes = eventsRequest.payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_session_end'])
           const numSuites = eventTypes.reduce(
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
           assert.equal(numSuites, 2)
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle')
+          done()
+        }).catch(done)
 
         childProcess = exec(
           runTestsWithCoverageCommand,
@@ -529,7 +554,6 @@ tests.forEach(({
             stdio: 'inherit'
           }
         )
-        Promise.all([itrConfigRequest, codeCovRequest, eventsRequest]).then(() => done()).catch(done)
       })
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
@@ -543,7 +567,7 @@ tests.forEach(({
         }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcov')
 
         receiver.assertPayloadReceived(({ headers, payload }) => {
-          assert.notProperty(headers, 'dd-api-key', '1')
+          assert.notProperty(headers, 'dd-api-key')
           assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
           const eventTypes = payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_suite_end'])
@@ -559,26 +583,39 @@ tests.forEach(({
         )
       })
       it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
-        const skippableRequest = receiver.assertPayloadReceived(({ headers }) => {
-          assert.notProperty(headers, 'dd-api-key', '1')
-          assert.notProperty(headers, 'dd-application-key', '1')
-          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'api')
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable')
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test/ci-visibility-test.js'
+          }
+        }])
 
-        const coverageRequest = receiver.assertPayloadReceived(({ payload, headers }) => {
-          const [coveragePayload] = payload
-          assert.notProperty(headers, 'dd-api-key', '1')
-          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'event-platform-intake')
+        const skippableRequestPromise = receiver.payloadReceived(
+          ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable'
+        )
+        const coverageRequestPromise = receiver.payloadReceived(({ url }) => url === '/evp_proxy/v2/api/v2/citestcov')
+        const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle')
+
+        Promise.all([
+          skippableRequestPromise,
+          coverageRequestPromise,
+          eventsRequestPromise
+        ]).then(([skippableRequest, coverageRequest, eventsRequest]) => {
+          assert.notProperty(skippableRequest.headers, 'dd-api-key')
+          assert.notProperty(skippableRequest.headers, 'dd-application-key')
+          assert.propertyVal(skippableRequest.headers, 'x-datadog-evp-subdomain', 'api')
+
+          const [coveragePayload] = coverageRequest.payload
+          assert.notProperty(coverageRequest.headers, 'dd-api-key')
+          assert.propertyVal(coverageRequest.headers, 'x-datadog-evp-subdomain', 'event-platform-intake')
           assert.propertyVal(coveragePayload, 'name', 'coverage1')
           assert.propertyVal(coveragePayload, 'filename', 'coverage1.msgpack')
           assert.propertyVal(coveragePayload, 'type', 'application/msgpack')
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcov')
 
-        const eventsRequest = receiver.assertPayloadReceived(({ headers, payload }) => {
-          assert.notProperty(headers, 'dd-api-key', '1')
-          assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
-          const eventTypes = payload.events.map(event => event.type)
-          const skippedTest = payload.events.find(event =>
+          assert.notProperty(eventsRequest.headers, 'dd-api-key')
+          assert.propertyVal(eventsRequest.headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
+          const eventTypes = eventsRequest.payload.events.map(event => event.type)
+          const skippedTest = eventsRequest.payload.events.find(event =>
             event.content.resource === 'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests'
           )
           assert.notExists(skippedTest)
@@ -587,14 +624,8 @@ tests.forEach(({
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
           assert.equal(numSuites, 1)
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle')
-
-        receiver.setSuitesToSkip([{
-          type: 'suite',
-          attributes: {
-            suite: 'ci-visibility/test/ci-visibility-test.js'
-          }
-        }])
+          done()
+        })
 
         childProcess = exec(
           runTestsWithCoverageCommand,
@@ -604,7 +635,6 @@ tests.forEach(({
             stdio: 'inherit'
           }
         )
-        Promise.all([skippableRequest, eventsRequest, coverageRequest]).then(() => done()).catch(done)
       })
       it('does not skip tests if git metadata upload fails', (done) => {
         receiver.assertPayloadReceived(() => {
@@ -613,7 +643,7 @@ tests.forEach(({
         }, ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable')
 
         receiver.assertPayloadReceived(({ headers, payload }) => {
-          assert.notProperty(headers, 'dd-api-key', '1')
+          assert.notProperty(headers, 'dd-api-key')
           assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
           const eventTypes = payload.events.map(event => event.type)
           // because they are not skipped
@@ -649,7 +679,7 @@ tests.forEach(({
         }, ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable')
 
         receiver.assertPayloadReceived(({ headers, payload }) => {
-          assert.notProperty(headers, 'dd-api-key', '1')
+          assert.notProperty(headers, 'dd-api-key')
           assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
           const eventTypes = payload.events.map(event => event.type)
           // because they are not skipped

@@ -169,14 +169,14 @@ class FakeCiVisIntake extends FakeAgent {
     infoResponse = DEFAULT_INFO_RESPONSE
   }
 
-  messageReceived (messageMatch, timeout) {
+  payloadReceived (payloadMatch, timeout) {
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         this.removeListener('message', messageHandler)
         reject(new Error('Timeout'))
       }, timeout || 15000)
       const messageHandler = (message) => {
-        if (!messageMatch || messageMatch(message)) {
+        if (!payloadMatch || payloadMatch(message)) {
           clearInterval(timeoutId)
           resolve(message)
           this.removeListener('message', messageHandler)
@@ -185,7 +185,6 @@ class FakeCiVisIntake extends FakeAgent {
       this.on('message', messageHandler)
     })
   }
-
 
   assertPayloadReceived (fn, messageMatch, timeout) {
     let resultResolve
