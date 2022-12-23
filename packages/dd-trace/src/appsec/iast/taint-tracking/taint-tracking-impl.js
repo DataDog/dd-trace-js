@@ -59,7 +59,19 @@ function getCsiFn (cb, ...protos) {
   return getFilteredCsiFn(cb, filter)
 }
 
-const TaintTracking = {
+function csiMethodsDefaults (names, excluded) {
+  const impl = {}
+  names.forEach(name => {
+    if (excluded.indexOf(name) !== -1) return
+    impl[name] = getCsiFn(
+      (transactionId, res, target, ...rest) => TaintedUtils[name](transactionId, res, target, ...rest),
+      String.prototype[name]
+    )
+  })
+  return impl
+}
+
+const csiMethodsOverrides = {
   plusOperator: function (res, op1, op2) {
     try {
       if (notString(res) || (notString(op1) && notString(op2))) { return res }
@@ -77,31 +89,12 @@ const TaintTracking = {
     (transactionId, res, target) => TaintedUtils.trim(transactionId, res, target),
     String.prototype.trim,
     String.prototype.trimStart
-  ),
-  trimEnd: getCsiFn(
-    (transactionId, res, target) => TaintedUtils.trimEnd(transactionId, res, target),
-    String.prototype.trimEnd
-  ),
-  concat: getCsiFn(
-    (transactionId, res, target, ...rest) => TaintedUtils.concat(transactionId, res, target, ...rest),
-    String.prototype.concat
-  ),
-  substring: getCsiFn(
-    (transactionId, res, target, ...rest) => TaintedUtils.substring(transactionId, res, target, ...rest),
-    String.prototype.substring
-  ),
-  substr: getCsiFn(
-    (transactionId, res, target, ...rest) => TaintedUtils.substr(transactionId, res, target, ...rest),
-    String.prototype.substr
-  ),
-  slice: getCsiFn(
-    (transactionId, res, target, ...rest) => TaintedUtils.slice(transactionId, res, target, ...rest),
-    String.prototype.slice
-  ),
-  replace: getCsiFn(
-    (transactionId, res, target, ...rest) => TaintedUtils.replace(transactionId, res, target, ...rest),
-    String.prototype.replace
   )
+}
+
+const TaintTracking = {
+  ...csiMethodsDefaults(Object.keys(TaintTrackingDummy), Object.keys(csiMethodsOverrides)),
+  ...csiMethodsOverrides
 }
 
 module.exports = {
