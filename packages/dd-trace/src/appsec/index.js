@@ -12,7 +12,7 @@ const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
 const { extractIp } = require('./ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { block } = require('./blocking')
+const { block, loadTemplates, loadTemplatesAsync } = require('./blocking')
 
 let isEnabled = false
 let config
@@ -21,20 +21,29 @@ function enable (_config) {
   if (isEnabled) return
 
   try {
-    let rules = fs.readFileSync(_config.appsec.rules || path.join(__dirname, 'recommended.json'))
-    rules = JSON.parse(rules)
-
-    RuleManager.applyRules(rules, _config.appsec)
-    remoteConfig.enableAsmData(_config.appsec)
+    loadTemplates(_config)
+    const rules = fs.readFileSync(_config.appsec.rules || path.join(__dirname, 'recommended.json'))
+    enableFromRules(_config, JSON.parse(rules))
   } catch (err) {
-    log.error('Unable to start AppSec')
-    log.error(err)
-
-    // abort AppSec start
-    RuleManager.clearAllRules()
-    remoteConfig.disableAsmData()
-    return
+    abortEnable(err)
   }
+}
+
+async function enableAsync (_config) {
+  if (isEnabled) return
+
+  try {
+    await loadTemplatesAsync(_config)
+    const rules = await fs.promises.readFile(_config.appsec.rules || path.join(__dirname, 'recommended.json'))
+    enableFromRules(_config, JSON.parse(rules))
+  } catch (err) {
+    abortEnable(err)
+  }
+}
+
+function enableFromRules (_config, rules) {
+  RuleManager.applyRules(rules, _config.appsec)
+  remoteConfig.enableAsmData(_config.appsec)
 
   Reporter.setRateLimit(_config.appsec.rateLimit)
 
@@ -49,6 +58,15 @@ function enable (_config) {
 
   isEnabled = true
   config = _config
+}
+
+function abortEnable (err) {
+  log.error('Unable to start AppSec')
+  log.error(err)
+
+  // abort AppSec start
+  RuleManager.clearAllRules()
+  remoteConfig.disableAsmData()
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
@@ -79,7 +97,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
 
     for (const entry of results) {
       if (entry && entry.includes('block')) {
-        block(config, req, res, topSpan, abortController)
+        block(req, res, topSpan, abortController)
         break
       }
     }
@@ -151,6 +169,7 @@ function disable () {
 
 module.exports = {
   enable,
+  enableAsync,
   disable,
   incomingHttpStartTranslator,
   incomingHttpEndTranslator

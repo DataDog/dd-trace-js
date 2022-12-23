@@ -2,7 +2,7 @@
 
 const fs = require('fs')
 let templateHtml, templateJson
-function block (config, req, res, topSpan, abortController) {
+function block (req, res, topSpan, abortController) {
   let type
   let body
 
@@ -11,15 +11,9 @@ function block (config, req, res, topSpan, abortController) {
 
   if (accept && accept.includes('text/html') && !accept.includes('application/json')) {
     type = 'text/html'
-    if (!templateHtml) {
-      templateHtml = fs.readFileSync(config.appsec.blockedTemplateHtml)
-    }
     body = templateHtml
   } else {
     type = 'application/json'
-    if (!templateJson) {
-      templateJson = fs.readFileSync(config.appsec.blockedTemplateJson)
-    }
     body = templateJson
   }
 
@@ -35,6 +29,16 @@ function block (config, req, res, topSpan, abortController) {
   abortController.abort()
 }
 
+function loadTemplates (config) {
+  templateHtml = fs.readFileSync(config.appsec.blockedTemplateHtml)
+  templateJson = fs.readFileSync(config.appsec.blockedTemplateJson)
+}
+
+async function loadTemplatesAsync (config) {
+  templateHtml = await fs.promises.readFile(config.appsec.blockedTemplateHtml)
+  templateJson = await fs.promises.readFile(config.appsec.blockedTemplateJson)
+}
+
 module.exports = {
-  block
+  block, loadTemplates, loadTemplatesAsync
 }

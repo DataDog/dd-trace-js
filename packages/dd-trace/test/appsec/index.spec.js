@@ -29,7 +29,9 @@ describe('AppSec Index', () => {
         rateLimit: 42,
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
-        obfuscatorValueRegex: '.*'
+        obfuscatorValueRegex: '.*',
+        blockedTemplateHtml: path.join(__dirname, '..', '..', 'src', 'appsec', 'templates', 'blocked.html'),
+        blockedTemplateJson: path.join(__dirname, '..', '..', 'src', 'appsec', 'templates', 'blocked.json')
       }
     }
 
@@ -42,6 +44,7 @@ describe('AppSec Index', () => {
     })
 
     sinon.stub(fs, 'readFileSync').returns('{"rules": [{"a": 1}]}')
+    sinon.stub(fs.promises, 'readFile').returns('{"rules": [{"a": 1}]}')
     sinon.stub(RuleManager, 'applyRules')
     sinon.stub(remoteConfig, 'enableAsmData')
     sinon.stub(remoteConfig, 'disableAsmData')
@@ -61,7 +64,9 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
       AppSec.enable(config)
 
-      expect(fs.readFileSync).to.have.been.calledOnceWithExactly('./path/rules.json')
+      expect(fs.readFileSync).to.have.been.calledWithExactly('./path/rules.json')
+      expect(fs.readFileSync).to.have.been.calledWithExactly(config.appsec.blockedTemplateHtml)
+      expect(fs.readFileSync).to.have.been.calledWithExactly(config.appsec.blockedTemplateJson)
       expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] }, config.appsec)
       expect(remoteConfig.enableAsmData).to.have.been.calledOnce
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
@@ -84,6 +89,49 @@ describe('AppSec Index', () => {
       sinon.stub(RuleManager, 'applyRules').throws(err)
 
       AppSec.enable(config)
+
+      expect(log.error).to.have.been.calledTwice
+      expect(log.error.firstCall).to.have.been.calledWithExactly('Unable to start AppSec')
+      expect(log.error.secondCall).to.have.been.calledWithExactly(err)
+      expect(remoteConfig.disableAsmData).to.have.been.calledOnce
+      expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
+      expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
+      expect(Gateway.manager.addresses).to.be.empty
+    })
+  })
+
+  describe('enableAsync', () => {
+    it('should enable AppSec only once', async () => {
+      await AppSec.enableAsync(config)
+      await AppSec.enableAsync(config)
+
+      expect(fs.readFileSync).not.to.have.been.called
+      expect(fs.promises.readFile).to.have.been.calledThrice
+      expect(fs.promises.readFile).to.have.been.calledWithExactly('./path/rules.json')
+      expect(fs.promises.readFile).to.have.been.calledWithExactly(config.appsec.blockedTemplateHtml)
+      expect(fs.promises.readFile).to.have.been.calledWithExactly(config.appsec.blockedTemplateJson)
+      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] }, config.appsec)
+      expect(remoteConfig.enableAsmData).to.have.been.calledOnce
+      expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
+      expect(incomingHttpRequestStart.subscribe)
+        .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
+      expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
+      expect(Gateway.manager.addresses).to.have.all.keys(
+        addresses.HTTP_INCOMING_HEADERS,
+        addresses.HTTP_INCOMING_ENDPOINT,
+        addresses.HTTP_INCOMING_RESPONSE_HEADERS,
+        addresses.HTTP_INCOMING_REMOTE_IP
+      )
+    })
+
+    it('should log when enable fails', async () => {
+      sinon.stub(log, 'error')
+      RuleManager.applyRules.restore()
+
+      const err = new Error('Invalid Rules')
+      sinon.stub(RuleManager, 'applyRules').throws(err)
+
+      await AppSec.enableAsync(config)
 
       expect(log.error).to.have.been.calledTwice
       expect(log.error.firstCall).to.have.been.calledWithExactly('Unable to start AppSec')

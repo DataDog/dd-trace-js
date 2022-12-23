@@ -23,7 +23,7 @@ function enable (config) {
         }
 
         if (shouldEnable) {
-          require('..').enable(config)
+          require('..').enableAsync(config).catch(() => {})
         } else {
           require('..').disable()
         }
