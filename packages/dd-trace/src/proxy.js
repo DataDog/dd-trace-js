@@ -1,4 +1,5 @@
 'use strict'
+const PluginManager = require('./plugin_manager')
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
@@ -6,7 +7,6 @@ const metrics = require('./metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
-const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
 
 class Tracer extends NoopProxy {
