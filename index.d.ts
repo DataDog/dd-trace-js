@@ -1210,6 +1210,12 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
+   * [ldapjs](https://github.com/ldapjs/node-ldapjs/) module.
+   */
+  interface ldapjs extends Instrumentation {}
+
+  /**
+   * This plugin automatically instruments the
    * [mariadb](https://github.com/mariadb-corporation/mariadb-connector-nodejs) module.
    */
   interface mariadb extends mysql {}
