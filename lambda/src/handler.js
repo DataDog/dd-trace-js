@@ -34,7 +34,10 @@ function checkTimeout (context) {
 function crashFlush () {
   const activeSpan = tracer.scope().active()
   const error = new ImpendingTimeout('Datadog detected an impending timeout')
-  activeSpan.setTag('error', error)
+  activeSpan.addTags({
+    'error.type': error.name,
+    'error.message': error.message
+  })
   tracer._processor.killAll()
   activeSpan.finish()
 }
