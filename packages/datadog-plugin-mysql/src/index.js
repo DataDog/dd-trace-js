@@ -6,7 +6,7 @@ class MySQLPlugin extends DatabasePlugin {
   static get name () { return 'mysql' }
   static get system () { return 'mysql' }
 
-  start ({ sql, conf: dbConfig }) {
+  start ({ sqlStatement, sql, conf: dbConfig }) {
     const service = getServiceName(this.config, dbConfig)
 
     this.startSpan(`${this.system}.query`, {
@@ -22,6 +22,12 @@ class MySQLPlugin extends DatabasePlugin {
         'out.port': dbConfig.port
       }
     })
+    if (this.config.dbmPropagationMode !== 'disabled') {
+      if (sqlStatement[0].sql !== undefined) {
+        const key = 'sql'
+        sqlStatement[0][key] = this.injectDbmQuery(sqlStatement[0].sql)
+      } else sqlStatement[0] = this.injectDbmQuery(sqlStatement[0])
+    }
   }
 }
 
