@@ -18,14 +18,14 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
     }
 
     const sqlStatement = arguments
-    const sql = arguments[0].sql || arguments[0]
+    const sql = arguments[0].sql ? arguments[0].sql : arguments[0]
     const conf = this.config
 
     const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
     return asyncResource.runInAsyncScope(() => {
-      startCh.publish({ sqlStatement: sqlStatement, sql: sql, conf })
+      startCh.publish({ sqlStatement: sqlStatement, sql, conf })
 
       try {
         const res = query.apply(this, arguments)
