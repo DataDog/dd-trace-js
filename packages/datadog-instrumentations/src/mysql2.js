@@ -44,9 +44,10 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
     const callbackResource = new AsyncResource('bound-anonymous-fn')
 
     return asyncResource.bind(function executeWithTrace (packet, connection) {
+      const sqlStatement = cmd
       const sql = cmd.statement ? cmd.statement.query : cmd.sql
 
-      startCh.publish({ sql, conf: config })
+      startCh.publish({ sqlStatement: sqlStatement, sql, conf: config })
 
       if (this.onResult) {
         const onResult = callbackResource.bind(this.onResult)
