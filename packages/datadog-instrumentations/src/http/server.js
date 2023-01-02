@@ -1,5 +1,6 @@
 'use strict'
 
+const { AbortController } = require('node-abort-controller') // AbortController is not available in node <15
 const {
   channel,
   addHook
@@ -48,9 +49,14 @@ function wrapEmit (emit) {
     if (eventName === 'request') {
       res.req = req
 
-      startServerCh.publish({ req, res })
+      const abortController = new AbortController()
+
+      startServerCh.publish({ req, res, abortController })
 
       try {
+        if (abortController.signal.aborted) {
+          return res.end()
+        }
         return emit.apply(this, arguments)
       } catch (err) {
         errorServerCh.publish(err)
