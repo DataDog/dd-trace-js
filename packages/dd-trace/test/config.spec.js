@@ -1,7 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
-
+const path = require('path')
 describe('Config', () => {
   let Config
   let log
@@ -65,7 +65,6 @@ describe('Config', () => {
     expect(config).to.have.property('flushInterval', 2000)
     expect(config).to.have.property('flushMinSpans', 1000)
     expect(config).to.have.property('queryStringObfuscation').with.length(626)
-    expect(config).to.have.property('clientIpHeaderDisabled', true)
     expect(config).to.have.property('clientIpHeader', null)
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.property('runtimeMetrics', false)
@@ -175,7 +174,6 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('queryStringObfuscation', '.*')
-    expect(config).to.have.property('clientIpHeaderDisabled', false)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
@@ -470,7 +468,9 @@ describe('Config', () => {
         rateLimit: 42,
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
-        obfuscatorValueRegex: '.*'
+        obfuscatorValueRegex: '.*',
+        blockedTemplateHtml: __filename,
+        blockedTemplateJson: __filename
       }
     })
 
@@ -500,6 +500,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
+    expect(config).to.have.nested.property('appsec.blockedTemplateHtml', __filename)
+    expect(config).to.have.nested.property('appsec.blockedTemplateJson', __filename)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 2)
@@ -534,7 +536,11 @@ describe('Config', () => {
       rateLimit: 42,
       wafTimeout: 42,
       obfuscatorKeyRegex: '.*',
-      obfuscatorValueRegex: '.*'
+      obfuscatorValueRegex: '.*',
+      blockedTemplateHtml:
+        path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.html'),
+      blockedTemplateJson:
+        path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.json')
     })
   })
 
@@ -669,6 +675,20 @@ describe('Config', () => {
       { service: 'mysql', sampleRate: 1.0 },
       { sampleRate: 0.1 }
     ])
+  })
+
+  it('should ignore appsec.blockedTemplateHtml if it does not exist', () => {
+    const config = new Config({
+      appsec: {
+        enabled: true,
+        blockedTemplateHtml: path.join(__dirname, 'DOES_NOT_EXIST.html'),
+        blockedTemplateJson: path.join(__dirname, 'DOES_NOT_EXIST.json')
+      }
+    })
+    expect(config.appsec.blockedTemplateHtml).to.be
+      .equal(path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.html'))
+    expect(config.appsec.blockedTemplateJson).to.be
+      .equal(path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.json'))
   })
 
   context('auto configuration w/ unix domain sockets', () => {
