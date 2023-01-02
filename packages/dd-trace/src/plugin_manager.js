@@ -19,25 +19,30 @@ const disabledPlugins = new Set(
 // TODO actually ... should we be looking at envrionment variables this deep down in the code?
 
 const pluginClasses = {}
+let isSubscribed = false
+function subscribe () {
+  if (!isSubscribed) {
+    isSubscribed = true
+    loadChannel.subscribe(({ name }) => {
+      const Plugin = plugins[name]
 
-loadChannel.subscribe(({ name }) => {
-  const Plugin = plugins[name]
+      if (!Plugin || typeof Plugin !== 'function') return
+      if (!pluginClasses[Plugin.name]) {
+        const envName = `DD_TRACE_${Plugin.name.toUpperCase()}_ENABLED`
+        const enabled = process.env[envName.replace(/[^a-z0-9_]/ig, '_')]
 
-  if (!Plugin || typeof Plugin !== 'function') return
-  if (!pluginClasses[Plugin.name]) {
-    const envName = `DD_TRACE_${Plugin.name.toUpperCase()}_ENABLED`
-    const enabled = process.env[envName.replace(/[^a-z0-9_]/ig, '_')]
+        // TODO: remove the need to load the plugin class in order to disable the plugin
+        if (isFalse(enabled) || disabledPlugins.has(Plugin.name)) {
+          log.debug(`Plugin "${Plugin.name}" was disabled via configuration option.`)
 
-    // TODO: remove the need to load the plugin class in order to disable the plugin
-    if (isFalse(enabled) || disabledPlugins.has(Plugin.name)) {
-      log.debug(`Plugin "${Plugin.name}" was disabled via configuration option.`)
-
-      pluginClasses[Plugin.name] = null
-    } else {
-      pluginClasses[Plugin.name] = Plugin
-    }
+          pluginClasses[Plugin.name] = null
+        } else {
+          pluginClasses[Plugin.name] = Plugin
+        }
+      }
+    })
   }
-})
+}
 
 // TODO this must always be a singleton.
 module.exports = class PluginManager {
@@ -54,7 +59,7 @@ module.exports = class PluginManager {
 
       this.loadPlugin(Plugin.name)
     }
-
+    subscribe()
     loadChannel.subscribe(this._loadedSubscriber)
   }
 
