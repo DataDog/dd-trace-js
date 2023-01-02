@@ -23,7 +23,7 @@ function enable (config) {
         }
 
         if (shouldEnable) {
-          require('..').enable(config)
+          require('..').enableAsync(config).catch(() => {})
         } else {
           require('..').disable()
         }
@@ -34,6 +34,7 @@ function enable (config) {
 
 function enableAsmData (appsecConfig) {
   if (rc && appsecConfig && appsecConfig.rules === undefined) {
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
     rc.on('ASM_DATA', _asmDataListener)
   }
 }
