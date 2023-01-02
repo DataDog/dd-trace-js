@@ -119,10 +119,8 @@ module.exports = class PluginManager {
     const {
       logInjection,
       serviceMapping,
-      clientIpHeaderDisabled,
-      clientIpHeader,
-      site,
       queryStringObfuscation,
+      site,
       url,
       dbmPropagationMode
     } = this._tracerConfig
@@ -135,14 +133,6 @@ module.exports = class PluginManager {
 
     if (queryStringObfuscation !== undefined) {
       sharedConfig.queryStringObfuscation = queryStringObfuscation
-    }
-
-    if (clientIpHeaderDisabled !== undefined) {
-      sharedConfig.clientIpHeaderDisabled = clientIpHeaderDisabled
-    }
-
-    if (clientIpHeader !== undefined) {
-      sharedConfig.clientIpHeader = clientIpHeader
     }
 
     sharedConfig.dbmPropagationMode = dbmPropagationMode

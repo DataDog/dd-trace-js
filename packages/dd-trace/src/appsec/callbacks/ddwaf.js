@@ -61,7 +61,7 @@ class WAFCallback {
 
           subscribedAddresses.add(address)
 
-          Gateway.manager.addSubscription({ addresses: [ address ], callback })
+          Gateway.manager.addSubscription({ addresses: [address], callback })
         }
       }
     }

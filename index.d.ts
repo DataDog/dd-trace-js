@@ -509,7 +509,17 @@ export declare interface TracerOptions {
     /**
      * Specifies a regex that will redact sensitive data by its value in attack reports.
      */
-    obfuscatorValueRegex?: string
+    obfuscatorValueRegex?: string,
+
+    /**
+     * Specifies a path to a custom blocking template html file.
+     */
+    blockedTemplateHtml?: string,
+
+    /**
+     * Specifies a path to a custom blocking template json file.
+     */
+    blockedTemplateJson?: string,
   };
 }
 

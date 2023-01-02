@@ -94,7 +94,9 @@ tracer.init({
     rateLimit: 100,
     wafTimeout: 100e3,
     obfuscatorKeyRegex: '.*',
-    obfuscatorValueRegex: '.*'
+    obfuscatorValueRegex: '.*',
+    blockedTemplateHtml: './blocked.html',
+    blockedTemplateJson: './blocked.json'
   }
 });
 
