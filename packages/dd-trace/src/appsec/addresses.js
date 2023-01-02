@@ -14,5 +14,7 @@ module.exports = {
   HTTP_INCOMING_RESPONSE_HEADERS: 'server.response.headers.no_cookies',
   // TODO: 'server.response.trailers',
   HTTP_INCOMING_REMOTE_IP: 'server.request.client_ip',
-  HTTP_INCOMING_REMOTE_PORT: 'server.request.client_port'
+  HTTP_INCOMING_REMOTE_PORT: 'server.request.client_port',
+
+  HTTP_CLIENT_IP: 'http.client_ip'
 }
