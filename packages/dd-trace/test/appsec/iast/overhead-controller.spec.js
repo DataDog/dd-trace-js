@@ -429,8 +429,8 @@ describe('Overhead controller', () => {
                     if (url.includes(SECURE_REQUEST)) {
                       expect(trace.meta['_dd.iast.json']).to.be.undefined
                       expect(trace.meta['_dd.iast.enabled']).eq('1')
+                      done()
                     }
-                    done()
                   }
                 }
               }
