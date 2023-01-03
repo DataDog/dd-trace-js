@@ -92,18 +92,19 @@
 				<h2>Index</h2>
 				<section class="tsd-panel tsd-index-panel">
 					<div class="tsd-index-content">
-						<section class="tsd-index-section tsd-is-inherited">
+						<section class="tsd-index-section ">
 							<h3>Properties</h3>
 							<ul class="tsd-index-list">
 								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.mongodb_core.html#enabled" class="tsd-kind-icon">enabled</a></li>
 								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.mongodb_core.html#measured" class="tsd-kind-icon">measured</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="plugins.mongodb_core.html#queryinresourcename" class="tsd-kind-icon">query<wbr>InResource<wbr>Name</a></li>
 								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.mongodb_core.html#service" class="tsd-kind-icon">service</a></li>
 							</ul>
 						</section>
 					</div>
 				</section>
 			</section>
-			<section class="tsd-panel-group tsd-member-group tsd-is-inherited">
+			<section class="tsd-panel-group tsd-member-group ">
 				<h2>Properties</h2>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
 					<a name="enabled" class="tsd-anchor"></a>
@@ -112,7 +113,7 @@
 					<aside class="tsd-sources">
 						<p>Inherited from Integration.enabled</p>
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/aba2495/index.d.ts#L677">index.d.ts:677</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/5522dc6/index.d.ts#L677">index.d.ts:677</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
@@ -133,13 +134,28 @@
 					<aside class="tsd-sources">
 						<p>Inherited from <a href="traceoptions.html">TraceOptions</a>.<a href="traceoptions.html#measured">measured</a></p>
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/aba2495/index.d.ts#L663">index.d.ts:663</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/5522dc6/index.d.ts#L663">index.d.ts:663</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
 						<div class="lead">
 							<p>Whether to measure the span. Can also be set to a key-value pair with span
 							names as keys and booleans as values for more granular control.</p>
+						</div>
+					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface">
+					<a name="queryinresourcename" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> query<wbr>InResource<wbr>Name</h3>
+					<div class="tsd-signature tsd-kind-icon">query<wbr>InResource<wbr>Name<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">false</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">true</span></div>
+					<aside class="tsd-sources">
+						<ul>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/5522dc6/index.d.ts#L1261">index.d.ts:1261</a></li>
+						</ul>
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Whether to include the query contents in the resource name.</p>
 						</div>
 					</div>
 				</section>
@@ -150,7 +166,7 @@
 					<aside class="tsd-sources">
 						<p>Inherited from Integration.service</p>
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/aba2495/index.d.ts#L672">index.d.ts:672</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/5522dc6/index.d.ts#L672">index.d.ts:672</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
@@ -184,6 +200,9 @@
 							</li>
 							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
 								<a href="plugins.mongodb_core.html#measured" class="tsd-kind-icon">measured</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-interface">
+								<a href="plugins.mongodb_core.html#queryinresourcename" class="tsd-kind-icon">query<wbr>InResource<wbr>Name</a>
 							</li>
 							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
 								<a href="plugins.mongodb_core.html#service" class="tsd-kind-icon">service</a>
