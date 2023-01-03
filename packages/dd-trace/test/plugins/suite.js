@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint-disable no-console */
+
 const childProcess = require('child_process')
 const fs = require('fs')
 const util = require('util')
@@ -21,7 +23,7 @@ async function getLatest (modName, repoUrl) {
   if (latestCache[modName]) {
     return latestCache[modName]
   }
-  const { stdout } = await exec(`npm view ${modName} dist-tags --json`)
+  const { stdout } = await retry(() => exec(`npm view ${modName} dist-tags --json`), 1000)
   const { latest } = JSON.parse(stdout)
   const tags = await get(`https://api.github.com/repos/${repoUrl}/git/refs/tags`)
   for (const tag of tags) {
@@ -38,6 +40,21 @@ function get (theUrl) {
       'user-agent': 'dd-trace plugin test suites'
     }
     https.get(options, res => {
+      if (res.statusCode === 403) {
+        console.log('403')
+        for (const header in res.headers) {
+          if (header.startsWith('x-ratelimit')) {
+            console.log(header, res.headers[header])
+          }
+        }
+        const resetTime = Number(res.headers['x-ratelimit-reset']) * 1000
+        const waitTime = 1000 + resetTime - Date.now()
+        console.log('Waiting', waitTime / 1000, 'seconds for retry')
+        setTimeout(() => {
+          get(theUrl).then(resolve, reject)
+        }, waitTime)
+        return
+      }
       if (res.statusCode >= 300) {
         res.pipe(process.stderr)
         reject(new Error(res.statusCode))
@@ -52,6 +69,19 @@ function get (theUrl) {
   })
 }
 
+async function retry (fn, delay) {
+  let result
+  try {
+    result = fn()
+  } catch (e) {
+    console.log(e)
+    console.log('Retrying after', delay, 'ms')
+    await new Promise(resolve => setTimeout(resolve, delay))
+    result = retry(fn, delay)
+  }
+  return result
+}
+
 function exec (cmd, opts = {}) {
   const date = new Date()
   const time = [
@@ -59,7 +89,6 @@ function exec (cmd, opts = {}) {
     String(date.getMinutes()).padStart(2, 0),
     String(date.getSeconds()).padStart(2, 0)
   ].join(':')
-  // eslint-disable-next-line no-console
   console.log(time, '❯', cmd)
   return new Promise((resolve, reject) => {
     const proc = childProcess.spawn(cmd, Object.assign({
