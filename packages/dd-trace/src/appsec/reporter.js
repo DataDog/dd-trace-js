@@ -3,6 +3,7 @@
 const addresses = require('./addresses')
 const Limiter = require('../rate_limiter')
 const web = require('../plugins/util/web')
+const { storage } = require('../../../datadog-core')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -37,24 +38,24 @@ const RESPONSE_HEADERS_PASSLIST = [
 
 const metricsQueue = new Map()
 
-function resolveHTTPRequest (context) {
-  if (!context) return {}
+function resolveHTTPRequest (params) {
+  if (!params) return {}
 
-  const headers = context.resolve(addresses.HTTP_INCOMING_HEADERS)
+  const headers = params[addresses.HTTP_INCOMING_HEADERS]
 
   return {
-    remote_ip: context.resolve(addresses.HTTP_INCOMING_REMOTE_IP),
+    remote_ip: params[addresses.HTTP_INCOMING_REMOTE_IP],
     headers: filterHeaders(headers, REQUEST_HEADERS_PASSLIST, 'http.request.headers.')
   }
 }
 
-function resolveHTTPResponse (context) {
-  if (!context) return {}
+function resolveHTTPResponse (params) {
+  if (!params) return {}
 
-  const headers = context.resolve(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
+  const headers = params[addresses.HTTP_INCOMING_RESPONSE_HEADERS]
 
   return {
-    endpoint: context.resolve(addresses.HTTP_INCOMING_ENDPOINT),
+    endpoint: params[addresses.HTTP_INCOMING_ENDPOINT],
     headers: filterHeaders(headers, RESPONSE_HEADERS_PASSLIST, 'http.response.headers.')
   }
 }
@@ -84,8 +85,11 @@ function formatHeaderName (name) {
     .toLowerCase()
 }
 
-function reportMetrics (metrics, store) {
-  const req = store && store.get('req')
+function reportMetrics (metrics) {
+  // TODO metrics should be something incremental
+  //  there is already a RFC to report metrics
+  const store = storage.getStore()
+  const req = store && store.req
   const rootSpan = web.root(req)
   if (!rootSpan) return false
 
@@ -102,8 +106,9 @@ function reportMetrics (metrics, store) {
   }
 }
 
-function reportAttack (attackData, store) {
-  const req = store && store.get('req')
+function reportAttack (attackData, params) {
+  const store = storage.getStore()
+  const req = store && store.req
   const rootSpan = web.root(req)
   if (!rootSpan) return false
 
@@ -131,10 +136,8 @@ function reportAttack (attackData, store) {
     newTags['_dd.appsec.json'] = '{"triggers":' + attackData + '}'
   }
 
-  const context = store.get('context')
-
-  if (context) {
-    const resolvedRequest = resolveHTTPRequest(context)
+  if (params) {
+    const resolvedRequest = resolveHTTPRequest(params)
 
     Object.assign(newTags, resolvedRequest.headers)
 
@@ -142,14 +145,17 @@ function reportAttack (attackData, store) {
     if (ua) {
       newTags['http.useragent'] = ua
     }
-
-    newTags['network.client.ip'] = resolvedRequest.remote_ip
+    if (resolvedRequest.remote_ip) {
+      newTags['network.client.ip'] = resolvedRequest.remote_ip
+    }
   }
 
   rootSpan.addTags(newTags)
 }
 
-function finishRequest (req, context) {
+function finishRequest (req, wafContext, params) {
+  if (!wafContext) return false
+  if (!params) return false
   const rootSpan = web.root(req)
   if (!rootSpan) return false
 
@@ -158,10 +164,12 @@ function finishRequest (req, context) {
 
     metricsQueue.clear()
   }
+  if (!rootSpan.context()._tags['appsec.event']) {
+    wafContext.dispose()
+    return false
+  }
 
-  if (!context || !rootSpan.context()._tags['appsec.event']) return false
-
-  const resolvedResponse = resolveHTTPResponse(context)
+  const resolvedResponse = resolveHTTPResponse(params)
 
   const newTags = resolvedResponse.headers
 
@@ -170,6 +178,7 @@ function finishRequest (req, context) {
   }
 
   rootSpan.addTags(newTags)
+  wafContext.dispose()
 }
 
 function setRateLimit (rateLimit) {

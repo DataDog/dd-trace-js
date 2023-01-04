@@ -2,9 +2,9 @@
 
 const log = require('../log')
 const RuleManager = require('./rule_manager')
+const WAFManagerModule = require('./waf_manager')
 const remoteConfig = require('./remote_config')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('./gateway/channels')
-const Gateway = require('./gateway/engine')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
@@ -31,17 +31,12 @@ function enable (_config) {
 function enableFromRules (_config, rules) {
   RuleManager.applyRules(rules, _config.appsec)
   remoteConfig.enableAsmData(_config.appsec)
+  remoteConfig.enableAsmDDRules(_config.appsec)
 
   Reporter.setRateLimit(_config.appsec.rateLimit)
 
   incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
   incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
-
-  // add fields needed for HTTP context reporting
-  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_HEADERS)
-  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_ENDPOINT)
-  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
-  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
 
   isEnabled = true
   config = _config
@@ -54,6 +49,7 @@ function abortEnable (err) {
   // abort AppSec start
   RuleManager.clearAllRules()
   remoteConfig.disableAsmData()
+  remoteConfig.disableAsmDDRules()
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
@@ -67,18 +63,11 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     '_dd.runtime_family': 'nodejs',
     [HTTP_CLIENT_IP]: clientIp
   })
-
-  const store = Gateway.startContext()
-
-  store.set('req', req)
-  store.set('res', res)
-
-  const context = store.get('context')
-
-  if (clientIp) {
-    const results = Gateway.propagate({
+  const wafContext = WAFManagerModule.wafManager && WAFManagerModule.wafManager.createDDWAFContext(req)
+  if (clientIp && wafContext) {
+    const results = wafContext.run({
       [addresses.HTTP_CLIENT_IP]: clientIp
-    }, context)
+    })
 
     if (!results || !abortController) return
 
@@ -92,8 +81,8 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
 }
 
 function incomingHttpEndTranslator (data) {
-  const context = Gateway.getContext()
-  if (!context) return
+  const wafContext = WAFManagerModule.wafManager && WAFManagerModule.wafManager.getDDWAFContext(data.req)
+  if (!wafContext) return
 
   const requestHeaders = Object.assign({}, data.req.headers)
   delete requestHeaders.cookie
@@ -137,9 +126,9 @@ function incomingHttpEndTranslator (data) {
     }
   }
 
-  Gateway.propagate(payload, context)
+  wafContext.run(payload)
 
-  Reporter.finishRequest(data.req, context)
+  Reporter.finishRequest(data.req, wafContext, payload)
 }
 
 function disable () {
@@ -148,6 +137,7 @@ function disable () {
 
   RuleManager.clearAllRules()
   remoteConfig.disableAsmData()
+  remoteConfig.disableAsmDDRules()
 
   // Channel#unsubscribe() is undefined for non active channels
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)

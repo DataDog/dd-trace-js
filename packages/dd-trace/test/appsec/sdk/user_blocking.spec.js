@@ -15,10 +15,10 @@ describe('user_blocking', () => {
     const res = { headersSent: false }
     const tracer = {}
 
-    let propagate, rootSpan, getRootSpan, block, storage, log, userBlocking
+    let run, rootSpan, getRootSpan, block, storage, log, userBlocking, getDDWAFContext
 
     beforeEach(() => {
-      propagate = sinon.stub().returns([['something'], ['block']])
+      run = sinon.stub().returns([['something'], ['block']])
 
       rootSpan = {
         context: () => {
@@ -38,8 +38,14 @@ describe('user_blocking', () => {
         warn: sinon.stub()
       }
 
+      getDDWAFContext = sinon.stub().returns({ run })
+
       userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
-        '../gateway/engine': { propagate },
+        '../waf_manager': {
+          wafManager: {
+            getDDWAFContext
+          }
+        },
         './utils': { getRootSpan },
         '../blocking': { block },
         '../../../../datadog-core': { storage },
@@ -89,7 +95,7 @@ describe('user_blocking', () => {
       })
 
       it('should return false when received no results', () => {
-        propagate.returns([])
+        run.returns([])
 
         const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'gooduser' })
         expect(ret).to.be.false

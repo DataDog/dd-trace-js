@@ -2,19 +2,18 @@
 
 const proxyquire = require('proxyquire')
 const log = require('../../src/log')
+const WAFManagerModule = require('../../src/appsec/waf_manager')
 const RuleManager = require('../../src/appsec/rule_manager')
 const remoteConfig = require('../../src/appsec/remote_config')
 const appsec = require('../../src/appsec')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../src/appsec/gateway/channels')
-const Gateway = require('../../src/appsec/gateway/engine')
-const addresses = require('../../src/appsec/addresses')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
 const Config = require('../../src/config')
 const axios = require('axios')
 const getPort = require('get-port')
-
 const blockedTemplate = require('../../src/appsec/blocked_templates')
+const recommendedJson = require('../../src/appsec/recommended.json')
 
 describe('AppSec Index', () => {
   let config
@@ -37,10 +36,8 @@ describe('AppSec Index', () => {
         blockedTemplateJson: blockedTemplate.json
       }
     }
-
-    web = {
-      root: sinon.stub()
-    }
+    sinon.stub(web, 'root')
+    sinon.stub(web, 'getContext').returns({})
 
     blocking = {
       setTemplates: sinon.stub()
@@ -51,13 +48,17 @@ describe('AppSec Index', () => {
       './blocking': blocking
     })
 
+    sinon.stub(WAFManagerModule, 'init').callThrough()
+    sinon.stub(WAFManagerModule.WAFManager.prototype, 'createDDWAFContext').callThrough()
+    sinon.stub(WAFManagerModule.WAFContextWrapper.prototype, 'run')
     sinon.stub(RuleManager, 'applyRules')
     sinon.stub(remoteConfig, 'enableAsmData')
+    sinon.stub(remoteConfig, 'enableAsmDDRules')
     sinon.stub(remoteConfig, 'disableAsmData')
+    sinon.stub(remoteConfig, 'disableAsmDDRules')
     sinon.stub(Reporter, 'setRateLimit')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
-    Gateway.manager.clear()
   })
 
   afterEach(() => {
@@ -72,16 +73,11 @@ describe('AppSec Index', () => {
       expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
       expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly(RULES, config.appsec)
       expect(remoteConfig.enableAsmData).to.have.been.calledOnce
+      expect(remoteConfig.enableAsmDDRules).to.have.been.calledOnce
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
-      expect(Gateway.manager.addresses).to.have.all.keys(
-        addresses.HTTP_INCOMING_HEADERS,
-        addresses.HTTP_INCOMING_ENDPOINT,
-        addresses.HTTP_INCOMING_RESPONSE_HEADERS,
-        addresses.HTTP_INCOMING_REMOTE_IP
-      )
     })
 
     it('should log when enable fails', () => {
@@ -97,9 +93,40 @@ describe('AppSec Index', () => {
       expect(log.error.firstCall).to.have.been.calledWithExactly('Unable to start AppSec')
       expect(log.error.secondCall).to.have.been.calledWithExactly(err)
       expect(remoteConfig.disableAsmData).to.have.been.calledOnce
+      expect(remoteConfig.disableAsmDDRules).to.have.been.calledOnce
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
-      expect(Gateway.manager.addresses).to.be.empty
+    })
+
+    it('should load recommended.json rules if not provided by the user', () => {
+      config.appsec.rules = undefined
+      AppSec.enable(config)
+
+      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly(recommendedJson, config.appsec)
+      expect(remoteConfig.enableAsmData).to.have.been.calledOnce
+      expect(remoteConfig.enableAsmDDRules).to.have.been.calledOnce
+      expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
+      expect(incomingHttpRequestStart.subscribe)
+        .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
+      expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
+    })
+
+    it('should log when enable fails', async () => {
+      sinon.stub(log, 'error')
+      RuleManager.applyRules.restore()
+
+      const err = new Error('Invalid Rules')
+      sinon.stub(RuleManager, 'applyRules').throws(err)
+
+      await AppSec.enableAsync(config)
+
+      expect(log.error).to.have.been.calledTwice
+      expect(log.error.firstCall).to.have.been.calledWithExactly('Unable to start AppSec')
+      expect(log.error.secondCall).to.have.been.calledWithExactly(err)
+      expect(remoteConfig.disableAsmData).to.have.been.calledOnce
+      expect(remoteConfig.disableAsmDDRules).to.have.been.calledOnce
+      expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
+      expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
     })
   })
 
@@ -119,6 +146,7 @@ describe('AppSec Index', () => {
 
       expect(RuleManager.clearAllRules).to.have.been.calledOnce
       expect(remoteConfig.disableAsmData).to.have.been.calledOnce
+      expect(remoteConfig.disableAsmDDRules).to.have.been.calledOnce
       expect(incomingHttpRequestStart.unsubscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.unsubscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
@@ -138,11 +166,10 @@ describe('AppSec Index', () => {
   describe('incomingHttpStartTranslator', () => {
     beforeEach(() => {
       AppSec.enable(config)
+      WAFManagerModule.init(require('../../src/appsec/recommended.json'), config.appsec)
     })
 
     it('should propagate incoming http start data', () => {
-      const store = new Map()
-      sinon.stub(Gateway, 'startContext').returns(store)
       const rootSpan = {
         addTags: sinon.stub()
       }
@@ -164,21 +191,16 @@ describe('AppSec Index', () => {
       }
       const res = {}
 
-      sinon.stub(Gateway, 'propagate')
-
       AppSec.incomingHttpStartTranslator({ req, res })
 
-      expect(Gateway.startContext).to.have.been.calledOnce
-
-      expect(store.get('req')).to.equal(req)
-      expect(store.get('res')).to.equal(res)
+      expect(WAFManagerModule.WAFManager.prototype.createDDWAFContext).to.have.been.calledOnceWithExactly(req)
 
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
         '_dd.appsec.enabled': 1,
         '_dd.runtime_family': 'nodejs',
         'http.client_ip': '127.0.0.1'
       })
-      expect(Gateway.propagate).to.have.been.calledOnceWith({
+      expect(WAFManagerModule.WAFContextWrapper.prototype.run).to.have.been.calledOnceWith({
         'http.client_ip': '127.0.0.1'
       })
     })
@@ -187,6 +209,9 @@ describe('AppSec Index', () => {
   describe('incomingHttpEndTranslator', () => {
     beforeEach(() => {
       AppSec.enable(config)
+
+      WAFManagerModule.init(require('../../src/appsec/recommended.json'), config.appsec)
+
       const rootSpan = {
         addTags: sinon.stub()
       }
@@ -203,12 +228,11 @@ describe('AppSec Index', () => {
         statusCode: 201
       }
 
-      sinon.stub(Gateway, 'propagate')
       sinon.stub(Reporter, 'finishRequest')
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(Gateway.propagate).to.not.have.been.called
+      expect(WAFManagerModule.WAFContextWrapper.prototype.run).to.not.have.been.called
       expect(Reporter.finishRequest).to.not.have.been.called
     })
 
@@ -234,13 +258,15 @@ describe('AppSec Index', () => {
         statusCode: 201
       }
 
+      web.patch(req)
+
       AppSec.incomingHttpStartTranslator({ req, res })
-      sinon.stub(Gateway, 'propagate')
       sinon.stub(Reporter, 'finishRequest')
+      WAFManagerModule.WAFContextWrapper.prototype.run.resetHistory()
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(Gateway.propagate).to.have.been.calledOnceWith({
+      expect(WAFManagerModule.WAFContextWrapper.prototype.run).to.have.been.calledOnceWithExactly({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
           'user-agent': 'Arachni',
@@ -259,14 +285,6 @@ describe('AppSec Index', () => {
     })
 
     it('should propagate incoming http end data with invalid framework properties', () => {
-      const context = {
-        dispatch: sinon.stub()
-      }
-      const store = new Map()
-      store.set('context', context)
-      sinon.stub(Gateway, 'startContext').returns(store)
-      sinon.stub(Gateway, 'getContext').returns(context)
-
       const req = {
         url: '/path',
         headers: {
@@ -293,16 +311,16 @@ describe('AppSec Index', () => {
         statusCode: 201
       }
 
+      web.patch(req)
+
       AppSec.incomingHttpStartTranslator({ req, res })
-      sinon.stub(Gateway, 'propagate')
       sinon.stub(Reporter, 'finishRequest')
+      WAFManagerModule.WAFContextWrapper.prototype.run.resetHistory()
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(Gateway.startContext).to.have.been.calledOnce
-      expect(store.get('req')).to.equal(req)
-      expect(store.get('res')).to.equal(res)
-      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
+      expect(WAFManagerModule.WAFManager.prototype.createDDWAFContext).to.have.been.calledOnceWithExactly(req)
+      const expectedPayload = {
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
           'user-agent': 'Arachni',
@@ -316,17 +334,13 @@ describe('AppSec Index', () => {
           'content-type': 'application/json',
           'content-lenght': 42
         }
-      }, context)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, context)
+      }
+      expect(WAFManagerModule.WAFContextWrapper.prototype.run).to.have.been.calledOnceWithExactly(expectedPayload)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req,
+        WAFManagerModule.wafManager.getDDWAFContext(req), expectedPayload)
     })
 
     it('should propagate incoming http end data with express', () => {
-      const context = { dispatch: sinon.stub() }
-      const store = new Map()
-      store.set('context', context)
-      sinon.stub(Gateway, 'startContext').returns(store)
-      sinon.stub(Gateway, 'getContext').returns(context)
-
       const req = {
         url: '/path',
         headers: {
@@ -363,16 +377,16 @@ describe('AppSec Index', () => {
         }),
         statusCode: 201
       }
-      AppSec.incomingHttpStartTranslator({ req, res })
-      sinon.stub(Gateway, 'propagate')
-      sinon.stub(Reporter, 'finishRequest')
 
+      web.patch(req)
+
+      AppSec.incomingHttpStartTranslator({ req, res })
+      WAFManagerModule.WAFContextWrapper.prototype.run.resetHistory()
+      sinon.stub(Reporter, 'finishRequest')
+      const ddwafContext = WAFManagerModule.wafManager.getDDWAFContext(req)
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(Gateway.startContext).to.have.been.calledOnce
-      expect(store.get('req')).to.equal(req)
-      expect(store.get('res')).to.equal(res)
-      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
+      const expectedPayload = {
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
           'user-agent': 'Arachni',
@@ -390,9 +404,10 @@ describe('AppSec Index', () => {
         'server.request.query': { b: '2' },
         'server.request.framework_endpoint': '/path/:c',
         'server.request.path_params': { c: '3' },
-        'server.request.cookies': { d: [ '4' ], e: [ '5' ] }
-      }, context)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, context)
+        'server.request.cookies': { d: ['4'], e: ['5'] }
+      }
+      expect(WAFManagerModule.WAFContextWrapper.prototype.run).to.have.been.calledOnceWithExactly(expectedPayload)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, ddwafContext, expectedPayload)
     })
   })
 })
