@@ -1,18 +1,35 @@
 'use strict'
 
-const callbacks = require('./callbacks')
-const Gateway = require('./gateway/engine')
+const WAFManagerModule = require('./waf_manager')
+const log = require('../log')
 
-const appliedCallbacks = new Map()
 const appliedAsmData = new Map()
+let defaultRules
+let asmDDRules
 
 function applyRules (rules, config) {
-  if (appliedCallbacks.has(rules)) return
+  if (WAFManagerModule.wafManager) return
+  defaultRules = rules
+  WAFManagerModule.init(rules, config)
+}
 
-  // for now there is only WAF
-  const callback = new callbacks.DDWAF(rules, config)
+function updateAsmDDRules (action, asmRules) {
+  if (action === 'unapply') {
+    asmDDRules = undefined
+  } else {
+    asmDDRules = asmRules
+  }
+  updateAppliedRules()
+  updateAppliedRuleData()
+}
 
-  appliedCallbacks.set(rules, callback)
+function updateAppliedRules () {
+  const rules = asmDDRules || defaultRules
+  try {
+    WAFManagerModule.wafManager.reload(rules)
+  } catch {
+    log.error('AppSec could not load native package. Applied rules have not been updated')
+  }
 }
 
 function updateAsmData (action, asmData, asmDataId) {
@@ -22,10 +39,12 @@ function updateAsmData (action, asmData, asmDataId) {
     appliedAsmData.set(asmDataId, asmData)
   }
 
+  updateAppliedRuleData()
+}
+
+function updateAppliedRuleData () {
   const mergedRuleData = mergeRuleData(appliedAsmData.values())
-  for (const callback of appliedCallbacks.values()) {
-    callback.updateRuleData(mergedRuleData)
-  }
+  WAFManagerModule.wafManager && WAFManagerModule.wafManager.updateRuleData(mergedRuleData)
 }
 
 function mergeRuleData (asmDataValues) {
@@ -70,18 +89,13 @@ function copyRulesData (rulesData) {
   return copy
 }
 function clearAllRules () {
-  Gateway.manager.clear()
-
-  for (const [key, callback] of appliedCallbacks) {
-    callback.clear()
-
-    appliedCallbacks.delete(key)
-  }
+  WAFManagerModule.destroy()
   appliedAsmData.clear()
 }
 
 module.exports = {
   applyRules,
   clearAllRules,
-  updateAsmData
+  updateAsmData,
+  updateAsmDDRules
 }
