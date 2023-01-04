@@ -86,7 +86,7 @@ function testThatRequestHasVulnerability (app, vulnerability) {
   testInRequest(app, tests)
 }
 
-function testThatRequestHasNoVulnerability (app, vulnerability) {
+function testThatRequestHasNotVulnerability (app, vulnerability) {
   function tests (config) {
     prepareTests()
 
@@ -106,4 +106,4 @@ function testThatRequestHasNoVulnerability (app, vulnerability) {
   testInRequest(app, tests)
 }
 
-module.exports = { testThatRequestHasNoVulnerability, testThatRequestHasVulnerability, testInRequest }
+module.exports = { testThatRequestHasNotVulnerability, testThatRequestHasVulnerability, testInRequest }
