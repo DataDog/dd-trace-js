@@ -82,11 +82,11 @@ function taintObject (iastContext, object, type) {
   return result
 }
 
-function isTainted (iastContext, value) {
+function isTainted (iastContext, string) {
   let result = false
-  if (iastContext && typeof value === 'string' && iastContext[IAST_TRANSACTION_ID]) {
+  if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
-    result = TaintedUtils.isTainted(transactionId, value)
+    result = TaintedUtils.isTainted(transactionId, string)
   } else {
     result = false
   }
