@@ -29,8 +29,9 @@ class RouterPlugin extends WebPlugin {
         context.middleware.push(span)
       }
 
-      this._storeStack.push(storage.getStore())
-      this.enter(span)
+      const store = storage.getStore()
+      this._storeStack.push(store)
+      this.enter(span, store)
 
       web.patch(req)
       web.setRoute(req, context.route)
@@ -53,7 +54,9 @@ class RouterPlugin extends WebPlugin {
     })
 
     this.addSub(`apm:${this.constructor.name}:middleware:exit`, ({ req }) => {
-      this.enter(this._storeStack.pop())
+      const savedStore = this._storeStack.pop()
+      const span = savedStore && savedStore.span
+      this.enter(span, savedStore)
     })
 
     this.addSub(`apm:${this.constructor.name}:middleware:error`, ({ req, error }) => {
