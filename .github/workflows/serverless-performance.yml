@@ -18,9 +18,9 @@ jobs:
           # TODO remove hardcoded branch when merged to main
           ref: refs/heads/maxday/add-git
           path: datadog-lambda-js
-      - name: Update package.json to latest commit
+      - name: Update package.json to the current ref
         # TODO node_version hardcoded for now, switch to matrix for all supported version of node
         run: |
           cd datadog-lambda-js
-          yarn add https://github.com/DataDog/dd-trace-js#$GITHUB_REF_NAME --save-dev
+          yarn add https://github.com/DataDog/dd-trace-js#$GITHUB_REF --save-dev
           NODE_VERSION=18.12 ./scripts/build_layers.sh
