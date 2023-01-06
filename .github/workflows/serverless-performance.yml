@@ -22,5 +22,5 @@ jobs:
         # TODO node_version hardcoded for now, switch to matrix for all supported version of node
         run: |
           cd datadog-lambda-js
-          yarn add https://github.com/DataDog/dd-trace-js#{{ env.GITHUB_SHA}} --save-dev
+          yarn add https://github.com/DataDog/dd-trace-js#$GITHUB_SHA --save-dev
           NODE_VERSION=18.12 ./scripts/build_layers.sh
