@@ -1,0 +1,26 @@
+name: Serverless performance test
+
+on:
+  push:
+    branches:
+      - maxday/serverless-perf
+
+jobs:
+  performance-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout dd-trace-js
+        uses: actions/checkout@v3
+      - name: Checkout datadog-lambda-js
+        uses: actions/checkout@v3
+        with:
+          repository: DataDog/datadog-lambda-js
+          # TODO remove hardcoded branch when merged to main
+          ref: refs/heads/maxday/add-git
+          path: datadog-lambda-js
+      - name: Update package.json to latest commit
+        # TODO node_version hardcoded for now, switch to matrix for all supported version of node
+        run: |
+          cd datadog-lambda-js
+          yarn add https://github.com/DataDog/dd-trace-js#{{ env.GITHUB_SHA}} --save-dev
+          NODE_VERSION=18.12 ./scripts/build_layers.sh
