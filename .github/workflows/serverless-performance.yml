@@ -1,12 +1,9 @@
 name: Serverless performance test
 
 on:
-  push:
-    branches:
-      - maxday/serverless-perf
   pull_request:
-    branches:
-      - maxday/serverless-perf
+  push:
+    branches: [master]
 
 jobs:
   performance-test:
