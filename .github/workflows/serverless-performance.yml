@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - maxday/serverless-perf
+  pull_request:
+    branches:
+      - maxday/serverless-perf
 
 jobs:
   performance-test:
