@@ -23,7 +23,7 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     this._apiUrl = url || new URL(`https://api.${site}`)
 
     if (isGitUploadEnabled) {
-      this.sendGitMetadata({ url: this._apiUrl })
+      this.sendGitMetadata({ url: this._getApiUrl() })
     }
   }
 
