@@ -33,6 +33,6 @@ jobs:
           cd datadog-lambda-js 
           ./scripts/build_layers.sh
       - name: Deploy
-        uses: DataDog/serverless-performance-test-action
+        uses: DataDog/serverless-performance-test-action@main
         with:
           runtimeId: 'maxday-runtime'
