@@ -4,23 +4,6 @@ const Module = require('module')
 const shimmer = require('../../../../../datadog-shimmer')
 const log = require('../../../log')
 const { isPrivateModule, isNotLibraryFile } = require('./filter')
-const { csiMethods } = require('./csi-methods')
-
-let rewriter
-let getPrepareStackTrace
-function getRewriter () {
-  if (!rewriter) {
-    try {
-      const iastRewriter = require('@datadog/native-iast-rewriter')
-      const Rewriter = iastRewriter.Rewriter
-      getPrepareStackTrace = iastRewriter.getPrepareStackTrace
-      rewriter = new Rewriter({ csiMethods })
-    } catch (e) {
-      log.warn(`Unable to initialize TaintTracking Rewriter: ${e.message}`)
-    }
-  }
-  return rewriter
-}
 
 let originalPrepareStackTrace = Error.prepareStackTrace
 function getPrepareStackTraceAccessor () {
@@ -34,6 +17,22 @@ function getPrepareStackTraceAccessor () {
       originalPrepareStackTrace = value
     }
   }
+}
+
+let rewriter
+let getPrepareStackTrace
+function getRewriter () {
+  if (!rewriter) {
+    try {
+      const iastRewriter = require('@datadog/native-iast-rewriter')
+      const Rewriter = iastRewriter.Rewriter
+      getPrepareStackTrace = iastRewriter.getPrepareStackTrace
+      rewriter = new Rewriter()
+    } catch (e) {
+      log.warn(`Unable to initialize TaintTracking Rewriter: ${e.message}`)
+    }
+  }
+  return rewriter
 }
 
 function getCompileMethodFn (compileMethod) {
