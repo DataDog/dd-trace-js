@@ -32,7 +32,7 @@ describe('lambda', () => {
 
     it('patches lambda function correctly', async () => {
       const _context = {
-        getRemainingTimeInMillis: () => 200
+        getRemainingTimeInMillis: () => 300
       }
       const _event = {}
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
@@ -55,7 +55,7 @@ describe('lambda', () => {
 
     it('returns traces with error when handler is about to timeout', async () => {
       const _context = {
-        getRemainingTimeInMillis: () => 50
+        getRemainingTimeInMillis: () => 150
       }
       const _event = {}
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')

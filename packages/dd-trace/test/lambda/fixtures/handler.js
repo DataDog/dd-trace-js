@@ -5,7 +5,7 @@ exports.handler = async (...args) => {
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
   await _tracer.trace('self.sleepy', async () => {
-    await sleep(100)
+    await sleep(200)
   })
 
   const response = {
