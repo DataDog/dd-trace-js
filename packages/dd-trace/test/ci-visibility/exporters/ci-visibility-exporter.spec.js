@@ -68,7 +68,7 @@ describe('CI Visibility Exporter', () => {
       })
     })
     context('if ITR is enabled', () => {
-      it('should request the API after EVP proxy is resolved if ITR is enabled', (done) => {
+      it('should request the API after EVP proxy is resolved', (done) => {
         const scope = nock(`http://localhost:${port}`)
           .post('/api/v2/libraries/tests/services/setting')
           .reply(200, JSON.stringify({

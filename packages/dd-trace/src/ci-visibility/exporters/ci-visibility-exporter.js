@@ -37,6 +37,9 @@ class CiVisibilityExporter extends AgentInfoExporter {
       }
     })
 
+    // This should be overwritten by the class extending CiVisibilityExporter
+    this._apiUrl = this._url
+
     process.once('beforeExit', () => {
       if (this._writer) {
         this._writer.flush()
@@ -79,7 +82,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         return callback(gitUploadError, [])
       }
       const configuration = {
-        url: this._url,
+        url: this._apiUrl,
         site: this._config.site,
         env: this._config.env,
         service: this._config.service,
@@ -103,7 +106,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         return callback(null, {})
       }
       const configuration = {
-        url: this._url,
+        url: this._apiUrl,
         env: this._config.env,
         service: this._config.service,
         isEvpProxy: !!this._isUsingEvpProxy,

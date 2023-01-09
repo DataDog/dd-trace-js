@@ -38,6 +38,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           url: this._url,
           evpProxyPrefix: AGENT_EVP_PROXY_PATH
         })
+        this._apiUrl = this._url
         if (isGitUploadEnabled) {
           this.sendGitMetadata({ url: this._url, isEvpProxy: true })
         }

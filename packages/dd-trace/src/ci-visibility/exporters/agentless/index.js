@@ -19,9 +19,10 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     this._coverageUrl = url || new URL(`https://event-platform-intake.${site}`)
     this._coverageWriter = new CoverageWriter({ url: this._coverageUrl })
 
+    this._apiUrl = url || new URL(`https://api.${site}`)
+
     if (isGitUploadEnabled) {
-      const gitUrl = url || new URL(`https://api.${site}`)
-      this.sendGitMetadata({ url: gitUrl })
+      this.sendGitMetadata({ url: this._apiUrl })
     }
   }
 }
