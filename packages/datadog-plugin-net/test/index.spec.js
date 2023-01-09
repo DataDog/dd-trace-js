@@ -90,7 +90,7 @@ describe('Plugin', () => {
               'tcp.family': 'IPv4',
               'tcp.remote.host': 'localhost',
               'tcp.local.address': socket.localAddress,
-              'network.destination.host': 'localhost',
+              'network.destination.name': 'localhost',
               'network.destination.ip': '127.0.0.1'
             },
             metrics: {
@@ -122,7 +122,7 @@ describe('Plugin', () => {
               'tcp.family': 'IPv4',
               'tcp.remote.host': 'localhost',
               'tcp.local.address': socket.localAddress,
-              'network.destination.host': 'localhost',
+              'network.destination.name': 'localhost',
               'network.destination.ip': '127.0.0.1'
             },
             metrics: {
@@ -173,7 +173,7 @@ describe('Plugin', () => {
             'span.kind': 'client',
             'tcp.family': 'IPv4',
             'tcp.remote.host': 'localhost',
-            'network.destination.host': 'localhost',
+            'network.destination.name': 'localhost',
             'network.destination.ip': '127.0.0.1',
             [ERROR_TYPE]: error.name,
             [ERROR_MESSAGE]: error.message,

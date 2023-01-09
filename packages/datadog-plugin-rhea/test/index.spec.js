@@ -61,7 +61,7 @@ describe('Plugin', () => {
                   'amqp.link.target.address': 'amq.topic',
                   'amqp.link.role': 'sender',
                   'amqp.delivery.state': 'accepted',
-                  'network.destination.host': 'localhost',
+                  'network.destination.name': 'localhost',
                   'network.destination.ip': '127.0.0.1',
                   'component': 'rhea'
                 })

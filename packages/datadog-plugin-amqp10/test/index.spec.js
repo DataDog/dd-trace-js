@@ -68,7 +68,7 @@ describe('Plugin', () => {
                 expect(span).to.have.property('resource', 'send amq.topic')
                 expect(span).to.not.have.property('type')
                 expect(span.meta).to.have.property('span.kind', 'producer')
-                expect(span.meta).to.have.property('network.destination.host', 'localhost')
+                expect(span.meta).to.have.property('network.destination.name', 'localhost')
                 expect(span.meta).to.have.property('network.destination.ip', '127.0.0.1')
                 expect(span.meta).to.have.property('amqp.connection.host', 'localhost')
                 expect(span.meta).to.have.property('amqp.connection.user', 'admin')

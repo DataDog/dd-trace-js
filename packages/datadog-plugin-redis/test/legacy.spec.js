@@ -49,7 +49,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.name', '0')
               expect(traces[0][0].meta).to.have.property('db.type', 'redis')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('network.destination.host', 'localhost')
+              expect(traces[0][0].meta).to.have.property('network.destination.name', 'localhost')
               expect(traces[0][0].meta).to.have.property('network.destination.ip', '127.0.0.1')
               expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
               expect(traces[0][0].meta).to.have.property('component', 'redis')

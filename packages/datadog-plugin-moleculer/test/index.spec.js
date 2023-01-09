@@ -121,7 +121,7 @@ describe('Plugin', () => {
               expect(spans[0]).to.have.property('service', 'test')
               expect(spans[0]).to.have.property('resource', 'math.add')
               expect(spans[0].meta).to.have.property('span.kind', 'client')
-              expect(spans[0].meta).to.have.property('network.destination.host', os.hostname())
+              expect(spans[0].meta).to.have.property('network.destination.name', os.hostname())
               expect(spans[0].meta).to.have.property('moleculer.context.action', 'math.add')
               expect(spans[0].meta).to.have.property('moleculer.context.node_id', `server-${process.pid}`)
               expect(spans[0].meta).to.have.property('moleculer.context.request_id')
