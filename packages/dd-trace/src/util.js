@@ -65,11 +65,9 @@ function globMatch (pattern, subject) {
 
 function resolveHostDetails (host) {
   if (host === 'localhost' || host === '127.0.0.1') {
-    const hostIP = '127.0.0.1'
-    const hostName = host
     return {
-      'network.destination.ip': hostIP,
-      'network.destination.name': hostName
+      'network.destination.ip': '127.0.0.1',
+      'network.destination.name': 'localhost'
     }
   } else if (isIP(host)) {
     const hostIP = host
