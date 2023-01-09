@@ -29,4 +29,8 @@ jobs:
       - name: Build the layer
         env:
           NODE_VERSION: ${{ matrix.node-version }}
-        run: ./scripts/build_layers.sh
+        run: |
+          ls
+          pwd
+          cd datadog-lambda-js 
+          ./scripts/build_layers.sh
