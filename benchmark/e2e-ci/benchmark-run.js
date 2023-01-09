@@ -8,6 +8,15 @@ const API_REPOSITORY_URL = 'https://api.github.com/repos/DataDog/test-environmen
 const DISPATCH_WORKFLOW_URL = `${API_REPOSITORY_URL}/actions/workflows/dd-trace-js-tests.yml/dispatches`
 const GET_WORKFLOWS_URL = `${API_REPOSITORY_URL}/actions/runs`
 
+function getBranchUnderTest () {
+  /**
+   * GITHUB_HEAD_REF is only set for `pull_request` events
+   * GITHUB_REF_NAME is used for `push` events
+   * More info in: https://docs.github.com/en/actions/learn-github-actions/environment-variables
+   */
+  return process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME
+}
+
 const getCommonHeaders = () => {
   return {
     'Content-Type': 'application/json',
@@ -18,13 +27,13 @@ const getCommonHeaders = () => {
 }
 
 const triggerWorkflow = () => {
-  console.log(`Branch under test: ${process.env.CIRCLE_BRANCH}`)
+  console.log(`Branch under test: ${getBranchUnderTest()}`)
   return new Promise((resolve, reject) => {
     // eslint-disable-next-line
     let response = ''
     const body = JSON.stringify({
       ref: 'main',
-      inputs: { branch: process.env.CIRCLE_BRANCH }
+      inputs: { branch: getBranchUnderTest() }
     })
     const request = https.request(
       DISPATCH_WORKFLOW_URL,
