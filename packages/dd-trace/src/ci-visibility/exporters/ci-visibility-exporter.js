@@ -77,7 +77,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         return callback(gitUploadError, [])
       }
       const configuration = {
-        url: this.getApiUrl(),
+        url: this._getApiUrl(),
         site: this._config.site,
         env: this._config.env,
         service: this._config.service,
@@ -101,7 +101,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         return callback(null, {})
       }
       const configuration = {
-        url: this.getApiUrl(),
+        url: this._getApiUrl(),
         env: this._config.env,
         service: this._config.service,
         isEvpProxy: !!this._isUsingEvpProxy,
@@ -196,11 +196,6 @@ class CiVisibilityExporter extends AgentInfoExporter {
 
   _getApiUrl () {
     return this._url
-  }
-
-  // To be reimplemented by the class extending CiVisibilityExporter
-  getApiUrl () {
-    return this._getApiUrl()
   }
 }
 

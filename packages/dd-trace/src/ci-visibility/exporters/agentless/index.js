@@ -37,7 +37,7 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     }
   }
 
-  getApiUrl () {
+  _getApiUrl () {
     return this._apiUrl
   }
 }
