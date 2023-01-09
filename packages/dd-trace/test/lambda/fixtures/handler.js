@@ -1,5 +1,5 @@
 'use strict'
-const _tracer = require('../../../packages/dd-trace')
+const _tracer = require('../../../../dd-trace')
 
 exports.handler = async (...args) => {
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))

@@ -1,7 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
-const { _extractModuleRootAndHandler, _extractModuleNameAndHandlerPath } = require('../../src/runtime/ritm')
+const { _extractModuleRootAndHandler, _extractModuleNameAndHandlerPath } = require('../../../src/lambda/runtime/ritm')
 
 describe('runtime', () => {
   describe('ritm', () => {

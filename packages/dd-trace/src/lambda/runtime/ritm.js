@@ -10,15 +10,15 @@
 const fs = require('fs')
 const path = require('path')
 
-const log = require('../../../packages/dd-trace/src/log')
-const Hook = require('../../../packages/datadog-instrumentations/src/helpers/hook')
-const instrumentations = require('../../../packages/datadog-instrumentations/src/helpers/instrumentations')
+const log = require('../../log')
+const Hook = require('../../../../datadog-instrumentations/src/helpers/hook')
+const instrumentations = require('../../../../datadog-instrumentations/src/helpers/instrumentations')
 const {
   filename,
   getVersion,
   matchVersion,
   pathSepExpr
-} = require('../../../packages/datadog-instrumentations/src/helpers/register')
+} = require('../../../../datadog-instrumentations/src/helpers/register')
 
 /**
  * Breaks the full handler string into two pieces: the module root

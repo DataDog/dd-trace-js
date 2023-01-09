@@ -11,7 +11,7 @@ const loadChannel = channel('dd-trace:instrumentation:load')
 require('../../datadog-instrumentations')
 if (process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined) {
   // instrument lambda environment
-  require('../../../lambda')
+  require('./lambda')
 }
 
 const { DD_TRACE_DISABLED_PLUGINS } = process.env

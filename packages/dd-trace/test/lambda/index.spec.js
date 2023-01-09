@@ -1,7 +1,7 @@
 'use strict'
 
 const path = require('path')
-const agent = require('../../packages/dd-trace/test/plugins/agent')
+const agent = require('../plugins/agent')
 
 describe('lambda', () => {
   let datadog
@@ -10,7 +10,7 @@ describe('lambda', () => {
   describe('with lambda extension - agent exporter', () => {
     beforeEach(() => {
       const newEnv = {
-        LAMBDA_TASK_ROOT: './lambda/test/fixtures',
+        LAMBDA_TASK_ROOT: './packages/dd-trace/test/lambda/fixtures',
         DD_LAMBDA_HANDLER: 'handler.handler',
         AWS_LAMBDA_FUNCTION_NAME: 'my-function-name',
         DD_TRACE_ENABLED: 'true',
