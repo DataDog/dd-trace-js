@@ -1,6 +1,7 @@
 'use strict'
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const { resolveHostDetails } = require('../../dd-trace/src/util')
 
 class CassandraDriverPlugin extends DatabasePlugin {
   static get name () { return 'cassandra-driver' }
@@ -11,6 +12,8 @@ class CassandraDriverPlugin extends DatabasePlugin {
       query = combine(query)
     }
 
+    const hostDetails = resolveHostDetails(connectionOptions.host)
+
     this.startSpan('cassandra.query', {
       service: this.config.service,
       resource: trim(query, 5000),
@@ -20,8 +23,8 @@ class CassandraDriverPlugin extends DatabasePlugin {
         'db.type': 'cassandra',
         'cassandra.query': query,
         'cassandra.keyspace': keyspace,
-        'out.host': connectionOptions.host,
-        'network.destination.port': connectionOptions.port
+        'network.destination.port': connectionOptions.port,
+        ...hostDetails
       }
     })
   }

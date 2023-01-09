@@ -10,6 +10,7 @@ const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const log = require('../../dd-trace/src/log')
 const url = require('url')
 const { COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { resolveHostDetails } = require('../../dd-trace/src/util')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
@@ -29,6 +30,9 @@ class HttpClientPlugin extends Plugin {
       const agent = options.agent || options._defaultAgent || http.globalAgent
       const protocol = options.protocol || agent.protocol || 'http:'
       const hostname = options.hostname || options.host || 'localhost'
+
+      const hostDetails = resolveHostDetails(hostname)
+
       const host = options.port ? `${hostname}:${options.port}` : hostname
       const path = options.path ? options.path.split(/[?#]/)[0] : '/'
       const uri = `${protocol}//${host}${path}`
@@ -45,7 +49,9 @@ class HttpClientPlugin extends Plugin {
           'resource.name': method,
           'span.type': 'http',
           'http.method': method,
-          'http.url': uri
+          'http.url': uri,
+          ...(options.port && { 'network.destination.port': options.port }),
+          ...hostDetails
         }
       })
 

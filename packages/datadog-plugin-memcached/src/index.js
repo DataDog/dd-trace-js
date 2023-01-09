@@ -1,12 +1,15 @@
 'use strict'
 
 const CachePlugin = require('../../dd-trace/src/plugins/cache')
+const { resolveHostDetails } = require('../../dd-trace/src/util')
 
 class MemcachedPlugin extends CachePlugin {
   static get name () { return 'memcached' }
 
   start ({ client, server, query }) {
     const address = getAddress(client, server, query)
+
+    const hostDetails = resolveHostDetails(address[0])
 
     this.startSpan('memcached.command', {
       service: this.config.service,
@@ -15,8 +18,8 @@ class MemcachedPlugin extends CachePlugin {
       kind: 'client',
       meta: {
         'memcached.command': query.command,
-        'out.host': address[0],
-        'network.destination.port': address[1]
+        'network.destination.port': address[1],
+        ...hostDetails
       }
     })
   }

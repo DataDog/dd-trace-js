@@ -1,6 +1,7 @@
 'use strict'
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const { resolveHostDetails } = require('../../dd-trace/src/util')
 
 class TediousPlugin extends DatabasePlugin {
   static get name () { return 'tedious' }
@@ -8,6 +9,7 @@ class TediousPlugin extends DatabasePlugin {
   static get system () { return 'mssql' }
 
   start ({ queryOrProcedure, connectionConfig }) {
+    const destinationHostDetails = resolveHostDetails(connectionConfig.server)
     this.startSpan('tedious.request', {
       service: this.config.service,
       resource: queryOrProcedure,
@@ -16,7 +18,7 @@ class TediousPlugin extends DatabasePlugin {
       meta: {
         'db.type': 'mssql',
         'component': 'tedious',
-        'out.host': connectionConfig.server,
+        ...destinationHostDetails,
         'network.destination.port': connectionConfig.options.port,
         'db.user': connectionConfig.userName || connectionConfig.authentication.options.userName,
         'db.name': connectionConfig.options.database,

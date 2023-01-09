@@ -2,6 +2,7 @@
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const log = require('../../dd-trace/src/log')
+const { resolveHostDetails } = require('../../dd-trace/src/util')
 
 class OracledbPlugin extends DatabasePlugin {
   static get name () { return 'oracledb' }
@@ -10,6 +11,8 @@ class OracledbPlugin extends DatabasePlugin {
   start ({ query, connAttrs }) {
     const service = getServiceName(this.config, connAttrs)
     const url = getUrl(connAttrs.connectString)
+
+    const destinationHostDetails = resolveHostDetails(url.hostname)
 
     this.startSpan('oracle.query', {
       service,
@@ -20,7 +23,9 @@ class OracledbPlugin extends DatabasePlugin {
         'db.user': this.config.user,
         'db.instance': url.pathname && url.pathname.substring(1),
         'db.hostname': url.hostname,
-        'network.destination.port': url.port
+        'network.destination.port': url.port,
+        'network.destination.transport': url.protocol,
+        ...destinationHostDetails
       }
     })
   }

@@ -1,6 +1,7 @@
 'use strict'
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const { resolveHostDetails } = require('../../dd-trace/src/util')
 
 class MongodbCorePlugin extends DatabasePlugin {
   static get name () { return 'mongodb-core' }
@@ -10,6 +11,8 @@ class MongodbCorePlugin extends DatabasePlugin {
     const query = getQuery(ops)
     const resource = truncate(getResource(ns, query, name))
 
+    const hostDetails = resolveHostDetails(options.host)
+
     this.startSpan('mongodb.query', {
       service: this.config.service,
       resource,
@@ -18,8 +21,8 @@ class MongodbCorePlugin extends DatabasePlugin {
       meta: {
         'db.name': ns,
         'mongodb.query': query,
-        'out.host': options.host,
-        'network.destination.port': options.port
+        'network.destination.port': options.port,
+        ...hostDetails
       }
     })
   }

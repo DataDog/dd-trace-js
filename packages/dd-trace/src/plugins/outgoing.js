@@ -1,8 +1,7 @@
 'use strict'
 
-const { isIP } = require('net')
-
 const TracingPlugin = require('./tracing')
+const { resolveHostDetails } = require('../util')
 
 // const transportProtocols = ['ip_tcp', 'ip_udp', 'unix', 'pipe', 'inproc', 'other']
 
@@ -25,37 +24,12 @@ class OutgoingPlugin extends TracingPlugin {
 
     if (!span) return
 
-    hostDetails = this.resolveHostDetails(hostname)
+    const hostDetails = resolveHostDetails(hostname)
 
     span.addTags({
       ...hostDetails,
       'network.destination.port': port
     })
-  }
-
-  resolveHostDetails(host) {
-
-    if (host == 'localhost') {
-      const hostIP = '127.0.0.1'
-      const hostName = host
-      return {
-        'network.destination.ip': hostIP,
-        'network.destination.name': hostName,
-      }
-    }
-    // ipVersion returns 4, 6 or undefined depending on if input string is IPV4, IPV6, or not a valid IP
-    else if (isIP(host)) {
-      const hostIP = host
-      return {
-        'network.destination.ip': hostIP,
-      }
-    }
-    else {
-      const hostName = host
-      return {
-        'network.destination.name': hostName,
-      }
-    }
   }
 }
 

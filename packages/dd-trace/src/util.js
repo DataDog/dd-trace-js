@@ -1,5 +1,7 @@
 'use strict'
 
+const { isIP } = require('net')
+
 function isTrue (str) {
   str = String(str).toLowerCase()
   return str === 'true' || str === '1'
@@ -61,9 +63,31 @@ function globMatch (pattern, subject) {
   return true
 }
 
+function resolveHostDetails (host) {
+  if (host === 'localhost') {
+    const hostIP = '127.0.0.1'
+    const hostName = host
+    return {
+      'network.destination.ip': hostIP,
+      'network.destination.name': hostName
+    }
+  } else if (isIP(host)) {
+    const hostIP = host
+    return {
+      'network.destination.ip': hostIP
+    }
+  } else {
+    const hostName = host
+    return {
+      'network.destination.name': hostName
+    }
+  }
+}
+
 module.exports = {
   isTrue,
   isFalse,
   isError,
-  globMatch
+  globMatch,
+  resolveHostDetails
 }

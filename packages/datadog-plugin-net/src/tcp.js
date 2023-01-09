@@ -1,6 +1,7 @@
 'use strict'
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
+const { resolveHostDetails } = require('../../dd-trace/src/util')
 
 class NetTCPPlugin extends ClientPlugin {
   static get name () { return 'net' }
@@ -14,7 +15,11 @@ class NetTCPPlugin extends ClientPlugin {
 
       span.addTags({
         'tcp.local.address': socket.localAddress,
-        'tcp.local.port': socket.localPort
+        'tcp.local.port': socket.localPort,
+        'networking.client.ip': socket.localAddress,
+        'networking.client.port': socket.localPort,
+        'networking.client.host': 'localhost',
+        'networking.client.transport': 'ip_tcp'
       })
     })
   }
@@ -24,6 +29,7 @@ class NetTCPPlugin extends ClientPlugin {
     const port = options.port || 0
     const family = options.family || 4
 
+    const networkingDestinationHostDetails = resolveHostDetails(host)
     this.startSpan('tcp.connect', {
       service: this.config.service,
       resource: [host, port].filter(val => val).join(':'),
@@ -32,7 +38,8 @@ class NetTCPPlugin extends ClientPlugin {
         'tcp.remote.host': host,
         'tcp.family': `IPv${family}`,
         'tcp.local.address': '',
-        'out.host': host
+        ...networkingDestinationHostDetails,
+        'network.destination.transport': 'ip_tcp'
       },
       metrics: {
         'tcp.remote.port': port,

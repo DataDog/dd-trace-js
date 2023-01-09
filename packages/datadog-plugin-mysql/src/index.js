@@ -1,6 +1,7 @@
 'use strict'
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const { resolveHostDetails } = require('../../dd-trace/src/util')
 
 class MySQLPlugin extends DatabasePlugin {
   static get name () { return 'mysql' }
@@ -8,6 +9,8 @@ class MySQLPlugin extends DatabasePlugin {
 
   start ({ sql, conf: dbConfig }) {
     const service = getServiceName(this.config, dbConfig)
+
+    const hostDetails = resolveHostDetails(dbConfig.host)
 
     this.startSpan(`${this.system}.query`, {
       service,
@@ -18,8 +21,8 @@ class MySQLPlugin extends DatabasePlugin {
         'db.type': this.system,
         'db.user': dbConfig.user,
         'db.name': dbConfig.database,
-        'out.host': dbConfig.host,
-        'network.destination.port': dbConfig.port
+        'network.destination.port': dbConfig.port,
+        ...hostDetails
       }
     })
   }

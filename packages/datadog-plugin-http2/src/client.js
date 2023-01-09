@@ -11,6 +11,7 @@ const formats = require('../../../ext/formats')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const { resolveHostDetails } = require('../../dd-trace/src/util')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -37,6 +38,9 @@ class Http2ClientPlugin extends Plugin {
       const path = headers[HTTP2_HEADER_PATH] || '/'
       const pathname = path.split(/[?#]/)[0]
       const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
+
+      const hostDetails = resolveHostDetails(sessionDetails.host)
+
       const uri = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${pathname}`
       const allowed = this.config.filter(uri)
 
@@ -51,7 +55,9 @@ class Http2ClientPlugin extends Plugin {
           'resource.name': method,
           'span.type': 'http',
           'http.method': method,
-          'http.url': uri
+          'http.url': uri,
+          'network.destination.port': sessionDetails.port,
+          ...hostDetails
         }
       })
 

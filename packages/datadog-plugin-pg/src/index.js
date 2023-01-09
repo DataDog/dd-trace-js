@@ -1,6 +1,7 @@
 'use strict'
 
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const { resolveHostDetails } = require('../../dd-trace/src/util')
 
 class PGPlugin extends DatabasePlugin {
   static get name () { return 'pg' }
@@ -11,6 +12,7 @@ class PGPlugin extends DatabasePlugin {
     const service = getServiceName(this.config, params)
     const originalStatement = query.text
 
+    const destinationHostDetails = resolveHostDetails(params.host)
     this.startSpan('pg.query', {
       service,
       resource: originalStatement,
@@ -21,8 +23,8 @@ class PGPlugin extends DatabasePlugin {
         'db.pid': processId,
         'db.name': params.database,
         'db.user': params.user,
-        'out.host': params.host,
-        'network.destination.port': params.port
+        'network.destination.port': params.port,
+        ...destinationHostDetails
       }
     })
 

@@ -1,6 +1,7 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+const { resolveHostDetails } = require('../../dd-trace/src/util')
 
 class RheaProducerPlugin extends ProducerPlugin {
   static get name () { return 'rhea' }
@@ -15,6 +16,8 @@ class RheaProducerPlugin extends ProducerPlugin {
   start ({ targetAddress, host, port }) {
     const name = targetAddress || 'amq.topic'
 
+    const destinationHostDetails = resolveHostDetails(host)
+
     this.startSpan('amqp.send', {
       service: this.config.service || `${this.tracer._service}-amqp-producer`,
       resource: name,
@@ -23,8 +26,8 @@ class RheaProducerPlugin extends ProducerPlugin {
         'component': 'rhea',
         'amqp.link.target.address': name,
         'amqp.link.role': 'sender',
-        'out.host': host,
-        'network.destination.port': port
+        'network.destination.port': port,
+        ...destinationHostDetails
       }
     })
   }

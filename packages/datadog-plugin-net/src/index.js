@@ -4,6 +4,7 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
+const { resolveHostDetails } = require('../../dd-trace/src/util')
 
 class NetPlugin extends Plugin {
   static get name () {
@@ -44,6 +45,8 @@ class NetPlugin extends Plugin {
       const port = options.port || 0
       const family = options.family || 4
 
+      const networkingDestinationHostDetails = resolveHostDetails(host)
+
       const span = this.tracer.startSpan('tcp.connect', {
         childOf,
         tags: {
@@ -52,10 +55,11 @@ class NetPlugin extends Plugin {
           'tcp.remote.host': host,
           'tcp.remote.port': port,
           'tcp.family': `IPv${family}`,
-          'out.host': host,
-          'network.destination.port': port,
           'span.kind': 'client',
-          'service.name': this.config.service || this.tracer._service
+          'service.name': this.config.service || this.tracer._service,
+          ...networkingDestinationHostDetails,
+          'network.destination.transport': 'ip_tpc',
+          'network.destination.port': port
         }
       })
 
@@ -72,7 +76,11 @@ class NetPlugin extends Plugin {
       span.addTags({
         [COMPONENT]: this.constructor.name,
         'tcp.local.address': socket.localAddress,
-        'tcp.local.port': socket.localPort
+        'tcp.local.port': socket.localPort,
+        'networking.client.ip': socket.localAddress,
+        'networking.client.port': socket.localPort,
+        'networking.client.host': 'localhost',
+        'networking.client.transport': 'ip_tcp'
       })
     })
   }

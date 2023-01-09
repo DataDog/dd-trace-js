@@ -3,6 +3,7 @@
 const { TEXT_MAP } = require('../../../ext/formats')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { getResourceName } = require('./util')
+const { resolveHostDetails } = require('../../dd-trace/src/util')
 
 class AmqplibProducerPlugin extends ProducerPlugin {
   static get name () { return 'amqplib' }
@@ -12,12 +13,15 @@ class AmqplibProducerPlugin extends ProducerPlugin {
     if (method !== 'basic.publish') return
 
     const stream = (channel.connection && channel.connection.stream) || {}
+
+    const hostDetails = resolveHostDetails(stream._host)
+
     const span = this.startSpan('amqp.command', {
       service: this.config.service || `${this.tracer._service}-amqp`,
       resource: getResourceName(method, fields),
       kind: 'producer',
       meta: {
-        'out.host': stream._host,
+        ...hostDetails,
         'network.destination.port': stream.remotePort,
         'amqp.queue': fields.queue,
         'amqp.exchange': fields.exchange,
