@@ -23,10 +23,10 @@ jobs:
           ref: refs/heads/maxday/add-git
           path: datadog-lambda-js
       - name: Update package.json to the current ref
-        # TODO node_version hardcoded for now, switch to matrix for all supported version of node
         run: |
           cd datadog-lambda-js
           yarn add https://github.com/DataDog/dd-trace-js#refs/heads/$GITHUB_HEAD_REF --save-dev
       - name: Build the layer
-        run: NODE_VERSION=${{ matrix.node-version }} ./scripts/build_layers.sh
-      - uses: ./.github/actions/serverless
+        env:
+          NODE_VERSION: ${{ matrix.node-version }}
+        run: ./scripts/build_layers.sh
