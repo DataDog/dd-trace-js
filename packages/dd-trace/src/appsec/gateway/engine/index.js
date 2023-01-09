@@ -22,6 +22,10 @@ function getContext () {
   return store && store.get('context')
 }
 
+function needsAddress (address) {
+  return manager.addresses.has(address)
+}
+
 function propagate (data, context = getContext()) {
   if (!context) return
 
@@ -30,7 +34,7 @@ function propagate (data, context = getContext()) {
   for (let i = 0; i < keys.length; ++i) {
     const key = keys[i]
 
-    if (manager.addresses.has(key)) {
+    if (needsAddress(key)) {
       context.setValue(key, data[key])
     }
   }
@@ -42,5 +46,6 @@ module.exports = {
   manager,
   startContext,
   getContext,
+  needsAddress,
   propagate
 }

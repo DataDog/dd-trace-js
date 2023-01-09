@@ -26,7 +26,6 @@ function runSubscriptions (subscriptions, params) {
       result = subscription.callback.method(params, store)
     } catch (err) {
       // TODO: log ?
-      result = {}
     }
 
     results.push(result)

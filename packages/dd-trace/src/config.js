@@ -9,6 +9,7 @@ const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const uuid = require('crypto-randomuuid')
+const path = require('path')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -20,6 +21,16 @@ function maybeFile (filepath) {
   if (!filepath) return
   try {
     return fs.readFileSync(filepath, 'utf8')
+  } catch (e) {
+    return undefined
+  }
+}
+
+function maybePath (filepath) {
+  if (!filepath) return
+  try {
+    fs.openSync(filepath, 'r')
+    return filepath
   } catch (e) {
     return undefined
   }
@@ -116,8 +127,11 @@ class Config {
       process.env.DD_TRACE_URL,
       null
     )
+    const DD_IS_CIVISIBILITY = coalesce(
+      options.isCiVisibility,
+      false
+    )
     const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
-    const DD_CIVISIBILITY_AGENTLESS_ENABLED = process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
 
     const DD_CIVISIBILITY_ITR_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_ITR_ENABLED,
@@ -249,6 +263,16 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 \\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?\
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
     )
+    const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = coalesce(
+      maybePath(appsec.blockedTemplateHtml),
+      maybePath(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML),
+      path.join(__dirname, 'appsec', 'templates', 'blocked.html')
+    )
+    const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = coalesce(
+      maybePath(appsec.blockedTemplateJson),
+      maybePath(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON),
+      path.join(__dirname, 'appsec', 'templates', 'blocked.json')
+    )
 
     const iastOptions = options.experimental && options.experimental.iast
     const DD_IAST_ENABLED = coalesce(
@@ -331,7 +355,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.sampleRate = coalesce(Math.min(Math.max(sampler.sampleRate, 0), 1), 1)
     this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
-    this.clientIpHeaderDisabled = !isTrue(DD_APPSEC_ENABLED)
     this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE
@@ -371,7 +394,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       rateLimit: DD_APPSEC_TRACE_RATE_LIMIT,
       wafTimeout: DD_APPSEC_WAF_TIMEOUT,
       obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
-      obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP
+      obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
+      blockedTemplateHtml: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
+      blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     }
     this.iast = {
       enabled: isTrue(DD_IAST_ENABLED),
@@ -380,10 +405,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS
     }
 
-    const isCiVisibilityAgentlessEnabled = isTrue(DD_CIVISIBILITY_AGENTLESS_ENABLED)
-    this.isIntelligentTestRunnerEnabled = isCiVisibilityAgentlessEnabled && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
-    this.isGitUploadEnabled = this.isIntelligentTestRunnerEnabled ||
-      (isCiVisibilityAgentlessEnabled && isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
+    this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
+
+    this.isIntelligentTestRunnerEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
+    this.isGitUploadEnabled = this.isCiVisibility &&
+      (this.isIntelligentTestRunnerEnabled || isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
 
     this.stats = {
       enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)

@@ -1,4 +1,4 @@
-const { testThatRequestHasVulnerability, testThatRequestHasNoVulnerability } = require('../utils')
+const { testThatRequestHasVulnerability, testThatRequestHasNotVulnerability } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
@@ -6,7 +6,7 @@ const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking
 describe('command injection analyzer', () => {
   describe('full feature', () => {
     describe('must have', () => {
-      testThatRequestHasVulnerability(() => {
+      testThatRequestHasVulnerability(function () {
         const store = storage.getStore()
         const iastContext = iastContextFunctions.getIastContext(store)
         const command = newTaintedString(iastContext, 'ls -la', 'param', 'Request')
@@ -16,7 +16,7 @@ describe('command injection analyzer', () => {
     })
 
     describe('must not have', () => {
-      testThatRequestHasNoVulnerability(() => {
+      testThatRequestHasNotVulnerability(function () {
         const childProcess = require('child_process')
         childProcess.execSync('ls -la')
       }, 'COMMAND_INJECTION')
