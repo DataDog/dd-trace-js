@@ -59,7 +59,6 @@ tracer.use("pg", {
 <h5 id="koa"></h5>
 <h5 id="koa-tags"></h5>
 <h5 id="koa-config"></h5>
-<h5 id="ldapjs"></h5>
 <h5 id="mariadb"></h5>
 <h5 id="memcached"></h5>
 <h5 id="memcached-tags"></h5>
@@ -124,7 +123,6 @@ tracer.use("pg", {
 - [kafkajs](./interfaces/plugins.kafkajs.html)
 - [knex](./interfaces/plugins.knex.html)
 - [koa](./interfaces/plugins.koa.html)
-* [ldapjs](./interfaces/plugins.ldapjs.html)
 - [mariadb](./interfaces/plugins.mariadb.html)
 - [microgateway--core](./interfaces/plugins.microgateway_core.html)
 - [mocha](./interfaces/plugins.mocha.html)
