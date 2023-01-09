@@ -66,9 +66,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
   }
 
   canReportCodeCoverage () {
-    return this._canUseCiVisProtocol &&
-      this._itrConfig &&
-      this._itrConfig.isCodeCoverageEnabled
+    return this._canUseCiVisProtocol
   }
 
   // We can't call the skippable endpoint until git upload has finished,
@@ -113,6 +111,10 @@ class CiVisibilityExporter extends AgentInfoExporter {
         ...testConfiguration
       }
       getItrConfigurationRequest(configuration, (err, itrConfig) => {
+        /**
+         * **Important**: this._itrConfig remains empty in testing frameworks
+         * where the tests run in a subprocess, because `getItrConfiguration` is called only once.
+         */
         this._itrConfig = itrConfig
         callback(err, itrConfig)
       })
