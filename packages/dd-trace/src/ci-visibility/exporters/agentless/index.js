@@ -4,6 +4,7 @@ const URL = require('url').URL
 const Writer = require('./writer')
 const CoverageWriter = require('./coverage-writer')
 const CiVisibilityExporter = require('../ci-visibility-exporter')
+const log = require('../../../log')
 
 class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
   constructor (config) {
@@ -24,6 +25,20 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     if (isGitUploadEnabled) {
       this.sendGitMetadata({ url: this._apiUrl })
     }
+  }
+
+  setUrl (url, coverageUrl = url, apiUrl = url) {
+    this._setUrl(url, coverageUrl)
+    try {
+      apiUrl = new URL(apiUrl)
+      this._apiUrl = apiUrl
+    } catch (e) {
+      log.error(e)
+    }
+  }
+
+  getApiUrl () {
+    return this._apiUrl
   }
 }
 
