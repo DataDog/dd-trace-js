@@ -33,7 +33,8 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', 'get')
               expect(traces[0][0]).to.have.property('type', 'memcached')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+              expect(traces[0][0].meta).to.have.property('network.destination.host', 'localhost')
+              expect(traces[0][0].meta).to.have.property('network.destination.ip', '127.0.0.1')
               expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
               expect(traces[0][0].meta).to.have.property('memcached.command', 'get test')
               expect(traces[0][0].meta).to.have.property('component', 'memcached')
@@ -88,7 +89,8 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+              expect(traces[0][0].meta).to.have.property('network.destination.host', 'localhost')
+              expect(traces[0][0].meta).to.have.property('network.destination.ip', '127.0.0.1')
               expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
               expect(traces[0][0].meta).to.have.property('component', 'memcached')
             })
@@ -106,7 +108,8 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+              expect(traces[0][0].meta).to.have.property('network.destination.host', 'localhost')
+              expect(traces[0][0].meta).to.have.property('network.destination.ip', '127.0.0.1')
               expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
               expect(traces[0][0].meta).to.have.property('component', 'memcached')
             })
@@ -130,7 +133,8 @@ describe('Plugin', () => {
 
             agent
               .use(traces => {
-                expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+                expect(traces[0][0].meta).to.have.property('network.destination.host', 'localhost')
+                expect(traces[0][0].meta).to.have.property('network.destination.ip', '127.0.0.1')
                 expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
                 expect(traces[0][0].meta).to.have.property('component', 'memcached')
               })
