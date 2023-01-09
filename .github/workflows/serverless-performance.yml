@@ -11,7 +11,7 @@ jobs:
     strategy:
       max-parallel: 4
       matrix:
-        node-version: [12.13, 14.15, 16.14, 18.12]
+        node-version: [14.15, 16.14, 18.12]
     steps:
       - name: Checkout dd-trace-js
         uses: actions/checkout@v3
@@ -30,7 +30,5 @@ jobs:
         env:
           NODE_VERSION: ${{ matrix.node-version }}
         run: |
-          ls
-          pwd
           cd datadog-lambda-js 
           ./scripts/build_layers.sh
