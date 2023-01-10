@@ -10,7 +10,10 @@ const timeoutChannel = channel('apm:aws:lambda:timeout')
 let __lambdaTimeout
 
 /**
- * Calls `crashFlush` when the remaining time is about to end.
+ * Publishes to the `apm:aws:lambda:timeout` channel when
+ * the AWS Lambda run time is about to end.
+ * Also subscribes to the `apm:aws:lambda:timeout` channel to
+ * call `crashFlush` in order to crash unfinished spans before timeout.
  *
  * @param {*} context AWS Lambda context object.
  */
