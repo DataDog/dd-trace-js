@@ -10,7 +10,7 @@ const proxyquire = require('proxyquire')
 const pathTraversalAnalyzer = require('../../../../src/appsec/iast/analyzers/path-traversal-analyzer')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 
-const { testThatRequestHasNotVulnerability, testThatRequestHasVulnerability } = require('../utils')
+const { testThatRequestHasNoVulnerability, testThatRequestHasVulnerability } = require('../utils')
 const fs = require('fs')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
 
@@ -155,7 +155,7 @@ describe('integration test', () => {
         }, 'PATH_TRAVERSAL')
       })
       describe('no vulnerable', () => {
-        testThatRequestHasNotVulnerability(function () {
+        testThatRequestHasNoVulnerability(function () {
           return fn(args)
         }, 'PATH_TRAVERSAL')
       })
