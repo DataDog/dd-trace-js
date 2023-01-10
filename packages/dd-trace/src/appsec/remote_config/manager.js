@@ -17,7 +17,7 @@ class RemoteConfigManager extends EventEmitter {
   constructor (config) {
     super()
 
-    const pollInterval = config.remoteConfig.pollInterval * 1000;
+    const pollInterval = config.remoteConfig.pollInterval * 1000
     this.scheduler = new Scheduler((cb) => this.poll(cb), pollInterval)
 
     this.requestOptions = {
