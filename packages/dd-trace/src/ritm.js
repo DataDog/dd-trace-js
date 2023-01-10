@@ -99,8 +99,11 @@ function Hook (modules, options, onrequire) {
     } else {
       const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
       const hasLambdaHandler = process.env.DD_LAMBDA_HANDLER !== undefined
-      // verify that environment is AWS Lambda and has the handler set
-      const stat = inAWSLambda && hasLambdaHandler ? { name: filename } : parse(filename)
+      const segments = filename.split(path.sep)
+      const filenameFromNodeModule = segments.lastIndexOf('node_modules') !== -1
+      // decide how to assign the stat
+      // first case will only happen when patching an AWS Lambda Handler
+      const stat = inAWSLambda && hasLambdaHandler && !filenameFromNodeModule ? { name: filename } : parse(filename)
       if (!stat) return exports // abort if filename could not be parsed
       name = stat.name
       basedir = stat.basedir
