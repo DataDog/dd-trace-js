@@ -21,8 +21,8 @@ describe('sql-injection-analyzer with pg', () => {
         client.connect(err => done(err))
       })
 
-      afterEach((done) => {
-        client.end(done)
+      afterEach(async () => {
+        await client.end()
       })
 
       describe('has vulnerability', () => {
