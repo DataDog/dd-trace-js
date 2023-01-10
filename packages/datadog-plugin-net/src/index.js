@@ -58,7 +58,7 @@ class NetPlugin extends Plugin {
           'span.kind': 'client',
           'service.name': this.config.service || this.tracer._service,
           ...networkingDestinationHostDetails,
-          'network.destination.transport': 'ip_tpc',
+          'network.destination.transport': 'ip_tcp',
           'network.destination.port': port
         }
       })
@@ -77,10 +77,10 @@ class NetPlugin extends Plugin {
         [COMPONENT]: this.constructor.name,
         'tcp.local.address': socket.localAddress,
         'tcp.local.port': socket.localPort,
-        'networking.client.ip': socket.localAddress,
-        'networking.client.port': socket.localPort,
-        'networking.client.host': 'localhost',
-        'networking.client.transport': 'ip_tcp'
+        'network.client.ip': socket.localAddress,
+        'network.client.port': socket.localPort,
+        'network.client.name': 'localhost',
+        'network.client.transport': 'ip_tcp'
       })
     })
   }

@@ -1,7 +1,7 @@
 'use strict'
 
 const { isIP } = require('net')
-const isLoopbackAddr = require('is-localhost-ip');
+const isLoopbackAddr = require('is-localhost-ip')
 
 function isTrue (str) {
   str = String(str).toLowerCase()
@@ -68,9 +68,9 @@ const hostDetailsLocalhost = {
   'network.destination.ip': '127.0.0.1',
   'network.destination.name': 'localhost'
 }
-const hostDetailsOther = (loopback_ip) => {
+const hostDetailsOther = (loopbackIP) => {
   return {
-    'network.destination.ip': loopback_ip,
+    'network.destination.ip': loopbackIP,
     'network.destination.name': 'localhost'
   }
 }
@@ -89,8 +89,6 @@ function resolveHostDetails (host) {
     }
   }
 }
-
-
 
 module.exports = {
   isTrue,

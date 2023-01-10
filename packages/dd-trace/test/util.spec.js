@@ -93,14 +93,14 @@ describe('util', () => {
   it('resolveHostDetails resolves ip for valid non-loopback ip str input ', () => {
     const hostDetails = resolveHostDetails('184.55.123.1')
     expect(hostDetails).to.deep.equal({
-      'network.destination.ip': '184.55.123.1',
+      'network.destination.ip': '184.55.123.1'
     })
   })
 
   it('resolveHostDetails resolves name for host name str input ', () => {
     const hostDetails = resolveHostDetails('mongo')
     expect(hostDetails).to.deep.equal({
-      'network.destination.name': 'mongo',
+      'network.destination.name': 'mongo'
     })
   })
 })

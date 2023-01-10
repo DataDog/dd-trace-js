@@ -16,10 +16,10 @@ class NetTCPPlugin extends ClientPlugin {
       span.addTags({
         'tcp.local.address': socket.localAddress,
         'tcp.local.port': socket.localPort,
-        'networking.client.ip': socket.localAddress,
-        'networking.client.port': socket.localPort,
-        'networking.client.host': 'localhost',
-        'networking.client.transport': 'ip_tcp'
+        'network.client.ip': socket.localAddress,
+        'network.client.port': socket.localPort,
+        'network.client.name': 'localhost',
+        'network.client.transport': 'ip_tcp'
       })
     })
   }
@@ -44,6 +44,7 @@ class NetTCPPlugin extends ClientPlugin {
       metrics: {
         'tcp.remote.port': port,
         'tcp.local.port': 0,
+        'network.client.port': 0,
         'network.destination.port': port
       }
     })
