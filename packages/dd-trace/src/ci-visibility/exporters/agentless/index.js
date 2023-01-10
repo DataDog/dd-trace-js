@@ -4,6 +4,7 @@ const URL = require('url').URL
 const Writer = require('./writer')
 const CoverageWriter = require('./coverage-writer')
 const CiVisibilityExporter = require('../ci-visibility-exporter')
+const log = require('../../../log')
 
 class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
   constructor (config) {
@@ -19,10 +20,25 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     this._coverageUrl = url || new URL(`https://event-platform-intake.${site}`)
     this._coverageWriter = new CoverageWriter({ url: this._coverageUrl })
 
+    this._apiUrl = url || new URL(`https://api.${site}`)
+
     if (isGitUploadEnabled) {
-      const gitUrl = url || new URL(`https://api.${site}`)
-      this.sendGitMetadata({ url: gitUrl })
+      this.sendGitMetadata({ url: this._getApiUrl() })
     }
+  }
+
+  setUrl (url, coverageUrl = url, apiUrl = url) {
+    this._setUrl(url, coverageUrl)
+    try {
+      apiUrl = new URL(apiUrl)
+      this._apiUrl = apiUrl
+    } catch (e) {
+      log.error(e)
+    }
+  }
+
+  _getApiUrl () {
+    return this._apiUrl
   }
 }
 

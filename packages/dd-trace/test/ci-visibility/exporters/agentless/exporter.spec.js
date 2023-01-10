@@ -43,6 +43,61 @@ describe('CI Visibility Agentless Exporter', () => {
   })
 
   describe('when ITR is enabled', () => {
+    it('will request configuration to api.site by default', (done) => {
+      const scope = nock('https://api.datadoge.c0m')
+        .post('/api/v2/libraries/tests/services/setting')
+        .reply(200, JSON.stringify({
+          data: {
+            attributes: {
+              code_coverage: true,
+              tests_skipping: true
+            }
+          }
+        }))
+      const agentlessExporter = new AgentlessCiVisibilityExporter({
+        site: 'datadoge.c0m',
+        isGitUploadEnabled: true,
+        isIntelligentTestRunnerEnabled: true,
+        tags: {}
+      })
+      expect(agentlessExporter.shouldRequestItrConfiguration()).to.be.true
+      agentlessExporter.getItrConfiguration({}, () => {
+        expect(scope.isDone()).to.be.true
+        expect(agentlessExporter.canReportCodeCoverage()).to.be.true
+        expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.true
+        done()
+      })
+    })
+    it('will request skippable to api.site by default', (done) => {
+      const scope = nock('https://api.datadoge.c0m')
+        .post('/api/v2/libraries/tests/services/setting')
+        .reply(200, JSON.stringify({
+          data: {
+            attributes: {
+              code_coverage: true,
+              tests_skipping: true
+            }
+          }
+        }))
+        .post('/api/v2/ci/tests/skippable')
+        .reply(200, JSON.stringify({
+          data: []
+        }))
+
+      const agentlessExporter = new AgentlessCiVisibilityExporter({
+        site: 'datadoge.c0m',
+        isGitUploadEnabled: true,
+        isIntelligentTestRunnerEnabled: true,
+        tags: {}
+      })
+      agentlessExporter._resolveGit()
+      agentlessExporter.getItrConfiguration({}, () => {
+        agentlessExporter.getSkippableSuites({}, () => {
+          expect(scope.isDone()).to.be.true
+          done()
+        })
+      })
+    })
     it('can request ITR configuration right away', (done) => {
       const scope = nock('http://www.example.com')
         .post('/api/v2/libraries/tests/services/setting')
@@ -85,7 +140,6 @@ describe('CI Visibility Agentless Exporter', () => {
         done()
       })
     })
-
     it('will not allow skippable request if ITR configuration fails', (done) => {
       // request will fail
       delete process.env.DD_APP_KEY
