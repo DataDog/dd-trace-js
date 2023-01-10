@@ -1,4 +1,5 @@
 const IAST_CONTEXT_KEY = Symbol('_dd.iast.context')
+const IAST_TRANSACTION_ID = Symbol('_dd.iast.transactionId')
 
 function getIastContext (store) {
   return store && store[IAST_CONTEXT_KEY]
@@ -46,5 +47,6 @@ module.exports = {
   getIastContext,
   saveIastContext,
   cleanIastContext,
-  IAST_CONTEXT_KEY
+  IAST_CONTEXT_KEY,
+  IAST_TRANSACTION_ID
 }
