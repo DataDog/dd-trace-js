@@ -527,8 +527,8 @@ export declare interface TracerOptions {
    */
   remoteConfig?: {
     /**
-     * Specifies the remote configuration polling interval
-     * @default 5000
+     * Specifies the remote configuration polling interval in seconds
+     * @default 5
      */
     pollInterval?: number,
   }
