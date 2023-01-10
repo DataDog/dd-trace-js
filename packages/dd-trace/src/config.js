@@ -274,6 +274,13 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       path.join(__dirname, 'appsec', 'templates', 'blocked.json')
     )
 
+    const remoteConfigOptions = options.remoteConfig || {}
+    const DD_REMOTE_CONFIG_POLL_INTERVAL = coalesce(
+      parseInt(remoteConfigOptions.pollInterval),
+      parseInt(process.env.DD_REMOTE_CONFIGURATION_POLLING_INTERVAL),
+      5 // seconds
+    )
+
     const iastOptions = options.experimental && options.experimental.iast
     const DD_IAST_ENABLED = coalesce(
       iastOptions &&
@@ -397,6 +404,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       blockedTemplateHtml: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
       blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
+    }
+    this.remoteConfig = {
+      pollInterval: DD_REMOTE_CONFIG_POLL_INTERVAL
     }
     this.iast = {
       enabled: isTrue(DD_IAST_ENABLED),

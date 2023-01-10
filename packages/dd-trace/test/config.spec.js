@@ -85,6 +85,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
+    expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
   })
 
@@ -158,6 +159,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = '42'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '.*'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
+    process.env.DD_REMOTE_CONFIGURATION_POLLING_INTERVAL = '42'
     process.env.DD_IAST_ENABLED = 'true'
     process.env.DD_IAST_REQUEST_SAMPLING = '40'
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
@@ -208,6 +210,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
+    expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 40)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 3)
@@ -304,7 +307,10 @@ describe('Config', () => {
           maxContextOperations: 5
         }
       },
-      appsec: false
+      appsec: false,
+      remoteConfig: {
+        pollInterval: 42
+      }
     })
 
     expect(config).to.have.property('protocolVersion', '0.5')
@@ -338,6 +344,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', false)
+    expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 50)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 4)
@@ -432,6 +439,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
+    process.env.DD_REMOTE_CONFIGURATION_POLLING_INTERVAL = 11
     process.env.DD_IAST_ENABLED = 'false'
 
     const config = new Config({
@@ -471,6 +479,9 @@ describe('Config', () => {
         obfuscatorValueRegex: '.*',
         blockedTemplateHtml: __filename,
         blockedTemplateJson: __filename
+      },
+      remoteConfig: {
+        pollInterval: 42
       }
     })
 
@@ -502,6 +513,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', __filename)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', __filename)
+    expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 2)
