@@ -1,9 +1,12 @@
 'use strict'
 
+const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
+const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
 const { ImpendingTimeout } = require('./runtime/errors')
 
 const globalTracer = global._ddtrace
 const tracer = globalTracer._tracer
+const timeoutChannel = channel('apm:aws:lambda:timeout')
 let __lambdaTimeout
 
 /**
@@ -19,8 +22,12 @@ function checkTimeout (context) {
   }
 
   __lambdaTimeout = setTimeout(() => {
-    crashFlush()
+    timeoutChannel.publish(undefined)
   }, remainingTimeInMillis - 50)
+
+  timeoutChannel.subscribe(_ => {
+    crashFlush()
+  })
 }
 
 /**
@@ -35,8 +42,8 @@ function crashFlush () {
   const activeSpan = tracer.scope().active()
   const error = new ImpendingTimeout('Datadog detected an impending timeout')
   activeSpan.addTags({
-    'error.type': error.name,
-    'error.message': error.message
+    [ERROR_MESSAGE]: error.message,
+    [ERROR_TYPE]: error.name
   })
   tracer._processor.killAll()
   activeSpan.finish()
