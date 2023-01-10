@@ -237,7 +237,7 @@ testFrameworks.forEach(({
           assert.include(coveragePayload.content, {
             version: 2
           })
-          const allCoverageFiles = coveragePayload
+          const allCoverageFiles = codeCovRequest.payload
             .flatMap(coverage => coverage.content.coverages)
             .flatMap(file => file.files)
             .map(file => file.filename)
@@ -522,21 +522,22 @@ testFrameworks.forEach(({
 
           const [coveragePayload] = codeCovRequest.payload
           assert.notProperty(codeCovRequest.headers, 'dd-api-key')
-          assert.propertyVal(codeCovRequest.headers, 'x-datadog-evp-subdomain', 'event-platform-intake')
+          assert.notProperty(codeCovRequest.headers, 'dd-application-key')
 
           assert.propertyVal(coveragePayload, 'name', 'coverage1')
           assert.propertyVal(coveragePayload, 'filename', 'coverage1.msgpack')
           assert.propertyVal(coveragePayload, 'type', 'application/msgpack')
           assert.include(coveragePayload.content, {
-            version: 1
+            version: 2
           })
           const allCoverageFiles = codeCovRequest.payload
-            .flatMap(coverage => coverage.content.files)
+            .flatMap(coverage => coverage.content.coverages)
+            .flatMap(file => file.files)
             .map(file => file.filename)
 
           assert.includeMembers(allCoverageFiles, expectedCoverageFiles)
-          assert.exists(coveragePayload.content.span_id)
-          assert.exists(coveragePayload.content.trace_id)
+          assert.exists(coveragePayload.content.coverages[0].test_session_id)
+          assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_session_end'])
