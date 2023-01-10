@@ -27,7 +27,7 @@ class Amqp10ProducerPlugin extends ProducerPlugin {
         'amqp.connection.host': address.host,
         'amqp.connection.port': address.port,
         'amqp.connection.user': address.user,
-        'networking.destination.port': address.port,
+        'network.destination.port': address.port,
         ...hostDetails
       }
     })

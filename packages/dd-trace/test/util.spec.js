@@ -1,6 +1,6 @@
 'use strict'
 
-const { isTrue, isFalse, globMatch } = require('../src/util')
+const { isTrue, isFalse, globMatch, resolveHostDetails } = require('../src/util')
 
 const TRUES = [
   1,
@@ -63,6 +63,44 @@ describe('util', () => {
 
     NONMATCH_CASES.forEach(({ subject, pattern }) => {
       expect(globMatch(pattern, subject)).to.equal(false)
+    })
+  })
+
+  it('resolveHostDetails resolves name and ip for localhost str input', () => {
+    const hostDetails = resolveHostDetails('localhost')
+    expect(hostDetails).to.deep.equal({
+      'network.destination.ip': '127.0.0.1',
+      'network.destination.name': 'localhost'
+    })
+  })
+
+  it('resolveHostDetails resolves name and ip for loopback ip str input', () => {
+    const hostDetails = resolveHostDetails('127.0.0.1')
+    expect(hostDetails).to.deep.equal({
+      'network.destination.ip': '127.0.0.1',
+      'network.destination.name': 'localhost'
+    })
+  })
+
+  it('resolveHostDetails resolves name and ip for loopback ipv6 str input', () => {
+    const hostDetails = resolveHostDetails('::1')
+    expect(hostDetails).to.deep.equal({
+      'network.destination.ip': '::1',
+      'network.destination.name': 'localhost'
+    })
+  })
+
+  it('resolveHostDetails resolves ip for valid non-loopback ip str input ', () => {
+    const hostDetails = resolveHostDetails('184.55.123.1')
+    expect(hostDetails).to.deep.equal({
+      'network.destination.ip': '184.55.123.1',
+    })
+  })
+
+  it('resolveHostDetails resolves name for host name str input ', () => {
+    const hostDetails = resolveHostDetails('mongo')
+    expect(hostDetails).to.deep.equal({
+      'network.destination.name': 'mongo',
     })
   })
 })

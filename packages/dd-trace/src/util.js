@@ -1,6 +1,7 @@
 'use strict'
 
 const { isIP } = require('net')
+const isLoopbackAddr = require('is-localhost-ip');
 
 function isTrue (str) {
   str = String(str).toLowerCase()
@@ -63,24 +64,33 @@ function globMatch (pattern, subject) {
   return true
 }
 
+const hostDetailsLocalhost = {
+  'network.destination.ip': '127.0.0.1',
+  'network.destination.name': 'localhost'
+}
+const hostDetailsOther = (loopback_ip) => {
+  return {
+    'network.destination.ip': loopback_ip,
+    'network.destination.name': 'localhost'
+  }
+}
+
 function resolveHostDetails (host) {
-  if (host === 'localhost' || host === '127.0.0.1') {
-    return {
-      'network.destination.ip': '127.0.0.1',
-      'network.destination.name': 'localhost'
-    }
+  const isLocal = isLoopbackAddr(host)
+  if (isLocal) {
+    return host === 'localhost' ? hostDetailsLocalhost : hostDetailsOther(host)
   } else if (isIP(host)) {
-    const hostIP = host
     return {
-      'network.destination.ip': hostIP
+      'network.destination.ip': host
     }
   } else {
-    const hostName = host
     return {
-      'network.destination.name': hostName
+      'network.destination.name': host
     }
   }
 }
+
+
 
 module.exports = {
   isTrue,
