@@ -2,8 +2,11 @@
 
 const OVERHEAD_CONTROLLER_CONTEXT_KEY = 'oce'
 const REPORT_VULNERABILITY = 'REPORT_VULNERABILITY'
+const INTERVAL_RESET_GLOBAL_CONTEXT = 60 * 1000
 
 const GLOBAL_OCE_CONTEXT = {}
+
+let resetGlobalContextInterval
 let config = {}
 let availableRequest = 0
 const OPERATIONS = {
@@ -80,11 +83,27 @@ function configure (cfg) {
   availableRequest = config.maxConcurrentRequests
 }
 
-_resetGlobalContext()
+function startGlobalContext () {
+  if (resetGlobalContextInterval) return
+  _resetGlobalContext()
+  resetGlobalContextInterval = setInterval(() => {
+    _resetGlobalContext()
+  }, INTERVAL_RESET_GLOBAL_CONTEXT)
+}
+
+function finishGlobalContext () {
+  if (resetGlobalContextInterval) {
+    clearInterval(resetGlobalContextInterval)
+    resetGlobalContextInterval.unref && resetGlobalContextInterval.unref()
+    resetGlobalContextInterval = null
+  }
+}
 
 module.exports = {
   OVERHEAD_CONTROLLER_CONTEXT_KEY,
   OPERATIONS,
+  startGlobalContext,
+  finishGlobalContext,
   _resetGlobalContext,
   initializeRequestContext,
   hasQuota,
