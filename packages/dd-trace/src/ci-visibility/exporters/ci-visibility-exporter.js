@@ -63,9 +63,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
   }
 
   canReportCodeCoverage () {
-    return this._canUseCiVisProtocol &&
-      this._itrConfig &&
-      this._itrConfig.isCodeCoverageEnabled
+    return this._canUseCiVisProtocol
   }
 
   // We can't call the skippable endpoint until git upload has finished,
@@ -79,7 +77,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         return callback(gitUploadError, [])
       }
       const configuration = {
-        url: this._url,
+        url: this._getApiUrl(),
         site: this._config.site,
         env: this._config.env,
         service: this._config.service,
@@ -103,13 +101,17 @@ class CiVisibilityExporter extends AgentInfoExporter {
         return callback(null, {})
       }
       const configuration = {
-        url: this._url,
+        url: this._getApiUrl(),
         env: this._config.env,
         service: this._config.service,
         isEvpProxy: !!this._isUsingEvpProxy,
         ...testConfiguration
       }
       getItrConfigurationRequest(configuration, (err, itrConfig) => {
+        /**
+         * **Important**: this._itrConfig remains empty in testing frameworks
+         * where the tests run in a subprocess, because `getItrConfiguration` is called only once.
+         */
         this._itrConfig = itrConfig
         callback(err, itrConfig)
       })
@@ -179,7 +181,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
     this._coverageBuffer = []
   }
 
-  setUrl (url, coverageUrl = url) {
+  _setUrl (url, coverageUrl = url) {
     try {
       url = new URL(url)
       coverageUrl = new URL(coverageUrl)
@@ -190,6 +192,10 @@ class CiVisibilityExporter extends AgentInfoExporter {
     } catch (e) {
       log.error(e)
     }
+  }
+
+  _getApiUrl () {
+    return this._url
   }
 }
 
