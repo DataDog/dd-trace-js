@@ -57,6 +57,10 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       this.exportUncodedCoverages()
     })
   }
+
+  setUrl (url, coverageUrl) {
+    this._setUrl(url, coverageUrl)
+  }
 }
 
 module.exports = AgentProxyCiVisibilityExporter
