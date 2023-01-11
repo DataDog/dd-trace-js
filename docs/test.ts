@@ -84,7 +84,10 @@ tracer.init({
   reportHostname: true,
   logLevel: 'debug',
   dbmPropagationMode: 'full',
-  appsec: true
+  appsec: true,
+  remoteConfig: {
+    pollInterval: 5
+  }
 });
 
 tracer.init({
