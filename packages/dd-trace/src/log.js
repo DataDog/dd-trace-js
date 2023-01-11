@@ -1,31 +1,7 @@
 'use strict'
 
-const { storage } = require('../../datadog-core')
-
-const _default = {
-  debug: msg => console.debug(msg), /* eslint-disable-line no-console */
-  info: msg => console.info(msg), /* eslint-disable-line no-console */
-  warn: msg => console.warn(msg), /* eslint-disable-line no-console */
-  error: msg => console.error(msg) /* eslint-disable-line no-console */
-}
-
-// based on: https://github.com/trentm/node-bunyan#levels
-const _logLevels = {
-  'debug': 20,
-  'info': 30,
-  'warn': 40,
-  'error': 50
-}
-
-const _defaultLogLevel = 'debug'
-
-const _checkLogLevel = (logLevel) => {
-  if (logLevel && typeof logLevel === 'string') {
-    return _logLevels[logLevel.toLowerCase().trim()] || _logLevels[_defaultLogLevel]
-  }
-
-  return _logLevels[_defaultLogLevel]
-}
+const { Level, publishChannel, getChannelLogLevel } = require('./log_channels')
+const logWriter = require('./log_writer')
 
 const memoize = func => {
   const cache = {}
@@ -40,99 +16,57 @@ const memoize = func => {
   return memoized
 }
 
-function processMsg (msg) {
-  return typeof msg === 'function' ? msg() : msg
-}
-
-function withNoop (fn) {
-  const store = storage.getStore()
-
-  storage.enterWith({ noop: true })
-  fn()
-  storage.enterWith(store)
-}
-
 const log = {
   _isLogLevelEnabled (level) {
-    return _logLevels[level] >= this._logLevel
+    return getChannelLogLevel(level) >= this._logLevel
   },
 
-  use (logger) {
-    if (logger && logger.debug instanceof Function && logger.error instanceof Function) {
-      this._logger = logger
+  _publish (level, message) {
+    if (this._isLogLevelEnabled(level)) {
+      publishChannel(level, message)
     }
-
     return this
   },
 
-  toggle (enabled, logLevel, tracer) {
-    this._enabled = enabled
-    this._logLevel = _checkLogLevel(logLevel)
-    this._tracer = tracer
+  use (logger) {
+    logWriter.use(logger)
+    return this
+  },
 
+  toggle (enabled, logLevel) {
+    this._logLevel = getChannelLogLevel(logLevel)
+    logWriter.toogle(enabled)
     return this
   },
 
   reset () {
-    this._logger = _default
-    this._enabled = false
+    this._logLevel = getChannelLogLevel()
+    logWriter.reset()
     this._deprecate = memoize((code, message) => {
-      withNoop(() => this._logger.error(message))
-      return this
+      publishChannel(Level.Error, message)
+      return true
     })
-    this._logLevel = _checkLogLevel()
 
     return this
   },
 
   debug (message) {
-    if (this._enabled && this._isLogLevelEnabled('debug')) {
-      withNoop(() => this._logger.debug(processMsg(message)))
-    }
-
-    return this
+    return this._publish(Level.Debug, message)
   },
 
   info (message) {
-    if (!this._logger.info) return this.debug(message)
-    if (this._enabled && this._isLogLevelEnabled('info')) {
-      withNoop(() => this._logger.info(processMsg(message)))
-    }
-
-    return this
+    return this._publish(Level.Info, message)
   },
 
   warn (message) {
-    if (!this._logger.warn) return this.debug(message)
-    if (this._enabled && this._isLogLevelEnabled('warn')) {
-      withNoop(() => this._logger.warn(processMsg(message)))
-    }
-
-    return this
+    return this._publish(Level.Warn, message)
   },
 
   error (err) {
-    if (this._enabled && this._isLogLevelEnabled('error')) {
-      if (err instanceof Function) {
-        err = err()
-      }
-
-      if (typeof err !== 'object' || !err) {
-        err = String(err)
-      } else if (!err.stack) {
-        err = String(err.message || err)
-      }
-
-      if (typeof err === 'string') {
-        err = new Error(err)
-      }
-
-      withNoop(() => this._logger.error(err))
-    }
-
-    return this
+    return this._publish(Level.Error, err)
   },
 
+  // this method is used?
   deprecate (code, message) {
     return this._deprecate(code, message)
   }
