@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>pg | dd-trace</title>
+	<title>ldapjs | dd-trace</title>
 	<meta name="description" content="Documentation for dd-trace">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="../assets/css/main.css">
@@ -57,10 +57,10 @@
 					<a href="../modules/plugins.html">plugins</a>
 				</li>
 				<li>
-					<a href="plugins.pg.html">pg</a>
+					<a href="plugins.ldapjs.html">ldapjs</a>
 				</li>
 			</ul>
-			<h1>Interface pg</h1>
+			<h1>Interface ldapjs</h1>
 		</div>
 	</div>
 </header>
@@ -71,7 +71,7 @@
 				<div class="tsd-comment tsd-typography">
 					<div class="lead">
 						<p>This plugin automatically instruments the
-						<a href="https://node-postgres.com/">pg</a> module.</p>
+						<a href="https://github.com/ldapjs/node-ldapjs/">ldapjs</a> module.</p>
 					</div>
 				</div>
 			</section>
@@ -82,7 +82,7 @@
 						<span class="tsd-signature-type">Instrumentation</span>
 						<ul class="tsd-hierarchy">
 							<li>
-								<span class="target">pg</span>
+								<span class="target">ldapjs</span>
 							</li>
 						</ul>
 					</li>
@@ -92,18 +92,18 @@
 				<h2>Index</h2>
 				<section class="tsd-panel tsd-index-panel">
 					<div class="tsd-index-content">
-						<section class="tsd-index-section ">
+						<section class="tsd-index-section tsd-is-inherited">
 							<h3>Properties</h3>
 							<ul class="tsd-index-list">
-								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.pg.html#enabled" class="tsd-kind-icon">enabled</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.pg.html#measured" class="tsd-kind-icon">measured</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite"><a href="plugins.pg.html#service" class="tsd-kind-icon">service</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.ldapjs.html#enabled" class="tsd-kind-icon">enabled</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.ldapjs.html#measured" class="tsd-kind-icon">measured</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.ldapjs.html#service" class="tsd-kind-icon">service</a></li>
 							</ul>
 						</section>
 					</div>
 				</section>
 			</section>
-			<section class="tsd-panel-group tsd-member-group ">
+			<section class="tsd-panel-group tsd-member-group tsd-is-inherited">
 				<h2>Properties</h2>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
 					<a name="enabled" class="tsd-anchor"></a>
@@ -143,19 +143,19 @@
 						</div>
 					</div>
 				</section>
-				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite">
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
 					<a name="service" class="tsd-anchor"></a>
 					<h3><span class="tsd-flag ts-flagOptional">Optional</span> service</h3>
-					<div class="tsd-signature tsd-kind-icon">service<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">(</span>params<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">any</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol"> =&gt; </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span></div>
+					<div class="tsd-signature tsd-kind-icon">service<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">any</span></div>
 					<aside class="tsd-sources">
-						<p>Overrides Integration.service</p>
+						<p>Inherited from Integration.service</p>
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/09ab5a1/index.d.ts#L1353">index.d.ts:1353</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/09ab5a1/index.d.ts#L682">index.d.ts:682</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
 						<div class="lead">
-							<p>The service name to be used for this plugin. If a function is used, it will be passed the connection parameters and its return value will be used as the service name.</p>
+							<p>The service name to be used for this plugin.</p>
 						</div>
 					</div>
 				</section>
@@ -177,16 +177,16 @@
 				</ul>
 				<ul class="current">
 					<li class="current tsd-kind-interface tsd-parent-kind-namespace">
-						<a href="plugins.pg.html" class="tsd-kind-icon">pg</a>
+						<a href="plugins.ldapjs.html" class="tsd-kind-icon">ldapjs</a>
 						<ul>
 							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
-								<a href="plugins.pg.html#enabled" class="tsd-kind-icon">enabled</a>
+								<a href="plugins.ldapjs.html#enabled" class="tsd-kind-icon">enabled</a>
 							</li>
 							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
-								<a href="plugins.pg.html#measured" class="tsd-kind-icon">measured</a>
+								<a href="plugins.ldapjs.html#measured" class="tsd-kind-icon">measured</a>
 							</li>
-							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite">
-								<a href="plugins.pg.html#service" class="tsd-kind-icon">service</a>
+							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
+								<a href="plugins.ldapjs.html#service" class="tsd-kind-icon">service</a>
 							</li>
 						</ul>
 					</li>
