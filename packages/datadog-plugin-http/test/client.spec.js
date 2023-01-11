@@ -1146,7 +1146,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const meta = traces[0][0].meta
 
-                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, `bar`)
+                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, `bar1,bar2`)
               })
               .then(done)
               .catch(done)
@@ -1156,7 +1156,7 @@ describe('Plugin', () => {
                 res.on('data', () => { })
               })
 
-              req.setHeader('x-foo', ['bar'])
+              req.setHeader('x-foo', ['bar1', 'bar2'])
               req.end()
             })
           })
