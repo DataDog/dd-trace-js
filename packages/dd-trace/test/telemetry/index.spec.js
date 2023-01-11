@@ -5,6 +5,7 @@ const proxyquire = require('proxyquire')
 const http = require('http')
 const { once } = require('events')
 const { storage } = require('../../../datadog-core')
+const os = require('node:os')
 
 let traceAgent
 
@@ -45,11 +46,6 @@ describe('telemetry', () => {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
-        }
-      },
-      os: {
-        hostname () {
-          return 'test hostname'
         }
       }
     })
@@ -178,11 +174,6 @@ describe('telemetry with interval change', () => {
           return 'test docker id'
         }
       },
-      os: {
-        hostname () {
-          return 'test hostname'
-        }
-      },
       './send-data': {
         sendData: () => {}
       }
@@ -229,6 +220,29 @@ async function testSeq (seqId, reqType, validatePayload) {
     'dd-telemetry-api-version': 'v1',
     'dd-telemetry-request-type': reqType
   })
+  let osName = os.type()
+  let host = {
+    hostname: os.hostname(),
+    os: osName
+  }
+  if (osName === 'Linux' || osName === 'Darwin'){
+    host = {
+      hostname: os.hostname(),
+      os: osName,
+      architecture: os.arch(),
+      kernel_version: os.version(),
+      kernel_release: os.release(),
+      kernel_name: osName
+    }
+  }
+  else if (osName === 'Windows_NT') {
+    host = {
+      hostname: os.hostname(),
+      os: osName,
+      os_version: os.version(),
+      architecture: os.arch()
+    }
+  }
   expect(req.body).to.deep.include({
     api_version: 'v1',
     request_type: reqType,
@@ -242,10 +256,7 @@ async function testSeq (seqId, reqType, validatePayload) {
       language_name: 'nodejs',
       language_version: process.versions.node
     },
-    host: {
-      hostname: 'test hostname',
-      container_id: 'test docker id'
-    }
+    host
   })
   expect([1, 0, -1].includes(Math.floor(Date.now() / 1000) - req.body.tracer_time)).to.be.true
 
