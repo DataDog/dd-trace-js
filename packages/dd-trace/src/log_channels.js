@@ -13,9 +13,8 @@ const _defaultLevel = Level.Debug
 
 class LogLevel {
   constructor (name, logLevel) {
-    this.name = name
-    this.logLevel = logLevel
     this.channel = dc.channel(`dd-trace:log:${name}`)
+    this.logLevel = logLevel
   }
 
   publish (message) {
@@ -38,8 +37,8 @@ class LogLevel {
 // based on: https://github.com/trentm/node-bunyan#levels
 const logChannels = {};
 [Level.Debug, Level.Info, Level.Warn, Level.Error]
-  .forEach((channelName, index) => {
-    logChannels[channelName] = new LogLevel(channelName, (index + 2) * 10)
+  .forEach((level, index) => {
+    logChannels[level] = new LogLevel(level, (index + 2) * 10)
   })
 
 const debugChannel = logChannels[Level.Debug]
@@ -47,10 +46,10 @@ const infoChannel = logChannels[Level.Info]
 const warnChannel = logChannels[Level.Warn]
 const errorChannel = logChannels[Level.Error]
 
-function getChannelLogLevel (logLevel) {
+function getChannelLogLevel (level) {
   let logChannel
-  if (logLevel && typeof logLevel === 'string') {
-    logChannel = logChannels[logLevel.toLowerCase().trim()] || logChannels[_defaultLevel]
+  if (level && typeof level === 'string') {
+    logChannel = logChannels[level.toLowerCase().trim()] || logChannels[_defaultLevel]
   } else {
     logChannel = logChannels[_defaultLevel]
   }
@@ -58,16 +57,16 @@ function getChannelLogLevel (logLevel) {
 }
 
 function subscribe (listeners) {
-  for (const channelName in listeners) {
-    const channel = logChannels[channelName]
-    channel && channel.subscribe(listeners[channelName])
+  for (const level in listeners) {
+    const logChannel = logChannels[level]
+    logChannel && logChannel.subscribe(listeners[level])
   }
 }
 
 function unsubscribe (listeners) {
-  for (const channelName in listeners) {
-    const channel = logChannels[channelName]
-    channel && channel.unsubscribe(listeners[channelName])
+  for (const level in listeners) {
+    const logChannel = logChannels[level]
+    logChannel && logChannel.unsubscribe(listeners[level])
   }
 }
 
