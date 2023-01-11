@@ -275,7 +275,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     )
 
     const remoteConfigOptions = options.remoteConfig || {}
-    const DD_REMOTE_CONFIG_POLL_INTERVAL = coalesce(
+    const DD_REMOTE_CONFIGURATION_POLLING_INTERVAL = coalesce(
       parseInt(remoteConfigOptions.pollInterval),
       parseInt(process.env.DD_REMOTE_CONFIGURATION_POLLING_INTERVAL),
       5 // seconds
@@ -406,7 +406,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     }
     this.remoteConfig = {
-      pollInterval: DD_REMOTE_CONFIG_POLL_INTERVAL
+      pollInterval: DD_REMOTE_CONFIGURATION_POLLING_INTERVAL
     }
     this.iast = {
       enabled: isTrue(DD_IAST_ENABLED),
