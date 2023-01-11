@@ -74,6 +74,7 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('logLevel', 'debug')
+    expect(config).to.have.deep.property('serviceMapping', {})
     expect(config).to.have.nested.property('experimental.b3', false)
     expect(config).to.have.nested.property('experimental.traceparent', false)
     expect(config).to.have.nested.property('experimental.runtimeId', false)
@@ -125,6 +126,7 @@ describe('Config', () => {
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     process.env.DD_SERVICE = 'service'
+    process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
     process.env.DD_VERSION = '1.0.0'
     process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '.*'
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'x-true-client-ip'
@@ -196,6 +198,10 @@ describe('Config', () => {
         { service: 'mysql', sampleRate: 1.0 },
         { sampleRate: 0.1 }
       ]
+    })
+    expect(config).to.have.deep.property('serviceMapping', {
+      a: 'aa',
+      b: 'bb'
     })
     expect(config).to.have.nested.property('experimental.b3', true)
     expect(config).to.have.nested.property('experimental.traceparent', true)
@@ -283,6 +289,10 @@ describe('Config', () => {
         { service: 'mysql', sampleRate: 1.0 },
         { sampleRate: 0.1 }
       ],
+      serviceMapping: {
+        a: 'aa',
+        b: 'bb'
+      },
       logger,
       tags,
       flushInterval: 5000,
@@ -358,6 +368,10 @@ describe('Config', () => {
         { sampleRate: 0.1 }
       ]
     })
+    expect(config).to.have.deep.property('serviceMapping', {
+      a: 'aa',
+      b: 'bb'
+    })
   })
 
   it('should initialize from the options with url taking precedence', () => {
@@ -413,6 +427,7 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
     process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
     process.env.DD_SERVICE = 'service'
+    process.env.DD_SERVICE_MAPPING = 'a:aa'
     process.env.DD_VERSION = '0.0.0'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
@@ -452,6 +467,9 @@ describe('Config', () => {
       tags: {
         foo: 'foo'
       },
+      serviceMapping: {
+        b: 'bb'
+      },
       experimental: {
         b3: false,
         traceparent: false,
@@ -489,6 +507,7 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'development')
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
+    expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
     expect(config).to.have.nested.property('experimental.b3', false)
     expect(config).to.have.nested.property('experimental.traceparent', false)
     expect(config).to.have.nested.property('experimental.runtimeId', false)
@@ -610,30 +629,6 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '0.1.0')
     expect(config).to.have.property('env', 'test')
-  })
-
-  it('should support the serviceMapping environment variable', () => {
-    let origVar
-    if ('DD_SERVICE_MAPPING' in process.env) {
-      origVar = Object.getOwnPropertyDescriptor(process.env, 'DD_SERVICE')
-    }
-    process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
-    let config = new Config()
-
-    expect(config.serviceMapping).to.deep.equal({
-      a: 'aa',
-      b: 'bb'
-    })
-
-    if (origVar) {
-      Object.defineProperty(process.env, 'DD_SERVICE', origVar)
-    } else {
-      delete process.env.DD_SERVICE_MAPPING
-    }
-
-    config = new Config()
-
-    expect(config.serviceMapping).to.deep.equal({})
   })
 
   it('should trim whitespace characters around keys', () => {

@@ -78,6 +78,9 @@ tracer.init({
     { sampleRate: 0.5, service: 'ba?', name: 'ba?.*', maxPerSecond: 10 }
   ],
   service: 'test',
+  serviceMapping: {
+    http: 'new-http-service-name'
+  },
   tags: {
     foo: 'bar'
   },

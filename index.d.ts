@@ -243,6 +243,11 @@ export declare interface TracerOptions {
   service?: string;
 
   /**
+   * Provide service name mappings for each plugin.
+   */
+  serviceMapping?: { [key: string]: string };
+
+  /**
    * The url of the trace agent that the tracer will submit to.
    * Takes priority over hostname and port, if set.
    */
