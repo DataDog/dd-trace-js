@@ -9,48 +9,76 @@ const Level = {
   Error: 'error'
 }
 
-const defaultLogLevel = Level.Debug
+const _defaultLevel = Level.Debug
 
-// based on: https://github.com/trentm/node-bunyan#levels
-const channels = {};
-[Level.Debug, Level.Info, Level.Warn, Level.Error]
-  .forEach((channelName, index) => {
-    channels[channelName] = {
-      ord: (index + 2) * 10,
-      channel: dc.channel(`dd-trace:log:${channelName}`)
+class LogLevel {
+  constructor (name, logLevel) {
+    this.name = name
+    this.logLevel = logLevel
+    this.channel = dc.channel(`dd-trace:log:${name}`)
+  }
+
+  publish (message) {
+    if (this.channel.hasSubscribers) {
+      return this.channel.publish(message)
     }
-  })
+  }
 
-function publishChannel (channelName, message) {
-  channels[channelName].channel.publish(message)
+  subscribe (onMessage) {
+    this.channel.subscribe(onMessage)
+  }
+
+  unsubscribe (onMessage) {
+    if (this.channel.hasSubscribers) {
+      this.channel.unsubscribe(onMessage)
+    }
+  }
 }
 
+// based on: https://github.com/trentm/node-bunyan#levels
+const logChannels = {};
+[Level.Debug, Level.Info, Level.Warn, Level.Error]
+  .forEach((channelName, index) => {
+    logChannels[channelName] = new LogLevel(channelName, (index + 2) * 10)
+  })
+
+const debugChannel = logChannels[Level.Debug]
+const infoChannel = logChannels[Level.Info]
+const warnChannel = logChannels[Level.Warn]
+const errorChannel = logChannels[Level.Error]
+
 function getChannelLogLevel (logLevel) {
-  let channel
+  let logChannel
   if (logLevel && typeof logLevel === 'string') {
-    channel = channels[logLevel.toLowerCase().trim()] || channels[defaultLogLevel]
+    logChannel = logChannels[logLevel.toLowerCase().trim()] || logChannels[_defaultLevel]
   } else {
-    channel = channels[defaultLogLevel]
+    logChannel = logChannels[_defaultLevel]
   }
-  return channel.ord
+  return logChannel.logLevel
 }
 
 function subscribe (listeners) {
   for (const channelName in listeners) {
-    channels[channelName].channel.subscribe(listeners[channelName])
+    const channel = logChannels[channelName]
+    channel && channel.subscribe(listeners[channelName])
   }
 }
 
 function unsubscribe (listeners) {
   for (const channelName in listeners) {
-    channels[channelName].channel.unsubscribe(listeners[channelName])
+    const channel = logChannels[channelName]
+    channel && channel.unsubscribe(listeners[channelName])
   }
 }
 
 module.exports = {
   Level,
-  publishChannel,
   getChannelLogLevel,
   subscribe,
-  unsubscribe
+  unsubscribe,
+
+  debugChannel,
+  infoChannel,
+  warnChannel,
+  errorChannel
 }

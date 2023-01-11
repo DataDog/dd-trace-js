@@ -1,6 +1,6 @@
 'use strict'
 
-const { Level, publishChannel, getChannelLogLevel } = require('./log_channels')
+const { getChannelLogLevel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./log_channels')
 const logWriter = require('./log_writer')
 
 const memoize = func => {
@@ -17,13 +17,13 @@ const memoize = func => {
 }
 
 const log = {
-  _isLogLevelEnabled (level) {
-    return getChannelLogLevel(level) >= this._logLevel
+  _isLogLevelEnabled (logLevel) {
+    return logLevel >= this._logLevel
   },
 
-  _publish (level, message) {
-    if (this._isLogLevelEnabled(level)) {
-      publishChannel(level, message)
+  _publish (logChannel, message) {
+    if (this._isLogLevelEnabled(logChannel.logLevel)) {
+      logChannel.publish(message)
     }
     return this
   },
@@ -43,7 +43,7 @@ const log = {
     this._logLevel = getChannelLogLevel()
     logWriter.reset()
     this._deprecate = memoize((code, message) => {
-      publishChannel(Level.Error, message)
+      this._publish(errorChannel, message)
       return true
     })
 
@@ -51,19 +51,19 @@ const log = {
   },
 
   debug (message) {
-    return this._publish(Level.Debug, message)
+    return this._publish(debugChannel, message)
   },
 
   info (message) {
-    return this._publish(Level.Info, message)
+    return this._publish(infoChannel, message)
   },
 
   warn (message) {
-    return this._publish(Level.Warn, message)
+    return this._publish(warnChannel, message)
   },
 
   error (err) {
-    return this._publish(Level.Error, err)
+    return this._publish(errorChannel, err)
   },
 
   // this method is used?
