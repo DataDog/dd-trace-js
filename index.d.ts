@@ -521,6 +521,17 @@ export declare interface TracerOptions {
      */
     blockedTemplateJson?: string,
   };
+
+  /**
+   * Configuration of ASM Remote Configuration
+   */
+  remoteConfig?: {
+    /**
+     * Specifies the remote configuration polling interval in seconds
+     * @default 5
+     */
+    pollInterval?: number,
+  }
 }
 
 /**
