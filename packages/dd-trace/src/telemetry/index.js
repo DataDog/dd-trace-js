@@ -92,8 +92,8 @@ function createHostObject () {
     return {
       hostname: os.hostname(),
       os: osName,
-      os_version: os.version(),
-      architecture: os.arch()
+      architecture: os.arch(),
+      os_version: os.version()
     }
   }
 
