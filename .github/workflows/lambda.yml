@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - run: yarn test:lambda
+      - run: yarn test:lambda:ci
       - uses: codecov/codecov-action@v2
 
   ubuntu:
