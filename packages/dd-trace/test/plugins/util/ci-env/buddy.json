@@ -3,7 +3,7 @@
     {
       "BUDDY": "true",
       "BUDDY_EXECUTION_BRANCH": "master",
-      "BUDDY_EXECUTION_ID": "12",
+      "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "e5e13f8b7f8d5c6096a0501dc09b48eef05fea96",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
       "BUDDY_EXECUTION_REVISION_COMMITTER_NAME": "Mike Benson",
@@ -15,9 +15,9 @@
       "BUDDY_SCM_URL": "https://github.com/buddyworks/my-project"
     },
     {
-      "ci.pipeline.id": "456/12",
+      "ci.pipeline.id": "456/buddy-execution-id",
       "ci.pipeline.name": "Deploy to Production",
-      "ci.pipeline.number": "12",
+      "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
       "git.branch": "master",
@@ -33,7 +33,7 @@
     {
       "BUDDY": "true",
       "BUDDY_EXECUTION_BRANCH": "refs/heads/feature/one",
-      "BUDDY_EXECUTION_ID": "12",
+      "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "e5e13f8b7f8d5c6096a0501dc09b48eef05fea96",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
       "BUDDY_EXECUTION_REVISION_COMMITTER_NAME": "Mike Benson",
@@ -45,9 +45,9 @@
       "BUDDY_SCM_URL": "https://github.com/buddyworks/my-project"
     },
     {
-      "ci.pipeline.id": "456/12",
+      "ci.pipeline.id": "456/buddy-execution-id",
       "ci.pipeline.name": "Deploy to Production",
-      "ci.pipeline.number": "12",
+      "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
       "git.branch": "feature/one",
@@ -63,7 +63,7 @@
     {
       "BUDDY": "true",
       "BUDDY_EXECUTION_BRANCH": "master",
-      "BUDDY_EXECUTION_ID": "12",
+      "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "e5e13f8b7f8d5c6096a0501dc09b48eef05fea96",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
       "BUDDY_EXECUTION_REVISION_COMMITTER_NAME": "Mike Benson",
@@ -86,9 +86,9 @@
       "DD_GIT_TAG": "user-supplied-tag"
     },
     {
-      "ci.pipeline.id": "456/12",
+      "ci.pipeline.id": "456/buddy-execution-id",
       "ci.pipeline.name": "Deploy to Production",
-      "ci.pipeline.number": "12",
+      "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
       "git.branch": "master",
@@ -108,7 +108,7 @@
     {
       "BUDDY": "true",
       "BUDDY_EXECUTION_BRANCH": "master",
-      "BUDDY_EXECUTION_ID": "12",
+      "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "e5e13f8b7f8d5c6096a0501dc09b48eef05fea96",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
       "BUDDY_EXECUTION_REVISION_COMMITTER_NAME": "Mike Benson",
@@ -130,9 +130,9 @@
       "DD_GIT_REPOSITORY_URL": "git@github.com:DataDog/userrepo.git"
     },
     {
-      "ci.pipeline.id": "456/12",
+      "ci.pipeline.id": "456/buddy-execution-id",
       "ci.pipeline.name": "Deploy to Production",
-      "ci.pipeline.number": "12",
+      "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
       "git.branch": "user-supplied-branch",
