@@ -518,5 +518,28 @@
       "git.repository_url": "git@github.com:DataDog/userrepo.git",
       "git.tag": "0.0.2"
     }
+  ],
+  [
+    {
+      "CIRCLECI": "circleCI",
+      "CIRCLE_BUILD_NUM": "circleci-pipeline-number",
+      "CIRCLE_BUILD_URL": "circleci-build-url",
+      "CIRCLE_JOB": "circleci-job-name",
+      "CIRCLE_PROJECT_REPONAME": "circleci-pipeline-name",
+      "CIRCLE_REPOSITORY_URL": "https://user:password@github.com/DataDog/dogweb.git",
+      "CIRCLE_SHA1": "circleci-git-commit",
+      "CIRCLE_WORKFLOW_ID": "circleci-pipeline-id"
+    },
+    {
+      "_dd.ci.env_vars": "{\"CIRCLE_WORKFLOW_ID\":\"circleci-pipeline-id\",\"CIRCLE_BUILD_NUM\":\"circleci-pipeline-number\"}",
+      "ci.job.name": "circleci-job-name",
+      "ci.job.url": "circleci-build-url",
+      "ci.pipeline.id": "circleci-pipeline-id",
+      "ci.pipeline.name": "circleci-pipeline-name",
+      "ci.pipeline.url": "https://app.circleci.com/pipelines/workflows/circleci-pipeline-id",
+      "ci.provider.name": "circleci",
+      "git.commit.sha": "circleci-git-commit",
+      "git.repository_url": "https://github.com/DataDog/dogweb.git"
+    }
   ]
 ]
