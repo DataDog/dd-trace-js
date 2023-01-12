@@ -235,7 +235,8 @@ module.exports = {
         GITHUB_SHA,
         GITHUB_REPOSITORY,
         GITHUB_SERVER_URL,
-        GITHUB_RUN_ATTEMPT
+        GITHUB_RUN_ATTEMPT,
+        GITHUB_JOB
       } = env
 
       const repositoryURL = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git`
@@ -259,6 +260,7 @@ module.exports = {
         [GIT_COMMIT_SHA]: GITHUB_SHA,
         [GIT_REPOSITORY_URL]: repositoryURL,
         [CI_JOB_URL]: jobUrl,
+        [CI_JOB_NAME]: GITHUB_JOB,
         [CI_WORKSPACE_PATH]: GITHUB_WORKSPACE,
         [refKey]: ref,
         [CI_ENV_VARS]: JSON.stringify({
