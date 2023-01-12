@@ -1133,6 +1133,34 @@ describe('Plugin', () => {
             })
           })
         })
+
+        it('should support adding request headers when header set as an array', done => {
+          const app = express()
+
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const meta = traces[0][0].meta
+
+                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, `bar1,bar2`)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => { })
+              })
+
+              req.setHeader('x-foo', ['bar1', 'bar2'])
+              req.end()
+            })
+          })
+        })
       })
 
       describe('with hooks configuration', () => {
