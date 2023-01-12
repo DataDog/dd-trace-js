@@ -77,7 +77,7 @@ function createAppObject () {
 
 function createHostObject () {
   const osName = os.type()
-  if (osName === 'Linux' || osName === 'Darwin'){
+  if (osName === 'Linux' || osName === 'Darwin') {
     return {
       hostname: os.hostname(),
       os: osName,
