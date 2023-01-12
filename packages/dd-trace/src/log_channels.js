@@ -11,7 +11,7 @@ const Level = {
 
 const _defaultLevel = Level.Debug
 
-class LogLevel {
+class LogChannel {
   constructor (name, logLevel) {
     this.channel = dc.channel(`dd-trace:log:${name}`)
     this.logLevel = logLevel
@@ -38,7 +38,7 @@ class LogLevel {
 const logChannels = {};
 [Level.Debug, Level.Info, Level.Warn, Level.Error]
   .forEach((level, index) => {
-    logChannels[level] = new LogLevel(level, (index + 2) * 10)
+    logChannels[level] = new LogChannel(level, (index + 2) * 10)
   })
 
 const debugChannel = logChannels[Level.Debug]
