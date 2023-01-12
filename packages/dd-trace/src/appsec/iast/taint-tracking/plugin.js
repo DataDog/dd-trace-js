@@ -1,3 +1,5 @@
+'use strict'
+
 const Plugin = require('../../../plugins/plugin')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
