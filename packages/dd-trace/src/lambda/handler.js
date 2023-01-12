@@ -7,13 +7,17 @@ const { ImpendingTimeout } = require('./runtime/errors')
 const globalTracer = global._ddtrace
 const tracer = globalTracer._tracer
 const timeoutChannel = channel('apm:aws:lambda:timeout')
+// Always crash the flushes when a message is received
+// from this channel.
+timeoutChannel.subscribe(_ => {
+  crashFlush()
+})
+
 let __lambdaTimeout
 
 /**
  * Publishes to the `apm:aws:lambda:timeout` channel when
  * the AWS Lambda run time is about to end.
- * Also subscribes to the `apm:aws:lambda:timeout` channel to
- * call `crashFlush` in order to crash unfinished spans before timeout.
  *
  * @param {*} context AWS Lambda context object.
  */
@@ -27,10 +31,6 @@ function checkTimeout (context) {
   __lambdaTimeout = setTimeout(() => {
     timeoutChannel.publish(undefined)
   }, remainingTimeInMillis - 50)
-
-  timeoutChannel.subscribe(_ => {
-    crashFlush()
-  })
 }
 
 /**
@@ -65,7 +65,7 @@ exports.datadog = function datadog (lambdaHandler) {
 
     if (patched) {
       // clear the timeout as soon as a result is returned
-      patched.then((_) => clearTimeout(__lambdaTimeout))
+      patched.then(_ => clearTimeout(__lambdaTimeout))
     }
     return patched
   }
