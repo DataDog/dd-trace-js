@@ -57,24 +57,18 @@ function patchLambdaHandler (lambdaHandler) {
   return datadog(lambdaHandler)
 }
 
-/**
- * Immediately Invoked Function Expression (IIFE) to avoid
- * error on previously defined constants.
- */
-(() => {
-  const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
-  const originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
+const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
+const originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
 
-  if (originalLambdaHandler !== undefined) {
-    const [moduleRoot, moduleAndHandler] = _extractModuleRootAndHandler(originalLambdaHandler)
-    const [_module, handlerPath] = _extractModuleNameAndHandlerPath(moduleAndHandler)
+if (originalLambdaHandler !== undefined) {
+  const [moduleRoot, moduleAndHandler] = _extractModuleRootAndHandler(originalLambdaHandler)
+  const [_module, handlerPath] = _extractModuleNameAndHandlerPath(moduleAndHandler)
 
-    const lambdaStylePath = path.resolve(lambdaTaskRoot, moduleRoot, _module)
-    const lambdaFilePath = _getLambdaFilePath(lambdaStylePath)
+  const lambdaStylePath = path.resolve(lambdaTaskRoot, moduleRoot, _module)
+  const lambdaFilePath = _getLambdaFilePath(lambdaStylePath)
 
-    addHook({ name: lambdaFilePath }, patchLambdaModule(handlerPath))
-  } else {
-    // Instrumentation is done manually.
-    addHook({ name: 'datadog-lambda-js', versions: ['>=6.85.0'] }, patchDatadogLambdaModule)
-  }
-})()
+  addHook({ name: lambdaFilePath }, patchLambdaModule(handlerPath))
+} else {
+  // Instrumentation is done manually.
+  addHook({ name: 'datadog-lambda-js', versions: ['>=6.85.0'] }, patchDatadogLambdaModule)
+}
