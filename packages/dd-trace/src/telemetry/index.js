@@ -88,7 +88,7 @@ function createHostObject () {
     }
   }
 
-  else if (osName === 'Windows_NT') {
+  if (osName === 'Windows_NT') {
     return {
       hostname: os.hostname(),
       os: osName,
