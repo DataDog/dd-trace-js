@@ -109,9 +109,9 @@ class PrioritySampler {
   }
 
   _getPriorityFromTags (tags) {
-    if (tags.hasOwnProperty(MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
+    if (hasOwn(tags, MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
       return USER_KEEP
-    } else if (tags.hasOwnProperty(MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
+    } else if (hasOwn(tags, MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
       return USER_REJECT
     } else {
       const priority = parseInt(tags[SAMPLING_PRIORITY], 10)
@@ -196,6 +196,10 @@ class PrioritySampler {
 
     return true
   }
+}
+
+function hasOwn (object, prop) {
+  return Object.prototype.hasOwnProperty.call(object, prop)
 }
 
 module.exports = PrioritySampler
