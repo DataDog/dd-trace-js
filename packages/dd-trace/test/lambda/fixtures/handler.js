@@ -4,9 +4,7 @@ const _tracer = require('../../../../dd-trace')
 exports.handler = async (...args) => {
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
-  await _tracer.trace('self.sleepy', async () => {
-    await sleep(200)
-  })
+  await _tracer.trace('self.sleepy', () => sleep(200))
 
   const response = {
     statusCode: 200,
