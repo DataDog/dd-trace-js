@@ -220,12 +220,12 @@ async function testSeq (seqId, reqType, validatePayload) {
     'dd-telemetry-api-version': 'v1',
     'dd-telemetry-request-type': reqType
   })
-  let osName = os.type()
+  const osName = os.type()
   let host = {
     hostname: os.hostname(),
     os: osName
   }
-  if (osName === 'Linux' || osName === 'Darwin'){
+  if (osName === 'Linux' || osName === 'Darwin') {
     host = {
       hostname: os.hostname(),
       os: osName,
@@ -234,8 +234,7 @@ async function testSeq (seqId, reqType, validatePayload) {
       kernel_release: os.release(),
       kernel_name: osName
     }
-  }
-  else if (osName === 'Windows_NT') {
+  } else if (osName === 'Windows_NT') {
     host = {
       hostname: os.hostname(),
       os: osName,

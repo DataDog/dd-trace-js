@@ -1,7 +1,6 @@
 'use strict'
 
 const tracerVersion = require('../../../../package.json').version
-const containerId = require('../exporters/common/docker').id()
 const os = require('os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
