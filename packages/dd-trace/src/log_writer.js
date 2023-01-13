@@ -31,7 +31,7 @@ function withNoop (fn) {
   storage.enterWith(store)
 }
 
-function toogleSubscription (enabled) {
+function toggleSubscription (enabled) {
   if (enabled) {
     subscribe(_listeners)
   } else {
@@ -39,9 +39,9 @@ function toogleSubscription (enabled) {
   }
 }
 
-function toogle (enabled) {
+function toggle (enabled) {
   if (enabled !== _enabled) {
-    toogleSubscription(enabled)
+    toggleSubscription(enabled)
     _enabled = enabled
   }
 }
@@ -55,7 +55,7 @@ function use (logger) {
 function reset () {
   _logger = _defaultLogger
   _enabled = false
-  toogleSubscription(false)
+  toggleSubscription(false)
 }
 
 function onError (err) {
@@ -98,4 +98,4 @@ function onDebug (message) {
   }
 }
 
-module.exports = { use, toogle, reset }
+module.exports = { use, toggle, reset }

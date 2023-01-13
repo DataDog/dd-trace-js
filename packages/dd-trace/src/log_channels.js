@@ -11,40 +11,32 @@ const Level = {
 
 const _defaultLevel = Level.Debug
 
-class LogChannel {
+class LogChannel extends dc.Channel {
   constructor (name, logLevel) {
-    this.channel = dc.channel(`dd-trace:log:${name}`)
+    super(`dd-trace:log:${name}`)
     this.logLevel = logLevel
   }
 
   publish (message) {
-    if (this.channel.hasSubscribers) {
-      return this.channel.publish(message)
+    if (this.hasSubscribers) {
+      return this.publish(message)
     }
   }
 
-  subscribe (onMessage) {
-    this.channel.subscribe(onMessage)
-  }
-
   unsubscribe (onMessage) {
-    if (this.channel.hasSubscribers) {
-      this.channel.unsubscribe(onMessage)
+    if (this.hasSubscribers) {
+      this.unsubscribe(onMessage)
     }
   }
 }
 
 // based on: https://github.com/trentm/node-bunyan#levels
-const logChannels = {};
-[Level.Debug, Level.Info, Level.Warn, Level.Error]
-  .forEach((level, index) => {
-    logChannels[level] = new LogChannel(level, (index + 2) * 10)
-  })
-
-const debugChannel = logChannels[Level.Debug]
-const infoChannel = logChannels[Level.Info]
-const warnChannel = logChannels[Level.Warn]
-const errorChannel = logChannels[Level.Error]
+const logChannels = {
+  [Level.Debug]: new LogChannel(Level.Debug, 20),
+  [Level.Info]: new LogChannel(Level.Info, 30),
+  [Level.Warn]: new LogChannel(Level.Warn, 40),
+  [Level.Error]: new LogChannel(Level.Error, 50)
+}
 
 function getChannelLogLevel (level) {
   let logChannel
@@ -76,8 +68,8 @@ module.exports = {
   subscribe,
   unsubscribe,
 
-  debugChannel,
-  infoChannel,
-  warnChannel,
-  errorChannel
+  debugChannel: logChannels[Level.Debug],
+  infoChannel: logChannels[Level.Info],
+  warnChannel: logChannels[Level.Warn],
+  errorChannel: logChannels[Level.Error]
 }

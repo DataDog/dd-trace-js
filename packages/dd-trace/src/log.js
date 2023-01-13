@@ -35,7 +35,7 @@ const log = {
 
   toggle (enabled, logLevel) {
     this._logLevel = getChannelLogLevel(logLevel)
-    logWriter.toogle(enabled)
+    logWriter.toggle(enabled)
     return this
   },
 
