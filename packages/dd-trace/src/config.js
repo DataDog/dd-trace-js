@@ -145,7 +145,12 @@ class Config {
       process.env.AWS_LAMBDA_FUNCTION_NAME ||
       pkg.name ||
       'node'
-    const DD_SERVICE_MAPPING = process.env.DD_SERVICE_MAPPING || ''
+    const DD_SERVICE_MAPPING = coalesce(
+      options.serviceMapping,
+      process.env.DD_SERVICE_MAPPING ? fromEntries(
+        process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
+      ) : {}
+    )
     const DD_ENV = coalesce(
       options.env,
       process.env.DD_ENV,
@@ -365,9 +370,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE
-    this.serviceMapping = DD_SERVICE_MAPPING.length ? fromEntries(
-      DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
-    ) : {}
+    this.serviceMapping = DD_SERVICE_MAPPING
     this.version = DD_VERSION
     this.dogstatsd = {
       hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, this.hostname),
