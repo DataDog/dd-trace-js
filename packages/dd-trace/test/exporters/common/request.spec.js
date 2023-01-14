@@ -235,4 +235,28 @@ describe('request', function () {
       })
     })
   })
+
+  it('should support ipv6 with brackets', (done) => {
+    nock('http://[2607:f0d0:1002:51::4]:123', {
+      reqheaders: {
+        'content-type': 'application/octet-stream',
+        'content-length': '13'
+      }
+    })
+      .put('/path')
+      .reply(200, 'OK')
+
+    request(
+      Buffer.from(JSON.stringify({ foo: 'bar' })), {
+        url: 'http://[2607:f0d0:1002:51::4]:123/path',
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/octet-stream'
+        }
+      },
+      (err, res) => {
+        expect(res).to.equal('OK')
+        done(err)
+      })
+  })
 })
