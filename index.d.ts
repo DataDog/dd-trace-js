@@ -83,7 +83,8 @@ export declare interface Tracer extends opentracing.Tracer {
    * unless there is already an active span or `childOf` option. Note that this
    * option is deprecated and has been removed in version 4.0.
    */
-  trace<T> (name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
+  trace<T> (name: string, fn: (span: Span) => T): T;
+  trace<T> (name: string, fn: (span: Span, done: (error?: Error) => string) => T): T;
   trace<T> (name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
 
   /**
