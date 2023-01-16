@@ -9,24 +9,12 @@ const Level = {
   Error: 'error'
 }
 
-const _defaultLevel = Level.Debug
+const defaultLevel = Level.Debug
 
 class LogChannel extends dc.Channel {
   constructor (name, logLevel) {
     super(`dd-trace:log:${name}`)
     this.logLevel = logLevel
-  }
-
-  publish (message) {
-    if (this.hasSubscribers) {
-      return this.publish(message)
-    }
-  }
-
-  unsubscribe (onMessage) {
-    if (this.hasSubscribers) {
-      this.unsubscribe(onMessage)
-    }
   }
 }
 
@@ -41,32 +29,16 @@ const logChannels = {
 function getChannelLogLevel (level) {
   let logChannel
   if (level && typeof level === 'string') {
-    logChannel = logChannels[level.toLowerCase().trim()] || logChannels[_defaultLevel]
+    logChannel = logChannels[level.toLowerCase().trim()] || logChannels[defaultLevel]
   } else {
-    logChannel = logChannels[_defaultLevel]
+    logChannel = logChannels[defaultLevel]
   }
   return logChannel.logLevel
-}
-
-function subscribe (listeners) {
-  for (const level in listeners) {
-    const logChannel = logChannels[level]
-    logChannel && logChannel.subscribe(listeners[level])
-  }
-}
-
-function unsubscribe (listeners) {
-  for (const level in listeners) {
-    const logChannel = logChannels[level]
-    logChannel && logChannel.unsubscribe(listeners[level])
-  }
 }
 
 module.exports = {
   Level,
   getChannelLogLevel,
-  subscribe,
-  unsubscribe,
 
   debugChannel: logChannels[Level.Debug],
   infoChannel: logChannels[Level.Info],
