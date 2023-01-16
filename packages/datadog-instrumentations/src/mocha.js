@@ -89,6 +89,12 @@ function getTestAsyncResource (test) {
   return testToAr.get(originalFn)
 }
 
+function getSuitesToRun (originalSuites) {
+  return originalSuites.filter(suite =>
+    !suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
+  )
+}
+
 function mochaHook (Runner) {
   if (patched.has(Runner)) return Runner
 
@@ -279,11 +285,6 @@ function mochaHook (Runner) {
       }
     })
 
-    // We remove the suites that we skip through ITR
-    this.suite.suites = this.suite.suites.filter(suite =>
-      !suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
-    )
-
     return run.apply(this, arguments)
   })
 
@@ -323,6 +324,14 @@ addHook({
     if (!itrConfigurationCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
+    /**
+     * This attaches `run` to the global context, which we'll call after
+     * our configuration and skippable suites requests
+     */
+    this.options.delay = true
+
+    const runner = run.apply(this, arguments)
+
     const onReceivedSkippableSuites = ({ err, skippableSuites }) => {
       if (err) {
         log.error(err)
@@ -330,16 +339,18 @@ addHook({
       } else {
         suitesToSkip = skippableSuites
       }
-      run.apply(this, arguments)
+      // We remove the suites that we skip through ITR
+      runner.suite.suites = getSuitesToRun(runner.suite.suites)
+      global.run()
     }
 
     const onReceivedConfiguration = ({ err }) => {
       if (err) {
         log.error(err)
-        return run.apply(this, arguments)
+        return global.run()
       }
       if (!skippableSuitesCh.hasSubscribers) {
-        return run.apply(this, arguments)
+        return global.run()
       }
 
       skippableSuitesCh.publish({
@@ -352,6 +363,7 @@ addHook({
         onDone: mochaRunAsyncResource.bind(onReceivedConfiguration)
       })
     })
+    return runner
   })
   return Mocha
 })
