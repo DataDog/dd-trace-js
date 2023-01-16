@@ -324,12 +324,6 @@ addHook({
     if (!itrConfigurationCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
-    /**
-     * This attaches `run` to the global context, which we'll call after
-     * our configuration and skippable suites requests
-     */
-    this.options.delay = true
-
     const runner = run.apply(this, arguments)
 
     const onReceivedSkippableSuites = ({ err, skippableSuites }) => {
@@ -373,6 +367,23 @@ addHook({
   versions: ['>=5.2.0'],
   file: 'lib/runner.js'
 }, mochaHook)
+
+addHook({
+  name: 'mocha',
+  versions: ['>=5.2.0'],
+  file: 'lib/cli/run-helpers.js'
+}, (run) => {
+  shimmer.wrap(run, 'runMocha', runMocha => async function () {
+    const mocha = arguments[0]
+    /**
+     * This attaches `run` to the global context, which we'll call after
+     * our configuration and skippable suites requests
+     */
+    mocha.options.delay = true
+    return runMocha.apply(this, arguments)
+  })
+  return run
+})
 
 addHook({
   name: 'mocha',
