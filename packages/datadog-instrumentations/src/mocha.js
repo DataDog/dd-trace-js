@@ -324,6 +324,8 @@ addHook({
     if (!itrConfigurationCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
+    this.options.delay = true
+
     const runner = run.apply(this, arguments)
 
     const onReceivedSkippableSuites = ({ err, skippableSuites }) => {
