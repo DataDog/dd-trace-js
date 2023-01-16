@@ -20,7 +20,6 @@ describe('Overhead controller', () => {
         }
       })
       overheadController.configure(config.iast)
-      overheadController._resetGlobalContext()
     })
 
     describe('Initialize OCE context', () => {
@@ -34,6 +33,46 @@ describe('Overhead controller', () => {
           overheadController.initializeRequestContext(iastContext)
           expect(iastContext).to.have.nested.property(overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY)
         })
+      })
+    })
+
+    describe('Global context', () => {
+      let originalSetInterval
+      let originalClearInterval
+      before(() => {
+        originalSetInterval = global.setInterval
+        originalClearInterval = global.clearInterval
+      })
+      beforeEach(() => {
+        global.setInterval = sinon.spy(global.setInterval)
+        global.clearInterval = sinon.spy(global.clearInterval)
+      })
+      afterEach(() => {
+        sinon.restore()
+      })
+      after(() => {
+        global.setInterval = originalSetInterval
+        global.clearInterval = originalClearInterval
+      })
+      it('should not start refresher interval when already started', () => {
+        overheadController.startGlobalContext()
+        overheadController.startGlobalContext()
+        expect(global.setInterval).to.have.been.calledOnce
+        overheadController.finishGlobalContext()
+      })
+      it('should stop refresher interval once when already finished', () => {
+        overheadController.startGlobalContext()
+        overheadController.finishGlobalContext()
+        overheadController.finishGlobalContext()
+        expect(global.clearInterval).to.have.been.calledOnce
+      })
+      it('should restart refresher when already finished', () => {
+        overheadController.startGlobalContext()
+        overheadController.finishGlobalContext()
+        overheadController.startGlobalContext()
+        overheadController.finishGlobalContext()
+        expect(global.setInterval).to.have.been.calledTwice
+        expect(global.clearInterval).to.have.been.calledTwice
       })
     })
 
@@ -167,6 +206,7 @@ describe('Overhead controller', () => {
 
         describe('out of request', () => {
           it('should reject the operation once all tokens has been spent', () => {
+            overheadController._resetGlobalContext()
             for (let i = 0, l = OPERATION.initialTokenBucketSize(); i < l; i++) {
               expect(overheadController.hasQuota(OPERATION, {})).to.be.true
             }
