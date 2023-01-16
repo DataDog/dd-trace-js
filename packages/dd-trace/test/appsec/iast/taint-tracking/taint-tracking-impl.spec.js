@@ -87,7 +87,7 @@ describe('TaintTracking', () => {
   describe('should not catch original Error', () => {
     const filtered = ['concatSuffix', 'insertStr', 'appendStr', 'concatTaintedStr']
     propagationFns.forEach((propFn) => {
-      if (filtered.indexOf(propFn) !== -1) return
+      if (filtered.includes(propFn)) return
       it(`invoking ${propFn} with null argument`, () => {
         const propFnInstrumented = require(instrumentedFunctionsFile)[propFn]
         expect(() => propFnInstrumented(null)).to.throw()
