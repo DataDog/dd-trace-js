@@ -98,7 +98,7 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `planCacheListPlans test.${collection}`
+                const resource = `planCacheListPlans test.${collection} {}`
 
                 expect(span).to.have.property('resource', resource)
               })
@@ -115,11 +115,9 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collection}`
-                const query = `{"_id":"?"}`
+                const resource = `find test.${collection} {"_id":"?"}`
 
                 expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
@@ -139,11 +137,9 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collection}`
-                const query = `{"_id":"${id}"}`
+                const resource = `find test.${collection} {"_id":"${id}"}`
 
                 expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
@@ -160,11 +156,9 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collection}`
-                const query = `{"_id":"1234"}`
+                const resource = `find test.${collection} {"_id":"1234"}`
 
                 expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
@@ -220,7 +214,7 @@ describe('Plugin', () => {
             Promise.all([
               agent
                 .use(traces => {
-                  expect(traces[0][0].resource).to.equal(`find test.${collection}`)
+                  expect(traces[0][0].resource).to.equal(`find test.${collection} {}`)
                 }),
               agent
                 .use(traces => {
@@ -249,11 +243,9 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collection}`
-                const query = `{"foo":1,"bar":{"baz":[1,2,3]}}`
+                const resource = `find test.${collection} {"foo":1,"bar":{"baz":[1,2,3]}}`
 
                 expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)

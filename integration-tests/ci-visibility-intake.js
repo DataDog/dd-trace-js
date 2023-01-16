@@ -15,20 +15,12 @@ const DEFAULT_SETTINGS = {
 
 const DEFAULT_SUITES_TO_SKIP = []
 const DEFAULT_GIT_UPLOAD_STATUS = 200
-const DEFAULT_INFO_RESPONSE = {
-  endpoints: ['/evp_proxy/v2']
-}
 
 let settings = DEFAULT_SETTINGS
 let suitesToSkip = DEFAULT_SUITES_TO_SKIP
 let gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
-let infoResponse = DEFAULT_INFO_RESPONSE
 
 class FakeCiVisIntake extends FakeAgent {
-  setInfoResponse (newInfoResponse) {
-    infoResponse = newInfoResponse
-  }
-
   setGitUploadStatus (newStatus) {
     gitUploadStatus = newStatus
   }
@@ -45,25 +37,7 @@ class FakeCiVisIntake extends FakeAgent {
     const app = express()
     app.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
 
-    app.put('/v0.4/traces', (req, res) => {
-      if (req.body.length === 0) return res.status(200).send()
-      res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
-      this.emit('message', {
-        headers: req.headers,
-        payload: msgpack.decode(req.body, { codec }),
-        url: req.url
-      })
-    })
-
-    app.get('/info', (req, res) => {
-      res.status(200).send(JSON.stringify(infoResponse))
-      this.emit('message', {
-        headers: req.headers,
-        url: req.url
-      })
-    })
-
-    app.post(['/api/v2/citestcycle', '/evp_proxy/v2/api/v2/citestcycle'], (req, res) => {
+    app.post('/api/v2/citestcycle', (req, res) => {
       res.status(200).send('OK')
       this.emit('message', {
         headers: req.headers,
@@ -72,10 +46,7 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    app.post([
-      '/api/v2/git/repository/search_commits',
-      '/evp_proxy/v2/api/v2/git/repository/search_commits'
-    ], (req, res) => {
+    app.post('/api/v2/git/repository/search_commits', (req, res) => {
       res.status(gitUploadStatus).send(JSON.stringify({ data: [] }))
       this.emit('message', {
         headers: req.headers,
@@ -84,10 +55,7 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    app.post([
-      '/api/v2/git/repository/packfile',
-      '/evp_proxy/v2/api/v2/git/repository/packfile'
-    ], (req, res) => {
+    app.post('/api/v2/git/repository/packfile', (req, res) => {
       res.status(202).send('')
       this.emit('message', {
         headers: req.headers,
@@ -95,10 +63,7 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    app.post([
-      '/api/v2/citestcov',
-      '/evp_proxy/v2/api/v2/citestcov'
-    ], upload.any(), (req, res) => {
+    app.post('/api/v2/citestcov', upload.any(), (req, res) => {
       res.status(200).send('OK')
 
       const coveragePayloads = req.files
@@ -119,10 +84,7 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    app.post([
-      '/api/v2/libraries/tests/services/setting',
-      '/evp_proxy/v2/api/v2/libraries/tests/services/setting'
-    ], (req, res) => {
+    app.post('/api/v2/libraries/tests/services/setting', (req, res) => {
       res.status(200).send(JSON.stringify({
         data: {
           attributes: settings
@@ -134,10 +96,7 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    app.post([
-      '/api/v2/ci/tests/skippable',
-      '/evp_proxy/v2/api/v2/ci/tests/skippable'
-    ], (req, res) => {
+    app.post('/api/v2/ci/tests/skippable', (req, res) => {
       res.status(200).send(JSON.stringify({
         data: suitesToSkip
       }))
@@ -166,24 +125,6 @@ class FakeCiVisIntake extends FakeAgent {
     settings = DEFAULT_SETTINGS
     suitesToSkip = DEFAULT_SUITES_TO_SKIP
     gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
-    infoResponse = DEFAULT_INFO_RESPONSE
-  }
-
-  payloadReceived (payloadMatch, timeout) {
-    return new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.removeListener('message', messageHandler)
-        reject(new Error('Timeout'))
-      }, timeout || 15000)
-      const messageHandler = (message) => {
-        if (!payloadMatch || payloadMatch(message)) {
-          clearInterval(timeoutId)
-          resolve(message)
-          this.removeListener('message', messageHandler)
-        }
-      }
-      this.on('message', messageHandler)
-    })
   }
 
   assertPayloadReceived (fn, messageMatch, timeout) {

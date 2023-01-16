@@ -7,7 +7,4 @@ mocha.run(() => {
   if (process.send) {
     process.send('finished')
   }
-}).on('end', () => {
-  // eslint-disable-next-line
-  console.log('end event: can add event listeners to mocha')
 })

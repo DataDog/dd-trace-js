@@ -44,7 +44,7 @@ function getCommonRequestOptions (url) {
  * The response are the commits for which the backend already has information
  * This response is used to know which commits can be ignored from there on
  */
-function getCommitsToExclude ({ url, isEvpProxy, repositoryUrl }, callback) {
+function getCommitsToExclude ({ url, repositoryUrl }, callback) {
   const latestCommits = getLatestCommits()
   const [headCommit] = latestCommits
 
@@ -57,12 +57,6 @@ function getCommitsToExclude ({ url, isEvpProxy, repositoryUrl }, callback) {
       'Content-Type': 'application/json'
     },
     path: '/api/v2/git/repository/search_commits'
-  }
-
-  if (isEvpProxy) {
-    options.path = '/evp_proxy/v2/api/v2/git/repository/search_commits'
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
-    delete options.headers['dd-api-key']
   }
 
   const localCommitData = JSON.stringify({
@@ -93,7 +87,7 @@ function getCommitsToExclude ({ url, isEvpProxy, repositoryUrl }, callback) {
 /**
  * This function uploads a git packfile
  */
-function uploadPackFile ({ url, isEvpProxy, packFileToUpload, repositoryUrl, headCommit }, callback) {
+function uploadPackFile ({ url, packFileToUpload, repositoryUrl, headCommit }, callback) {
   const form = new FormData()
 
   const pushedSha = JSON.stringify({
@@ -131,13 +125,6 @@ function uploadPackFile ({ url, isEvpProxy, packFileToUpload, repositoryUrl, hea
       ...form.getHeaders()
     }
   }
-
-  if (isEvpProxy) {
-    options.path = '/evp_proxy/v2/api/v2/git/repository/packfile'
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
-    delete options.headers['dd-api-key']
-  }
-
   request(form, options, (err, _, statusCode) => {
     if (err) {
       const error = new Error(`Could not upload packfiles: status code ${statusCode}: ${err.message}`)
@@ -150,14 +137,16 @@ function uploadPackFile ({ url, isEvpProxy, packFileToUpload, repositoryUrl, hea
 /**
  * This function uploads git metadata to CI Visibility's backend.
 */
-function sendGitMetadata (url, isEvpProxy, callback) {
+function sendGitMetadata (intakeUrl, site, callback) {
+  const url = intakeUrl || new URL(`https://api.${site}`)
+
   const repositoryUrl = getRepositoryUrl()
 
   if (!repositoryUrl) {
     return callback(new Error('Repository URL is empty'))
   }
 
-  getCommitsToExclude({ url, repositoryUrl, isEvpProxy }, (err, commitsToExclude, headCommit) => {
+  getCommitsToExclude({ url, repositoryUrl }, (err, commitsToExclude, headCommit) => {
     if (err) {
       return callback(err)
     }
@@ -183,7 +172,6 @@ function sendGitMetadata (url, isEvpProxy, callback) {
         {
           packFileToUpload: packFilesToUpload[packFileIndex++],
           url,
-          isEvpProxy,
           repositoryUrl,
           headCommit
         },
@@ -193,9 +181,8 @@ function sendGitMetadata (url, isEvpProxy, callback) {
 
     uploadPackFile(
       {
-        packFileToUpload: packFilesToUpload[packFileIndex++],
         url,
-        isEvpProxy,
+        packFileToUpload: packFilesToUpload[packFileIndex++],
         repositoryUrl,
         headCommit
       },

@@ -24,21 +24,6 @@ function isMatchingTrace (spans, spanResourceMatch) {
   return !!spans.find(span => spanResourceMatch.test(span.resource))
 }
 
-function ciVisRequestHandler (request, response) {
-  response.status(200).send('OK')
-  handlers.forEach(({ handler, spanResourceMatch }) => {
-    const { events } = request.body
-    const spans = events.map(event => event.content)
-    if (isMatchingTrace(spans, spanResourceMatch)) {
-      handler(request.body, request)
-    }
-  })
-}
-
-const DEFAULT_AVAILABLE_ENDPOINTS = ['/evp_proxy/v2']
-
-let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
-
 module.exports = {
   // Load the plugin on the tracer with an optional config and start a mock agent.
   async load (pluginName, config, tracerConfig = {}) {
@@ -55,7 +40,7 @@ module.exports = {
 
     agent.get('/info', (req, res) => {
       res.status(202).send({
-        endpoints: availableEndpoints
+        endpoints: ['/evp_proxy/v2']
       })
     })
 
@@ -75,10 +60,23 @@ module.exports = {
     })
 
     // CI Visibility Agentless intake
-    agent.post('/api/v2/citestcycle', ciVisRequestHandler)
+    agent.post('/api/v2/citestcycle', (req, res) => {
+      res.status(200).send('OK')
+      handlers.forEach(({ handler, spanResourceMatch }) => {
+        const { events } = req.body
+        const spans = events.map(event => event.content)
+        if (isMatchingTrace(spans, spanResourceMatch)) {
+          handler(req.body)
+        }
+      })
+    })
 
     // EVP proxy endpoint
-    agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
+    // We additionally pass the request for further inspection
+    agent.post('/evp_proxy/v2/api/v2/citestcycle', (req, res) => {
+      res.status(200).send('OK')
+      handlers.forEach(({ handler }) => handler(req.body, req))
+    })
 
     const port = await getPort()
 
@@ -150,7 +148,6 @@ module.exports = {
    * @param {(traces: Array<Array<object>>) => void} callback - A function that tests trace data as it's received.
    * @param {Object} [options] - An options object
    * @param {number} [options.timeoutMs=1000] - The timeout in ms.
-   * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
    * @returns {Promise<void>} A promise resolving if expectations are met
    */
   use (callback, options) {
@@ -178,12 +175,7 @@ module.exports = {
         clearTimeout(timeout)
         deferred.resolve()
       } catch (e) {
-        if (options && options.rejectFirst) {
-          clearTimeout(timeout)
-          deferred.reject(e)
-        } else {
-          error = error || e
-        }
+        error = error || e
       }
     }
 
@@ -217,8 +209,6 @@ module.exports = {
     if (wipe) {
       this.wipe()
     }
-    this.setAvailableEndpoints(DEFAULT_AVAILABLE_ENDPOINTS)
-
     return new Promise((resolve, reject) => {
       this.server.on('close', () => {
         this.server = null
@@ -226,10 +216,6 @@ module.exports = {
         resolve()
       })
     })
-  },
-
-  setAvailableEndpoints (newEndpoints) {
-    availableEndpoints = newEndpoints
   },
 
   // Wipe the require cache.

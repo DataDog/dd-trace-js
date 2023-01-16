@@ -16,7 +16,7 @@ const {
   TEST_SESSION_ID,
   TEST_COMMAND,
   TEST_ITR_TESTS_SKIPPED,
-  TEST_SESSION_CODE_COVERAGE_ENABLED,
+  TEST_SESSION_ITR_CODE_COVERAGE_ENABLED,
   TEST_SESSION_ITR_SKIPPING_ENABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -34,6 +34,9 @@ class MochaPlugin extends CiPlugin {
     this.sourceRoot = process.cwd()
 
     this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
+      if (!this.config.isIntelligentTestRunnerEnabled) {
+        return
+      }
       if (!this.itrConfig || !this.itrConfig.isCodeCoverageEnabled) {
         return
       }
@@ -145,7 +148,7 @@ class MochaPlugin extends CiPlugin {
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
         this.testSessionSpan.setTag(TEST_SESSION_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
-        this.testSessionSpan.setTag(TEST_SESSION_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+        this.testSessionSpan.setTag(TEST_SESSION_ITR_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
 
         this.testSessionSpan.finish()
         finishAllTraceSpans(this.testSessionSpan)

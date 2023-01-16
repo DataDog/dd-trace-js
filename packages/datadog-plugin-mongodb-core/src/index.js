@@ -8,7 +8,7 @@ class MongodbCorePlugin extends DatabasePlugin {
 
   start ({ ns, ops, options = {}, name }) {
     const query = getQuery(ops)
-    const resource = truncate(getResource(this, ns, query, name))
+    const resource = truncate(getResource(ns, query, name))
 
     this.startSpan('mongodb.query', {
       service: this.config.service,
@@ -31,10 +31,10 @@ function getQuery (cmd) {
   if (cmd.filter) return JSON.stringify(limitDepth(cmd.filter))
 }
 
-function getResource (plugin, ns, query, operationName) {
+function getResource (ns, query, operationName) {
   const parts = [operationName, ns]
 
-  if (plugin.config.queryInResourceName && query) {
+  if (query) {
     parts.push(query)
   }
 

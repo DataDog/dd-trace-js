@@ -1,7 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
-const path = require('path')
+
 describe('Config', () => {
   let Config
   let log
@@ -65,6 +65,7 @@ describe('Config', () => {
     expect(config).to.have.property('flushInterval', 2000)
     expect(config).to.have.property('flushMinSpans', 1000)
     expect(config).to.have.property('queryStringObfuscation').with.length(626)
+    expect(config).to.have.property('clientIpHeaderDisabled', true)
     expect(config).to.have.property('clientIpHeader', null)
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.property('runtimeMetrics', false)
@@ -74,7 +75,6 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('logLevel', 'debug')
-    expect(config).to.have.deep.property('serviceMapping', {})
     expect(config).to.have.nested.property('experimental.b3', false)
     expect(config).to.have.nested.property('experimental.traceparent', false)
     expect(config).to.have.nested.property('experimental.runtimeId', false)
@@ -86,7 +86,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
-    expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
   })
 
@@ -127,7 +126,6 @@ describe('Config', () => {
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     process.env.DD_SERVICE = 'service'
-    process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
     process.env.DD_VERSION = '1.0.0'
     process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '.*'
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'x-true-client-ip'
@@ -161,7 +159,6 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = '42'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '.*'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
-    process.env.DD_REMOTE_CONFIGURATION_POLLING_INTERVAL = '42'
     process.env.DD_IAST_ENABLED = 'true'
     process.env.DD_IAST_REQUEST_SAMPLING = '40'
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
@@ -178,6 +175,7 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('queryStringObfuscation', '.*')
+    expect(config).to.have.property('clientIpHeaderDisabled', false)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
@@ -201,10 +199,6 @@ describe('Config', () => {
         { sampleRate: 0.1 }
       ]
     })
-    expect(config).to.have.deep.property('serviceMapping', {
-      a: 'aa',
-      b: 'bb'
-    })
     expect(config).to.have.nested.property('experimental.b3', true)
     expect(config).to.have.nested.property('experimental.traceparent', true)
     expect(config).to.have.nested.property('experimental.runtimeId', true)
@@ -216,7 +210,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
-    expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 40)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 3)
@@ -292,10 +285,6 @@ describe('Config', () => {
         { service: 'mysql', sampleRate: 1.0 },
         { sampleRate: 0.1 }
       ],
-      serviceMapping: {
-        a: 'aa',
-        b: 'bb'
-      },
       logger,
       tags,
       flushInterval: 5000,
@@ -317,10 +306,7 @@ describe('Config', () => {
           maxContextOperations: 5
         }
       },
-      appsec: false,
-      remoteConfig: {
-        pollInterval: 42
-      }
+      appsec: false
     })
 
     expect(config).to.have.property('protocolVersion', '0.5')
@@ -354,7 +340,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', false)
-    expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 50)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 4)
@@ -374,10 +359,6 @@ describe('Config', () => {
         { service: 'mysql', sampleRate: 1.0 },
         { sampleRate: 0.1 }
       ]
-    })
-    expect(config).to.have.deep.property('serviceMapping', {
-      a: 'aa',
-      b: 'bb'
     })
   })
 
@@ -434,7 +415,6 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
     process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
     process.env.DD_SERVICE = 'service'
-    process.env.DD_SERVICE_MAPPING = 'a:aa'
     process.env.DD_VERSION = '0.0.0'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
@@ -454,7 +434,6 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
-    process.env.DD_REMOTE_CONFIGURATION_POLLING_INTERVAL = 11
     process.env.DD_IAST_ENABLED = 'false'
 
     const config = new Config({
@@ -475,9 +454,6 @@ describe('Config', () => {
       tags: {
         foo: 'foo'
       },
-      serviceMapping: {
-        b: 'bb'
-      },
       experimental: {
         b3: false,
         traceparent: false,
@@ -494,12 +470,7 @@ describe('Config', () => {
         rateLimit: 42,
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
-        obfuscatorValueRegex: '.*',
-        blockedTemplateHtml: __filename,
-        blockedTemplateJson: __filename
-      },
-      remoteConfig: {
-        pollInterval: 42
+        obfuscatorValueRegex: '.*'
       }
     })
 
@@ -518,7 +489,6 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'development')
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
-    expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
     expect(config).to.have.nested.property('experimental.b3', false)
     expect(config).to.have.nested.property('experimental.traceparent', false)
     expect(config).to.have.nested.property('experimental.runtimeId', false)
@@ -530,9 +500,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
-    expect(config).to.have.nested.property('appsec.blockedTemplateHtml', __filename)
-    expect(config).to.have.nested.property('appsec.blockedTemplateJson', __filename)
-    expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 2)
@@ -567,11 +534,7 @@ describe('Config', () => {
       rateLimit: 42,
       wafTimeout: 42,
       obfuscatorKeyRegex: '.*',
-      obfuscatorValueRegex: '.*',
-      blockedTemplateHtml:
-        path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.html'),
-      blockedTemplateJson:
-        path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.json')
+      obfuscatorValueRegex: '.*'
     })
   })
 
@@ -643,6 +606,30 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'test')
   })
 
+  it('should support the serviceMapping environment variable', () => {
+    let origVar
+    if ('DD_SERVICE_MAPPING' in process.env) {
+      origVar = Object.getOwnPropertyDescriptor(process.env, 'DD_SERVICE')
+    }
+    process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
+    let config = new Config()
+
+    expect(config.serviceMapping).to.deep.equal({
+      a: 'aa',
+      b: 'bb'
+    })
+
+    if (origVar) {
+      Object.defineProperty(process.env, 'DD_SERVICE', origVar)
+    } else {
+      delete process.env.DD_SERVICE_MAPPING
+    }
+
+    config = new Config()
+
+    expect(config.serviceMapping).to.deep.equal({})
+  })
+
   it('should trim whitespace characters around keys', () => {
     process.env.DD_TAGS = 'foo:bar, baz:qux'
 
@@ -682,20 +669,6 @@ describe('Config', () => {
       { service: 'mysql', sampleRate: 1.0 },
       { sampleRate: 0.1 }
     ])
-  })
-
-  it('should ignore appsec.blockedTemplateHtml if it does not exist', () => {
-    const config = new Config({
-      appsec: {
-        enabled: true,
-        blockedTemplateHtml: path.join(__dirname, 'DOES_NOT_EXIST.html'),
-        blockedTemplateJson: path.join(__dirname, 'DOES_NOT_EXIST.json')
-      }
-    })
-    expect(config.appsec.blockedTemplateHtml).to.be
-      .equal(path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.html'))
-    expect(config.appsec.blockedTemplateJson).to.be
-      .equal(path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.json'))
   })
 
   context('auto configuration w/ unix domain sockets', () => {
@@ -787,38 +760,40 @@ describe('Config', () => {
   })
 
   context('ci visibility config', () => {
-    let options = {}
     beforeEach(() => {
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
+      delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
-      options = {}
     })
-    context('ci visibility mode is enabled', () => {
+    context('agentless is enabled', () => {
       beforeEach(() => {
-        options = { isCiVisibility: true }
+        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
       })
       it('should activate git upload if the env var is passed', () => {
         process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'true'
-        const config = new Config(options)
+        const config = new Config()
         expect(config).to.have.property('isGitUploadEnabled', true)
       })
       it('should activate intelligent test runner if the env var is passed', () => {
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
-        const config = new Config(options)
+        const config = new Config()
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
       })
       it('should activate git upload automatically if intelligent test runner is activated', () => {
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
-        const config = new Config(options)
+        const config = new Config()
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
         expect(config).to.have.property('isGitUploadEnabled', true)
       })
     })
-    context('ci visibility mode is not enabled', () => {
+    context('agentless is disabled', () => {
+      beforeEach(() => {
+        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'false'
+      })
       it('should not activate intelligent test runner or git metadata upload', () => {
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
         process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'true'
-        const config = new Config(options)
+        const config = new Config()
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
         expect(config).to.have.property('isGitUploadEnabled', false)
       })

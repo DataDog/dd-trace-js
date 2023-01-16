@@ -123,7 +123,6 @@ async function createSandbox (dependencies = [], isGitRepo = false) {
     await exec('echo "node_modules/" > .gitignore', { cwd: folder })
     await exec('git config user.email "john@doe.com"', { cwd: folder })
     await exec('git config user.name "John Doe"', { cwd: folder })
-    await exec('git config commit.gpgsign false', { cwd: folder })
     await exec(
       'git add -A && git commit -m "first commit" --no-verify && git remote add origin git@git.com:datadog/example',
       { cwd: folder }
@@ -162,35 +161,10 @@ async function curlAndAssertMessage (agent, procOrUrl, fn, timeout) {
   return resultPromise
 }
 
-function getCiVisAgentlessConfig (port) {
-  return {
-    ...process.env,
-    DD_API_KEY: '1',
-    DD_APP_KEY: '1',
-    DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
-    DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
-    DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 1,
-    DD_CIVISIBILITY_ITR_ENABLED: 1,
-    NODE_OPTIONS: '-r dd-trace/ci/init'
-  }
-}
-
-function getCiVisEvpProxyConfig (port) {
-  return {
-    ...process.env,
-    DD_TRACE_AGENT_PORT: port,
-    DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 1,
-    DD_CIVISIBILITY_ITR_ENABLED: 1,
-    NODE_OPTIONS: '-r dd-trace/ci/init'
-  }
-}
-
 module.exports = {
   FakeAgent,
   spawnProc,
   createSandbox,
   curl,
-  curlAndAssertMessage,
-  getCiVisAgentlessConfig,
-  getCiVisEvpProxyConfig
+  curlAndAssertMessage
 }

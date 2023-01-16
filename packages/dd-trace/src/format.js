@@ -175,7 +175,7 @@ function addTag (meta, metrics, key, value, nested) {
         metrics[key] = value.toString()
       } else if (!Array.isArray(value) && !nested) {
         for (const prop in value) {
-          if (!hasOwn(value, prop)) continue
+          if (!value.hasOwnProperty(prop)) continue
 
           addTag(meta, metrics, `${key}.${prop}`, value[prop], true)
         }
@@ -183,10 +183,6 @@ function addTag (meta, metrics, key, value, nested) {
 
       break
   }
-}
-
-function hasOwn (object, prop) {
-  return Object.prototype.hasOwnProperty.call(object, prop)
 }
 
 function isNodeBuffer (obj) {

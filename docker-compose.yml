@@ -129,13 +129,3 @@ services:
       - "ES_JAVA_OPTS=-Xms128m -Xmx128m"
     ports:
       - "127.0.0.1:9201:9200"
-  openldap:
-    image: bitnami/openldap:latest
-    ports:
-      - '127.0.0.1:1389:1389'
-      - '127.0.0.1:1636:1636'
-    environment:
-      - LDAP_ADMIN_USERNAME=admin
-      - LDAP_ADMIN_PASSWORD=adminpassword
-      - LDAP_USERS=user01,user02
-      - LDAP_PASSWORDS=password1,password2

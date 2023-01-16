@@ -47,7 +47,7 @@ const JEST_TEST_RUNNER = 'test.jest.test_runner'
 
 const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.tests_skipped'
 const TEST_SESSION_ITR_SKIPPING_ENABLED = 'test_session.itr.tests_skipping.enabled'
-const TEST_SESSION_CODE_COVERAGE_ENABLED = 'test_session.code_coverage.enabled'
+const TEST_SESSION_ITR_CODE_COVERAGE_ENABLED = 'test_session.itr.code_coverage.enabled'
 
 const TEST_CODE_COVERAGE_LINES_TOTAL = 'test.codecov_lines_total'
 
@@ -81,7 +81,7 @@ module.exports = {
   TEST_SUITE_ID,
   TEST_ITR_TESTS_SKIPPED,
   TEST_SESSION_ITR_SKIPPING_ENABLED,
-  TEST_SESSION_CODE_COVERAGE_ENABLED,
+  TEST_SESSION_ITR_CODE_COVERAGE_ENABLED,
   TEST_CODE_COVERAGE_LINES_TOTAL,
   getCoveredFilenamesFromCoverage,
   resetCoverage,

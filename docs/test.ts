@@ -78,19 +78,13 @@ tracer.init({
     { sampleRate: 0.5, service: 'ba?', name: 'ba?.*', maxPerSecond: 10 }
   ],
   service: 'test',
-  serviceMapping: {
-    http: 'new-http-service-name'
-  },
   tags: {
     foo: 'bar'
   },
   reportHostname: true,
   logLevel: 'debug',
   dbmPropagationMode: 'full',
-  appsec: true,
-  remoteConfig: {
-    pollInterval: 5
-  }
+  appsec: true
 });
 
 tracer.init({
@@ -100,9 +94,7 @@ tracer.init({
     rateLimit: 100,
     wafTimeout: 100e3,
     obfuscatorKeyRegex: '.*',
-    obfuscatorValueRegex: '.*',
-    blockedTemplateHtml: './blocked.html',
-    blockedTemplateJson: './blocked.json'
+    obfuscatorValueRegex: '.*'
   }
 });
 

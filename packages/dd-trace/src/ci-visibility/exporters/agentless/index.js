@@ -3,42 +3,82 @@
 const URL = require('url').URL
 const Writer = require('./writer')
 const CoverageWriter = require('./coverage-writer')
-const CiVisibilityExporter = require('../ci-visibility-exporter')
+
 const log = require('../../../log')
 
-class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
+class AgentlessCiVisibilityExporter {
   constructor (config) {
-    super(config)
-    const { tags, site, url, isGitUploadEnabled } = config
-    // we don't need to request /info because we are using agentless by configuration
-    this._isInitialized = true
-    this._resolveCanUseCiVisProtocol(true)
-
+    this._config = config
+    const { tags, site, url } = config
     this._url = url || new URL(`https://citestcycle-intake.${site}`)
     this._writer = new Writer({ url: this._url, tags })
+    this._timer = undefined
+    this._coverageTimer = undefined
 
     this._coverageUrl = url || new URL(`https://event-platform-intake.${site}`)
     this._coverageWriter = new CoverageWriter({ url: this._coverageUrl })
 
-    this._apiUrl = url || new URL(`https://api.${site}`)
+    process.once('beforeExit', () => {
+      this._writer.flush()
+      this._coverageWriter.flush()
+    })
+  }
 
-    if (isGitUploadEnabled) {
-      this.sendGitMetadata({ url: this._getApiUrl() })
+  exportCoverage ({ span, coverageFiles }) {
+    const formattedCoverage = {
+      traceId: span.context()._traceId,
+      spanId: span.context()._spanId,
+      files: coverageFiles
+    }
+    this._coverageWriter.append(formattedCoverage)
+
+    const { flushInterval } = this._config
+
+    if (flushInterval === 0) {
+      this._coverageWriter.flush()
+    } else if (flushInterval > 0 && !this._coverageTimer) {
+      this._coverageTimer = setTimeout(() => {
+        this._coverageWriter.flush()
+        this._coverageTimer = clearTimeout(this._coverageTimer)
+      }, flushInterval).unref()
     }
   }
 
-  setUrl (url, coverageUrl = url, apiUrl = url) {
-    this._setUrl(url, coverageUrl)
+  export (trace) {
+    this._writer.append(trace)
+
+    const { flushInterval } = this._config
+
+    if (flushInterval === 0) {
+      this._writer.flush()
+    } else if (flushInterval > 0 && !this._timer) {
+      this._timer = setTimeout(() => {
+        this._writer.flush()
+        this._timer = clearTimeout(this._timer)
+      }, flushInterval).unref()
+    }
+  }
+
+  flush (done = () => {}) {
+    if (!this._isInitialized) {
+      return done()
+    }
+    this._writer.flush(() => {
+      this._coverageWriter.flush(done)
+    })
+  }
+
+  setUrl (url, coverageUrl = url) {
     try {
-      apiUrl = new URL(apiUrl)
-      this._apiUrl = apiUrl
+      url = new URL(url)
+      coverageUrl = new URL(coverageUrl)
+      this._url = url
+      this._coverageUrl = coverageUrl
+      this._writer.setUrl(url)
+      this._coverageWriter.setUrl(coverageUrl)
     } catch (e) {
       log.error(e)
     }
-  }
-
-  _getApiUrl () {
-    return this._apiUrl
   }
 }
 

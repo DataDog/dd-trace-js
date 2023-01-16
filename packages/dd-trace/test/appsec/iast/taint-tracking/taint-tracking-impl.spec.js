@@ -16,16 +16,7 @@ const propagationFns = [
   'appendStr',
   'trimStr',
   'trimStartStr',
-  'trimEndStr',
-  'trimProtoStr',
-  'concatStr',
-  'concatTaintedStr',
-  'concatProtoStr',
-  'substringStr',
-  'substrStr',
-  'sliceStr',
-  'replaceStr',
-  'replaceRegexStr'
+  'trimEndStr'
 ]
 
 const commands = [
@@ -85,9 +76,7 @@ describe('TaintTracking', () => {
   })
 
   describe('should not catch original Error', () => {
-    const filtered = ['concatSuffix', 'insertStr', 'appendStr', 'concatTaintedStr']
-    propagationFns.forEach((propFn) => {
-      if (filtered.includes(propFn)) return
+    propagationFns.slice(3).forEach((propFn) => {
       it(`invoking ${propFn} with null argument`, () => {
         const propFnInstrumented = require(instrumentedFunctionsFile)[propFn]
         expect(() => propFnInstrumented(null)).to.throw()

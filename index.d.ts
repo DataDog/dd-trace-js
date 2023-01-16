@@ -243,11 +243,6 @@ export declare interface TracerOptions {
   service?: string;
 
   /**
-   * Provide service name mappings for each plugin.
-   */
-  serviceMapping?: { [key: string]: string };
-
-  /**
    * The url of the trace agent that the tracer will submit to.
    * Takes priority over hostname and port, if set.
    */
@@ -514,29 +509,8 @@ export declare interface TracerOptions {
     /**
      * Specifies a regex that will redact sensitive data by its value in attack reports.
      */
-    obfuscatorValueRegex?: string,
-
-    /**
-     * Specifies a path to a custom blocking template html file.
-     */
-    blockedTemplateHtml?: string,
-
-    /**
-     * Specifies a path to a custom blocking template json file.
-     */
-    blockedTemplateJson?: string,
+    obfuscatorValueRegex?: string
   };
-
-  /**
-   * Configuration of ASM Remote Configuration
-   */
-  remoteConfig?: {
-    /**
-     * Specifies the remote configuration polling interval in seconds
-     * @default 5
-     */
-    pollInterval?: number,
-  }
 }
 
 /**
@@ -1236,12 +1210,6 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
-   * [ldapjs](https://github.com/ldapjs/node-ldapjs/) module.
-   */
-  interface ldapjs extends Instrumentation {}
-
-  /**
-   * This plugin automatically instruments the
    * [mariadb](https://github.com/mariadb-corporation/mariadb-connector-nodejs) module.
    */
   interface mariadb extends mysql {}
@@ -1286,12 +1254,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [mongodb-core](https://github.com/mongodb-js/mongodb-core) module.
    */
-  interface mongodb_core extends Instrumentation {
-    /**
-     * Whether to include the query contents in the resource name.
-     */
-    queryInResourceName?: boolean;
-  }
+  interface mongodb_core extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the

@@ -155,7 +155,7 @@ describe('Gateway Runner', () => {
       als.run(store, () => {
         const result = Runner.runSubscriptions(new Set(subscriptions), params)
 
-        expect(result).to.deep.equal(['a', undefined, 'c'])
+        expect(result).to.deep.equal(['a', {}, 'c'])
       })
     })
   })

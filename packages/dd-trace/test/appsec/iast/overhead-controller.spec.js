@@ -186,17 +186,14 @@ describe('Overhead controller', () => {
       const THIRD_REQUEST = '/third'
       const FOURTH_REQUEST = '/fourth'
       const FIFTH_REQUEST = '/fifth'
-      const SECURE_REQUEST = '/secure'
 
       const testRequestEventEmitter = new EventEmitter()
       let requestResolvers = {}
 
       function app (req) {
         return new Promise((resolve) => {
-          if (req.url.indexOf('secure') === -1) {
-            const crypto = require('crypto')
-            crypto.createHash('sha1')
-          }
+          const crypto = require('crypto')
+          crypto.createHash('sha1')
           requestResolvers[req.url] = () => {
             resolve()
             testRequestEventEmitter.emit(TEST_REQUEST_FINISHED, req.url)
@@ -246,11 +243,9 @@ describe('Overhead controller', () => {
                     const url = trace.meta['http.url']
                     if (url.includes(FIRST_REQUEST)) {
                       expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                      expect(trace.meta['_dd.iast.enabled']).eq('1')
                       urlCounter++
                     } else if (url.includes(SECOND_REQUEST)) {
                       expect(trace.meta['_dd.iast.json']).to.be.undefined
-                      expect(trace.meta['_dd.iast.enabled']).eq('0')
                       urlCounter++
                     }
                     if (urlCounter === 2) {
@@ -297,7 +292,6 @@ describe('Overhead controller', () => {
                   if (trace.type === 'web') {
                     urlCounter++
                     expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                    expect(trace.meta['_dd.iast.enabled']).eq('1')
                     if (urlCounter === 2) {
                       done()
                     }
@@ -405,51 +399,6 @@ describe('Overhead controller', () => {
           })
 
           axios.get(`http://localhost:${serverConfig.port}${FIRST_REQUEST}`).then().catch(done)
-        })
-
-        it('should add _dd.iast.enabled tag even when no vulnerability is detected', (done) => {
-          const config = new Config({
-            experimental: {
-              iast: {
-                enabled: true,
-                requestSampling: 100,
-                maxConcurrentRequests: 1
-              }
-            }
-          })
-          iast.enable(config)
-
-          const handler = function (traces) {
-            try {
-              for (let i = 0; i < traces.length; i++) {
-                for (let j = 0; j < traces[i].length; j++) {
-                  const trace = traces[i][j]
-                  if (trace.type === 'web') {
-                    const url = trace.meta['http.url']
-                    if (url.includes(SECURE_REQUEST)) {
-                      expect(trace.meta['_dd.iast.json']).to.be.undefined
-                      expect(trace.meta['_dd.iast.enabled']).eq('1')
-                      done()
-                    }
-                  }
-                }
-              }
-            } catch (e) {
-              agent.unsubscribe(handler)
-              done(e)
-            }
-          }
-          handlers.push(handler)
-          agent.subscribe(handler)
-
-          testRequestEventEmitter.on(TEST_REQUEST_STARTED, (url) => {
-            if (url === SECURE_REQUEST) {
-              setImmediate(() => {
-                requestResolvers[SECURE_REQUEST]()
-              })
-            }
-          })
-          axios.get(`http://localhost:${serverConfig.port}${SECURE_REQUEST}`).then().catch(done)
         })
       }
 

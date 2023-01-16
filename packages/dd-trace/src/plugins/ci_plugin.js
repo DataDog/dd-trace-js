@@ -1,3 +1,5 @@
+const { channel } = require('diagnostics_channel')
+
 const {
   getTestEnvironmentMetadata,
   getCodeOwnersFileEntries,
@@ -7,6 +9,8 @@ const {
   TEST_CODE_OWNERS,
   CI_APP_ORIGIN
 } = require('./util/test')
+const { getItrConfiguration } = require('../ci-visibility/intelligent-test-runner/get-itr-configuration')
+const { getSkippableSuites } = require('../ci-visibility/intelligent-test-runner/get-skippable-suites')
 const { COMPONENT } = require('../constants')
 
 const Plugin = require('./plugin')
@@ -15,18 +19,52 @@ module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub(`ci:${this.constructor.name}:itr-configuration`, ({ onDone }) => {
-      this.tracer._exporter.getItrConfiguration(this.testConfiguration, (err, itrConfig) => {
-        if (!err) {
-          this.itrConfig = itrConfig
+    const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
+    // `gitMetadataPromise` is used to wait until git metadata is uploaded to
+    // proceed with calculating the suites to skip
+    // TODO: add timeout after which the promise is resolved
+    const gitMetadataPromise = new Promise(resolve => {
+      gitMetadataUploadFinishCh.subscribe(err => {
+        resolve(err)
+      })
+    })
+
+    this.codeOwnersEntries = getCodeOwnersFileEntries()
+
+    this.addSub(`ci:${this.constructor.name}:configuration`, ({ onDone }) => {
+      if (!this.config.isIntelligentTestRunnerEnabled) {
+        onDone({ config: {} })
+        return
+      }
+      getItrConfiguration(this.testConfiguration, (err, config) => {
+        if (err) {
+          onDone({ err })
+        } else {
+          this.itrConfig = config
+          onDone({ config })
         }
-        onDone({ err, itrConfig })
       })
     })
 
     this.addSub(`ci:${this.constructor.name}:test-suite:skippable`, ({ onDone }) => {
-      this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites) => {
-        onDone({ err, skippableSuites })
+      if (!this.config.isIntelligentTestRunnerEnabled) {
+        return onDone({ skippableSuites: [] })
+      }
+      // we only request after git upload has happened, if it didn't fail
+      gitMetadataPromise.then((gitUploadError) => {
+        if (gitUploadError) {
+          return onDone({ err: gitUploadError })
+        }
+        if (!this.itrConfig || !this.itrConfig.isSuitesSkippingEnabled) {
+          return onDone({ skippableSuites: [] })
+        }
+        getSkippableSuites(this.testConfiguration, (err, skippableSuites) => {
+          if (err) {
+            onDone({ err })
+          } else {
+            onDone({ skippableSuites })
+          }
+        })
       })
     })
   }
@@ -34,7 +72,6 @@ module.exports = class CiPlugin extends Plugin {
   configure (config) {
     super.configure(config)
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.name, this.config)
-    this.codeOwnersEntries = getCodeOwnersFileEntries()
 
     const {
       'git.repository_url': repositoryUrl,
@@ -55,7 +92,11 @@ module.exports = class CiPlugin extends Plugin {
       osArchitecture,
       runtimeName,
       runtimeVersion,
-      branch
+      branch,
+      url: this.config.url,
+      site: this.config.site,
+      env: this.tracer._env,
+      service: this.config.service || this.tracer._service
     }
   }
 

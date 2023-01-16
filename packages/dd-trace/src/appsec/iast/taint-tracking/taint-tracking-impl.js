@@ -9,12 +9,7 @@ function noop (res) { return res }
 const TaintTrackingDummy = {
   plusOperator: noop,
   trim: noop,
-  trimEnd: noop,
-  concat: noop,
-  substring: noop,
-  substr: noop,
-  slice: noop,
-  replace: noop
+  trimEnd: noop
 }
 
 function getTransactionId () {
@@ -59,19 +54,7 @@ function getCsiFn (cb, ...protos) {
   return getFilteredCsiFn(cb, filter)
 }
 
-function csiMethodsDefaults (names, excluded) {
-  const impl = {}
-  names.forEach(name => {
-    if (excluded.indexOf(name) !== -1) return
-    impl[name] = getCsiFn(
-      (transactionId, res, target, ...rest) => TaintedUtils[name](transactionId, res, target, ...rest),
-      String.prototype[name]
-    )
-  })
-  return impl
-}
-
-const csiMethodsOverrides = {
+const TaintTracking = {
   plusOperator: function (res, op1, op2) {
     try {
       if (notString(res) || (notString(op1) && notString(op2))) { return res }
@@ -89,12 +72,11 @@ const csiMethodsOverrides = {
     (transactionId, res, target) => TaintedUtils.trim(transactionId, res, target),
     String.prototype.trim,
     String.prototype.trimStart
+  ),
+  trimEnd: getCsiFn(
+    (transactionId, res, target) => TaintedUtils.trimEnd(transactionId, res, target),
+    String.prototype.trimEnd
   )
-}
-
-const TaintTracking = {
-  ...csiMethodsDefaults(Object.keys(TaintTrackingDummy), Object.keys(csiMethodsOverrides)),
-  ...csiMethodsOverrides
 }
 
 module.exports = {

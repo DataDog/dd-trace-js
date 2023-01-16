@@ -19,7 +19,7 @@ const testRunFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
-const jestItrConfigurationCh = channel('ci:jest:itr-configuration')
+const jestConfigurationCh = channel('ci:jest:configuration')
 
 let skippableSuites = []
 let isCodeCoverageEnabled = false
@@ -176,21 +176,21 @@ function cliWrapper (cli) {
     const configurationPromise = new Promise((resolve) => {
       onDone = resolve
     })
-    if (!jestItrConfigurationCh.hasSubscribers) {
+    if (!jestConfigurationCh.hasSubscribers) {
       return runCLI.apply(this, arguments)
     }
 
     sessionAsyncResource.runInAsyncScope(() => {
-      jestItrConfigurationCh.publish({ onDone })
+      jestConfigurationCh.publish({ onDone })
     })
 
     try {
-      const { err, itrConfig } = await configurationPromise
+      const { err, config } = await configurationPromise
       if (err) {
         log.error(err)
       }
-      isCodeCoverageEnabled = itrConfig.isCodeCoverageEnabled
-      isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled
+      isCodeCoverageEnabled = config.isCodeCoverageEnabled
+      isSuitesSkippingEnabled = config.isSuitesSkippingEnabled
     } catch (e) {
       log.error(e)
     }
@@ -314,11 +314,6 @@ function jestAdapterWrapper (jestAdapter) {
         const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
           .map(filename => getTestSuitePath(filename, environment.rootDir))
 
-        /**
-         * Child processes do not each request ITR configuration, so the jest's parent process
-         * needs to pass them the configuration. This is done via _ddTestCodeCoverageEnabled, which
-         * controls whether coverage is reported.
-         */
         if (coverageFiles &&
           environment.testEnvironmentOptions &&
           environment.testEnvironmentOptions._ddTestCodeCoverageEnabled) {

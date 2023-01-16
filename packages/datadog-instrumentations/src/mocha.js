@@ -17,7 +17,7 @@ const skipCh = channel('ci:mocha:test:skip')
 const testFinishCh = channel('ci:mocha:test:finish')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 
-const itrConfigurationCh = channel('ci:mocha:itr-configuration')
+const configurationCh = channel('ci:mocha:configuration')
 const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
 
 const testSessionStartCh = channel('ci:mocha:session:start')
@@ -87,12 +87,6 @@ function getTestAsyncResource (test) {
   }
   const originalFn = originalFns.get(test.fn)
   return testToAr.get(originalFn)
-}
-
-function getSuitesToRun (originalSuites) {
-  return originalSuites.filter(suite =>
-    !suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
-  )
 }
 
 function mochaHook (Runner) {
@@ -285,6 +279,11 @@ function mochaHook (Runner) {
       }
     })
 
+    // We remove the suites that we skip through ITR
+    this.suite.suites = this.suite.suites.filter(suite =>
+      !suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
+    )
+
     return run.apply(this, arguments)
   })
 
@@ -321,13 +320,9 @@ addHook({
    * If ITR is disabled, `onDone` is called immediately on the subscriber
    */
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
-    if (!itrConfigurationCh.hasSubscribers) {
+    if (!configurationCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
-    this.options.delay = true
-
-    const runner = run.apply(this, arguments)
-
     const onReceivedSkippableSuites = ({ err, skippableSuites }) => {
       if (err) {
         log.error(err)
@@ -335,18 +330,16 @@ addHook({
       } else {
         suitesToSkip = skippableSuites
       }
-      // We remove the suites that we skip through ITR
-      runner.suite.suites = getSuitesToRun(runner.suite.suites)
-      global.run()
+      run.apply(this, arguments)
     }
 
     const onReceivedConfiguration = ({ err }) => {
       if (err) {
         log.error(err)
-        return global.run()
+        return run.apply(this, arguments)
       }
       if (!skippableSuitesCh.hasSubscribers) {
-        return global.run()
+        return run.apply(this, arguments)
       }
 
       skippableSuitesCh.publish({
@@ -355,11 +348,10 @@ addHook({
     }
 
     mochaRunAsyncResource.runInAsyncScope(() => {
-      itrConfigurationCh.publish({
+      configurationCh.publish({
         onDone: mochaRunAsyncResource.bind(onReceivedConfiguration)
       })
     })
-    return runner
   })
   return Mocha
 })
@@ -369,23 +361,6 @@ addHook({
   versions: ['>=5.2.0'],
   file: 'lib/runner.js'
 }, mochaHook)
-
-addHook({
-  name: 'mocha',
-  versions: ['>=5.2.0'],
-  file: 'lib/cli/run-helpers.js'
-}, (run) => {
-  shimmer.wrap(run, 'runMocha', runMocha => async function () {
-    const mocha = arguments[0]
-    /**
-     * This attaches `run` to the global context, which we'll call after
-     * our configuration and skippable suites requests
-     */
-    mocha.options.delay = true
-    return runMocha.apply(this, arguments)
-  })
-  return run
-})
 
 addHook({
   name: 'mocha',

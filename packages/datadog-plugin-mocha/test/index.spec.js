@@ -94,18 +94,25 @@ describe('Plugin', () => {
         .get('/')
         .reply(200, 'OK')
 
-      process.env.DD_API_KEY = 'key'
-      process.env.DD_APP_KEY = 'app-key'
+      const loadArguments = [['mocha', 'http']]
 
-      const isAgentlessTest = this.currentTest.parent.title === 'reporting through agentless'
-      const isEvpProxyTest = this.currentTest.parent.title === 'reporting through evp proxy'
+      const isAgentlessTest = this.currentTest.parent.title === 'agentless'
+      const isEvpProxy = this.currentTest.parent.title === 'evp proxy'
 
-      const exporter = isAgentlessTest ? 'datadog' : 'agent_proxy'
-
-      if (!isEvpProxyTest) {
-        agent.setAvailableEndpoints([])
+      if (isAgentlessTest) {
+        process.env.DD_API_KEY = 'key'
+        process.env.DD_APP_KEY = 'app-key'
+        process.env.DD_ENV = 'ci'
+        process.env.DD_SITE = 'datad0g.com'
+        process.env.DD_CIVISIBILITY_ITR_ENABLED = 1
+        loadArguments.push({ isIntelligentTestRunnerEnabled: true })
+        loadArguments.push({ experimental: { exporter: 'datadog' } })
+      } else if (isEvpProxy) {
+        loadArguments.push({ service: 'test' })
+        loadArguments.push({ experimental: { exporter: 'agent_proxy' } })
       }
-      return agent.load(['mocha', 'http'], { service: 'test' }, { experimental: { exporter } }).then(() => {
+
+      return agent.load(...loadArguments).then(() => {
         Mocha = require(`../../../versions/mocha@${version}`).get()
       })
     })
@@ -499,63 +506,112 @@ describe('Plugin', () => {
         mocha.run()
       })
 
-      const initOptions = ['agentless', 'evp proxy']
+      describe('agentless', () => {
+        beforeEach(() => {
+          delete global.__coverage__
+          delete require.cache[require.resolve('./fixtures/coverage.json')]
+          // we have to mock the __coverage__ global variable that `nyc` adds
+          global.__coverage__ = require('./fixtures/coverage.json')
+        })
+        it('works with test suite level visibility', function (done) {
+          const testFilePaths = fs.readdirSync(__dirname)
+            .filter(name => name.startsWith('mocha-test-suite-level'))
+            .map(relativePath => path.join(__dirname, relativePath))
 
-      initOptions.forEach(option => {
-        describe(`reporting through ${option}`, () => {
-          it('should create events for session, suites and test', (done) => {
-            const testFilePaths = fs.readdirSync(__dirname)
-              .filter(name => name.startsWith('mocha-test-suite-level'))
-              .map(relativePath => path.join(__dirname, relativePath))
+          const suites = [
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-after-each.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-skip-describe.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-test.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-pass.js'
+          ]
 
-            const suites = [
-              'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-after-each.js',
-              'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-skip-describe.js',
-              'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-test.js',
-              'packages/datadog-plugin-mocha/test/mocha-test-suite-level-pass.js'
-            ]
+          agent.use(agentlessPayload => {
+            const events = agentlessPayload.events.map(event => event.content)
 
-            agent.use((agentlessPayload, request) => {
-              if (option === 'evp proxy') {
-                expect(request.headers['x-datadog-evp-subdomain']).to.equal('citestcycle-intake')
-                expect(request.path).to.equal('/evp_proxy/v2/api/v2/citestcycle')
-              } else {
-                expect(request.path).to.equal('/api/v2/citestcycle')
-              }
-              const events = agentlessPayload.events.map(event => event.content)
+            if (events[0].type === 'test') {
+              throw new Error() // we don't want to assert on tests
+            }
 
-              if (events[0].type === 'test') {
-                throw new Error() // we don't want to assert on tests
-              }
+            const testSessionEvent = events.find(span => span.type === 'test_session_end')
+            const testSuiteEvents = events.filter(span => span.type === 'test_suite_end')
 
-              const testSessionEvent = events.find(span => span.type === 'test_session_end')
-              const testSuiteEvents = events.filter(span => span.type === 'test_suite_end')
+            expect(testSessionEvent.meta[TEST_STATUS]).to.equal('fail')
+            expect(testSuiteEvents.length).to.equal(4)
 
-              expect(testSessionEvent.meta[TEST_STATUS]).to.equal('fail')
-              expect(testSuiteEvents.length).to.equal(4)
+            expect(
+              testSuiteEvents.every(
+                span => span.test_session_id.toString() === testSessionEvent.test_session_id.toString()
+              )
+            ).to.be.true
+            expect(testSuiteEvents.every(suite => suite.test_suite_id !== undefined)).to.be.true
+            expect(testSuiteEvents.every(suite => suites.includes(suite.meta[TEST_SUITE]))).to.be.true
 
-              expect(
-                testSuiteEvents.every(
-                  span => span.test_session_id.toString() === testSessionEvent.test_session_id.toString()
-                )
-              ).to.be.true
-              expect(testSuiteEvents.every(suite => suite.test_suite_id !== undefined)).to.be.true
-              expect(testSuiteEvents.every(suite => suites.includes(suite.meta[TEST_SUITE]))).to.be.true
+            const failedSuites = testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'fail')
+            expect(testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'pass')).to.have.length(1)
+            expect(failedSuites).to.have.length(3)
+            expect(failedSuites.every(suite => suite.meta[ERROR_MESSAGE] !== undefined)).to.be.true
+          }).then(() => done()).catch(done)
 
-              const failedSuites = testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'fail')
-              expect(testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'pass')).to.have.length(1)
-              expect(failedSuites).to.have.length(3)
-              expect(failedSuites.every(suite => suite.meta[ERROR_MESSAGE] !== undefined)).to.be.true
-            }).then(() => done()).catch(done)
-
-            const mocha = new Mocha({
-              reporter: function () {} // silent on internal tests
-            })
-            testFilePaths.forEach(filePath => {
-              mocha.addFile(filePath)
-            })
-            mocha.run()
+          const mocha = new Mocha({
+            reporter: function () {} // silent on internal tests
           })
+          testFilePaths.forEach(filePath => {
+            mocha.addFile(filePath)
+          })
+          mocha.run()
+        })
+      })
+
+      describe('evp proxy', () => {
+        it('works with test suite level visibility', function (done) {
+          const testFilePaths = fs.readdirSync(__dirname)
+            .filter(name => name.startsWith('mocha-test-suite-level'))
+            .map(relativePath => path.join(__dirname, relativePath))
+
+          const suites = [
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-after-each.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-skip-describe.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-fail-test.js',
+            'packages/datadog-plugin-mocha/test/mocha-test-suite-level-pass.js'
+          ]
+
+          agent.use((agentlessPayload, request) => {
+            expect(request.headers['x-datadog-evp-subdomain']).to.equal('citestcycle-intake')
+            expect(request.path).to.equal('/evp_proxy/v2/api/v2/citestcycle')
+
+            const events = agentlessPayload.events.map(event => event.content)
+
+            if (events[0].type === 'test') {
+              throw new Error() // we don't want to assert on tests
+            }
+
+            const testSessionEvent = events.find(span => span.type === 'test_session_end')
+            const testSuiteEvents = events.filter(span => span.type === 'test_suite_end')
+
+            expect(testSessionEvent.meta[TEST_STATUS]).to.equal('fail')
+            expect(testSuiteEvents.length).to.equal(4)
+
+            expect(
+              testSuiteEvents.every(
+                span => span.test_session_id.toString() === testSessionEvent.test_session_id.toString()
+              )
+            ).to.be.true
+            expect(testSuiteEvents.every(suite => suite.test_suite_id !== undefined)).to.be.true
+            expect(testSuiteEvents.every(suite => suites.includes(suite.meta[TEST_SUITE]))).to.be.true
+
+            const failedSuites = testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'fail')
+            expect(testSuiteEvents.filter(span => span.meta[TEST_STATUS] === 'pass')).to.have.length(1)
+            expect(failedSuites).to.have.length(3)
+            expect(failedSuites.every(suite => suite.meta[ERROR_MESSAGE] !== undefined)).to.be.true
+          }).then(() => done()).catch(done)
+
+          const mocha = new Mocha({
+            reporter: function () {} // silent on internal tests
+          })
+          testFilePaths.forEach(filePath => {
+            mocha.addFile(filePath)
+          })
+          mocha.run()
         })
       })
     })

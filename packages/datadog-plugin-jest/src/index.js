@@ -15,7 +15,7 @@ const {
   TEST_SUITE_ID,
   TEST_COMMAND,
   TEST_ITR_TESTS_SKIPPED,
-  TEST_SESSION_CODE_COVERAGE_ENABLED,
+  TEST_SESSION_ITR_CODE_COVERAGE_ENABLED,
   TEST_SESSION_ITR_SKIPPING_ENABLED,
   TEST_CODE_COVERAGE_LINES_TOTAL
 } = require('../../dd-trace/src/plugins/util/test')
@@ -77,7 +77,7 @@ class JestPlugin extends CiPlugin {
       testSessionSpan.setTag(TEST_STATUS, status)
       testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
       testSessionSpan.setTag(TEST_SESSION_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
-      testSessionSpan.setTag(TEST_SESSION_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+      testSessionSpan.setTag(TEST_SESSION_ITR_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
 
       if (testCodeCoverageLinesTotal !== undefined) {
         testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
@@ -133,12 +133,10 @@ class JestPlugin extends CiPlugin {
       finishAllTraceSpans(testSuiteSpan)
     })
 
-    /**
-     * This can't use `this.itrConfig` like `ci:mocha:test-suite:code-coverage`
-     * because this subscription happens in a different process from the one
-     * fetching the ITR config.
-     */
     this.addSub('ci:jest:test-suite:code-coverage', (coverageFiles) => {
+      if (!this.config.isIntelligentTestRunnerEnabled) {
+        return
+      }
       const testSuiteSpan = storage.getStore().span
       this.tracer._exporter.exportCoverage({ span: testSuiteSpan, coverageFiles })
     })

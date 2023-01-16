@@ -2,7 +2,7 @@ const request = require('../../exporters/common/request')
 
 function getSkippableSuites ({
   url,
-  isEvpProxy,
+  site,
   env,
   service,
   repositoryUrl,
@@ -13,32 +13,28 @@ function getSkippableSuites ({
   runtimeName,
   runtimeVersion
 }, done) {
+  const intakeUrl = url || new URL(`https://api.${site}`)
+
+  const apiKey = process.env.DATADOG_API_KEY || process.env.DD_API_KEY
+  const appKey = process.env.DATADOG_APP_KEY ||
+    process.env.DD_APP_KEY ||
+    process.env.DATADOG_APPLICATION_KEY ||
+    process.env.DD_APPLICATION_KEY
+
+  if (!apiKey || !appKey) {
+    return done(new Error('API key or Application key are undefined.'))
+  }
+
   const options = {
     path: '/api/v2/ci/tests/skippable',
     method: 'POST',
     headers: {
+      'dd-api-key': apiKey,
+      'dd-application-key': appKey,
       'Content-Type': 'application/json'
     },
     timeout: 15000,
-    url
-  }
-
-  if (isEvpProxy) {
-    options.path = '/evp_proxy/v2/api/v2/ci/tests/skippable'
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
-    options.headers['X-Datadog-NeedsAppKey'] = 'true'
-  } else {
-    const apiKey = process.env.DATADOG_API_KEY || process.env.DD_API_KEY
-    const appKey = process.env.DATADOG_APP_KEY ||
-      process.env.DD_APP_KEY ||
-      process.env.DATADOG_APPLICATION_KEY ||
-      process.env.DD_APPLICATION_KEY
-
-    if (!apiKey || !appKey) {
-      return done(new Error('App key or API key undefined'))
-    }
-    options.headers['dd-api-key'] = apiKey
-    options.headers['dd-application-key'] = appKey
+    url: intakeUrl
   }
 
   const data = JSON.stringify({
@@ -72,8 +68,8 @@ function getSkippableSuites ({
           .filter(({ type }) => type === 'suite')
           .map(({ attributes: { suite } }) => suite)
         done(null, skippableSuites)
-      } catch (err) {
-        done(err)
+      } catch (e) {
+        done(e)
       }
     }
   })

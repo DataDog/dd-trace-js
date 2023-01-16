@@ -4,6 +4,7 @@ const log = require('../../../src/log')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const tags = require('../../../../../ext/tags')
+const { incomingHttpRequestEnd } = require('../../../src/appsec/gateway/channels')
 const { USER_REJECT } = require('../../../../../ext/priority')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../../../dd-trace/src/constants')
 
@@ -21,6 +22,7 @@ const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
+const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 
 describe('plugins/util/web', () => {
   let web
@@ -182,7 +184,8 @@ describe('plugins/util/web', () => {
             [HTTP_URL]: 'http://localhost/user/123',
             [HTTP_METHOD]: 'GET',
             [SPAN_KIND]: SERVER,
-            [HTTP_USERAGENT]: 'curl'
+            [HTTP_USERAGENT]: 'curl',
+            [HTTP_CLIENT_IP]: '8.8.8.8'
           })
         })
       })
@@ -366,7 +369,8 @@ describe('plugins/util/web', () => {
             [HTTP_URL]: 'https://localhost/user/123',
             [HTTP_METHOD]: 'GET',
             [SPAN_KIND]: SERVER,
-            [HTTP_USERAGENT]: 'curl'
+            [HTTP_USERAGENT]: 'curl',
+            [HTTP_CLIENT_IP]: '8.8.8.8'
           })
         })
       })
@@ -394,7 +398,8 @@ describe('plugins/util/web', () => {
             [HTTP_URL]: 'https://localhost/user/123',
             [HTTP_METHOD]: 'GET',
             [SPAN_KIND]: SERVER,
-            [HTTP_USERAGENT]: 'curl'
+            [HTTP_USERAGENT]: 'curl',
+            [HTTP_CLIENT_IP]: '8.8.8.8'
           })
         })
       })
@@ -541,6 +546,22 @@ describe('plugins/util/web', () => {
 
           expect(tags).to.have.property('resource.name', 'GET /custom/route')
         })
+      })
+
+      it('should call diagnostics_channel', () => {
+        const spy = sinon.spy((data) => {
+          expect(data.req).to.equal(req)
+          expect(data.res).to.equal(res)
+        })
+
+        incomingHttpRequestEnd.subscribe(spy)
+
+        res.end()
+
+        incomingHttpRequestEnd.unsubscribe(spy)
+
+        expect(spy).to.have.been.calledOnce
+        expect(end).to.have.been.calledAfter(spy)
       })
     })
   })
@@ -868,8 +889,7 @@ describe('plugins/util/web', () => {
     })
   })
 
-  // TODO move this tests to current extractIp tests
-  describe.skip('extractIp', () => {
+  describe('extractIp', () => {
     let context
 
     beforeEach(() => {

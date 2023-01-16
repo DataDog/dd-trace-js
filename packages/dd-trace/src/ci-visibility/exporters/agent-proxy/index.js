@@ -3,7 +3,8 @@
 const AgentWriter = require('../../../exporters/agent/writer')
 const AgentlessWriter = require('../agentless/writer')
 const CoverageWriter = require('../agentless/coverage-writer')
-const CiVisibilityExporter = require('../ci-visibility-exporter')
+const AgentInfoExporter = require('../../../exporters/common/agent-info-exporter')
+const log = require('../../../log')
 
 const AGENT_EVP_PROXY_PATH = '/evp_proxy/v2'
 
@@ -11,24 +12,28 @@ function getIsEvpCompatible (err, agentInfo) {
   return !err && agentInfo.endpoints.some(url => url.includes(AGENT_EVP_PROXY_PATH))
 }
 
-class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
+const getIsTestSessionTrace = (trace) => {
+  return trace.some(span =>
+    span.type === 'test_session_end' || span.type === 'test_suite_end'
+  )
+}
+
+/**
+ * AgentProxyCiVisibilityExporter extends from AgentInfoExporter to get the agent information.
+ * If the agent is event platform proxy compatible,
+ * it will initialize the AgentlessWriter and CoverageWriter, else it will fall back to AgentWriter.
+ */
+class AgentProxyCiVisibilityExporter extends AgentInfoExporter {
   constructor (config) {
     super(config)
 
-    const {
-      tags,
-      prioritySampler,
-      lookup,
-      protocolVersion,
-      headers,
-      isGitUploadEnabled
-    } = config
+    this._coverageBuffer = []
+    const { tags, prioritySampler, lookup, protocolVersion, headers } = config
 
     this.getAgentInfo((err, agentInfo) => {
       this._isInitialized = true
-      const isEvpCompatible = getIsEvpCompatible(err, agentInfo)
-      if (isEvpCompatible) {
-        this._isUsingEvpProxy = true
+      this._isEvpCompatible = getIsEvpCompatible(err, agentInfo)
+      if (this._isEvpCompatible) {
         this._writer = new AgentlessWriter({
           url: this._url,
           tags,
@@ -38,9 +43,6 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           url: this._url,
           evpProxyPrefix: AGENT_EVP_PROXY_PATH
         })
-        if (isGitUploadEnabled) {
-          this.sendGitMetadata({ url: this._url, isEvpProxy: true })
-        }
       } else {
         this._writer = new AgentWriter({
           url: this._url,
@@ -52,14 +54,91 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
         // coverages will never be used, so we discard them
         this._coverageBuffer = []
       }
-      this._resolveCanUseCiVisProtocol(isEvpCompatible)
       this.exportUncodedTraces()
       this.exportUncodedCoverages()
     })
+
+    process.once('beforeExit', () => {
+      if (this._writer) {
+        this._writer.flush()
+      }
+      if (this._coverageWriter) {
+        this._coverageWriter.flush()
+      }
+    })
   }
 
-  setUrl (url, coverageUrl) {
-    this._setUrl(url, coverageUrl)
+  exportUncodedTraces () {
+    this.getUncodedTraces().forEach(uncodedTrace => {
+      this.export(uncodedTrace)
+    })
+    this.resetUncodedTraces()
+  }
+
+  exportUncodedCoverages () {
+    this._coverageBuffer.forEach(oldCoveragePayload => {
+      this.exportCoverage(oldCoveragePayload)
+    })
+    this._coverageBuffer = []
+  }
+
+  export (trace) {
+    // Until it's initialized, we just store the traces as is
+    if (!this._isInitialized) {
+      this._traceBuffer.push(trace)
+      return
+    }
+    if (!this._isEvpCompatible && getIsTestSessionTrace(trace)) {
+      return
+    }
+    this._export(trace)
+  }
+
+  exportCoverage (coveragePayload) {
+    // Until it's initialized, we just store the coverages as is
+    if (!this._isInitialized) {
+      this._coverageBuffer.push(coveragePayload)
+      return
+    }
+    // We can't process coverages if it's not evp compatible
+    if (!this._isEvpCompatible) {
+      return
+    }
+
+    const { span, coverageFiles } = coveragePayload
+    const formattedCoverage = {
+      traceId: span.context()._traceId,
+      spanId: span.context()._spanId,
+      files: coverageFiles
+    }
+
+    this._export(formattedCoverage, this._coverageWriter, '_coverageTimer')
+  }
+
+  flush (done = () => {}) {
+    if (!this._isInitialized) {
+      return done()
+    }
+    this._writer.flush(() => {
+      if (this._coverageWriter) {
+        this._coverageWriter.flush(done)
+      } else {
+        done()
+      }
+    })
+  }
+
+  setUrl (url, coverageUrl = url) {
+    super.setUrl(url)
+    try {
+      if (this._coverageWriter) {
+        coverageUrl = new URL(coverageUrl)
+        this._coverageUrl = coverageUrl
+        this._coverageWriter.setUrl(coverageUrl)
+      }
+    } catch (e) {
+      log.error(e)
+    }
   }
 }
 

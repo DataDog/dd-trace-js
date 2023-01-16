@@ -7,8 +7,6 @@ const dc = require('diagnostics_channel')
 const iastContextFunctions = require('./iast-context')
 const { enableTaintTracking, disableTaintTracking, createTransaction, removeTransaction } = require('./taint-tracking')
 
-const IAST_ENABLED_TAG_KEY = '_dd.iast.enabled'
-
 // TODO Change to `apm:http:server:request:[start|close]` when the subscription
 //  order of the callbacks can be enforce
 const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
@@ -41,11 +39,6 @@ function onIncomingHttpRequestStart (data) {
           const iastContext = iastContextFunctions.saveIastContext(store, topContext, { rootSpan, req: data.req })
           createTransaction(rootSpan.context().toSpanId(), iastContext)
           overheadController.initializeRequestContext(iastContext)
-        }
-        if (rootSpan.addTags) {
-          rootSpan.addTags({
-            [IAST_ENABLED_TAG_KEY]: isRequestAcquired ? '1' : '0'
-          })
         }
       }
     }

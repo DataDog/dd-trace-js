@@ -31,6 +31,7 @@ describe('Plugin', function () {
     testPathIgnorePatterns: ['/node_modules/'],
     coverageReporters: [],
     reporters: [],
+    silent: true,
     cache: false,
     maxWorkers: '50%',
     testEnvironment: 'node'
@@ -50,11 +51,7 @@ describe('Plugin', function () {
         .get('/')
         .reply(200, 'OK')
 
-      agent.setAvailableEndpoints([])
-
-      return agent.load(
-        ['jest', 'http'], { service: 'test' }, { experimental: { exporter: 'agent_proxy' } }
-      ).then(() => {
+      return agent.load(['jest', 'http'], { service: 'test' }).then(() => {
         jestCommonOptions.testRunner =
           require(`../../../versions/jest@${version}`).getPath('jest-jasmine2')
 

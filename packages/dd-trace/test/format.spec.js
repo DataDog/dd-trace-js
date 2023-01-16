@@ -412,13 +412,5 @@ describe('format', () => {
       trace = format(span)
       expect(trace.metrics[PROCESS_ID]).to.equal(process.pid)
     })
-
-    it('should not crash on prototype-free tags objects when nesting', () => {
-      const tags = Object.create(null)
-      tags['nested'] = { foo: 'bar' }
-      spanContext._tags['nested'] = tags
-
-      format(span)
-    })
   })
 })

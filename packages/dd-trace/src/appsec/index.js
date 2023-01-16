@@ -10,42 +10,31 @@ const Gateway = require('./gateway/engine')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
-const { extractIp } = require('./ip_extractor')
-const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { block, loadTemplates, loadTemplatesAsync } = require('./blocking')
 
 let isEnabled = false
-let config
 
-function enable (_config) {
+function enable (config) {
   if (isEnabled) return
 
   try {
-    loadTemplates(_config)
-    const rules = fs.readFileSync(_config.appsec.rules || path.join(__dirname, 'recommended.json'))
-    enableFromRules(_config, JSON.parse(rules))
+    // TODO: enable dc_blocking: config.appsec.blocking === true
+
+    let rules = fs.readFileSync(config.appsec.rules || path.join(__dirname, 'recommended.json'))
+    rules = JSON.parse(rules)
+
+    RuleManager.applyRules(rules, config.appsec)
+    remoteConfig.enableAsmData(config.appsec)
   } catch (err) {
-    abortEnable(err)
+    log.error('Unable to start AppSec')
+    log.error(err)
+
+    // abort AppSec start
+    RuleManager.clearAllRules()
+    remoteConfig.disableAsmData()
+    return
   }
-}
 
-async function enableAsync (_config) {
-  if (isEnabled) return
-
-  try {
-    await loadTemplatesAsync(_config)
-    const rules = await fs.promises.readFile(_config.appsec.rules || path.join(__dirname, 'recommended.json'))
-    enableFromRules(_config, JSON.parse(rules))
-  } catch (err) {
-    abortEnable(err)
-  }
-}
-
-function enableFromRules (_config, rules) {
-  RuleManager.applyRules(rules, _config.appsec)
-  remoteConfig.enableAsmData(_config.appsec)
-
-  Reporter.setRateLimit(_config.appsec.rateLimit)
+  Reporter.setRateLimit(config.appsec.rateLimit)
 
   incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
   incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
@@ -57,55 +46,27 @@ function enableFromRules (_config, rules) {
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
 
   isEnabled = true
-  config = _config
 }
 
-function abortEnable (err) {
-  log.error('Unable to start AppSec')
-  log.error(err)
-
-  // abort AppSec start
-  RuleManager.clearAllRules()
-  remoteConfig.disableAsmData()
-}
-
-function incomingHttpStartTranslator ({ req, res, abortController }) {
-  const topSpan = web.root(req)
-  if (!topSpan) return
-
-  const clientIp = extractIp(config, req)
-
-  topSpan.addTags({
-    '_dd.appsec.enabled': 1,
-    '_dd.runtime_family': 'nodejs',
-    [HTTP_CLIENT_IP]: clientIp
-  })
-
-  const store = Gateway.startContext()
-
-  store.set('req', req)
-  store.set('res', res)
-
-  const context = store.get('context')
-
-  if (clientIp) {
-    const results = Gateway.propagate({
-      [addresses.HTTP_CLIENT_IP]: clientIp
-    }, context)
-
-    if (!results || !abortController) return
-
-    for (const entry of results) {
-      if (entry && entry.includes('block')) {
-        block(req, res, topSpan, abortController)
-        break
-      }
-    }
+function incomingHttpStartTranslator (data) {
+  // TODO: get span from datadog-core storage instead
+  const topSpan = web.root(data.req)
+  if (topSpan) {
+    topSpan.addTags({
+      '_dd.appsec.enabled': 1,
+      '_dd.runtime_family': 'nodejs'
+    })
   }
 }
 
 function incomingHttpEndTranslator (data) {
-  const context = Gateway.getContext()
+  const store = Gateway.startContext()
+
+  store.set('req', data.req)
+  store.set('res', data.res)
+
+  const context = store.get('context')
+
   if (!context) return
 
   const requestHeaders = Object.assign({}, data.req.headers)
@@ -146,7 +107,7 @@ function incomingHttpEndTranslator (data) {
     payload[addresses.HTTP_INCOMING_COOKIES] = {}
 
     for (const k of Object.keys(data.req.cookies)) {
-      payload[addresses.HTTP_INCOMING_COOKIES][k] = [data.req.cookies[k]]
+      payload[addresses.HTTP_INCOMING_COOKIES][k] = [ data.req.cookies[k] ]
     }
   }
 
@@ -157,7 +118,6 @@ function incomingHttpEndTranslator (data) {
 
 function disable () {
   isEnabled = false
-  config = null
 
   RuleManager.clearAllRules()
   remoteConfig.disableAsmData()
@@ -169,7 +129,6 @@ function disable () {
 
 module.exports = {
   enable,
-  enableAsync,
   disable,
   incomingHttpStartTranslator,
   incomingHttpEndTranslator

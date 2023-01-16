@@ -9,6 +9,7 @@ const log = require('../../log')
 
 const clientId = uuid()
 
+const POLL_INTERVAL = 5e3
 const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
 
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
@@ -17,8 +18,7 @@ class RemoteConfigManager extends EventEmitter {
   constructor (config) {
     super()
 
-    const pollInterval = config.remoteConfig.pollInterval * 1000
-    this.scheduler = new Scheduler((cb) => this.poll(cb), pollInterval)
+    this.scheduler = new Scheduler((cb) => this.poll(cb), POLL_INTERVAL)
 
     this.requestOptions = {
       url: config.url,

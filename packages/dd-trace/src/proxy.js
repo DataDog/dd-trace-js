@@ -1,4 +1,6 @@
 'use strict'
+const { channel } = require('diagnostics_channel')
+
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
@@ -7,7 +9,10 @@ const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
+const { sendGitMetadata } = require('./ci-visibility/exporters/git/git_metadata')
 const remoteConfig = require('./appsec/remote_config')
+
+const gitMetadataUploadFinishCh = channel('ci:git-metadata-upload:finish')
 
 class Tracer extends NoopProxy {
   constructor () {
@@ -25,9 +30,7 @@ class Tracer extends NoopProxy {
     try {
       const config = new Config(options) // TODO: support dynamic config
 
-      if (!config.isCiVisibility) {
-        remoteConfig.enable(config)
-      }
+      remoteConfig.enable(config)
 
       if (config.profiling.enabled) {
         // do not stop tracer initialization if the profiler fails to be imported
@@ -57,6 +60,17 @@ class Tracer extends NoopProxy {
         this._pluginManager.configure(config)
         setStartupLogPluginManager(this._pluginManager)
         telemetry.start(config, this._pluginManager)
+      }
+
+      if (config.isGitUploadEnabled) {
+        sendGitMetadata(config.url, config.site, (err) => {
+          if (err) {
+            log.error(`Error uploading git metadata: ${err.message}`)
+          } else {
+            log.debug('Successfully uploaded git metadata')
+          }
+          gitMetadataUploadFinishCh.publish(err)
+        })
       }
     } catch (e) {
       log.error(e)

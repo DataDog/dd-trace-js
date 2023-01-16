@@ -47,10 +47,7 @@ describe('RemoteConfigManager', () => {
       },
       service: 'serviceName',
       env: 'serviceEnv',
-      version: 'appVersion',
-      remoteConfig: {
-        pollInterval: 5
-      }
+      version: 'appVersion'
     }
 
     rc = new RemoteConfigManager(config)
