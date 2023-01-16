@@ -16,6 +16,10 @@ const memoize = func => {
   return memoized
 }
 
+function processMsg (msg) {
+  return typeof msg === 'function' ? msg() : msg
+}
+
 const log = {
   use (logger) {
     logWriter.use(logger)
@@ -38,22 +42,30 @@ const log = {
   },
 
   debug (message) {
-    debugChannel.publish(message)
+    if (debugChannel.hasSubscribers) {
+      debugChannel.publish(processMsg(message))
+    }
     return this
   },
 
   info (message) {
-    infoChannel.publish(message)
+    if (infoChannel.hasSubscribers) {
+      infoChannel.publish(processMsg(message))
+    }
     return this
   },
 
   warn (message) {
-    warnChannel.publish(message)
+    if (warnChannel.hasSubscribers) {
+      warnChannel.publish(processMsg(message))
+    }
     return this
   },
 
   error (err) {
-    errorChannel.publish(err)
+    if (errorChannel.hasSubscribers) {
+      errorChannel.publish(err)
+    }
     return this
   },
 

@@ -14,10 +14,6 @@ let enabled = false
 let logger = defaultLogger
 let logLevel = getChannelLogLevel()
 
-function processMsg (msg) {
-  return typeof msg === 'function' ? msg() : msg
-}
-
 function withNoop (fn) {
   const store = storage.getStore()
 
@@ -96,20 +92,20 @@ function onError (err) {
 function onWarn (message) {
   if (!logger.warn) return onDebug(message)
   if (enabled) {
-    withNoop(() => logger.warn(processMsg(message)))
+    withNoop(() => logger.warn(message))
   }
 }
 
 function onInfo (message) {
   if (!logger.info) return onDebug(message)
   if (enabled) {
-    withNoop(() => logger.info(processMsg(message)))
+    withNoop(() => logger.info(message))
   }
 }
 
 function onDebug (message) {
   if (enabled) {
-    withNoop(() => logger.debug(processMsg(message)))
+    withNoop(() => logger.debug(message))
   }
 }
 
