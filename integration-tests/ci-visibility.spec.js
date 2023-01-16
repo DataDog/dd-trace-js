@@ -30,6 +30,7 @@ const testFrameworks = [
     dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc'],
     testFile: 'ci-visibility/run-mocha.js',
     expectedStdout: '2 passing',
+    extraStdout: 'end event: can add event listeners to mocha',
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.js',
       'ci-visibility/test/sum.js',
@@ -57,6 +58,7 @@ testFrameworks.forEach(({
   dependencies,
   testFile,
   expectedStdout,
+  extraStdout,
   expectedCoverageFiles,
   runTestsWithCoverageCommand
 }) => {
@@ -104,6 +106,9 @@ testFrameworks.forEach(({
         const areAllTestSpans = testSpans.every(span => span.name === `${name}.test`)
         assert.isTrue(areAllTestSpans)
         assert.include(testOutput, expectedStdout)
+        if (extraStdout) {
+          assert.include(testOutput, extraStdout)
+        }
         done()
       })
 
@@ -334,7 +339,8 @@ testFrameworks.forEach(({
           assert.propertyVal(testSession.meta, TEST_SESSION_CODE_COVERAGE_ENABLED, 'true')
           assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'true')
           done()
-        })
+        }).catch(done)
+
         childProcess = exec(
           runTestsWithCoverageCommand,
           {
@@ -495,7 +501,7 @@ testFrameworks.forEach(({
           )
           assert.equal(numSuites, 2)
           done()
-        })
+        }).catch(done)
 
         childProcess = fork(startupTestFile, {
           cwd,
@@ -625,7 +631,7 @@ testFrameworks.forEach(({
           )
           assert.equal(numSuites, 1)
           done()
-        })
+        }).catch(done)
 
         childProcess = exec(
           runTestsWithCoverageCommand,
