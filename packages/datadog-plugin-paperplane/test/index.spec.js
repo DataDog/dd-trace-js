@@ -605,7 +605,7 @@ describe('Plugin', () => {
             })
           })
 
-          it('should not alter logs with no active span', () => {
+          it('should not inject trace_id or span_id without an active span', () => {
             /* eslint-disable no-console */
             paperplane.logger({ message: ':datadoge:' })
 
@@ -613,7 +613,9 @@ describe('Plugin', () => {
 
             const record = JSON.parse(console.info.firstCall.args[0])
 
-            expect(record).to.not.have.property('dd')
+            expect(record).to.have.property('dd')
+            expect(record.dd).to.not.have.property('trace_id')
+            expect(record.dd).to.not.have.property('span_id')
             expect(record).to.have.property('message', ':datadoge:')
             /* eslint-enable no-console */
           })
