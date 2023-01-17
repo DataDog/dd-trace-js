@@ -14,6 +14,7 @@ class SpanProcessor {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
+    this._killAll = false
 
     this._stats = new SpanStatsProcessor(config)
     this._spanSampler = new SpanSampler(config)
@@ -48,6 +49,18 @@ class SpanProcessor {
 
       this._erase(trace, active)
     }
+
+    if (this._killAll) {
+      started.map(startedSpan => {
+        if (!startedSpan._finished) {
+          startedSpan.finish()
+        }
+      })
+    }
+  }
+
+  killAll () {
+    this._killAll = true
   }
 
   _erase (trace, active) {

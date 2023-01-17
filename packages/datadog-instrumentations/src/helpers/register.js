@@ -57,3 +57,10 @@ function getVersion (moduleBaseDir) {
 function filename (name, file) {
   return [name, file].filter(val => val).join('/')
 }
+
+module.exports = {
+  filename,
+  getVersion,
+  matchVersion,
+  pathSepExpr
+}
