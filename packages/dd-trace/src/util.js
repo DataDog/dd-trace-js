@@ -1,7 +1,7 @@
 'use strict'
 
 const { isIP } = require('net')
-const isLoopbackAddr = require('is-localhost-ip')
+const isLoopbackAddr = require('is-loopback-addr')
 
 function isTrue (str) {
   str = String(str).toLowerCase()
