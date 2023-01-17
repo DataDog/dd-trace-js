@@ -89,14 +89,16 @@ describe('Plugin', () => {
           })
         })
 
-        it('should skip injection without an active span', () => {
+        it('should not inject trace_id or span_id without an active span', () => {
           logger.info('message')
 
           expect(stream.write).to.have.been.called
 
           const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-          expect(record).to.not.have.property('dd')
+          expect(record).to.have.property('dd')
+          expect(record.dd).to.not.have.property('trace_id')
+          expect(record.dd).to.not.have.property('span_id')
         })
       })
     })

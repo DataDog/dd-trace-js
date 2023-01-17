@@ -43,8 +43,8 @@ module.exports = class LogPlugin extends Plugin {
       const store = storage.getStore()
       const span = store && store.span
 
-      if (!span) return
-
+      // NOTE: This needs to run whether or not there is a span
+      // so service, version, and env will always get injected.
       const holder = {}
       this.tracer.inject(span, LOG, holder)
       arg.message = messageProxy(arg.message, holder)
