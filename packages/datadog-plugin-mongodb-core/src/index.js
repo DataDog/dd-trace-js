@@ -9,7 +9,7 @@ class MongodbCorePlugin extends DatabasePlugin {
 
   start ({ ns, ops, options = {}, name }) {
     const query = getQuery(ops)
-    const resource = truncate(getResource(ns, query, name))
+    const resource = truncate(getResource(this, ns, query, name))
 
     const hostDetails = resolveHostDetails(options.host)
 
@@ -34,10 +34,10 @@ function getQuery (cmd) {
   if (cmd.filter) return JSON.stringify(limitDepth(cmd.filter))
 }
 
-function getResource (ns, query, operationName) {
+function getResource (plugin, ns, query, operationName) {
   const parts = [operationName, ns]
 
-  if (query) {
+  if (plugin.config.queryInResourceName && query) {
     parts.push(query)
   }
 

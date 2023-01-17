@@ -169,6 +169,7 @@ describe('WAFCallback', () => {
             return this.dispose.called
           }
         })),
+        updateRuleData: sinon.stub(),
         dispose: sinon.stub()
       })
 
@@ -427,6 +428,28 @@ describe('WAFCallback', () => {
           rulesVersion: '1.2.3'
         }, store)
         expect(Reporter.reportAttack).to.not.have.been.called
+      })
+    })
+
+    describe('updateRuleData', () => {
+      it('should call ddwaf.updateRuleData', () => {
+        const ruleData = [
+          {
+            id: 'blocked_users',
+            type: 'data_with_expiration',
+            data: [
+              {
+                expiration: 9999999999,
+                value: 'user1'
+              }
+            ]
+          }
+        ]
+
+        waf.updateRuleData(ruleData)
+
+        expect(waf.ddwaf.updateRuleData).to.be.calledOnce
+        expect(waf.ddwaf.updateRuleData).to.be.calledWithExactly(ruleData)
       })
     })
 

@@ -21,6 +21,7 @@ require,lodash.uniq,MIT,Copyright JS Foundation and other contributors
 require,lru-cache,ISC,Copyright (c) 2010-2022 Isaac Z. Schlueter and Contributors
 require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk
 require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
+require,node-abort-controller,MIT,Copyright (c) 2019 Steve Faulkner
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
 require,protobufjs,BSD-3-Clause,Copyright 2016 Daniel Wirtz
@@ -39,6 +40,7 @@ dev,dotenv,BSD-2-Clause,Copyright 2015 Scott Motte
 dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
 dev,eslint-config-standard,MIT,Copyright Feross Aboukhadijeh
 dev,eslint-plugin-import,MIT,Copyright 2015 Ben Mosher
+dev,eslint-plugin-mocha,MIT,Copyright 2014 Mathias Schreck
 dev,eslint-plugin-node,MIT,Copyright 2015 Toru Nagashima
 dev,eslint-plugin-promise,ISC,jden and other contributors
 dev,eslint-plugin-standard,MIT,Copyright 2015 Jamund Ferguson

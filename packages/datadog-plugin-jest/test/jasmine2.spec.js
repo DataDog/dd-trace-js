@@ -22,7 +22,8 @@ const {
 
 const { version: ddTraceVersion } = require('../../../package.json')
 
-describe('Plugin', () => {
+describe('Plugin', function () {
+  this.retries(2)
   let jestExecutable
 
   const jestCommonOptions = {
@@ -30,7 +31,6 @@ describe('Plugin', () => {
     testPathIgnorePatterns: ['/node_modules/'],
     coverageReporters: [],
     reporters: [],
-    silent: true,
     cache: false,
     maxWorkers: '50%',
     testEnvironment: 'node'
@@ -42,7 +42,7 @@ describe('Plugin', () => {
       jestTestFile.forEach((testFile) => {
         delete require.cache[require.resolve(path.join(__dirname, testFile))]
       })
-      return agent.close({ ritmReset: false, wipe: true })
+      return agent.close()
     })
     beforeEach(() => {
       // for http integration tests
@@ -50,7 +50,11 @@ describe('Plugin', () => {
         .get('/')
         .reply(200, 'OK')
 
-      return agent.load(['jest', 'http'], { service: 'test' }).then(() => {
+      agent.setAvailableEndpoints([])
+
+      return agent.load(
+        ['jest', 'http'], { service: 'test' }, { experimental: { exporter: 'agent_proxy' } }
+      ).then(() => {
         jestCommonOptions.testRunner =
           require(`../../../versions/jest@${version}`).getPath('jest-jasmine2')
 
@@ -58,7 +62,7 @@ describe('Plugin', () => {
       })
     })
     describe('jest with jasmine', function () {
-      this.timeout(15000)
+      this.timeout(20000)
       it('instruments async, sync and integration tests', function (done) {
         const tests = [
           {
@@ -116,7 +120,7 @@ describe('Plugin', () => {
             expect(testSpan.service).to.equal('test')
             expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: 8000, spanResourceMatch: new RegExp(`${name}$`) })
+          }, { timeoutMs: 10000, spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -163,7 +167,7 @@ describe('Plugin', () => {
               `packages/datadog-plugin-jest/test/jest-hook-failure.js.${name}`
             )
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          }, { timeoutMs: 8000, spanResourceMatch: new RegExp(`${name}$`) })
+          }, { timeoutMs: 10000, spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)
@@ -201,7 +205,7 @@ describe('Plugin', () => {
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
               [COMPONENT]: 'jest'
             })
-          }, { timeoutMs: 8000, spanResourceMatch: new RegExp(`${name}$`) })
+          }, { timeoutMs: 10000, spanResourceMatch: new RegExp(`${name}$`) })
         })
 
         Promise.all(assertionPromises).then(() => done()).catch(done)

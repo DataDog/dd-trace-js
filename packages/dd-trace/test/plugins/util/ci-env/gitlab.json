@@ -783,8 +783,8 @@
       "DD_GIT_COMMIT_COMMITTER_EMAIL": "usersupplied-comitteremail",
       "DD_GIT_COMMIT_COMMITTER_NAME": "usersupplied-comittername",
       "DD_GIT_COMMIT_MESSAGE": "usersupplied-message",
-      "DD_GIT_COMMIT_SHA": "usersupplied-commit",
-      "DD_GIT_REPOSITORY_URL": "usersupplied-repo",
+      "DD_GIT_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "DD_GIT_REPOSITORY_URL": "git@github.com:DataDog/userrepo.git",
       "GITLAB_CI": "gitlab"
     },
     {
@@ -804,8 +804,8 @@
       "git.commit.committer.email": "usersupplied-comitteremail",
       "git.commit.committer.name": "usersupplied-comittername",
       "git.commit.message": "usersupplied-message",
-      "git.commit.sha": "usersupplied-commit",
-      "git.repository_url": "usersupplied-repo"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "git@github.com:DataDog/userrepo.git"
     }
   ],
   [
@@ -829,8 +829,8 @@
       "DD_GIT_COMMIT_COMMITTER_EMAIL": "usersupplied-comitteremail",
       "DD_GIT_COMMIT_COMMITTER_NAME": "usersupplied-comittername",
       "DD_GIT_COMMIT_MESSAGE": "usersupplied-message",
-      "DD_GIT_COMMIT_SHA": "usersupplied-commit",
-      "DD_GIT_REPOSITORY_URL": "usersupplied-repo",
+      "DD_GIT_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "DD_GIT_REPOSITORY_URL": "git@github.com:DataDog/userrepo.git",
       "DD_GIT_TAG": "0.0.2",
       "GITLAB_CI": "gitlab"
     },
@@ -850,9 +850,43 @@
       "git.commit.committer.email": "usersupplied-comitteremail",
       "git.commit.committer.name": "usersupplied-comittername",
       "git.commit.message": "usersupplied-message",
-      "git.commit.sha": "usersupplied-commit",
-      "git.repository_url": "usersupplied-repo",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "git@github.com:DataDog/userrepo.git",
       "git.tag": "0.0.2"
+    }
+  ],
+  [
+    {
+      "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
+      "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
+      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
+      "CI_JOB_ID": "gitlab-job-id",
+      "CI_JOB_NAME": "gitlab-job-name",
+      "CI_JOB_STAGE": "gitlab-stage-name",
+      "CI_JOB_URL": "gitlab-job-url",
+      "CI_PIPELINE_ID": "gitlab-pipeline-id",
+      "CI_PIPELINE_IID": "gitlab-pipeline-number",
+      "CI_PROJECT_PATH": "gitlab-pipeline-name",
+      "CI_PROJECT_URL": "gitlab-project-url",
+      "CI_REPOSITORY_URL": "https://user:password@gitlab.com/DataDog/dogweb.git",
+      "GITLAB_CI": "gitlab"
+    },
+    {
+      "_dd.ci.env_vars": "{\"CI_PROJECT_URL\":\"gitlab-project-url\",\"CI_PIPELINE_ID\":\"gitlab-pipeline-id\",\"CI_JOB_ID\":\"gitlab-job-id\"}",
+      "ci.job.name": "gitlab-job-name",
+      "ci.job.url": "gitlab-job-url",
+      "ci.pipeline.id": "gitlab-pipeline-id",
+      "ci.pipeline.name": "gitlab-pipeline-name",
+      "ci.pipeline.number": "gitlab-pipeline-number",
+      "ci.provider.name": "gitlab",
+      "ci.stage.name": "gitlab-stage-name",
+      "git.commit.author.date": "2021-07-21T11:43:07-04:00",
+      "git.commit.author.email": "john@doe.com",
+      "git.commit.author.name": "John Doe",
+      "git.commit.message": "gitlab-git-commit-message",
+      "git.commit.sha": "gitlab-git-commit",
+      "git.repository_url": "https://gitlab.com/DataDog/dogweb.git"
     }
   ]
 ]

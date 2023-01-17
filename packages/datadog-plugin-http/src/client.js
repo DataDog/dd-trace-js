@@ -123,7 +123,7 @@ function addRequestHeaders (req, span, config) {
     const value = req.getHeader(key)
 
     if (value) {
-      span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, value)
+      span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, Array.isArray(value) ? value.toString() : value)
     }
   })
 }

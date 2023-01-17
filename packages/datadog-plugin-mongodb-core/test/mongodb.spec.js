@@ -99,9 +99,11 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `planCacheListPlans test.$cmd {}`
+                const resource = `planCacheListPlans test.$cmd`
+                const query = `{}`
 
                 expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
@@ -116,9 +118,11 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collectionName} {"_id":"?"}`
+                const resource = `find test.${collectionName}`
+                const query = `{"_id":"?"}`
 
                 expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
@@ -132,9 +136,11 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collectionName} {"_bin":"?"}`
+                const resource = `find test.${collectionName}`
+                const query = `{"_bin":"?"}`
 
                 expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
@@ -150,9 +156,11 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collectionName} {"_id":"${id}"}`
+                const resource = `find test.${collectionName}`
+                const query = `{"_id":"${id}"}`
 
                 expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
@@ -166,9 +174,11 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collectionName} {"_time":{"$timestamp":"0"}}`
+                const resource = `find test.${collectionName}`
+                const query = `{"_time":{"$timestamp":"0"}}`
 
                 expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
@@ -182,9 +192,11 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collectionName} {"_id":"?"}`
+                const resource = `find test.${collectionName}`
+                const query = `{"_id":"?"}`
 
                 expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
@@ -198,9 +210,11 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collectionName} {"_id":"1234"}`
+                const resource = `find test.${collectionName}`
+                const query = `{"_id":"1234"}`
 
                 expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
@@ -222,7 +236,10 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load('mongodb-core', { service: 'custom' })
+          return agent.load('mongodb-core', {
+            service: 'custom',
+            queryInResourceName: true
+          })
         })
 
         after(() => {
@@ -243,7 +260,23 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          collection.insertOne({ a: 1 }, () => {})
+          collection.insertOne({ a: 1 }, {}, () => {})
+        })
+
+        it('should include sanitized query in resource when configured', done => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+              const resource = `find test.${collectionName} {"_bin":"?"}`
+
+              expect(span).to.have.property('resource', resource)
+            })
+            .then(done)
+            .catch(done)
+
+          collection.find({
+            _bin: new BSON.Binary()
+          }).toArray()
         })
       })
     })

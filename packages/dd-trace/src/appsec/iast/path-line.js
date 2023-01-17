@@ -1,4 +1,5 @@
 const path = require('path')
+const process = require('process')
 const pathLine = {
   getFirstNonDDPathAndLine,
   getFirstNonDDPathAndLineFromCallsites, // Exported only for test purposes
@@ -7,7 +8,7 @@ const pathLine = {
 }
 
 const EXCLUDED_PATHS = [
-  '/node_modules/diagnostics_channel'
+  path.join(path.sep, 'node_modules', 'diagnostics_channel')
 ]
 const EXCLUDED_PATH_PREFIXES = [
   'node:diagnostics_channel',
@@ -20,7 +21,7 @@ const EXCLUDED_PATH_PREFIXES = [
 
 function calculateDDBasePath (dirname) {
   const dirSteps = dirname.split(path.sep)
-  const packagesIndex = dirSteps.indexOf('packages')
+  const packagesIndex = dirSteps.lastIndexOf('packages')
   return dirSteps.slice(0, packagesIndex).join(path.sep) + path.sep
 }
 
@@ -43,10 +44,10 @@ function getFirstNonDDPathAndLineFromCallsites (callsites) {
   if (callsites) {
     for (let i = 0; i < callsites.length; i++) {
       const callsite = callsites[i]
-      const path = callsite.getFileName()
-      if (!isExcluded(callsite) && path.indexOf(pathLine.ddBasePath) === -1) {
+      const filepath = callsite.getFileName()
+      if (!isExcluded(callsite) && filepath.indexOf(pathLine.ddBasePath) === -1) {
         return {
-          path,
+          path: path.relative(process.cwd(), filepath),
           line: callsite.getLineNumber()
         }
       }

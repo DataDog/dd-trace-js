@@ -40,6 +40,7 @@ describe('Plugin', () => {
             const Client = clients[implementation](pg)
 
             client = new Client({
+              host: '127.0.0.1',
               user: 'postgres',
               password: 'postgres',
               database: 'postgres',
@@ -181,6 +182,7 @@ describe('Plugin', () => {
           pg = require(`../../../versions/pg@${version}`).get()
 
           client = new pg.Client({
+            host: '127.0.0.1',
             user: 'postgres',
             password: 'postgres',
             database: 'postgres'
@@ -219,6 +221,7 @@ describe('Plugin', () => {
           pg = require(`../../../versions/pg@${version}`).get()
 
           client = new pg.Client({
+            host: '127.0.0.1',
             user: 'postgres',
             password: 'postgres',
             database: 'postgres'
@@ -230,7 +233,7 @@ describe('Plugin', () => {
         it('should be configured with the correct service', done => {
           agent.use(traces => {
             try {
-              expect(traces[0][0]).to.have.property('service', 'localhost-postgres')
+              expect(traces[0][0]).to.have.property('service', '127.0.0.1-postgres')
 
               done()
             } catch (e) {
@@ -260,6 +263,7 @@ describe('Plugin', () => {
           pg = require(`../../../versions/pg@${version}`).get()
 
           client = new pg.Client({
+            host: '127.0.0.1',
             user: 'postgres',
             password: 'postgres',
             database: 'postgres'
@@ -269,6 +273,7 @@ describe('Plugin', () => {
 
         it('should contain comment in query text', done => {
           const client = new pg.Client({
+            host: '127.0.0.1',
             user: 'postgres',
             password: 'postgres',
             database: 'postgres'
@@ -318,6 +323,7 @@ describe('Plugin', () => {
           pg = require(`../../../versions/pg@${version}`).get()
 
           clientDBM = new pg.Client({
+            host: '127.0.0.1',
             user: 'postgres',
             password: 'postgres',
             database: 'postgres'
@@ -361,6 +367,7 @@ describe('Plugin', () => {
           })
 
           client = new pg.Client({
+            host: '127.0.0.1',
             user: 'postgres',
             password: 'postgres',
             database: 'postgres'

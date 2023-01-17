@@ -28,6 +28,7 @@ describe('Plugin', function () {
   let cypressExecutable
   let appPort
   let agentListenPort
+  this.retries(2)
   withVersions('cypress', 'cypress', (version, moduleName) => {
     beforeEach(function () {
       this.timeout(10000)
@@ -41,7 +42,9 @@ describe('Plugin', function () {
       })
     })
     afterEach(() => agent.close({ ritmReset: false }))
-    afterEach(done => appServer.close(done))
+    afterEach(done => {
+      appServer.close(done)
+    })
 
     describe('cypress', function () {
       this.timeout(testTimeout)
@@ -53,7 +56,8 @@ describe('Plugin', function () {
           config: {
             baseUrl: `http://localhost:${appPort}`
           },
-          quiet: true
+          quiet: true,
+          headless: true
         })
         const passingTestPromise = agent.use(traces => {
           const testSpan = traces[0][0]

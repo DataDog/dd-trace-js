@@ -15,6 +15,8 @@ const {
   TEST_SUITE_ID,
   TEST_COMMAND,
   TEST_ITR_TESTS_SKIPPED,
+  TEST_SESSION_CODE_COVERAGE_ENABLED,
+  TEST_SESSION_ITR_SKIPPING_ENABLED,
   TEST_CODE_COVERAGE_LINES_TOTAL
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -33,7 +35,7 @@ class JestPlugin extends CiPlugin {
     // Used to handle the end of a jest worker to be able to flush
     const handler = ([message]) => {
       if (message === CHILD_MESSAGE_END) {
-        this.tracer._exporter._writer.flush(() => {
+        this.tracer._exporter.flush(() => {
           // eslint-disable-next-line
           // https://github.com/facebook/jest/blob/24ed3b5ecb419c023ee6fdbc838f07cc028fc007/packages/jest-worker/src/workers/processChild.ts#L118-L133
           // Only after the flush is done we clean up open handles
@@ -48,9 +50,6 @@ class JestPlugin extends CiPlugin {
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
     this.addSub('ci:jest:session:start', (command) => {
-      if (!this.config.isAgentlessEnabled) {
-        return
-      }
       const store = storage.getStore()
       const childOf = getTestParentSpan(this.tracer)
       const testSessionSpanMetadata = getTestSessionCommonTags(command, this.tracer._version)
@@ -66,30 +65,32 @@ class JestPlugin extends CiPlugin {
       this.enter(testSessionSpan, store)
     })
 
-    this.addSub('ci:jest:session:finish', ({ status, isTestsSkipped, testCodeCoverageLinesTotal }) => {
-      if (!this.config.isAgentlessEnabled) {
-        return
-      }
+    this.addSub('ci:jest:session:finish', ({
+      status,
+      isSuitesSkipped,
+      isSuitesSkippingEnabled,
+      isCodeCoverageEnabled,
+      testCodeCoverageLinesTotal
+    }) => {
       const testSessionSpan = storage.getStore().span
+
       testSessionSpan.setTag(TEST_STATUS, status)
-      if (isTestsSkipped) {
-        testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
-      }
+      testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
+      testSessionSpan.setTag(TEST_SESSION_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
+      testSessionSpan.setTag(TEST_SESSION_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+
       if (testCodeCoverageLinesTotal !== undefined) {
         testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
       }
       testSessionSpan.finish()
       finishAllTraceSpans(testSessionSpan)
-      this.tracer._exporter._writer.flush()
+      this.tracer._exporter.flush()
     })
 
     // Test suites can be run in a different process from jest's main one.
     // This subscriber changes the configuration objects from jest to inject the trace id
     // of the test session to the processes that run the test suites.
     this.addSub('ci:jest:session:configuration', configs => {
-      if (!this.config.isAgentlessEnabled) {
-        return
-      }
       const testSessionSpan = storage.getStore().span
       configs.forEach(config => {
         config._ddTestSessionId = testSessionSpan.context()._traceId.toString(10)
@@ -98,10 +99,6 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions }) => {
-      if (!this.config.isAgentlessEnabled) {
-        return
-      }
-
       const { _ddTestSessionId: testSessionId, _ddTestCommand: testCommand } = testEnvironmentOptions
 
       const store = storage.getStore()
@@ -125,9 +122,6 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage }) => {
-      if (!this.config.isAgentlessEnabled) {
-        return
-      }
       const testSuiteSpan = storage.getStore().span
       testSuiteSpan.setTag(TEST_STATUS, status)
       if (errorMessage) {
@@ -139,10 +133,12 @@ class JestPlugin extends CiPlugin {
       finishAllTraceSpans(testSuiteSpan)
     })
 
+    /**
+     * This can't use `this.itrConfig` like `ci:mocha:test-suite:code-coverage`
+     * because this subscription happens in a different process from the one
+     * fetching the ITR config.
+     */
     this.addSub('ci:jest:test-suite:code-coverage', (coverageFiles) => {
-      if (!this.config.isAgentlessEnabled || !this.config.isIntelligentTestRunnerEnabled) {
-        return
-      }
       const testSuiteSpan = storage.getStore().span
       this.tracer._exporter.exportCoverage({ span: testSuiteSpan, coverageFiles })
     })

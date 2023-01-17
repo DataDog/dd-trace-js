@@ -26,6 +26,19 @@ function removeEmptyValues (tags) {
   }, {})
 }
 
+function filterSensitiveInfoFromRepository (repositoryUrl) {
+  try {
+    if (repositoryUrl.startsWith('git@')) {
+      return repositoryUrl
+    }
+    const { protocol, hostname, pathname } = new URL(repositoryUrl)
+
+    return `${protocol}//${hostname}${pathname}`
+  } catch (e) {
+    return repositoryUrl
+  }
+}
+
 function getUserProviderGitMetadata () {
   const {
     DD_GIT_COMMIT_SHA,
@@ -57,7 +70,7 @@ function getUserProviderGitMetadata () {
   return removeEmptyValues({
     [GIT_COMMIT_SHA]: DD_GIT_COMMIT_SHA,
     [GIT_BRANCH]: branch,
-    [GIT_REPOSITORY_URL]: DD_GIT_REPOSITORY_URL,
+    [GIT_REPOSITORY_URL]: filterSensitiveInfoFromRepository(DD_GIT_REPOSITORY_URL),
     [GIT_TAG]: tag,
     [GIT_COMMIT_MESSAGE]: DD_GIT_COMMIT_MESSAGE,
     [GIT_COMMIT_COMMITTER_NAME]: DD_GIT_COMMIT_COMMITTER_NAME,

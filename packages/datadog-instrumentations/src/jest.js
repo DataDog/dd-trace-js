@@ -19,7 +19,7 @@ const testRunFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
-const jestConfigurationCh = channel('ci:jest:configuration')
+const jestItrConfigurationCh = channel('ci:jest:itr-configuration')
 
 let skippableSuites = []
 let isCodeCoverageEnabled = false
@@ -176,18 +176,21 @@ function cliWrapper (cli) {
     const configurationPromise = new Promise((resolve) => {
       onDone = resolve
     })
+    if (!jestItrConfigurationCh.hasSubscribers) {
+      return runCLI.apply(this, arguments)
+    }
 
     sessionAsyncResource.runInAsyncScope(() => {
-      jestConfigurationCh.publish({ onDone })
+      jestItrConfigurationCh.publish({ onDone })
     })
 
     try {
-      const { err, config } = await configurationPromise
+      const { err, itrConfig } = await configurationPromise
       if (err) {
         log.error(err)
       }
-      isCodeCoverageEnabled = config.isCodeCoverageEnabled
-      isSuitesSkippingEnabled = config.isSuitesSkippingEnabled
+      isCodeCoverageEnabled = itrConfig.isCodeCoverageEnabled
+      isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled
     } catch (e) {
       log.error(e)
     }
@@ -213,7 +216,7 @@ function cliWrapper (cli) {
       }
     }
 
-    const isTestsSkipped = !!skippableSuites.length
+    const isSuitesSkipped = !!skippableSuites.length
 
     const processArgv = process.argv.slice(2).join(' ')
     sessionAsyncResource.runInAsyncScope(() => {
@@ -226,13 +229,20 @@ function cliWrapper (cli) {
 
     let testCodeCoverageLinesTotal
     try {
-      testCodeCoverageLinesTotal = coverageMap.getCoverageSummary().lines.pct
+      const { pct, total } = coverageMap.getCoverageSummary().lines
+      testCodeCoverageLinesTotal = total !== 0 ? pct : 0
     } catch (e) {
       // ignore errors
     }
 
     sessionAsyncResource.runInAsyncScope(() => {
-      testSessionFinishCh.publish({ status: success ? 'pass' : 'fail', isTestsSkipped, testCodeCoverageLinesTotal })
+      testSessionFinishCh.publish({
+        status: success ? 'pass' : 'fail',
+        isSuitesSkipped,
+        isSuitesSkippingEnabled,
+        isCodeCoverageEnabled,
+        testCodeCoverageLinesTotal
+      })
     })
 
     return result
@@ -304,6 +314,11 @@ function jestAdapterWrapper (jestAdapter) {
         const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
           .map(filename => getTestSuitePath(filename, environment.rootDir))
 
+        /**
+         * Child processes do not each request ITR configuration, so the jest's parent process
+         * needs to pass them the configuration. This is done via _ddTestCodeCoverageEnabled, which
+         * controls whether coverage is reported.
+         */
         if (coverageFiles &&
           environment.testEnvironmentOptions &&
           environment.testEnvironmentOptions._ddTestCodeCoverageEnabled) {
@@ -351,9 +366,11 @@ function configureTestEnvironment (readConfigsResult) {
   if (isSuitesSkippingEnabled) {
     // If suite skipping is enabled, the code coverage results are not going to be relevant,
     // so we do not show them.
+    // Also, we might skip every test, so we need to pass `passWithNoTests`
     const globalConfig = {
       ...readConfigsResult.globalConfig,
-      coverageReporters: ['none']
+      coverageReporters: ['none'],
+      passWithNoTests: true
     }
     readConfigsResult.globalConfig = globalConfig
   }

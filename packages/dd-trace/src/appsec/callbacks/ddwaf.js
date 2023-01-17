@@ -61,7 +61,7 @@ class WAFCallback {
 
           subscribedAddresses.add(address)
 
-          Gateway.manager.addSubscription({ addresses: [ address ], callback })
+          Gateway.manager.addSubscription({ addresses: [address], callback })
         }
       }
     }
@@ -121,6 +121,10 @@ class WAFCallback {
     }
 
     return result.actions
+  }
+
+  updateRuleData (ruleData) {
+    this.ddwaf.updateRuleData(ruleData)
   }
 
   clear () {

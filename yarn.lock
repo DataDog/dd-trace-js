@@ -196,17 +196,17 @@
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-iast-rewriter@1.0.0":
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-1.0.0.tgz#02bf338055cdcd3c5b3e8d528afe6d967985cf11"
-  integrity sha512-DGN4cQd30mUaAB349gKeoDTt7acviBERnNYlyk8G+PlobuomTSEohJri5Jo4X+/5oRJPJngGX2VBq7YwMHiing==
+"@datadog/native-iast-rewriter@1.1.2":
+  version "1.1.2"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-1.1.2.tgz#793cbf92d218ec80d645be0830023656b81018ea"
+  integrity sha512-pigRfRtAjZjMjqIXyXb98S4aDnuHz/EmqpoxAajFZsNjBLM87YonwSY5zoBdCsOyA46ddKOJRoCQd5ZalpOFMQ==
   dependencies:
     node-gyp-build "^4.5.0"
 
-"@datadog/native-iast-taint-tracking@1.0.0":
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-1.0.0.tgz#d875cf0a3ef3907c27311386f85b3f3a9d99431b"
-  integrity sha512-fS7XoRE5T4JQ7UzWjNT/wZQhS6nmLDwt12IDcSBZfRRJ2VyFth5GvOlQtCPa6Q0k7WMIrt9UXIl/v807cVq1SQ==
+"@datadog/native-iast-taint-tracking@1.1.0":
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-1.1.0.tgz#8f7d0016157b32dbf5c01b15b8afb1c4286b4a18"
+  integrity sha512-TOrngpt6Qh52zWFOz1CkFXw0g43rnuUziFBtIMUsOLGzSHr9wdnTnE6HAyuvKy3f3ecAoZESlMfilGRKP93hXQ==
   dependencies:
     node-gyp-build "^3.9.0"
 
@@ -1296,6 +1296,14 @@ eslint-plugin-import@^2.8.0:
     object.values "^1.1.5"
     resolve "^1.22.0"
     tsconfig-paths "^3.14.1"
+
+eslint-plugin-mocha@^10.1.0:
+  version "10.1.0"
+  resolved "https://registry.yarnpkg.com/eslint-plugin-mocha/-/eslint-plugin-mocha-10.1.0.tgz#69325414f875be87fb2cb00b2ef33168d4eb7c8d"
+  integrity sha512-xLqqWUF17llsogVOC+8C6/jvQ+4IoOREbN7ZCHuOHuD6cT5cDD4h7f2LgsZuzMAiwswWE21tO7ExaknHVDrSkw==
+  dependencies:
+    eslint-utils "^3.0.0"
+    rambda "^7.1.0"
 
 eslint-plugin-node@^5.2.1:
   version "5.2.1"
@@ -2639,6 +2647,11 @@ nock@^11.3.3:
     mkdirp "^0.5.0"
     propagate "^2.0.0"
 
+node-abort-controller@^3.0.1:
+  version "3.0.1"
+  resolved "https://registry.yarnpkg.com/node-abort-controller/-/node-abort-controller-3.0.1.tgz#f91fa50b1dee3f909afabb7e261b1e1d6b0cb74e"
+  integrity sha512-/ujIVxthRs+7q6hsdjHMaj8hRG9NuWmwrz+JdRwZ14jdFoKSkm+vDsCbF9PLpnSqjaWQJuTmVtcWHNLr+vrOFw==
+
 node-gyp-build@^3.9.0:
   version "3.9.0"
   resolved "https://registry.yarnpkg.com/node-gyp-build/-/node-gyp-build-3.9.0.tgz#53a350187dd4d5276750da21605d1cb681d09e25"
@@ -3003,6 +3016,11 @@ queue-microtask@^1.2.2:
   version "1.2.3"
   resolved "https://registry.yarnpkg.com/queue-microtask/-/queue-microtask-1.2.3.tgz#4929228bbc724dfac43e0efb058caf7b6cfb6243"
   integrity sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==
+
+rambda@^7.1.0:
+  version "7.4.0"
+  resolved "https://registry.yarnpkg.com/rambda/-/rambda-7.4.0.tgz#61ec9de31d3dd6affe804de3bae04a5b818781e5"
+  integrity sha512-A9hihu7dUTLOUCM+I8E61V4kRXnN4DwYeK0DwCBydC1MqNI1PidyAtbtpsJlBBzK4icSctEcCQ1bGcLpBuETUQ==
 
 randombytes@^2.1.0:
   version "2.1.0"

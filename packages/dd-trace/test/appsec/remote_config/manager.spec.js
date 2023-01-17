@@ -47,7 +47,10 @@ describe('RemoteConfigManager', () => {
       },
       service: 'serviceName',
       env: 'serviceEnv',
-      version: 'appVersion'
+      version: 'appVersion',
+      remoteConfig: {
+        pollInterval: 5
+      }
     }
 
     rc = new RemoteConfigManager(config)
@@ -527,6 +530,7 @@ describe('RemoteConfigManager', () => {
 
       const list = [
         {
+          id: 'asm_features',
           path: 'datadog/42/ASM_FEATURES/confId/config',
           product: 'ASM_FEATURES',
           apply_state: 1,
@@ -534,6 +538,7 @@ describe('RemoteConfigManager', () => {
           file: { asm: { enabled: true } }
         },
         {
+          id: 'asm_data',
           path: 'datadog/42/ASM_DATA/confId/config',
           product: 'ASM_DATA',
           apply_state: 1,
@@ -541,6 +546,7 @@ describe('RemoteConfigManager', () => {
           file: { data: [1, 2, 3] }
         },
         {
+          id: 'asm_dd',
           path: 'datadog/42/ASM_DD/confId/config',
           product: 'ASM_DD',
           apply_state: 1,
@@ -552,9 +558,10 @@ describe('RemoteConfigManager', () => {
       rc.dispatch(list, 'apply')
 
       expect(rc.emit).to.have.been.calledThrice
-      expect(rc.emit.firstCall).to.have.been.calledWithExactly('ASM_FEATURES', 'apply', { asm: { enabled: true } })
-      expect(rc.emit.secondCall).to.have.been.calledWithExactly('ASM_DATA', 'apply', { data: [1, 2, 3] })
-      expect(rc.emit.thirdCall).to.have.been.calledWithExactly('ASM_DD', 'apply', { rules: [4, 5, 6] })
+      expect(rc.emit.firstCall).to.have.been
+        .calledWithExactly('ASM_FEATURES', 'apply', { asm: { enabled: true } }, 'asm_features')
+      expect(rc.emit.secondCall).to.have.been.calledWithExactly('ASM_DATA', 'apply', { data: [1, 2, 3] }, 'asm_data')
+      expect(rc.emit.thirdCall).to.have.been.calledWithExactly('ASM_DD', 'apply', { rules: [4, 5, 6] }, 'asm_dd')
 
       expect(list[0].apply_state).to.equal(2)
       expect(list[0].apply_error).to.equal('')
@@ -570,6 +577,7 @@ describe('RemoteConfigManager', () => {
 
     it('should delete config from state when action is unapply', () => {
       rc.appliedConfigs.set('datadog/42/ASM_FEATURES/confId/config', {
+        id: 'asm_data',
         path: 'datadog/42/ASM_FEATURES/confId/config',
         product: 'ASM_FEATURES',
         apply_state: 2,
@@ -579,7 +587,8 @@ describe('RemoteConfigManager', () => {
 
       rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply')
 
-      expect(rc.emit).to.have.been.calledOnceWithExactly('ASM_FEATURES', 'unapply', { asm: { enabled: true } })
+      expect(rc.emit).to.have.been
+        .calledOnceWithExactly('ASM_FEATURES', 'unapply', { asm: { enabled: true } }, 'asm_data')
       expect(rc.appliedConfigs).to.be.empty
     })
   })
