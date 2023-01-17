@@ -115,6 +115,8 @@ export declare interface Tracer extends opentracing.Tracer {
    * @returns {Tracer} The Tracer instance for chaining.
    */
   setUser (user: User): Tracer;
+
+  appsec: Appsec;
 }
 
 export declare interface TraceOptions extends Analyzable {
@@ -580,6 +582,11 @@ export declare interface User {
    * Custom fields to attach to the user (RBAC, Oauth, etc…).
    */
   [key: string]: string | undefined
+}
+
+export declare interface Appsec {
+  trackUserLoginSuccessEvent(user: User, metadata?: { [key: string]: string }): void
+  trackUserLoginFailureEvent(userId: string, exists: boolean, metadata?: { [key: string]: string }): void
 }
 
 /** @hidden */
