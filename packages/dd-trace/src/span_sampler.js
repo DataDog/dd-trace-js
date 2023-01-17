@@ -1,9 +1,6 @@
 'use strict'
 const { globMatch } = require('../src/util')
-const {
-  USER_KEEP,
-  AUTO_KEEP
-} = require('../../../ext').priority
+const { USER_KEEP, AUTO_KEEP } = require('../../../ext').priority
 const RateLimiter = require('./rate_limiter')
 
 class SpanSampler {
