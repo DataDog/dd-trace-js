@@ -22,7 +22,7 @@ const tagger = {
             .map(key => `${key}:${tags[key]}`))
         }
       case 'string':
-        return tagger.parse(tags.split(','))
+        return tagger.parse(tags.split(/[, ]+/))
       default:
         return {}
     }
