@@ -37,8 +37,28 @@ describe('tagger', () => {
     })
   })
 
-  it('should support strings', () => {
+  it('should support strings with comma', () => {
     const tags = 'foo:bar,baz:qux'
+    const parsed = tagger.parse(tags)
+
+    expect(parsed).to.deep.equal({
+      foo: 'bar',
+      baz: 'qux'
+    })
+  })
+
+  it('should support strings with space', () => {
+    const tags = 'foo:bar baz:qux'
+    const parsed = tagger.parse(tags)
+
+    expect(parsed).to.deep.equal({
+      foo: 'bar',
+      baz: 'qux'
+    })
+  })
+
+  it('should support strings with with comma and space', () => {
+    const tags = 'foo:bar, baz:qux'
     const parsed = tagger.parse(tags)
 
     expect(parsed).to.deep.equal({
@@ -68,13 +88,6 @@ describe('tagger', () => {
 
   it('should ignore empty keys in strings', () => {
     const tags = ':bar'
-    const parsed = tagger.parse(tags)
-
-    expect(parsed).to.deep.equal({})
-  })
-
-  it('should ignore empty values in strings', () => {
-    const tags = 'foo:'
     const parsed = tagger.parse(tags)
 
     expect(parsed).to.deep.equal({})
