@@ -76,9 +76,10 @@ const hostDetailsOther = (loopbackIP) => {
 }
 
 function resolveHostDetails (host) {
-  const isLocal = isLoopbackAddr(host)
-  if (isLocal) {
-    return host === 'localhost' ? hostDetailsLocalhost : hostDetailsOther(host)
+  if (host === 'localhost') {
+    return hostDetailsLocalhost
+  } else if (isLoopbackAddr(host)) {
+    return hostDetailsOther(host)
   } else if (isIP(host)) {
     return {
       'network.destination.ip': host
