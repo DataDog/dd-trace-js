@@ -585,8 +585,27 @@ export declare interface User {
 }
 
 export declare interface Appsec {
+  /**
+   * Links success login related data to the current trace, it calls to setUser internally
+   * @param {User} user Properties of the authenticated user. Accepts custom fields.
+   * @param {[key: string]: string} metadata Custom fields to login success event
+   */
   trackUserLoginSuccessEvent(user: User, metadata?: { [key: string]: string }): void
+
+  /**
+   * Links login failure related data to the current trace
+   * @param {string} userId The id of the user who has tried to login
+   * @param {boolean} exists If the user id exists
+   * @param {[key: string]: string} metadata Custom fields to login failure event
+   */
   trackUserLoginFailureEvent(userId: string, exists: boolean, metadata?: { [key: string]: string }): void
+
+  /**
+   * Links custom data to the current trace
+   * @param {string} eventName The name of the custom event
+   * @param {[key: string]: string} metadata Custom fields to login custom event
+   */
+  trackCustomEvent(eventName: string, metadata?: { [key: string]: string }): void
 }
 
 /** @hidden */
