@@ -54,7 +54,10 @@ describe('TracerProxy', () => {
       debug: true,
       profiling: {},
       appsec: {},
-      iast: {}
+      iast: {},
+      remoteConfig: {
+        enabled: true
+      }
     }
     Config = sinon.stub().returns(config)
 
