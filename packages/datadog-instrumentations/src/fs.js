@@ -98,8 +98,8 @@ addHook({ name: 'fs' }, fs => {
   wrap(fs.realpathSync, 'native', createWrapFunction('', 'realpath.native'))
   wrap(fs.promises.realpath, 'native', createWrapFunction('', 'realpath.native'))
 
-  wrap(fs, 'createReadStream', createWrapCreateStream())
-  wrap(fs, 'createWriteStream', createWrapCreateStream())
+  wrap(fs, 'createReadStream', wrapCreateStream)
+  wrap(fs, 'createWriteStream', wrapCreateStream)
   if (fs.Dir) {
     wrap(fs.Dir.prototype, 'close', createWrapFunction('dir.'))
     wrap(fs.Dir.prototype, 'closeSync', createWrapFunction('dir.'))
@@ -108,16 +108,18 @@ addHook({ name: 'fs' }, fs => {
     wrap(fs.Dir.prototype, Symbol.asyncIterator, createWrapDirAsyncIterator())
   }
 
-  wrap(fs, 'unwatchFile', creaetWatchWrapFunction())
-  wrap(fs, 'watch', creaetWatchWrapFunction())
-  wrap(fs, 'watchFile', creaetWatchWrapFunction())
+  wrap(fs, 'unwatchFile', createWatchWrapFunction())
+  wrap(fs, 'watch', createWatchWrapFunction())
+  wrap(fs, 'watchFile', createWatchWrapFunction())
 
-  wrapFileHandle(fs)
   return fs
 })
 
-async function wrapFileHandle (fs) {
-  const fileHandlePrototype = await getFileHandlePrototype(fs)
+function isFirstMethodReturningFileHandle (original) {
+  return !kHandle && original.name === 'open'
+}
+function wrapFileHandle (fh) {
+  const fileHandlePrototype = getFileHandlePrototype(fh)
   const desc = Reflect.getOwnPropertyDescriptor(fileHandlePrototype, kHandle)
   if (!desc || !desc.get) {
     Reflect.defineProperty(fileHandlePrototype, kHandle, {
@@ -139,13 +141,10 @@ async function wrapFileHandle (fs) {
   }
 }
 
-async function getFileHandlePrototype (fs) {
-  const fh = await fs.promises.open(__filename, 'r')
+function getFileHandlePrototype (fh) {
   if (!kHandle) {
     kHandle = Reflect.ownKeys(fh).find(key => typeof key === 'symbol' && key.toString().includes('kHandle'))
   }
-  fh.close()
-
   return Object.getPrototypeOf(fh)
 }
 
@@ -179,49 +178,47 @@ function createWrapDirAsyncIterator () {
   }
 }
 
-function createWrapCreateStream () {
-  return function wrapCreateStream (original) {
-    const classes = {
-      createReadStream: 'ReadStream',
-      createWriteStream: 'WriteStream'
-    }
-    const name = classes[original.name]
+function wrapCreateStream (original) {
+  const classes = {
+    createReadStream: 'ReadStream',
+    createWriteStream: 'WriteStream'
+  }
+  const name = classes[original.name]
 
-    return function (path, options) {
-      if (!startChannel.hasSubscribers) return original.apply(this, arguments)
+  return function (path, options) {
+    if (!startChannel.hasSubscribers) return original.apply(this, arguments)
 
-      const innerResource = new AsyncResource('bound-anonymous-fn')
-      const message = getMessage(name, ['path', 'options'], arguments)
+    const innerResource = new AsyncResource('bound-anonymous-fn')
+    const message = getMessage(name, ['path', 'options'], arguments)
 
-      return innerResource.runInAsyncScope(() => {
-        startChannel.publish(message)
+    return innerResource.runInAsyncScope(() => {
+      startChannel.publish(message)
 
-        try {
-          const stream = original.apply(this, arguments)
-          const onError = innerResource.bind(error => {
-            errorChannel.publish(error)
-            onFinish()
-          })
-          const onFinish = innerResource.bind(() => {
-            finishChannel.publish()
-            stream.off('close', onFinish)
-            stream.off('end', onFinish)
-            stream.off('finish', onFinish)
-            stream.off('error', onError)
-          })
-
-          stream.once('close', onFinish)
-          stream.once('end', onFinish)
-          stream.once('finish', onFinish)
-          stream.once('error', onError)
-
-          return stream
-        } catch (error) {
+      try {
+        const stream = original.apply(this, arguments)
+        const onError = innerResource.bind(error => {
           errorChannel.publish(error)
+          onFinish()
+        })
+        const onFinish = innerResource.bind(() => {
           finishChannel.publish()
-        }
-      })
-    }
+          stream.off('close', onFinish)
+          stream.off('end', onFinish)
+          stream.off('finish', onFinish)
+          stream.off('error', onError)
+        })
+
+        stream.once('close', onFinish)
+        stream.once('end', onFinish)
+        stream.once('finish', onFinish)
+        stream.once('error', onError)
+
+        return stream
+      } catch (error) {
+        errorChannel.publish(error)
+        finishChannel.publish()
+      }
+    })
   }
 }
 
@@ -232,7 +229,7 @@ function getMethodParamsRelationByPrefix (prefix) {
   return paramsByMethod
 }
 
-function creaetWatchWrapFunction (override = '') {
+function createWatchWrapFunction (override = '') {
   return function wrapFunction (original) {
     const name = override || original.name
     const method = name
@@ -287,14 +284,17 @@ function createWrapFunction (prefix = '', override = '') {
 
       return innerResource.runInAsyncScope(() => {
         startChannel.publish(message)
-
         try {
           const result = original.apply(this, arguments)
-
           if (cb) return result
           if (result && typeof result.then === 'function') {
+            // TODO method open returning promise and filehandle prototype not initialized, initialize it
+
             return result.then(
               value => {
+                if (isFirstMethodReturningFileHandle(original)) {
+                  wrapFileHandle(value)
+                }
                 finishChannel.publish()
                 return value
               },
