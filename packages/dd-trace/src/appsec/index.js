@@ -97,7 +97,12 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
 
     for (const entry of results) {
       if (entry && entry.includes('block')) {
-        block(req, res, topSpan, abortController)
+        block({
+          req: req,
+          res: res,
+          topSpan: topSpan,
+          abortController: abortController
+        })
         break
       }
     }
