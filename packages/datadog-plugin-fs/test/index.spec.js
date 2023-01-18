@@ -14,7 +14,7 @@ const hasWritev = semver.satisfies(process.versions.node, '>=12.9.0')
 const hasOSymlink = realFS.constants.O_SYMLINK
 
 describe('Plugin', () => {
-  describe.skip('fs not instrumented without internal method call', () => {
+  describe('fs not instrumented without internal method call', () => {
     let fs
     let tracer
     afterEach(() => agent.close({ ritmReset: false }))
@@ -69,6 +69,7 @@ describe('Plugin', () => {
     afterEach(() => agent.close({ ritmReset: false }))
     beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')
+      tracer._pluginManager.loadPlugin('fs', true)
       fs = require('fs')
     }))
     before(() => {
