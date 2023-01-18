@@ -161,7 +161,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = '42'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '.*'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
-    process.env.DD_REMOTE_CONFIGURATION_POLLING_INTERVAL = '42'
+    process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
     process.env.DD_IAST_REQUEST_SAMPLING = '40'
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
@@ -454,7 +454,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
-    process.env.DD_REMOTE_CONFIGURATION_POLLING_INTERVAL = 11
+    process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
 
     const config = new Config({
