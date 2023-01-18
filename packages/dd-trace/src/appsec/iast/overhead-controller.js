@@ -89,12 +89,12 @@ function startGlobalContext () {
   resetGlobalContextInterval = setInterval(() => {
     _resetGlobalContext()
   }, INTERVAL_RESET_GLOBAL_CONTEXT)
+  resetGlobalContextInterval.unref && resetGlobalContextInterval.unref()
 }
 
 function finishGlobalContext () {
   if (resetGlobalContextInterval) {
     clearInterval(resetGlobalContextInterval)
-    resetGlobalContextInterval.unref && resetGlobalContextInterval.unref()
     resetGlobalContextInterval = null
   }
 }
