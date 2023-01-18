@@ -3,6 +3,7 @@
 const { channel } = require('diagnostics_channel')
 const { isFalse } = require('./util')
 const plugins = require('./plugins')
+const deprecatedPlugins = require('./plugins/deprecated_plugins')
 const log = require('./log')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
@@ -21,8 +22,10 @@ const disabledPlugins = new Set(
 const pluginClasses = {}
 
 loadChannel.subscribe(({ name }) => {
-  const Plugin = plugins[name]
+  initPlugin(plugins[name])
+})
 
+function initPlugin (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.name]) {
     const envName = `DD_TRACE_${Plugin.name.toUpperCase()}_ENABLED`
@@ -37,7 +40,7 @@ loadChannel.subscribe(({ name }) => {
       pluginClasses[Plugin.name] = Plugin
     }
   }
-})
+}
 
 // TODO this must always be a singleton.
 module.exports = class PluginManager {
@@ -58,9 +61,14 @@ module.exports = class PluginManager {
     loadChannel.subscribe(this._loadedSubscriber)
   }
 
-  loadPlugin (name) {
-    const Plugin = pluginClasses[name]
-
+  loadPlugin (name, forceDeprecated = false) {
+    let Plugin = pluginClasses[name]
+    if (!Plugin && forceDeprecated) { // just for DD test purposes
+      Plugin = deprecatedPlugins[name]
+      if (Plugin) {
+        initPlugin(Plugin)
+      }
+    }
     if (!Plugin) return
     if (!this._pluginsByName[name]) {
       this._pluginsByName[name] = new Plugin(this._tracer)

@@ -14,6 +14,54 @@ const hasWritev = semver.satisfies(process.versions.node, '>=12.9.0')
 const hasOSymlink = realFS.constants.O_SYMLINK
 
 describe('Plugin', () => {
+  describe.skip('fs not instrumented without internal method call', () => {
+    let fs
+    let tracer
+    afterEach(() => agent.close({ ritmReset: false }))
+    beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
+      tracer = require('../../dd-trace')
+      fs = require('fs')
+    }))
+    describe('with parent span', () => {
+      beforeEach((done) => {
+        const parentSpan = tracer.startSpan('parent')
+        parentSpan.finish()
+        tracer.scope().activate(parentSpan, done)
+      })
+
+      describe('open', () => {
+        it('should not be instrumented', (done) => {
+          function waitForNextTrace () {
+            agent.use((data) => {
+              if (data) {
+                data.forEach((arr) => {
+                  arr.forEach((trace) => {
+                    if (trace.name === 'fs.operation') {
+                      expect.fail('should not have been any fs traces')
+                    }
+                  })
+                })
+              }
+              process.nextTick(() => {
+                waitForNextTrace()
+              })
+            }).catch(done)
+          }
+
+          waitForNextTrace()
+          setTimeout(done, 1500) // allow enough time to ensure no traces happened
+
+          fs.open(__filename, 'r+', (err, fd) => {
+            if (err) {
+              done(err)
+            } else {
+              realFS.closeSync(fd)
+            }
+          })
+        })
+      })
+    })
+  })
   describe('fs', () => {
     let fs
     let tmpdir
