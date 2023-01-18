@@ -1,20 +1,16 @@
 'use strict'
 const addresses = require('../addresses')
 const Gateway = require('../gateway/engine')
+const { getRootSpan } = require('./utils')
 
 function isUserBlocked (tracer, user) {
-  const span = tracer.scope().active()
-  if (!span) {
-    return false
-  }
-
-  const rootSpan = span._spanContext._trace.started[0]
+  const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
     return false
   }
 
   const userId = rootSpan.context()._tags['usr.id']
-  if (!user) {
+  if (!userId) {
     tracer.appsec.setUser({ id: userId }, rootSpan)
   }
 

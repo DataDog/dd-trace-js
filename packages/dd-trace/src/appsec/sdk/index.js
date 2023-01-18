@@ -5,6 +5,7 @@ const { isUserBlocked } = require('./user_blocking')
 const Gateway = require('../gateway/engine')
 const web = require('../../plugins/util/web')
 const { block } = require('../blocking')
+const { getRootSpan } = require('./utils')
 
 class AppsecSDK {
   constructor (tracer) {
@@ -48,11 +49,14 @@ class AppsecSDK {
   }
 
   setUser (user) {
-    const span = this._tracer.scope().active()
-    if (!span) return
+    if (!user || !user.id) {
+      return
+    }
 
-    const rootSpan = span._spanContext._trace.started[0]
-    if (!rootSpan) return
+    const rootSpan = getRootSpan(this._tracer)
+    if (!rootSpan) {
+      return
+    }
 
     for (const k of Object.keys(user)) {
       rootSpan.setTag(`usr.${k}`, '' + user[k])
