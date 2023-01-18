@@ -2,6 +2,7 @@
 
 module.exports = {
   '@cucumber/cucumber': () => require('../cucumber'),
+  '@playwright/test': () => require('../playwright'),
   '@elastic/elasticsearch': () => require('../elasticsearch'),
   '@elastic/transport': () => require('../elasticsearch'),
   '@google-cloud/pubsub': () => require('../google-cloud-pubsub'),
