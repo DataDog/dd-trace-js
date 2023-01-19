@@ -92,8 +92,7 @@ describe('Appsec SDK', () => {
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.success.track', 'true')
           expect(traces[0][0].meta).to.have.property('usr.id', 'test_user_id')
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.success.metakey', 'metaValue')
-          // TODO check - why manual.keep sometimes come in metris and others in meta?
-          expect(traces[0][0].metrics['manual.keep'] === 1 || traces[0][0].meta['manual.keep'] === 'true').to.be.true
+          expect(traces[0][0].meta).to.have.property('manual.keep', 'true')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -131,7 +130,7 @@ describe('Appsec SDK', () => {
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.usr.id', 'test_user_id')
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.usr.exists', 'true')
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.metakey', 'metaValue')
-          expect(traces[0][0].metrics['manual.keep'] === 1 || traces[0][0].meta['manual.keep'] === 'true').to.be.true
+          expect(traces[0][0].meta).to.have.property('manual.keep', 'true')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -146,7 +145,7 @@ describe('Appsec SDK', () => {
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.usr.id', 'test_user_id')
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.usr.exists', 'false')
           expect(traces[0][0].meta).to.have.property('appsec.events.users.login.failure.metakey', 'metaValue')
-          expect(traces[0][0].metrics['manual.keep'] === 1 || traces[0][0].meta['manual.keep'] === 'true').to.be.true
+          expect(traces[0][0].meta).to.have.property('manual.keep', 'true')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -182,7 +181,7 @@ describe('Appsec SDK', () => {
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('appsec.events.my-custom-event.track', 'true')
           expect(traces[0][0].meta).to.have.property('appsec.events.my-custom-event.metakey', 'metaValue')
-          expect(traces[0][0].metrics['manual.keep'] === 1 || traces[0][0].meta['manual.keep'] === 'true').to.be.true
+          expect(traces[0][0].meta).to.have.property('manual.keep', 'true')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -194,7 +193,7 @@ describe('Appsec SDK', () => {
           res.end()
         }
         agent.use(traces => {
-          expect(traces[0][0].metrics).not.to.have.property('manual.keep', 1)
+          expect(traces[0][0].meta).not.to.have.property('manual.keep', 'true')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
