@@ -24,7 +24,7 @@ const STATUS_TO_TEST_STATUS = {
 addHook({
   name: '@playwright/test',
   file: 'lib/workerRunner.js',
-  versions: ['>=1']
+  versions: ['>=1.10.0']
 }, (workerRunnerPackage) => {
   // This runs in the worker process
   shimmer.wrap(workerRunnerPackage.WorkerRunner.prototype, 'runTestGroup', runTestGroup => async function () {
@@ -40,7 +40,7 @@ addHook({
 addHook({
   name: '@playwright/test',
   file: 'lib/runner.js',
-  versions: ['>=1']
+  versions: ['>=1.10.0']
 }, (RunnerExport) => {
   shimmer.wrap(RunnerExport.Runner.prototype, 'runAllTests', runAllTests => async function () {
     const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -74,7 +74,7 @@ addHook({
 addHook({
   name: '@playwright/test',
   file: 'lib/dispatcher.js',
-  versions: ['>=1']
+  versions: ['>=1.10.0']
 }, (dispatcher) => {
   shimmer.wrap(dispatcher.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
