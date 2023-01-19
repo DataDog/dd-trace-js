@@ -56,7 +56,10 @@ describe('TracerProxy', () => {
       debug: true,
       profiling: {},
       appsec: {},
-      iast: {}
+      iast: {},
+      remoteConfig: {
+        enabled: true
+      }
     }
     Config = sinon.stub().returns(config)
 
@@ -126,6 +129,15 @@ describe('TracerProxy', () => {
 
         expect(DatadogTracer).to.have.been.calledOnce
         expect(remoteConfig.enable).to.have.been.calledOnce
+      })
+
+      it('should not enable remote config when disabled', () => {
+        config.remoteConfig.enabled = false
+
+        proxy.init()
+
+        expect(DatadogTracer).to.have.been.calledOnce
+        expect(remoteConfig.enable).to.not.have.been.called
       })
 
       it('should not initialize when disabled', () => {
