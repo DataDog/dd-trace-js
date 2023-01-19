@@ -4,12 +4,13 @@ const { trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
 const { isUserBlocked } = require('./user_blocking')
 const Gateway = require('../gateway/engine')
 const web = require('../../plugins/util/web')
-const { block } = require('../blocking')
+const { block, loadTemplates } = require('../blocking')
 const { getRootSpan } = require('./utils')
 
 class AppsecSDK {
   constructor (tracer) {
     this._tracer = tracer
+    loadTemplates(tracer.config)
   }
 
   trackUserLoginSuccessEvent (user, metadata) {
@@ -31,7 +32,7 @@ class AppsecSDK {
     return isUserBlocked(this._tracer, user)
   }
 
-  blockRequest (req, res, statusCode, body) {
+  blockRequest (req, res) {
     const request = req || Gateway.getContext().get('req')
     const response = res || Gateway.getContext().get('res')
     const topSpan = web.root(req)
@@ -42,8 +43,6 @@ class AppsecSDK {
     block({
       req: request,
       res: response,
-      statusCode: statusCode,
-      body: body,
       topSpan: topSpan
     })
   }

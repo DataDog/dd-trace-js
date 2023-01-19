@@ -2,7 +2,7 @@
 
 const fs = require('fs')
 let templateHtml, templateJson
-function block ({req, res, statusCode, body, topSpan, abortController}) {
+function block ({ req, res, topSpan, abortController }) {
   let type
   let bodyContents
 
@@ -11,17 +11,17 @@ function block ({req, res, statusCode, body, topSpan, abortController}) {
 
   if (accept && accept.includes('text/html') && !accept.includes('application/json')) {
     type = 'text/html'
-    bodyContents = body || templateHtml
+    bodyContents = templateHtml
   } else {
     type = 'application/json'
-    bodyContents = body || templateJson
+    bodyContents = templateJson
   }
 
   topSpan.addTags({
     'appsec.blocked': 'true'
   })
 
-  statusCode = statusCode || 403
+  res.statusCode = 403
   res.setHeader('Content-Type', type)
   res.setHeader('Content-Length', Buffer.byteLength(bodyContents))
   res.end(bodyContents)
