@@ -457,7 +457,6 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
-    process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'true'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
 
@@ -536,7 +535,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', __filename)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', __filename)
-    expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
