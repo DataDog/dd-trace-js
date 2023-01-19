@@ -284,7 +284,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     const remoteConfigOptions = options.remoteConfig || {}
     const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
-      process.env.DD_REMOTE_CONFIGURATION_ENABLED,
+      isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
       !inAWSLambda,
       true
     )
@@ -414,7 +414,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     }
     this.remoteConfig = {
-      enabled: isTrue(DD_REMOTE_CONFIGURATION_ENABLED),
+      enabled: DD_REMOTE_CONFIGURATION_ENABLED,
       pollInterval: DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     }
     this.iast = {
