@@ -285,8 +285,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     const remoteConfigOptions = options.remoteConfig || {}
     const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
       process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
-      !inAWSLambda,
-      true
+      !inAWSLambda
     )
     const DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = coalesce(
       parseInt(remoteConfigOptions.pollInterval),
