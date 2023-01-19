@@ -356,7 +356,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
         })
       })
     }
-    
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
