@@ -661,6 +661,7 @@ describe('Config', () => {
 
     expect(config.telemetryEnabled).to.be.false
   })
+
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
 
