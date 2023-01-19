@@ -11,9 +11,11 @@ const {
   getTestSuitePath,
   COMPONENT,
   TEST_SESSION_ID,
+  TEST_MODULE_ID,
   TEST_COMMAND,
   TEST_SUITE_ID,
-  getTestSuiteCommonTags
+  getTestSuiteCommonTags,
+  getTestModuleCommonTags
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 
@@ -42,12 +44,26 @@ class PlaywrightPlugin extends CiPlugin {
           ...testSessionSpanMetadata
         }
       })
+
+      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion)
+      this.testModuleSpan = this.tracer.startSpan('playwright.test_module', {
+        childOf: this.testSessionSpan,
+        tags: {
+          [COMPONENT]: this.constructor.name,
+          ...this.testEnvironmentMetadata,
+          ...testModuleSpanMetadata
+        }
+      })
     })
 
     this.addSub('ci:playwright:session:finish', ({ status, onDone }) => {
       if (this.testSessionSpan) {
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testSessionSpan.finish()
+        if (this.testModuleSpan) {
+          this.testModuleSpan.setTag(TEST_STATUS, status)
+          this.testModuleSpan.finish()
+        }
         finishAllTraceSpans(this.testSessionSpan)
       }
       this.tracer._exporter.flush(onDone)
@@ -62,7 +78,7 @@ class PlaywrightPlugin extends CiPlugin {
       )
 
       const testSuiteSpan = this.tracer.startSpan('playwright.test_suite', {
-        childOf: this.testSessionSpan,
+        childOf: this.testModuleSpan,
         tags: {
           [COMPONENT]: this.constructor.name,
           ...this.testEnvironmentMetadata,
@@ -120,6 +136,11 @@ class PlaywrightPlugin extends CiPlugin {
     if (testSuiteSpan) {
       const testSuiteId = testSuiteSpan.context()._spanId.toString(10)
       testSuiteTags[TEST_SUITE_ID] = testSuiteId
+    }
+
+    if (this.testModuleSpan) {
+      const testModuleId = this.testModuleSpan.context()._traceId.toString(10)
+      testSuiteTags[TEST_MODULE_ID] = testModuleId
     }
 
     if (this.testSessionSpan) {

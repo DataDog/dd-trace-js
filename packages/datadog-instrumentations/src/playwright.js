@@ -12,6 +12,7 @@ const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const testToAr = new WeakMap()
 const testSuiteToAr = new Map()
+const testSuiteToTestStatuses = new Map()
 
 const STATUS_TO_TEST_STATUS = {
   passed: 'pass',
@@ -25,6 +26,7 @@ addHook({
   file: 'lib/workerRunner.js',
   versions: ['>=1']
 }, (workerRunnerPackage) => {
+  // This runs in the worker process
   shimmer.wrap(workerRunnerPackage.WorkerRunner.prototype, 'runTestGroup', runTestGroup => async function () {
     const testGroup = arguments[0]
     process.send({ method: 'ddTestSuiteStart', params: { testSuite: testGroup.file } })
@@ -80,14 +82,14 @@ addHook({
 
     worker.process.on('message', ({ method, params }) => {
       if (method === 'testBegin') {
-        const test = dispatcher._testById.get(params.testId).test
+        const { test } = dispatcher._testById.get(params.testId)
         const testAsyncResource = new AsyncResource('bound-anonymous-fn')
         testToAr.set(test, testAsyncResource)
         testAsyncResource.runInAsyncScope(() => {
           testStartCh.publish(test)
         })
       } else if (method === 'testEnd') {
-        const test = dispatcher._testById.get(params.testId).test
+        const { test } = dispatcher._testById.get(params.testId)
         const result = test.results[test.results.length - 1]
 
         const testStatus = STATUS_TO_TEST_STATUS[result.status]
@@ -96,6 +98,11 @@ addHook({
         testAsyncResource.runInAsyncScope(() => {
           testFinishCh.publish({ testStatus, steps: result.steps })
         })
+        if (!testSuiteToTestStatuses.has(test.location.file)) {
+          testSuiteToTestStatuses.set(test.location.file, [testStatus])
+        } else {
+          testSuiteToTestStatuses.get(test.location.file).push(testStatus)
+        }
       } else if (method === 'ddTestSuiteStart') {
         const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
         testSuiteToAr.set(params.testSuite, testSuiteAsyncResource)
@@ -103,9 +110,18 @@ addHook({
           testSuiteStartCh.publish(params.testSuite)
         })
       } else if (method === 'ddTestSuiteEnd') {
+        const testStatuses = testSuiteToTestStatuses.get(params.testSuite)
+
+        let testSuiteStatus = 'pass'
+        if (testStatuses.some(status => status === 'fail')) {
+          testSuiteStatus = 'fail'
+        } else if (testStatuses.every(status => status === 'skip')) {
+          testSuiteStatus = 'skip'
+        }
+
         const testSuiteAsyncResource = testSuiteToAr.get(params.testSuite)
         testSuiteAsyncResource.runInAsyncScope(() => {
-          testSuiteFinishCh.publish('pass')
+          testSuiteFinishCh.publish(testSuiteStatus)
         })
       }
     })

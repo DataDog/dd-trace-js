@@ -38,7 +38,9 @@ const TEST_CODE_OWNERS = 'test.codeowners'
 const TEST_SOURCE_FILE = 'test.source.file'
 const LIBRARY_VERSION = 'library_version'
 const TEST_COMMAND = 'test.command'
+const TEST_BUNDLE = 'test.bundle'
 const TEST_SESSION_ID = 'test_session_id'
+const TEST_MODULE_ID = 'test_module_id'
 const TEST_SUITE_ID = 'test_suite_id'
 
 const CI_APP_ORIGIN = 'ciapp-test'
@@ -75,9 +77,11 @@ module.exports = {
   getCodeOwnersForFilename,
   getTestCommonTags,
   getTestSessionCommonTags,
+  getTestModuleCommonTags,
   getTestSuiteCommonTags,
   TEST_COMMAND,
   TEST_SESSION_ID,
+  TEST_MODULE_ID,
   TEST_SUITE_ID,
   TEST_ITR_TESTS_SKIPPED,
   TEST_SESSION_ITR_SKIPPING_ENABLED,
@@ -240,6 +244,18 @@ function getCodeOwnersForFilename (filename, entries) {
     }
   }
   return null
+}
+
+function getTestModuleCommonTags (command, version) {
+  return {
+    [SPAN_TYPE]: 'test_module_end',
+    [TEST_TYPE]: 'test',
+    [RESOURCE_NAME]: `test_module.${command}`,
+    [TEST_FRAMEWORK_VERSION]: version,
+    [LIBRARY_VERSION]: ddTraceVersion,
+    [TEST_COMMAND]: command,
+    [TEST_BUNDLE]: command
+  }
 }
 
 function getTestSessionCommonTags (command, version) {
