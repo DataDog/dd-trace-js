@@ -86,6 +86,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
+    expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
   })
@@ -161,6 +162,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = '42'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '.*'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
+    process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
     process.env.DD_IAST_REQUEST_SAMPLING = '40'
@@ -216,6 +218,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
+    expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 40)
@@ -657,6 +660,14 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config.telemetryEnabled).to.be.false
+  })
+
+  it('should not set DD_REMOTE_CONFIGURATION_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+
+    const config = new Config()
+
+    expect(config.remoteConfig.enabled).to.be.false
   })
 
   it('should ignore invalid iast.requestSampling', () => {

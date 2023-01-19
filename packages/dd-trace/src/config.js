@@ -279,7 +279,13 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       path.join(__dirname, 'appsec', 'templates', 'blocked.json')
     )
 
+    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+
     const remoteConfigOptions = options.remoteConfig || {}
+    const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
+      process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
+      !inAWSLambda
+    )
     const DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = coalesce(
       parseInt(remoteConfigOptions.pollInterval),
       parseInt(process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS),
@@ -351,7 +357,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       })
     }
 
-    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
@@ -409,6 +414,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     }
     this.remoteConfig = {
+      enabled: DD_REMOTE_CONFIGURATION_ENABLED,
       pollInterval: DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     }
     this.iast = {
