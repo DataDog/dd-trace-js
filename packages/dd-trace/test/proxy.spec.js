@@ -128,14 +128,14 @@ describe('TracerProxy', () => {
         expect(DatadogTracer).to.have.been.calledOnce
         expect(remoteConfig.enable).to.have.been.calledOnce
       })
-      
+
       it('should not enable remote config when disabled', () => {
         proxy.init({
           remoteConfig: {
             enabled: false
           }
         })
-        
+
         expect(DatadogTracer).to.have.been.calledOnce
         expect(remoteConfig.enable).to.not.have.been.called
       })
