@@ -57,15 +57,11 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addSub('ci:playwright:session:finish', ({ status, onDone }) => {
-      if (this.testSessionSpan) {
-        this.testSessionSpan.setTag(TEST_STATUS, status)
-        this.testSessionSpan.finish()
-        if (this.testModuleSpan) {
-          this.testModuleSpan.setTag(TEST_STATUS, status)
-          this.testModuleSpan.finish()
-        }
-        finishAllTraceSpans(this.testSessionSpan)
-      }
+      this.testModuleSpan.setTag(TEST_STATUS, status)
+      this.testModuleSpan.finish()
+      this.testSessionSpan.setTag(TEST_STATUS, status)
+      this.testSessionSpan.finish()
+      finishAllTraceSpans(this.testSessionSpan)
       this.tracer._exporter.flush(onDone)
     })
 
@@ -102,10 +98,14 @@ class PlaywrightPlugin extends CiPlugin {
 
       this.enter(span, store)
     })
-    this.addSub('ci:playwright:test:finish', ({ testStatus, steps }) => {
+    this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error }) => {
       const span = storage.getStore().span
 
       span.setTag(TEST_STATUS, testStatus)
+
+      if (error) {
+        span.setTag('error', error)
+      }
 
       steps.forEach(step => {
         const stepStartTime = step.startTime.getTime()
@@ -118,6 +118,9 @@ class PlaywrightPlugin extends CiPlugin {
             [RESOURCE_NAME]: step.title
           }
         })
+        if (step.error) {
+          stepSpan.setTag('error', step.error)
+        }
         stepSpan.finish(stepStartTime + step.duration)
       })
 

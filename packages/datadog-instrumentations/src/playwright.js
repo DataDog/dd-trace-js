@@ -96,7 +96,7 @@ addHook({
 
         const testAsyncResource = testToAr.get(test)
         testAsyncResource.runInAsyncScope(() => {
-          testFinishCh.publish({ testStatus, steps: result.steps })
+          testFinishCh.publish({ testStatus, steps: result.steps, error: result.error })
         })
         if (!testSuiteToTestStatuses.has(test.location.file)) {
           testSuiteToTestStatuses.set(test.location.file, [testStatus])
@@ -112,6 +112,7 @@ addHook({
       } else if (method === 'ddTestSuiteEnd') {
         const testStatuses = testSuiteToTestStatuses.get(params.testSuite)
 
+        // TODO: bubble up test error to suite (testSuiteToTestStatuses will have to carry errors)
         let testSuiteStatus = 'pass'
         if (testStatuses.some(status => status === 'fail')) {
           testSuiteStatus = 'fail'
