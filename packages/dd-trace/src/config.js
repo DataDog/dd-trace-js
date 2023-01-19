@@ -280,7 +280,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     )
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
-    const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
     const remoteConfigOptions = options.remoteConfig || {}
     const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
@@ -357,6 +356,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
         })
       })
     }
+    
+    const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
