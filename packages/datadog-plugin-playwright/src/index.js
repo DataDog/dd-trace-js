@@ -114,7 +114,7 @@ class PlaywrightPlugin extends CiPlugin {
           startTime: stepStartTime,
           tags: {
             [COMPONENT]: this.constructor.name,
-            'cucumber.step': step.title,
+            'playwright.step': step.title,
             [RESOURCE_NAME]: step.title
           }
         })
