@@ -2,15 +2,17 @@
 
 const { trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent } = require('./track_event')
 const { isUserBlocked } = require('./user_blocking')
-const Gateway = require('../gateway/engine')
 const web = require('../../plugins/util/web')
 const { block, loadTemplates } = require('../blocking')
 const { getRootSpan } = require('./utils')
+const als = require('../gateway/als')
 
 class AppsecSDK {
-  constructor (tracer) {
+  constructor (tracer, config) {
     this._tracer = tracer
-    loadTemplates(tracer.config)
+    if (config) {
+      loadTemplates(config)
+    }
   }
 
   trackUserLoginSuccessEvent (user, metadata) {
@@ -29,13 +31,27 @@ class AppsecSDK {
     if (!user || !user.id) {
       return false
     }
-    return isUserBlocked(this._tracer, user)
+
+    const rootSpan = getRootSpan(this._tracer)
+    if (!rootSpan) {
+      return false
+    }
+    const userId = rootSpan.context()._tags['usr.id']
+    if (!userId) {
+      this.setUser({ id: user.id })
+    }
+    return isUserBlocked(user)
   }
 
   blockRequest (req, res) {
-    const request = req || Gateway.getContext().get('req')
-    const response = res || Gateway.getContext().get('res')
-    const topSpan = web.root(req)
+    const store = als.getStore()
+    const request = req || store ? store.get('req') : undefined
+    const response = res || store ? store.get('res') : undefined
+
+    if (!request || !response) {
+      return
+    }
+    const topSpan = web.root(request)
     if (!topSpan) {
       return
     }

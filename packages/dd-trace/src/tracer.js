@@ -7,6 +7,7 @@ const { storage } = require('../../datadog-core')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const AppsecSDK = require('./appsec/sdk')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -19,6 +20,7 @@ class DatadogTracer extends Tracer {
 
     this._scope = new Scope()
     setStartupLogConfig(config)
+    this.appsec = new AppsecSDK(this, config)
   }
 
   trace (name, options, fn) {
@@ -127,15 +129,7 @@ class DatadogTracer extends Tracer {
   setUser (user) {
     if (!user || !user.id) return this
 
-    const span = this.scope().active()
-    if (!span) return this
-
-    const rootSpan = span._spanContext._trace.started[0]
-    if (!rootSpan) return this
-
-    for (const k of Object.keys(user)) {
-      rootSpan.setTag(`usr.${k}`, '' + user[k])
-    }
+    this.appsec.setUser(user)
 
     return this
   }

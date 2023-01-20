@@ -58,6 +58,7 @@ class Tracer extends NoopProxy {
         }
 
         this._pluginManager.configure(config)
+        this.appsec = this._tracer.appsec
         setStartupLogPluginManager(this._pluginManager)
         telemetry.start(config, this._pluginManager)
       }
