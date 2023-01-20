@@ -10,7 +10,7 @@ const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
 
 function getIsTestSessionTrace (trace) {
   return trace.some(span =>
-    span.type === 'test_session_end' || span.type === 'test_suite_end' || span.type === 'test_module_end'
+    span.type === 'test_session_end' || span.type === 'test_suite_end'
   )
 }
 

@@ -5,10 +5,9 @@ const { version: ddTraceVersion } = require('../../../../package.json')
 const id = require('../../../dd-trace/src/id')
 const ENCODING_VERSION = 1
 
-const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
+const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_suite_end', 'test']
 
-const TEST_SUITE_KEYS_LENGTH = 12
-const TEST_MODULE_KEYS_LENGTH = 11
+const TEST_SUITE_KEYS_LENGTH = 11
 const TEST_SESSION_KEYS_LENGTH = 10
 
 const INTAKE_SOFT_LIMIT = 2 * 1024 * 1024 // 2MB
@@ -47,39 +46,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeString(bytes, 'test_session_id')
     this._encodeId(bytes, content.trace_id)
 
-    this._encodeString(bytes, 'test_module_id')
-    this._encodeId(bytes, content.parent_id)
-
     this._encodeString(bytes, 'test_suite_id')
-    this._encodeId(bytes, content.span_id)
-
-    this._encodeString(bytes, 'error')
-    this._encodeNumber(bytes, content.error)
-    this._encodeString(bytes, 'name')
-    this._encodeString(bytes, content.name)
-    this._encodeString(bytes, 'service')
-    this._encodeString(bytes, content.service)
-    this._encodeString(bytes, 'resource')
-    this._encodeString(bytes, content.resource)
-    this._encodeString(bytes, 'start')
-    this._encodeNumber(bytes, content.start)
-    this._encodeString(bytes, 'duration')
-    this._encodeNumber(bytes, content.duration)
-    this._encodeString(bytes, 'meta')
-    this._encodeMap(bytes, content.meta)
-    this._encodeString(bytes, 'metrics')
-    this._encodeMap(bytes, content.metrics)
-  }
-
-  _encodeTestModule (bytes, content) {
-    this._encodeMapPrefix(bytes, TEST_MODULE_KEYS_LENGTH)
-    this._encodeString(bytes, 'type')
-    this._encodeString(bytes, content.type)
-
-    this._encodeString(bytes, 'test_session_id')
-    this._encodeId(bytes, content.trace_id)
-
-    this._encodeString(bytes, 'test_module_id')
     this._encodeId(bytes, content.span_id)
 
     this._encodeString(bytes, 'error')
@@ -128,13 +95,8 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
   _encodeEventContent (bytes, content) {
     const keysLength = Object.keys(content).length
-
     if (content.meta.test_session_id) {
-      if (content.meta.test_module_id) {
-        this._encodeMapPrefix(bytes, keysLength + 3)
-      } else {
-        this._encodeMapPrefix(bytes, keysLength + 2)
-      }
+      this._encodeMapPrefix(bytes, keysLength + 2)
     } else {
       this._encodeMapPrefix(bytes, keysLength)
     }
@@ -175,12 +137,6 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       this._encodeId(bytes, id(content.meta.test_session_id, 10))
       delete content.meta.test_session_id
 
-      if (content.meta.test_module_id) {
-        this._encodeString(bytes, 'test_module_id')
-        this._encodeId(bytes, id(content.meta.test_module_id, 10))
-        delete content.meta.test_module_id
-      }
-
       this._encodeString(bytes, 'test_suite_id')
       this._encodeId(bytes, id(content.meta.test_suite_id, 10))
       delete content.meta.test_suite_id
@@ -204,8 +160,6 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       this._encodeEventContent(bytes, event.content)
     } else if (event.type === 'test_suite_end') {
       this._encodeTestSuite(bytes, event.content)
-    } else if (event.type === 'test_module_end') {
-      this._encodeTestModule(bytes, event.content)
     } else if (event.type === 'test_session_end') {
       this._encodeTestSession(bytes, event.content)
     }
@@ -246,7 +200,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     const rawEvents = trace.map(formatSpan)
 
     const testSessionEvents = rawEvents.filter(
-      event => event.type === 'test_session_end' || event.type === 'test_suite_end' || event.type === 'test_module_end'
+      event => event.type === 'test_session_end' || event.type === 'test_suite_end'
     )
 
     const isTestSessionTrace = !!testSessionEvents.length
