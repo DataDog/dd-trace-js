@@ -102,8 +102,6 @@ describe('playwright', () => {
             stdio: 'pipe'
           }
         )
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
       })
     })
   })
