@@ -11,11 +11,14 @@ describe('Plugin', () => {
   describe('aws-sdk', function () {
     setup()
 
-    withVersions('aws-sdk', 'aws-sdk', version => {
+    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
       let AWS
       let s3
       let sqs
       let tracer
+
+      const s3ClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-s3' : 'aws-sdk'
+      const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
 
       describe('without configuration', () => {
         before(() => {
@@ -23,11 +26,8 @@ describe('Plugin', () => {
         })
 
         before(() => {
-          AWS = require(`../../../versions/aws-sdk@${version}`).get()
-
-          const endpoint = new AWS.Endpoint('http://127.0.0.1:4572')
-
-          s3 = new AWS.S3({ endpoint, s3ForcePathStyle: true })
+          AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
+          s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4572', region: 'us-east-1', s3ForcePathStyle: true })
           tracer = require('../../dd-trace')
         })
 
@@ -64,7 +64,7 @@ describe('Plugin', () => {
 
             expect(span).to.include({
               name: 'aws.request',
-              resource: 'listBuckets',
+              resource: 'completeMultipartUpload',
               service: 'test-aws-s3'
             })
 
@@ -76,12 +76,12 @@ describe('Plugin', () => {
             })
           }).then(done, done)
 
-          s3.listBuckets({ 'BadParam': 'badvalue' }, e => {
+          s3.completeMultipartUpload('invalid', e => {
             error = e
           })
         })
 
-        if (semver.intersects(version, '>=2.3.0')) {
+        if (semver.intersects(version, '>=2.3.0 <3')) {
           it('should instrument service methods using promise()', (done) => {
             agent.use(traces => {
               const span = sort(traces[0])[0]
@@ -117,7 +117,7 @@ describe('Plugin', () => {
           const span = {}
 
           tracer.scope().activate(span, () => {
-            s3.listBuckets(() => {
+            s3.listBuckets({}, () => {
               try {
                 expect(tracer.scope().active()).to.equal(span)
                 done()
@@ -146,11 +146,8 @@ describe('Plugin', () => {
         })
 
         before(() => {
-          AWS = require(`../../../versions/aws-sdk@${version}`).get()
-
-          const endpoint = new AWS.Endpoint('http://127.0.0.1:5000')
-
-          s3 = new AWS.S3({ endpoint, s3ForcePathStyle: true })
+          AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
+          s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:5000', region: 'us-east-1', s3ForcePathStyle: true })
           tracer = require('../../dd-trace')
         })
 
@@ -186,10 +183,11 @@ describe('Plugin', () => {
         })
 
         before(() => {
-          AWS = require(`../../../versions/aws-sdk@${version}`).get()
+          const { S3 } = require(`../../../versions/${s3ClientName}@${version}`).get()
+          const { SQS } = require(`../../../versions/${sqsClientName}@${version}`).get()
 
-          s3 = new AWS.S3({ endpoint: new AWS.Endpoint('http://127.0.0.1:4572'), s3ForcePathStyle: true })
-          sqs = new AWS.SQS({ endpoint: new AWS.Endpoint('http://127.0.0.1:4576') })
+          s3 = new S3({ endpoint: 'http://127.0.0.1:4572', region: 'us-east-1', s3ForcePathStyle: true })
+          sqs = new SQS({ endpoint: 'http://127.0.0.1:4576', region: 'us-east-1' })
           tracer = require('../../dd-trace')
         })
 

@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  '@aws-sdk/smithy-client': () => require('../aws-sdk'),
   '@cucumber/cucumber': () => require('../cucumber'),
   '@playwright/test': () => require('../playwright'),
   '@elastic/elasticsearch': () => require('../elasticsearch'),
