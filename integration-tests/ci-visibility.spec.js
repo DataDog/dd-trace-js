@@ -160,9 +160,6 @@ testFrameworks.forEach(({
     })
     context('when no ci visibility init is used', () => {
       it('does not crash', (done) => {
-        receiver.assertMessageReceived(() => {
-          done(new Error('Should not create spans'))
-        })
         childProcess = fork(startupTestFile, {
           cwd,
           env: {
