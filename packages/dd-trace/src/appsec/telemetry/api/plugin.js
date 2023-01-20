@@ -39,7 +39,9 @@ module.exports = class TelemetryPlugin {
     this.config = aConfig
     this.application = appplicationObject
     this.host = hostObject
-    this.heartbeatInterval = this.heartbeatInterval || heartbeatInterval
+    if (!this.heartbeatInterval) {
+      this.heartbeatInterval = heartbeatInterval
+    }
 
     if (this.onStart(this.config) && this.heartbeatInterval) {
       if (this.onStartCallback) {

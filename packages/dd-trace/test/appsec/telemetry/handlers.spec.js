@@ -50,13 +50,13 @@ describe('Telemetry Handlers', () => {
       defaultHandler.add(5)
 
       const metricDataList = defaultHandler.drain()
-      expect(metricDataList.length).to.be.eq(1)
+      expect(metricDataList.length).to.eq(1)
 
       const metricData = metricDataList[0]
       expect(metricData).to.be.an.instanceOf(MetricData)
-      expect(metricData.metric).to.be.eq(metric)
-      expect(metricData.points.length).to.be.eq(1)
-      expect(metricData.points[0]).to.be.eq(point)
+      expect(metricData.metric).to.eq(metric)
+      expect(metricData.points.length).to.eq(1)
+      expect(metricData.points[0]).to.eq(point)
     })
 
     it('should invoke combiner.merge', () => {
@@ -75,10 +75,10 @@ describe('Telemetry Handlers', () => {
       const taggedHandler = new TaggedHandler(taggedMetric, supplier)
       taggedHandler.add(5, 'this_is_a_tag')
 
-      expect(combinersCreated.length).to.be.eq(1)
-      expect(taggedHandler.combiners.size).to.be.eq(1)
+      expect(combinersCreated.length).to.eq(1)
+      expect(taggedHandler.combiners.size).to.eq(1)
       expect(taggedHandler.combiners.has('this_is_a_tag')).to.be.true
-      expect(taggedHandler.combiners.get('this_is_a_tag')).to.be.eq(combinersCreated[0])
+      expect(taggedHandler.combiners.get('this_is_a_tag')).to.eq(combinersCreated[0])
 
       expect(combinersCreated[0].add).to.be.calledOnceWith(5)
     })
@@ -88,8 +88,8 @@ describe('Telemetry Handlers', () => {
       taggedHandler.add(5, 'this_is_a_tag')
       taggedHandler.add(10, 'this_is_a_tag')
 
-      expect(combinersCreated.length).to.be.eq(1)
-      expect(taggedHandler.combiners.size).to.be.eq(1)
+      expect(combinersCreated.length).to.eq(1)
+      expect(taggedHandler.combiners.size).to.eq(1)
 
       expect(combinersCreated[0].add).to.be.calledTwice
     })
@@ -99,8 +99,8 @@ describe('Telemetry Handlers', () => {
       taggedHandler.add(5, 'this_is_a_tag')
       taggedHandler.add(10, 'this_is_a_different_tag')
 
-      expect(combinersCreated.length).to.be.eq(2)
-      expect(taggedHandler.combiners.size).to.be.eq(2)
+      expect(combinersCreated.length).to.eq(2)
+      expect(taggedHandler.combiners.size).to.eq(2)
 
       expect(combinersCreated[0].add).to.be.calledOnceWith(5)
       expect(combinersCreated[1].add).to.be.calledOnceWith(10)
@@ -110,8 +110,8 @@ describe('Telemetry Handlers', () => {
       const taggedHandler = new TaggedHandler(taggedMetric, supplier)
       taggedHandler.add(5)
 
-      expect(combinersCreated.length).to.be.eq(1)
-      expect(taggedHandler.combiners.size).to.be.eq(1)
+      expect(combinersCreated.length).to.eq(1)
+      expect(taggedHandler.combiners.size).to.eq(1)
       expect(taggedHandler.combiners.has('')).to.be.true
     })
 
@@ -125,13 +125,13 @@ describe('Telemetry Handlers', () => {
       expect(combinersCreated[0].drain).to.be.calledOnce
       expect(combinersCreated[1].drain).to.be.calledOnce
 
-      expect(metricDataList.length).to.be.eq(2)
+      expect(metricDataList.length).to.eq(2)
 
-      expect(metricDataList[0].metric).to.be.equal(taggedMetric)
-      expect(metricDataList[0].tag).to.be.equal('this_is_a_tag')
+      expect(metricDataList[0].metric).to.equal(taggedMetric)
+      expect(metricDataList[0].tag).to.equal('this_is_a_tag')
 
-      expect(metricDataList[1].metric).to.be.equal(taggedMetric)
-      expect(metricDataList[1].tag).to.be.equal('this_is_a_different_tag')
+      expect(metricDataList[1].metric).to.equal(taggedMetric)
+      expect(metricDataList[1].tag).to.equal('this_is_a_different_tag')
     })
 
     it('should merge metricData which same tag if match', () => {
@@ -159,7 +159,7 @@ describe('Telemetry Handlers', () => {
       }
       taggedHandler.merge(metricData)
 
-      expect(combinersCreated.length).to.be.eq(3)
+      expect(combinersCreated.length).to.eq(3)
       expect(combinersCreated[2].merge).to.be.calledOnceWith(metricData)
       expect(taggedHandler.combiners.has('this_is_another_tag')).to.be.true
     })
@@ -184,7 +184,7 @@ describe('Telemetry Handlers', () => {
       taggedHandler.add(5, 'this_is_a_tag')
       const metricDatas = taggedHandler.drain()
 
-      expect(metricDatas.length).to.be.eq(1)
+      expect(metricDatas.length).to.eq(1)
       expect(metricDatas[0].getTags()).to.be.deep.eq(['metricTag:this_is_a_tag', 'tag1:value1', 'tag2:value2'])
     })
   })
@@ -240,7 +240,7 @@ describe('Telemetry Handlers', () => {
 
       expect(handler).to.not.be.undefined
       expect(handler).to.be.an.instanceOf(DelegatingHandler)
-      expect(handler.collector).to.be.eq(collector)
+      expect(handler.collector).to.eq(collector)
     })
   })
 })

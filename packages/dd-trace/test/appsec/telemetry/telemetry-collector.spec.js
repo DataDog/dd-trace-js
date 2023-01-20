@@ -2,12 +2,21 @@
 
 const { expect } = require('chai')
 const proxyquire = require('proxyquire')
-const { INSTRUMENTED_PROPAGATION, INSTRUMENTED_SOURCE,
-  REQUEST_TAINTED } = require('../../../src/appsec/iast/iast-metric')
-const { addValue, getMetricCollector, init, getFromContext, drain
-  , DD_TELEMETRY_COLLECTOR, GLOBAL
-  , TelemetryCollector } =
-  require('../../../src/appsec/telemetry/telemetry-collector')
+const {
+  INSTRUMENTED_PROPAGATION,
+  INSTRUMENTED_SOURCE,
+  REQUEST_TAINTED
+} = require('../../../src/appsec/iast/iast-metric')
+const {
+  addValue,
+  getMetricCollector,
+  init,
+  getFromContext,
+  drain,
+  DD_TELEMETRY_COLLECTOR,
+  GLOBAL,
+  TelemetryCollector 
+} = require('../../../src/appsec/telemetry/telemetry-collector')
 
 function getHandler (metric) {
   return getMetricCollector(metric).handlers.get(metric)
@@ -43,18 +52,18 @@ describe('IAST TelemetryCollector', () => {
         const metric = { name: 'test' }
         const handler = collector.getOrCreateHandler(metric)
 
-        expect(handler).to.be.equal(testHandler)
-        expect(collector.handlers.size).to.be.eq(1)
+        expect(handler).to.equal(testHandler)
+        expect(collector.handlers.size).to.eq(1)
         expect(collector.handlers.has(metric)).to.be.true
 
         collector.getOrCreateHandler(metric)
-        expect(collector.handlers.size).to.be.eq(1)
+        expect(collector.handlers.size).to.eq(1)
 
         const otherMetric = { name: 'other' }
         const handler2 = collector.getOrCreateHandler(otherMetric)
 
-        expect(handler2).to.be.equal(otherHandler)
-        expect(collector.handlers.size).to.be.eq(2)
+        expect(handler2).to.equal(otherHandler)
+        expect(collector.handlers.size).to.eq(2)
         expect(collector.handlers.has(otherMetric)).to.be.true
       })
 
@@ -68,7 +77,7 @@ describe('IAST TelemetryCollector', () => {
         collector.getOrCreateHandler(metric)
         collector.getOrCreateHandler(metric)
 
-        expect(collector.handlers.size).to.be.eq(1)
+        expect(collector.handlers.size).to.eq(1)
         expect(collector.handlers.has(metric)).to.be.true
       })
     })
@@ -100,7 +109,7 @@ describe('IAST TelemetryCollector', () => {
 
         expect(testHandler.drain).to.be.calledOnce
         expect(otherHandler.drain).to.be.calledOnce
-        expect(collector.handlers.size).to.be.eq(0)
+        expect(collector.handlers.size).to.eq(0)
       })
     })
 
@@ -134,12 +143,12 @@ describe('IAST TelemetryCollector', () => {
       const handler = getHandler(INSTRUMENTED_PROPAGATION)
 
       let metricDataList = handler.drain()
-      expect(metricDataList.length).to.be.eq(1)
-      expect(metricDataList[0].points.length).to.be.eq(1)
-      expect(metricDataList[0].points[0].value).to.be.eq(1)
+      expect(metricDataList.length).to.eq(1)
+      expect(metricDataList[0].points.length).to.eq(1)
+      expect(metricDataList[0].points[0].value).to.eq(1)
 
       metricDataList = handler.drain()
-      expect(metricDataList.length).to.be.eq(0)
+      expect(metricDataList.length).to.eq(0)
     })
 
     it('should increment a conflated metric every time it is called', () => {
@@ -150,12 +159,12 @@ describe('IAST TelemetryCollector', () => {
       const handler = getHandler(INSTRUMENTED_PROPAGATION)
 
       let metricDataList = handler.drain()
-      expect(metricDataList.length).to.be.eq(1)
-      expect(metricDataList[0].points.length).to.be.eq(1)
-      expect(metricDataList[0].points[0].value).to.be.eq(3)
+      expect(metricDataList.length).to.eq(1)
+      expect(metricDataList[0].points.length).to.eq(1)
+      expect(metricDataList[0].points[0].value).to.eq(3)
 
       metricDataList = handler.drain()
-      expect(metricDataList.length).to.be.eq(0)
+      expect(metricDataList.length).to.eq(0)
     })
 
     it('should increment a conflated tagged metric', () => {
@@ -164,15 +173,15 @@ describe('IAST TelemetryCollector', () => {
       const handler = getHandler(INSTRUMENTED_SOURCE)
 
       let metricDataList = handler.drain()
-      expect(metricDataList.length).to.be.eq(1)
+      expect(metricDataList.length).to.eq(1)
 
-      expect(metricDataList.length).to.be.eq(1)
-      expect(metricDataList[0].tag).to.be.eq('tag1')
-      expect(metricDataList[0].points.length).to.be.eq(1)
-      expect(metricDataList[0].points[0].value).to.be.eq(1)
+      expect(metricDataList.length).to.eq(1)
+      expect(metricDataList[0].tag).to.eq('tag1')
+      expect(metricDataList[0].points.length).to.eq(1)
+      expect(metricDataList[0].points[0].value).to.eq(1)
 
       metricDataList = handler.drain()
-      expect(metricDataList.length).to.be.eq(0)
+      expect(metricDataList.length).to.eq(0)
     })
 
     it('should increment a conflated tagged metric every time is called', () => {
@@ -183,15 +192,15 @@ describe('IAST TelemetryCollector', () => {
       const handler = getHandler(INSTRUMENTED_SOURCE)
 
       let metricDataList = handler.drain()
-      expect(metricDataList.length).to.be.eq(1)
+      expect(metricDataList.length).to.eq(1)
 
-      expect(metricDataList.length).to.be.eq(1)
-      expect(metricDataList[0].tag).to.be.eq('tag1')
-      expect(metricDataList[0].points.length).to.be.eq(1)
-      expect(metricDataList[0].points[0].value).to.be.eq(3)
+      expect(metricDataList.length).to.eq(1)
+      expect(metricDataList[0].tag).to.eq('tag1')
+      expect(metricDataList[0].points.length).to.eq(1)
+      expect(metricDataList[0].points[0].value).to.eq(3)
 
       metricDataList = handler.drain()
-      expect(metricDataList.length).to.be.eq(0)
+      expect(metricDataList.length).to.eq(0)
     })
 
     it('should increment an aggregated metric', () => {
@@ -201,12 +210,12 @@ describe('IAST TelemetryCollector', () => {
       const handler = getHandler(REQUEST_TAINTED)
 
       let metricDataList = handler.drain()
-      expect(metricDataList.length).to.be.eq(1)
-      expect(metricDataList[0].points.length).to.be.eq(2)
+      expect(metricDataList.length).to.eq(1)
+      expect(metricDataList[0].points.length).to.eq(2)
 
       metricDataList = handler.drain()
-      expect(metricDataList.length).to.be.eq(1)
-      expect(metricDataList[0].points.length).to.be.eq(0)
+      expect(metricDataList.length).to.eq(1)
+      expect(metricDataList[0].points.length).to.eq(0)
     })
 
     it('should add any value to a conflated metric', () => {
@@ -215,9 +224,9 @@ describe('IAST TelemetryCollector', () => {
 
       const handler = getHandler(INSTRUMENTED_SOURCE)
       const metricDataList = handler.drain()
-      expect(metricDataList.length).to.be.eq(1)
-      expect(metricDataList[0].points.length).to.be.eq(1)
-      expect(metricDataList[0].points[0].value).to.be.eq(6)
+      expect(metricDataList.length).to.eq(1)
+      expect(metricDataList[0].points.length).to.eq(1)
+      expect(metricDataList[0].points[0].value).to.eq(6)
     })
 
     it('should add any value to an aggregated metric', () => {
@@ -226,10 +235,10 @@ describe('IAST TelemetryCollector', () => {
 
       const handler = getHandler(REQUEST_TAINTED)
       const metricDataList = handler.drain()
-      expect(metricDataList.length).to.be.eq(1)
-      expect(metricDataList[0].points.length).to.be.eq(2)
-      expect(metricDataList[0].points[0].value).to.be.eq(1)
-      expect(metricDataList[0].points[1].value).to.be.eq(5)
+      expect(metricDataList.length).to.eq(1)
+      expect(metricDataList[0].points.length).to.eq(2)
+      expect(metricDataList[0].points[0].value).to.eq(1)
+      expect(metricDataList[0].points[1].value).to.eq(5)
     })
 
     it('should catch exceptions', () => {
@@ -258,7 +267,7 @@ describe('IAST TelemetryCollector', () => {
       expect(collector).to.not.be.undefined
       expect(context[DD_TELEMETRY_COLLECTOR]).to.not.be.undefined
 
-      expect(collector).to.be.eq(getFromContext(context))
+      expect(collector).to.eq(getFromContext(context))
     })
   })
 
@@ -270,7 +279,7 @@ describe('IAST TelemetryCollector', () => {
       expect(collector).to.not.be.undefined
       expect(context[DD_TELEMETRY_COLLECTOR]).to.not.be.undefined
 
-      expect(collector).to.be.eq(getFromContext(context, true))
+      expect(collector).to.eq(getFromContext(context, true))
       expect(context[DD_TELEMETRY_COLLECTOR]).to.be.undefined
       expect(getFromContext(context)).to.be.undefined
     })
@@ -282,8 +291,7 @@ describe('IAST TelemetryCollector', () => {
       const collector = init(context)
 
       const reqMetricCollector = getMetricCollector(REQUEST_TAINTED, context)
-
-      expect(reqMetricCollector).to.be.eq(collector)
+      expect(reqMetricCollector).to.eq(collector)
     })
 
     // TODO: at the moment, if no context is provided for a request scoped metric GLOBAL collector is returned
@@ -292,8 +300,7 @@ describe('IAST TelemetryCollector', () => {
       init(context)
 
       const reqMetricCollector = getMetricCollector(REQUEST_TAINTED)
-
-      expect(reqMetricCollector).to.be.eq(GLOBAL)
+      expect(reqMetricCollector).to.eq(GLOBAL)
     })
 
     it('should return GLOBAL collector for a global metric', () => {
@@ -302,7 +309,7 @@ describe('IAST TelemetryCollector', () => {
 
       const globalMetricCollector = getMetricCollector(INSTRUMENTED_PROPAGATION, context)
 
-      expect(globalMetricCollector).to.be.eq(GLOBAL)
+      expect(globalMetricCollector).to.eq(GLOBAL)
       expect(globalMetricCollector).to.be.not.eq(collector)
     })
   })
@@ -319,47 +326,47 @@ describe('IAST TelemetryCollector', () => {
       GLOBAL.addMetric(REQUEST_TAINTED, 20)
 
       const drained = drain()
-      expect(drained.length).to.be.eq(3)
+      expect(drained.length).to.eq(3)
 
       // conflated
       const sourceParam = drained[0]
-      expect(sourceParam.metric).to.be.eq('instrumented.source')
+      expect(sourceParam.metric).to.eq('instrumented.source')
       expect(sourceParam.tags).to.be.deep.eq(['source_type:http.request.param'])
-      expect(sourceParam.common).to.be.eq(true)
-      expect(sourceParam.type).to.be.eq('count')
+      expect(sourceParam.common).to.eq(true)
+      expect(sourceParam.type).to.eq('count')
 
       // only one point with the sum
-      expect(sourceParam.points.length).to.be.eq(1)
+      expect(sourceParam.points.length).to.eq(1)
       expect(sourceParam.points[0]).to.be.an.instanceOf(Array)
-      expect(sourceParam.points[0].length).to.be.eq(2)
-      expect(sourceParam.points[0][1]).to.be.eq(10)
+      expect(sourceParam.points[0].length).to.eq(2)
+      expect(sourceParam.points[0][1]).to.eq(10)
 
       // conflated with other tag
       const sourceBody = drained[1]
-      expect(sourceBody.metric).to.be.eq('instrumented.source')
+      expect(sourceBody.metric).to.eq('instrumented.source')
       expect(sourceBody.tags).to.be.deep.eq(['source_type:http.request.body'])
-      expect(sourceBody.common).to.be.eq(true)
-      expect(sourceBody.type).to.be.eq('count')
+      expect(sourceBody.common).to.eq(true)
+      expect(sourceBody.type).to.eq('count')
 
       // only one point with the sum
-      expect(sourceBody.points.length).to.be.eq(1)
+      expect(sourceBody.points.length).to.eq(1)
       expect(sourceBody.points[0]).to.be.an.instanceOf(Array)
-      expect(sourceBody.points[0].length).to.be.eq(2)
-      expect(sourceBody.points[0][1]).to.be.eq(1)
+      expect(sourceBody.points[0].length).to.eq(2)
+      expect(sourceBody.points[0][1]).to.eq(1)
 
       // aggregated
       const requestTainted = drained[2]
-      expect(requestTainted.metric).to.be.eq('request.tainted')
+      expect(requestTainted.metric).to.eq('request.tainted')
       expect(requestTainted.tags).to.be.undefined
-      expect(requestTainted.common).to.be.eq(true)
-      expect(requestTainted.type).to.be.eq('count')
+      expect(requestTainted.common).to.eq(true)
+      expect(requestTainted.type).to.eq('count')
 
       // as many points as added metrics
-      expect(requestTainted.points.length).to.be.eq(2)
+      expect(requestTainted.points.length).to.eq(2)
       expect(requestTainted.points[0]).to.be.an.instanceOf(Array)
-      expect(requestTainted.points[0].length).to.be.eq(2)
-      expect(requestTainted.points[0][1]).to.be.eq(15)
-      expect(requestTainted.points[1][1]).to.be.eq(20)
+      expect(requestTainted.points[0].length).to.eq(2)
+      expect(requestTainted.points[0][1]).to.eq(15)
+      expect(requestTainted.points[1][1]).to.eq(20)
     })
   })
 })

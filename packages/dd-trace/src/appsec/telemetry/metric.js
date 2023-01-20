@@ -1,7 +1,6 @@
 'use strict'
 
 const { addValue } = require('./telemetry-collector')
-
 const Scope = {
   GLOBAL: 'GLOBAL',
   REQUEST: 'REQUEST'

@@ -11,19 +11,23 @@ const STACK_FRAME_LINE_REGEX = /^\s*at\s/gm
 function sanitize (logEntry, stack) {
   if (!stack) return logEntry
 
-  let stackLines = stack.split(EOL)
+  if (telemetry.isLogCollectionDebugEnabled()) {
+    logEntry.stack_trace = stack
+  } else {
+    let stackLines = stack.split(EOL)
 
-  const firstIndex = stackLines.findIndex(l => l.match(STACK_FRAME_LINE_REGEX))
+    const firstIndex = stackLines.findIndex(l => l.match(STACK_FRAME_LINE_REGEX))
 
-  const isDDCode = firstIndex > -1 && stackLines[firstIndex].includes(ddBasePath)
-  stackLines = stackLines
-    .filter((line, index) => (isDDCode && index < firstIndex) || line.includes(ddBasePath))
-    .map(line => line.replace(ddBasePath, ''))
+    const isDDCode = firstIndex > -1 && stackLines[firstIndex].includes(ddBasePath)
+    stackLines = stackLines
+      .filter((line, index) => (isDDCode && index < firstIndex) || line.includes(ddBasePath))
+      .map(line => line.replace(ddBasePath, ''))
 
-  logEntry.stack_trace = stackLines.join(EOL)
+    logEntry.stack_trace = stackLines.join(EOL)
 
-  if (!isDDCode) {
-    logEntry.message = 'omitted'
+    if (!isDDCode) {
+      logEntry.message = 'omitted'
+    }
   }
 
   return logEntry

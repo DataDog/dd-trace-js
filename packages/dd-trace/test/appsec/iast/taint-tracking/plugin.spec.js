@@ -109,6 +109,7 @@ describe('IAST Taint tracking plugin', () => {
     )
 
     taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted, iastPluginContext)
+
     expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
       iastContext,
       objToBeTainted[propertyToBeTainted],
@@ -132,6 +133,7 @@ describe('IAST Taint tracking plugin', () => {
     )
 
     taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
+
     expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
       iastContext,
       objToBeTainted[propertyToBeTainted],

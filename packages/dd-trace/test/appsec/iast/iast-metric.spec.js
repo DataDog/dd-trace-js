@@ -2,9 +2,15 @@
 
 const { expect } = require('chai')
 
-const { MetricTag, getExecutedMetric, getInstrumentedMetric, EXECUTED_SINK, EXECUTED_SOURCE,
-  INSTRUMENTED_SINK, INSTRUMENTED_SOURCE } =
-  require('../../../src/appsec/iast/iast-metric')
+const {
+  MetricTag,
+  getExecutedMetric,
+  getInstrumentedMetric,
+  EXECUTED_SINK,
+  EXECUTED_SOURCE,
+  INSTRUMENTED_SINK,
+  INSTRUMENTED_SOURCE
+} = require('../../../src/appsec/iast/iast-metric')
 
 describe('IastMetrics', () => {
   it('getExecutedMetric should return a metric depending on tag', () => {

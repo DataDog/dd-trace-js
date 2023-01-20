@@ -8,7 +8,13 @@ const { REQUEST_TAINTED, EXECUTED_SINK, INSTRUMENTED_PROPAGATION } = require('..
 const TAG_PREFIX = '_dd.instrumentation_telemetry_data.iast'
 
 describe('Telemetry', () => {
-  let defaultConfig
+  const defaultConfig = {
+    telemetry: {
+      enabled: true,
+      metrics: true
+    }
+  }
+
   let collector
   let telemetryMetrics
   let telemetryLogs
@@ -16,13 +22,6 @@ describe('Telemetry', () => {
   let logCollector
 
   beforeEach(() => {
-    defaultConfig = {
-      telemetry: {
-        enabled: true,
-        metrics: true
-      }
-    }
-
     collector = {
       init: sinon.spy(),
       getFromContext: (context) => context['collector'],
@@ -67,7 +66,7 @@ describe('Telemetry', () => {
       telemetry.configure(defaultConfig)
 
       expect(telemetry.enabled).to.be.true
-      expect(telemetry.verbosity).to.be.eq(Verbosity.INFORMATION)
+      expect(telemetry.verbosity).to.eq(Verbosity.INFORMATION)
       expect(telemetryMetrics.init).to.be.calledOnceWith(defaultConfig.telemetry)
       expect(telemetryLogs.init).to.be.calledOnceWith(defaultConfig.telemetry)
     })
@@ -77,7 +76,7 @@ describe('Telemetry', () => {
       telemetry.configure(defaultConfig)
 
       expect(telemetry.enabled).to.be.false
-      expect(telemetry.verbosity).to.be.eq(Verbosity.OFF)
+      expect(telemetry.verbosity).to.eq(Verbosity.OFF)
       expect(telemetryMetrics.init).to.not.be.called
       expect(telemetryLogs.init).to.not.be.called
     })
@@ -99,7 +98,7 @@ describe('Telemetry', () => {
       })
 
       expect(telemetry.enabled).to.be.true
-      expect(telemetry.verbosity).to.be.eq(Verbosity.OFF)
+      expect(telemetry.verbosity).to.eq(Verbosity.OFF)
       expect(telemetryMetrics.init).to.be.calledOnceWith(telemetryConfig)
       expect(telemetryLogs.init).to.be.calledOnceWith(telemetryConfig)
     })
@@ -111,7 +110,7 @@ describe('Telemetry', () => {
       })
 
       expect(telemetry.enabled).to.be.false
-      expect(telemetry.verbosity).to.be.eq(Verbosity.OFF)
+      expect(telemetry.verbosity).to.eq(Verbosity.OFF)
       expect(telemetryMetrics.init).to.not.be.called
       expect(telemetryLogs.init).to.not.be.called
     })
@@ -190,7 +189,7 @@ describe('Telemetry', () => {
 
       const tag = rootSpan.addTags.getCalls()[0].args[0]
       expect(tag).to.has.property(`${TAG_PREFIX}.${REQUEST_TAINTED.name}`)
-      expect(tag[`${TAG_PREFIX}.${REQUEST_TAINTED.name}`]).to.be.eq(10)
+      expect(tag[`${TAG_PREFIX}.${REQUEST_TAINTED.name}`]).to.eq(10)
     })
 
     it('should set as many rootSpan tags as different request scoped metrics', () => {
@@ -221,11 +220,11 @@ describe('Telemetry', () => {
       const calls = rootSpan.addTags.getCalls()
       const reqTaintedTag = calls[0].args[0]
       expect(reqTaintedTag).to.has.property(`${TAG_PREFIX}.${REQUEST_TAINTED.name}`)
-      expect(reqTaintedTag[`${TAG_PREFIX}.${REQUEST_TAINTED.name}`]).to.be.eq(15)
+      expect(reqTaintedTag[`${TAG_PREFIX}.${REQUEST_TAINTED.name}`]).to.eq(15)
 
       const execSinkTag = calls[1].args[0]
       expect(execSinkTag).to.has.property(`${TAG_PREFIX}.${EXECUTED_SINK.name}`)
-      expect(execSinkTag[`${TAG_PREFIX}.${EXECUTED_SINK.name}`]).to.be.eq(1)
+      expect(execSinkTag[`${TAG_PREFIX}.${EXECUTED_SINK.name}`]).to.eq(1)
     })
 
     it('should set filter out global scoped metrics', () => {
