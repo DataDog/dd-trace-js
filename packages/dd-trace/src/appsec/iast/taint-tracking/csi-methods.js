@@ -2,16 +2,29 @@
 
 const csiMethods = [
   { src: 'plusOperator', operator: true },
-  { src: 'trim' },
-  { src: 'trimStart', dst: 'trim' },
-  { src: 'trimEnd' },
   { src: 'concat' },
-  { src: 'substring' },
-  { src: 'substr' },
+  { src: 'replace' },
   { src: 'slice' },
-  { src: 'replace' }
+  { src: 'substr' },
+  { src: 'substring' },
+  { src: 'trim' },
+  { src: 'trimEnd' },
+  { src: 'trimStart', dst: 'trim' }
 ]
 
+function getExpectedMethods () {
+  const set = new Set()
+  for (const definition of csiMethods) {
+    if (definition.dst) {
+      set.add(definition.dst)
+    } else {
+      set.add(definition.src)
+    }
+  }
+  return [...set]
+}
+
 module.exports = {
-  csiMethods
+  csiMethods,
+  getExpectedMethods
 }
