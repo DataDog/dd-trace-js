@@ -169,6 +169,22 @@ class FakeCiVisIntake extends FakeAgent {
     infoResponse = DEFAULT_INFO_RESPONSE
   }
 
+  gatherPayloads (payloadMatch, gatheringTime = 15000) {
+    const payloads = []
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        this.removeListener('message', messageHandler)
+        resolve(payloads)
+      }, gatheringTime)
+      const messageHandler = (message) => {
+        if (!payloadMatch || payloadMatch(message)) {
+          payloads.push(message)
+        }
+      }
+      this.on('message', messageHandler)
+    })
+  }
+
   payloadReceived (payloadMatch, timeout) {
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
