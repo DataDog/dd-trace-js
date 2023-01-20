@@ -33,12 +33,12 @@ jobs:
           cd datadog-lambda-js 
           ./scripts/build_layers.sh
       - name: Rename layer to 'layer.zip'
-        run: mv .layers/datadog_lambda_node${{ matrix.node-version }}.zip ./layers/layer.zip
+        run: mv datadog-lambda-js/.layers/datadog_lambda_node${{ matrix.node-version }}.zip ./layer.zip
       - name: Deploy
         uses: DataDog/serverless-performance-test-action@main
         with:
           runtime_id: 'maxday-runtime'
-          layer_path: './layers/layer.zip'
+          layer_path: './layer.zip'
           layer_name: 'performance-tester-nodejs-${{ matrix.node-version }}'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.SERVERLESS_AWS_ACCESS_KEY_ID }}
