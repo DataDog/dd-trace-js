@@ -112,6 +112,39 @@ function testThatRequestHasNoVulnerability (app, vulnerability) {
   testInRequest(app, tests)
 }
 
+function testOutsideRequestHasVulnerability (fnToTest, vulnerability) {
+  beforeEach(async () => {
+    await agent.load()
+  })
+  afterEach(() => {
+    return agent.close({ ritmReset: false })
+  })
+  beforeEach(() => {
+    const tracer = require('../../..')
+    iast.enable(new Config({
+      experimental: {
+        iast: {
+          enabled: true,
+          requestSampling: 100
+        }
+      }
+    }), tracer)
+  })
+
+  afterEach(() => {
+    iast.disable()
+  })
+  it(`should detect ${vulnerability} vulnerability out of request`, function (done) {
+    agent
+      .use(traces => {
+        expect(traces[0][0].meta['_dd.iast.json']).to.include(`"${vulnerability}"`)
+      })
+      .then(done)
+      .catch(done)
+    fnToTest()
+  })
+}
+
 let index = 0
 function copyFileToTmp (src) {
   const srcName = `dd-iast-${index++}-${path.basename(src)}`
@@ -120,4 +153,10 @@ function copyFileToTmp (src) {
   return dest
 }
 
-module.exports = { testThatRequestHasNoVulnerability, testThatRequestHasVulnerability, testInRequest, copyFileToTmp }
+module.exports = {
+  testThatRequestHasNoVulnerability,
+  testThatRequestHasVulnerability,
+  testOutsideRequestHasVulnerability,
+  testInRequest,
+  copyFileToTmp
+}
