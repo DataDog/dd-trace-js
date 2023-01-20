@@ -28,7 +28,7 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.name}:test-suite:skippable`, ({ onDone }) => {
-      if (!this.tracer._exporter.getSkippableSuites) {
+      if (!this.tracer._exporter || !this.tracer._exporter.getSkippableSuites) {
         return onDone({ err: new Error('CI Visibility was not initialized correctly') })
       }
       this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites) => {
