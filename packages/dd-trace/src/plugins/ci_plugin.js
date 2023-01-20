@@ -16,6 +16,9 @@ module.exports = class CiPlugin extends Plugin {
     super(...args)
 
     this.addSub(`ci:${this.constructor.name}:itr-configuration`, ({ onDone }) => {
+      if (!this.tracer._exporter || !this.tracer._exporter.getItrConfiguration) {
+        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+      }
       this.tracer._exporter.getItrConfiguration(this.testConfiguration, (err, itrConfig) => {
         if (!err) {
           this.itrConfig = itrConfig
@@ -25,6 +28,9 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.name}:test-suite:skippable`, ({ onDone }) => {
+      if (!this.tracer._exporter || !this.tracer._exporter.getSkippableSuites) {
+        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+      }
       this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites) => {
         onDone({ err, skippableSuites })
       })
