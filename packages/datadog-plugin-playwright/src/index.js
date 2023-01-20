@@ -116,6 +116,13 @@ class PlaywrightPlugin extends CiPlugin {
   }
 
   startTestSpan (test) {
+    const childOf = getTestParentSpan(this.tracer)
+
+    // This is a hack to get good time resolution on test events, while keeping
+    // the test event as the root span of its trace.
+    childOf._trace.startTime = this.testSessionSpan.context()._trace.startTime
+    childOf._trace.ticks = this.testSessionSpan.context()._trace.ticks
+
     const { title: testName, location: { file } } = test
     const testSuite = getTestSuitePath(file, this.rootDir)
 
@@ -133,7 +140,7 @@ class PlaywrightPlugin extends CiPlugin {
       testSuiteTags[TEST_COMMAND] = this.command
     }
 
-    return super.startTestSpan(testName, testSuite, testSuiteTags)
+    return super.startTestSpan(testName, testSuite, testSuiteTags, childOf)
   }
 }
 

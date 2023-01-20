@@ -6,7 +6,6 @@ test.beforeEach(async ({ page }) => {
 
 test.describe('playwright', () => {
   test('should work with failing tests', async ({ page }) => {
-    // Create 1st todo.
     await expect(page.locator('.hello-world')).toHaveText([
       'Hello Warld'
     ])

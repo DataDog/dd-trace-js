@@ -14,7 +14,7 @@ const { FakeCiVisIntake } = require('./ci-visibility-intake')
 const webAppServer = require('./ci-visibility/web-app-server')
 const { TEST_STATUS } = require('../packages/dd-trace/src/plugins/util/test')
 
-describe.only('playwright', () => {
+describe('playwright', () => {
   let sandbox, cwd, receiver, childProcess, webAppPort
   before(async () => {
     sandbox = await createSandbox(['@playwright/test'], true)
@@ -73,12 +73,14 @@ describe.only('playwright', () => {
 
           assert.includeMembers(testEvents.map(test => test.content.resource), [
             'ci-visibility/playwright-tests/landing-page-test.js.should work with passing tests',
+            'ci-visibility/playwright-tests/landing-page-test.js.should work with skipped tests',
             'ci-visibility/playwright-tests/todo-list-page-test.js.should work with failing tests'
           ])
 
           assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
             'pass',
-            'fail'
+            'fail',
+            'skip'
           ])
 
           stepEvents.forEach(stepEvent => {
