@@ -158,6 +158,33 @@ testFrameworks.forEach(({
         })
       })
     })
+    context('when no ci visibility init is used', () => {
+      it('does not crash', (done) => {
+        receiver.assertMessageReceived(() => {
+          done(new Error('Should not create spans'))
+        })
+        childProcess = fork(startupTestFile, {
+          cwd,
+          env: {
+            DD_TRACE_AGENT_PORT: receiver.port,
+            NODE_OPTIONS: '-r dd-trace/init'
+          },
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('message', () => {
+          assert.notInclude(testOutput, 'TypeError')
+          assert.notInclude(testOutput, 'Uncaught error outside test suite')
+          assert.include(testOutput, expectedStdout)
+          done()
+        })
+      })
+    })
 
     describe('agentless', () => {
       it('does not init if DD_API_KEY is not set', (done) => {
