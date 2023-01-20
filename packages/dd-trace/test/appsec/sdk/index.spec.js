@@ -1,3 +1,5 @@
+'use strict'
+
 const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
 const getPort = require('get-port')

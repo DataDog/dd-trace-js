@@ -1,3 +1,5 @@
+'use strict'
+
 function getRootSpan (tracer) {
   const span = tracer.scope().active()
   if (!span) return undefined

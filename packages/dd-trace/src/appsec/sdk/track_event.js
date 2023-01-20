@@ -1,3 +1,5 @@
+'use strict'
+
 const { getRootSpan } = require('./utils')
 const { MANUAL_KEEP } = require('../../../../../ext/tags')
 const log = require('../../log')

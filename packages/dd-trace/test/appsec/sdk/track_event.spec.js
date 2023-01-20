@@ -1,3 +1,5 @@
+'use strict'
+
 const proxyquire = require('proxyquire')
 
 describe('track_event', () => {

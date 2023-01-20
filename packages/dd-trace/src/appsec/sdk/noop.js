@@ -1,3 +1,5 @@
+'use strict'
+
 class AppsecSdk {
   trackUserLoginSuccessEvent (user, metadata) { }
 
