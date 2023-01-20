@@ -112,7 +112,6 @@ addHook({
       } else if (method === 'ddTestSuiteEnd') {
         const testStatuses = testSuiteToTestStatuses.get(params.testSuite)
 
-        // TODO: bubble up test error to suite (testSuiteToTestStatuses will have to carry errors)
         let testSuiteStatus = 'pass'
         if (testStatuses.some(status => status === 'fail')) {
           testSuiteStatus = 'fail'
