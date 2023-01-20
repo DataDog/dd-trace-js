@@ -25,8 +25,8 @@ class DatabasePlugin extends StoragePlugin {
     }
   }
 
-  createDBMPropagationCommentService () {
-    this.encodingServiceTags('dddbs', 'encodedDddbs', this.config.service)
+  createDBMPropagationCommentService (serviceName) {
+    this.encodingServiceTags('dddbs', 'encodedDddbs', serviceName)
     this.encodingServiceTags('dde', 'encodedDde', this.tracer._env)
     this.encodingServiceTags('ddps', 'encodedDdps', this.tracer._service)
     this.encodingServiceTags('ddpv', 'encodedDdpv', this.tracer._version)
@@ -37,11 +37,11 @@ class DatabasePlugin extends StoragePlugin {
     `ddps='${encodedDdps}',ddpv='${encodedDdpv}'`
   }
 
-  injectDbmQuery (query) {
+  injectDbmQuery (query, serviceName) {
     if (this.config.dbmPropagationMode === 'disabled') {
       return query
     }
-    const servicePropagation = this.createDBMPropagationCommentService()
+    const servicePropagation = this.createDBMPropagationCommentService(serviceName)
     if (this.config.dbmPropagationMode === 'service') {
       return `/*${servicePropagation}*/ ${query}`
     } else if (this.config.dbmPropagationMode === 'full') {
