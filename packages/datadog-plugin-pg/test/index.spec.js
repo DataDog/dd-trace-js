@@ -252,7 +252,7 @@ describe('Plugin', () => {
       })
       describe('with DBM propagation enabled with service using plugin configurations', () => {
         before(() => {
-          return agent.load('pg', [{ dbmPropagationMode: 'service', service: 'serviced' }])
+          return agent.load('pg', [{ dbmPropagationMode: 'service', service: () => 'serviced' }])
         })
 
         after(() => {
