@@ -10,7 +10,13 @@ const INSECURE_HASH_ALGORITHMS = new Set([
 class WeakHashAnalyzer extends Analyzer {
   constructor () {
     super('WEAK_HASH')
-    this.addSub('datadog:crypto:hashing:start', ({ algorithm }) => this.analyze(algorithm))
+  }
+
+  onConfigure () {
+    this.addSub(
+      { channelName: 'datadog:crypto:hashing:start' },
+      ({ algorithm }) => this.analyze(algorithm)
+    )
   }
 
   _isVulnerable (algorithm) {

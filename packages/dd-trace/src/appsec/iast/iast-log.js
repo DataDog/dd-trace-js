@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('../../log')
-const telemetryLogs = require('./telemetry/logs')
+const { isLevelEnabled, add } = require('../telemetry/log-collector')
 const { calculateDDBasePath } = require('../../util')
 
 const ddBasePath = calculateDDBasePath(__dirname)
@@ -80,9 +80,9 @@ const iastLog = {
   },
 
   publish (data, level) {
-    if (telemetryLogs.isLevelEnabled(level)) {
+    if (isLevelEnabled(level)) {
       const telemetryLog = getTelemetryLog(data, level)
-      telemetryLogs.publish(telemetryLog)
+      add(telemetryLog)
     }
     return this
   },

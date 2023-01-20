@@ -8,6 +8,8 @@ describe('weak-hash-analyzer', () => {
   const VULNERABLE_ALGORITHM = 'sha1'
   const NON_VULNERABLE_ALGORITHM = 'sha512'
 
+  weakHashAnalyzer.configure(true)
+
   it('should subscribe to crypto hashing channel', () => {
     expect(weakHashAnalyzer._subscriptions).to.have.lengthOf(1)
     expect(weakHashAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:crypto:hashing:start')
@@ -45,6 +47,10 @@ describe('weak-hash-analyzer', () => {
         }
       }
     }
+    const iastPluginContext = {
+      store: {},
+      iastContext
+    }
     const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
       '../iast-context': {
         getIastContext: () => iastContext
@@ -56,7 +62,7 @@ describe('weak-hash-analyzer', () => {
       {
         './vulnerability-analyzer': ProxyAnalyzer
       })
-    proxiedWeakHashAnalyzer.analyze(VULNERABLE_ALGORITHM)
+    proxiedWeakHashAnalyzer.analyze(VULNERABLE_ALGORITHM, iastPluginContext)
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'WEAK_HASH' })
   })

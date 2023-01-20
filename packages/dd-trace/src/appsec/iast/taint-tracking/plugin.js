@@ -1,22 +1,25 @@
 'use strict'
 
-const Plugin = require('../../../plugins/plugin')
+const { HTTP_REQUEST_PARAMETER, HTTP_REQUEST_BODY } = require('./source-types')
+const { taintObject } = require('./operations')
+const { SourceIastPlugin } = require('../iast-plugin')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
-const { HTTP_REQUEST_PARAMETER, HTTP_REQUEST_BODY } = require('./origin-types')
-const { taintObject } = require('./operations')
 
-class TaintTrackingPlugin extends Plugin {
+class TaintTrackingPlugin extends SourceIastPlugin {
   constructor () {
     super()
     this._type = 'taint-tracking'
+  }
+
+  onConfigure () {
     this.addSub(
-      'datadog:body-parser:read:finish',
+      { channelName: 'datadog:body-parser:read:finish', tag: HTTP_REQUEST_BODY },
       ({ req }) => this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body')
     )
     this.addSub(
-      'datadog:qs:parse:finish',
-      ({ qs }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, qs))
+      { channelName: 'datadog:qs:parse:finish', tag: HTTP_REQUEST_PARAMETER },
+      ({ qs }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, qs, null))
   }
 
   _taintTrackingHandler (type, target, property) {

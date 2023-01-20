@@ -4,7 +4,12 @@ const InjectionAnalyzer = require('./injection-analyzer')
 class LdapInjectionAnalyzer extends InjectionAnalyzer {
   constructor () {
     super('LDAP_INJECTION')
-    this.addSub('datadog:ldapjs:client:search', ({ base, filter }) => this.analyzeAll(base, filter))
+  }
+
+  onConfigure () {
+    this.addSub(
+      { channelName: 'datadog:ldapjs:client:search' },
+      ({ base, filter }) => this.analyzeAll(base, filter))
   }
 }
 

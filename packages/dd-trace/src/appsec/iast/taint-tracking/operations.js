@@ -3,7 +3,10 @@
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { IAST_TRANSACTION_ID } = require('../iast-context')
 const iastLog = require('../iast-log')
-const { TaintTracking, TaintTrackingDummy } = require('./taint-tracking-impl')
+const telemetry = require('../../telemetry')
+const { REQUEST_TAINTED } = require('../iast-metric')
+const { isDebugAllowed, isInfoAllowed } = require('../../telemetry/verbosity')
+const { TaintTracking, TaintTrackingDebug, TaintTrackingDummy } = require('./taint-tracking-impl')
 
 function createTransaction (id, iastContext) {
   if (id && iastContext) {
@@ -11,9 +14,21 @@ function createTransaction (id, iastContext) {
   }
 }
 
+function onRemoveTransaction (transactionId, iastContext) {}
+
+function onRemoveTransactionInformationTelemetry (transactionId, iastContext) {
+  const metrics = TaintedUtils.getMetrics(transactionId, telemetry.verbosity)
+  if (metrics && metrics.requestCount) {
+    REQUEST_TAINTED.add(metrics.requestCount, null, iastContext)
+  }
+}
+
 function removeTransaction (iastContext) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
+
+    onRemoveTransaction(transactionId, iastContext)
+
     TaintedUtils.removeTransaction(transactionId)
     delete iastContext[IAST_TRANSACTION_ID]
   }
@@ -87,8 +102,14 @@ function getRanges (iastContext, string) {
   return result
 }
 
-function enableTaintOperations () {
-  global._ddiast = TaintTracking
+function enableTaintOperations (telemetryVerbosity) {
+  if (isInfoAllowed(telemetryVerbosity)) {
+    // eslint-disable-next-line no-func-assign
+    onRemoveTransaction = onRemoveTransactionInformationTelemetry
+  }
+  global._ddiast = isDebugAllowed(telemetryVerbosity)
+    ? TaintTrackingDebug
+    : TaintTracking
 }
 
 function disableTaintOperations () {

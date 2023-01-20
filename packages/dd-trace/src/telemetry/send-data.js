@@ -1,4 +1,25 @@
 const request = require('../exporters/common/request')
+
+const debug = process.env.DD_TELEMETRY_DEBUG
+  ? process.env.DD_TELEMETRY_DEBUG === 'true'
+  : false
+
+function getHeaders (reqType, debug, application) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'DD-Telemetry-API-Version': 'v1',
+    'DD-Telemetry-Request-Type': reqType
+  }
+  if (debug) {
+    headers['DD-Telemetry-Debug-Enabled'] = 'true'
+  }
+  if (application) {
+    headers['DD-Client-Library-Language'] = application.language_name
+    headers['DD-Client-Library-Version'] = application.tracer_version
+  }
+  return headers
+}
+
 let seqId = 0
 function sendData (config, application, host, reqType, payload = {}) {
   const {
@@ -15,11 +36,7 @@ function sendData (config, application, host, reqType, payload = {}) {
     port,
     method: 'POST',
     path: '/telemetry/proxy/api/v2/apmtelemetry',
-    headers: {
-      'content-type': 'application/json',
-      'dd-telemetry-api-version': 'v1',
-      'dd-telemetry-request-type': reqType
-    }
+    headers: getHeaders(reqType, debug, application)
   }
   const data = JSON.stringify({
     api_version: 'v1',

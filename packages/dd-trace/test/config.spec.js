@@ -786,6 +786,8 @@ describe('Config', () => {
 
     expect(config.telemetry).to.not.be.undefined
     expect(config.telemetry.enabled).to.be.true
+    expect(config.telemetry.metrics).to.be.false
+    expect(config.telemetry.metricsInterval).to.be.eq(10000)
     expect(config.telemetry.logCollection).to.be.false
     expect(config.telemetry.debug).to.be.false
   })
@@ -799,6 +801,17 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
 
     process.env.DD_TRACE_TELEMETRY_ENABLED = origTraceTelemetryValue
+  })
+
+  it('should set DD_TELEMETRY_METRICS_ENABLED', () => {
+    const origTelemetryMetricsEnabledValue = process.env.DD_TELEMETRY_METRICS_ENABLED
+    process.env.DD_TELEMETRY_METRICS_ENABLED = 'true'
+
+    const config = new Config()
+
+    expect(config.telemetry.metrics).to.be.true
+
+    process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabledValue
   })
 
   it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
@@ -832,6 +845,17 @@ describe('Config', () => {
     expect(config.telemetry.debug).to.be.true
 
     process.env.DD_TELEMETRY_DEBUG_ENABLED = origTelemetryDebugValue
+  })
+
+  it('should set DD_TELEMETRY_METRICS_INTERVAL_SECONDS', () => {
+    const origTelemetryMetricsIntervalValue = process.env.DD_TELEMETRY_METRICS_INTERVAL_SECONDS
+    process.env.DD_TELEMETRY_METRICS_INTERVAL_SECONDS = 40
+
+    const config = new Config()
+
+    expect(config.telemetry.metricsInterval).to.be.eq(40000)
+
+    process.env.DD_TELEMETRY_METRICS_INTERVAL_SECONDS = origTelemetryMetricsIntervalValue
   })
 
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {

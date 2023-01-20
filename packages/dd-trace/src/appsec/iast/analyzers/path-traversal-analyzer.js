@@ -1,14 +1,15 @@
 'use strict'
 
 const path = require('path')
+
+const InjectionAnalyzer = require('./injection-analyzer')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
-const InjectionAnalyzer = require('./injection-analyzer')
 
 class PathTraversalAnalyzer extends InjectionAnalyzer {
   constructor () {
     super('PATH_TRAVERSAL')
-    this.addSub('apm:fs:operation:start', obj => {
+    this.addSub({ channelName: 'apm:fs:operation:start' }, (obj) => {
       const pathArguments = []
       if (obj.dest) {
         pathArguments.push(obj.dest)

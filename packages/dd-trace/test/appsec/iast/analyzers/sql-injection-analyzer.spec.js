@@ -1,5 +1,6 @@
 'use strict'
 
+const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 
 describe('sql-injection-analyzer', () => {
@@ -18,6 +19,8 @@ describe('sql-injection-analyzer', () => {
   const sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
     './injection-analyzer': InjectionAnalyzer
   })
+
+  sqlInjectionAnalyzer.configure(true)
 
   it('should subscribe to mysql, mysql2 and pg start query channel', () => {
     expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(3)
@@ -72,5 +75,63 @@ describe('sql-injection-analyzer', () => {
     proxiedSqlInjectionAnalyzer.analyze(TAINTED_QUERY)
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'SQL_INJECTION' })
+  })
+
+  describe('analyze', () => {
+    let sqlInjectionAnalyzer, analyze
+
+    const store = {}
+    const iastContext = {}
+
+    beforeEach(() => {
+      const getStore = sinon.stub().returns(store)
+      const getIastContext = sinon.stub().returns(iastContext)
+
+      const iastPlugin = proxyquire('../../../../src/appsec/iast/iast-plugin', {
+        '../../../../datadog-core': { storage: { getStore } },
+        './iast-context': { getIastContext }
+      })
+
+      const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
+        '../iast-plugin': iastPlugin,
+        '../overhead-controller': { hasQuota: () => true }
+      })
+      const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
+        '../taint-tracking/operations': TaintTrackingMock,
+        './vulnerability-analyzer': ProxyAnalyzer
+      })
+
+      sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
+        './injection-analyzer': InjectionAnalyzer
+      })
+      analyze = sinon.stub(sqlInjectionAnalyzer, 'analyze')
+      sqlInjectionAnalyzer.configure(true)
+    })
+
+    afterEach(sinon.restore)
+
+    it('should call analyze on apm:mysql:query:start', () => {
+      const onMysqlQueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
+
+      onMysqlQueryStart({ sql: 'SELECT 1', name: 'apm:mysql:query:start' })
+
+      expect(analyze).to.be.calledOnceWith('SELECT 1')
+    })
+
+    it('should call analyze on apm:mysql2:query:start', () => {
+      const onMysql2QueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
+
+      onMysql2QueryStart({ sql: 'SELECT 1', name: 'apm:mysql2:query:start' })
+
+      expect(analyze).to.be.calledOnceWith('SELECT 1')
+    })
+
+    it('should call analyze on apm:pg:query:start', () => {
+      const onPgQueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
+
+      onPgQueryStart({ sql: 'SELECT 1', name: 'apm:pg:query:start' })
+
+      expect(analyze).to.be.calledOnceWith('SELECT 1')
+    })
   })
 })

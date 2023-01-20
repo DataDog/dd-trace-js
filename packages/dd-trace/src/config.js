@@ -204,6 +204,14 @@ class Config {
       process.env.DD_TELEMETRY_DEBUG_ENABLED,
       false
     )
+    const DD_TELEMETRY_METRICS_ENABLED = coalesce(
+      process.env.DD_TELEMETRY_METRICS_ENABLED,
+      false
+    )
+    const DD_TELEMETRY_METRICS_INTERVAL_SECONDS = coalesce(
+      parseInt(process.env.DD_TELEMETRY_METRICS_INTERVAL_SECONDS),
+      10
+    )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
       options.protocolVersion,
       process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
@@ -488,6 +496,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     // Disabled for CI Visibility's agentless
     this.telemetry = {
       enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
+      metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED),
+      metricsInterval: DD_TELEMETRY_METRICS_INTERVAL_SECONDS * 1000,
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
       debug: isTrue(DD_TELEMETRY_DEBUG_ENABLED)
     }

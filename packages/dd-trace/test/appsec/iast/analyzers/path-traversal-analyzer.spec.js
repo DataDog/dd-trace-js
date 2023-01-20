@@ -25,6 +25,11 @@ const iastContext = {
   }
 }
 
+const iasPluginContext = {
+  store: {},
+  iastContext
+}
+
 const TaintTrackingMock = {
   isTainted: sinon.stub()
 }
@@ -96,7 +101,7 @@ describe('path-traversal-analyzer', () => {
     hasQuota.returns(true)
     TaintTrackingMock.isTainted.returns(true)
 
-    proxyPathAnalyzer.analyze(['test'])
+    proxyPathAnalyzer.analyze(['test'], iasPluginContext)
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { type: 'PATH_TRAVERSAL' })
   })
@@ -112,7 +117,7 @@ describe('path-traversal-analyzer', () => {
     TaintTrackingMock.isTainted.returns(true)
     hasQuota.returns(true)
 
-    proxyPathAnalyzer.analyze(['taintedArg1', 'taintedArg2'])
+    proxyPathAnalyzer.analyze(['taintedArg1', 'taintedArg2'], iasPluginContext)
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { evidence: { value: 'taintedArg1' } })
   })
@@ -130,7 +135,7 @@ describe('path-traversal-analyzer', () => {
     TaintTrackingMock.isTainted.onSecondCall().returns(true)
     hasQuota.returns(true)
 
-    proxyPathAnalyzer.analyze(['arg1', 'taintedArg2'])
+    proxyPathAnalyzer.analyze(['arg1', 'taintedArg2'], iasPluginContext)
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { evidence: { value: 'taintedArg2' } })
   })
@@ -152,7 +157,7 @@ describe('path-traversal-analyzer', () => {
     TaintTrackingMock.isTainted.returns(true)
     hasQuota.returns(true)
 
-    proxyPathAnalyzer.analyze(['arg1'])
+    proxyPathAnalyzer.analyze(['arg1'], iasPluginContext)
     expect(addVulnerability).not.have.been.called
   })
 })

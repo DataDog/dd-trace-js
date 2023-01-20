@@ -8,6 +8,8 @@ describe('weak-cipher-analyzer', () => {
   const VULNERABLE_CIPHER = 'des-ede-cbc'
   const NON_VULNERABLE_CIPHER = 'sha512'
 
+  weakCipherAnalyzer.configure(true)
+
   it('should subscribe to crypto hashing channel', () => {
     expect(weakCipherAnalyzer._subscriptions).to.have.lengthOf(1)
     expect(weakCipherAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:crypto:cipher:start')
@@ -45,6 +47,10 @@ describe('weak-cipher-analyzer', () => {
         }
       }
     }
+    const iastPluginContext = {
+      store: {},
+      iastContext
+    }
     const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
       '../iast-context': {
         getIastContext: () => iastContext
@@ -56,7 +62,7 @@ describe('weak-cipher-analyzer', () => {
       {
         './vulnerability-analyzer': ProxyAnalyzer
       })
-    proxiedWeakCipherAnalyzer.analyze(VULNERABLE_CIPHER)
+    proxiedWeakCipherAnalyzer.analyze(VULNERABLE_CIPHER, iastPluginContext)
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'WEAK_CIPHER' })
   })
