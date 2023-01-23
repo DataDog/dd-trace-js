@@ -38,7 +38,7 @@ class AppsecSDK {
 
     const userId = rootSpan.context()._tags['usr.id']
     if (!userId) {
-      this.setUser({ id: user.id })
+      this._setUser({ id: user.id }, rootSpan)
     }
     return isUserBlocked(user)
   }
