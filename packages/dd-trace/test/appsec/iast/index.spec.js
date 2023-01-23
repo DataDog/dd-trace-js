@@ -103,6 +103,15 @@ describe('IAST Index', () => {
     let mockIast
     let mockOverheadController
 
+    const config = new Config({
+      experimental: {
+        iast: {
+          enabled: true,
+          requestSampling: 100
+        }
+      }
+    })
+
     beforeEach(() => {
       mockVulnerabilityReporter = {
         sendVulnerabilities: sinon.stub()
@@ -110,7 +119,9 @@ describe('IAST Index', () => {
       mockOverheadController = {
         acquireRequest: sinon.stub(),
         releaseRequest: sinon.stub(),
-        initializeRequestContext: sinon.stub()
+        initializeRequestContext: sinon.stub(),
+        startGlobalContext: sinon.stub(),
+        finishGlobalContext: sinon.stub()
       }
       mockIast = proxyquire('../../../src/appsec/iast', {
         './vulnerability-reporter': mockVulnerabilityReporter,
@@ -121,6 +132,18 @@ describe('IAST Index', () => {
     afterEach(() => {
       sinon.restore()
       mockIast.disable()
+    })
+
+    describe('managing overhead controller global context', () => {
+      it('should start global context refresher on iast enabled', () => {
+        mockIast.enable(config)
+        expect(mockOverheadController.startGlobalContext).to.have.been.calledOnce
+      })
+
+      it('should finish global context refresher on iast disabled', () => {
+        mockIast.disable()
+        expect(mockOverheadController.finishGlobalContext).to.have.been.calledOnce
+      })
     })
 
     describe('onIncomingHttpRequestStart', () => {
