@@ -431,6 +431,10 @@ function addRequestTags (context) {
     [SPAN_TYPE]: WEB,
     [HTTP_USERAGENT]: req.headers['user-agent']
   })
+  
+  if (config.clientIpEnabled && !span.context()._tags.hasOwnProperty('http.client_ip')) {
+    span.setTag('http.client_ip', extractIp(config, req))
+  }
 
   addHeaders(context)
 }
