@@ -186,10 +186,12 @@ class Config {
       qsRegex
     )
     const DD_TRACE_CLIENT_IP_ENABLED = coalesce(
+      options.clientIpEnabled,
       process.env.DD_TRACE_CLIENT_IP_ENABLED && isTrue(process.env.DD_TRACE_CLIENT_IP_ENABLED),
       false
     )
     const DD_TRACE_CLIENT_IP_HEADER = coalesce(
+      options.clientIpHeader,
       process.env.DD_TRACE_CLIENT_IP_HEADER,
       null
     )
