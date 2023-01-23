@@ -433,7 +433,10 @@ function addRequestTags (context) {
   })
 
   if (config.clientIpEnabled && !span.context()._tags.hasOwnProperty('http.client_ip')) {
-    span.setTag('http.client_ip', extractIp(config, req))
+    const clientIp = extractIp(config, req)
+    if (clientIp) {
+      span.setTag('http.client_ip', clientIp)
+    }
   }
 
   addHeaders(context)
