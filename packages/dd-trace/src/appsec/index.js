@@ -55,6 +55,7 @@ function enableFromRules (_config, rules) {
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_ENDPOINT)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
+  Gateway.manager.addresses.add(addresses.USER_ID)
 
   isEnabled = true
   config = _config
