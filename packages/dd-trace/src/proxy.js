@@ -49,11 +49,12 @@ class Tracer extends NoopProxy {
           require('./appsec').enable(config)
         }
 
+        this._tracer = new DatadogTracer(config)
+
         if (config.iast.enabled) {
-          require('./appsec/iast').enable(config)
+          require('./appsec/iast').enable(config, this._tracer)
         }
 
-        this._tracer = new DatadogTracer(config)
         this._pluginManager.configure(config)
         setStartupLogPluginManager(this._pluginManager)
         telemetry.start(config, this._pluginManager)
