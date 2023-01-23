@@ -589,6 +589,8 @@ export declare interface Appsec {
    * Links success login related data to the current trace, it calls to setUser internally
    * @param {User} user Properties of the authenticated user. Accepts custom fields.
    * @param {[key: string]: string} metadata Custom fields to login success event
+   *
+   * @beta This method is in beta and could change in the future versions
    */
   trackUserLoginSuccessEvent(user: User, metadata?: { [key: string]: string }): void
 
@@ -597,6 +599,8 @@ export declare interface Appsec {
    * @param {string} userId The id of the user who has tried to login
    * @param {boolean} exists If the user id exists
    * @param {[key: string]: string} metadata Custom fields to login failure event
+   *
+   * @beta This method is in beta and could change in the future versions
    */
   trackUserLoginFailureEvent(userId: string, exists: boolean, metadata?: { [key: string]: string }): void
 
@@ -604,6 +608,8 @@ export declare interface Appsec {
    * Links custom data to the current trace
    * @param {string} eventName The name of the custom event
    * @param {[key: string]: string} metadata Custom fields to login custom event
+   *
+   * @beta This method is in beta and could change in the future versions
    */
   trackCustomEvent(eventName: string, metadata?: { [key: string]: string }): void
 }
