@@ -3,7 +3,7 @@
 
 const { sendTrace } = require("./node-napi-rs.darwin-arm64.node")
 
-class NAPIRSExporter {
+class NAPI_RSExporter {
   constructor () {}
 
   export (spans) {
@@ -19,4 +19,4 @@ class NAPIRSExporter {
   }
 }
 
-module.exports = NAPIRSExporter
+module.exports = NAPI_RSExporter
