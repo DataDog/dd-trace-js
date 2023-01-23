@@ -77,7 +77,8 @@ describe('AppSec Index', () => {
         addresses.HTTP_INCOMING_HEADERS,
         addresses.HTTP_INCOMING_ENDPOINT,
         addresses.HTTP_INCOMING_RESPONSE_HEADERS,
-        addresses.HTTP_INCOMING_REMOTE_IP
+        addresses.HTTP_INCOMING_REMOTE_IP,
+        addresses.USER_ID
       )
     })
 
@@ -120,7 +121,8 @@ describe('AppSec Index', () => {
         addresses.HTTP_INCOMING_HEADERS,
         addresses.HTTP_INCOMING_ENDPOINT,
         addresses.HTTP_INCOMING_RESPONSE_HEADERS,
-        addresses.HTTP_INCOMING_REMOTE_IP
+        addresses.HTTP_INCOMING_REMOTE_IP,
+        addresses.USER_ID
       )
     })
 
