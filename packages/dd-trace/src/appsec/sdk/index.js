@@ -2,10 +2,9 @@
 
 const { trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent } = require('./track_event')
 const { isUserBlocked } = require('./user_blocking')
-const web = require('../../plugins/util/web')
 const { block, loadTemplates } = require('../blocking')
 const { getRootSpan } = require('./utils')
-const als = require('../gateway/als')
+const { storage } = require('../../../../datadog-core')
 
 class AppsecSDK {
   constructor (tracer, config) {
@@ -36,6 +35,7 @@ class AppsecSDK {
     if (!rootSpan) {
       return false
     }
+
     const userId = rootSpan.context()._tags['usr.id']
     if (!userId) {
       this.setUser({ id: user.id })
@@ -44,16 +44,23 @@ class AppsecSDK {
   }
 
   blockRequest (req, res) {
-    const store = als.getStore()
-    const request = req || store ? store.get('req') : undefined
-    const response = res || store ? store.get('res') : undefined
+    let request, response
+    if (!req || !res) {
+      const store = storage.getStore()
+      request = req || store.req
+      response = res || store.res
+    } else {
+      request = req
+      response = res
+    }
 
     if (!request || !response) {
-      return
+      return false
     }
-    const topSpan = web.root(request)
+
+    const topSpan = getRootSpan(this._tracer)
     if (!topSpan) {
-      return
+      return false
     }
 
     block({
@@ -61,6 +68,7 @@ class AppsecSDK {
       res: response,
       topSpan: topSpan
     })
+    return true
   }
 
   setUser (user) {
@@ -73,6 +81,10 @@ class AppsecSDK {
       return
     }
 
+    this._setUser(user, rootSpan)
+  }
+
+  _setUser (user, rootSpan) {
     for (const k of Object.keys(user)) {
       rootSpan.setTag(`usr.${k}`, '' + user[k])
     }
