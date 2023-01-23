@@ -478,6 +478,10 @@ describe('IP blocking', () => {
     }))
     RuleManager.updateAsmData('apply', ruleData, 'asm_data')
   })
+  afterEach(() => {
+    appsec.disable()
+  })
+
   describe('do not block the request', () => {
     it('should not block the request by default', async () => {
       await axios.get(`http://localhost:${port}/`).then((res) => {
