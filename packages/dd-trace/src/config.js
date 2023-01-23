@@ -185,6 +185,10 @@ class Config {
       process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       qsRegex
     )
+    const DD_TRACE_CLIENT_IP_ENABLED = coalesce(
+      process.env.DD_TRACE_CLIENT_IP_ENABLED && isTrue(process.env.DD_TRACE_CLIENT_IP_ENABLED),
+      false
+    )
     const DD_TRACE_CLIENT_IP_HEADER = coalesce(
       process.env.DD_TRACE_CLIENT_IP_HEADER,
       null
@@ -372,6 +376,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.sampleRate = coalesce(Math.min(Math.max(sampler.sampleRate, 0), 1), 1)
     this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
+    this.clientIpEnabled = DD_TRACE_CLIENT_IP_ENABLED
     this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE
