@@ -432,8 +432,10 @@ function addRequestTags (context) {
     [HTTP_USERAGENT]: req.headers['user-agent']
   })
 
+  // if client ip has already been set by appsec, no need to run it again
   if (config.clientIpEnabled && !span.context()._tags.hasOwnProperty('http.client_ip')) {
     const clientIp = extractIp(config, req)
+
     if (clientIp) {
       span.setTag('http.client_ip', clientIp)
     }
