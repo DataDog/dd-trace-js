@@ -1,7 +1,27 @@
 /* eslint-disable */
 'use strict'
 
-const { sendTrace } = require("./node-napi-rs.darwin-arm64.node")
+let sendTrace
+
+switch(process.arch) {
+  case 'x64':
+    sendTrace = require("./node-napi-rs.linux-x64-gnu.node").sendTrace
+    break;
+  case 'arm64':
+    sendTrace = require("./node-napi-rs.darwin-arm64.node").sendTrace
+    break;
+}
+
+switch(process.platform) {
+  case 'darwin':
+    console.log("darwin platform");
+    break;
+  case 'linux':
+    console.log("linux platform");
+    break;
+  default:
+    console.log("default platform");
+}
 
 class NAPI_RSExporter {
   constructor () {}
@@ -15,7 +35,7 @@ class NAPI_RSExporter {
 
     const payload = JSON.stringify(spans)
 
-    sendTrace(payload, 0)
+    sendTrace(payload, 0);
   }
 }
 
