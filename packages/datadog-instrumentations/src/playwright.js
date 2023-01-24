@@ -25,70 +25,46 @@ const STATUS_TO_TEST_STATUS = {
 
 let remainingTestsByFile = {}
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/runner.js',
-  versions: ['>=1.10.0']
-}, (RunnerExport) => {
-  shimmer.wrap(RunnerExport.Runner.prototype, '_dispatchToWorkers', _dispatchToWorkers => async function () {
-    const stageGroups = arguments[0]
+function getTestsBySuiteFromTestsById (testsById) {
+  const testsByTestSuite = {}
+  for (const { test } of testsById.values()) {
+    const { _requireFile } = test
+    if (test._type === 'beforeAll' || test._type === 'afterAll') {
+      continue
+    }
+    if (testsByTestSuite[_requireFile]) {
+      testsByTestSuite[_requireFile].push(test)
+    } else {
+      testsByTestSuite[_requireFile] = [test]
+    }
+  }
+  return testsByTestSuite
+}
 
-    remainingTestsByFile = stageGroups.reduce((acc, { requireFile, tests }) => {
-      if (acc[requireFile]) {
-        acc[requireFile] = acc[requireFile].concat(tests)
-      } else {
-        acc[requireFile] = tests
-      }
-      return acc
-    }, {})
+function getRootDir (playwrightLoader) {
+  if (playwrightLoader._fullConfig) {
+    return playwrightLoader._fullConfig.rootDir
+  }
+  if (playwrightLoader._configDir) {
+    return playwrightLoader._configDir
+  }
+  return process.cwd()
+}
 
-    return _dispatchToWorkers.apply(this, arguments)
-  })
-  shimmer.wrap(RunnerExport.Runner.prototype, 'runAllTests', runAllTests => async function () {
-    const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
-    const { _configDir: rootDir, version: frameworkVersion } = this._loader.fullConfig()
-
-    const processArgv = process.argv.slice(2).join(' ')
-    const command = `playwright ${processArgv}`
-    testSessionAsyncResource.runInAsyncScope(() => {
-      testSessionStartCh.publish({ command, frameworkVersion, rootDir })
-    })
-
-    const res = await runAllTests.apply(this, arguments)
-    const sessionStatus = STATUS_TO_TEST_STATUS[res.status]
-
-    let onDone
-
-    const flushWait = new Promise(resolve => {
-      onDone = resolve
-    })
-
-    testSessionAsyncResource.runInAsyncScope(() => {
-      testSessionFinishCh.publish({ status: sessionStatus, onDone })
-    })
-    await flushWait
-
-    startedSuites = []
-    remainingTestsByFile = {}
-
-    return res
-  })
-  return RunnerExport
-})
-
-addHook({
-  name: '@playwright/test',
-  file: 'lib/dispatcher.js',
-  versions: ['>=1.10.0']
-}, (dispatcher) => {
-  shimmer.wrap(dispatcher.Dispatcher.prototype, '_createWorker', createWorker => function () {
+function dispatcherHook (dispatcherExport) {
+  shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
+    remainingTestsByFile = getTestsBySuiteFromTestsById(dispatcher._testById)
     const worker = createWorker.apply(this, arguments)
 
     worker.process.on('message', ({ method, params }) => {
       if (method === 'testBegin') {
         const { test } = dispatcher._testById.get(params.testId)
-        const { title: testName, location: { file: testSuiteAbsolutePath } } = test
+        const { title: testName, location: { file: testSuiteAbsolutePath }, _type } = test
+
+        if (_type === 'beforeAll' || _type === 'afterAll') {
+          return
+        }
 
         const isNewTestSuite = !startedSuites.includes(testSuiteAbsolutePath)
 
@@ -108,7 +84,11 @@ addHook({
         })
       } else if (method === 'testEnd') {
         const { test } = dispatcher._testById.get(params.testId)
-        const { location: { file: testSuiteAbsolutePath }, results } = test
+        const { location: { file: testSuiteAbsolutePath }, results, _type } = test
+
+        if (_type === 'beforeAll' || _type === 'afterAll') {
+          return
+        }
 
         const testResult = results[results.length - 1]
 
@@ -148,5 +128,53 @@ addHook({
 
     return worker
   })
-  return dispatcher
-})
+  return dispatcherExport
+}
+
+function runnerHook (runnerExport) {
+  shimmer.wrap(runnerExport.Runner.prototype, 'runAllTests', runAllTests => async function () {
+    const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
+    const { version: frameworkVersion } = this._loader.fullConfig()
+
+    const rootDir = getRootDir(this._loader)
+
+    const processArgv = process.argv.slice(2).join(' ')
+    const command = `playwright ${processArgv}`
+    testSessionAsyncResource.runInAsyncScope(() => {
+      testSessionStartCh.publish({ command, frameworkVersion, rootDir })
+    })
+
+    const res = await runAllTests.apply(this, arguments)
+    const sessionStatus = STATUS_TO_TEST_STATUS[res.status]
+
+    let onDone
+
+    const flushWait = new Promise(resolve => {
+      onDone = resolve
+    })
+
+    testSessionAsyncResource.runInAsyncScope(() => {
+      testSessionFinishCh.publish({ status: sessionStatus, onDone })
+    })
+    await flushWait
+
+    startedSuites = []
+    remainingTestsByFile = {}
+
+    return res
+  })
+
+  return runnerExport
+}
+
+addHook({
+  name: '@playwright/test',
+  file: 'lib/runner.js',
+  versions: ['>=1.18.0']
+}, runnerHook)
+
+addHook({
+  name: '@playwright/test',
+  file: 'lib/dispatcher.js',
+  versions: ['>=1.18.0']
+}, dispatcherHook)

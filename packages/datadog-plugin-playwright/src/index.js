@@ -9,13 +9,13 @@ const {
   getTestParentSpan,
   getTestSessionCommonTags,
   getTestSuitePath,
-  COMPONENT,
   TEST_SESSION_ID,
   TEST_COMMAND,
   TEST_SUITE_ID,
   getTestSuiteCommonTags
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class PlaywrightPlugin extends CiPlugin {
   static get name () {
