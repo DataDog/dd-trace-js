@@ -60,7 +60,5 @@ function filename (name, file) {
 
 module.exports = {
   filename,
-  getVersion,
-  matchVersion,
   pathSepExpr
 }
