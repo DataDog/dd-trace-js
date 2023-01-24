@@ -13,11 +13,11 @@ jobs:
       matrix:
         include:
           - node-version: 14.15
-            aws-runtime-name: "nodejs.14x"
+            aws-runtime-name: "nodejs14.x"
           - node-version: 16.14
-            aws-runtime-name: "nodejs.16x"
+            aws-runtime-name: "nodejs16.x"
           - node-version: 18.12
-            aws-runtime-name: "nodejs.18x"
+            aws-runtime-name: "nodejs18.x"
     steps:
       - name: Checkout dd-trace-js
         uses: actions/checkout@v3
