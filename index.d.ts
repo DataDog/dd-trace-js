@@ -623,6 +623,32 @@ export declare interface Appsec {
    * @beta This method is in beta and could change in future versions.
    */
   trackCustomEvent(eventName: string, metadata?: { [key: string]: string }): void
+
+  /**
+   * Checks if the user passed as parameter is excluded
+   * @param {User} user Properties of the authenticated user. Accepts custom fields.
+   *
+   * @beta This method is in beta and could change in the future
+   */
+  isUserBlocked(user: User): Boolean
+
+  /**
+   * Ends the server response and sends a template reponse based on the request
+   * accept header type. The template body can be customized through remote configuration.
+   * @param {ClientRequest}
+   * @param {ServerResponse}
+   *
+   * @beta This method is in beta and could change in the future
+   */
+  blockRequest(req: ClientRequest, res: ServerResponse): Boolean
+
+  /**
+   * Links an authenticated user to the current trace.
+   * @param {User} user Properties of the authenticated user. Accepts custom fields.
+   *
+   * @beta This method is in beta and could change in the future
+   */
+  setUser(user: User): void
 }
 
 /** @hidden */
