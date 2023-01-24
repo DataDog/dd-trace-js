@@ -15,8 +15,6 @@ const Hook = require('../../../../datadog-instrumentations/src/helpers/hook')
 const instrumentations = require('../../../../datadog-instrumentations/src/helpers/instrumentations')
 const {
   filename,
-  getVersion,
-  matchVersion,
   pathSepExpr
 } = require('../../../../datadog-instrumentations/src/helpers/register')
 
@@ -111,21 +109,18 @@ const registerLambdaHook = () => {
     })
   } else {
     const moduleToPatch = 'datadog-lambda-js'
-    Hook([moduleToPatch], (moduleExports, moduleName, moduleBaseDir) => {
+    Hook([moduleToPatch], (moduleExports, moduleName, _) => {
       moduleName = moduleName.replace(pathSepExpr, '/')
 
       require('./patch')
 
-      for (const { name, file, versions, hook } of instrumentations[moduleToPatch]) {
+      for (const { name, file, hook } of instrumentations[moduleToPatch]) {
         const fullFilename = filename(name, file)
         if (moduleName === fullFilename) {
-          const version = getVersion(moduleBaseDir)
-          if (matchVersion(version, versions)) {
-            try {
-              moduleExports = hook(moduleExports)
-            } catch (e) {
-              log.error(e)
-            }
+          try {
+            moduleExports = hook(moduleExports)
+          } catch (e) {
+            log.error(e)
           }
         }
       }
