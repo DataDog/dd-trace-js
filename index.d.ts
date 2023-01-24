@@ -626,6 +626,8 @@ export declare interface Appsec {
 
   /**
    * Checks if the user passed as parameter is excluded
+   * Checks if the user is excluded. If no user is linked to the current trace
+   * the one passed as parameter will be used for that purpose.
    * @param {User} user Properties of the authenticated user. Accepts custom fields.
    *
    * @beta This method is in beta and could change in the future
@@ -640,7 +642,7 @@ export declare interface Appsec {
    *
    * @beta This method is in beta and could change in the future
    */
-  blockRequest(req: ClientRequest, res: ServerResponse): Boolean
+  blockRequest(req?: ClientRequest, res?: ServerResponse): Boolean
 
   /**
    * Links an authenticated user to the current trace.

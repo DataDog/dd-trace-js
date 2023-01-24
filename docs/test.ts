@@ -364,8 +364,6 @@ const user: User = {
   custom: 'hello'
 }
 
-tracer.setUser(user)
-
 const meta = {
   metakey: 'metavalue',
   metakey2: 'metavalue2'
@@ -381,3 +379,9 @@ tracer.appsec.trackUserLoginFailureEvent('user_id', false, meta)
 
 tracer.appsec.trackCustomEvent('event_name')
 tracer.appsec.trackCustomEvent('event_name', meta)
+
+tracer.setUser(user)
+
+const resUserBlock: Boolean = tracer.appsec.isUserBlocked(user)
+const resBlockRequest: Boolean = tracer.appsec.blockRequest()
+tracer.appsec.setUser(user)
