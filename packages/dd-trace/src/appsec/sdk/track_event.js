@@ -14,15 +14,7 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
     return
   }
   tracer.setUser(user)
-  const tags = {}
-  tags['appsec.events.users.login.success.track'] = 'true'
-  tags[MANUAL_KEEP] = 'true'
-  if (metadata) {
-    for (const metadataKey of Object.keys(metadata)) {
-      tags[`appsec.events.users.login.success.${metadataKey}`] = '' + metadata[metadataKey]
-    }
-  }
-  rootSpan.addTags(tags)
+  trackEvent(tracer, 'users.login.success', metadata, 'trackUserLoginSuccessEvent')
 }
 
 function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
@@ -30,22 +22,12 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
     log.warn('Invalid userId provided to trackUserLoginFailureEvent')
     return
   }
-  const rootSpan = getRootSpan(tracer)
-  if (!rootSpan) {
-    log.warn('Expected root span available in trackUserLoginFailureEvent')
-    return
+  const fields = {
+    'usr.id': userId,
+    'usr.exists': exists ? 'true' : 'false',
+    ...metadata
   }
-  const tags = {}
-  tags['appsec.events.users.login.failure.track'] = 'true'
-  tags['appsec.events.users.login.failure.usr.id'] = userId
-  tags['appsec.events.users.login.failure.usr.exists'] = exists ? 'true' : 'false'
-  tags[MANUAL_KEEP] = 'true'
-  if (metadata) {
-    for (const metadataKey of Object.keys(metadata)) {
-      tags[`appsec.events.users.login.failure.${metadataKey}`] = '' + metadata[metadataKey]
-    }
-  }
-  rootSpan.addTags(tags)
+  trackEvent(tracer, 'users.login.failure', fields, 'trackUserLoginFailureEvent')
 }
 
 function trackCustomEvent (tracer, eventName, metadata) {
@@ -53,16 +35,22 @@ function trackCustomEvent (tracer, eventName, metadata) {
     log.warn('Invalid eventName received in trackCustomEvent')
     return
   }
+  trackEvent(tracer, eventName, metadata, 'trackCustomEvent')
+}
+
+function trackEvent (tracer, eventName, fields, sdkMethodName) {
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
-    log.warn('Expected root span available in trackCustomEvent')
+    log.warn(`Expected root span available in ${sdkMethodName}`)
     return
   }
   const tags = {}
   tags[`appsec.events.${eventName}.track`] = 'true'
   tags[MANUAL_KEEP] = 'true'
-  for (const metadataKey of Object.keys(metadata)) {
-    tags[`appsec.events.${eventName}.${metadataKey}`] = '' + metadata[metadataKey]
+  if (fields) {
+    for (const metadataKey of Object.keys(fields)) {
+      tags[`appsec.events.${eventName}.${metadataKey}`] = '' + fields[metadataKey]
+    }
   }
   rootSpan.addTags(tags)
 }
