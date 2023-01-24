@@ -19,4 +19,5 @@ class AppsecSdk {
     return trackCustomEvent(this._tracer, eventName, metadata)
   }
 }
+
 module.exports = AppsecSdk
