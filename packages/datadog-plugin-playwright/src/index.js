@@ -51,12 +51,14 @@ class PlaywrightPlugin extends CiPlugin {
       this.tracer._exporter.flush(onDone)
     })
 
-    this.addSub('ci:playwright:test-suite:start', (testSuite) => {
+    this.addSub('ci:playwright:test-suite:start', (testSuiteAbsolutePath) => {
       const store = storage.getStore()
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
+
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
-        getTestSuitePath(testSuite, this.rootDir)
+        testSuite
       )
 
       const testSuiteSpan = this.tracer.startSpan('playwright.test_suite', {
@@ -78,9 +80,10 @@ class PlaywrightPlugin extends CiPlugin {
       span.finish()
     })
 
-    this.addSub('ci:playwright:test:start', (test) => {
+    this.addSub('ci:playwright:test:start', ({ testName, testSuiteAbsolutePath }) => {
       const store = storage.getStore()
-      const span = this.startTestSpan(test)
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
+      const span = this.startTestSpan(testName, testSuite)
 
       this.enter(span, store)
     })
@@ -115,20 +118,15 @@ class PlaywrightPlugin extends CiPlugin {
     })
   }
 
-  startTestSpan (test) {
+  startTestSpan (testName, testSuite) {
     const childOf = getTestParentSpan(this.tracer)
-
     // This is a hack to get good time resolution on test events, while keeping
     // the test event as the root span of its trace.
     childOf._trace.startTime = this.testSessionSpan.context()._trace.startTime
     childOf._trace.ticks = this.testSessionSpan.context()._trace.ticks
 
-    const { title: testName, location: { file } } = test
-    const testSuite = getTestSuitePath(file, this.rootDir)
-
     const testSuiteTags = {}
-
-    const testSuiteSpan = this._testSuites.get(file)
+    const testSuiteSpan = this._testSuites.get(testSuite)
     if (testSuiteSpan) {
       const testSuiteId = testSuiteSpan.context()._spanId.toString(10)
       testSuiteTags[TEST_SUITE_ID] = testSuiteId

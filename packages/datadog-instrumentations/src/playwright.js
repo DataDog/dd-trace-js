@@ -14,6 +14,8 @@ const testToAr = new WeakMap()
 const testSuiteToAr = new Map()
 const testSuiteToTestStatuses = new Map()
 
+let startedSuites = []
+
 const STATUS_TO_TEST_STATUS = {
   passed: 'pass',
   failed: 'fail',
@@ -21,27 +23,27 @@ const STATUS_TO_TEST_STATUS = {
   skipped: 'skip'
 }
 
-addHook({
-  name: '@playwright/test',
-  file: 'lib/workerRunner.js',
-  versions: ['>=1.10.0']
-}, (workerRunnerPackage) => {
-  // This runs in the worker process
-  shimmer.wrap(workerRunnerPackage.WorkerRunner.prototype, 'runTestGroup', runTestGroup => async function () {
-    const testGroup = arguments[0]
-    process.send({ method: 'ddTestSuiteStart', params: { testSuite: testGroup.file } })
-    const res = await runTestGroup.apply(this, arguments)
-    process.send({ method: 'ddTestSuiteEnd', params: { testSuite: testGroup.file } })
-    return res
-  })
-  return workerRunnerPackage
-})
+let remainingTestsByFile = {}
 
 addHook({
   name: '@playwright/test',
   file: 'lib/runner.js',
   versions: ['>=1.10.0']
 }, (RunnerExport) => {
+  shimmer.wrap(RunnerExport.Runner.prototype, '_dispatchToWorkers', _dispatchToWorkers => async function () {
+    const stageGroups = arguments[0]
+
+    remainingTestsByFile = stageGroups.reduce((acc, { requireFile, tests }) => {
+      if (acc[requireFile]) {
+        acc[requireFile] = acc[requireFile].concat(tests)
+      } else {
+        acc[requireFile] = tests
+      }
+      return acc
+    }, {})
+
+    return _dispatchToWorkers.apply(this, arguments)
+  })
   shimmer.wrap(RunnerExport.Runner.prototype, 'runAllTests', runAllTests => async function () {
     const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
     const { _configDir: rootDir, version: frameworkVersion } = this._loader.fullConfig()
@@ -66,6 +68,9 @@ addHook({
     })
     await flushWait
 
+    startedSuites = []
+    remainingTestsByFile = {}
+
     return res
   })
   return RunnerExport
@@ -83,46 +88,61 @@ addHook({
     worker.process.on('message', ({ method, params }) => {
       if (method === 'testBegin') {
         const { test } = dispatcher._testById.get(params.testId)
+        const { title: testName, location: { file: testSuiteAbsolutePath } } = test
+
+        const isNewTestSuite = !startedSuites.includes(testSuiteAbsolutePath)
+
+        if (isNewTestSuite) {
+          startedSuites.push(testSuiteAbsolutePath)
+          const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
+          testSuiteToAr.set(testSuiteAbsolutePath, testSuiteAsyncResource)
+          testSuiteAsyncResource.runInAsyncScope(() => {
+            testSuiteStartCh.publish(testSuiteAbsolutePath)
+          })
+        }
+
         const testAsyncResource = new AsyncResource('bound-anonymous-fn')
         testToAr.set(test, testAsyncResource)
         testAsyncResource.runInAsyncScope(() => {
-          testStartCh.publish(test)
+          testStartCh.publish({ testName, testSuiteAbsolutePath })
         })
       } else if (method === 'testEnd') {
         const { test } = dispatcher._testById.get(params.testId)
-        const result = test.results[test.results.length - 1]
+        const { location: { file: testSuiteAbsolutePath }, results } = test
 
-        const testStatus = STATUS_TO_TEST_STATUS[result.status]
+        const testResult = results[results.length - 1]
+
+        const testStatus = STATUS_TO_TEST_STATUS[testResult.status]
 
         const testAsyncResource = testToAr.get(test)
         testAsyncResource.runInAsyncScope(() => {
-          testFinishCh.publish({ testStatus, steps: result.steps, error: result.error })
+          testFinishCh.publish({ testStatus, steps: testResult.steps, error: testResult.error })
         })
-        if (!testSuiteToTestStatuses.has(test.location.file)) {
-          testSuiteToTestStatuses.set(test.location.file, [testStatus])
+
+        if (!testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
+          testSuiteToTestStatuses.set(testSuiteAbsolutePath, [testStatus])
         } else {
-          testSuiteToTestStatuses.get(test.location.file).push(testStatus)
-        }
-      } else if (method === 'ddTestSuiteStart') {
-        const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
-        testSuiteToAr.set(params.testSuite, testSuiteAsyncResource)
-        testSuiteAsyncResource.runInAsyncScope(() => {
-          testSuiteStartCh.publish(params.testSuite)
-        })
-      } else if (method === 'ddTestSuiteEnd') {
-        const testStatuses = testSuiteToTestStatuses.get(params.testSuite)
-
-        let testSuiteStatus = 'pass'
-        if (testStatuses.some(status => status === 'fail')) {
-          testSuiteStatus = 'fail'
-        } else if (testStatuses.every(status => status === 'skip')) {
-          testSuiteStatus = 'skip'
+          testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
         }
 
-        const testSuiteAsyncResource = testSuiteToAr.get(params.testSuite)
-        testSuiteAsyncResource.runInAsyncScope(() => {
-          testSuiteFinishCh.publish(testSuiteStatus)
-        })
+        remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
+          .filter(currentTest => currentTest !== test)
+
+        if (!remainingTestsByFile[testSuiteAbsolutePath].length) {
+          const testStatuses = testSuiteToTestStatuses.get(testSuiteAbsolutePath)
+
+          let testSuiteStatus = 'pass'
+          if (testStatuses.some(status => status === 'fail')) {
+            testSuiteStatus = 'fail'
+          } else if (testStatuses.every(status => status === 'skip')) {
+            testSuiteStatus = 'skip'
+          }
+
+          const testSuiteAsyncResource = testSuiteToAr.get(testSuiteAbsolutePath)
+          testSuiteAsyncResource.runInAsyncScope(() => {
+            testSuiteFinishCh.publish(testSuiteStatus)
+          })
+        }
       }
     })
 
