@@ -5,6 +5,7 @@ describe('TracerProxy', () => {
   let proxy
   let DatadogTracer
   let NoopTracer
+  let AppsecSdk
   let NoopAppsecSdk
   let tracer
   let NoopProxy
@@ -37,8 +38,7 @@ describe('TracerProxy', () => {
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
-      setUrl: sinon.stub(),
-      appsec: appsecSdk
+      setUrl: sinon.stub()
     }
 
     noop = {
@@ -63,6 +63,7 @@ describe('TracerProxy', () => {
 
     DatadogTracer = sinon.stub().returns(tracer)
     NoopTracer = sinon.stub().returns(noop)
+    AppsecSdk = sinon.stub().returns(appsecSdk)
     NoopAppsecSdk = sinon.stub().returns(noopAppsecSdk)
 
     config = {
@@ -118,7 +119,8 @@ describe('TracerProxy', () => {
       './appsec': appsec,
       './appsec/iast': iast,
       './telemetry': telemetry,
-      './appsec/remote_config': remoteConfig
+      './appsec/remote_config': remoteConfig,
+      './appsec/sdk': AppsecSdk
     })
 
     proxy = new Proxy()

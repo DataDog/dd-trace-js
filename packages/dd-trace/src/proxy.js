@@ -8,6 +8,7 @@ const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
+const AppsecSdk = require('./appsec/sdk')
 
 class Tracer extends NoopProxy {
   constructor () {
@@ -50,7 +51,7 @@ class Tracer extends NoopProxy {
         }
 
         this._tracer = new DatadogTracer(config)
-        this.appsec = this._tracer.appsec
+        this.appsec = new AppsecSdk(this)
 
         if (config.iast.enabled) {
           require('./appsec/iast').enable(config, this._tracer)

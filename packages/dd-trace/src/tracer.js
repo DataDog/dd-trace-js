@@ -7,7 +7,6 @@ const { storage } = require('../../datadog-core')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const AppsecSdk = require('./appsec/sdk')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -20,7 +19,6 @@ class DatadogTracer extends Tracer {
 
     this._scope = new Scope()
     setStartupLogConfig(config)
-    this.appsec = new AppsecSdk(this)
   }
 
   trace (name, options, fn) {
