@@ -1,6 +1,7 @@
 'use strict'
 
 const { trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent } = require('./track_event')
+
 class AppsecSdk {
   constructor (tracer) {
     this._tracer = tracer
