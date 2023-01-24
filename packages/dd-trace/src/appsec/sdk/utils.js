@@ -2,11 +2,7 @@
 
 function getRootSpan (tracer) {
   const span = tracer.scope().active()
-  if (!span) return undefined
-
-  const rootSpan = span._spanContext._trace.started[0]
-  if (!rootSpan) return undefined
-  return rootSpan
+  if (span) return span.context()._trace.started[0]
 }
 
 module.exports = {
