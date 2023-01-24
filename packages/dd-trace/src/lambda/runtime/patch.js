@@ -70,5 +70,5 @@ if (originalLambdaHandler !== undefined) {
   addHook({ name: lambdaFilePath }, patchLambdaModule(handlerPath))
 } else {
   // Instrumentation is done manually.
-  addHook({ name: 'datadog-lambda-js', versions: ['>=6.85.0'] }, patchDatadogLambdaModule)
+  addHook({ name: 'datadog-lambda-js' }, patchDatadogLambdaModule)
 }
