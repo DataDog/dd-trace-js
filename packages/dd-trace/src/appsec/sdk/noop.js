@@ -1,10 +1,11 @@
 'use strict'
 
-class AppsecSdk {
-  trackUserLoginSuccessEvent (user, metadata) { }
+class NoopAppsecSdk {
+  trackUserLoginSuccessEvent () {}
 
-  trackUserLoginFailureEvent (userId, exists, metadata) { }
+  trackUserLoginFailureEvent () {}
 
-  trackCustomEvent (eventName, metadata) { }
+  trackCustomEvent () {}
 }
-module.exports = AppsecSdk
+
+module.exports = NoopAppsecSdk
