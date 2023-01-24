@@ -24,6 +24,8 @@ jobs:
       - name: Checkout datadog-lambda-js
         uses: actions/checkout@v3
         with:
+          # TODO remove hardcoded branch when merged to main
+          ref: refs/heads/maxday/add-git
           repository: DataDog/datadog-lambda-js
           path: datadog-lambda-js
       - name: Update package.json to the current ref
