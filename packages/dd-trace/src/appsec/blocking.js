@@ -4,17 +4,17 @@ const fs = require('fs')
 let templateHtml, templateJson
 function block ({ req, res, topSpan, abortController }) {
   let type
-  let bodyContents
+  let body
 
   // parse the Accept header, ex: Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
   const accept = req.headers.accept && req.headers.accept.split(',').map((str) => str.split(';', 1)[0].trim())
 
   if (accept && accept.includes('text/html') && !accept.includes('application/json')) {
     type = 'text/html'
-    bodyContents = templateHtml
+    body = templateHtml
   } else {
     type = 'application/json'
-    bodyContents = templateJson
+    body = templateJson
   }
 
   topSpan.addTags({
@@ -23,8 +23,8 @@ function block ({ req, res, topSpan, abortController }) {
 
   res.statusCode = 403
   res.setHeader('Content-Type', type)
-  res.setHeader('Content-Length', Buffer.byteLength(bodyContents))
-  res.end(bodyContents)
+  res.setHeader('Content-Length', Buffer.byteLength(body))
+  res.end(body)
 
   if (abortController) {
     abortController.abort()
