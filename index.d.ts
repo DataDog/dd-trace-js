@@ -1,4 +1,4 @@
-import { ClientRequest, IncomingMessage, ServerResponse } from "http";
+import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
 import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
@@ -637,12 +637,12 @@ export declare interface Appsec {
   /**
    * Ends the server response and sends a template reponse based on the request
    * accept header type. The template body can be customized through remote configuration.
-   * @param {ClientRequest}
-   * @param {ServerResponse}
+   * @param {IncomingMessage}
+   * @param {OutgoingMessage}
    *
    * @beta This method is in beta and could change in the future
    */
-  blockRequest(req?: ClientRequest, res?: ServerResponse): Boolean
+  blockRequest(req?: IncomingMessage, res?: OutgoingMessage): Boolean
 
   /**
    * Links an authenticated user to the current trace.

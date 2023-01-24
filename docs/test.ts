@@ -23,6 +23,7 @@ import {
 } from '../ext/tags'
 import { HTTP, WEB } from '../ext/types'
 import * as opentracing from 'opentracing';
+import {ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse} from 'http';
 
 opentracing.initGlobalTracer(tracer);
 
@@ -383,5 +384,8 @@ tracer.appsec.trackCustomEvent('event_name', meta)
 tracer.setUser(user)
 
 const resUserBlock: Boolean = tracer.appsec.isUserBlocked(user)
-const resBlockRequest: Boolean = tracer.appsec.blockRequest()
+let resBlockRequest: Boolean = tracer.appsec.blockRequest()
+const req = {} as IncomingMessage
+const res = {} as OutgoingMessage
+resBlockRequest  = tracer.appsec.blockRequest(req, res)
 tracer.appsec.setUser(user)
