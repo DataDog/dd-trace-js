@@ -23,7 +23,7 @@ import {
 } from '../ext/tags'
 import { HTTP, WEB } from '../ext/types'
 import * as opentracing from 'opentracing';
-import {ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse} from 'http';
+import { IncomingMessage, OutgoingMessage } from 'http';
 
 opentracing.initGlobalTracer(tracer);
 
