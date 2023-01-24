@@ -607,7 +607,7 @@ export declare interface Appsec {
   /**
    * Links custom data to the current trace
    * @param {string} eventName The name of the custom event
-   * @param {[key: string]: string} metadata Custom fields to login custom event
+   * @param {[key: string]: string} metadata Fields to custom event
    *
    * @beta This method is in beta and could change in future versions
    */
