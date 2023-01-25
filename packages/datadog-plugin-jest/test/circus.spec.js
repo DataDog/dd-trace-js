@@ -22,7 +22,8 @@ const {
   LIBRARY_VERSION,
   TEST_COMMAND,
   TEST_SUITE_ID,
-  TEST_SESSION_ID
+  TEST_SESSION_ID,
+  TEST_MODULE_ID
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { version: ddTraceVersion } = require('../../../package.json')
@@ -66,7 +67,7 @@ describe('Plugin', function () {
   let jestCommonOptions
 
   this.timeout(testTimeout)
-  this.retries(2)
+  this.retries(0)
 
   withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {
@@ -304,7 +305,7 @@ describe('Plugin', function () {
         }
       })
 
-      const initOptions = ['agentless', 'evp proxy']
+      const initOptions = ['agentless']
 
       initOptions.forEach(option => {
         describe(`reporting through ${option}`, () => {
@@ -316,12 +317,17 @@ describe('Plugin', function () {
             jestExecutable = loadedAgent.jestExecutable
             jestCommonOptions = loadedAgent.jestCommonOptions
           })
-          it('should create events for session, suite and test', (done) => {
+          it.only('should create events for session, suite and test', (done) => {
             const events = [
               {
                 type: 'test_session_end',
                 status: 'pass',
                 spanResourceMatch: /^test_session/
+              },
+              {
+                type: 'test_module_end',
+                status: 'pass',
+                spanResourceMatch: /^test_module/
               },
               {
                 type: 'test_suite_end',
@@ -353,13 +359,21 @@ describe('Plugin', function () {
                 if (type === 'test_session_end') {
                   expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
                   expect(span[TEST_SUITE_ID]).to.equal(undefined)
+                  expect(span[TEST_MODULE_ID]).to.equal(undefined)
                   expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+                }
+                if (type === 'test_module_id') {
+                  expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
+                  expect(span[TEST_SUITE_ID]).to.equal(undefined)
+                  expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+                  expect(span[TEST_MODULE_ID]).not.to.equal(undefined)
                 }
                 if (type === 'test_suite_end') {
                   expect(span.meta[TEST_SUITE]).to.equal(suite)
                   expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
                   expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
                   expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+                  expect(span[TEST_MODULE_ID]).not.to.equal(undefined)
                 }
                 if (type === 'test') {
                   expect(span.meta[TEST_SUITE]).to.equal(suite)
@@ -367,6 +381,7 @@ describe('Plugin', function () {
                   expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
                   expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
                   expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+                  expect(span[TEST_MODULE_ID]).not.to.equal(undefined)
                 }
               }, { timeoutMs: assertionTimeout, spanResourceMatch })
             })

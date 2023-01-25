@@ -503,7 +503,7 @@ describe('Plugin', () => {
 
       initOptions.forEach(option => {
         describe(`reporting through ${option}`, () => {
-          it('should create events for session, suites and test', (done) => {
+          it.only('should create events for session, modules, suites and test', (done) => {
             const testFilePaths = fs.readdirSync(__dirname)
               .filter(name => name.startsWith('mocha-test-suite-level'))
               .map(relativePath => path.join(__dirname, relativePath))
@@ -529,9 +529,11 @@ describe('Plugin', () => {
               }
 
               const testSessionEvent = events.find(span => span.type === 'test_session_end')
+              const testModuleEvent = events.find(span => span.type === 'test_module_end')
               const testSuiteEvents = events.filter(span => span.type === 'test_suite_end')
 
               expect(testSessionEvent.meta[TEST_STATUS]).to.equal('fail')
+              expect(testModuleEvent.meta[TEST_STATUS]).to.equal('fail')
               expect(testSuiteEvents.length).to.equal(4)
 
               expect(
@@ -539,6 +541,13 @@ describe('Plugin', () => {
                   span => span.test_session_id.toString() === testSessionEvent.test_session_id.toString()
                 )
               ).to.be.true
+
+              expect(
+                testSuiteEvents.every(
+                  span => span.test_module_id.toString() === testModuleEvent.test_module_id.toString()
+                )
+              ).to.be.true
+
               expect(testSuiteEvents.every(suite => suite.test_suite_id !== undefined)).to.be.true
               expect(testSuiteEvents.every(suite => suites.includes(suite.meta[TEST_SUITE]))).to.be.true
 

@@ -8,10 +8,12 @@ const {
   getTestEnvironmentMetadata,
   getTestParentSpan,
   getTestSessionCommonTags,
+  getTestModuleCommonTags,
   getTestSuiteCommonTags,
   TEST_PARAMETERS,
   getCodeOwnersFileEntries,
   TEST_SESSION_ID,
+  TEST_MODULE_ID,
   TEST_SUITE_ID,
   TEST_COMMAND,
   TEST_ITR_TESTS_SKIPPED,
@@ -49,12 +51,12 @@ class JestPlugin extends CiPlugin {
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
-    this.addSub('ci:jest:session:start', (command) => {
-      const store = storage.getStore()
+    this.addSub('ci:jest:session:start', ({ command, testFrameworkVersion }) => {
       const childOf = getTestParentSpan(this.tracer)
-      const testSessionSpanMetadata = getTestSessionCommonTags(command, this.tracer._version)
+      const testSessionSpanMetadata = getTestSessionCommonTags(command, testFrameworkVersion || this.tracer._version)
+      const testModuleSpanMetadata = getTestModuleCommonTags(command, testFrameworkVersion || this.tracer._version)
 
-      const testSessionSpan = this.tracer.startSpan('jest.test_session', {
+      this.testSessionSpan = this.tracer.startSpan('jest.test_session', {
         childOf,
         tags: {
           [COMPONENT]: this.constructor.name,
@@ -62,7 +64,14 @@ class JestPlugin extends CiPlugin {
           ...testSessionSpanMetadata
         }
       })
-      this.enter(testSessionSpan, store)
+      this.testModuleSpan = this.tracer.startSpan('jest.test_module', {
+        childOf: this.testSessionSpan,
+        tags: {
+          [COMPONENT]: this.constructor.name,
+          ...this.testEnvironmentMetadata,
+          ...testModuleSpanMetadata
+        }
+      })
     })
 
     this.addSub('ci:jest:session:finish', ({
@@ -72,18 +81,18 @@ class JestPlugin extends CiPlugin {
       isCodeCoverageEnabled,
       testCodeCoverageLinesTotal
     }) => {
-      const testSessionSpan = storage.getStore().span
-
-      testSessionSpan.setTag(TEST_STATUS, status)
-      testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
-      testSessionSpan.setTag(TEST_SESSION_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
-      testSessionSpan.setTag(TEST_SESSION_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+      this.testSessionSpan.setTag(TEST_STATUS, status)
+      this.testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
+      this.testSessionSpan.setTag(TEST_SESSION_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
+      this.testSessionSpan.setTag(TEST_SESSION_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
 
       if (testCodeCoverageLinesTotal !== undefined) {
-        testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
+        this.testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
       }
-      testSessionSpan.finish()
-      finishAllTraceSpans(testSessionSpan)
+      this.testModuleSpan.setTag(TEST_STATUS, status)
+      this.testModuleSpan.finish()
+      this.testSessionSpan.finish()
+      finishAllTraceSpans(this.testSessionSpan)
       this.tracer._exporter.flush()
     })
 
@@ -91,21 +100,25 @@ class JestPlugin extends CiPlugin {
     // This subscriber changes the configuration objects from jest to inject the trace id
     // of the test session to the processes that run the test suites.
     this.addSub('ci:jest:session:configuration', configs => {
-      const testSessionSpan = storage.getStore().span
       configs.forEach(config => {
-        config._ddTestSessionId = testSessionSpan.context()._traceId.toString(10)
-        config._ddTestCommand = testSessionSpan.context()._tags[TEST_COMMAND]
+        config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
+        config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
+        config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
       })
     })
 
     this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions }) => {
-      const { _ddTestSessionId: testSessionId, _ddTestCommand: testCommand } = testEnvironmentOptions
+      const {
+        _ddTestSessionId: testSessionId,
+        _ddTestCommand: testCommand,
+        _ddTestModuleId: testModuleId
+      } = testEnvironmentOptions
 
       const store = storage.getStore()
 
       const testSessionSpanContext = this.tracer.extract('text_map', {
         'x-datadog-trace-id': testSessionId,
-        'x-datadog-parent-id': '0000000000000000'
+        'x-datadog-parent-id': testModuleId
       })
 
       const testSuiteMetadata = getTestSuiteCommonTags(testCommand, this.tracer._version, testSuite)
@@ -177,9 +190,10 @@ class JestPlugin extends CiPlugin {
     const store = storage.getStore()
     const testSuiteSpan = store ? store.span : undefined
     if (testSuiteSpan) {
-      const testSuiteId = testSuiteSpan.context()._spanId.toString(10)
+      const testSuiteId = testSuiteSpan.context().toSpanId()
       suiteTags[TEST_SUITE_ID] = testSuiteId
-      suiteTags[TEST_SESSION_ID] = testSuiteSpan.context()._traceId.toString(10)
+      suiteTags[TEST_SESSION_ID] = testSuiteSpan.context().toTraceId()
+      suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
       suiteTags[TEST_COMMAND] = testSuiteSpan.context()._tags[TEST_COMMAND]
     }
 

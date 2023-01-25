@@ -11,9 +11,12 @@ const {
   getTestParentSpan,
   getTestParametersString,
   getTestSessionCommonTags,
+  getTestModuleCommonTags,
   getTestSuiteCommonTags,
   TEST_SUITE_ID,
   TEST_SESSION_ID,
+  TEST_MODULE_ID,
+  TEST_BUNDLE,
   TEST_COMMAND,
   TEST_ITR_TESTS_SKIPPED,
   TEST_SESSION_CODE_COVERAGE_ENABLED,
@@ -61,6 +64,16 @@ class MochaPlugin extends CiPlugin {
           ...testSessionSpanMetadata
         }
       })
+
+      const testModuleSpanMetadata = getTestModuleCommonTags(command, this.tracer._version)
+      this.testModuleSpan = this.tracer.startSpan('mocha.test_module', {
+        childOf: this.testSessionSpan,
+        tags: {
+          [COMPONENT]: this.constructor.name,
+          ...this.testEnvironmentMetadata,
+          ...testModuleSpanMetadata
+        }
+      })
     })
 
     this.addSub('ci:mocha:test-suite:start', (suite) => {
@@ -71,7 +84,7 @@ class MochaPlugin extends CiPlugin {
         getTestSuitePath(suite.file, this.sourceRoot)
       )
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
-        childOf: this.testSessionSpan,
+        childOf: this.testModuleSpan,
         tags: {
           [COMPONENT]: this.constructor.name,
           ...this.testEnvironmentMetadata,
@@ -147,6 +160,8 @@ class MochaPlugin extends CiPlugin {
         this.testSessionSpan.setTag(TEST_SESSION_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
         this.testSessionSpan.setTag(TEST_SESSION_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
 
+        this.testModuleSpan.setTag(TEST_STATUS, status)
+        this.testModuleSpan.finish()
         this.testSessionSpan.finish()
         finishAllTraceSpans(this.testSessionSpan)
       }
@@ -156,6 +171,12 @@ class MochaPlugin extends CiPlugin {
   }
 
   startTestSpan (test) {
+    const childOf = getTestParentSpan(this.tracer)
+    // This is a hack to get good time resolution on test events, while keeping
+    // the test event as the root span of its trace.
+    childOf._trace.startTime = this.testSessionSpan.context()._trace.startTime
+    childOf._trace.ticks = this.testSessionSpan.context()._trace.ticks
+
     const testSuiteTags = {}
     const testSuiteSpan = this._testSuites.get(test.parent.file)
     if (testSuiteSpan) {
@@ -167,6 +188,13 @@ class MochaPlugin extends CiPlugin {
       const testSessionId = this.testSessionSpan.context()._traceId.toString(10)
       testSuiteTags[TEST_SESSION_ID] = testSessionId
       testSuiteTags[TEST_COMMAND] = this.command
+    }
+
+    if (this.testModuleSpan) {
+      const testModuleId = this.testModuleSpan.context()._traceId.toString(10)
+      testSuiteTags[TEST_MODULE_ID] = testModuleId
+      testSuiteTags[TEST_COMMAND] = this.command
+      testSuiteTags[TEST_BUNDLE] = this.command
     }
 
     const { file: testSuiteAbsolutePath } = test
@@ -182,7 +210,7 @@ class MochaPlugin extends CiPlugin {
       extraTags[TEST_PARAMETERS] = testParametersString
     }
 
-    return super.startTestSpan(fullTestName, testSuite, extraTags)
+    return super.startTestSpan(fullTestName, testSuite, extraTags, childOf)
   }
 }
 
