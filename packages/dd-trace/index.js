@@ -1,9 +1,16 @@
 'use strict'
 
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+function wait(ms) {
+  var start = Date.now(),
+      now = start;
+  while (now - start < ms) {
+    now = Date.now();
+  }
+}
+
+wait(1000);
 
 if (!global._ddtrace) {
-  await delay(1000);
   const TracerProxy = require('./src')
 
   Object.defineProperty(global, '_ddtrace', {
