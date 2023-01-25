@@ -460,30 +460,30 @@ describe('TracerProxy', () => {
 
     describe('appsec', () => {
       describe('trackUserLoginSuccessEvent', () => {
-        it('should call the underlying NoopAppsecSdk method', () => {
+        it('should call the underlying AppsecSdk method', () => {
           const user = { id: 'user_id' }
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackUserLoginSuccessEvent(user, metadata)
-          expect(appsecSdk.trackUserLoginSuccessEvent).to.have.been.calledOnceWith(user, metadata)
+          expect(appsecSdk.trackUserLoginSuccessEvent).to.have.been.calledOnceWithExactly(user, metadata)
         })
       })
 
       describe('trackUserLoginFailureEvent', () => {
-        it('should call the underlying NoopAppsecSdk method', () => {
+        it('should call the underlying AppsecSdk method', () => {
           const userId = 'user_id'
           const exists = true
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackUserLoginFailureEvent(userId, exists, metadata)
-          expect(appsecSdk.trackUserLoginFailureEvent).to.have.been.calledOnceWith(userId, exists, metadata)
+          expect(appsecSdk.trackUserLoginFailureEvent).to.have.been.calledOnceWithExactly(userId, exists, metadata)
         })
       })
 
       describe('trackCustomEvent', () => {
-        it('should call the underlying NoopAppsecSdk method', () => {
+        it('should call the underlying AppsecSdk method', () => {
           const eventName = 'custom_event'
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackCustomEvent(eventName, metadata)
-          expect(appsecSdk.trackCustomEvent).to.have.been.calledOnceWith(eventName, metadata)
+          expect(appsecSdk.trackCustomEvent).to.have.been.calledOnceWithExactly(eventName, metadata)
         })
       })
     })
