@@ -433,11 +433,11 @@ function addRequestTags (context) {
   })
 
   // if client ip has already been set by appsec, no need to run it again
-  if (config.clientIpEnabled && !span.context()._tags.hasOwnProperty('http.client_ip')) {
+  if (config.clientIpEnabled && !span.context()._tags.hasOwnProperty(tags.HTTP_CLIENT_IP)) {
     const clientIp = extractIp(config, req)
 
     if (clientIp) {
-      span.setTag('http.client_ip', clientIp)
+      span.setTag(tags.HTTP_CLIENT_IP, clientIp)
     }
   }
 
