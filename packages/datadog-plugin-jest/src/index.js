@@ -186,6 +186,7 @@ class JestPlugin extends CiPlugin {
   }
 
   startTestSpan (test) {
+    let childOf
     const suiteTags = {}
     const store = storage.getStore()
     const testSuiteSpan = store ? store.span : undefined
@@ -195,6 +196,9 @@ class JestPlugin extends CiPlugin {
       suiteTags[TEST_SESSION_ID] = testSuiteSpan.context().toTraceId()
       suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
       suiteTags[TEST_COMMAND] = testSuiteSpan.context()._tags[TEST_COMMAND]
+      childOf = getTestParentSpan(this.tracer)
+      childOf._trace.startTime = testSuiteSpan.context()._trace.startTime
+      childOf._trace.ticks = testSuiteSpan.context()._trace.ticks
     }
 
     const { suite, name, runner, testParameters } = test
@@ -205,7 +209,7 @@ class JestPlugin extends CiPlugin {
       ...suiteTags
     }
 
-    return super.startTestSpan(name, suite, extraTags)
+    return super.startTestSpan(name, suite, extraTags, childOf)
   }
 }
 
