@@ -32,6 +32,16 @@ function enable (config) {
   }
 }
 
+function enableAsm () {
+  rc.on('ASM', RuleManager.toggleRules)
+}
+
+function disableAsm () {
+  if (rc) {
+    rc.off('ASM', RuleManager.toggleRules)
+  }
+}
+
 function enableAsmData (appsecConfig) {
   if (rc && appsecConfig && appsecConfig.rules === undefined) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)

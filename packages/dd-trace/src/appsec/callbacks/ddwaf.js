@@ -127,6 +127,10 @@ class WAFCallback {
     this.ddwaf.updateRuleData(ruleData)
   }
 
+  toggleRules (rulesTogglingData) {
+    this.ddwaf.toggleRules(rulesTogglingData)
+  }
+
   clear () {
     this.ddwaf.dispose()
 
