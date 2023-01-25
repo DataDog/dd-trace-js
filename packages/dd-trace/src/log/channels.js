@@ -13,7 +13,7 @@ const defaultLevel = Level.Debug
 
 class LogChannel extends dc.Channel {
   constructor (name, logLevel) {
-    super(`dd-trace:log:${name}`)
+    super(`datadog:log:${name}`)
     this.logLevel = logLevel
   }
 }

@@ -69,7 +69,6 @@ const log = {
     return this
   },
 
-  // is this method used?
   deprecate (code, message) {
     return this._deprecate(code, message)
   }
