@@ -123,6 +123,7 @@ async function createSandbox (dependencies = [], isGitRepo = false) {
     await exec('echo "node_modules/" > .gitignore', { cwd: folder })
     await exec('git config user.email "john@doe.com"', { cwd: folder })
     await exec('git config user.name "John Doe"', { cwd: folder })
+    await exec('git config commit.gpgsign false', { cwd: folder })
     await exec(
       'git add -A && git commit -m "first commit" --no-verify && git remote add origin git@git.com:datadog/example',
       { cwd: folder }

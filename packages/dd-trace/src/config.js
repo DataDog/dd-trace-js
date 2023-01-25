@@ -145,7 +145,12 @@ class Config {
       process.env.AWS_LAMBDA_FUNCTION_NAME ||
       pkg.name ||
       'node'
-    const DD_SERVICE_MAPPING = process.env.DD_SERVICE_MAPPING || ''
+    const DD_SERVICE_MAPPING = coalesce(
+      options.serviceMapping,
+      process.env.DD_SERVICE_MAPPING ? fromEntries(
+        process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
+      ) : {}
+    )
     const DD_ENV = coalesce(
       options.env,
       process.env.DD_ENV,
@@ -274,10 +279,16 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       path.join(__dirname, 'appsec', 'templates', 'blocked.json')
     )
 
+    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+
     const remoteConfigOptions = options.remoteConfig || {}
-    const DD_REMOTE_CONFIGURATION_POLLING_INTERVAL = coalesce(
+    const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
+      process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
+      !inAWSLambda
+    )
+    const DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = coalesce(
       parseInt(remoteConfigOptions.pollInterval),
-      parseInt(process.env.DD_REMOTE_CONFIGURATION_POLLING_INTERVAL),
+      parseInt(process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS),
       5 // seconds
     )
 
@@ -346,7 +357,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       })
     }
 
-    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
@@ -365,9 +375,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE
-    this.serviceMapping = DD_SERVICE_MAPPING.length ? fromEntries(
-      DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
-    ) : {}
+    this.serviceMapping = DD_SERVICE_MAPPING
     this.version = DD_VERSION
     this.dogstatsd = {
       hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, this.hostname),
@@ -406,7 +414,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     }
     this.remoteConfig = {
-      pollInterval: DD_REMOTE_CONFIGURATION_POLLING_INTERVAL
+      enabled: DD_REMOTE_CONFIGURATION_ENABLED,
+      pollInterval: DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     }
     this.iast = {
       enabled: isTrue(DD_IAST_ENABLED),

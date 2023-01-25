@@ -74,6 +74,7 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('logLevel', 'debug')
+    expect(config).to.have.deep.property('serviceMapping', {})
     expect(config).to.have.nested.property('experimental.b3', false)
     expect(config).to.have.nested.property('experimental.traceparent', false)
     expect(config).to.have.nested.property('experimental.runtimeId', false)
@@ -85,6 +86,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
+    expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
   })
@@ -126,6 +128,7 @@ describe('Config', () => {
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     process.env.DD_SERVICE = 'service'
+    process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
     process.env.DD_VERSION = '1.0.0'
     process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '.*'
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'x-true-client-ip'
@@ -159,7 +162,8 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = '42'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '.*'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
-    process.env.DD_REMOTE_CONFIGURATION_POLLING_INTERVAL = '42'
+    process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
+    process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
     process.env.DD_IAST_REQUEST_SAMPLING = '40'
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
@@ -199,6 +203,10 @@ describe('Config', () => {
         { sampleRate: 0.1 }
       ]
     })
+    expect(config).to.have.deep.property('serviceMapping', {
+      a: 'aa',
+      b: 'bb'
+    })
     expect(config).to.have.nested.property('experimental.b3', true)
     expect(config).to.have.nested.property('experimental.traceparent', true)
     expect(config).to.have.nested.property('experimental.runtimeId', true)
@@ -210,6 +218,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
+    expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 40)
@@ -286,6 +295,10 @@ describe('Config', () => {
         { service: 'mysql', sampleRate: 1.0 },
         { sampleRate: 0.1 }
       ],
+      serviceMapping: {
+        a: 'aa',
+        b: 'bb'
+      },
       logger,
       tags,
       flushInterval: 5000,
@@ -365,6 +378,10 @@ describe('Config', () => {
         { sampleRate: 0.1 }
       ]
     })
+    expect(config).to.have.deep.property('serviceMapping', {
+      a: 'aa',
+      b: 'bb'
+    })
   })
 
   it('should initialize from the options with url taking precedence', () => {
@@ -420,6 +437,7 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
     process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
     process.env.DD_SERVICE = 'service'
+    process.env.DD_SERVICE_MAPPING = 'a:aa'
     process.env.DD_VERSION = '0.0.0'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
@@ -439,7 +457,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
-    process.env.DD_REMOTE_CONFIGURATION_POLLING_INTERVAL = 11
+    process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
 
     const config = new Config({
@@ -459,6 +477,9 @@ describe('Config', () => {
       env: 'development',
       tags: {
         foo: 'foo'
+      },
+      serviceMapping: {
+        b: 'bb'
       },
       experimental: {
         b3: false,
@@ -500,6 +521,7 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'development')
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
+    expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
     expect(config).to.have.nested.property('experimental.b3', false)
     expect(config).to.have.nested.property('experimental.traceparent', false)
     expect(config).to.have.nested.property('experimental.runtimeId', false)
@@ -624,30 +646,6 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'test')
   })
 
-  it('should support the serviceMapping environment variable', () => {
-    let origVar
-    if ('DD_SERVICE_MAPPING' in process.env) {
-      origVar = Object.getOwnPropertyDescriptor(process.env, 'DD_SERVICE')
-    }
-    process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
-    let config = new Config()
-
-    expect(config.serviceMapping).to.deep.equal({
-      a: 'aa',
-      b: 'bb'
-    })
-
-    if (origVar) {
-      Object.defineProperty(process.env, 'DD_SERVICE', origVar)
-    } else {
-      delete process.env.DD_SERVICE_MAPPING
-    }
-
-    config = new Config()
-
-    expect(config.serviceMapping).to.deep.equal({})
-  })
-
   it('should trim whitespace characters around keys', () => {
     process.env.DD_TAGS = 'foo:bar, baz:qux'
 
@@ -662,6 +660,14 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config.telemetryEnabled).to.be.false
+  })
+
+  it('should not set DD_REMOTE_CONFIGURATION_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+
+    const config = new Config()
+
+    expect(config.remoteConfig.enabled).to.be.false
   })
 
   it('should ignore invalid iast.requestSampling', () => {

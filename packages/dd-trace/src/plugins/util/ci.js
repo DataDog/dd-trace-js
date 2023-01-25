@@ -235,7 +235,8 @@ module.exports = {
         GITHUB_SHA,
         GITHUB_REPOSITORY,
         GITHUB_SERVER_URL,
-        GITHUB_RUN_ATTEMPT
+        GITHUB_RUN_ATTEMPT,
+        GITHUB_JOB
       } = env
 
       const repositoryURL = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git`
@@ -259,6 +260,7 @@ module.exports = {
         [GIT_COMMIT_SHA]: GITHUB_SHA,
         [GIT_REPOSITORY_URL]: repositoryURL,
         [CI_JOB_URL]: jobUrl,
+        [CI_JOB_NAME]: GITHUB_JOB,
         [CI_WORKSPACE_PATH]: GITHUB_WORKSPACE,
         [refKey]: ref,
         [CI_ENV_VARS]: JSON.stringify({
@@ -353,7 +355,8 @@ module.exports = {
         [GIT_COMMIT_AUTHOR_EMAIL]: BUILD_REQUESTEDFOREMAIL,
         [GIT_COMMIT_MESSAGE]: BUILD_SOURCEVERSIONMESSAGE,
         [CI_STAGE_NAME]: SYSTEM_STAGEDISPLAYNAME,
-        [CI_JOB_NAME]: SYSTEM_JOBDISPLAYNAME
+        [CI_JOB_NAME]: SYSTEM_JOBDISPLAYNAME,
+        [CI_ENV_VARS]: JSON.stringify({ SYSTEM_TEAMPROJECTID, BUILD_BUILDID, SYSTEM_JOBID })
       }
 
       if (SYSTEM_TEAMFOUNDATIONSERVERURI && SYSTEM_TEAMPROJECTID && BUILD_BUILDID) {

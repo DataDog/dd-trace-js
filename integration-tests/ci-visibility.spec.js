@@ -15,7 +15,7 @@ const {
 const { FakeCiVisIntake } = require('./ci-visibility-intake')
 
 const {
-  TEST_SESSION_ITR_CODE_COVERAGE_ENABLED,
+  TEST_SESSION_CODE_COVERAGE_ENABLED,
   TEST_SESSION_ITR_SKIPPING_ENABLED,
   TEST_ITR_TESTS_SKIPPED
 } = require('../packages/dd-trace/src/plugins/util/test')
@@ -30,6 +30,7 @@ const testFrameworks = [
     dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc'],
     testFile: 'ci-visibility/run-mocha.js',
     expectedStdout: '2 passing',
+    extraStdout: 'end event: can add event listeners to mocha',
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.js',
       'ci-visibility/test/sum.js',
@@ -57,6 +58,7 @@ testFrameworks.forEach(({
   dependencies,
   testFile,
   expectedStdout,
+  extraStdout,
   expectedCoverageFiles,
   runTestsWithCoverageCommand
 }) => {
@@ -104,6 +106,9 @@ testFrameworks.forEach(({
         const areAllTestSpans = testSpans.every(span => span.name === `${name}.test`)
         assert.isTrue(areAllTestSpans)
         assert.include(testOutput, expectedStdout)
+        if (extraStdout) {
+          assert.include(testOutput, extraStdout)
+        }
         done()
       })
 
@@ -150,6 +155,30 @@ testFrameworks.forEach(({
             assert.include(testOutput, expectedStdout)
             done()
           })
+        })
+      })
+    })
+    context('when no ci visibility init is used', () => {
+      it('does not crash', (done) => {
+        childProcess = fork(startupTestFile, {
+          cwd,
+          env: {
+            DD_TRACE_AGENT_PORT: receiver.port,
+            NODE_OPTIONS: '-r dd-trace/init'
+          },
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('message', () => {
+          assert.notInclude(testOutput, 'TypeError')
+          assert.notInclude(testOutput, 'Uncaught error outside test suite')
+          assert.include(testOutput, expectedStdout)
+          done()
         })
       })
     })
@@ -281,7 +310,7 @@ testFrameworks.forEach(({
           assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_suite_end'])
           const testSession = payload.events.find(event => event.type === 'test_session_end').content
           assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
-          assert.propertyVal(testSession.meta, TEST_SESSION_ITR_CODE_COVERAGE_ENABLED, 'false')
+          assert.propertyVal(testSession.meta, TEST_SESSION_CODE_COVERAGE_ENABLED, 'false')
           assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'false')
         }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
@@ -332,10 +361,11 @@ testFrameworks.forEach(({
           assert.equal(numSuites, 1)
           const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
           assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
-          assert.propertyVal(testSession.meta, TEST_SESSION_ITR_CODE_COVERAGE_ENABLED, 'true')
+          assert.propertyVal(testSession.meta, TEST_SESSION_CODE_COVERAGE_ENABLED, 'true')
           assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'true')
           done()
-        })
+        }).catch(done)
+
         childProcess = exec(
           runTestsWithCoverageCommand,
           {
@@ -371,7 +401,7 @@ testFrameworks.forEach(({
           assert.equal(numSuites, 2)
           const testSession = payload.events.find(event => event.type === 'test_session_end').content
           assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
-          assert.propertyVal(testSession.meta, TEST_SESSION_ITR_CODE_COVERAGE_ENABLED, 'true')
+          assert.propertyVal(testSession.meta, TEST_SESSION_CODE_COVERAGE_ENABLED, 'true')
           assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'true')
         }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
@@ -496,7 +526,7 @@ testFrameworks.forEach(({
           )
           assert.equal(numSuites, 2)
           done()
-        })
+        }).catch(done)
 
         childProcess = fork(startupTestFile, {
           cwd,
@@ -627,7 +657,7 @@ testFrameworks.forEach(({
           )
           assert.equal(numSuites, 1)
           done()
-        })
+        }).catch(done)
 
         childProcess = exec(
           runTestsWithCoverageCommand,
