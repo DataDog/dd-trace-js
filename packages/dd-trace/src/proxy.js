@@ -9,19 +9,10 @@ const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
 
-
-function wait(ms) {
-  var start = Date.now(),
-      now = start;
-  while (now - start < ms) {
-    now = Date.now();
-  }
-}
-
 class Tracer extends NoopProxy {
   constructor () {
     super()
-    wait(2000);
+
     this._initialized = false
     this._pluginManager = new PluginManager(this)
   }
