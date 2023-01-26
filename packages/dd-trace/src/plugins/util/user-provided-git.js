@@ -54,16 +54,11 @@ function getUserProviderGitMetadata () {
     DD_GIT_COMMIT_AUTHOR_DATE
   } = process.env
 
-  let branch = normalizeRef(DD_GIT_BRANCH)
+  const branch = normalizeRef(DD_GIT_BRANCH)
   let tag = normalizeRef(DD_GIT_TAG)
 
-  if (DD_GIT_TAG) {
-    branch = undefined
-  }
-
-  // if DD_GIT_BRANCH is a tag, we associate its value to TAG instead of BRANCH
+  // if DD_GIT_BRANCH is a tag, we associate its value to TAG too
   if ((DD_GIT_BRANCH || '').includes('origin/tags') || (DD_GIT_BRANCH || '').includes('refs/heads/tags')) {
-    branch = undefined
     tag = normalizeRef(DD_GIT_BRANCH)
   }
 

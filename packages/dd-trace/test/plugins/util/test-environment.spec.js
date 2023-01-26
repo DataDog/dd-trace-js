@@ -5,6 +5,8 @@ const proxyquire = require('proxyquire')
 const sanitizedExecStub = sinon.stub().returns('')
 
 const { getCIMetadata } = require('../../../src/plugins/util/ci')
+const { CI_ENV_VARS } = require('../../../src/plugins/util/tags')
+
 const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
   './exec': {
     'sanitizedExec': sanitizedExecStub
@@ -33,9 +35,14 @@ describe('test environment data', () => {
     assertions.forEach(([env, expectedSpanTags], index) => {
       it(`reads env info for spec ${index} from ${ciProvider}`, () => {
         process.env = env
-        const tags = getTestEnvironmentMetadata()
+        const { [CI_ENV_VARS]: envVars, ...restOfTags } = getTestEnvironmentMetadata()
+        const { [CI_ENV_VARS]: expectedEnvVars, ...restOfExpectedTags } = expectedSpanTags
 
-        expect(tags).to.contain(expectedSpanTags)
+        expect(restOfTags).to.contain(restOfExpectedTags)
+        // `CI_ENV_VARS` key contains a dictionary, so we do a `eql` comparison
+        if (envVars && expectedEnvVars) {
+          expect(JSON.parse(envVars)).to.eql(JSON.parse(expectedEnvVars))
+        }
       })
     })
   })
