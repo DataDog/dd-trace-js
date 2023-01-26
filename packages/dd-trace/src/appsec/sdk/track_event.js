@@ -56,7 +56,7 @@ function trackEvent (tracer, eventName, fields, sdkMethodName, rootSpan = getRoo
     [`appsec.events.${eventName}.track`]: 'true',
     [MANUAL_KEEP]: 'true'
   }
-  
+
   if (fields) {
     for (const metadataKey of Object.keys(fields)) {
       tags[`appsec.events.${eventName}.${metadataKey}`] = '' + fields[metadataKey]
