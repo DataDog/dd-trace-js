@@ -21,6 +21,7 @@ const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
+const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 
 describe('plugins/util/web', () => {
   let web
@@ -183,6 +184,54 @@ describe('plugins/util/web', () => {
             [HTTP_METHOD]: 'GET',
             [SPAN_KIND]: SERVER,
             [HTTP_USERAGENT]: 'curl'
+          })
+        })
+      })
+
+      it('should add client ip tag to the span when enabled', () => {
+        req.headers['x-forwarded-for'] = '8.8.8.8'
+
+        config.clientIpEnabled = true
+
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
+          res.end()
+
+          expect(tags).to.include({
+            [HTTP_CLIENT_IP]: '8.8.8.8'
+          })
+        })
+      })
+
+      it('should not add client ip tag to the span when disabled', () => {
+        req.headers['x-forwarded-for'] = '8.8.8.8'
+
+        config.clientIpEnabled = false
+
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
+          res.end()
+
+          expect(tags).to.not.have.property(HTTP_CLIENT_IP)
+        })
+      })
+
+      it('should not replace client ip when it exists', () => {
+        req.headers['x-forwarded-for'] = '8.8.8.8'
+
+        config.clientIpEnabled = true
+
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
+          span.setTag(HTTP_CLIENT_IP, '1.1.1.1')
+
+          res.end()
+
+          expect(tags).to.include({
+            [HTTP_CLIENT_IP]: '1.1.1.1'
           })
         })
       })
