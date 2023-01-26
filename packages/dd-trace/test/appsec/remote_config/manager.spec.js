@@ -116,10 +116,16 @@ describe('RemoteConfigManager', () => {
 
       rc.updateCapabilities(Capabilities.ASM_DD_RULES, true)
       expect(rc.state.client.capabilities).to.equal('Dg==')
+
+      rc.updateCapabilities(Capabilities.ASM_USER_BLOCKING, true)
+      expect(rc.state.client.capabilities).to.equal('jg==')
     })
 
     it('should set multiple capabilities to false', () => {
-      rc.state.client.capabilities = 'Dg=='
+      rc.state.client.capabilities = 'jg=='
+
+      rc.updateCapabilities(Capabilities.ASM_USER_BLOCKING, false)
+      expect(rc.state.client.capabilities).to.equal('Dg==')
 
       rc.updateCapabilities(Capabilities.ASM_ACTIVATION, false)
       expect(rc.state.client.capabilities).to.equal('DA==')
