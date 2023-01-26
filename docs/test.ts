@@ -90,7 +90,9 @@ tracer.init({
   appsec: true,
   remoteConfig: {
     pollInterval: 5
-  }
+  },
+  clientIpEnabled: true,
+  clientIpHeader: null
 });
 
 tracer.init({
