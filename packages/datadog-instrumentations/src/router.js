@@ -145,7 +145,7 @@ function createWrapRouterMethod (name) {
     if (maybeCached) {
       return maybeCached
     }
-    const regexp = pathToRegExp(pattern)
+    const regexp = pathToRegExp.parse(pattern)
     regexpCache[pattern] = regexp
     return regexp
   }
