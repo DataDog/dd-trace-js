@@ -38,7 +38,7 @@ function testInRequest (app, tests) {
   })
 
   beforeEach(() => {
-    return agent.load('http')
+    return agent.load('http', undefined, { flushInterval: 1 })
       .then(() => {
         http = require('http')
       })
