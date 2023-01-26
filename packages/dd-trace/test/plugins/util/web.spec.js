@@ -236,6 +236,18 @@ describe('plugins/util/web', () => {
         })
       })
 
+      it('should not add client ip tag when no candidate header is present in request', () => {
+        config.clientIpEnabled = true
+
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
+          res.end()
+
+          expect(tags).to.not.have.property(HTTP_CLIENT_IP)
+        })
+      })
+
       it('should add configured headers to the span tags', () => {
         config.headers = ['host', 'server']
 
