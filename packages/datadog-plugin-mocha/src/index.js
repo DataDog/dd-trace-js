@@ -180,18 +180,18 @@ class MochaPlugin extends CiPlugin {
     const testSuiteTags = {}
     const testSuiteSpan = this._testSuites.get(test.parent.file)
     if (testSuiteSpan) {
-      const testSuiteId = testSuiteSpan.context()._spanId.toString(10)
+      const testSuiteId = testSuiteSpan.context().toSpanId()
       testSuiteTags[TEST_SUITE_ID] = testSuiteId
     }
 
     if (this.testSessionSpan) {
-      const testSessionId = this.testSessionSpan.context()._traceId.toString(10)
+      const testSessionId = this.testSessionSpan.context().toTraceId()
       testSuiteTags[TEST_SESSION_ID] = testSessionId
       testSuiteTags[TEST_COMMAND] = this.command
     }
 
     if (this.testModuleSpan) {
-      const testModuleId = this.testModuleSpan.context()._traceId.toString(10)
+      const testModuleId = this.testModuleSpan.context().toSpanId()
       testSuiteTags[TEST_MODULE_ID] = testModuleId
       testSuiteTags[TEST_COMMAND] = this.command
       testSuiteTags[TEST_BUNDLE] = this.command

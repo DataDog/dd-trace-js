@@ -19,7 +19,8 @@ const {
   TEST_ITR_TESTS_SKIPPED,
   TEST_SESSION_CODE_COVERAGE_ENABLED,
   TEST_SESSION_ITR_SKIPPING_ENABLED,
-  TEST_CODE_COVERAGE_LINES_TOTAL
+  TEST_CODE_COVERAGE_LINES_TOTAL,
+  TEST_BUNDLE
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
@@ -196,6 +197,7 @@ class JestPlugin extends CiPlugin {
       suiteTags[TEST_SESSION_ID] = testSuiteSpan.context().toTraceId()
       suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
       suiteTags[TEST_COMMAND] = testSuiteSpan.context()._tags[TEST_COMMAND]
+      suiteTags[TEST_BUNDLE] = testSuiteSpan.context()._tags[TEST_COMMAND]
       childOf = getTestParentSpan(this.tracer)
       childOf._trace.startTime = testSuiteSpan.context()._trace.startTime
       childOf._trace.ticks = testSuiteSpan.context()._trace.ticks

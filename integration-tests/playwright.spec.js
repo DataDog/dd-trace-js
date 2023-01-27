@@ -55,6 +55,7 @@ versions.forEach((version) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end')
+            const testModuleEvent = events.find(event => event.type === 'test_module_end')
             const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
             const testEvents = events.filter(event => event.type === 'test')
 
@@ -62,6 +63,8 @@ versions.forEach((version) => {
 
             assert.equal(testSessionEvent.content.resource, 'test_session.playwright test')
             assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
+            assert.equal(testModuleEvent.content.resource, 'test_module.playwright test')
+            assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
 
             assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
               'test_suite.todo-list-page-test.js',
