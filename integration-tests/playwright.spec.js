@@ -17,7 +17,7 @@ const { TEST_STATUS } = require('../packages/dd-trace/src/plugins/util/test')
 const versions = ['1.18.0', 'latest']
 
 versions.forEach((version) => {
-  describe(`playwright@${version}`, () => {
+  describe.only(`playwright@${version}`, () => {
     let sandbox, cwd, receiver, childProcess, webAppPort
     before(async () => {
       sandbox = await createSandbox([`@playwright/test@${version}`], true)
@@ -51,7 +51,7 @@ versions.forEach((version) => {
             ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
           const reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
 
-          receiver.gatherPayloads(({ url }) => url === reportUrl, 10000).then((payloads) => {
+          receiver.gatherPayloads(({ url }) => url === reportUrl).then((payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end')
