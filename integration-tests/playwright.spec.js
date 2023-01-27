@@ -51,7 +51,7 @@ versions.forEach((version) => {
             ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
           const reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
 
-          receiver.gatherPayloads(({ url }) => url === reportUrl, 10000).then((payloads) => {
+          receiver.gatherPayloads(({ url }) => url === reportUrl).then((payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end')
