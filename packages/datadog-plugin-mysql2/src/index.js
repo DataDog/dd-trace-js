@@ -22,16 +22,19 @@ class MySQL2Plugin extends DatabasePlugin {
         'out.port': dbConfig.port
       }
     })
-    if (this.config.dbmPropagationMode !== 'disabled') {
-      if (sqlStatement.statement !== undefined) {
-        sqlStatement.statement.query = this.injectDbmQuery(sqlStatement.statement.query)
-      } else if (sqlStatement.sql) {
-        sqlStatement.sql = this.injectDbmQuery(sqlStatement.sql)
-      }
-    }
+    getPropagation(sqlStatement, service)
   }
 }
 
+function getPropagation (sqlStatement, service) {
+  if (this.config.dbmPropagationMode !== 'disabled') {
+    if (sqlStatement.statement !== undefined) {
+      sqlStatement.statement.query = this.injectDbmQuery(sqlStatement.statement.query)
+    } else if (sqlStatement.sql) {
+      sqlStatement.sql = this.injectDbmQuery(sqlStatement.sql)
+    }
+  }
+}
 function getServiceName (config, dbConfig) {
   if (typeof config.service === 'function') {
     return config.service(dbConfig)
