@@ -17,7 +17,7 @@ const { TEST_STATUS } = require('../packages/dd-trace/src/plugins/util/test')
 const versions = ['1.18.0', 'latest']
 
 versions.forEach((version) => {
-  describe.only(`playwright@${version}`, () => {
+  describe(`playwright@${version}`, () => {
     let sandbox, cwd, receiver, childProcess, webAppPort
     before(async () => {
       sandbox = await createSandbox([`@playwright/test@${version}`], true)
