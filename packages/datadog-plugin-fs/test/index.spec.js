@@ -9,11 +9,61 @@ const path = require('path')
 const semver = require('semver')
 const rimraf = require('rimraf')
 const util = require('util')
+const plugins = require('../../dd-trace/src/plugins')
+const { channel } = require('diagnostics_channel')
 
 const hasWritev = semver.satisfies(process.versions.node, '>=12.9.0')
 const hasOSymlink = realFS.constants.O_SYMLINK
 
 describe('Plugin', () => {
+  describe('fs not instrumented without internal method call', () => {
+    let fs
+    let tracer
+    afterEach(() => agent.close({ ritmReset: false }))
+    beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
+      tracer = require('../../dd-trace')
+      fs = require('fs')
+    }))
+    describe('with parent span', () => {
+      beforeEach((done) => {
+        const parentSpan = tracer.startSpan('parent')
+        parentSpan.finish()
+        tracer.scope().activate(parentSpan, done)
+      })
+
+      describe('open', () => {
+        it('should not be instrumented', (done) => {
+          function waitForNextTrace () {
+            agent.use((data) => {
+              if (data) {
+                data.forEach((arr) => {
+                  arr.forEach((trace) => {
+                    if (trace.name === 'fs.operation') {
+                      expect.fail('should not have been any fs traces')
+                    }
+                  })
+                })
+              }
+              process.nextTick(() => {
+                waitForNextTrace()
+              })
+            }).catch(done)
+          }
+
+          waitForNextTrace()
+          setTimeout(done, 1500) // allow enough time to ensure no traces happened
+
+          fs.open(__filename, 'r+', (err, fd) => {
+            if (err) {
+              done(err)
+            } else {
+              realFS.closeSync(fd)
+            }
+          })
+        })
+      })
+    })
+  })
   describe('fs', () => {
     let fs
     let tmpdir
@@ -22,12 +72,16 @@ describe('Plugin', () => {
     beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')
       fs = require('fs')
+      tracer.use('fs', { enabled: true })
     }))
     before(() => {
       tmpdir = realFS.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-js-test'))
+      plugins['fs'] = require('../../datadog-plugin-fs/src')
+      channel('dd-trace:instrumentation:load').publish({ name: 'fs' })
     })
     after((done) => {
       rimraf(tmpdir, realFS, done)
+      delete plugins['fs']
     })
 
     describe('without parent span', () => {
