@@ -6,33 +6,26 @@ class MySQLPlugin extends DatabasePlugin {
   static get name () { return 'mysql' }
   static get system () { return 'mysql' }
 
-  start ({ sqlStatement, sql, conf: dbConfig }) {
-    const service = getServiceName(this.config, dbConfig)
+  start (payload) {
+    const service = getServiceName(this.config, payload.conf)
 
     this.startSpan(`${this.system}.query`, {
       service,
-      resource: sql,
+      resource: payload.sql,
       type: 'sql',
       kind: 'client',
       meta: {
         'db.type': this.system,
-        'db.user': dbConfig.user,
-        'db.name': dbConfig.database,
-        'out.host': dbConfig.host,
-        'out.port': dbConfig.port
+        'db.user': payload.conf.user,
+        'db.name': payload.conf.database,
+        'out.host': payload.conf.host,
+        'out.port': payload.conf.port
       }
     })
-    getPropagation(sqlStatement, service, this)
+    payload.sql = this.injectDbmQuery(payload.sql, service)
   }
 }
 
-function getPropagation (sqlStatement, service, source) {
-  if (source.config.dbmPropagationMode !== 'disabled') {
-    if (sqlStatement[0].sql !== undefined) {
-      sqlStatement[0]['sql'] = source.injectDbmQuery(sqlStatement[0].sql, service)
-    } else sqlStatement[0] = source.injectDbmQuery(sqlStatement[0], service)
-  }
-}
 function getServiceName (config, dbConfig) {
   if (typeof config.service === 'function') {
     return config.service(dbConfig)
