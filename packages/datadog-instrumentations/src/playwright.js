@@ -173,7 +173,7 @@ function dispatcherHookNew (dispatcherExport) {
     worker.on('testEnd', ({ testId, status, errors }) => {
       const { test } = dispatcher._testById.get(testId)
 
-      testEndHandler(test, STATUS_TO_TEST_STATUS[status], errors[0])
+      testEndHandler(test, STATUS_TO_TEST_STATUS[status], errors && errors[0])
     })
 
     return worker
