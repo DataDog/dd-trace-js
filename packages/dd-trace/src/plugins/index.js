@@ -2,6 +2,7 @@
 
 module.exports = {
   get '@cucumber/cucumber' () { return require('../../../datadog-plugin-cucumber/src') },
+  get '@playwright/test' () { return require('../../../datadog-plugin-playwright/src') },
   get '@elastic/elasticsearch' () { return require('../../../datadog-plugin-elasticsearch/src') },
   get '@elastic/transport' () { return require('../../../datadog-plugin-elasticsearch/src') },
   get '@google-cloud/pubsub' () { return require('../../../datadog-plugin-google-cloud-pubsub/src') },
