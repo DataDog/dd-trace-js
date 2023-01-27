@@ -92,7 +92,7 @@ tracer.init({
     pollInterval: 5
   },
   clientIpEnabled: true,
-  clientIpHeader: null
+  clientIpHeader: 'x-forwarded-for'
 });
 
 tracer.init({
