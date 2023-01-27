@@ -302,6 +302,200 @@ describe('Plugin', () => {
           })
         })
       })
+      describe('with DBM propagation enabled with service using plugin configurations', () => {
+        let connection
+
+        before(async () => {
+          await agent.load('mysql2', [{ dbmPropagationMode: 'service', service: 'serviced' }])
+          mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
+
+          connection = mysql2.createConnection({
+            host: '127.0.0.1',
+            user: 'root',
+            database: 'db'
+          })
+          connection.connect()
+        })
+
+        it('should contain comment in query text', done => {
+          const connect = connection.query('SELECT 1 + 1 AS solution', (...args) => {
+            try {
+              expect(connect.sql).to.equal(`/*dddbs='serviced',dde='tester',` +
+              `ddps='test',ddpv='8.4.0'*/ SELECT 1 + 1 AS solution`)
+            } catch (e) {
+              done(e)
+            }
+            done()
+          })
+        })
+        it('trace query resource should not be changed when propagation is enabled', done => {
+          agent.use(traces => {
+            expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
+            done()
+          })
+          connection.query('SELECT 1 + 1 AS solution', (err) => {
+            if (err) return done(err)
+            connection.end((err) => {
+              if (err) return done(err)
+            })
+          })
+        })
+      })
+      describe('DBM propagation should handle special characters', () => {
+        let connection
+
+        afterEach((done) => {
+          connection.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
+        })
+
+        beforeEach(async () => {
+          await agent.load('mysql2', [{ dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' }])
+          mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
+
+          connection = mysql2.createConnection({
+            host: '127.0.0.1',
+            user: 'root',
+            database: 'db'
+          })
+          connection.connect()
+        })
+
+        it('DBM propagation should handle special characters', done => {
+          const connect = connection.query('SELECT 1 + 1 AS solution', () => {
+            try {
+              expect(connect.sql).to.equal(
+                `/*dddbs='~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E',dde='tester',` +
+              `ddps='test',ddpv='8.4.0'*/ SELECT 1 + 1 AS solution`)
+              done()
+            } catch (e) {
+              done(e)
+            }
+          })
+        })
+      })
+      describe('with DBM propagation enabled with full using tracer configurations', () => {
+        let connection
+
+        afterEach((done) => {
+          connection.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
+        })
+
+        beforeEach(async () => {
+          await agent.load('mysql2', [{ dbmPropagationMode: 'full', service: 'post' }])
+          mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
+
+          connection = mysql2.createConnection({
+            host: '127.0.0.1',
+            user: 'root',
+            database: 'db'
+          })
+          connection.connect()
+        })
+
+        it('query text should contain traceparent', done => {
+          let queryText = ''
+          agent.use(traces => {
+            const traceId = traces[0][0].trace_id.toString(16).padStart(32, '0')
+            const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
+
+            expect(queryText).to.equal(
+              `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0',` +
+            `traceparent='01-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
+          }).then(done, done)
+          const connect = connection.query('SELECT 1 + 1 AS solution', () => {
+            queryText = connect.sql
+          })
+        })
+        it('query should inject _dd.dbm_trace_injected into span', done => {
+          agent.use(traces => {
+            expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
+            done()
+          })
+          connection.query('SELECT 1 + 1 AS solution', () => {
+          })
+        })
+      })
+      describe('with DBM propagation enabled with service using a connection pool', () => {
+        let pool
+
+        afterEach((done) => {
+          pool.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
+        })
+
+        beforeEach(async () => {
+          await agent.load('mysql2', [{ dbmPropagationMode: 'service', service: 'post' }])
+          mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
+
+          pool = mysql2.createPool({
+            connectionLimit: 1,
+            host: '127.0.0.1',
+            user: 'root',
+            database: 'db'
+          })
+        })
+
+        it('should contain comment in query text', done => {
+          const queryPool = pool.query('SELECT 1 + 1 AS solution', () => {
+            try {
+              expect(queryPool.sql).to.equal(
+                `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0'*/ SELECT 1 + 1 AS solution`)
+            } catch (e) {
+              done(e)
+            }
+            done()
+          })
+        })
+      })
+      describe('with DBM propagation enabled with service using a connection pool', () => {
+        let pool
+
+        afterEach((done) => {
+          pool.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
+        })
+
+        beforeEach(async () => {
+          await agent.load('mysql2', [{ dbmPropagationMode: 'full', service: 'post' }])
+          mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
+
+          pool = mysql2.createPool({
+            connectionLimit: 1,
+            host: '127.0.0.1',
+            user: 'root',
+            database: 'db'
+          })
+        })
+
+        it('query text should contain traceparent', done => {
+          let queryText = ''
+          agent.use(traces => {
+            const traceId = traces[0][0].trace_id.toString(16).padStart(32, '0')
+            const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
+
+            expect(queryText).to.equal(
+              `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0',` +
+            `traceparent='01-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
+          }).then(done, done)
+          const queryPool = pool.query('SELECT 1 + 1 AS solution', () => {
+            queryText = queryPool.sql
+          })
+        })
+        it('query should inject _dd.dbm_trace_injected into span', done => {
+          agent.use(traces => {
+            expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
+            done()
+          })
+          pool.query('SELECT 1 + 1 AS solution', () => {
+          })
+        })
+      })
     })
   })
 })
