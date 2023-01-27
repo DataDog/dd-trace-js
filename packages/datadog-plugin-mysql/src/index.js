@@ -22,10 +22,10 @@ class MySQLPlugin extends DatabasePlugin {
         'out.port': dbConfig.port
       }
     })
+
     if (this.config.dbmPropagationMode !== 'disabled') {
       if (sqlStatement[0].sql !== undefined) {
-        const key = 'sql'
-        sqlStatement[0][key] = this.injectDbmQuery(sqlStatement[0].sql)
+        sqlStatement[0]['sql'] = this.injectDbmQuery(sqlStatement[0].sql)
       } else sqlStatement[0] = this.injectDbmQuery(sqlStatement[0])
     }
   }
