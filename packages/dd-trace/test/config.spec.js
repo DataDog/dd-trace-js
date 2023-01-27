@@ -65,6 +65,7 @@ describe('Config', () => {
     expect(config).to.have.property('flushInterval', 2000)
     expect(config).to.have.property('flushMinSpans', 1000)
     expect(config).to.have.property('queryStringObfuscation').with.length(2)
+    expect(config).to.have.property('clientIpEnabled', false)
     expect(config).to.have.property('clientIpHeader', null)
     expect(config).to.have.property('sampleRate', 1)
     expect(config).to.have.property('runtimeMetrics', false)
@@ -130,6 +131,7 @@ describe('Config', () => {
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
     process.env.DD_VERSION = '1.0.0'
+    process.env.DD_TRACE_CLIENT_IP_ENABLED = 'true'
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'x-true-client-ip'
     process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '.*'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
@@ -180,6 +182,7 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('queryStringObfuscation', '.*')
+    expect(config).to.have.property('clientIpEnabled', true)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
@@ -281,6 +284,8 @@ describe('Config', () => {
       service: 'service',
       version: '0.1.0',
       env: 'test',
+      clientIpEnabled: true,
+      clientIpHeader: 'x-true-client-ip',
       sampleRate: 0.5,
       rateLimit: 1000,
       samplingRules: [
@@ -341,6 +346,8 @@ describe('Config', () => {
     expect(config.tags).to.have.property('service', 'service')
     expect(config.tags).to.have.property('version', '0.1.0')
     expect(config.tags).to.have.property('env', 'test')
+    expect(config).to.have.property('clientIpEnabled', true)
+    expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.property('flushInterval', 5000)
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('runtimeMetrics', true)
@@ -444,6 +451,8 @@ describe('Config', () => {
     process.env.DD_ENV = 'test'
     process.env.DD_API_KEY = '123'
     process.env.DD_APP_KEY = '456'
+    process.env.DD_TRACE_CLIENT_IP_ENABLED = 'false'
+    process.env.DD_TRACE_CLIENT_IP_HEADER = 'foo-bar-header'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_TRACEPARENT_ENABLED = 'true'
@@ -475,6 +484,8 @@ describe('Config', () => {
       service: 'test',
       version: '1.0.0',
       env: 'development',
+      clientIpEnabled: true,
+      clientIpHeader: 'x-true-client-ip',
       tags: {
         foo: 'foo'
       },
@@ -519,6 +530,8 @@ describe('Config', () => {
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('env', 'development')
+    expect(config).to.have.property('clientIpEnabled', true)
+    expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
