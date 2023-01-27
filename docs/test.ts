@@ -288,6 +288,7 @@ tracer.use('oracledb');
 tracer.use('oracledb', { service: params => `${params.host}-${params.database}` });
 tracer.use('paperplane');
 tracer.use('paperplane', httpServerOptions);
+tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
 tracer.use('pino');

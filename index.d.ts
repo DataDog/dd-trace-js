@@ -691,6 +691,7 @@ interface Plugins {
   "opensearch": plugins.opensearch;
   "oracledb": plugins.oracledb;
   "paperplane": plugins.paperplane;
+  "playwright": plugins.playwright;
   "pg": plugins.pg;
   "pino": plugins.pino;
   "redis": plugins.redis;
@@ -1385,6 +1386,12 @@ declare namespace plugins {
    * [paperplane](https://github.com/articulate/paperplane) module.
    */
   interface paperplane extends HttpServer {}
+
+  /**
+  * This plugin automatically instruments the
+  * [playwright](https://github.com/microsoft/playwright) module.
+  */
+  interface playwright extends Integration {}
 
   /**
    * This plugin automatically instruments the
