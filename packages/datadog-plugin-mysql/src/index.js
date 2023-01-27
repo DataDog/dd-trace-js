@@ -6,22 +6,23 @@ class MySQLPlugin extends DatabasePlugin {
   static get name () { return 'mysql' }
   static get system () { return 'mysql' }
 
-  start ({ sql, conf: dbConfig }) {
-    const service = getServiceName(this.config, dbConfig)
+  start (payload) {
+    const service = getServiceName(this.config, payload.conf)
 
     this.startSpan(`${this.system}.query`, {
       service,
-      resource: sql,
+      resource: payload.sql,
       type: 'sql',
       kind: 'client',
       meta: {
         'db.type': this.system,
-        'db.user': dbConfig.user,
-        'db.name': dbConfig.database,
-        'out.host': dbConfig.host,
-        'out.port': dbConfig.port
+        'db.user': payload.conf.user,
+        'db.name': payload.conf.database,
+        'out.host': payload.conf.host,
+        'out.port': payload.conf.port
       }
     })
+    payload.sql = this.injectDbmQuery(payload.sql, service)
   }
 }
 
