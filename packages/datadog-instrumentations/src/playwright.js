@@ -226,7 +226,7 @@ addHook({
 addHook({
   name: '@playwright/test',
   file: 'lib/dispatcher.js',
-  versions: ['1.18.0 - 1.29.2']
+  versions: ['>=1.18.0  <1.30.0']
 }, dispatcherHook)
 
 addHook({
