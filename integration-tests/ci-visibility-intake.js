@@ -169,17 +169,33 @@ class FakeCiVisIntake extends FakeAgent {
     infoResponse = DEFAULT_INFO_RESPONSE
   }
 
+  gatherPayloads (payloadMatch, gatheringTime = 15000) {
+    const payloads = []
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        this.off('message', messageHandler)
+        resolve(payloads)
+      }, gatheringTime)
+      const messageHandler = (message) => {
+        if (!payloadMatch || payloadMatch(message)) {
+          payloads.push(message)
+        }
+      }
+      this.on('message', messageHandler)
+    })
+  }
+
   payloadReceived (payloadMatch, timeout) {
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
-        this.removeListener('message', messageHandler)
+        this.off('message', messageHandler)
         reject(new Error('Timeout'))
       }, timeout || 15000)
       const messageHandler = (message) => {
         if (!payloadMatch || payloadMatch(message)) {
           clearInterval(timeoutId)
           resolve(message)
-          this.removeListener('message', messageHandler)
+          this.off('message', messageHandler)
         }
       }
       this.on('message', messageHandler)
@@ -203,7 +219,7 @@ class FakeCiVisIntake extends FakeAgent {
         } catch (e) {
           resultReject(e)
         }
-        this.removeListener('message', messageHandler)
+        this.off('message', messageHandler)
       }
     }
     this.on('message', messageHandler)
