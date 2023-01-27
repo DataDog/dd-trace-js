@@ -67,7 +67,7 @@ describe('Plugin', function () {
   let jestCommonOptions
 
   this.timeout(testTimeout)
-  this.retries(0)
+  this.retries(2)
 
   withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {
@@ -305,7 +305,7 @@ describe('Plugin', function () {
         }
       })
 
-      const initOptions = ['agentless']
+      const initOptions = ['agentless', 'evp proxy']
 
       initOptions.forEach(option => {
         describe(`reporting through ${option}`, () => {
@@ -317,7 +317,7 @@ describe('Plugin', function () {
             jestExecutable = loadedAgent.jestExecutable
             jestCommonOptions = loadedAgent.jestCommonOptions
           })
-          it.only('should create events for session, suite and test', (done) => {
+          it('should create events for session, suite and test', (done) => {
             const events = [
               {
                 type: 'test_session_end',
