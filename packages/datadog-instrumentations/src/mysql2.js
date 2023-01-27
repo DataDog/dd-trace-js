@@ -47,7 +47,7 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
       const sqlStatement = cmd
       const sql = cmd.statement ? cmd.statement.query : cmd.sql
 
-      startCh.publish({ sqlStatement: sqlStatement, sql, conf: config })
+      startCh.publish({ sqlStatement, sql, conf: config })
 
       if (this.onResult) {
         const onResult = callbackResource.bind(this.onResult)
