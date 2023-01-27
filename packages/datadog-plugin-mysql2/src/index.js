@@ -22,16 +22,16 @@ class MySQL2Plugin extends DatabasePlugin {
         'out.port': dbConfig.port
       }
     })
-    getPropagation(sqlStatement, service)
+    getPropagation(sqlStatement, service, this)
   }
 }
 
-function getPropagation (sqlStatement, service) {
-  if (this.config.dbmPropagationMode !== 'disabled') {
+function getPropagation (sqlStatement, service, source) {
+  if (source.config.dbmPropagationMode !== 'disabled') {
     if (sqlStatement.statement !== undefined) {
-      sqlStatement.statement.query = this.injectDbmQuery(sqlStatement.statement.query)
+      sqlStatement.statement.query = source.injectDbmQuery(sqlStatement.statement.query, service)
     } else if (sqlStatement.sql) {
-      sqlStatement.sql = this.injectDbmQuery(sqlStatement.sql)
+      sqlStatement.sql = source.injectDbmQuery(sqlStatement.sql, service)
     }
   }
 }
