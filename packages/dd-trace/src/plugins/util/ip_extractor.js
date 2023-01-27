@@ -2,7 +2,7 @@
 
 const BlockList = require('./ip_blocklist')
 const net = require('net')
-const log = require('../log')
+const log = require('../../log')
 
 const ipHeaderList = [
   'x-forwarded-for',

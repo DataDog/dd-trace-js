@@ -10,7 +10,7 @@ const Gateway = require('./gateway/engine')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
-const { extractIp } = require('./ip_extractor')
+const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { block, loadTemplates, loadTemplatesAsync } = require('./blocking')
 

@@ -537,6 +537,17 @@ export declare interface TracerOptions {
      */
     pollInterval?: number,
   }
+
+  /**
+   * Whether to enable client IP collection from relevant IP headers
+   * @default false
+   */
+  clientIpEnabled?: boolean
+
+  /**
+   * Custom header name to source the http.client_ip tag from.
+   */
+  clientIpHeader?: string,
 }
 
 /**
