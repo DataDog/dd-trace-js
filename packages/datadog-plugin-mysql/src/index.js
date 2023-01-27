@@ -22,15 +22,17 @@ class MySQLPlugin extends DatabasePlugin {
         'out.port': dbConfig.port
       }
     })
-
-    if (this.config.dbmPropagationMode !== 'disabled') {
-      if (sqlStatement[0].sql !== undefined) {
-        sqlStatement[0]['sql'] = this.injectDbmQuery(sqlStatement[0].sql)
-      } else sqlStatement[0] = this.injectDbmQuery(sqlStatement[0])
-    }
+    getPropagation(sqlStatement, service)
   }
 }
 
+function getPropagation (sqlStatement, service) {
+  if (this.config.dbmPropagationMode !== 'disabled') {
+    if (sqlStatement[0].sql !== undefined) {
+      sqlStatement[0]['sql'] = this.injectDbmQuery(sqlStatement[0].sql, service)
+    } else sqlStatement[0] = this.injectDbmQuery(sqlStatement[0], service)
+  }
+}
 function getServiceName (config, dbConfig) {
   if (typeof config.service === 'function') {
     return config.service(dbConfig)
