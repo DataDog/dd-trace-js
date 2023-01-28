@@ -4,70 +4,71 @@ const proxyquire = require('proxyquire')
 
 describe('track_event', () => {
   let log
-  let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
+  let rootSpan
   let getRootSpan
   let tracer
+  let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
 
   beforeEach(() => {
     log = {
       warn: sinon.stub()
     }
-    getRootSpan = sinon.stub()
-    tracer = {
-      setUser: sinon.stub(),
+
+    rootSpan = {
       addTags: sinon.stub()
     }
+
+    getRootSpan = sinon.stub().callsFake(() => rootSpan)
+
+    tracer = {
+      setUser: sinon.stub()
+    }
+
     const trackEvent = proxyquire('../../../src/appsec/sdk/track_event', {
       '../../log': log,
       './utils': {
         getRootSpan
       }
     })
+
     trackUserLoginSuccessEvent = trackEvent.trackUserLoginSuccessEvent
     trackUserLoginFailureEvent = trackEvent.trackUserLoginFailureEvent
     trackCustomEvent = trackEvent.trackCustomEvent
   })
 
   describe('trackUserLoginSuccessEvent', () => {
-    it('should call to log.warn with a message when user is not send', () => {
+    it('should log warning when passed invalid user', () => {
       trackUserLoginSuccessEvent(tracer, null, { key: 'value' })
-      expect(log.warn).to.be.calledOnce
-      expect(log.warn).to.be.calledOnceWith('User not provided to trackUserLoginSuccessEvent')
-      expect(tracer.setUser).not.to.be.called
-      expect(tracer.addTags).not.to.be.called
+      trackUserLoginSuccessEvent(tracer, {}, { key: 'value' })
+
+      expect(log.warn).to.have.been.calledTwice
+      expect(log.warn.firstCall).to.have.been.calledWithExactly('Invalid user provided to trackUserLoginSuccessEvent')
+      expect(log.warn.secondCall).to.have.been.calledWithExactly('Invalid user provided to trackUserLoginSuccessEvent')
+      expect(tracer.setUser).to.not.have.been.called
+      expect(rootSpan.addTags).to.not.have.been.called
     })
 
-    it('should call to log.warn with a message when root span is not available', () => {
+    it('should log warning when root span is not available', () => {
+      rootSpan = undefined
+
       trackUserLoginSuccessEvent(tracer, { id: 'user_id' }, { key: 'value' })
-      expect(log.warn).to.be.calledOnce
-      expect(log.warn).to.be.calledOnceWith('Expected root span available in trackUserLoginSuccessEvent')
-      expect(tracer.setUser).not.to.be.called
-      expect(tracer.addTags).not.to.be.called
+
+      expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in trackUserLoginSuccessEvent')
+      expect(tracer.setUser).to.not.have.been.called
     })
 
-    it('should call to setUser', () => {
-      const rootSpan = {
-        addTags: sinon.stub()
-      }
-      getRootSpan.returns(rootSpan)
+    it('should call setUser and addTags with metadata', () => {
       const user = { id: 'user_id' }
-      trackUserLoginSuccessEvent(tracer, user, { key: 'value' })
-      expect(log.warn).not.to.be.called
-      expect(tracer.setUser).to.be.calledOnceWith(user)
-      expect(rootSpan.addTags).to.be.called
-    })
-    it('should call to addTags with metadata', () => {
-      const rootSpan = {
-        addTags: sinon.stub()
-      }
-      getRootSpan.returns(rootSpan)
-      const user = { id: 'user_id' }
+
       trackUserLoginSuccessEvent(tracer, user, {
-        metakey1: 'metaValue1', metakey2: 'metaValue2', metakey3: 'metaValue3'
+        metakey1: 'metaValue1',
+        metakey2: 'metaValue2',
+        metakey3: 'metaValue3'
       })
-      expect(log.warn).not.to.be.called
-      expect(tracer.setUser).to.be.calledOnceWith(user)
-      expect(rootSpan.addTags).to.be.calledOnceWith({
+
+      expect(log.warn).to.not.have.been.called
+      expect(tracer.setUser).to.have.been.calledOnceWithExactly(user)
+      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
         'appsec.events.users.login.success.track': 'true',
         'appsec.events.users.login.success.metakey1': 'metaValue1',
         'appsec.events.users.login.success.metakey2': 'metaValue2',
@@ -76,16 +77,14 @@ describe('track_event', () => {
       })
     })
 
-    it('should call to addTags without metadata', () => {
-      const rootSpan = {
-        addTags: sinon.stub()
-      }
-      getRootSpan.returns(rootSpan)
+    it('should call setUser and addTags without metadata', () => {
       const user = { id: 'user_id' }
+
       trackUserLoginSuccessEvent(tracer, user)
-      expect(log.warn).not.to.be.called
-      expect(tracer.setUser).to.be.calledOnceWith(user)
-      expect(rootSpan.addTags).to.be.calledOnceWith({
+
+      expect(log.warn).to.not.have.been.called
+      expect(tracer.setUser).to.have.been.calledOnceWithExactly(user)
+      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
         'appsec.events.users.login.success.track': 'true',
         'manual.keep': 'true'
       })
@@ -93,34 +92,35 @@ describe('track_event', () => {
   })
 
   describe('trackUserLoginFailureEvent', () => {
-    it('should call to log.warn if userId is not defined', () => {
+    it('should log warning when passed invalid userId', () => {
       trackUserLoginFailureEvent(tracer, null, false)
-      expect(log.warn).to.be.calledOnce
-      expect(log.warn).to.be.calledOnceWith('Invalid userId provided to trackUserLoginFailureEvent')
-      expect(tracer.setUser).not.to.be.called
-      expect(tracer.addTags).not.to.be.called
+      trackUserLoginFailureEvent(tracer, [], false)
+
+      expect(log.warn).to.have.been.calledTwice
+      expect(log.warn.firstCall).to.have.been.calledWithExactly('Invalid userId provided to trackUserLoginFailureEvent')
+      expect(log.warn.secondCall)
+        .to.have.been.calledWithExactly('Invalid userId provided to trackUserLoginFailureEvent')
+      expect(tracer.setUser).to.not.have.been.called
+      expect(rootSpan.addTags).to.not.have.been.called
     })
 
-    it('should call to log.warn if rootSpan is not available', () => {
-      getRootSpan.returns(null)
+    it('should log warning when root span is not available', () => {
+      rootSpan = undefined
+
       trackUserLoginFailureEvent(tracer, 'user_id', false)
-      expect(log.warn).to.be.calledOnce
-      expect(log.warn).to.be.calledOnceWith('Expected root span available in trackUserLoginFailureEvent')
-      expect(tracer.setUser).not.to.be.called
-      expect(tracer.addTags).not.to.be.called
+
+      expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in trackUserLoginFailureEvent')
+      expect(tracer.setUser).to.not.have.been.called
     })
 
-    it('should call to addTags with metadata', () => {
-      const rootSpan = {
-        addTags: sinon.stub()
-      }
-      getRootSpan.returns(rootSpan)
+    it('should call addTags with metadata', () => {
       trackUserLoginFailureEvent(tracer, 'user_id', true, {
         metakey1: 'metaValue1', metakey2: 'metaValue2', metakey3: 'metaValue3'
       })
-      expect(log.warn).not.to.be.called
-      expect(tracer.setUser).not.to.be.called
-      expect(rootSpan.addTags).to.be.calledOnceWith({
+
+      expect(log.warn).to.not.have.been.called
+      expect(tracer.setUser).to.not.have.been.called
+      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
         'appsec.events.users.login.failure.track': 'true',
         'appsec.events.users.login.failure.usr.id': 'user_id',
         'appsec.events.users.login.failure.usr.exists': 'true',
@@ -132,16 +132,13 @@ describe('track_event', () => {
     })
 
     it('should send false `usr.exists` property when the user does not exist', () => {
-      const rootSpan = {
-        addTags: sinon.stub()
-      }
-      getRootSpan.returns(rootSpan)
       trackUserLoginFailureEvent(tracer, 'user_id', false, {
         metakey1: 'metaValue1', metakey2: 'metaValue2', metakey3: 'metaValue3'
       })
-      expect(log.warn).not.to.be.called
-      expect(tracer.setUser).not.to.be.called
-      expect(rootSpan.addTags).to.be.calledOnceWith({
+
+      expect(log.warn).to.not.have.been.called
+      expect(tracer.setUser).to.not.have.been.called
+      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
         'appsec.events.users.login.failure.track': 'true',
         'appsec.events.users.login.failure.usr.id': 'user_id',
         'appsec.events.users.login.failure.usr.exists': 'false',
@@ -152,58 +149,61 @@ describe('track_event', () => {
       })
     })
 
-    it('should call to addTags without metadata', () => {
-      const rootSpan = {
-        addTags: sinon.stub()
-      }
-      getRootSpan.returns(rootSpan)
-      trackUserLoginFailureEvent(tracer, 'user_id', false)
-      expect(log.warn).not.to.be.called
-      expect(tracer.setUser).not.to.be.called
-      expect(rootSpan.addTags).to.be.calledOnceWith({
+    it('should call addTags without metadata', () => {
+      trackUserLoginFailureEvent(tracer, 'user_id', true)
+
+      expect(log.warn).to.not.have.been.called
+      expect(tracer.setUser).to.not.have.been.called
+      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
         'appsec.events.users.login.failure.track': 'true',
         'appsec.events.users.login.failure.usr.id': 'user_id',
-        'appsec.events.users.login.failure.usr.exists': 'false',
+        'appsec.events.users.login.failure.usr.exists': 'true',
         'manual.keep': 'true'
       })
     })
   })
 
   describe('trackCustomEvent', () => {
-    it('should log.warm with null eventName', () => {
+    it('should log warning when passed invalid eventName', () => {
       trackCustomEvent(tracer, null)
-      expect(log.warn).to.be.calledOnce
-      expect(log.warn).to.be.calledOnceWith('Invalid eventName received in trackCustomEvent')
-      expect(tracer.setUser).not.to.be.called
-      expect(tracer.addTags).not.to.be.called
-    })
-
-    it('should log.warm with invalid eventName', () => {
       trackCustomEvent(tracer, { name: 'name' })
-      expect(log.warn).to.be.calledOnce
-      expect(log.warn).to.be.calledOnceWith('Invalid eventName received in trackCustomEvent')
-      expect(tracer.addTags).not.to.be.called
+
+      expect(log.warn).to.have.been.calledTwice
+      expect(log.warn.firstCall).to.have.been.calledWithExactly('Invalid eventName provided to trackCustomEvent')
+      expect(log.warn.secondCall).to.have.been.calledWithExactly('Invalid eventName provided to trackCustomEvent')
+      expect(tracer.setUser).to.not.have.been.called
+      expect(rootSpan.addTags).to.not.have.been.called
     })
 
-    it('should log.warm without root span', () => {
+    it('should log warning when root span is not available', () => {
+      rootSpan = undefined
+
       trackCustomEvent(tracer, 'custom_event')
-      expect(log.warn).to.be.calledOnce
-      expect(log.warn).to.be.calledOnceWith('Expected root span available in trackCustomEvent')
-      expect(tracer.addTags).not.to.be.called
+
+      expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in trackCustomEvent')
+      expect(tracer.setUser).to.not.have.been.called
     })
 
     it('should call addTags with metadata', () => {
-      const rootSpan = {
-        addTags: sinon.stub()
-      }
-      getRootSpan.returns(rootSpan)
       trackCustomEvent(tracer, 'custom_event', { metaKey1: 'metaValue1', metakey2: 'metaValue2' })
-      expect(log.warn).not.to.be.called
-      expect(rootSpan.addTags).to.be.calledOnce
-      expect(rootSpan.addTags).to.be.calledOnceWith({
+
+      expect(log.warn).to.not.have.been.called
+      expect(tracer.setUser).to.not.have.been.called
+      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
         'appsec.events.custom_event.track': 'true',
         'appsec.events.custom_event.metaKey1': 'metaValue1',
         'appsec.events.custom_event.metakey2': 'metaValue2',
+        'manual.keep': 'true'
+      })
+    })
+
+    it('should call addTags without metadata', () => {
+      trackCustomEvent(tracer, 'custom_event')
+
+      expect(log.warn).to.not.have.been.called
+      expect(tracer.setUser).to.not.have.been.called
+      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
+        'appsec.events.custom_event.track': 'true',
         'manual.keep': 'true'
       })
     })

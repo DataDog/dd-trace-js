@@ -5,18 +5,19 @@ const { getRootSpan } = require('./utils')
 const { MANUAL_KEEP } = require('../../../../../ext/tags')
 
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
+  // TODO: better user check here and in _setUser() ?
   if (!user || !user.id) {
-    log.warn('User not provided to trackUserLoginSuccessEvent')
+    log.warn('Invalid user provided to trackUserLoginSuccessEvent')
     return
   }
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
-    log.warn('Expected root span available in trackUserLoginSuccessEvent')
+    log.warn('Root span not available in trackUserLoginSuccessEvent')
     return
   }
 
-  // TODO use sdk._setUser(user, rootSpan) (available in User Blocking PR #2710)
+  // TODO: use sdk._setUser(user, rootSpan) (available in User Blocking PR #2710)
   tracer.setUser(user)
 
   trackEvent(tracer, 'users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan)
@@ -39,7 +40,7 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
 
 function trackCustomEvent (tracer, eventName, metadata) {
   if (!eventName || typeof eventName !== 'string') {
-    log.warn('Invalid eventName received in trackCustomEvent')
+    log.warn('Invalid eventName provided to trackCustomEvent')
     return
   }
 
@@ -48,7 +49,7 @@ function trackCustomEvent (tracer, eventName, metadata) {
 
 function trackEvent (tracer, eventName, fields, sdkMethodName, rootSpan = getRootSpan(tracer)) {
   if (!rootSpan) {
-    log.warn(`Expected root span available in ${sdkMethodName}`)
+    log.warn(`Root span not available in ${sdkMethodName}`)
     return
   }
 

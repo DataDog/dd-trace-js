@@ -7,6 +7,7 @@ const axios = require('axios')
 const appsec = require('../../../src/appsec')
 const tracer = require('../../../../../index')
 const Config = require('../../../src/config')
+
 describe('Appsec SDK', () => {
   describe('calls to external methods', () => {
     let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
@@ -17,30 +18,35 @@ describe('Appsec SDK', () => {
       trackUserLoginSuccessEvent = sinon.stub()
       trackUserLoginFailureEvent = sinon.stub()
       trackCustomEvent = sinon.stub()
+
       const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
         './track_event': { trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent }
       })
+
       appsecSdk = new AppsecSdk(tracer)
     })
 
-    it('trackUserLoginSuccessEvent should cal to track_event trackUserLoginSuccessEvent', () => {
+    it('trackUserLoginSuccessEvent should call track_event trackUserLoginSuccessEvent', () => {
       const user = { id: 'user_id' }
       const metadata = { key: 'value' }
       appsecSdk.trackUserLoginSuccessEvent(user, metadata)
-      expect(trackUserLoginSuccessEvent).to.be.calledOnceWith(tracer, user, metadata)
+
+      expect(trackUserLoginSuccessEvent).to.have.been.calledOnceWithExactly(tracer, user, metadata)
     })
 
-    it('trackUserLoginFailureEvent should cal to track_event trackUserLoginFailureEvent', () => {
+    it('trackUserLoginFailureEvent should call track_event trackUserLoginFailureEvent', () => {
       const user = { id: 'user_id' }
       const metadata = { key: 'value' }
       appsecSdk.trackUserLoginFailureEvent(user, metadata)
-      expect(trackUserLoginFailureEvent).to.be.calledOnceWith(tracer, user, metadata)
+
+      expect(trackUserLoginFailureEvent).to.have.been.calledOnceWithExactly(tracer, user, metadata)
     })
 
-    it('trackCustomEvent should cal to track_event trackCustomEvent', () => {
+    it('trackCustomEvent should call track_event trackCustomEvent', () => {
       const metadata = { key: 'value' }
       appsecSdk.trackCustomEvent('event_name', metadata)
-      expect(trackCustomEvent).to.be.calledOnceWith(tracer, 'event_name', metadata)
+
+      expect(trackCustomEvent).to.have.been.calledOnceWithExactly(tracer, 'event_name', metadata)
     })
   })
 
@@ -49,6 +55,7 @@ describe('Appsec SDK', () => {
     let controller
     let appListener
     let port
+
     function listener (req, res) {
       if (controller) {
         controller(req, res)
@@ -105,17 +112,17 @@ describe('Appsec SDK', () => {
           res.end()
         }
         agent.use(traces => {
-          expect(traces[0][0].meta).not.to.have.property('appsec.events.users.login.success.track', 'true')
+          expect(traces[0][0].meta).to.not.have.property('appsec.events.users.login.success.track', 'true')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
 
-      it('should not track without call to the sdk method', (done) => {
+      it('should not track without calling the sdk method', (done) => {
         controller = (req, res) => {
           res.end()
         }
         agent.use(traces => {
-          expect(traces[0][0].meta).not.to.have.property('appsec.events.users.login.success.track', 'true')
+          expect(traces[0][0].meta).to.not.have.property('appsec.events.users.login.success.track', 'true')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -158,17 +165,17 @@ describe('Appsec SDK', () => {
           res.end()
         }
         agent.use(traces => {
-          expect(traces[0][0].meta).not.to.have.property('appsec.events.users.login.failure.track', 'true')
+          expect(traces[0][0].meta).to.not.have.property('appsec.events.users.login.failure.track', 'true')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
 
-      it('should not track without call to the sdk method', (done) => {
+      it('should not track without calling the sdk method', (done) => {
         controller = (req, res) => {
           res.end()
         }
         agent.use(traces => {
-          expect(traces[0][0].meta).not.to.have.property('appsec.events.users.login.failure.track', 'true')
+          expect(traces[0][0].meta).to.not.have.property('appsec.events.users.login.failure.track', 'true')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
@@ -188,14 +195,14 @@ describe('Appsec SDK', () => {
         axios.get(`http://localhost:${port}/`)
       })
 
-      it('should not track not valid event name', (done) => {
+      it('should not track invalid event name', (done) => {
         controller = (req, res) => {
           tracer.appsec.trackCustomEvent(null, { metakey: 'metaValue' })
           tracer.appsec.trackCustomEvent({ event: 'name' }, { metakey: 'metaValue' })
           res.end()
         }
         agent.use(traces => {
-          expect(traces[0][0].meta).not.to.have.property('manual.keep', 'true')
+          expect(traces[0][0].meta).to.not.have.property('manual.keep', 'true')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
