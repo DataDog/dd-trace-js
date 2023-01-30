@@ -4,9 +4,7 @@ const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
 const getPort = require('get-port')
 const axios = require('axios')
-const appsec = require('../../../src/appsec')
 const tracer = require('../../../../../index')
-const Config = require('../../../src/config')
 
 describe('Appsec SDK', () => {
   describe('calls to external methods', () => {
