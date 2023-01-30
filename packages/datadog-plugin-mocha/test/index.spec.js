@@ -503,7 +503,7 @@ describe('Plugin', () => {
 
       initOptions.forEach(option => {
         describe(`reporting through ${option}`, () => {
-          it.only('should create events for session, modules, suites and test', (done) => {
+          it('should create events for session, modules, suites and test', (done) => {
             const testFilePaths = fs.readdirSync(__dirname)
               .filter(name => name.startsWith('mocha-test-suite-level'))
               .map(relativePath => path.join(__dirname, relativePath))

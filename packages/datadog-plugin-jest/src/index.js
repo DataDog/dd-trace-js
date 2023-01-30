@@ -54,8 +54,8 @@ class JestPlugin extends CiPlugin {
 
     this.addSub('ci:jest:session:start', ({ command, testFrameworkVersion }) => {
       const childOf = getTestParentSpan(this.tracer)
-      const testSessionSpanMetadata = getTestSessionCommonTags(command, testFrameworkVersion || this.tracer._version)
-      const testModuleSpanMetadata = getTestModuleCommonTags(command, testFrameworkVersion || this.tracer._version)
+      const testSessionSpanMetadata = getTestSessionCommonTags(command, testFrameworkVersion)
+      const testModuleSpanMetadata = getTestModuleCommonTags(command, testFrameworkVersion)
 
       this.testSessionSpan = this.tracer.startSpan('jest.test_session', {
         childOf,
@@ -198,6 +198,8 @@ class JestPlugin extends CiPlugin {
       suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
       suiteTags[TEST_COMMAND] = testSuiteSpan.context()._tags[TEST_COMMAND]
       suiteTags[TEST_BUNDLE] = testSuiteSpan.context()._tags[TEST_COMMAND]
+      // This is a hack to get good time resolution on test events, while keeping
+      // the test event as the root span of its trace.
       childOf = getTestParentSpan(this.tracer)
       childOf._trace.startTime = testSuiteSpan.context()._trace.startTime
       childOf._trace.ticks = testSuiteSpan.context()._trace.ticks

@@ -51,9 +51,9 @@ class MochaPlugin extends CiPlugin {
       })
     })
 
-    this.addSub('ci:mocha:session:start', (command) => {
+    this.addSub('ci:mocha:session:start', ({ command, frameworkVersion }) => {
       const childOf = getTestParentSpan(this.tracer)
-      const testSessionSpanMetadata = getTestSessionCommonTags(command, this.tracer._version)
+      const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion)
 
       this.command = command
       this.testSessionSpan = this.tracer.startSpan('mocha.test_session', {
@@ -65,7 +65,7 @@ class MochaPlugin extends CiPlugin {
         }
       })
 
-      const testModuleSpanMetadata = getTestModuleCommonTags(command, this.tracer._version)
+      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion)
       this.testModuleSpan = this.tracer.startSpan('mocha.test_module', {
         childOf: this.testSessionSpan,
         tags: {

@@ -246,38 +246,39 @@ function getCodeOwnersForFilename (filename, entries) {
   return null
 }
 
-function getTestModuleCommonTags (command, frameworkVersion) {
+function getTestLevelCommonTags (command, testFrameworkVersion) {
   return {
-    [SPAN_TYPE]: 'test_module_end',
-    [TEST_TYPE]: 'test',
-    [RESOURCE_NAME]: `test_module.${command}`,
-    [TEST_FRAMEWORK_VERSION]: frameworkVersion,
+    [TEST_FRAMEWORK_VERSION]: testFrameworkVersion,
     [LIBRARY_VERSION]: ddTraceVersion,
     [TEST_COMMAND]: command,
-    [TEST_BUNDLE]: command
+    [TEST_TYPE]: 'test'
   }
 }
 
-function getTestSessionCommonTags (command, frameworkVersion) {
+function getTestSessionCommonTags (command, testFrameworkVersion) {
   return {
     [SPAN_TYPE]: 'test_session_end',
-    [TEST_TYPE]: 'test',
     [RESOURCE_NAME]: `test_session.${command}`,
-    [TEST_FRAMEWORK_VERSION]: frameworkVersion,
-    [LIBRARY_VERSION]: ddTraceVersion,
-    [TEST_COMMAND]: command
+    ...getTestLevelCommonTags(command, testFrameworkVersion)
   }
 }
 
-function getTestSuiteCommonTags (command, frameworkVersion, testSuite) {
+function getTestModuleCommonTags (command, testFrameworkVersion) {
+  return {
+    [SPAN_TYPE]: 'test_module_end',
+    [RESOURCE_NAME]: `test_module.${command}`,
+    [TEST_BUNDLE]: command,
+    ...getTestLevelCommonTags(command, testFrameworkVersion)
+  }
+}
+
+function getTestSuiteCommonTags (command, testFrameworkVersion, testSuite) {
   return {
     [SPAN_TYPE]: 'test_suite_end',
-    [TEST_TYPE]: 'test',
     [RESOURCE_NAME]: `test_suite.${testSuite}`,
-    [TEST_FRAMEWORK_VERSION]: frameworkVersion,
-    [LIBRARY_VERSION]: ddTraceVersion,
+    [TEST_BUNDLE]: command,
     [TEST_SUITE]: testSuite,
-    [TEST_COMMAND]: command
+    ...getTestLevelCommonTags(command, testFrameworkVersion)
   }
 }
 
