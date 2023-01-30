@@ -122,7 +122,7 @@ module.exports = {
         [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID })
       }
 
-      const isTag = JENKINS_GIT_BRANCH && JENKINS_GIT_BRANCH.includes('tags')
+      const isTag = JENKINS_GIT_BRANCH && JENKINS_GIT_BRANCH.includes('tags/')
       const refKey = isTag ? GIT_TAG : GIT_BRANCH
       const ref = normalizeRef(JENKINS_GIT_BRANCH)
 
@@ -216,7 +216,8 @@ module.exports = {
         [GIT_REPOSITORY_URL]: CIRCLE_REPOSITORY_URL,
         [CI_JOB_URL]: CIRCLE_BUILD_URL,
         [CI_WORKSPACE_PATH]: CIRCLE_WORKING_DIRECTORY,
-        [CIRCLE_TAG ? GIT_TAG : GIT_BRANCH]: CIRCLE_TAG || CIRCLE_BRANCH,
+        [GIT_TAG]: CIRCLE_TAG,
+        [GIT_BRANCH]: CIRCLE_BRANCH,
         [CI_ENV_VARS]: JSON.stringify({
           CIRCLE_WORKFLOW_ID,
           CIRCLE_BUILD_NUM
@@ -249,7 +250,7 @@ module.exports = {
       const jobUrl = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks`
 
       const ref = GITHUB_HEAD_REF || GITHUB_REF || ''
-      const refKey = ref.includes('tags') ? GIT_TAG : GIT_BRANCH
+      const refKey = ref.includes('tags/') ? GIT_TAG : GIT_BRANCH
 
       tags = {
         [CI_PIPELINE_ID]: GITHUB_RUN_ID,
@@ -305,13 +306,12 @@ module.exports = {
       }
 
       if (APPVEYOR_REPO_PROVIDER === 'github') {
-        const refKey = APPVEYOR_REPO_TAG_NAME ? GIT_TAG : GIT_BRANCH
-        const ref = APPVEYOR_REPO_TAG_NAME || APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH || APPVEYOR_REPO_BRANCH
         tags = {
           ...tags,
           [GIT_REPOSITORY_URL]: `https://github.com/${APPVEYOR_REPO_NAME}.git`,
           [GIT_COMMIT_SHA]: APPVEYOR_REPO_COMMIT,
-          [refKey]: ref
+          [GIT_TAG]: APPVEYOR_REPO_TAG_NAME,
+          [GIT_BRANCH]: APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH || APPVEYOR_REPO_BRANCH
         }
       }
     }
@@ -340,7 +340,7 @@ module.exports = {
       } = env
 
       const ref = SYSTEM_PULLREQUEST_SOURCEBRANCH || BUILD_SOURCEBRANCH || BUILD_SOURCEBRANCHNAME
-      const refKey = (ref || '').includes('tags') ? GIT_TAG : GIT_BRANCH
+      const refKey = (ref || '').includes('tags/') ? GIT_TAG : GIT_BRANCH
 
       tags = {
         [CI_PROVIDER_NAME]: 'azurepipelines',
@@ -419,10 +419,6 @@ module.exports = {
         BITRISE_GIT_MESSAGE
       } = env
 
-      const isTag = !!BITRISE_GIT_TAG
-      const refKey = isTag ? GIT_TAG : GIT_BRANCH
-      const ref = BITRISE_GIT_TAG || BITRISEIO_GIT_BRANCH_DEST || BITRISE_GIT_BRANCH
-
       tags = {
         [CI_PROVIDER_NAME]: 'bitrise',
         [CI_PIPELINE_ID]: BITRISE_BUILD_SLUG,
@@ -432,7 +428,8 @@ module.exports = {
         [GIT_COMMIT_SHA]: BITRISE_GIT_COMMIT || GIT_CLONE_COMMIT_HASH,
         [GIT_REPOSITORY_URL]: BITRISE_GIT_REPOSITORY_URL,
         [CI_WORKSPACE_PATH]: BITRISE_SOURCE_DIR,
-        [refKey]: ref,
+        [GIT_TAG]: BITRISE_GIT_TAG,
+        [GIT_BRANCH]: BITRISEIO_GIT_BRANCH_DEST || BITRISE_GIT_BRANCH,
         [GIT_COMMIT_MESSAGE]: BITRISE_GIT_MESSAGE
       }
     }
@@ -454,9 +451,6 @@ module.exports = {
         BUILDKITE_MESSAGE
       } = env
 
-      const ref = BUILDKITE_TAG || BUILDKITE_BRANCH
-      const refKey = BUILDKITE_TAG ? GIT_TAG : GIT_BRANCH
-
       tags = {
         [CI_PROVIDER_NAME]: 'buildkite',
         [CI_PIPELINE_ID]: BUILDKITE_BUILD_ID,
@@ -467,7 +461,8 @@ module.exports = {
         [GIT_COMMIT_SHA]: BUILDKITE_COMMIT,
         [CI_WORKSPACE_PATH]: BUILDKITE_BUILD_CHECKOUT_PATH,
         [GIT_REPOSITORY_URL]: BUILDKITE_REPO,
-        [refKey]: ref,
+        [GIT_TAG]: BUILDKITE_TAG,
+        [GIT_BRANCH]: BUILDKITE_BRANCH,
         [GIT_COMMIT_AUTHOR_NAME]: BUILDKITE_BUILD_AUTHOR,
         [GIT_COMMIT_AUTHOR_EMAIL]: BUILDKITE_BUILD_AUTHOR_EMAIL,
         [GIT_COMMIT_MESSAGE]: BUILDKITE_MESSAGE,
@@ -493,10 +488,6 @@ module.exports = {
         TRAVIS_COMMIT_MESSAGE
       } = env
 
-      const isTag = !!TRAVIS_TAG
-      const ref = TRAVIS_TAG || TRAVIS_PULL_REQUEST_BRANCH || TRAVIS_BRANCH
-      const refKey = isTag ? GIT_TAG : GIT_BRANCH
-
       tags = {
         [CI_PROVIDER_NAME]: 'travisci',
         [CI_JOB_URL]: TRAVIS_JOB_WEB_URL,
@@ -507,7 +498,8 @@ module.exports = {
         [GIT_COMMIT_SHA]: TRAVIS_COMMIT,
         [GIT_REPOSITORY_URL]: `https://github.com/${TRAVIS_REPO_SLUG}.git`,
         [CI_WORKSPACE_PATH]: TRAVIS_BUILD_DIR,
-        [refKey]: ref,
+        [GIT_TAG]: TRAVIS_TAG,
+        [GIT_BRANCH]: TRAVIS_PULL_REQUEST_BRANCH || TRAVIS_BRANCH,
         [GIT_COMMIT_MESSAGE]: TRAVIS_COMMIT_MESSAGE
       }
     }
