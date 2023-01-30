@@ -71,10 +71,6 @@ function reset () {
 
 function onError (err) {
   if (enabled) {
-    if (err instanceof Function) {
-      err = err()
-    }
-
     if (typeof err !== 'object' || !err) {
       err = String(err)
     } else if (!err.stack) {

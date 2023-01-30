@@ -64,7 +64,7 @@ const log = {
 
   error (err) {
     if (errorChannel.hasSubscribers) {
-      errorChannel.publish(err)
+      errorChannel.publish(processMsg(err))
     }
     return this
   },
