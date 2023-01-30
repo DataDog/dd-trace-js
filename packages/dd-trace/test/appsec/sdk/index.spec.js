@@ -35,11 +35,12 @@ describe('Appsec SDK', () => {
     })
 
     it('trackUserLoginFailureEvent should call track_event trackUserLoginFailureEvent', () => {
-      const user = { id: 'user_id' }
+      const userId = 'user_id'
+      const exists = false
       const metadata = { key: 'value' }
-      appsecSdk.trackUserLoginFailureEvent(user, metadata)
+      appsecSdk.trackUserLoginFailureEvent(userId, exists, metadata)
 
-      expect(trackUserLoginFailureEvent).to.have.been.calledOnceWithExactly(tracer, user, metadata)
+      expect(trackUserLoginFailureEvent).to.have.been.calledOnceWithExactly(tracer, userId, exists, metadata)
     })
 
     it('trackCustomEvent should call track_event trackCustomEvent', () => {
@@ -61,8 +62,6 @@ describe('Appsec SDK', () => {
         controller(req, res)
       }
     }
-    before(async () => {
-    })
 
     before(async () => {
       port = await getPort()
@@ -79,14 +78,6 @@ describe('Appsec SDK', () => {
     after(() => {
       appListener.close()
       return agent.close({ ritmReset: false })
-    })
-
-    beforeEach(() => {
-      appsec.enable(new Config({
-        appsec: {
-          enabled: true
-        }
-      }))
     })
 
     describe('trackUserLoginSuccessEvent', () => {
