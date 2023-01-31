@@ -12,7 +12,10 @@ const {
   TEST_SESSION_ID,
   TEST_COMMAND,
   TEST_SUITE_ID,
-  getTestSuiteCommonTags
+  getTestSuiteCommonTags,
+  getTestModuleCommonTags,
+  TEST_MODULE_ID,
+  TEST_BUNDLE
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -42,10 +45,22 @@ class PlaywrightPlugin extends CiPlugin {
           ...testSessionSpanMetadata
         }
       })
+      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion)
+      this.testModuleSpan = this.tracer.startSpan('playwright.test_module', {
+        childOf: this.testSessionSpan,
+        tags: {
+          [COMPONENT]: this.constructor.name,
+          ...this.testEnvironmentMetadata,
+          ...testModuleSpanMetadata
+        }
+      })
     })
 
     this.addSub('ci:playwright:session:finish', ({ status, onDone }) => {
+      this.testModuleSpan.setTag(TEST_STATUS, status)
       this.testSessionSpan.setTag(TEST_STATUS, status)
+
+      this.testModuleSpan.finish()
       this.testSessionSpan.finish()
       finishAllTraceSpans(this.testSessionSpan)
       this.tracer._exporter.flush(onDone)
@@ -62,7 +77,7 @@ class PlaywrightPlugin extends CiPlugin {
       )
 
       const testSuiteSpan = this.tracer.startSpan('playwright.test_suite', {
-        childOf: this.testSessionSpan,
+        childOf: this.testModuleSpan,
         tags: {
           [COMPONENT]: this.constructor.name,
           ...this.testEnvironmentMetadata,
@@ -132,14 +147,21 @@ class PlaywrightPlugin extends CiPlugin {
     const testSuiteTags = {}
     const testSuiteSpan = this._testSuites.get(testSuite)
     if (testSuiteSpan) {
-      const testSuiteId = testSuiteSpan.context()._spanId.toString(10)
+      const testSuiteId = testSuiteSpan.context().toSpanId()
       testSuiteTags[TEST_SUITE_ID] = testSuiteId
     }
 
     if (this.testSessionSpan) {
-      const testSessionId = this.testSessionSpan.context()._traceId.toString(10)
+      const testSessionId = this.testSessionSpan.context().toTraceId()
       testSuiteTags[TEST_SESSION_ID] = testSessionId
       testSuiteTags[TEST_COMMAND] = this.command
+    }
+
+    if (this.testModuleSpan) {
+      const testModuleId = this.testModuleSpan.context().toSpanId()
+      testSuiteTags[TEST_MODULE_ID] = testModuleId
+      testSuiteTags[TEST_COMMAND] = this.command
+      testSuiteTags[TEST_BUNDLE] = this.command
     }
 
     return super.startTestSpan(testName, testSuite, testSuiteTags, childOf)
