@@ -397,6 +397,24 @@ const tracer = require('dd-trace').init({
 })
 ```
 
+<h3 id="span-tag">Span Tags</h3>
+The Datadog UI uses tags to set span level metadata. Custom tags may be set by grabbing the active span from the global tracer and setting a tag with `setTag` method.
+
+For example:
+```javascript
+app.get('/shopping_cart/:customer_id', (req, res) => {
+  // Get the active span
+  const span = tracer.scope().active()
+  if (span !== null) {
+    // customer_id -> 254889
+    span.setTag('customer.id', req.params.customer_id)
+  }
+})
+```
+[Video guide](https://youtu.be/pguPbIDN6hY)
+
+[This](https://youtu.be/gA68coge3Ro) shows some of the other ways to add span tags.
+
 <h3 id="span-hooks">Span Hooks</h3>
 
 In some cases, it's necessary to update the metadata of a span created by one of the built-in integrations. This is possible using span hooks registered by integration. Each hook provides the span as the first argument and other contextual objects as additional arguments.
@@ -414,6 +432,7 @@ tracer.use('express', {
   }
 })
 ```
+[Video guide](https://youtu.be/wtt5Zz7aZhk)
 
 Right now this functionality is limited to Web frameworks.
 
