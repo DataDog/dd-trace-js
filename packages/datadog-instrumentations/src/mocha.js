@@ -39,6 +39,7 @@ const testFileToSuiteAr = new Map()
 const originalCoverageMap = createCoverageMap()
 
 let suitesToSkip = []
+let mochaVersion
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -128,7 +129,7 @@ function mochaHook (Runner) {
     this.once('start', testRunAsyncResource.bind(function () {
       const processArgv = process.argv.slice(2).join(' ')
       const command = `mocha ${processArgv}`
-      testSessionStartCh.publish(command)
+      testSessionStartCh.publish({ command, frameworkVersion: mochaVersion })
     }))
 
     this.on('suite', function (suite) {
@@ -315,12 +316,12 @@ addHook({
   file: 'lib/mocha.js'
 }, (Mocha) => {
   const mochaRunAsyncResource = new AsyncResource('bound-anonymous-fn')
-
   /**
    * Get ITR configuration and skippable suites
    * If ITR is disabled, `onDone` is called immediately on the subscriber
    */
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
+    mochaVersion = this.version
     if (!itrConfigurationCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
