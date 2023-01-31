@@ -218,9 +218,19 @@ function cliWrapper (cli) {
 
     const isSuitesSkipped = !!skippableSuites.length
 
+    let testFrameworkVersion
+    try {
+      testFrameworkVersion = this.getVersion()
+    } catch (e) {
+      try {
+        testFrameworkVersion = this.default.getVersion()
+      } catch (e) {
+        // ignore errors
+      }
+    }
     const processArgv = process.argv.slice(2).join(' ')
     sessionAsyncResource.runInAsyncScope(() => {
-      testSessionStartCh.publish(`jest ${processArgv}`)
+      testSessionStartCh.publish({ command: `jest ${processArgv}`, testFrameworkVersion })
     })
 
     const result = await runCLI.apply(this, arguments)
