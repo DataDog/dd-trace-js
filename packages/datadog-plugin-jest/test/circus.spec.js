@@ -22,7 +22,8 @@ const {
   LIBRARY_VERSION,
   TEST_COMMAND,
   TEST_SUITE_ID,
-  TEST_SESSION_ID
+  TEST_SESSION_ID,
+  TEST_MODULE_ID
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { version: ddTraceVersion } = require('../../../package.json')
@@ -324,6 +325,11 @@ describe('Plugin', function () {
                 spanResourceMatch: /^test_session/
               },
               {
+                type: 'test_module_end',
+                status: 'pass',
+                spanResourceMatch: /^test_module/
+              },
+              {
                 type: 'test_suite_end',
                 status: 'pass',
                 suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js',
@@ -353,13 +359,21 @@ describe('Plugin', function () {
                 if (type === 'test_session_end') {
                   expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
                   expect(span[TEST_SUITE_ID]).to.equal(undefined)
+                  expect(span[TEST_MODULE_ID]).to.equal(undefined)
                   expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+                }
+                if (type === 'test_module_id') {
+                  expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
+                  expect(span[TEST_SUITE_ID]).to.equal(undefined)
+                  expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+                  expect(span[TEST_MODULE_ID]).not.to.equal(undefined)
                 }
                 if (type === 'test_suite_end') {
                   expect(span.meta[TEST_SUITE]).to.equal(suite)
                   expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
                   expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
                   expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+                  expect(span[TEST_MODULE_ID]).not.to.equal(undefined)
                 }
                 if (type === 'test') {
                   expect(span.meta[TEST_SUITE]).to.equal(suite)
@@ -367,6 +381,7 @@ describe('Plugin', function () {
                   expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
                   expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
                   expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+                  expect(span[TEST_MODULE_ID]).not.to.equal(undefined)
                 }
               }, { timeoutMs: assertionTimeout, spanResourceMatch })
             })
