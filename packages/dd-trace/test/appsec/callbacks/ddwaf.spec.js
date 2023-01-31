@@ -117,7 +117,7 @@ describe('WAFCallback', () => {
         '_dd.appsec.event_rules.loaded': 3,
         '_dd.appsec.event_rules.error_count': 2,
         '_dd.appsec.event_rules.errors': '{"invalid rule":["id1","id2"]}',
-        'manual.keep': true
+        'manual.keep': 'true'
       })
       expect(waf.ddwaf).to.equal(ddwaf)
       expect(waf.wafContextCache).to.be.an.instanceOf(WeakMap)
