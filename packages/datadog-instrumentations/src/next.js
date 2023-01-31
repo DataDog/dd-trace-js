@@ -60,6 +60,18 @@ function wrapRenderErrorToHTML (renderErrorToHTML) {
   }
 }
 
+function wrapFindPageComponentsWithObjectParams(findPageComponents) {
+  return function (ctx) {
+    const result = findPageComponents.apply(this, arguments)
+
+    if (result) {
+      pageLoadChannel.publish({ page: getPagePath(ctx.pathname) })
+    }
+
+    return result
+  }
+}
+
 function wrapFindPageComponents (findPageComponents) {
   return function (pathname, query) {
     const result = findPageComponents.apply(this, arguments)
@@ -127,7 +139,7 @@ function finish (req, res, result, err) {
   return result
 }
 
-addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({ name: 'next', versions: ['>=11.1 <12.2.6'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
@@ -135,6 +147,18 @@ addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js'
   shimmer.wrap(Server.prototype, 'renderToResponse', wrapRenderToResponse)
   shimmer.wrap(Server.prototype, 'renderErrorToResponse', wrapRenderErrorToResponse)
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
+
+  return nextServer
+})
+
+addHook({ name: 'next', versions: ['>=12.2.6'], file: 'dist/server/next-server.js' }, nextServer => {
+  const Server = nextServer.default
+
+  shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
+  shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequest)
+  shimmer.wrap(Server.prototype, 'renderToResponse', wrapRenderToResponse)
+  shimmer.wrap(Server.prototype, 'renderErrorToResponse', wrapRenderErrorToResponse)
+  shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponentsWithObjectParams)
 
   return nextServer
 })
