@@ -115,6 +115,8 @@ export declare interface Tracer extends opentracing.Tracer {
    * @returns {Tracer} The Tracer instance for chaining.
    */
   setUser (user: User): Tracer;
+
+  appsec: Appsec;
 }
 
 export declare interface TraceOptions extends Analyzable {
@@ -591,6 +593,36 @@ export declare interface User {
    * Custom fields to attach to the user (RBAC, Oauth, etc…).
    */
   [key: string]: string | undefined
+}
+
+export declare interface Appsec {
+  /**
+   * Links a successful login event to the current trace. Will link the passed user to the current trace with Appsec.setUser() internally.
+   * @param {User} user Properties of the authenticated user. Accepts custom fields.
+   * @param {[key: string]: string} metadata Custom fields to link to the login success event.
+   *
+   * @beta This method is in beta and could change in future versions.
+   */
+  trackUserLoginSuccessEvent(user: User, metadata?: { [key: string]: string }): void
+
+  /**
+   * Links a failed login event to the current trace.
+   * @param {string} userId The user id of the attemped login.
+   * @param {boolean} exists If the user id exists.
+   * @param {[key: string]: string} metadata Custom fields to link to the login failure event.
+   *
+   * @beta This method is in beta and could change in future versions.
+   */
+  trackUserLoginFailureEvent(userId: string, exists: boolean, metadata?: { [key: string]: string }): void
+
+  /**
+   * Links a custom event to the current trace.
+   * @param {string} eventName The name of the event.
+   * @param {[key: string]: string} metadata Custom fields to link to the event.
+   *
+   * @beta This method is in beta and could change in future versions.
+   */
+  trackCustomEvent(eventName: string, metadata?: { [key: string]: string }): void
 }
 
 /** @hidden */

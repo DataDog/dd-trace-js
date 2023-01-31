@@ -37,7 +37,7 @@ class WAFCallback {
     Reporter.metricsQueue.set('_dd.appsec.event_rules.error_count', failed)
     if (failed) Reporter.metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(errors))
 
-    Reporter.metricsQueue.set('manual.keep', true)
+    Reporter.metricsQueue.set('manual.keep', 'true')
 
     this.wafContextCache = new WeakMap()
 
