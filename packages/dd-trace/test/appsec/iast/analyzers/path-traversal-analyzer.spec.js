@@ -317,7 +317,7 @@ describe('integration test', () => {
       if (fd && fd.close) {
         fd.close()
       } else {
-        fs.close(fd)
+        fs.close(fd, () => {})
       }
     }, __filename, 'r')
   })
@@ -395,15 +395,16 @@ describe('integration test', () => {
 
     runFsMethodTestThreeWay('rmdir', 0, null, dirname)
   })
+  if (fs.rm) {
+    describe('test rm', () => {
+      const filename = path.join(os.tmpdir(), 'test-rmdir')
+      beforeEach(() => {
+        fs.writeFileSync(filename, '')
+      })
 
-  describe('test rm', () => {
-    const filename = path.join(os.tmpdir(), 'test-rmdir')
-    beforeEach(() => {
-      fs.writeFileSync(filename, '')
+      runFsMethodTestThreeWay('rm', 0, null, filename)
     })
-
-    runFsMethodTestThreeWay('rm', 0, null, filename)
-  })
+  }
 
   describe('test stat', () => {
     runFsMethodTestThreeWay('stat', 0, null, __filename)
