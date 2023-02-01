@@ -4,7 +4,9 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 
 const withTopologies = fn => {
-  withVersions('mongodb-core', 'mongodb', (version, moduleName) => {
+  const isOldNode = semver.satisfies(process.version, '<=12')
+  const range = isOldNode ? '>=2 <5' : '>=2'
+  withVersions('mongodb-core', 'mongodb', range, (version, moduleName) => {
     describe('using the default topology', () => {
       fn(async () => {
         const { MongoClient } = require(`../../../versions/${moduleName}@${version}`).get()
