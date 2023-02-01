@@ -225,10 +225,16 @@ describe('Plugin', () => {
           })
 
           it('should run the callback in the parent context', done => {
-            collection.insertOne({ a: 1 }, {}, () => {
+            const insertPromise = collection.insertOne({ a: 1 }, {}, () => {
               expect(tracer.scope().active()).to.be.null
               done()
             })
+            if (insertPromise && insertPromise.then) {
+              insertPromise.then(() => {
+                expect(tracer.scope().active()).to.be.null
+                done()
+              })
+            }
           })
         })
       })
