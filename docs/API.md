@@ -405,15 +405,15 @@ For example:
 app.get('/shopping_cart/:customer_id', (req, res) => {
   // Get the active span
   const span = tracer.scope().active()
-  if (span !== null) {
+  if (span) {
     // customer_id -> 254889
     span.setTag('customer.id', req.params.customer_id)
   }
 })
 ```
-[Video guide](https://youtu.be/pguPbIDN6hY)
+Related video guide: [![Creating Custom Spans for Method-Level Visibility](https://img.youtube.com/vi/pguPbIDN6hY/hqdefault.jpg)](https://youtu.be/pguPbIDN6hY)
 
-[This](https://youtu.be/gA68coge3Ro) shows some of the other ways to add span tags.
+Alternatie ways of customizing spans: [![Adding Custom Tags to Spans](https://img.youtube.com/vi/gA68coge3Ro/hqdefault.jpg)](https://youtu.be/gA68coge3Ro)
 
 <h3 id="span-hooks">Span Hooks</h3>
 
@@ -432,7 +432,7 @@ tracer.use('express', {
   }
 })
 ```
-[Video guide](https://youtu.be/wtt5Zz7aZhk)
+Related video guide: [![Modifying a Span Using Hooks](https://img.youtube.com/vi/wtt5Zz7aZhk/hqdefault.jpg)](https://youtu.be/wtt5Zz7aZhk)
 
 Right now this functionality is limited to Web frameworks.
 
