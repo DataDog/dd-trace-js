@@ -5,7 +5,7 @@ const proxyquire = require('proxyquire')
 const http = require('http')
 const { once } = require('events')
 const { storage } = require('../../../datadog-core')
-const os = require('node:os')
+const os = require('os')
 
 let traceAgent
 
