@@ -4,6 +4,7 @@ const { exec, execSync } = require('child_process')
 
 const getPort = require('get-port')
 const { assert } = require('chai')
+const semver = require('semver')
 
 const {
   createSandbox,
@@ -14,7 +15,10 @@ const { FakeCiVisIntake } = require('./ci-visibility-intake')
 const webAppServer = require('./ci-visibility/web-app-server')
 const { TEST_STATUS } = require('../packages/dd-trace/src/plugins/util/test')
 
-const versions = ['1.18.0', 'latest']
+// TODO: remove when 2.x support is removed.
+// This is done because from playwright@>=1.22.0 node 12 is not supported
+const isOldNode = semver.satisfies(process.version, '<=12')
+const versions = ['1.18.0', isOldNode ? '1.21.0' : 'latest']
 
 versions.forEach((version) => {
   describe(`playwright@${version}`, () => {
