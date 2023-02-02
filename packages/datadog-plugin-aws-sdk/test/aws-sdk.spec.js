@@ -81,7 +81,21 @@ describe('Plugin', () => {
           })
         })
 
-        if (semver.intersects(version, '>=2.3.0 <3')) {
+        if (!semver.intersects(version, '<3')) {
+          it('should instrument service methods using promises', (done) => {
+            agent.use(traces => {
+              const span = sort(traces[0])[0]
+
+              expect(span).to.include({
+                name: 'aws.request',
+                resource: 'listBuckets',
+                service: 'test-aws-s3'
+              })
+            }).then(done, done)
+
+            s3.listBuckets({}).catch(done)
+          })
+        } else if (!semver.intersects(version, '<2.3.0')) {
           it('should instrument service methods using promise()', (done) => {
             agent.use(traces => {
               const span = sort(traces[0])[0]

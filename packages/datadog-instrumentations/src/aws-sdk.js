@@ -39,31 +39,28 @@ function wrapRequest (send) {
   }
 }
 
-function wrapSmithyClient (SmithyClient) {
-  class Client extends SmithyClient {
-    send (command, ...args) {
-      const cb = args[args.length - 1]
+function wrapSmithySend (send) {
+  return function (command, ...args) {
+    const cb = args[args.length - 1]
+    const innerAr = new AsyncResource('apm:aws:request:inner')
+    const outerAr = new AsyncResource('apm:aws:request:outer')
+    const serviceIdentifier = this.config.serviceId.toLowerCase()
+    const channelSuffix = getChannelSuffix(serviceIdentifier)
+    const commandName = command.constructor.name
+    const clientName = this.constructor.name.replace(/Client$/, '')
+    const operation = `${commandName[0].toLowerCase()}${commandName.slice(1).replace(/Command$/, '')}`
+    const request = {
+      operation,
+      params: command.input
+    }
 
-      // TODO: support promises
-      if (typeof cb !== 'function') return super.send(command, ...args)
+    const startCh = channel(`apm:aws:request:start:${channelSuffix}`)
+    const regionCh = channel(`apm:aws:request:region:${channelSuffix}`)
+    const completeChannel = channel(`apm:aws:request:complete:${channelSuffix}`)
+    const responseStartChannel = channel(`apm:aws:response:start:${channelSuffix}`)
+    const responseFinishChannel = channel(`apm:aws:response:finish:${channelSuffix}`)
 
-      const outerAr = new AsyncResource('apm:aws:request:inner')
-      const serviceIdentifier = this.config.serviceId.toLowerCase()
-      const channelSuffix = getChannelSuffix(serviceIdentifier)
-      const commandName = command.constructor.name
-      const clientName = this.constructor.name.replace(/Client$/, '')
-      const operation = `${commandName[0].toLowerCase()}${commandName.slice(1).replace(/Command$/, '')}`
-      const request = {
-        operation,
-        params: command.input
-      }
-
-      const startCh = channel(`apm:aws:request:start:${channelSuffix}`)
-      const regionCh = channel(`apm:aws:request:region:${channelSuffix}`)
-      const completeChannel = channel(`apm:aws:request:complete:${channelSuffix}`)
-      const responseStartChannel = channel(`apm:aws:response:start:${channelSuffix}`)
-      const responseFinishChannel = channel(`apm:aws:response:finish:${channelSuffix}`)
-
+    return innerAr.runInAsyncScope(() => {
       startCh.publish({
         serviceIdentifier,
         operation,
@@ -76,35 +73,41 @@ function wrapSmithyClient (SmithyClient) {
         regionCh.publish(region)
       })
 
-      // There is no sync API so we can bind the callback directly.
-      args[args.length - 1] = function (err, result) {
-        const response = {
-          request,
-          error: err,
-          data: result, // TODO: is this needed?
-          requestId: result && result.$metadata.requestId,
-          ...result
+      if (typeof cb === 'function') {
+        args[args.length - 1] = function (err, result) {
+          const message = getMessage(request, err, result)
+
+          completeChannel.publish(message)
+
+          outerAr.runInAsyncScope(() => {
+            responseStartChannel.publish(message)
+
+            cb.apply(this, arguments)
+
+            if (message.needsFinish) {
+              responseFinishChannel.publish(message.response.error)
+            }
+          })
         }
-        const message = { request, response }
-
-        completeChannel.publish(message)
-
-        outerAr.runInAsyncScope(() => {
-          responseStartChannel.publish(message)
-
-          cb.apply(this, arguments)
-
-          if (message.needsFinish) {
-            responseFinishChannel.publish(response.error)
-          }
-        })
+      } else { // always a promise
+        return send.call(this, command, ...args)
+          .then(
+            result => {
+              const message = getMessage(request, null, result)
+              completeChannel.publish(message)
+              return result
+            },
+            error => {
+              const message = getMessage(request, error)
+              completeChannel.publish(message)
+              throw error
+            }
+          )
       }
 
-      return super.send(command, ...args)
-    }
+      return send.call(this, command, ...args)
+    })
   }
-
-  return Client
 }
 
 function wrapCb (cb, serviceName, request, ar) {
@@ -139,6 +142,16 @@ function wrapCb (cb, serviceName, request, ar) {
   }
 }
 
+function getMessage (request, error, result) {
+  const response = { request, error, ...result }
+
+  if (result && result.$metadata) {
+    response.requestId = result.$metadata.requestId
+  }
+
+  return { request, response }
+}
+
 function getChannelSuffix (name) {
   return [
     'cloudwatchlogs',
@@ -154,7 +167,8 @@ function getChannelSuffix (name) {
 }
 
 addHook({ name: '@aws-sdk/smithy-client', versions: ['>=3'] }, smithy => {
-  return shimmer.wrap(smithy, 'Client', wrapSmithyClient)
+  shimmer.wrap(smithy.Client.prototype, 'send', wrapSmithySend)
+  return smithy
 })
 
 addHook({ name: 'aws-sdk', versions: ['>=2.3.0'] }, AWS => {
