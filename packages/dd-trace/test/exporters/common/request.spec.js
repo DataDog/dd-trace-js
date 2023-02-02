@@ -79,17 +79,33 @@ describe('request', function () {
   })
 
   it('should handle an http error', done => {
-    nock('http://localhost:80')
+    nock('http://localhost:8080')
       .put('/path')
       .reply(400)
 
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
-      port: 80
+      port: 8080
     }, err => {
       expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('Error from localhost:80/path: 400 Bad Request.')
+      expect(err.message).to.equal('Error from http://localhost:8080/path: 400 Bad Request.')
+      done()
+    })
+  })
+
+  it('should handle an http error when url is specified', done => {
+    nock('http://api.datadog.com')
+      .put('/path')
+      .reply(400)
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      url: new URL('http://api.datadog.com/')
+    }, err => {
+      expect(err).to.be.instanceof(Error)
+      expect(err.message).to.equal('Error from http://api.datadog.com/path: 400 Bad Request.')
       done()
     })
   })
