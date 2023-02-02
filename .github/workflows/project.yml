@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: "./.github/actions/node/${{ matrix.version }}"
+      - uses: ${{ format('{0}{1}', "./.github/actions/node/", matrix.version) }}
       - run: yarn test:integration
 
   lint:
