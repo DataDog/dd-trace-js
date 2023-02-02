@@ -418,8 +418,13 @@ addHook({
 
         // we store the original function, not to lose it
         originalFns.set(newFn, this.fn)
-
         this.fn = newFn
+
+        // Temporarily keep functionality when .asyncResource is removed from node
+        // in https://github.com/nodejs/node/pull/46432
+        if (!this.fn.asyncResource) {
+          this.fn.asyncResource = asyncResource
+        }
       }
     }
 
