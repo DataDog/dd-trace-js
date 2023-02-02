@@ -50,8 +50,8 @@ class Tracer extends NoopProxy {
           require('./appsec').enable(config)
         }
 
-        this.appsec = new AppsecSDK(this, config)
-        this._tracer = new DatadogTracer(config, this.appsec)
+        this._tracer = new DatadogTracer(config)
+        this.appsec = new AppsecSDK(this._tracer, config)
 
         if (config.iast.enabled) {
           require('./appsec/iast').enable(config, this._tracer)

@@ -14,12 +14,10 @@ const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
 
 class DatadogTracer extends Tracer {
-  constructor (config, appsecSDK) {
+  constructor (config) {
     super(config)
 
-    this._appsec = appsecSDK
     this._scope = new Scope()
-    this._appsec = appsecSDK
     setStartupLogConfig(config)
   }
 
@@ -124,14 +122,6 @@ class DatadogTracer extends Tracer {
     return `\
 <meta name="dd-trace-id" content="${traceId}" />\
 <meta name="dd-trace-time" content="${traceTime}" />`
-  }
-
-  setUser (user) {
-    if (!user || !user.id) return this
-
-    this._appsec.setUser(user)
-
-    return this
   }
 }
 
