@@ -98,9 +98,16 @@ function request (data, options, callback) {
       if (res.statusCode >= 200 && res.statusCode <= 299) {
         callback(null, responseData, res.statusCode)
       } else {
-        const fullUrl = `${options.url || options.hostname || `localhost:${options.port}`}${options.path}`
-        // eslint-disable-next-line
-        let errorMessage = `Error from ${fullUrl}: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}.`
+        let errorMessage = ''
+        try {
+          const fullUrl = new URL(
+            options.path,
+            options.url || options.hostname || `http://localhost:${options.port}`
+          ).href
+          errorMessage = `Error from ${fullUrl}: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}.`
+        } catch (e) {
+          // ignore error
+        }
         if (responseData) {
           errorMessage += ` Response from the endpoint: "${responseData}"`
         }
