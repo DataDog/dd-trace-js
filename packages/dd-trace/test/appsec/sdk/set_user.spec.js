@@ -43,6 +43,20 @@ describe('Set user API', () => {
       sdk.setUser(user)
       expect(mockSetTag).not.to.have.been.called
     })
+
+    it('Check setUser with a user with several attributes', () => {
+      const user = {
+        id: '123',
+        email: 'a@b.c',
+        custom: 'hello'
+      }
+
+      sdk.setUser(user)
+      expect(mockSetTag).to.have.been.calledThrice
+      expect(mockSetTag.firstCall).to.have.been.calledWithExactly('usr.id', '123')
+      expect(mockSetTag.secondCall).to.have.been.calledWithExactly('usr.email', 'a@b.c')
+      expect(mockSetTag.thirdCall).to.have.been.calledWithExactly('usr.custom', 'hello')
+    })
   })
 
   describe('Check internal callings, no rootSpan', () => {
