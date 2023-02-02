@@ -15,13 +15,24 @@ jobs:
   integration:
     strategy:
       matrix:
-        version: [14, 16, 18, latest]
+        version: [14, 16, 18]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ${{ format('{0}{1}', "./.github/actions/node/", matrix.version) }}
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.version }}
+      - run: yarn test:integration
+
+  integration-latest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/latest
       - run: yarn test:integration
 
   lint:
