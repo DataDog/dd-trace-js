@@ -7,7 +7,7 @@ const { randomBytes } = require('crypto')
 
 describe('EventBridge', () => {
   let span
-  withVersions('aws-sdk', 'aws-sdk', version => {
+  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let traceId
     let parentId
     let spanId

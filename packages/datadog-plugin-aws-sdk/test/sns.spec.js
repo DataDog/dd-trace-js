@@ -6,7 +6,7 @@ const tracer = require('../../dd-trace')
 
 describe('Sns', () => {
   let span
-  withVersions('aws-sdk', 'aws-sdk', version => {
+  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let traceId
     let parentId
     let spanId

@@ -1,6 +1,10 @@
 {
   "aws-sdk": [
     {
+      "name": "@aws-sdk/client-lambda",
+      "versions": [">=3"]
+    },
+    {
       "name": "@aws-sdk/client-s3",
       "versions": [">=3"]
     },

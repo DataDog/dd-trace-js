@@ -99,7 +99,7 @@ services:
       - START_WEB=0
       - EDGE_PORT=4565
   serverless_localstack:
-    image: localstack/localstack:0.12.4
+    image: localstack/localstack:0.13.0
     ports:
       - "127.0.0.1:4566:4566" # Edge
     environment:

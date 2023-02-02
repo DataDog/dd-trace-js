@@ -40,65 +40,71 @@ function wrapRequest (send) {
 }
 
 function wrapSmithyClient (SmithyClient) {
-  return class Client extends SmithyClient {
-    constructor (...args) {
-      super(...args)
+  class Client extends SmithyClient {
+    send (command, ...args) {
+      const cb = args[args.length - 1]
 
+      // TODO: support promises
+      if (typeof cb !== 'function') return super.send(command, ...args)
+
+      const outerAr = new AsyncResource('apm:aws:request:inner')
       const serviceIdentifier = this.config.serviceId.toLowerCase()
       const channelSuffix = getChannelSuffix(serviceIdentifier)
+      const commandName = command.constructor.name
+      const clientName = this.constructor.name.replace(/Client$/, '')
+      const operation = `${commandName[0].toLowerCase()}${commandName.slice(1).replace(/Command$/, '')}`
+      const request = {
+        operation,
+        params: command.input
+      }
+
       const startCh = channel(`apm:aws:request:start:${channelSuffix}`)
       const regionCh = channel(`apm:aws:request:region:${channelSuffix}`)
       const completeChannel = channel(`apm:aws:request:complete:${channelSuffix}`)
       const responseStartChannel = channel(`apm:aws:response:start:${channelSuffix}`)
-      const responseFinishChannel = channel(`apm:aws:resonse:finish:${channelSuffix}`)
+      const responseFinishChannel = channel(`apm:aws:response:finish:${channelSuffix}`)
 
-      this.middlewareStack.add((next, context) => async (command) => {
-        if (!context.clientName) return next(command)
+      startCh.publish({
+        serviceIdentifier,
+        operation,
+        awsService: clientName,
+        request
+      })
 
-        const innerAr = new AsyncResource('apm:aws:request:inner')
+      // When the region is not set this never resolves so we can't await.
+      this.config.region().then(region => {
+        regionCh.publish(region)
+      })
 
-        return innerAr.runInAsyncScope(async () => {
-          const { commandName, clientName } = context
-          const operation = `${commandName[0].toLowerCase()}${commandName.slice(1).replace(/Command$/, '')}`
-          const request = {
-            operation,
-            params: command.input
-          }
-          const response = { request }
+      // There is no sync API so we can bind the callback directly.
+      args[args.length - 1] = function (err, result) {
+        const response = {
+          request,
+          error: err,
+          data: result, // TODO: is this needed?
+          requestId: result && result.$metadata.requestId,
+          ...result
+        }
+        const message = { request, response }
 
-          startCh.publish({
-            serviceIdentifier,
-            operation,
-            awsService: clientName.replace(/Client$/, ''),
-            request
-          })
+        completeChannel.publish(message)
 
-          // When the region is not set this never resolves so we can't await.
-          this.config.region().then(region => {
-            regionCh.publish(region)
-          })
+        outerAr.runInAsyncScope(() => {
+          responseStartChannel.publish(message)
 
-          try {
-            const result = await next(command) // TODO: no await
+          cb.apply(this, arguments)
 
-            Object.assign(response, result.output)
-
-            response.data = response.output
-            response.requestId = result.output.$metadata.requestId
-
-            return result
-          } catch (error) {
-            throw response.error = error
-          } finally {
-            // TODO: clean up this event mess
-            completeChannel.publish({ response })
-            responseStartChannel.publish({ request, response })
-            responseFinishChannel.publish({ request, response })
+          if (message.needsFinish) {
+            responseFinishChannel.publish(response.error)
           }
         })
-      }, { priority: 'high' })
+      }
+
+      return super.send(command, ...args)
     }
   }
+
+  return Client
 }
 
 function wrapCb (cb, serviceName, request, ar) {

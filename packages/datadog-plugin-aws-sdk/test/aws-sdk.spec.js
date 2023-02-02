@@ -53,7 +53,7 @@ describe('Plugin', () => {
             })
           }).then(done, done)
 
-          s3.listBuckets(e => e && done(e))
+          s3.listBuckets({}, e => e && done(e))
         })
 
         it('should mark error responses', (done) => {
@@ -222,8 +222,8 @@ describe('Plugin', () => {
             total++
           }).catch((e) => {}, { timeoutMs: 100 })
 
-          s3.listBuckets(() => {})
-          sqs.listQueues(() => {})
+          s3.listBuckets({}, () => {})
+          sqs.listQueues({}, () => {})
 
           setTimeout(() => {
             try {
