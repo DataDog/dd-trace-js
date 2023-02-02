@@ -14,11 +14,12 @@ const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
 
 class DatadogTracer extends Tracer {
-  constructor (config, appsec) {
+  constructor (config, appsecSDK) {
     super(config)
 
-    this._appsec = appsec
+    this._appsec = appsecSDK
     this._scope = new Scope()
+    this._appsec = appsecSDK
     setStartupLogConfig(config)
   }
 
