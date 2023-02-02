@@ -91,7 +91,7 @@ describe('git_metadata', () => {
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
       // eslint-disable-next-line
-      expect(err.message).to.contain('Error fetching commits to exclude: Error from https://api.test.com//api/v2/git/repository/search_commits: 404 Not Found. Response from the endpoint: "Not found SHA"')
+      expect(err.message).to.contain('Error fetching commits to exclude: Error from https://api.test.com/api/v2/git/repository/search_commits: 404 Not Found. Response from the endpoint: "Not found SHA"')
       // to check that it is not called
       expect(scope.isDone()).to.be.false
       expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
