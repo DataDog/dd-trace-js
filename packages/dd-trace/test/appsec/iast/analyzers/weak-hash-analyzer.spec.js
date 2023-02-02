@@ -2,7 +2,7 @@
 
 const weakHashAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-hash-analyzer')
 const proxyquire = require('proxyquire')
-const { testThatRequestHasVulnerability, testOutsideRequestHasVulnerability } = require('../utils')
+const { prepareTestServerForIast, testOutsideRequestHasVulnerability } = require('../utils')
 
 describe('weak-hash-analyzer', () => {
   const VULNERABLE_ALGORITHM = 'sha1'
@@ -62,7 +62,7 @@ describe('weak-hash-analyzer', () => {
   })
 
   describe('full feature', () => {
-    describe('inside request', () => {
+    prepareTestServerForIast('inside request', (testThatRequestHasVulnerability) => {
       testThatRequestHasVulnerability(() => {
         const crypto = require('crypto')
         crypto.createHash(VULNERABLE_ALGORITHM)

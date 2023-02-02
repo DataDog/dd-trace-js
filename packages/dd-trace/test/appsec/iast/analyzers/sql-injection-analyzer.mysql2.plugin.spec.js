@@ -1,6 +1,6 @@
 'use strict'
 
-const { testThatRequestHasVulnerability, testThatRequestHasNoVulnerability } = require('../utils')
+const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
@@ -10,7 +10,7 @@ describe('sql-injection-analyzer with mysql2', () => {
   let mysql2
   let connection
   withVersions('mysql2', 'mysql2', version => {
-    describe('mysql2', () => {
+    prepareTestServerForIast('mysql2', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       beforeEach(() => {
         vulnerabilityReporter.clearCache()
         mysql2 = require(`../../../../../../versions/mysql2@${version}`).get()
