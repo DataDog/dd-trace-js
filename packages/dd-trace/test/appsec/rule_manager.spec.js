@@ -387,5 +387,30 @@ describe('AppSec Rule Manager', () => {
 
       expect(FakeDDWAF.prototype.toggleRules).to.not.have.been.called
     })
+
+    it('should call WAF toggleRules ignoring the empty overrides', () => {
+      const rulesOverride = {
+        rules_override: [
+          {
+            enabled: false,
+            id: 'crs-941-300'
+          },
+          {
+            id: 'empty override'
+          }
+        ]
+      }
+
+      const expectedRulesOverride = [
+        {
+          enabled: false,
+          id: 'crs-941-300'
+        }
+      ]
+
+      applyRules(rules)
+      toggleRules('apply', rulesOverride, '1')
+      expect(FakeDDWAF.prototype.toggleRules).to.have.been.calledOnceWithExactly(expectedRulesOverride)
+    })
   })
 })

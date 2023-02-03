@@ -70,10 +70,19 @@ function copyRulesData (rulesData) {
   return copy
 }
 
-function toggleRules (action, _asmRulesToggling, _asmRulesTogglingId) {
-  if (action === 'apply' && _asmRulesToggling.rules_override) {
+function getToggleRulesData (rulesOverrideData) {
+  if (!rulesOverrideData.rules_override || !rulesOverrideData.rules_override.filter) {
+    return
+  }
+
+  return rulesOverrideData.rules_override.filter(ruleOverride => ruleOverride.hasOwnProperty('enabled'))
+}
+
+function toggleRules (action, asmRulesOverrideData, asmRulesOverrideId) {
+  const toggleRulesData = getToggleRulesData(asmRulesOverrideData)
+  if (action === 'apply' && toggleRulesData) {
     for (const callback of appliedCallbacks.values()) {
-      callback.toggleRules(_asmRulesToggling.rules_override)
+      callback.toggleRules(toggleRulesData)
     }
   }
 }
