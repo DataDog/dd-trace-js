@@ -10,16 +10,13 @@ const {
   getTestSessionCommonTags,
   getTestModuleCommonTags,
   getTestSuiteCommonTags,
+  addIntelligentTestRunnerSpanTags,
   TEST_PARAMETERS,
   getCodeOwnersFileEntries,
   TEST_SESSION_ID,
   TEST_MODULE_ID,
   TEST_SUITE_ID,
   TEST_COMMAND,
-  TEST_ITR_TESTS_SKIPPED,
-  TEST_SESSION_CODE_COVERAGE_ENABLED,
-  TEST_SESSION_ITR_SKIPPING_ENABLED,
-  TEST_CODE_COVERAGE_LINES_TOTAL,
   TEST_BUNDLE
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -83,14 +80,14 @@ class JestPlugin extends CiPlugin {
       testCodeCoverageLinesTotal
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
-      this.testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
-      this.testSessionSpan.setTag(TEST_SESSION_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
-      this.testSessionSpan.setTag(TEST_SESSION_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
-
-      if (testCodeCoverageLinesTotal !== undefined) {
-        this.testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
-      }
       this.testModuleSpan.setTag(TEST_STATUS, status)
+
+      addIntelligentTestRunnerSpanTags(
+        this.testSessionSpan,
+        this.testModuleSpan,
+        { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled, testCodeCoverageLinesTotal }
+      )
+
       this.testModuleSpan.finish()
       this.testSessionSpan.finish()
       finishAllTraceSpans(this.testSessionSpan)
