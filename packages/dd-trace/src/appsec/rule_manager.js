@@ -5,7 +5,6 @@ const Gateway = require('./gateway/engine')
 
 const appliedCallbacks = new Map()
 const appliedAsmData = new Map()
-let asmRulesToggling
 
 function applyRules (rules, config) {
   if (appliedCallbacks.has(rules)) return
@@ -72,13 +71,10 @@ function copyRulesData (rulesData) {
 }
 
 function toggleRules (action, _asmRulesToggling, _asmRulesTogglingId) {
-  if (action === 'unapply') {
-    asmRulesToggling = []
-  } else {
-    asmRulesToggling = _asmRulesToggling.rules_override
-  }
-  for (const callback of appliedCallbacks.values()) {
-    callback.toggleRules(asmRulesToggling)
+  if (action === 'apply' && _asmRulesToggling.rules_override) {
+    for (const callback of appliedCallbacks.values()) {
+      callback.toggleRules(_asmRulesToggling.rules_override)
+    }
   }
 }
 

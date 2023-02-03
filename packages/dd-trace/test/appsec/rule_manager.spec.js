@@ -337,7 +337,7 @@ describe('AppSec Rule Manager', () => {
   })
 
   describe('toggleRules', () => {
-    it('should call toggleRules with rulesOverride data', () => {
+    it('should call WAF toggleRules with rulesOverride data', () => {
       const rulesOverride = {
         rules_override: [
           {
@@ -357,7 +357,17 @@ describe('AppSec Rule Manager', () => {
       expect(FakeDDWAF.prototype.toggleRules).to.have.been.calledOnceWithExactly(rulesOverride.rules_override)
     })
 
-    it('should call toggleRules with empty data when unapply', () => {
+    it('should not call WAF toggleRules when rules_overrides is not present in data', () => {
+      const rulesOverride = {
+      }
+
+      applyRules(rules)
+      toggleRules('apply', rulesOverride, '1')
+
+      expect(FakeDDWAF.prototype.toggleRules).to.not.have.been.called
+    })
+
+    it('should not call WAF toggleRules when action is not apply', () => {
       const rulesOverride = {
         rules_override: [
           {
@@ -372,11 +382,10 @@ describe('AppSec Rule Manager', () => {
       }
 
       applyRules(rules)
-      toggleRules('apply', rulesOverride, '1')
+      toggleRules('modified', rulesOverride, '1')
       toggleRules('unapply', rulesOverride, '2')
 
-      expect(FakeDDWAF.prototype.toggleRules).to.have.been.callCount(2)
-      expect(FakeDDWAF.prototype.toggleRules.lastCall).to.have.been.calledWithExactly([])
+      expect(FakeDDWAF.prototype.toggleRules).to.not.have.been.called
     })
   })
 })
