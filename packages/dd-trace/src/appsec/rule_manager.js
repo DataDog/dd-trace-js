@@ -71,11 +71,8 @@ function copyRulesData (rulesData) {
 }
 
 function getRulesOverrideData (asmData) {
-  if (!asmData.rules_override || !asmData.rules_override.filter) {
-    return
-  }
-
-  return asmData.rules_override.filter(ruleOverride => ruleOverride.hasOwnProperty('enabled'))
+  return asmData.rules_override && asmData.rules_override.filter &&
+    asmData.rules_override.filter(ruleOverride => ruleOverride.hasOwnProperty('enabled'))
 }
 
 function toggleRules (action, asmData) {
