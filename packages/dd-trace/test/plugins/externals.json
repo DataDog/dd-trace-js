@@ -5,11 +5,19 @@
       "versions": [">=3"]
     },
     {
+      "name": "@aws-sdk/client-kinesis",
+      "versions": [">=3"]
+    },
+    {
       "name": "@aws-sdk/client-s3",
       "versions": [">=3"]
     },
     {
       "name": "@aws-sdk/client-sqs",
+      "versions": [">=3"]
+    },
+    {
+      "name": "@aws-sdk/node-http-handler",
       "versions": [">=3"]
     }
   ],
