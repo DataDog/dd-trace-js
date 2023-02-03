@@ -135,10 +135,14 @@ describe('Sns', () => {
         sqs.receiveMessage(receiveParams, (err, data) => {
           if (err) return done(err)
 
-          expect(data.Messages[0].Body).to.not.include('datadog')
-
-          done()
+          try {
+            expect(data.Messages[0].Body).to.not.include('datadog')
+            done()
+          } catch (e) {
+            done(e)
+          }
         })
+
         sns.publish({
           TopicArn,
           Message: 'message 1',
