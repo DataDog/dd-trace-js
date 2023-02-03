@@ -40,7 +40,7 @@ class Sns extends BaseAwsSdkPlugin {
       this.tracer.inject(span, 'text_map', ddInfo)
       injectPath.MessageAttributes._datadog = {
         DataType: 'Binary',
-        BinaryValue: JSON.stringify(ddInfo) // BINARY types are automatically base64 encoded
+        BinaryValue: Buffer.from(JSON.stringify(ddInfo)) // BINARY types are automatically base64 encoded
       }
     }
   }
