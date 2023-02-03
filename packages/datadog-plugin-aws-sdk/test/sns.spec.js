@@ -139,6 +139,7 @@ describe('Sns', () => {
             expect(data.Messages[0].Body).to.not.include('datadog')
             done()
           } catch (e) {
+            console.log(data) // eslint-disable-line no-console
             done(e)
           }
         })
