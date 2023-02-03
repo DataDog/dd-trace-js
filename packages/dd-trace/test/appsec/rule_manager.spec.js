@@ -337,8 +337,8 @@ describe('AppSec Rule Manager', () => {
   })
 
   describe('toggleRules', () => {
-    it('should call WAF toggleRules with rulesOverride data', () => {
-      const rulesOverride = {
+    it('should call WAF toggleRules on apply action', () => {
+      const asmPayload = {
         rules_override: [
           {
             enabled: false,
@@ -352,44 +352,73 @@ describe('AppSec Rule Manager', () => {
       }
 
       applyRules(rules)
-      toggleRules('apply', rulesOverride, '1')
+      toggleRules('apply', asmPayload)
 
-      expect(FakeDDWAF.prototype.toggleRules).to.have.been.calledOnceWithExactly(rulesOverride.rules_override)
+      expect(FakeDDWAF.prototype.toggleRules).to.have.been.calledOnceWithExactly(asmPayload.rules_override)
     })
 
-    it('should not call WAF toggleRules when rules_overrides is not present in data', () => {
-      const rulesOverride = {
+    it('should call WAF toggleRules on modify action', () => {
+      const asmPayload = {
+        rules_override: [
+          {
+            enabled: false,
+            id: 'crs-941-300'
+          },
+          {
+            enabled: false,
+            id: 'test-3'
+          }
+        ]
       }
 
       applyRules(rules)
-      toggleRules('apply', rulesOverride, '1')
+      toggleRules('modify', asmPayload)
+
+      expect(FakeDDWAF.prototype.toggleRules).to.have.been.calledOnceWithExactly(asmPayload.rules_override)
+    })
+
+    it('should not call WAF toggleRules on unapply action', () => {
+      const asmPayload = {
+        rules_override: [
+          {
+            enabled: false,
+            id: 'crs-941-300'
+          },
+          {
+            enabled: false,
+            id: 'test-3'
+          }
+        ]
+      }
+
+      applyRules(rules)
+      toggleRules('unapply', asmPayload)
 
       expect(FakeDDWAF.prototype.toggleRules).to.not.have.been.called
     })
 
-    it('should not call WAF toggleRules when action is not apply', () => {
-      const rulesOverride = {
-        rules_override: [
-          {
-            enabled: false,
-            id: 'crs-941-300'
-          },
-          {
-            enabled: false,
-            id: 'test-3'
-          }
-        ]
+    it('should not call WAF toggleRules when rules_overrides is not present in ASM payload', () => {
+      const asmPayload = {}
+
+      applyRules(rules)
+      toggleRules('apply', asmPayload)
+
+      expect(FakeDDWAF.prototype.toggleRules).to.not.have.been.called
+    })
+
+    it('should not call WAF toggleRules when rules_override is empty', () => {
+      const asmPayload = {
+        rules_override: {}
       }
 
       applyRules(rules)
-      toggleRules('modified', rulesOverride, '1')
-      toggleRules('unapply', rulesOverride, '2')
+      toggleRules('apply', asmPayload)
 
       expect(FakeDDWAF.prototype.toggleRules).to.not.have.been.called
     })
 
     it('should call WAF toggleRules ignoring the empty overrides', () => {
-      const rulesOverride = {
+      const asmPayload = {
         rules_override: [
           {
             enabled: false,
@@ -409,7 +438,7 @@ describe('AppSec Rule Manager', () => {
       ]
 
       applyRules(rules)
-      toggleRules('apply', rulesOverride, '1')
+      toggleRules('apply', asmPayload, '1')
       expect(FakeDDWAF.prototype.toggleRules).to.have.been.calledOnceWithExactly(expectedRulesOverride)
     })
   })
