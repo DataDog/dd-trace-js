@@ -170,6 +170,7 @@ describe('WAFCallback', () => {
           }
         })),
         updateRuleData: sinon.stub(),
+        toggleRules: sinon.stub(),
         dispose: sinon.stub()
       })
 
@@ -450,6 +451,22 @@ describe('WAFCallback', () => {
 
         expect(waf.ddwaf.updateRuleData).to.be.calledOnce
         expect(waf.ddwaf.updateRuleData).to.be.calledWithExactly(ruleData)
+      })
+    })
+
+    describe('toggleRules', () => {
+      it('should call ddwaf.toggleRules', () => {
+        const rulesTogglingData = [
+          {
+            id: 'blocked_users',
+            enabled: true
+          }
+        ]
+
+        waf.toggleRules(rulesTogglingData)
+
+        expect(waf.ddwaf.toggleRules).to.be.calledOnce
+        expect(waf.ddwaf.toggleRules).to.be.calledWithExactly(rulesTogglingData)
       })
     })
 
