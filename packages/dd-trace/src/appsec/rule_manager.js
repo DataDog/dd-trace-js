@@ -96,5 +96,6 @@ function clearAllRules () {
 module.exports = {
   applyRules,
   clearAllRules,
-  updateAsmData
+  updateAsmData,
+  toggleRules
 }

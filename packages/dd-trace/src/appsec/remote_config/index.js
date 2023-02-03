@@ -33,7 +33,9 @@ function enable (config) {
 }
 
 function enableAsm () {
-  rc.on('ASM', RuleManager.toggleRules)
+  if (rc) {
+    rc.on('ASM', RuleManager.toggleRules)
+  }
 }
 
 function disableAsm () {
@@ -61,6 +63,8 @@ function _asmDataListener (action, ruleData, ruleId) {
 
 module.exports = {
   enable,
+  enableAsm,
+  disableAsm,
   enableAsmData,
   disableAsmData
 }

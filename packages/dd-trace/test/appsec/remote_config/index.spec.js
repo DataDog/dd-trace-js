@@ -17,7 +17,8 @@ describe('Remote Config enable', () => {
 
     rc = {
       updateCapabilities: sinon.spy(),
-      on: sinon.spy()
+      on: sinon.spy(),
+      off: sinon.spy()
     }
 
     RemoteConfigManager = sinon.stub().returns(rc)
@@ -29,7 +30,8 @@ describe('Remote Config enable', () => {
     }
 
     RuleManager = {
-      updateAsmData: sinon.stub()
+      updateAsmData: sinon.stub(),
+      toggleRules: sinon.stub()
     }
 
     remoteConfig = proxyquire('../src/appsec/remote_config', {
@@ -130,7 +132,7 @@ describe('Remote Config enable', () => {
     })
 
     describe('enable', () => {
-      it('should not not fail if remote config is not enabled before', () => {
+      it('should not fail if remote config is not enabled before', () => {
         config.appsec = {}
         remoteConfig.enableAsmData(config.appsec)
         expect(rc.on).to.not.have.been.calledWith('ASM_DATA')
@@ -155,6 +157,55 @@ describe('Remote Config enable', () => {
         remoteConfig.enable(config)
         remoteConfig.enableAsmData(config.appsec)
         expect(rc.on.lastCall).to.have.been.calledWith('ASM_DATA')
+      })
+    })
+  })
+
+  describe('ASM remote config', () => {
+    describe('listener', () => {
+      let listener
+
+      beforeEach(() => {
+        config.appsec = { enabled: undefined }
+
+        remoteConfig.enable(config)
+        remoteConfig.enableAsm(config.appsec)
+
+        listener = rc.on.secondCall.args[1]
+      })
+
+      it('should call RuleManager.toggleRules', () => {
+        const rulesOverride = {
+          rules_override: [
+            {
+              enabled: false,
+              id: 'crs-941-300'
+            },
+            {
+              enabled: false,
+              id: 'test-3'
+            }
+          ]
+        }
+        listener('apply', rulesOverride, 'asm')
+
+        expect(RuleManager.toggleRules).to.have.been.calledOnceWithExactly('apply', rulesOverride, 'asm')
+      })
+    })
+
+    describe('enable', () => {
+      it('should not fail if remote config is not enabled before', () => {
+        config.appsec = {}
+        remoteConfig.enableAsm()
+        expect(rc.on).to.not.have.been.calledWith('ASM')
+      })
+    })
+
+    describe('disable', () => {
+      it('should unsubscribe listener', () => {
+        remoteConfig.enable(config)
+        remoteConfig.disableAsm()
+        expect(rc.off).to.be.calledOnceWith('ASM', RuleManager.toggleRules)
       })
     })
   })

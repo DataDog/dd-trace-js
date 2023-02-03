@@ -1,6 +1,6 @@
 'use strict'
 
-const { applyRules, clearAllRules, updateAsmData } = require('../../src/appsec/rule_manager')
+const { applyRules, clearAllRules, updateAsmData, toggleRules } = require('../../src/appsec/rule_manager')
 const callbacks = require('../../src/appsec/callbacks')
 const Gateway = require('../../src/appsec/gateway/engine')
 
@@ -14,6 +14,7 @@ describe('AppSec Rule Manager', () => {
 
     FakeDDWAF.prototype.clear = sinon.spy()
     FakeDDWAF.prototype.updateRuleData = sinon.spy()
+    FakeDDWAF.prototype.toggleRules = sinon.spy()
 
     sinon.stub(callbacks, 'DDWAF').get(() => FakeDDWAF)
   })
@@ -332,6 +333,50 @@ describe('AppSec Rule Manager', () => {
 
       expect(FakeDDWAF.prototype.updateRuleData).to.have.been.callCount(4)
       expect(FakeDDWAF.prototype.updateRuleData.lastCall).calledWithExactly(expectedMergedRulesData)
+    })
+  })
+
+  describe('toggleRules', () => {
+    it('should call toggleRules with rulesOverride data', () => {
+      const rulesOverride = {
+        rules_override: [
+          {
+            enabled: false,
+            id: 'crs-941-300'
+          },
+          {
+            enabled: false,
+            id: 'test-3'
+          }
+        ]
+      }
+
+      applyRules(rules)
+      toggleRules('apply', rulesOverride, '1')
+
+      expect(FakeDDWAF.prototype.toggleRules).to.have.been.calledOnceWithExactly(rulesOverride.rules_override)
+    })
+
+    it('should call toggleRules with empty data when unapply', () => {
+      const rulesOverride = {
+        rules_override: [
+          {
+            enabled: false,
+            id: 'crs-941-300'
+          },
+          {
+            enabled: false,
+            id: 'test-3'
+          }
+        ]
+      }
+
+      applyRules(rules)
+      toggleRules('apply', rulesOverride, '1')
+      toggleRules('unapply', rulesOverride, '2')
+
+      expect(FakeDDWAF.prototype.toggleRules).to.have.been.callCount(2)
+      expect(FakeDDWAF.prototype.toggleRules.lastCall).to.have.been.calledWithExactly([])
     })
   })
 })
