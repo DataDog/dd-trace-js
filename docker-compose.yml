@@ -82,6 +82,7 @@ services:
       - "127.0.0.1:8081:8081"
   localstack:
     image: localstack/localstack:0.11.2
+    platform: linux/amd64
     ports:
       - "127.0.0.1:4569:4569" # DynamoDB
       - "127.0.0.1:4568:4568" # Kinesis
@@ -100,7 +101,7 @@ services:
       - START_WEB=0
       - EDGE_PORT=4565
   serverless_localstack:
-    image: localstack/localstack:0.13.0
+    image: localstack/localstack:1.3.0
     ports:
       - "127.0.0.1:4566:4566" # Edge
     environment:

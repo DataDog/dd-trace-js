@@ -84,7 +84,7 @@ jobs:
           - 4586:4586 # CloudWatch Logs
           - 4577:4577 # Redshift
       localstack-serverless:
-        image: localstack/localstack:0.13.0
+        image: localstack/localstack:1.3.0
         env:
           LOCALSTACK_SERVICES: serverless
           EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
