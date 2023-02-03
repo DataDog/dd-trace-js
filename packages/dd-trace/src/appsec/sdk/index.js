@@ -6,7 +6,7 @@ const { block, loadTemplates } = require('../blocking')
 const { getRootSpan } = require('./utils')
 const { storage } = require('../../../../datadog-core')
 
-class AppsecSDK {
+class AppsecSdk {
   constructor (tracer, config) {
     this._tracer = tracer
     if (config) {
@@ -91,4 +91,4 @@ class AppsecSDK {
   }
 }
 
-module.exports = AppsecSDK
+module.exports = AppsecSdk

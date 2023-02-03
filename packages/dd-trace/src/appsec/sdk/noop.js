@@ -1,6 +1,6 @@
 'use strict'
 
-class NoopAppsecSDK {
+class NoopAppsecSdk {
   trackUserLoginSuccessEvent () {}
 
   trackUserLoginFailureEvent () {}
@@ -14,4 +14,4 @@ class NoopAppsecSDK {
   setUser () {}
 }
 
-module.exports = NoopAppsecSDK
+module.exports = NoopAppsecSdk

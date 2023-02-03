@@ -55,7 +55,6 @@ function enableFromRules (_config, rules) {
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_ENDPOINT)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
-  Gateway.manager.addresses.add(addresses.USER_ID)
 
   isEnabled = true
   config = _config
@@ -98,12 +97,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
 
     for (const entry of results) {
       if (entry && entry.includes('block')) {
-        block({
-          req: req,
-          res: res,
-          topSpan: topSpan,
-          abortController: abortController
-        })
+        block({ req, res, topSpan, abortController })
         break
       }
     }

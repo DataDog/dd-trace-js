@@ -1,3 +1,4 @@
+'use strict'
 const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
 const tracer = require('../../../../../index')
@@ -33,7 +34,7 @@ describe('User blocking API', () => {
       block.reset()
       getRootSpan = sinon.stub().returns(mockRootSpan)
 
-      const AppsecSDK = proxyquire('../../../src/appsec/sdk', {
+      const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
         './user_blocking': { isUserBlocked },
         '../blocking': { block, loadTemplates },
         '../../plugins/util/web': { root },
@@ -41,7 +42,7 @@ describe('User blocking API', () => {
         './utils': { getRootSpan }
       })
 
-      sdk = new AppsecSDK(tracer)
+      sdk = new AppsecSdk(tracer)
     })
 
     it('Check isUserBlocked with a valid user', () => {
@@ -87,7 +88,7 @@ describe('User blocking API', () => {
     } }
     const getRootSpan = sinon.stub().returns(undefined)
 
-    const AppsecSDK = proxyquire('../../../src/appsec/sdk', {
+    const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
       './user_blocking': { isUserBlocked },
       '../blocking': { block, loadTemplates },
       '../../plugins/util/web': { root },
@@ -95,7 +96,7 @@ describe('User blocking API', () => {
       './utils': { getRootSpan }
     })
 
-    const sdk = new AppsecSDK(tracer)
+    const sdk = new AppsecSdk(tracer)
 
     it('Check blockRequest no rootSpan', () => {
       const ret = sdk.blockRequest({}, {})
@@ -122,7 +123,7 @@ describe('User blocking API', () => {
     } }
     const getRootSpan = sinon.stub().returns(undefined)
 
-    const AppsecSDK = proxyquire('../../../src/appsec/sdk', {
+    const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
       './user_blocking': { isUserBlocked },
       '../blocking': { block, loadTemplates },
       '../../plugins/util/web': { root },
@@ -130,7 +131,7 @@ describe('User blocking API', () => {
       './utils': { getRootSpan }
     })
 
-    const sdk = new AppsecSDK(tracer)
+    const sdk = new AppsecSdk(tracer)
 
     it('Check blockRequest no storage', () => {
       const ret = sdk.blockRequest()

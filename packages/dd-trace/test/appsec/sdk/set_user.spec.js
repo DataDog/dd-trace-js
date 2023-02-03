@@ -1,3 +1,4 @@
+'use strict'
 const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
 const tracer = require('../../../../../index')
@@ -20,11 +21,11 @@ describe('Set user API', () => {
         setTag: mockSetTag }
       getRootSpan = sinon.stub().returns(mockRootSpan)
 
-      const AppsecSDK = proxyquire('../../../src/appsec/sdk', {
+      const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
         './utils': { getRootSpan }
       })
 
-      sdk = new AppsecSDK(tracer)
+      sdk = new AppsecSdk(tracer)
     })
 
     it('Check setUser', () => {
@@ -63,11 +64,11 @@ describe('Set user API', () => {
     const tracer = {}
     const getRootSpan = sinon.stub().returns(undefined)
 
-    const AppsecSDK = proxyquire('../../../src/appsec/sdk', {
+    const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
       './utils': { getRootSpan }
     })
 
-    const sdk = new AppsecSDK(tracer)
+    const sdk = new AppsecSdk(tracer)
 
     it('Check setUser no rootSpan', () => {
       sdk._setUser = sinon.stub()

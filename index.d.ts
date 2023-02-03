@@ -629,6 +629,7 @@ export declare interface Appsec {
    * Checks if the user is excluded. If no user is linked to the current trace
    * the one passed as parameter will be used for that purpose.
    * @param {User} user Properties of the authenticated user. Accepts custom fields.
+   * @return {Boolean} indicates whether the user is blocked.
    *
    * @beta This method is in beta and could change in the future
    */
@@ -639,6 +640,7 @@ export declare interface Appsec {
    * accept header type. The template body can be customized through remote configuration.
    * @param {IncomingMessage}
    * @param {OutgoingMessage}
+   * @return {Boolean} indicates if the action of blocking the request has succeded.
    *
    * @beta This method is in beta and could change in the future
    */

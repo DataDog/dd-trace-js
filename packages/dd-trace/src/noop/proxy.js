@@ -1,10 +1,10 @@
 'use strict'
 
 const NoopTracer = require('./tracer')
-const NoopAppsecSDK = require('../appsec/sdk/noop')
+const NoopAppsecSdk = require('../appsec/sdk/noop')
 
 const noop = new NoopTracer()
-const noopAppsec = new NoopAppsecSDK()
+const noopAppsec = new NoopAppsecSdk()
 
 class Tracer {
   constructor () {
