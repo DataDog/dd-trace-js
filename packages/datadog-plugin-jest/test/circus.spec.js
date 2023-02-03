@@ -22,7 +22,9 @@ const {
   LIBRARY_VERSION,
   TEST_COMMAND,
   TEST_SUITE_ID,
-  TEST_SESSION_ID
+  TEST_SESSION_ID,
+  TEST_MODULE_ID,
+  TEST_BUNDLE
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { version: ddTraceVersion } = require('../../../package.json')
@@ -350,23 +352,33 @@ describe('Plugin', function () {
                 const span = events.find(event => event.type === type).content
                 expect(span.meta[TEST_STATUS]).to.equal(status)
                 expect(span.meta[COMPONENT]).to.equal('jest')
-                if (type === 'test_session_end') {
+                if (type === 'test_session_end') { // session and module come in the same payload
                   expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
                   expect(span[TEST_SUITE_ID]).to.equal(undefined)
+                  expect(span[TEST_MODULE_ID]).to.equal(undefined)
                   expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+                  const testModuleSpan = events.find(event => event.type === 'test_module_end').content
+                  expect(testModuleSpan[TEST_SUITE_ID]).to.equal(undefined)
+                  expect(testModuleSpan[TEST_MODULE_ID]).not.to.equal(undefined)
+                  expect(testModuleSpan[TEST_SESSION_ID]).not.to.equal(undefined)
+                  expect(testModuleSpan.meta[TEST_BUNDLE]).not.to.equal(undefined)
                 }
                 if (type === 'test_suite_end') {
                   expect(span.meta[TEST_SUITE]).to.equal(suite)
                   expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
+                  expect(span.meta[TEST_BUNDLE]).not.to.equal(undefined)
                   expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
                   expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+                  expect(span[TEST_MODULE_ID]).not.to.equal(undefined)
                 }
                 if (type === 'test') {
                   expect(span.meta[TEST_SUITE]).to.equal(suite)
                   expect(span.meta[TEST_NAME]).to.equal(name)
                   expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
+                  expect(span.meta[TEST_BUNDLE]).not.to.equal(undefined)
                   expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
                   expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
+                  expect(span[TEST_MODULE_ID]).not.to.equal(undefined)
                 }
               }, { timeoutMs: assertionTimeout, spanResourceMatch })
             })

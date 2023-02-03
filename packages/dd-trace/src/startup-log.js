@@ -7,7 +7,7 @@ const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
 
 const logger = Object.create(mainLogger)
-logger._enabled = true
+logger.toggle(true)
 
 let config
 let pluginManager

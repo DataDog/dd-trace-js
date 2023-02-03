@@ -1,5 +1,5 @@
 const getPort = require('get-port')
-const { extractIp } = require('../../src/appsec/ip_extractor')
+const { extractIp } = require('../../../src/plugins/util/ip_extractor')
 const http = require('http')
 const axios = require('axios')
 describe('ip extractor', () => {

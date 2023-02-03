@@ -1,4 +1,4 @@
-import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope } from '..';
+import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope, User } from '..';
 import { formats, kinds, priority, tags, types } from '../ext';
 import { BINARY, HTTP_HEADERS, LOG, TEXT_MAP } from '../ext/formats';
 import { SERVER, CLIENT, PRODUCER, CONSUMER } from '../ext/kinds'
@@ -90,7 +90,9 @@ tracer.init({
   appsec: true,
   remoteConfig: {
     pollInterval: 5
-  }
+  },
+  clientIpEnabled: true,
+  clientIpHeader: 'x-forwarded-for'
 });
 
 tracer.init({
@@ -285,6 +287,7 @@ tracer.use('oracledb');
 tracer.use('oracledb', { service: params => `${params.host}-${params.database}` });
 tracer.use('paperplane');
 tracer.use('paperplane', httpServerOptions);
+tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
 tracer.use('pino');
@@ -355,8 +358,26 @@ tracer.wrap('x', () => {
 
 const result: Tracer = tracer.setUser({ id: '123' })
 
-tracer.setUser({
+const user: User = {
   id: '123',
   email: 'a@b.c',
   custom: 'hello'
-})
+}
+
+tracer.setUser(user)
+
+const meta = {
+  metakey: 'metavalue',
+  metakey2: 'metavalue2'
+}
+
+tracer.appsec.trackUserLoginSuccessEvent(user)
+tracer.appsec.trackUserLoginSuccessEvent(user, meta)
+
+tracer.appsec.trackUserLoginFailureEvent('user_id', true)
+tracer.appsec.trackUserLoginFailureEvent('user_id', true, meta)
+tracer.appsec.trackUserLoginFailureEvent('user_id', false)
+tracer.appsec.trackUserLoginFailureEvent('user_id', false, meta)
+
+tracer.appsec.trackCustomEvent('event_name')
+tracer.appsec.trackCustomEvent('event_name', meta)

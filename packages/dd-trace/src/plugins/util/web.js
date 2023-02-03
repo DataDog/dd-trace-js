@@ -8,6 +8,7 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
+const { extractIp } = require('./ip_extractor')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
 
 const WEB = types.WEB
@@ -24,6 +25,7 @@ const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
+const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const MANUAL_DROP = tags.MANUAL_DROP
 
 const HTTP2_HEADER_AUTHORITY = ':authority'
@@ -431,6 +433,15 @@ function addRequestTags (context) {
     [SPAN_TYPE]: WEB,
     [HTTP_USERAGENT]: req.headers['user-agent']
   })
+
+  // if client ip has already been set by appsec, no need to run it again
+  if (config.clientIpEnabled && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
+    const clientIp = extractIp(config, req)
+
+    if (clientIp) {
+      span.setTag(HTTP_CLIENT_IP, clientIp)
+    }
+  }
 
   addHeaders(context)
 }

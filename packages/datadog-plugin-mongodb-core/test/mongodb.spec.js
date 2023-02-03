@@ -4,7 +4,9 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 
 const withTopologies = fn => {
-  withVersions('mongodb-core', 'mongodb', (version, moduleName) => {
+  const isOldNode = semver.satisfies(process.version, '<=12')
+  const range = isOldNode ? '>=2 <5' : '>=2' // TODO: remove when 2.x support is removed.
+  withVersions('mongodb-core', 'mongodb', range, (version, moduleName) => {
     describe('using the default topology', () => {
       fn(async () => {
         const { MongoClient } = require(`../../../versions/${moduleName}@${version}`).get()
@@ -225,10 +227,16 @@ describe('Plugin', () => {
           })
 
           it('should run the callback in the parent context', done => {
-            collection.insertOne({ a: 1 }, {}, () => {
+            const insertPromise = collection.insertOne({ a: 1 }, {}, () => {
               expect(tracer.scope().active()).to.be.null
               done()
             })
+            if (insertPromise && insertPromise.then) {
+              insertPromise.then(() => {
+                expect(tracer.scope().active()).to.be.null
+                done()
+              })
+            }
           })
         })
       })

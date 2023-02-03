@@ -5,9 +5,13 @@ describe('TracerProxy', () => {
   let proxy
   let DatadogTracer
   let NoopTracer
+  let AppsecSdk
+  let NoopAppsecSdk
   let tracer
   let NoopProxy
   let noop
+  let appsecSdk
+  let noopAppsecSdk
   let Config
   let config
   let metrics
@@ -20,6 +24,13 @@ describe('TracerProxy', () => {
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
+
+    appsecSdk = {
+      trackUserLoginSuccessEvent: sinon.stub(),
+      trackUserLoginFailureEvent: sinon.stub(),
+      trackCustomEvent: sinon.stub()
+    }
+
     tracer = {
       use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('test'),
@@ -40,12 +51,20 @@ describe('TracerProxy', () => {
       setUrl: sinon.stub()
     }
 
+    noopAppsecSdk = {
+      trackUserLoginSuccessEvent: sinon.stub(),
+      trackUserLoginFailureEvent: sinon.stub(),
+      trackCustomEvent: sinon.stub()
+    }
+
     log = {
       error: sinon.spy()
     }
 
     DatadogTracer = sinon.stub().returns(tracer)
     NoopTracer = sinon.stub().returns(noop)
+    AppsecSdk = sinon.stub().returns(appsecSdk)
+    NoopAppsecSdk = sinon.stub().returns(noopAppsecSdk)
 
     config = {
       tracing: true,
@@ -86,7 +105,8 @@ describe('TracerProxy', () => {
     }
 
     NoopProxy = proxyquire('../src/noop/proxy', {
-      './tracer': NoopTracer
+      './tracer': NoopTracer,
+      '../appsec/sdk/noop': NoopAppsecSdk
     })
 
     Proxy = proxyquire('../src/proxy', {
@@ -99,7 +119,8 @@ describe('TracerProxy', () => {
       './appsec': appsec,
       './appsec/iast': iast,
       './telemetry': telemetry,
-      './appsec/remote_config': remoteConfig
+      './appsec/remote_config': remoteConfig,
+      './appsec/sdk': AppsecSdk
     })
 
     proxy = new Proxy()
@@ -328,6 +349,36 @@ describe('TracerProxy', () => {
         expect(returnValue).to.equal(proxy)
       })
     })
+
+    describe('appsec', () => {
+      describe('trackUserLoginSuccessEvent', () => {
+        it('should call the underlying NoopAppsecSdk method', () => {
+          const user = { id: 'user_id' }
+          const metadata = { metakey1: 'metavalue1' }
+          proxy.appsec.trackUserLoginSuccessEvent(user, metadata)
+          expect(noopAppsecSdk.trackUserLoginSuccessEvent).to.have.been.calledOnceWithExactly(user, metadata)
+        })
+      })
+
+      describe('trackUserLoginFailureEvent', () => {
+        it('should call the underlying NoopAppsecSdk method', () => {
+          const userId = 'user_id'
+          const exists = true
+          const metadata = { metakey1: 'metavalue1' }
+          proxy.appsec.trackUserLoginFailureEvent(userId, exists, metadata)
+          expect(noopAppsecSdk.trackUserLoginFailureEvent).to.have.been.calledOnceWithExactly(userId, exists, metadata)
+        })
+      })
+
+      describe('trackCustomEvent', () => {
+        it('should call the underlying NoopAppsecSdk method', () => {
+          const eventName = 'custom_event'
+          const metadata = { metakey1: 'metavalue1' }
+          proxy.appsec.trackCustomEvent(eventName, metadata)
+          expect(noopAppsecSdk.trackCustomEvent).to.have.been.calledOnceWithExactly(eventName, metadata)
+        })
+      })
+    })
   })
 
   describe('initialized', () => {
@@ -404,6 +455,36 @@ describe('TracerProxy', () => {
 
         expect(tracer.setUrl).to.have.been.calledWith('http://example.com')
         expect(returnValue).to.equal(proxy)
+      })
+    })
+
+    describe('appsec', () => {
+      describe('trackUserLoginSuccessEvent', () => {
+        it('should call the underlying AppsecSdk method', () => {
+          const user = { id: 'user_id' }
+          const metadata = { metakey1: 'metavalue1' }
+          proxy.appsec.trackUserLoginSuccessEvent(user, metadata)
+          expect(appsecSdk.trackUserLoginSuccessEvent).to.have.been.calledOnceWithExactly(user, metadata)
+        })
+      })
+
+      describe('trackUserLoginFailureEvent', () => {
+        it('should call the underlying AppsecSdk method', () => {
+          const userId = 'user_id'
+          const exists = true
+          const metadata = { metakey1: 'metavalue1' }
+          proxy.appsec.trackUserLoginFailureEvent(userId, exists, metadata)
+          expect(appsecSdk.trackUserLoginFailureEvent).to.have.been.calledOnceWithExactly(userId, exists, metadata)
+        })
+      })
+
+      describe('trackCustomEvent', () => {
+        it('should call the underlying AppsecSdk method', () => {
+          const eventName = 'custom_event'
+          const metadata = { metakey1: 'metavalue1' }
+          proxy.appsec.trackCustomEvent(eventName, metadata)
+          expect(appsecSdk.trackCustomEvent).to.have.been.calledOnceWithExactly(eventName, metadata)
+        })
       })
     })
   })

@@ -2,6 +2,7 @@
 
 module.exports = {
   '@cucumber/cucumber': () => require('../cucumber'),
+  '@playwright/test': () => require('../playwright'),
   '@elastic/elasticsearch': () => require('../elasticsearch'),
   '@elastic/transport': () => require('../elasticsearch'),
   '@google-cloud/pubsub': () => require('../google-cloud-pubsub'),
@@ -31,6 +32,8 @@ module.exports = {
   'express': () => require('../express'),
   'fastify': () => require('../fastify'),
   'find-my-way': () => require('../find-my-way'),
+  'fs': () => require('../fs'),
+  'node:fs': () => require('../fs'),
   'graphql': () => require('../graphql'),
   'grpc': () => require('../grpc'),
   'hapi': () => require('../hapi'),
