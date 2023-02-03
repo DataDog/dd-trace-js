@@ -13,14 +13,12 @@ const {
   getTestSessionCommonTags,
   getTestModuleCommonTags,
   getTestSuiteCommonTags,
+  addIntelligentTestRunnerSpanTags,
   TEST_SUITE_ID,
   TEST_SESSION_ID,
   TEST_MODULE_ID,
   TEST_BUNDLE,
-  TEST_COMMAND,
-  TEST_ITR_TESTS_SKIPPED,
-  TEST_SESSION_CODE_COVERAGE_ENABLED,
-  TEST_SESSION_ITR_SKIPPING_ENABLED
+  TEST_COMMAND
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
@@ -156,11 +154,14 @@ class MochaPlugin extends CiPlugin {
       if (this.testSessionSpan) {
         const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
         this.testSessionSpan.setTag(TEST_STATUS, status)
-        this.testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
-        this.testSessionSpan.setTag(TEST_SESSION_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
-        this.testSessionSpan.setTag(TEST_SESSION_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
-
         this.testModuleSpan.setTag(TEST_STATUS, status)
+
+        addIntelligentTestRunnerSpanTags(
+          this.testSessionSpan,
+          this.testModuleSpan,
+          { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled }
+        )
+
         this.testModuleSpan.finish()
         this.testSessionSpan.finish()
         finishAllTraceSpans(this.testSessionSpan)

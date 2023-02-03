@@ -50,6 +50,8 @@ const JEST_TEST_RUNNER = 'test.jest.test_runner'
 const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.tests_skipped'
 const TEST_SESSION_ITR_SKIPPING_ENABLED = 'test_session.itr.tests_skipping.enabled'
 const TEST_SESSION_CODE_COVERAGE_ENABLED = 'test_session.code_coverage.enabled'
+const TEST_MODULE_ITR_SKIPPING_ENABLED = 'test_module.itr.tests_skipping.enabled'
+const TEST_MODULE_CODE_COVERAGE_ENABLED = 'test_module.code_coverage.enabled'
 
 const TEST_CODE_COVERAGE_LINES_TOTAL = 'test.codecov_lines_total'
 
@@ -84,9 +86,13 @@ module.exports = {
   TEST_MODULE_ID,
   TEST_SUITE_ID,
   TEST_ITR_TESTS_SKIPPED,
+  TEST_BUNDLE,
   TEST_SESSION_ITR_SKIPPING_ENABLED,
   TEST_SESSION_CODE_COVERAGE_ENABLED,
+  TEST_MODULE_ITR_SKIPPING_ENABLED,
+  TEST_MODULE_CODE_COVERAGE_ENABLED,
   TEST_CODE_COVERAGE_LINES_TOTAL,
+  addIntelligentTestRunnerSpanTags,
   getCoveredFilenamesFromCoverage,
   resetCoverage,
   mergeCoverage,
@@ -279,6 +285,26 @@ function getTestSuiteCommonTags (command, testFrameworkVersion, testSuite) {
     [TEST_BUNDLE]: command,
     [TEST_SUITE]: testSuite,
     ...getTestLevelCommonTags(command, testFrameworkVersion)
+  }
+}
+
+function addIntelligentTestRunnerSpanTags (
+  testSessionSpan,
+  testModuleSpan,
+  { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled, testCodeCoverageLinesTotal }
+) {
+  testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
+  testSessionSpan.setTag(TEST_SESSION_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
+  testSessionSpan.setTag(TEST_SESSION_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+
+  testModuleSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
+  testModuleSpan.setTag(TEST_MODULE_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
+  testModuleSpan.setTag(TEST_MODULE_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+
+  // If suites have been skipped we don't want to report the total coverage, as it will be wrong
+  if (testCodeCoverageLinesTotal !== undefined && !isSuitesSkipped) {
+    testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
+    testModuleSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
   }
 }
 
