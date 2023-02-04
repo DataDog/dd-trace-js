@@ -142,6 +142,7 @@ class DatadogSpan {
 
   _createContext (parent) {
     let spanContext
+    const { extract, inject } = this._parentTracer._tracePropagationStyle
 
     if (parent) {
       spanContext = new SpanContext({
@@ -157,7 +158,8 @@ class DatadogSpan {
       const spanId = id()
       spanContext = new SpanContext({
         traceId: spanId,
-        spanId
+        spanId,
+        tracestate: extract.includes('tracecontext') || inject.includes('tracecontext')
       })
     }
 

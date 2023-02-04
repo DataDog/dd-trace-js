@@ -73,7 +73,7 @@ describe('SpanContext', () => {
         finished: [],
         tags: {}
       },
-      _tracestate: new TraceState()
+      _tracestate: undefined
     })
   })
 

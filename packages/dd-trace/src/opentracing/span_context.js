@@ -7,6 +7,11 @@ class DatadogSpanContext {
   constructor (props) {
     props = props || {}
 
+    let { tracestate } = props
+    if (tracestate === true) {
+      tracestate = new TraceState()
+    }
+
     this._traceId = props.traceId
     this._spanId = props.spanId
     this._parentId = props.parentId || null
@@ -15,7 +20,7 @@ class DatadogSpanContext {
     this._tags = props.tags || {}
     this._sampling = props.sampling || {}
     this._baggageItems = props.baggageItems || {}
-    this._tracestate = props.tracestate || new TraceState()
+    this._tracestate = tracestate
     this._noop = props.noop || null
     this._trace = props.trace || {
       started: [],

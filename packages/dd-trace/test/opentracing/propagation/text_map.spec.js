@@ -21,6 +21,7 @@ describe('TextMapPropagator', () => {
     const spanContext = new SpanContext({
       traceId: id('123', 10),
       spanId: id('-456', 10),
+      tracestate: true,
       baggageItems,
       ...params,
       trace: {
@@ -380,6 +381,7 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext).to.deep.equal(createContext({
+        tracestate: undefined,
         baggageItems: {
           foo: 'bar'
         }
@@ -432,6 +434,7 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.deep.equal(createContext({
+          tracestate: undefined,
           traceId: id('123', 16),
           spanId: id('456', 16),
           sampling: {
@@ -507,6 +510,7 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.deep.equal(createContext({
+          tracestate: undefined,
           traceId: id('123', 16),
           spanId: id('456', 16)
         }))
@@ -519,6 +523,7 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.deep.equal(createContext({
+          tracestate: undefined,
           traceId: id('123', 16),
           spanId: id('456', 16),
           sampling: {
@@ -534,6 +539,7 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.deep.equal(createContext({
+          tracestate: undefined,
           traceId: id('123', 16),
           spanId: id('456', 16),
           sampling: {
