@@ -27,7 +27,7 @@ describe('Plugin', () => {
 
         before(() => {
           AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
-          s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4572', region: 'us-east-1', s3ForcePathStyle: true })
+          s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', s3ForcePathStyle: true })
           tracer = require('../../dd-trace')
         })
 
@@ -200,8 +200,8 @@ describe('Plugin', () => {
           const { S3 } = require(`../../../versions/${s3ClientName}@${version}`).get()
           const { SQS } = require(`../../../versions/${sqsClientName}@${version}`).get()
 
-          s3 = new S3({ endpoint: 'http://127.0.0.1:4572', region: 'us-east-1', s3ForcePathStyle: true })
-          sqs = new SQS({ endpoint: 'http://127.0.0.1:4576', region: 'us-east-1' })
+          s3 = new S3({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', s3ForcePathStyle: true })
+          sqs = new SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
           tracer = require('../../dd-trace')
         })
 

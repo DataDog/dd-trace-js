@@ -32,7 +32,7 @@ describe('Plugin', () => {
         before(done => {
           AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
 
-          sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4576', region: 'us-east-1' })
+          sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
           sqs.createQueue(queueOptions, (err, res) => {
             if (err) return done(err)
 
@@ -152,7 +152,7 @@ describe('Plugin', () => {
         before(done => {
           AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
 
-          sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4576', region: 'us-east-1' })
+          sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
           sqs.createQueue(queueOptions, (err, res) => {
             if (err) return done(err)
 
@@ -178,7 +178,7 @@ describe('Plugin', () => {
 
             expect(span).to.include({
               name: 'aws.request',
-              resource: 'sendMessage http://localhost:4576/queue/SQS_QUEUE_NAME'
+              resource: `sendMessage ${QueueUrl}`
             })
 
             total++
@@ -189,7 +189,7 @@ describe('Plugin', () => {
 
             expect(span).to.include({
               name: 'aws.request',
-              resource: 'receiveMessage http://localhost:4576/queue/SQS_QUEUE_NAME'
+              resource: `receiveMessage ${QueueUrl}`
             })
 
             total++

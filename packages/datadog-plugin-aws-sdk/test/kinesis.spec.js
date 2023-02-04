@@ -22,7 +22,7 @@ describe('Kinesis', () => {
       AWS = require(`../../../versions/${kinesisClientName}@${version}`).get()
 
       const params = {
-        endpoint: 'http://127.0.0.1:4568',
+        endpoint: 'http://127.0.0.1:4566',
         region: 'us-east-1'
       }
 
