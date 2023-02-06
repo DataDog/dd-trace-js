@@ -1,6 +1,6 @@
 'use strict'
 
-const { testThatRequestHasVulnerability, testThatRequestHasNoVulnerability } = require('../utils')
+const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
@@ -12,7 +12,7 @@ const base = 'dc=example,dc=org'
 describe('ldap-injection-analyzer with ldapjs', () => {
   let client
   withVersions('ldapjs', 'ldapjs', version => {
-    describe('ldapjs', () => {
+    prepareTestServerForIast('ldapjs', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       beforeEach(async () => {
         await agent.load('ldapjs')
         vulnerabilityReporter.clearCache()

@@ -3,7 +3,7 @@
 const fs = require('fs')
 const path = require('path')
 
-const { testThatRequestHasVulnerability, copyFileToTmp } = require('../utils')
+const { prepareTestServerForIast, copyFileToTmp } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString, isTainted } = require('../../../../src/appsec/iast/taint-tracking/operations')
@@ -52,7 +52,7 @@ describe('TaintTracking', () => {
     clearCache()
   })
 
-  describe('should propagate strings', () => {
+  prepareTestServerForIast('should propagate strings', (testThatRequestHasVulnerability) => {
     propagationFns.forEach((propFn) => {
       describe(`using ${propFn}()`, () => {
         commands.forEach((command) => {
