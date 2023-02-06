@@ -18,30 +18,35 @@ class Sns extends BaseAwsSdkPlugin {
   }
 
   requestInject (span, request) {
-    const operation = request.operation
-    if (operation === 'publish' || operation === 'publishBatch') {
-      if (!request.params) {
-        request.params = {}
-      }
-      let injectPath
-      if (request.params.PublishBatchRequestEntries && request.params.PublishBatchRequestEntries.length > 0) {
-        injectPath = request.params.PublishBatchRequestEntries[0]
-      } else if (request.params.Message) {
-        injectPath = request.params
-      }
-      if (!injectPath.MessageAttributes) {
-        injectPath.MessageAttributes = {}
-      }
-      if (Object.keys(injectPath.MessageAttributes).length >= 10) { // SNS quota
-        log.info('Message attributes full, skipping trace context injection')
-        return
-      }
-      const ddInfo = {}
-      this.tracer.inject(span, 'text_map', ddInfo)
-      injectPath.MessageAttributes._datadog = {
-        DataType: 'Binary',
-        BinaryValue: Buffer.from(JSON.stringify(ddInfo)) // BINARY types are automatically base64 encoded
-      }
+    const { operation, params } = request
+
+    if (!params) return
+
+    switch (operation) {
+      case 'publish':
+        this._injectMessageAttributes(span, params)
+        break
+      case 'publishBatch':
+        if (params.PublishBatchRequestEntries && params.PublishBatchRequestEntries.length > 0) {
+          this._injectMessageAttributes(span, params.PublishBatchRequestEntries[0])
+        }
+        break
+    }
+  }
+
+  _injectMessageAttributes (span, params) {
+    if (!params.MessageAttributes) {
+      params.MessageAttributes = {}
+    }
+    if (Object.keys(params.MessageAttributes).length >= 10) { // SNS quota
+      log.info('Message attributes full, skipping trace context injection')
+      return
+    }
+    const ddInfo = {}
+    this.tracer.inject(span, 'text_map', ddInfo)
+    params.MessageAttributes._datadog = {
+      DataType: 'Binary',
+      BinaryValue: Buffer.from(JSON.stringify(ddInfo)) // BINARY types are automatically base64 encoded
     }
   }
 }
