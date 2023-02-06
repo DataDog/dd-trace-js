@@ -43,6 +43,8 @@ describe('AppSec Index', () => {
       '../plugins/util/web': web
     })
 
+    AppSec.disable()
+
     sinon.stub(fs, 'readFileSync').returns('{"rules": [{"a": 1}]}')
     sinon.stub(fs.promises, 'readFile').returns('{"rules": [{"a": 1}]}')
     sinon.stub(RuleManager, 'applyRules')
@@ -56,7 +58,6 @@ describe('AppSec Index', () => {
 
   afterEach(() => {
     sinon.restore()
-    AppSec.disable()
   })
 
   describe('enable', () => {
