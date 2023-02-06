@@ -449,18 +449,18 @@ describe('IP blocking', () => {
     }]
   }
   let http, appListener, port
-  beforeEach(() => {
+  before(() => {
     return getPort().then(newPort => {
       port = newPort
     })
   })
-  beforeEach(() => {
+  before(() => {
     return agent.load('http')
       .then(() => {
         http = require('http')
       })
   })
-  beforeEach(done => {
+  before(done => {
     const server = new http.Server((req, res) => {
       res.writeHead(200)
       res.end(JSON.stringify({ message: 'OK' }))
@@ -484,7 +484,7 @@ describe('IP blocking', () => {
     })
   })
 
-  afterEach(() => {
+  after(() => {
     appListener && appListener.close()
     return agent.close({ ritmReset: false })
   })

@@ -2,7 +2,7 @@
 
 const proxyquire = require('proxyquire')
 const weakCipherAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-cipher-analyzer')
-const { testThatRequestHasVulnerability } = require('../utils')
+const { prepareTestServerForIast } = require('../utils')
 
 describe('weak-cipher-analyzer', () => {
   const VULNERABLE_CIPHER = 'des-ede-cbc'
@@ -61,7 +61,7 @@ describe('weak-cipher-analyzer', () => {
     expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'WEAK_CIPHER' })
   })
 
-  describe('full feature', () => {
+  prepareTestServerForIast('full feature', (testThatRequestHasVulnerability) => {
     testThatRequestHasVulnerability(() => {
       const crypto = require('crypto')
       const key = '1111111111111111'
