@@ -436,6 +436,7 @@ describe('AppSec Index', () => {
     })
   })
 })
+
 describe('IP blocking', () => {
   const invalidIp = '1.2.3.4'
   const validIp = '4.3.2.1'

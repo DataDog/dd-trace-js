@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('fs')
+let templateLoaded = false
 let templateHtml, templateJson
 function block ({ req, res, topSpan, abortController }) {
   let type
@@ -32,15 +33,25 @@ function block ({ req, res, topSpan, abortController }) {
 }
 
 function loadTemplates (config) {
-  templateHtml = fs.readFileSync(config.appsec.blockedTemplateHtml)
-  templateJson = fs.readFileSync(config.appsec.blockedTemplateJson)
+  if (!templateLoaded) {
+    templateHtml = fs.readFileSync(config.appsec.blockedTemplateHtml)
+    templateJson = fs.readFileSync(config.appsec.blockedTemplateJson)
+    templateLoaded = true
+  }
 }
 
 async function loadTemplatesAsync (config) {
-  templateHtml = await fs.promises.readFile(config.appsec.blockedTemplateHtml)
-  templateJson = await fs.promises.readFile(config.appsec.blockedTemplateJson)
+  if (!templateLoaded) {
+    templateHtml = await fs.promises.readFile(config.appsec.blockedTemplateHtml)
+    templateJson = await fs.promises.readFile(config.appsec.blockedTemplateJson)
+    templateLoaded = true
+  }
+}
+
+function resetTemplates () {
+  templateLoaded = false
 }
 
 module.exports = {
-  block, loadTemplates, loadTemplatesAsync
+  block, loadTemplates, loadTemplatesAsync, resetTemplates
 }
