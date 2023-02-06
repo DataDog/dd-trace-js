@@ -21,8 +21,12 @@ describe('Set user API', () => {
         setTag: mockSetTag }
       getRootSpan = sinon.stub().returns(mockRootSpan)
 
-      const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
+      const { setUser } = proxyquire('../../../src/appsec/sdk/set_user', {
         './utils': { getRootSpan }
+      })
+
+      const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
+        './set_user': { setUser }
       })
 
       sdk = new AppsecSdk(tracer)
@@ -64,8 +68,12 @@ describe('Set user API', () => {
     const tracer = {}
     const getRootSpan = sinon.stub().returns(undefined)
 
-    const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
+    const { setUser } = proxyquire('../../../src/appsec/sdk/set_user', {
       './utils': { getRootSpan }
+    })
+
+    const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
+      './set_user': { setUser }
     })
 
     const sdk = new AppsecSdk(tracer)

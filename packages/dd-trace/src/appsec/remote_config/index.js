@@ -42,6 +42,7 @@ function enableAsmData (appsecConfig) {
 
 function disableAsmData () {
   if (rc) {
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, false)
     rc.off('ASM_DATA', _asmDataListener)
   }

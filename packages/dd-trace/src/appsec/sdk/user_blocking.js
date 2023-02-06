@@ -1,6 +1,10 @@
 'use strict'
 const addresses = require('../addresses')
 const Gateway = require('../gateway/engine')
+const { getRootSpan } = require('./utils')
+const { block } = require('../blocking')
+const { storage } = require('../../../../datadog-core')
+const { setUserTags } = require('./set_user')
 
 function isUserBlocked (user) {
   const results = Gateway.propagate({ [addresses.USER_ID]: user.id })
@@ -18,6 +22,52 @@ function isUserBlocked (user) {
   return false
 }
 
+function checkUserAndSetUser (tracer, user) {
+  if (!user || !user.id) {
+    return false
+  }
+
+  const rootSpan = getRootSpan(tracer)
+  if (!rootSpan) {
+    return false
+  }
+
+  const userId = rootSpan.context()._tags['usr.id']
+  if (!userId) {
+    setUserTags({ id: user.id }, rootSpan)
+  }
+  return isUserBlocked(user)
+}
+
+function blockRequest (tracer, req, res) {
+  let request, response
+  if (!req || !res) {
+    const store = storage.getStore()
+    request = req || (store ? store.req : undefined)
+    response = res || (store ? store.res : undefined)
+  } else {
+    request = req
+    response = res
+  }
+
+  if (!request || !response) {
+    return false
+  }
+
+  const topSpan = getRootSpan(tracer)
+  if (!topSpan) {
+    return false
+  }
+
+  block({
+    req: request,
+    res: response,
+    topSpan: topSpan
+  })
+  return true
+}
+
 module.exports = {
-  isUserBlocked
+  checkUserAndSetUser,
+  blockRequest
 }

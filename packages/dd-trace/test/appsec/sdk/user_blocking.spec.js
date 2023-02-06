@@ -11,130 +11,156 @@ const fs = require('fs')
 const crypto = require('crypto')
 
 describe('User blocking API', () => {
-  describe('Check internal callings', () => {
+  describe('Test public API', () => {
     const tracer = {}
     const mockReq = { protocol: 'https' }
     const mockRes = { headersSent: false }
-    const storage = { getStore: () => {
-      return { req: mockReq, res: mockRes }
-    } }
-    const block = sinon.stub()
-    const root = sinon.stub().returns({})
     const loadTemplates = sinon.stub()
-    let sdk, isUserBlocked, mockSetTag, mockRootSpan, getRootSpan
+    let sdk, checkUserAndSetUser, blockRequest, setUser
 
     beforeEach(() => {
-      isUserBlocked = sinon.stub()
-      mockSetTag = sinon.stub()
-      mockRootSpan = {
-        context: () => {
-          return { _tags: { 'usr.id': 'mockUser' } }
-        },
-        setTag: mockSetTag }
-      block.reset()
-      getRootSpan = sinon.stub().returns(mockRootSpan)
+      checkUserAndSetUser = sinon.stub()
+      blockRequest = sinon.stub()
+      setUser = sinon.stub()
 
       const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
-        './user_blocking': { isUserBlocked },
-        '../blocking': { block, loadTemplates },
-        '../../plugins/util/web': { root },
-        '../../../../datadog-core': { storage },
-        './utils': { getRootSpan }
+        './user_blocking': { checkUserAndSetUser, blockRequest },
+        './set_user': { setUser },
+        '../blocking': { loadTemplates }
       })
 
       sdk = new AppsecSdk(tracer)
     })
 
-    it('Check isUserBlocked with a valid user', () => {
+    it('Check isUserBlocked', () => {
       const user = { id: 'user' }
       sdk.isUserBlocked(user)
-      expect(isUserBlocked).to.be.calledWith(user)
-    })
-
-    it('Check isUserBlocked with an empty user', () => {
-      const user = {}
-      const ret = sdk.isUserBlocked(user)
-      expect(ret).to.be.false
-      expect(isUserBlocked).not.to.have.been.called
-    })
-
-    it('Check isUserBlocked with no user', () => {
-      const ret = sdk.isUserBlocked()
-      expect(ret).to.be.false
-      expect(isUserBlocked).not.to.have.been.called
+      expect(checkUserAndSetUser).to.be.calledWith(tracer, user)
     })
 
     it('Check blockRequest', () => {
-      sdk.blockRequest({}, {})
-      expect(block).to.be.calledWith({ req: {}, res: {}, topSpan: mockRootSpan })
+      sdk.blockRequest(mockReq, mockRes)
+      expect(blockRequest).to.be.calledWith(tracer, mockReq, mockRes)
     })
 
-    it('Check blockRequest no params', () => {
-      sdk.blockRequest()
-      expect(block).to.be.calledWith({ req: mockReq, res: mockRes, topSpan: mockRootSpan })
+    it('Check setUser', () => {
+      const user = { id: 'user' }
+      sdk.setUser(user)
+      expect(setUser).to.be.calledWith(tracer, user)
     })
   })
 
-  describe('Check internal callings, no rootSpan', () => {
+  describe('Test internal API', () => {
     const tracer = {}
-    const isUserBlocked = sinon.stub()
-    const block = sinon.stub()
-    const root = sinon.stub().returns({})
-    const loadTemplates = sinon.stub()
     const mockReq = { protocol: 'https' }
     const mockRes = { headersSent: false }
     const storage = { getStore: () => {
       return { req: mockReq, res: mockRes }
     } }
-    const getRootSpan = sinon.stub().returns(undefined)
 
-    const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
-      './user_blocking': { isUserBlocked },
-      '../blocking': { block, loadTemplates },
-      '../../plugins/util/web': { root },
-      '../../../../datadog-core': { storage },
-      './utils': { getRootSpan }
+    let block, getRootSpan, mockRootSpan, mockSetTag, userBlocking, isUserBlocked
+
+    beforeEach(() => {
+      block = sinon.stub()
+      mockSetTag = sinon.stub()
+      mockRootSpan = {
+        context: () => {
+          return { _tags: { 'usr.id': 'mockUser' } }
+        },
+        setTag: mockSetTag
+      }
+      getRootSpan = sinon.stub().returns(mockRootSpan)
+      isUserBlocked = sinon.stub()
+      userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
+        './utils': { getRootSpan },
+        '../blocking': { block },
+        '../../../../datadog-core': { storage },
+        'isUserBlocked': isUserBlocked
+      })
     })
 
-    const sdk = new AppsecSdk(tracer)
+    it('Test checkUserAndSetUser with an empty user', () => {
+      const user = {}
+      const ret = userBlocking.checkUserAndSetUser(tracer, user)
+      expect(ret).to.be.false
+      expect(isUserBlocked).not.to.have.been.called
+    })
+
+    it('Test checkUserAndSetUser with no user', () => {
+      const ret = userBlocking.checkUserAndSetUser()
+      expect(ret).to.be.false
+      expect(isUserBlocked).not.to.have.been.called
+    })
+
+    it('Test blockRequest', () => {
+      userBlocking.blockRequest(tracer, {}, {})
+      expect(block).to.be.calledWith({ req: {}, res: {}, topSpan: mockRootSpan })
+    })
+
+    it('Test blockRequest no params', () => {
+      userBlocking.blockRequest(tracer)
+      expect(block).to.be.calledWith({ req: mockReq, res: mockRes, topSpan: mockRootSpan })
+    })
+  })
+
+  describe('Test internal API, no rootSpan', () => {
+    const tracer = {}
+    const mockReq = { protocol: 'https' }
+    const mockRes = { headersSent: false }
+    const storage = { getStore: () => {
+      return { req: mockReq, res: mockRes }
+    } }
+
+    let block, getRootSpan, userBlocking, isUserBlocked
+
+    beforeEach(() => {
+      block = sinon.stub()
+      getRootSpan = sinon.stub().returns(undefined)
+      isUserBlocked = sinon.stub()
+      userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
+        './utils': { getRootSpan },
+        '../blocking': { block },
+        '../../../../datadog-core': { storage },
+        'isUserBlocked': isUserBlocked
+      })
+    })
 
     it('Check blockRequest no rootSpan', () => {
-      const ret = sdk.blockRequest({}, {})
+      const ret = userBlocking.blockRequest({}, {})
       expect(ret).to.be.false
       expect(block).not.to.have.been.called
     })
 
     it('Check isUserBlocked no rootSpan', () => {
-      const ret = sdk.isUserBlocked({ id: 'user' })
+      const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
       expect(getRootSpan).to.be.calledWith(tracer)
       expect(ret).to.be.false
       expect(isUserBlocked).not.to.have.been.called
     })
   })
 
-  describe('Check internal callings, no storage', () => {
+  describe('Test internal API, no storage', () => {
     const tracer = {}
-    const isUserBlocked = sinon.stub()
-    const block = sinon.stub()
-    const root = sinon.stub().returns({})
-    const loadTemplates = sinon.stub()
     const storage = { getStore: () => {
       return undefined
     } }
-    const getRootSpan = sinon.stub().returns(undefined)
 
-    const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
-      './user_blocking': { isUserBlocked },
-      '../blocking': { block, loadTemplates },
-      '../../plugins/util/web': { root },
-      '../../../../datadog-core': { storage },
-      './utils': { getRootSpan }
+    let block, getRootSpan, userBlocking, isUserBlocked
+
+    beforeEach(() => {
+      block = sinon.stub()
+      getRootSpan = sinon.stub().returns(undefined)
+      isUserBlocked = sinon.stub()
+      userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
+        './utils': { getRootSpan },
+        '../blocking': { block },
+        '../../../../datadog-core': { storage },
+        'isUserBlocked': isUserBlocked
+      })
     })
 
-    const sdk = new AppsecSdk(tracer)
-
     it('Check blockRequest no storage', () => {
-      const ret = sdk.blockRequest()
+      const ret = userBlocking.blockRequest(tracer)
       expect(ret).to.be.false
       expect(getRootSpan).not.to.have.been.called
     })
