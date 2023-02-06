@@ -1,7 +1,6 @@
 'use strict'
 
 const tracerVersion = require('../../../../package.json').version
-const containerId = require('../exporters/common/docker').id()
 const os = require('os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
@@ -76,9 +75,31 @@ function createAppObject () {
 }
 
 function createHostObject () {
+  const osName = os.type()
+
+  if (osName === 'Linux' || osName === 'Darwin') {
+    return {
+      hostname: os.hostname(),
+      os: osName,
+      architecture: os.arch(),
+      kernel_version: os.version(),
+      kernel_release: os.release(),
+      kernel_name: osName
+    }
+  }
+
+  if (osName === 'Windows_NT') {
+    return {
+      hostname: os.hostname(),
+      os: osName,
+      architecture: os.arch(),
+      os_version: os.version()
+    }
+  }
+
   return {
     hostname: os.hostname(), // TODO is this enough?
-    container_id: containerId
+    os: osName
   }
 }
 
