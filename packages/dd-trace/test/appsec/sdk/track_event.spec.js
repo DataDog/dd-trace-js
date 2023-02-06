@@ -7,6 +7,7 @@ describe('track_event', () => {
   let rootSpan
   let getRootSpan
   let tracer
+  let setUserTags
   let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
 
   beforeEach(() => {
@@ -18,6 +19,8 @@ describe('track_event', () => {
       addTags: sinon.stub()
     }
 
+    setUserTags = sinon.stub()
+
     getRootSpan = sinon.stub().callsFake(() => rootSpan)
 
     tracer = {
@@ -28,6 +31,9 @@ describe('track_event', () => {
       '../../log': log,
       './utils': {
         getRootSpan
+      },
+      './set_user': {
+        setUserTags
       }
     })
 
@@ -67,7 +73,7 @@ describe('track_event', () => {
       })
 
       expect(log.warn).to.not.have.been.called
-      expect(tracer.setUser).to.have.been.calledOnceWithExactly(user)
+      expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
         'appsec.events.users.login.success.track': 'true',
         'appsec.events.users.login.success.metakey1': 'metaValue1',
@@ -83,7 +89,7 @@ describe('track_event', () => {
       trackUserLoginSuccessEvent(tracer, user)
 
       expect(log.warn).to.not.have.been.called
-      expect(tracer.setUser).to.have.been.calledOnceWithExactly(user)
+      expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
         'appsec.events.users.login.success.track': 'true',
         'manual.keep': 'true'
