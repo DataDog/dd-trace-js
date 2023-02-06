@@ -55,7 +55,7 @@ class WAFCallback {
     for (const rule of rules.rules) {
       for (const condition of rule.conditions) {
         for (const input of condition.parameters.inputs) {
-          const address = input.address.split(':', 2)[0]
+          const address = input.address.split(':', 1)[0]
 
           if (!validAddressSet.has(address) || subscribedAddresses.has(address)) continue
 
@@ -85,11 +85,6 @@ class WAFCallback {
 
     if (!wafContext || wafContext.disposed) {
       wafContext = this.ddwaf.createContext()
-    }
-
-    // cast status code to string
-    if (params[addresses.HTTP_INCOMING_RESPONSE_CODE]) {
-      params[addresses.HTTP_INCOMING_RESPONSE_CODE] = params[addresses.HTTP_INCOMING_RESPONSE_CODE] + ''
     }
 
     try {
