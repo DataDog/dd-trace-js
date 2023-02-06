@@ -9,6 +9,7 @@ const agent = require('../../plugins/agent')
 const axios = require('axios')
 const iast = require('../../../src/appsec/iast')
 const Config = require('../../../src/config')
+const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
 
 function testInRequest (app, tests) {
   let http
@@ -58,60 +59,6 @@ function testInRequest (app, tests) {
   tests(config)
 }
 
-function prepareTests () {
-  beforeEach(() => {
-    iast.enable(new Config({
-      experimental: {
-        iast: {
-          enabled: true,
-          requestSampling: 100
-        }
-      }
-    }))
-  })
-
-  afterEach(() => {
-    iast.disable()
-  })
-}
-
-function testThatRequestHasVulnerability (app, vulnerability) {
-  function tests (config) {
-    prepareTests()
-    it(`should have ${vulnerability} vulnerability`, function (done) {
-      agent
-        .use(traces => {
-          expect(traces[0][0].meta['_dd.iast.json']).to.include(`"${vulnerability}"`)
-        })
-        .then(done)
-        .catch(done)
-      axios.get(`http://localhost:${config.port}/`).catch(done)
-    })
-  }
-
-  testInRequest(app, tests)
-}
-
-function testThatRequestHasNoVulnerability (app, vulnerability) {
-  function tests (config) {
-    prepareTests()
-
-    it(`should not have ${vulnerability} vulnerability`, function (done) {
-      agent
-        .use(traces => {
-          // iastJson == undefiend is valid
-          const iastJson = traces[0][0].meta['_dd.iast.json'] || ''
-          expect(iastJson).to.not.include(`"${vulnerability}"`)
-        })
-        .then(done)
-        .catch(done)
-      axios.get(`http://localhost:${config.port}/`).catch(done)
-    })
-  }
-
-  testInRequest(app, tests)
-}
-
 function testOutsideRequestHasVulnerability (fnToTest, vulnerability) {
   beforeEach(async () => {
     await agent.load()
@@ -153,10 +100,107 @@ function copyFileToTmp (src) {
   return dest
 }
 
+function prepareTestServerForIast (description, tests) {
+  describe(description, () => {
+    const config = {}
+    let http
+    let listener
+    let appListener
+    let app
+
+    before(() => {
+      return getPort().then(newPort => {
+        config.port = newPort
+      })
+    })
+
+    before(() => {
+      listener = (req, res) => {
+        const appResult = app && app(req, res)
+        if (appResult && typeof appResult.then === 'function') {
+          appResult.then(() => {
+            res.writeHead(200)
+            res.end()
+          })
+        } else {
+          res.writeHead(200)
+          res.end()
+        }
+      }
+    })
+
+    before(() => {
+      return agent.load('http', undefined, { flushInterval: 1 })
+        .then(() => {
+          http = require('http')
+        })
+    })
+
+    before(done => {
+      const server = new http.Server(listener)
+      appListener = server
+        .listen(config.port, 'localhost', () => done())
+    })
+
+    beforeEach(async () => {
+      vulnerabilityReporter.clearCache()
+    })
+
+    beforeEach(() => {
+      iast.enable(new Config({
+        experimental: {
+          iast: {
+            enabled: true,
+            requestSampling: 100
+          }
+        }
+      }))
+    })
+
+    afterEach(() => {
+      iast.disable()
+      app = null
+    })
+
+    after(() => {
+      appListener && appListener.close()
+      return agent.close({ ritmReset: false })
+    })
+
+    function testThatRequestHasVulnerability (fn, vulnerability) {
+      it(`should have ${vulnerability} vulnerability`, function (done) {
+        app = fn
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta['_dd.iast.json']).to.include(`"${vulnerability}"`)
+          })
+          .then(done)
+          .catch(done)
+        axios.get(`http://localhost:${config.port}/`).catch(done)
+      })
+    }
+
+    function testThatRequestHasNoVulnerability (fn, vulnerability) {
+      it(`should not have ${vulnerability} vulnerability`, function (done) {
+        app = fn
+        agent
+          .use(traces => {
+            // iastJson == undefiend is valid
+            const iastJson = traces[0][0].meta['_dd.iast.json'] || ''
+            expect(iastJson).to.not.include(`"${vulnerability}"`)
+          })
+          .then(done)
+          .catch(done)
+        axios.get(`http://localhost:${config.port}/`).catch(done)
+      })
+    }
+    tests(testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config)
+  })
+}
+
 module.exports = {
-  testThatRequestHasNoVulnerability,
-  testThatRequestHasVulnerability,
   testOutsideRequestHasVulnerability,
   testInRequest,
-  copyFileToTmp
+  copyFileToTmp,
+  prepareTestServerForIast
 }
