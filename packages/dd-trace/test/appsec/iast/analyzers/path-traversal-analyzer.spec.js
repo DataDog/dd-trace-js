@@ -10,9 +10,8 @@ const proxyquire = require('proxyquire')
 const pathTraversalAnalyzer = require('../../../../src/appsec/iast/analyzers/path-traversal-analyzer')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 
-const { testThatRequestHasNoVulnerability, testThatRequestHasVulnerability } = require('../utils')
+const { prepareTestServerForIast } = require('../utils')
 const fs = require('fs')
-const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
 
 const iastContext = {
   rootSpan: {
@@ -137,10 +136,7 @@ describe('path-traversal-analyzer', () => {
   })
 })
 
-describe('integration test', () => {
-  beforeEach(async () => {
-    vulnerabilityReporter.clearCache()
-  })
+prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
   function runFsMethodTest (description, vulnerableIndex, fn, ...args) {
     describe(description, () => {
       describe('vulnerable', () => {
