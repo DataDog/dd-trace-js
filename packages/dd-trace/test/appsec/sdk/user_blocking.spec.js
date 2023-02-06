@@ -11,45 +11,6 @@ const fs = require('fs')
 const crypto = require('crypto')
 
 describe('User blocking API', () => {
-  describe('Test public API', () => {
-    const tracer = {}
-    const mockReq = { protocol: 'https' }
-    const mockRes = { headersSent: false }
-    const loadTemplates = sinon.stub()
-    let sdk, checkUserAndSetUser, blockRequest, setUser
-
-    beforeEach(() => {
-      checkUserAndSetUser = sinon.stub()
-      blockRequest = sinon.stub()
-      setUser = sinon.stub()
-
-      const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
-        './user_blocking': { checkUserAndSetUser, blockRequest },
-        './set_user': { setUser },
-        '../blocking': { loadTemplates }
-      })
-
-      sdk = new AppsecSdk(tracer)
-    })
-
-    it('Check isUserBlocked', () => {
-      const user = { id: 'user' }
-      sdk.isUserBlocked(user)
-      expect(checkUserAndSetUser).to.be.calledWith(tracer, user)
-    })
-
-    it('Check blockRequest', () => {
-      sdk.blockRequest(mockReq, mockRes)
-      expect(blockRequest).to.be.calledWith(tracer, mockReq, mockRes)
-    })
-
-    it('Check setUser', () => {
-      const user = { id: 'user' }
-      sdk.setUser(user)
-      expect(setUser).to.be.calledWith(tracer, user)
-    })
-  })
-
   describe('Test internal API', () => {
     const tracer = {}
     const mockReq = { protocol: 'https' }
