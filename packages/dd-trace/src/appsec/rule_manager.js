@@ -71,8 +71,10 @@ function copyRulesData (rulesData) {
 }
 
 function getRulesOverrideData (asmData) {
-  return asmData.rules_override && asmData.rules_override.filter &&
-    asmData.rules_override.filter(ruleOverride => ruleOverride.hasOwnProperty('enabled'))
+  return asmData.rules_override && Array.isArray(asmData.rules_override) &&
+    asmData.rules_override
+      .filter(ruleOverride => ruleOverride.hasOwnProperty('enabled'))
+      .map(ruleOverride => ({ id: ruleOverride.id, enabled: ruleOverride.enabled }))
 }
 
 function toggleRules (action, asmData) {

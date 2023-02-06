@@ -441,5 +441,36 @@ describe('AppSec Rule Manager', () => {
       toggleRules('apply', asmPayload, '1')
       expect(FakeDDWAF.prototype.toggleRules).to.have.been.calledOnceWithExactly(expectedRulesOverride)
     })
+
+    it('should call WAF toggleRules with rules_override with extra fields', () => {
+      const asmPayload = {
+        rules_override: [
+          {
+            enabled: false,
+            id: 'crs-941-300',
+            extrafield: [ 'one', 'two', 'three' ]
+          },
+          {
+            enabled: false,
+            id: 'test-3'
+          }
+        ]
+      }
+
+      const expectedRulesOverride = [
+        {
+          enabled: false,
+          id: 'crs-941-300'
+        },
+        {
+          enabled: false,
+          id: 'test-3'
+        }
+      ]
+
+      applyRules(rules)
+      toggleRules('apply', asmPayload, '1')
+      expect(FakeDDWAF.prototype.toggleRules).to.have.been.calledOnceWithExactly(expectedRulesOverride)
+    })
   })
 })
