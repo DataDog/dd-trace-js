@@ -23,10 +23,18 @@ function withNoop (fn) {
 }
 
 function unsubscribeAll () {
-  debugChannel.unsubscribe(onDebug)
-  infoChannel.unsubscribe(onInfo)
-  warnChannel.unsubscribe(onWarn)
-  errorChannel.unsubscribe(onError)
+  if (debugChannel.hasSubscribers) {
+    debugChannel.unsubscribe(onDebug)
+  }
+  if (infoChannel.hasSubscribers) {
+    infoChannel.unsubscribe(onInfo)
+  }
+  if (warnChannel.hasSubscribers) {
+    warnChannel.unsubscribe(onWarn)
+  }
+  if (errorChannel.hasSubscribers) {
+    errorChannel.unsubscribe(onError)
+  }
 }
 
 function toggleSubscription (enable) {
