@@ -21,22 +21,6 @@ describe('CI Visibility Agentless Exporter', () => {
     delete process.env.DD_APP_KEY
   })
 
-  it('uploads git metadata if configured to do so', (done) => {
-    const scope = nock('http://www.example.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({
-        data: []
-      }))
-      .post('/api/v2/git/repository/packfile')
-      .reply(202, '')
-
-    const agentlessExporter = new AgentlessCiVisibilityExporter({ url, isGitUploadEnabled: true, tags: {} })
-    agentlessExporter._gitUploadPromise.then(() => {
-      expect(scope.isDone()).to.be.true
-      done()
-    })
-  })
-
   it('can use CI Vis protocol right away', () => {
     const agentlessExporter = new AgentlessCiVisibilityExporter({ url, isGitUploadEnabled: true, tags: {} })
     expect(agentlessExporter.canReportSessionTraces()).to.be.true

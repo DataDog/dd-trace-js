@@ -22,32 +22,32 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/packfile')
         .reply(202, '')
 
-      const ciVisibilityExporter = new CiVisibilityExporter({ port })
+      const url = new URL(`http://localhost:${port}`)
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
         expect(err).not.to.exist
         expect(scope.isDone()).to.be.true
         done()
       })
-
-      const url = new URL(`http://localhost:${port}`)
-      ciVisibilityExporter.sendGitMetadata({ url, isEvpProxy: false })
+      ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      ciVisibilityExporter.sendGitMetadata()
     })
     it('should resolve _gitUploadPromise with an error when git metadata request fails', (done) => {
       const scope = nock(`http://localhost:${port}`)
         .post('/api/v2/git/repository/search_commits')
         .reply(404)
 
-      const ciVisibilityExporter = new CiVisibilityExporter({ port })
+      const url = new URL(`http://localhost:${port}`)
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
         expect(err.message).to.include('Error fetching commits to exclude')
         expect(scope.isDone()).to.be.true
         done()
       })
-
-      const url = new URL(`http://localhost:${port}`)
-      ciVisibilityExporter.sendGitMetadata({ url, isEvpProxy: false })
+      ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      ciVisibilityExporter.sendGitMetadata()
     })
   })
 

@@ -32,7 +32,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
     }, GIT_UPLOAD_TIMEOUT).unref()
 
     const canUseCiVisProtocolTimeoutId = setTimeout(() => {
-      this._resolveGit(new Error('Timeout while attempting to communicate with the agent'))
+      this._resolveCanUseCiVisProtocol(false)
     }, CAN_USE_CI_VIS_PROTOCOL_TIMEOUT).unref()
 
     this._gitUploadPromise = new Promise(resolve => {
