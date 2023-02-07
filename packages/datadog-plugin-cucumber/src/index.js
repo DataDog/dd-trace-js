@@ -7,7 +7,10 @@ const {
   TEST_SKIP_REASON,
   TEST_STATUS,
   finishAllTraceSpans,
-  getTestSuitePath
+  getTestSuitePath,
+  getTestParentSpan,
+  getTestSessionCommonTags,
+  getTestModuleCommonTags
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -20,7 +23,37 @@ class CucumberPlugin extends CiPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub('ci:cucumber:session:finish', () => {
+    this.addSub('ci:cucumber:session:start', ({ command, frameworkVersion }) => {
+      const childOf = getTestParentSpan(this.tracer)
+      const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion)
+
+      this.command = command
+      this.testSessionSpan = this.tracer.startSpan('cucumber.test_session', {
+        childOf,
+        tags: {
+          [COMPONENT]: this.constructor.name,
+          ...this.testEnvironmentMetadata,
+          ...testSessionSpanMetadata
+        }
+      })
+
+      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion)
+      this.testModuleSpan = this.tracer.startSpan('cucumber.test_module', {
+        childOf: this.testSessionSpan,
+        tags: {
+          [COMPONENT]: this.constructor.name,
+          ...this.testEnvironmentMetadata,
+          ...testModuleSpanMetadata
+        }
+      })
+    })
+
+    this.addSub('ci:cucumber:session:finish', (status) => {
+      this.testSessionSpan.setTag(TEST_STATUS, status)
+      this.testModuleSpan.setTag(TEST_STATUS, status)
+      this.testModuleSpan.finish()
+      this.testSessionSpan.finish()
+      finishAllTraceSpans(this.testSessionSpan)
       this.tracer._exporter.flush()
     })
 

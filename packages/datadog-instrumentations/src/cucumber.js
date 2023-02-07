@@ -7,6 +7,8 @@ const runStartCh = channel('ci:cucumber:run:start')
 const runFinishCh = channel('ci:cucumber:run:finish')
 const runStepStartCh = channel('ci:cucumber:run-step:start')
 const errorCh = channel('ci:cucumber:error')
+
+const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
 
 // TODO: remove in a later major version
@@ -132,13 +134,19 @@ addHook({
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.0.0'],
-  file: 'lib/runtime/index.js'
-}, (Runtime) => {
-  shimmer.wrap(Runtime.default.prototype, 'start', start => async function () {
-    const result = await start.apply(this, arguments)
-    sessionFinishCh.publish(undefined)
-    return result
+  file: 'lib/cli/index.js'
+}, (cliPackage) => {
+  shimmer.wrap(cliPackage.default.prototype, 'run', run => async function () {
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    asyncResource.runInAsyncScope(() => {
+      sessionStartCh.publish({ command: 'cucumber-js', frameworkVersion: '0.0.1' })
+    })
+    const res = await run.apply(this, arguments)
+    asyncResource.runInAsyncScope(() => {
+      sessionFinishCh.publish('pass')
+    })
+    return res
   })
 
-  return Runtime
+  return cliPackage
 })
