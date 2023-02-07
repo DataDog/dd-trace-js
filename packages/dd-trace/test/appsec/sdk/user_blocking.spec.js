@@ -41,25 +41,25 @@ describe('User blocking API', () => {
       })
     })
 
-    it('Test checkUserAndSetUser with an empty user', () => {
+    it('checkUserAndSetUser should return false with an empty user', () => {
       const user = {}
       const ret = userBlocking.checkUserAndSetUser(tracer, user)
       expect(ret).to.be.false
       expect(isUserBlocked).not.to.have.been.called
     })
 
-    it('Test checkUserAndSetUser with no user', () => {
+    it('checkUserAndSetUser should return false with no user', () => {
       const ret = userBlocking.checkUserAndSetUser()
       expect(ret).to.be.false
       expect(isUserBlocked).not.to.have.been.called
     })
 
-    it('Test blockRequest', () => {
+    it('blockRequest should call block with proper arguments', () => {
       userBlocking.blockRequest(tracer, {}, {})
       expect(block).to.be.calledWith({ req: {}, res: {}, topSpan: mockRootSpan })
     })
 
-    it('Test blockRequest no params', () => {
+    it('blockRequest should get req and res from local storage when they are not passed', () => {
       userBlocking.blockRequest(tracer)
       expect(block).to.be.calledWith({ req: mockReq, res: mockRes, topSpan: mockRootSpan })
     })
@@ -87,13 +87,13 @@ describe('User blocking API', () => {
       })
     })
 
-    it('Check blockRequest no rootSpan', () => {
+    it('blockRequest should return proper value when there is no rootSpan available', () => {
       const ret = userBlocking.blockRequest({}, {})
       expect(ret).to.be.false
       expect(block).not.to.have.been.called
     })
 
-    it('Check isUserBlocked no rootSpan', () => {
+    it('checkUserAndSetUser should return false when there is no rootSpan available', () => {
       const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
       expect(getRootSpan).to.be.calledWith(tracer)
       expect(ret).to.be.false
@@ -121,7 +121,7 @@ describe('User blocking API', () => {
       })
     })
 
-    it('Check blockRequest no storage', () => {
+    it('blockRequest should return false when the storage is not available', () => {
       const ret = userBlocking.blockRequest(tracer)
       expect(ret).to.be.false
       expect(getRootSpan).not.to.have.been.called
@@ -216,34 +216,8 @@ describe('User blocking API', () => {
       RuleManager.updateAsmData('apply', blockRuleData, 'asm_data')
     })
 
-    describe('setUser', () => {
-      it('should set a proper user', (done) => {
-        controller = (req, res) => {
-          const user = { id: 'testUser' }
-          tracer.appsec.setUser(user)
-          res.end()
-        }
-        agent.use(traces => {
-          expect(traces[0][0].meta).to.have.property('usr.id', 'testUser')
-        }).then(done).catch(done)
-        axios.get(`http://localhost:${port}/`)
-      })
-
-      it('Last user should prevail', (done) => {
-        controller = (req, res) => {
-          tracer.appsec.setUser({ id: 'testUser' })
-          tracer.appsec.setUser({ id: 'testUser2' })
-          res.end()
-        }
-        agent.use(traces => {
-          expect(traces[0][0].meta).to.have.property('usr.id', 'testUser2')
-        }).then(done).catch(done)
-        axios.get(`http://localhost:${port}/`)
-      })
-    })
-
     describe('isUserBlocked', () => {
-      it('If user is not defined it should set the user', (done) => {
+      it('should set the user if user is not defined', (done) => {
         controller = (req, res) => {
           const ret = tracer.appsec.isUserBlocked({ id: 'testUser3' })
           expect(ret).to.be.false
@@ -255,7 +229,7 @@ describe('User blocking API', () => {
         axios.get(`http://localhost:${port}/`)
       })
 
-      it('If user is already defined it should not set the user', (done) => {
+      it('should not set the user if user is already defined', (done) => {
         controller = (req, res) => {
           tracer.setUser({ id: 'testUser' })
           const ret = tracer.appsec.isUserBlocked({ id: 'testUser3' })
@@ -268,7 +242,7 @@ describe('User blocking API', () => {
         axios.get(`http://localhost:${port}/`)
       })
 
-      it('If user is in the blocklist it should return true', (done) => {
+      it('should return true if user is in the blocklist', (done) => {
         controller = (req, res) => {
           const ret = tracer.appsec.isUserBlocked({ id: 'blockedUser' })
           expect(ret).to.be.true
@@ -282,7 +256,7 @@ describe('User blocking API', () => {
     })
 
     describe('blockRequest', () => {
-      it('When called it should set the proper tag', (done) => {
+      it('should set the proper tag', (done) => {
         controller = (req, res) => {
           tracer.appsec.blockRequest(req, res)
         }
@@ -292,7 +266,7 @@ describe('User blocking API', () => {
         axios.get(`http://localhost:${port}/`)
       })
 
-      it('When called with no params it should get them from the store', (done) => {
+      it('should get the params from the store if they are not passed', (done) => {
         controller = (req, res) => {
           if (!tracer.appsec.blockRequest()) {
             res.end()

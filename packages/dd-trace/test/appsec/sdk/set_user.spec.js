@@ -8,7 +8,7 @@ const Config = require('../../../src/config')
 const getPort = require('get-port')
 const axios = require('axios')
 
-describe('Set user API', () => {
+describe('setUser', () => {
   describe('Check internal callings', () => {
     const tracer = {}
     let sdk, mockSetTag, mockRootSpan, getRootSpan
@@ -33,24 +33,24 @@ describe('Set user API', () => {
       sdk = new AppsecSdk(tracer)
     })
 
-    it('Check setUser', () => {
+    it('setUser should call setTag with proper values', () => {
       const user = { id: 'user' }
       sdk.setUser(user)
       expect(mockSetTag).to.be.calledWith('usr.id', 'user')
     })
 
-    it('Check setUser with no user', () => {
+    it('setUser should not call setTag when no user is passed', () => {
       sdk.setUser()
       expect(mockSetTag).not.to.have.been.called
     })
 
-    it('Check setUser with no user id', () => {
+    it('setUser should not call setTag when user is empty', () => {
       const user = {}
       sdk.setUser(user)
       expect(mockSetTag).not.to.have.been.called
     })
 
-    it('Check setUser with a user with several attributes', () => {
+    it('setUser should call setTag with every attribute', () => {
       const user = {
         id: '123',
         email: 'a@b.c',
@@ -68,9 +68,11 @@ describe('Set user API', () => {
   describe('Check internal callings, no rootSpan', () => {
     const tracer = {}
     const getRootSpan = sinon.stub().returns(undefined)
+    const setUserTagsStub = sinon.stub()
 
     const { setUser } = proxyquire('../../../src/appsec/sdk/set_user', {
-      './utils': { getRootSpan }
+      './utils': { getRootSpan },
+      setUserTags: setUserTagsStub
     })
 
     const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
@@ -79,11 +81,10 @@ describe('Set user API', () => {
 
     const sdk = new AppsecSdk(tracer)
 
-    it('Check setUser no rootSpan', () => {
-      sdk._setUser = sinon.stub()
+    it('setUser should not call setUserTags when rootSpan is not available', () => {
       sdk.setUser({ id: 'user' })
       expect(getRootSpan).to.be.calledWith(tracer)
-      expect(sdk._setUser).not.to.have.been.called
+      expect(setUserTagsStub).not.to.have.been.called
     })
   })
 
@@ -139,7 +140,7 @@ describe('Set user API', () => {
         axios.get(`http://localhost:${port}/`)
       })
 
-      it('Last user should prevail', (done) => {
+      it('should prevail last user on consecutive callings', (done) => {
         controller = (req, res) => {
           tracer.appsec.setUser({ id: 'testUser' })
           tracer.appsec.setUser({ id: 'testUser2' })

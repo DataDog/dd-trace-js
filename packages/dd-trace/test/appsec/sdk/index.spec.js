@@ -32,38 +32,38 @@ describe('Test public API', () => {
     sdk = new AppsecSdk(tracer)
   })
 
-  it('Test isUserBlocked', () => {
+  it('isUserBlocked should call internal function with proper params', () => {
     const user = { id: 'user' }
     sdk.isUserBlocked(user)
     expect(checkUserAndSetUser).to.be.calledWith(tracer, user)
   })
 
-  it('Test blockRequest', () => {
+  it('blockRequest should call internal function wit proper params', () => {
     sdk.blockRequest(mockReq, mockRes)
     expect(blockRequest).to.be.calledWith(tracer, mockReq, mockRes)
   })
 
-  it('Test setUser', () => {
+  it('setUser should call internal function with proper params', () => {
     const user = { id: 'user' }
     sdk.setUser(user)
     expect(setUser).to.be.calledWith(tracer, user)
   })
 
-  it('Test trackUserLoginSuccessEvent', () => {
+  it('trackUserLoginSuccessEvent should call internal function with proper params', () => {
     const user = { id: 'user' }
     const metadata = {}
     sdk.trackUserLoginSuccessEvent(user, metadata)
     expect(trackUserLoginSuccessEvent).to.be.calledWith(tracer, user, metadata)
   })
 
-  it('Test trackUserLoginFailureEvent', () => {
+  it('trackUserLoginFailureEvent should call internal function with proper params', () => {
     const user = { id: 'user' }
     const metadata = {}
     sdk.trackUserLoginFailureEvent(user, metadata)
     expect(trackUserLoginFailureEvent).to.be.calledWith(tracer, user, metadata)
   })
 
-  it('Test trackCustomEvent', () => {
+  it('trackCustomEvent should call internal function with proper params', () => {
     const eventName = 'customEvent'
     const metadata = {}
     sdk.trackUserLoginFailureEvent(eventName, metadata)

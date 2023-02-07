@@ -35,7 +35,7 @@ function checkUserAndSetUser (tracer, user) {
 
   const userId = rootSpan.context()._tags['usr.id']
   if (!userId) {
-    setUserTags({ id: user.id }, rootSpan)
+    setUserTags(user, rootSpan)
   }
   return isUserBlocked(user)
 }
