@@ -296,23 +296,23 @@ function createWrapFunction (prefix = '', override = '') {
                 if (isFirstMethodReturningFileHandle(original)) {
                   wrapFileHandle(value)
                 }
-                finishChannel.publish()
+                finishChannel.publish(message)
                 return value
               },
               error => {
                 errorChannel.publish(error)
-                finishChannel.publish()
+                finishChannel.publish(message)
                 throw error
               }
             )
           }
 
-          finishChannel.publish()
+          finishChannel.publish(message)
 
           return result
         } catch (error) {
           errorChannel.publish(error)
-          finishChannel.publish()
+          finishChannel.publish(message)
           throw error
         }
       })

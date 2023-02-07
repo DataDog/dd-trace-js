@@ -46,8 +46,9 @@ const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/inje
 
 describe('path-traversal-analyzer', () => {
   it('Analyzer should be subscribed to proper channel', () => {
-    expect(pathTraversalAnalyzer._subscriptions).to.have.lengthOf(1)
-    expect(pathTraversalAnalyzer._subscriptions[0]._channel.name).to.equals('apm:fs:operation:start')
+    expect(pathTraversalAnalyzer._subscriptions).to.have.lengthOf(2)
+    expect(pathTraversalAnalyzer._subscriptions[0]._channel.name).to.equals('apm:fs:operation:finish')
+    expect(pathTraversalAnalyzer._subscriptions[1]._channel.name).to.equals('apm:fs:operation:start')
   })
 
   it('If no context it should not report vulnerability', () => {
@@ -139,6 +140,12 @@ describe('path-traversal-analyzer', () => {
 prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
   function runFsMethodTest (description, vulnerableIndex, fn, ...args) {
     describe(description, () => {
+      beforeEach(() => {
+        sinon.spy(pathTraversalAnalyzer, '_report')
+      })
+      afterEach(() => {
+        sinon.restore()
+      })
       describe('vulnerable', () => {
         testThatRequestHasVulnerability(function () {
           const store = storage.getStore()
@@ -147,7 +154,8 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
           if (vulnerableIndex > -1) {
             callArgs[vulnerableIndex] = newTaintedString(iastCtx, callArgs[vulnerableIndex], 'param', 'Request')
           }
-          return fn(callArgs)
+          fn(callArgs)
+          expect(pathTraversalAnalyzer._report).to.have.been.calledOnce
         }, 'PATH_TRAVERSAL')
       })
       describe('no vulnerable', () => {
@@ -195,9 +203,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     const filename = path.join(os.tmpdir(), 'test-appendfile')
     beforeEach(() => {
       fs.writeFileSync(filename, '')
+      sinon.restore()
     })
     afterEach(() => {
       fs.unlinkSync(filename)
+      sinon.restore()
     })
 
     runFsMethodTestThreeWay('appendFile', 0, null, filename, 'test-content')
