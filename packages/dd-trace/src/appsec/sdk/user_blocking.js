@@ -1,4 +1,5 @@
 'use strict'
+
 const addresses = require('../addresses')
 const Gateway = require('../gateway/engine')
 const { getRootSpan } = require('./utils')

@@ -1,4 +1,5 @@
 'use strict'
+
 const { getRootSpan } = require('./utils')
 
 function setUserTags (user, rootSpan) {
