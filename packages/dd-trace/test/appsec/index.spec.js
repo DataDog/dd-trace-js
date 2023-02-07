@@ -71,7 +71,7 @@ describe('AppSec Index', () => {
       expect(fs.readFileSync).to.have.been.calledWithExactly(config.appsec.blockedTemplateJson)
       expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] }, config.appsec)
       expect(remoteConfig.enableAsmData).to.have.been.calledOnce
-      expect(remoteConfig.enableAsm).to.have.been.calledOnce
+      expect(remoteConfig.enableAsm).to.have.been.calledOnceWithExactly(config.appsec)
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
@@ -115,7 +115,7 @@ describe('AppSec Index', () => {
       expect(fs.promises.readFile).to.have.been.calledWithExactly(config.appsec.blockedTemplateJson)
       expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] }, config.appsec)
       expect(remoteConfig.enableAsmData).to.have.been.calledOnce
-      expect(remoteConfig.enableAsm).to.have.been.calledOnce
+      expect(remoteConfig.enableAsm).to.have.been.calledOnceWithExactly(config.appsec)
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)

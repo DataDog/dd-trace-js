@@ -1,5 +1,7 @@
 'use strict'
 
+const RemoteConfigCapabilities = require('../../../src/appsec/remote_config/capabilities')
+
 let config
 let rc
 let RemoteConfigManager
@@ -194,18 +196,37 @@ describe('Remote Config enable', () => {
     })
 
     describe('enable', () => {
+      it('should subscribe to listener and update capabilities no rules file is provided', () => {
+        config.appsec = { enabled: true }
+        remoteConfig.enable(config)
+        remoteConfig.enableAsm(config.appsec)
+        expect(rc.updateCapabilities).to.have.been.calledOnceWith(RemoteConfigCapabilities.ASM_DD_RULES, true)
+        expect(rc.on).to.have.been.calledOnceWith('ASM')
+      })
+
       it('should not fail if remote config is not enabled before', () => {
         config.appsec = {}
-        remoteConfig.enableAsm()
-        expect(rc.on).to.not.have.been.calledWith('ASM')
+        remoteConfig.enableAsm(config.appsec)
+        expect(rc.on).to.not.have.been.called
+        expect(rc.updateCapabilities).to.not.have.been.called
+      })
+
+      it('should not subscribe to listener nor update capabilities if rules file is provided', () => {
+        config.appsec = { enabled: true, rules: './path/rules.json' }
+        remoteConfig.enable(config)
+        remoteConfig.enableAsm(config.appsec)
+        expect(rc.updateCapabilities).to.not.have.been.called
+        expect(rc.on).to.not.have.been.called
       })
     })
 
     describe('disable', () => {
-      it('should unsubscribe listener', () => {
+      it('should update capabilities and unsubscribe from listener', () => {
         remoteConfig.enable(config)
+        rc.updateCapabilities.resetHistory()
         remoteConfig.disableAsm()
-        expect(rc.off).to.be.calledOnceWith('ASM', RuleManager.toggleRules)
+        expect(rc.updateCapabilities).to.have.been.calledOnceWith(RemoteConfigCapabilities.ASM_DD_RULES, false)
+        expect(rc.off).to.have.been.calledOnceWith('ASM')
       })
     })
   })

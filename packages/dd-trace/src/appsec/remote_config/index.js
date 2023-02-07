@@ -32,14 +32,16 @@ function enable (config) {
   }
 }
 
-function enableAsm () {
-  if (rc) {
+function enableAsm (appsecConfig) {
+  if (rc && appsecConfig && appsecConfig.rules === undefined) {
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, true)
     rc.on('ASM', RuleManager.toggleRules)
   }
 }
 
 function disableAsm () {
   if (rc) {
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, false)
     rc.off('ASM', RuleManager.toggleRules)
   }
 }
