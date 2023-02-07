@@ -35,7 +35,7 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
       if (obj.target) {
         pathArguments.push(obj.target)
       }
-      this.analyze(pathArguments)
+      pathArguments.length > 0 && this.analyze(pathArguments)
     })
   }
 
