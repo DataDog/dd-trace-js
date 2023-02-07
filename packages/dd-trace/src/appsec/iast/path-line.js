@@ -19,7 +19,9 @@ const EXCLUDED_PATH_PREFIXES = [
   'node:child_process',
   'child_process',
   'node:async_hooks',
-  'async_hooks'
+  'async_hooks',
+  'fs',
+  'node:fs'
 ]
 
 function getCallSiteInfo () {
