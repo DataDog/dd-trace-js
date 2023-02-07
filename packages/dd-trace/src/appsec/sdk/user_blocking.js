@@ -44,8 +44,8 @@ function blockRequest (tracer, req, res) {
   let request, response
   if (!req || !res) {
     const store = storage.getStore()
-    request = req || (store ? store.req : undefined)
-    response = res || (store ? store.res : undefined)
+    request = req || (store && store.req)
+    response = res || (store && store.res)
   } else {
     request = req
     response = res
