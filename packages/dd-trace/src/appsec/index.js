@@ -12,7 +12,7 @@ const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { block, loadTemplates, loadTemplatesAsync, resetTemplates } = require('./blocking')
+const { block, loadTemplates, loadTemplatesAsync } = require('./blocking')
 
 let isEnabled = false
 let config
@@ -159,7 +159,6 @@ function disable () {
   isEnabled = false
   config = null
 
-  resetTemplates()
   RuleManager.clearAllRules()
   remoteConfig.disableAsmData()
 
