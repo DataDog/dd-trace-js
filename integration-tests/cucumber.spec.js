@@ -11,94 +11,138 @@ const {
   getCiVisEvpProxyConfig
 } = require('./helpers')
 const { FakeCiVisIntake } = require('./ci-visibility-intake')
-const { TEST_STATUS } = require('../packages/dd-trace/src/plugins/util/test')
+const { TEST_STATUS, TEST_COMMAND, TEST_BUNDLE } = require('../packages/dd-trace/src/plugins/util/test')
 
-describe('cucumber', () => {
-  let sandbox, cwd, receiver, childProcess
-  before(async () => {
-    sandbox = await createSandbox(['@cucumber/cucumber', 'assert'], true)
-    cwd = sandbox.folder
-  })
+const versions = ['7.0.0', 'latest']
 
-  after(async () => {
-    await sandbox.remove()
-  })
+versions.forEach(version => {
+  describe(`cucumber@${version}`, () => {
+    let sandbox, cwd, receiver, childProcess
+    before(async () => {
+      sandbox = await createSandbox(['@cucumber/cucumber', 'assert'], true)
+      cwd = sandbox.folder
+    })
 
-  beforeEach(async function () {
-    const port = await getPort()
-    receiver = await new FakeCiVisIntake(port).start()
-  })
+    after(async () => {
+      await sandbox.remove()
+    })
 
-  afterEach(async () => {
-    childProcess.kill()
-    await receiver.stop()
-  })
-  const reportMethods = ['agentless', 'evp proxy']
+    beforeEach(async function () {
+      const port = await getPort()
+      receiver = await new FakeCiVisIntake(port).start()
+    })
 
-  reportMethods.forEach((reportMethod) => {
-    context(`reporting via ${reportMethod}`, () => {
-      it('can run and report tests', (done) => {
-        const envVars = reportMethod === 'agentless'
-          ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
-        const reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
+    afterEach(async () => {
+      childProcess.kill()
+      await receiver.stop()
+    })
+    const reportMethods = ['agentless', 'evp proxy']
 
-        receiver.gatherPayloads(({ url }) => url === reportUrl, 5000).then((payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
+    reportMethods.forEach((reportMethod) => {
+      context(`reporting via ${reportMethod}`, () => {
+        it('can run and report tests', (done) => {
+          const envVars = reportMethod === 'agentless'
+            ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+          const reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
 
-          const testSessionEvent = events.find(event => event.type === 'test_session_end')
-          const testModuleEvent = events.find(event => event.type === 'test_module_end')
-          const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
-          const testEvents = events.filter(event => event.type === 'test')
+          receiver.gatherPayloads(({ url }) => url === reportUrl, 5000).then((payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
 
-          const stepEvents = events.filter(event => event.type === 'span')
+            const testSessionEvent = events.find(event => event.type === 'test_session_end')
+            const testModuleEvent = events.find(event => event.type === 'test_module_end')
+            const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+            const testEvents = events.filter(event => event.type === 'test')
 
-          assert.equal(testSessionEvent.content.resource, 'test_session.cucumber-js')
-          assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
-          assert.equal(testModuleEvent.content.resource, 'test_module.cucumber-js')
-          assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
+            const stepEvents = events.filter(event => event.type === 'span')
 
-          assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
-            'test_suite.ci-visibility/features/farewell.feature',
-            'test_suite.ci-visibility/features/greetings.feature'
-          ])
+            const { content: testSessionEventContent } = testSessionEvent
+            const { content: testModuleEventContent } = testModuleEvent
 
-          assert.includeMembers(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
-            'pass',
-            'fail'
-          ])
+            assert.exists(testSessionEventContent.test_session_id)
+            assert.equal(testSessionEventContent.resource, 'test_session.cucumber-js')
+            assert.include(testSessionEventContent.meta, {
+              [TEST_STATUS]: 'fail',
+              [TEST_COMMAND]: 'cucumber-js'
+            })
 
-          assert.includeMembers(testEvents.map(test => test.content.resource), [
-            'ci-visibility/features/farewell.feature.Say farewell',
-            'ci-visibility/features/greetings.feature.Say greetings',
-            'ci-visibility/features/greetings.feature.Say yeah',
-            'ci-visibility/features/greetings.feature.Say yo',
-            'ci-visibility/features/greetings.feature.Say skip'
-          ])
+            assert.exists(testModuleEventContent.test_session_id)
+            assert.exists(testModuleEventContent.test_module_id)
+            assert.equal(testModuleEventContent.resource, 'test_module.cucumber-js')
+            assert.include(testModuleEventContent.meta, {
+              [TEST_STATUS]: 'fail',
+              [TEST_COMMAND]: 'cucumber-js',
+              [TEST_BUNDLE]: 'cucumber-js'
+            })
+            assert.equal(
+              testModuleEventContent.test_session_id.toString(10),
+              testSessionEventContent.test_session_id.toString(10)
+            )
 
-          assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
-            'pass',
-            'pass',
-            'pass',
-            'fail',
-            'skip'
-          ])
+            assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
+              'test_suite.ci-visibility/features/farewell.feature',
+              'test_suite.ci-visibility/features/greetings.feature'
+            ])
+            assert.includeMembers(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
+              'pass',
+              'fail'
+            ])
 
-          stepEvents.forEach(stepEvent => {
-            assert.equal(stepEvent.content.name, 'cucumber.step')
-            assert.property(stepEvent.content.meta, 'cucumber.step')
-          })
+            testSuiteEvents.forEach(({
+              content: {
+                test_suite_id: testSuiteId,
+                test_module_id: testModuleId,
+                test_session_id: testSessionId
+              }
+            }) => {
+              assert.exists(testSuiteId)
+              assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
+              assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+            })
 
-          done()
-        }).catch(done)
+            assert.includeMembers(testEvents.map(test => test.content.resource), [
+              'ci-visibility/features/farewell.feature.Say farewell',
+              'ci-visibility/features/greetings.feature.Say greetings',
+              'ci-visibility/features/greetings.feature.Say yeah',
+              'ci-visibility/features/greetings.feature.Say yo',
+              'ci-visibility/features/greetings.feature.Say skip'
+            ])
+            assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
+              'pass',
+              'pass',
+              'pass',
+              'fail',
+              'skip'
+            ])
 
-        childProcess = exec(
-          './node_modules/.bin/cucumber-js ci-visibility/features/*.feature',
-          {
-            cwd,
-            env: envVars,
-            stdio: 'pipe'
-          }
-        )
+            testEvents.forEach(({
+              content: {
+                test_suite_id: testSuiteId,
+                test_module_id: testModuleId,
+                test_session_id: testSessionId
+              }
+            }) => {
+              assert.exists(testSuiteId)
+              assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
+              assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+            })
+
+            stepEvents.forEach(stepEvent => {
+              assert.equal(stepEvent.content.name, 'cucumber.step')
+              assert.property(stepEvent.content.meta, 'cucumber.step')
+            })
+
+            done()
+          }).catch(done)
+
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features/*.feature',
+            {
+              cwd,
+              env: envVars,
+              stdio: 'pipe'
+            }
+          )
+        })
       })
     })
   })
