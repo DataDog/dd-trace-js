@@ -22,6 +22,16 @@ const patched = new WeakSet()
 let pickleByFile = {}
 const pickleResultByFile = {}
 
+function getSuiteStatusFromTestStatuses (testStatuses) {
+  if (testStatuses.some(status => status === 'fail')) {
+    return 'fail'
+  }
+  if (testStatuses.every(status => status === 'skip')) {
+    return 'skip'
+  }
+  return 'pass'
+}
+
 function getStatusFromResult (result) {
   if (result.status === 1) {
     return { status: 'pass' }
@@ -79,8 +89,8 @@ function wrapRun (pl, isLatestVersion) {
             pickleResultByFile[testSuiteFullPath].push(status)
           }
           if (pickleResultByFile[testSuiteFullPath].length === pickleByFile[testSuiteFullPath].length) {
-            // calculate status from pickleResultByFile
-            testSuiteFinishCh.publish('pass')
+            const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testSuiteFullPath])
+            testSuiteFinishCh.publish(testSuiteStatus)
           }
           testFinishCh.publish({ status, skipReason, errorMessage })
         })
@@ -169,18 +179,19 @@ addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.0.0'],
   file: 'lib/runtime/index.js'
-}, (runtimePackage) => {
+}, (runtimePackage, frameworkVersion) => {
   shimmer.wrap(runtimePackage.default.prototype, 'start', start => async function () {
     pickleByFile = getPickleByFile(this)
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     asyncResource.runInAsyncScope(() => {
-      sessionStartCh.publish({ command: 'cucumber-js', frameworkVersion: '0.0.1' })
+      sessionStartCh.publish({ command: 'cucumber-js', frameworkVersion })
     })
-    const res = await start.apply(this, arguments)
+    const success = await start.apply(this, arguments)
+
     asyncResource.runInAsyncScope(() => {
-      sessionFinishCh.publish('pass')
+      sessionFinishCh.publish(success ? 'pass' : 'fail')
     })
-    return res
+    return success
   })
 
   return runtimePackage

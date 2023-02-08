@@ -32,7 +32,7 @@ for (const packageName of names) {
           try {
             loadChannel.publish({ name, version, file })
 
-            moduleExports = hook(moduleExports)
+            moduleExports = hook(moduleExports, version)
           } catch (e) {
             log.error(e)
           }
