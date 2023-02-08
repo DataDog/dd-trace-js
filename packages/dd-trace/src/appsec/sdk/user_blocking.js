@@ -6,6 +6,7 @@ const { getRootSpan } = require('./utils')
 const { block } = require('../blocking')
 const { storage } = require('../../../../datadog-core')
 const { setUserTags } = require('./set_user')
+const log = require('../../log')
 
 function isUserBlocked (user) {
   const results = Gateway.propagate({ [addresses.USER_ID]: user.id })
@@ -30,6 +31,7 @@ function checkUserAndSetUser (tracer, user) {
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
+    log.warn('Root span not available, checkUserAndSetUser failed')
     return false
   }
 
@@ -52,11 +54,13 @@ function blockRequest (tracer, req, res) {
   }
 
   if (!request || !response) {
+    log.warn('Requests or response object not available, blockRequest failed')
     return false
   }
 
   const topSpan = getRootSpan(tracer)
   if (!topSpan) {
+    log.warn('Root span not available, blockRequest failed')
     return false
   }
 

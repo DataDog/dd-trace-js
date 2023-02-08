@@ -56,12 +56,12 @@ describe('User blocking API', () => {
 
     it('blockRequest should call block with proper arguments', () => {
       userBlocking.blockRequest(tracer, {}, {})
-      expect(block).to.be.calledWith({ req: {}, res: {}, topSpan: mockRootSpan })
+      expect(block).to.be.calledOnceWithExactly({ req: {}, res: {}, topSpan: mockRootSpan })
     })
 
     it('blockRequest should get req and res from local storage when they are not passed', () => {
       userBlocking.blockRequest(tracer)
-      expect(block).to.be.calledWith({ req: mockReq, res: mockRes, topSpan: mockRootSpan })
+      expect(block).to.be.calledOnceWithExactly({ req: mockReq, res: mockRes, topSpan: mockRootSpan })
     })
   })
 
@@ -95,7 +95,7 @@ describe('User blocking API', () => {
 
     it('checkUserAndSetUser should return false when there is no rootSpan available', () => {
       const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
-      expect(getRootSpan).to.be.calledWith(tracer)
+      expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
       expect(ret).to.be.false
       expect(isUserBlocked).not.to.have.been.called
     })

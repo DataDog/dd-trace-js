@@ -36,7 +36,7 @@ describe('setUser', () => {
     it('setUser should call setTag with proper values', () => {
       const user = { id: 'user' }
       sdk.setUser(user)
-      expect(mockSetTag).to.be.calledWith('usr.id', 'user')
+      expect(mockSetTag).to.be.calledOnceWithExactly('usr.id', 'user')
     })
 
     it('setUser should not call setTag when no user is passed', () => {
@@ -83,7 +83,7 @@ describe('setUser', () => {
 
     it('setUser should not call setUserTags when rootSpan is not available', () => {
       sdk.setUser({ id: 'user' })
-      expect(getRootSpan).to.be.calledWith(tracer)
+      expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
       expect(setUserTagsStub).not.to.have.been.called
     })
   })

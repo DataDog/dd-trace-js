@@ -1,6 +1,7 @@
 'use strict'
 
 const { getRootSpan } = require('./utils')
+const log = require('../../log')
 
 function setUserTags (user, rootSpan) {
   for (const k of Object.keys(user)) {
@@ -15,6 +16,7 @@ function setUser (tracer, user) {
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
+    log.warn('Root span not available, setUser failed')
     return
   }
 
