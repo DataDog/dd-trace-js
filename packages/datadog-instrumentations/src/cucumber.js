@@ -183,9 +183,13 @@ addHook({
 }, (runtimePackage, frameworkVersion) => {
   shimmer.wrap(runtimePackage.default.prototype, 'start', start => async function () {
     pickleByFile = getPickleByFile(this)
+
+    const processArgv = process.argv.slice(2).join(' ')
+    const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
+
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     asyncResource.runInAsyncScope(() => {
-      sessionStartCh.publish({ command: 'cucumber-js', frameworkVersion })
+      sessionStartCh.publish({ command, frameworkVersion })
     })
     const success = await start.apply(this, arguments)
 
