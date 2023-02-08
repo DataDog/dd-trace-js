@@ -27,8 +27,10 @@ class MongodbCorePlugin extends DatabasePlugin {
 
 function getQuery (cmd) {
   if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) return
-  if (cmd.query) return JSON.stringify(limitDepth(cmd.query))
-  if (cmd.filter) return JSON.stringify(limitDepth(cmd.filter))
+  if (cmd.query) return JSON.stringify(limitDepth(cmd.query),2 , null)
+  if (cmd.filter) return JSON.stringify(limitDepth(cmd.filter), 2, null)
+  if (cmd.pipeline) return JSON.stringify(limitDepth(cmd.pipeline), 2, null)
+
 }
 
 function getResource (plugin, ns, query, operationName) {
