@@ -88,6 +88,7 @@ function wrapRun (pl, isLatestVersion) {
           } else {
             pickleResultByFile[testSuiteFullPath].push(status)
           }
+          // last test in suite
           if (pickleResultByFile[testSuiteFullPath].length === pickleByFile[testSuiteFullPath].length) {
             const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testSuiteFullPath])
             testSuiteFinishCh.publish(testSuiteStatus)
