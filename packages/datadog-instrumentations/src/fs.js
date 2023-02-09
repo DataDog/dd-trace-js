@@ -193,10 +193,21 @@ function wrapCreateStream (original) {
     const message = getMessage(name, ['path', 'options'], arguments)
 
     return innerResource.runInAsyncScope(() => {
+      if (this && !this.parentAsyncId) this.parentAsyncId = innerResource.asyncId()
+      if (this && this.parentAsyncId) {
+        message.innerCall = this.parentAsyncId !== innerResource.asyncId()
+      } else {
+        message.innerCall = true
+      }
       startChannel.publish(message)
 
       try {
         const stream = original.apply(this, arguments)
+
+        if (this && this.parentAsyncId && this.parentAsyncId === innerResource.asyncId()) {
+          this.parentAsyncId = undefined
+        }
+
         const onError = innerResource.bind(error => {
           errorChannel.publish(error)
           onFinish()
@@ -216,6 +227,10 @@ function wrapCreateStream (original) {
 
         return stream
       } catch (error) {
+        if (this && this.parentAsyncId && this.parentAsyncId === innerResource.asyncId()) {
+          this.parentAsyncId = undefined
+        }
+
         errorChannel.publish(error)
         finishChannel.publish()
       }
