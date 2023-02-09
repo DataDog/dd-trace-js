@@ -1375,7 +1375,7 @@ declare namespace plugins {
    */
   interface ioredis extends Instrumentation {
     /**
-     * List of commands that should be instrumented.
+     * List of commands that should be instrumented. Commands must be in lowercase for example 'xread'.
      *
      * @default /^.*$/
      */
@@ -1391,7 +1391,7 @@ declare namespace plugins {
 
     /**
      * List of commands that should not be instrumented. Takes precedence over
-     * allowlist if a command matches an entry in both.
+     * allowlist if a command matches an entry in both. Commands must be in lowercase for example 'xread'.
      *
      * @default []
      */
