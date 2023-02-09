@@ -38,7 +38,9 @@ const TEST_CODE_OWNERS = 'test.codeowners'
 const TEST_SOURCE_FILE = 'test.source.file'
 const LIBRARY_VERSION = 'library_version'
 const TEST_COMMAND = 'test.command'
+const TEST_BUNDLE = 'test.bundle'
 const TEST_SESSION_ID = 'test_session_id'
+const TEST_MODULE_ID = 'test_module_id'
 const TEST_SUITE_ID = 'test_suite_id'
 
 const CI_APP_ORIGIN = 'ciapp-test'
@@ -48,6 +50,8 @@ const JEST_TEST_RUNNER = 'test.jest.test_runner'
 const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.tests_skipped'
 const TEST_SESSION_ITR_SKIPPING_ENABLED = 'test_session.itr.tests_skipping.enabled'
 const TEST_SESSION_CODE_COVERAGE_ENABLED = 'test_session.code_coverage.enabled'
+const TEST_MODULE_ITR_SKIPPING_ENABLED = 'test_module.itr.tests_skipping.enabled'
+const TEST_MODULE_CODE_COVERAGE_ENABLED = 'test_module.code_coverage.enabled'
 
 const TEST_CODE_COVERAGE_LINES_TOTAL = 'test.codecov_lines_total'
 
@@ -75,14 +79,20 @@ module.exports = {
   getCodeOwnersForFilename,
   getTestCommonTags,
   getTestSessionCommonTags,
+  getTestModuleCommonTags,
   getTestSuiteCommonTags,
   TEST_COMMAND,
   TEST_SESSION_ID,
+  TEST_MODULE_ID,
   TEST_SUITE_ID,
   TEST_ITR_TESTS_SKIPPED,
+  TEST_BUNDLE,
   TEST_SESSION_ITR_SKIPPING_ENABLED,
   TEST_SESSION_CODE_COVERAGE_ENABLED,
+  TEST_MODULE_ITR_SKIPPING_ENABLED,
+  TEST_MODULE_CODE_COVERAGE_ENABLED,
   TEST_CODE_COVERAGE_LINES_TOTAL,
+  addIntelligentTestRunnerSpanTags,
   getCoveredFilenamesFromCoverage,
   resetCoverage,
   mergeCoverage,
@@ -242,26 +252,59 @@ function getCodeOwnersForFilename (filename, entries) {
   return null
 }
 
-function getTestSessionCommonTags (command, version) {
+function getTestLevelCommonTags (command, testFrameworkVersion) {
   return {
-    [SPAN_TYPE]: 'test_session_end',
-    [TEST_TYPE]: 'test',
-    [RESOURCE_NAME]: `test_session.${command}`,
-    [TEST_FRAMEWORK_VERSION]: version,
+    [TEST_FRAMEWORK_VERSION]: testFrameworkVersion,
     [LIBRARY_VERSION]: ddTraceVersion,
-    [TEST_COMMAND]: command
+    [TEST_COMMAND]: command,
+    [TEST_TYPE]: 'test'
   }
 }
 
-function getTestSuiteCommonTags (command, version, testSuite) {
+function getTestSessionCommonTags (command, testFrameworkVersion) {
+  return {
+    [SPAN_TYPE]: 'test_session_end',
+    [RESOURCE_NAME]: `test_session.${command}`,
+    ...getTestLevelCommonTags(command, testFrameworkVersion)
+  }
+}
+
+function getTestModuleCommonTags (command, testFrameworkVersion) {
+  return {
+    [SPAN_TYPE]: 'test_module_end',
+    [RESOURCE_NAME]: `test_module.${command}`,
+    [TEST_BUNDLE]: command,
+    ...getTestLevelCommonTags(command, testFrameworkVersion)
+  }
+}
+
+function getTestSuiteCommonTags (command, testFrameworkVersion, testSuite) {
   return {
     [SPAN_TYPE]: 'test_suite_end',
-    [TEST_TYPE]: 'test',
     [RESOURCE_NAME]: `test_suite.${testSuite}`,
-    [TEST_FRAMEWORK_VERSION]: version,
-    [LIBRARY_VERSION]: ddTraceVersion,
+    [TEST_BUNDLE]: command,
     [TEST_SUITE]: testSuite,
-    [TEST_COMMAND]: command
+    ...getTestLevelCommonTags(command, testFrameworkVersion)
+  }
+}
+
+function addIntelligentTestRunnerSpanTags (
+  testSessionSpan,
+  testModuleSpan,
+  { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled, testCodeCoverageLinesTotal }
+) {
+  testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
+  testSessionSpan.setTag(TEST_SESSION_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
+  testSessionSpan.setTag(TEST_SESSION_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+
+  testModuleSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
+  testModuleSpan.setTag(TEST_MODULE_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
+  testModuleSpan.setTag(TEST_MODULE_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+
+  // If suites have been skipped we don't want to report the total coverage, as it will be wrong
+  if (testCodeCoverageLinesTotal !== undefined && !isSuitesSkipped) {
+    testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
+    testModuleSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
   }
 }
 

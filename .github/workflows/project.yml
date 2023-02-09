@@ -13,24 +13,23 @@ concurrency:
 
 jobs:
   integration:
+    strategy:
+      matrix:
+        version: [14, 16, 18, latest]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/14
-      - run: yarn test:integration
-      - uses: ./.github/actions/node/16
-      - run: yarn test:integration
-      - uses: ./.github/actions/node/18
-      - run: yarn test:integration
-      - uses: ./.github/actions/node/latest
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.version }}
       - run: yarn test:integration
 
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn lint
@@ -38,7 +37,7 @@ jobs:
   typescript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn type:test

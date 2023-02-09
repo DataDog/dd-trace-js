@@ -1,4 +1,6 @@
-const { testThatRequestHasVulnerability, testThatRequestHasNoVulnerability } = require('../utils')
+'use strict'
+
+const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
@@ -8,7 +10,7 @@ describe('sql-injection-analyzer with pg', () => {
   let pg
   let client
   withVersions('pg', 'pg', version => {
-    describe('pg', () => {
+    prepareTestServerForIast('pg', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       beforeEach((done) => {
         pg = require(`../../../../../../versions/pg@${version}`).get()
         client = new pg.Client({
@@ -25,22 +27,18 @@ describe('sql-injection-analyzer with pg', () => {
         await client.end()
       })
 
-      describe('has vulnerability', () => {
-        testThatRequestHasVulnerability(() => {
-          const store = storage.getStore()
-          const iastCtx = iastContextFunctions.getIastContext(store)
-          let sql = 'SELECT 1'
-          sql = newTaintedString(iastCtx, sql, 'param', 'Request')
-          return client.query(sql)
-        }, 'SQL_INJECTION')
-      })
+      testThatRequestHasVulnerability(() => {
+        const store = storage.getStore()
+        const iastCtx = iastContextFunctions.getIastContext(store)
+        let sql = 'SELECT 1'
+        sql = newTaintedString(iastCtx, sql, 'param', 'Request')
+        return client.query(sql)
+      }, 'SQL_INJECTION')
 
-      describe('has no vulnerability', () => {
-        testThatRequestHasNoVulnerability(() => {
-          const sql = 'SELECT 1'
-          return client.query(sql)
-        }, 'SQL_INJECTION')
-      })
+      testThatRequestHasNoVulnerability(() => {
+        const sql = 'SELECT 1'
+        return client.query(sql)
+      }, 'SQL_INJECTION')
     })
   })
 })

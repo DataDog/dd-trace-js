@@ -45,8 +45,14 @@ addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['>=1'] }, Connec
 
     return asyncResource.bind(function executeWithTrace (packet, connection) {
       const sql = cmd.statement ? cmd.statement.query : cmd.sql
+      const payload = { sql, conf: config }
+      startCh.publish(payload)
 
-      startCh.publish({ sql, conf: config })
+      if (cmd.statement) {
+        cmd.statement.query = payload.sql
+      } else {
+        cmd.sql = payload.sql
+      }
 
       if (this.onResult) {
         const onResult = callbackResource.bind(this.onResult)
