@@ -4,7 +4,7 @@
 let sendTrace
 
 if (process.platform == 'linux' && process.arch == 'x64') {
-  sendTrace = require("./node-napi-rs.linux-x64-gnu.node").sendTrace
+  sendTrace = require("./node-napi-rs.linux-x64.node").sendTrace
 } else if (process.platform == 'darwin' && process.arch == 'arm64') {
   sendTrace = require("./node-napi-rs.darwin-arm64.node").sendTrace
 } else {
