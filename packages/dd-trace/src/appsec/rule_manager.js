@@ -1,6 +1,6 @@
 'use strict'
 
-const WAFManagerModule = require('./waf_manager')
+const waf = require('./waf')
 const log = require('../log')
 
 const appliedAsmData = new Map()
@@ -8,9 +8,9 @@ let defaultRules
 let asmDDRules
 
 function applyRules (rules, config) {
-  if (WAFManagerModule.wafManager) return
+  if (waf.wafManager) return
   defaultRules = rules
-  WAFManagerModule.init(rules, config)
+  waf.init(rules, config)
 }
 
 function updateAsmDDRules (action, asmRules) {
@@ -26,7 +26,7 @@ function updateAsmDDRules (action, asmRules) {
 function updateAppliedRules () {
   const rules = asmDDRules || defaultRules
   try {
-    WAFManagerModule.wafManager.reload(rules)
+    waf.wafManager.reload(rules)
   } catch {
     log.error('AppSec could not load native package. Applied rules have not been updated')
   }
@@ -44,7 +44,7 @@ function updateAsmData (action, asmData, asmDataId) {
 
 function updateAppliedRuleData () {
   const mergedRuleData = mergeRuleData(appliedAsmData.values())
-  WAFManagerModule.wafManager && WAFManagerModule.wafManager.updateRuleData(mergedRuleData)
+  waf.wafManager && waf.wafManager.updateRuleData(mergedRuleData)
 }
 
 function mergeRuleData (asmDataValues) {
@@ -89,7 +89,7 @@ function copyRulesData (rulesData) {
   return copy
 }
 function clearAllRules () {
-  WAFManagerModule.destroy()
+  waf.destroy()
   appliedAsmData.clear()
 }
 

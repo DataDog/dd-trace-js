@@ -4,7 +4,9 @@ const fs = require('fs')
 const path = require('path')
 const proxyquire = require('proxyquire')
 const log = require('../../src/log')
-const WAFManagerModule = require('../../src/appsec/waf_manager')
+const waf = require('../../src/appsec/waf')
+const WAFManager = require('../../src/appsec/waf/waf_manager')
+const WAFContextWrapper = require('../../src/appsec/waf/waf_context_wrapper')
 const RuleManager = require('../../src/appsec/rule_manager')
 const remoteConfig = require('../../src/appsec/remote_config')
 const appsec = require('../../src/appsec')
@@ -49,9 +51,9 @@ describe('AppSec Index', () => {
     const readFilePromiseStub = sinon.stub(fs.promises, 'readFile')
     readFilePromiseStub.withArgs('./path/rules.json').returns('{"rules": [{"a": 1}]}')
     readFilePromiseStub.callThrough()
-    sinon.stub(WAFManagerModule, 'init').callThrough()
-    sinon.stub(WAFManagerModule.WAFManager.prototype, 'createDDWAFContext').callThrough()
-    sinon.stub(WAFManagerModule.WAFContextWrapper.prototype, 'run')
+    sinon.stub(waf, 'init').callThrough()
+    sinon.stub(WAFManager.prototype, 'createDDWAFContext').callThrough()
+    sinon.stub(WAFContextWrapper.prototype, 'run')
     sinon.stub(RuleManager, 'applyRules')
     sinon.stub(remoteConfig, 'enableAsmData')
     sinon.stub(remoteConfig, 'enableAsmDDRules')
@@ -176,7 +178,7 @@ describe('AppSec Index', () => {
   describe('incomingHttpStartTranslator', () => {
     beforeEach(() => {
       AppSec.enable(config)
-      WAFManagerModule.init(require('../../src/appsec/recommended.json'), config.appsec)
+      waf.init(require('../../src/appsec/recommended.json'), config.appsec)
     })
 
     it('should propagate incoming http start data', () => {
@@ -203,14 +205,14 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpStartTranslator({ req, res })
 
-      expect(WAFManagerModule.WAFManager.prototype.createDDWAFContext).to.have.been.calledOnceWithExactly(req)
+      expect(WAFManager.prototype.createDDWAFContext).to.have.been.calledOnceWithExactly(req)
 
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
         '_dd.appsec.enabled': 1,
         '_dd.runtime_family': 'nodejs',
         'http.client_ip': '127.0.0.1'
       })
-      expect(WAFManagerModule.WAFContextWrapper.prototype.run).to.have.been.calledOnceWith({
+      expect(WAFContextWrapper.prototype.run).to.have.been.calledOnceWith({
         'http.client_ip': '127.0.0.1'
       })
     })
@@ -220,7 +222,7 @@ describe('AppSec Index', () => {
     beforeEach(() => {
       AppSec.enable(config)
 
-      WAFManagerModule.init(require('../../src/appsec/recommended.json'), config.appsec)
+      waf.init(require('../../src/appsec/recommended.json'), config.appsec)
 
       const rootSpan = {
         addTags: sinon.stub()
@@ -242,7 +244,7 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(WAFManagerModule.WAFContextWrapper.prototype.run).to.not.have.been.called
+      expect(WAFContextWrapper.prototype.run).to.not.have.been.called
       expect(Reporter.finishRequest).to.not.have.been.called
     })
 
@@ -272,11 +274,11 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpStartTranslator({ req, res })
       sinon.stub(Reporter, 'finishRequest')
-      WAFManagerModule.WAFContextWrapper.prototype.run.resetHistory()
+      WAFContextWrapper.prototype.run.resetHistory()
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(WAFManagerModule.WAFContextWrapper.prototype.run).to.have.been.calledOnceWithExactly({
+      expect(WAFContextWrapper.prototype.run).to.have.been.calledOnceWithExactly({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
           'user-agent': 'Arachni',
@@ -325,11 +327,11 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpStartTranslator({ req, res })
       sinon.stub(Reporter, 'finishRequest')
-      WAFManagerModule.WAFContextWrapper.prototype.run.resetHistory()
+      WAFContextWrapper.prototype.run.resetHistory()
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(WAFManagerModule.WAFManager.prototype.createDDWAFContext).to.have.been.calledOnceWithExactly(req)
+      expect(WAFManager.prototype.createDDWAFContext).to.have.been.calledOnceWithExactly(req)
       const expectedPayload = {
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
@@ -345,9 +347,9 @@ describe('AppSec Index', () => {
           'content-lenght': 42
         }
       }
-      expect(WAFManagerModule.WAFContextWrapper.prototype.run).to.have.been.calledOnceWithExactly(expectedPayload)
+      expect(WAFContextWrapper.prototype.run).to.have.been.calledOnceWithExactly(expectedPayload)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req,
-        WAFManagerModule.wafManager.getDDWAFContext(req), expectedPayload)
+        waf.wafManager.getDDWAFContext(req), expectedPayload)
     })
 
     it('should propagate incoming http end data with express', () => {
@@ -391,9 +393,9 @@ describe('AppSec Index', () => {
       web.patch(req)
 
       AppSec.incomingHttpStartTranslator({ req, res })
-      WAFManagerModule.WAFContextWrapper.prototype.run.resetHistory()
+      WAFContextWrapper.prototype.run.resetHistory()
       sinon.stub(Reporter, 'finishRequest')
-      const ddwafContext = WAFManagerModule.wafManager.getDDWAFContext(req)
+      const ddwafContext = waf.wafManager.getDDWAFContext(req)
       AppSec.incomingHttpEndTranslator({ req, res })
 
       const expectedPayload = {
@@ -416,7 +418,7 @@ describe('AppSec Index', () => {
         'server.request.path_params': { c: '3' },
         'server.request.cookies': { d: [ '4' ], e: [ '5' ] }
       }
-      expect(WAFManagerModule.WAFContextWrapper.prototype.run).to.have.been.calledOnceWithExactly(expectedPayload)
+      expect(WAFContextWrapper.prototype.run).to.have.been.calledOnceWithExactly(expectedPayload)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, ddwafContext, expectedPayload)
     })
   })
