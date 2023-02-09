@@ -199,6 +199,7 @@ class TextMapPropagator {
       }
     })
 
+    console.log(ts, ts.toString(), ts.get('dd').toString())
     carrier.tracestate = ts.toString()
   }
 
