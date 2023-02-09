@@ -381,7 +381,6 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext).to.deep.equal(createContext({
-        tracestate: undefined,
         baggageItems: {
           foo: 'bar'
         }
@@ -434,7 +433,6 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.deep.equal(createContext({
-          tracestate: undefined,
           traceId: id('123', 16),
           spanId: id('456', 16),
           sampling: {
@@ -510,7 +508,6 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.deep.equal(createContext({
-          tracestate: undefined,
           traceId: id('123', 16),
           spanId: id('456', 16)
         }))
@@ -523,7 +520,6 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.deep.equal(createContext({
-          tracestate: undefined,
           traceId: id('123', 16),
           spanId: id('456', 16),
           sampling: {
@@ -539,7 +535,6 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
 
         expect(spanContext).to.deep.equal(createContext({
-          tracestate: undefined,
           traceId: id('123', 16),
           spanId: id('456', 16),
           sampling: {
