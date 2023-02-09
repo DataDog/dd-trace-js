@@ -1,14 +1,14 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const Config = require('../../src/config')
-const rules = require('../../src/appsec/recommended.json')
-const Reporter = require('../../src/appsec/reporter')
-const addresses = require('../../src/appsec/addresses')
-const web = require('../../src/plugins/util/web')
+const Config = require('../../../src/config')
+const rules = require('../../../src/appsec/recommended.json')
+const Reporter = require('../../../src/appsec/reporter')
+const addresses = require('../../../src/appsec/addresses')
+const web = require('../../../src/plugins/util/web')
 
 describe('WAF Manager', () => {
-  let WAFManagerModule
+  let waf, WAFManager
   let DDWAF
   let config
   let webContext
@@ -25,10 +25,13 @@ describe('WAF Manager', () => {
       loaded: true, failed: 0
     }
 
-    WAFManagerModule = proxyquire('../../src/appsec/waf_manager', {
+    WAFManager = proxyquire('../../../src/appsec/waf/waf_manager', {
       '@datadog/native-appsec': { DDWAF }
     })
-    WAFManagerModule.destroy()
+    waf = proxyquire('../../../src/appsec/waf', {
+      './waf_manager': WAFManager
+    })
+    waf.destroy()
 
     sinon.stub(Reporter.metricsQueue, 'set')
     sinon.stub(Reporter, 'reportMetrics')
@@ -39,22 +42,22 @@ describe('WAF Manager', () => {
   })
   afterEach(() => {
     sinon.restore()
-    WAFManagerModule.destroy()
+    waf.destroy()
   })
 
   describe('init', () => {
     it('should initialize the manager', () => {
-      expect(WAFManagerModule.wafManager).to.be.null
-      WAFManagerModule.init(rules, config.appsec)
+      expect(waf.wafManager).to.be.null
+      waf.init(rules, config.appsec)
 
-      expect(WAFManagerModule.wafManager).not.to.be.null
-      expect(WAFManagerModule.wafManager.ddwaf).to.be.instanceof(DDWAF)
+      expect(waf.wafManager).not.to.be.null
+      expect(waf.wafManager.ddwaf).to.be.instanceof(DDWAF)
     })
 
     it('should set init metrics without error', () => {
       DDWAF.prototype.constructor.version.returns('1.2.3')
 
-      WAFManagerModule.init(rules, config.appsec)
+      waf.init(rules, config.appsec)
 
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.waf.version', '1.2.3')
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.loaded', true)
@@ -69,7 +72,7 @@ describe('WAF Manager', () => {
         loaded: false, failed: 2, errors: ['error1', 'error2']
       }
 
-      WAFManagerModule.init(rules, config.appsec)
+      waf.init(rules, config.appsec)
 
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.waf.version', '2.3.4')
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.loaded', false)
@@ -83,8 +86,8 @@ describe('WAF Manager', () => {
       const newRules = {
         rules: []
       }
-      WAFManagerModule.init(newRules, config.appsec)
-      expect(WAFManagerModule.wafManager.acceptedAddresses).to.have.all.keys(
+      waf.init(newRules, config.appsec)
+      expect(waf.wafManager.acceptedAddresses).to.have.all.keys(
         addresses.HTTP_INCOMING_HEADERS,
         addresses.HTTP_INCOMING_ENDPOINT,
         addresses.HTTP_INCOMING_RESPONSE_HEADERS,
@@ -95,35 +98,35 @@ describe('WAF Manager', () => {
 
   describe('wafManager.reload', () => {
     beforeEach(() => {
-      WAFManagerModule.init(rules, config.appsec)
+      waf.init(rules, config.appsec)
       Reporter.metricsQueue.set.resetHistory()
     })
     it('should create new instance of ddwaf', () => {
-      const previousDdwaf = WAFManagerModule.wafManager.ddwaf
+      const previousDdwaf = waf.wafManager.ddwaf
       expect(previousDdwaf).to.be.instanceof(DDWAF)
 
-      WAFManagerModule.wafManager.reload(rules)
+      waf.wafManager.reload(rules)
 
-      expect(WAFManagerModule.wafManager.ddwaf).to.be.instanceof(DDWAF)
-      expect(WAFManagerModule.wafManager.ddwaf).not.to.be.equal(previousDdwaf)
+      expect(waf.wafManager.ddwaf).to.be.instanceof(DDWAF)
+      expect(waf.wafManager.ddwaf).not.to.be.equal(previousDdwaf)
     })
 
     it('should dispose old ddwaf', () => {
       DDWAF.prototype.dispose.callsFake(function () {
         this.disposed = true
       })
-      const previousDdwaf = WAFManagerModule.wafManager.ddwaf
+      const previousDdwaf = waf.wafManager.ddwaf
 
-      WAFManagerModule.wafManager.reload(rules)
+      waf.wafManager.reload(rules)
 
       expect(previousDdwaf.disposed).to.be.true
-      expect(WAFManagerModule.wafManager.ddwaf).not.to.be.true
+      expect(waf.wafManager.ddwaf).not.to.be.true
     })
 
     it('should set init metrics without error', () => {
       DDWAF.prototype.constructor.version.returns('1.2.3')
 
-      WAFManagerModule.wafManager.reload(rules)
+      waf.wafManager.reload(rules)
 
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.waf.version', '1.2.3')
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.loaded', true)
@@ -138,7 +141,7 @@ describe('WAF Manager', () => {
         loaded: false, failed: 2, errors: ['error1', 'error2']
       }
 
-      WAFManagerModule.wafManager.reload(rules)
+      waf.wafManager.reload(rules)
 
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.waf.version', '2.3.4')
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.loaded', false)
@@ -151,18 +154,18 @@ describe('WAF Manager', () => {
 
   describe('wafManager.createDDWAFContext', () => {
     beforeEach(() => {
-      WAFManagerModule.init(rules, config.appsec)
+      waf.init(rules, config.appsec)
     })
 
     it('should call ddwaf.createContext', () => {
-      WAFManagerModule.wafManager.createDDWAFContext()
-      expect(WAFManagerModule.wafManager.ddwaf.createContext).to.been.calledOnce
+      waf.wafManager.createDDWAFContext()
+      expect(waf.wafManager.ddwaf.createContext).to.been.calledOnce
     })
   })
 
   describe('wafManager.updateRuleData', () => {
     beforeEach(() => {
-      WAFManagerModule.init(rules, config.appsec)
+      waf.init(rules, config.appsec)
     })
 
     it('should call ddwaf.updateRuleData', () => {
@@ -179,7 +182,7 @@ describe('WAF Manager', () => {
         }
       ]
 
-      WAFManagerModule.wafManager.updateRuleData(ruleData)
+      waf.wafManager.updateRuleData(ruleData)
 
       expect(DDWAF.prototype.updateRuleData).to.be.calledOnceWithExactly(ruleData)
     })
@@ -189,7 +192,7 @@ describe('WAF Manager', () => {
     let ddwafContext, wafContextWrapper
 
     beforeEach(() => {
-      WAFManagerModule.init(rules, config.appsec)
+      waf.init(rules, config.appsec)
 
       ddwafContext = {
         dispose: sinon.stub(),
@@ -198,19 +201,19 @@ describe('WAF Manager', () => {
       }
       DDWAF.prototype.createContext.returns(ddwafContext)
 
-      wafContextWrapper = WAFManagerModule.wafManager.createDDWAFContext()
+      wafContextWrapper = waf.wafManager.createDDWAFContext()
     })
 
     describe('dispose', () => {
       it('should call ddwafContext.dispose', () => {
-        const wafContextWrapper = WAFManagerModule.wafManager.createDDWAFContext()
+        const wafContextWrapper = waf.wafManager.createDDWAFContext()
         wafContextWrapper.dispose()
         expect(ddwafContext.dispose).to.be.calledOnce
       })
 
       it('should not call ddwafContext.dispose when it is already disposed', () => {
         ddwafContext.disposed = true
-        const wafContextWrapper = WAFManagerModule.wafManager.createDDWAFContext()
+        const wafContextWrapper = waf.wafManager.createDDWAFContext()
         wafContextWrapper.dispose()
         expect(ddwafContext.dispose).not.to.be.called
       })
@@ -335,7 +338,7 @@ describe('WAF Manager', () => {
             }
           ]
         }
-        WAFManagerModule.wafManager.reload(newRules)
+        waf.wafManager.reload(newRules)
 
         const params = {
           'server.response.status': 200,
@@ -381,8 +384,8 @@ describe('WAF Manager', () => {
             }
           ]
         }
-        WAFManagerModule.wafManager.reload(newRules)
-        const newWafContext = WAFManagerModule.wafManager.createDDWAFContext()
+        waf.wafManager.reload(newRules)
+        const newWafContext = waf.wafManager.createDDWAFContext()
         const params = {
           'server.response.status': 200,
           'server.request.query': { 'paramname': 'paramvalue' }

@@ -2,7 +2,7 @@
 
 const log = require('../log')
 const RuleManager = require('./rule_manager')
-const WAFManagerModule = require('./waf_manager')
+const waf = require('./waf')
 const remoteConfig = require('./remote_config')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('./gateway/channels')
 const addresses = require('./addresses')
@@ -63,7 +63,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     '_dd.runtime_family': 'nodejs',
     [HTTP_CLIENT_IP]: clientIp
   })
-  const wafContext = WAFManagerModule.wafManager && WAFManagerModule.wafManager.createDDWAFContext(req)
+  const wafContext = waf.wafManager && waf.wafManager.createDDWAFContext(req)
   if (clientIp && wafContext) {
     const results = wafContext.run({
       [addresses.HTTP_CLIENT_IP]: clientIp
@@ -81,7 +81,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
 }
 
 function incomingHttpEndTranslator (data) {
-  const wafContext = WAFManagerModule.wafManager && WAFManagerModule.wafManager.getDDWAFContext(data.req)
+  const wafContext = waf.wafManager && waf.wafManager.getDDWAFContext(data.req)
   if (!wafContext) return
 
   const requestHeaders = Object.assign({}, data.req.headers)

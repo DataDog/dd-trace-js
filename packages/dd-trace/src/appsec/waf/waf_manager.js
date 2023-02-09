@@ -1,61 +1,15 @@
 'use strict'
 
-const log = require('../log')
-const Reporter = require('./reporter')
-const addresses = require('./addresses')
-const web = require('../plugins/util/web')
-const { storage } = require('../../../datadog-core')
+const log = require('../../log')
+const Reporter = require('../reporter')
+const addresses = require('../addresses')
+const web = require('../../plugins/util/web')
+const { storage } = require('../../../../datadog-core')
+const WAFContextWrapper = require('./waf_context_wrapper')
 
 const validAddressSet = new Set(Object.values(addresses))
 const WAF_ENGINE_CONTEXT_KEY = Symbol('WAF_ENGINE_CONTEXT')
 // TODO MAX_CONTEXT_SIZE = 1024
-
-class WAFContextWrapper {
-  constructor (ddwafContext, acceptedAddresses, wafTimeout, rulesInfo) {
-    this.ddwafContext = ddwafContext
-    this.acceptedAddresses = acceptedAddresses
-    this.wafTimeout = wafTimeout
-    this.rulesInfo = rulesInfo
-  }
-
-  run (params) {
-    const inputs = {}
-    let someInputAdded = false
-    params && Object.keys(params).forEach((key) => {
-      if (this.acceptedAddresses.has(key)) {
-        inputs[key] = params[key]
-        someInputAdded = true
-      }
-    })
-    if (someInputAdded) {
-      const start = process.hrtime.bigint()
-
-      const ddwafResult = this.ddwafContext.run(inputs, this.wafTimeout)
-
-      ddwafResult.durationExt = parseInt(process.hrtime.bigint() - start)
-      return this._applyResult(ddwafResult, inputs)
-    }
-    return []
-  }
-
-  _applyResult (result, params) {
-    Reporter.reportMetrics({
-      duration: result.totalRuntime / 1e3,
-      durationExt: result.durationExt / 1e3,
-      rulesVersion: this.rulesInfo.version
-    })
-    if (result.data && result.data !== '[]') {
-      Reporter.reportAttack(result.data, params)
-    }
-
-    return result.actions
-  }
-  dispose () {
-    if (!this.ddwafContext.disposed) {
-      this.ddwafContext.dispose()
-    }
-  }
-}
 
 class WAFManager {
   constructor (rules, config) {
@@ -146,24 +100,4 @@ class WAFManager {
   }
 }
 
-function init (rules, config) {
-  if (!wafManagerModule.wafManager) {
-    wafManagerModule.wafManager = new WAFManager(rules, config)
-  }
-}
-
-function destroy () {
-  if (wafManagerModule.wafManager) {
-    wafManagerModule.wafManager.destroy()
-    wafManagerModule.wafManager = null
-  }
-}
-
-const wafManagerModule = {
-  WAFContextWrapper,
-  WAFManager,
-  init,
-  destroy,
-  wafManager: null
-}
-module.exports = wafManagerModule
+module.exports = WAFManager
