@@ -119,6 +119,7 @@
     "msgpack-lite": "^0.1.26",
     "multer": "^1.4.5-lts.1",
     "nock": "^11.3.3",
+    "node-loader": "^2.0.0",
     "nyc": "^15.1.0",
     "proxyquire": "^1.8.0",
     "rimraf": "^3.0.0",
