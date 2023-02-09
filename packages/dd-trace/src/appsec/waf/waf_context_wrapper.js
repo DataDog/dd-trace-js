@@ -19,6 +19,7 @@ class WAFContextWrapper {
         someInputAdded = true
       }
     })
+
     if (someInputAdded) {
       const start = process.hrtime.bigint()
 
@@ -36,6 +37,7 @@ class WAFContextWrapper {
       durationExt: result.durationExt / 1e3,
       rulesVersion: this.rulesInfo.version
     })
+
     if (result.data && result.data !== '[]') {
       Reporter.reportAttack(result.data, params)
     }
