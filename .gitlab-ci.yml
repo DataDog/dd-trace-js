@@ -37,6 +37,8 @@ deploy_to_docker_registries:
     IMG_SOURCES: ghcr.io/datadog/dd-trace-js/dd-lib-js-init:$CI_COMMIT_TAG
     IMG_DESTINATIONS: dd-lib-js-init:$CI_COMMIT_TAG
     IMG_SIGNING: "false"
+    RETRY_COUNT: 5
+    RETRY_DELAY: 300
 
 deploy_latest_to_docker_registries:
   stage: deploy
