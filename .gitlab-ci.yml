@@ -20,16 +20,6 @@ deploy_to_reliability_env:
     UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA
     FORCE_TRIGGER: $FORCE_TRIGGER
 
-
-nap:
-  stage: deploy
-  script: "sleep 600" # sleep for ten minutes
-
-# this step pulls a docker image and then publishes it elsewhere
-# it previously started almost immediately
-# at the same time a GitHub action publishes the image to be pulled
-# this resulted in a race condition
-# therefore, we're sleeping before attempting the pull
 deploy_to_docker_registries:
   stage: deploy
   rules:
@@ -47,9 +37,8 @@ deploy_to_docker_registries:
     IMG_SOURCES: ghcr.io/datadog/dd-trace-js/dd-lib-js-init:$CI_COMMIT_TAG
     IMG_DESTINATIONS: dd-lib-js-init:$CI_COMMIT_TAG
     IMG_SIGNING: "false"
-  retry: 2
-  needs:
-    - job: nap
+    RETRY_COUNT: 5
+    RETRY_DELAY: 300
 
 deploy_latest_to_docker_registries:
   stage: deploy
