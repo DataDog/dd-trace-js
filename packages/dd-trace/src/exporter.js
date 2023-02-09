@@ -4,7 +4,7 @@ const AgentExporter = require('./exporters/agent')
 const LogExporter = require('./exporters/log')
 const AgentlessCiVisibilityExporter = require('./ci-visibility/exporters/agentless')
 const AgentProxyCiVisibilityExporter = require('./ci-visibility/exporters/agent-proxy')
-const NAPI_RSExporter = require('./exporters/napi-rs')
+const NAPIRSExporter = require('./exporters/napi-rs')
 const exporters = require('../../../ext/exporters')
 const fs = require('fs')
 const constants = require('./constants')
@@ -23,7 +23,7 @@ module.exports = name => {
     case exporters.AGENT_PROXY:
       return AgentProxyCiVisibilityExporter
     case exporters.NAPI_RS:
-      return NAPI_RSExporter
+      return NAPIRSExporter
     default:
       return inAWSLambda && !usingLambdaExtension ? LogExporter : AgentExporter
   }

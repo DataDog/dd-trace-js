@@ -11,7 +11,7 @@ if (process.platform == 'linux' && process.arch == 'x64') {
   console.log("the NAPI_RS exporter does not support " + process.platform + "-" + process.arch);
 }
 
-class NAPI_RSExporter {
+class NAPIRSExporter {
   constructor () {}
 
   export (spans) {
@@ -27,4 +27,4 @@ class NAPI_RSExporter {
   }
 }
 
-module.exports = NAPI_RSExporter
+module.exports = NAPIRSExporter
