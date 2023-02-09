@@ -6,6 +6,9 @@ declare const tags: {
   SAMPLING_PRIORITY: 'sampling.priority'
   ANALYTICS: '_dd1.sr.eausr'
   ERROR: 'error'
+  ERROR_MSG: 'error.message',
+  ERROR_TYPE: 'error.type',
+  ERROR_STACK: 'error.stack',
   MANUAL_KEEP: 'manual.keep'
   MANUAL_DROP: 'manual.drop'
   MEASURED: '_dd.measured'
