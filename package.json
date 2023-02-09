@@ -85,9 +85,7 @@
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.2",
     "protobufjs": "^7.1.2",
-    "retry": "^0.10.1",
-    "semver": "^5.5.0",
-    "webpack": "5.0.0"
+    "retry": "^0.10.1"
   },
   "devDependencies": {
     "@types/node": ">=14",
@@ -120,7 +118,8 @@
     "msgpack-lite": "^0.1.26",
     "multer": "^1.4.5-lts.1",
     "nock": "^11.3.3",
-    "node-loader": "^2.0.0",
+    "node-loader": "1.0.0",
+    "webpack": "4.0.0",
     "nyc": "^15.1.0",
     "proxyquire": "^1.8.0",
     "rimraf": "^3.0.0",
