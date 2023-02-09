@@ -199,7 +199,6 @@ class TextMapPropagator {
       }
     })
 
-    console.log(ts, ts.toString(), ts.get('dd').toString())
     carrier.tracestate = ts.toString()
   }
 
@@ -271,7 +270,8 @@ class TextMapPropagator {
         return new DatadogSpanContext({
           traceId: id(),
           spanId: null,
-          sampling: { priority }
+          sampling: { priority },
+          tracestate: this._shouldMakeTraceState()
         })
       }
 
@@ -366,7 +366,8 @@ class TextMapPropagator {
 
       return new DatadogSpanContext({
         traceId: id(carrier[traceKey], radix),
-        spanId: id(carrier[spanKey], radix)
+        spanId: id(carrier[spanKey], radix),
+        tracestate: this._shouldMakeTraceState()
       })
     }
 
@@ -500,6 +501,11 @@ class TextMapPropagator {
     } else if (sampled === '0') {
       return AUTO_REJECT
     }
+  }
+
+  _shouldMakeTraceState () {
+    return this._hasPropagationStyle('inject', 'tracecontext') ||
+      this._hasPropagationStyle('extract', 'tracecontext')
   }
 }
 
