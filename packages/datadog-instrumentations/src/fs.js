@@ -284,9 +284,20 @@ function createWrapFunction (prefix = '', override = '') {
       }
 
       return innerResource.runInAsyncScope(() => {
+        if (this && !this.parentAsyncId) this.parentAsyncId = innerResource.asyncId()
+        if (this && this.parentAsyncId) {
+          message.innerCall = this.parentAsyncId !== innerResource.asyncId()
+        } else {
+          message.innerCall = true
+        }
         startChannel.publish(message)
         try {
           const result = original.apply(this, arguments)
+
+          if (this && this.parentAsyncId && this.parentAsyncId === innerResource.asyncId()) {
+            this.parentAsyncId = undefined
+          }
+
           if (cb) return result
           if (result && typeof result.then === 'function') {
             // TODO method open returning promise and filehandle prototype not initialized, initialize it
@@ -296,23 +307,26 @@ function createWrapFunction (prefix = '', override = '') {
                 if (isFirstMethodReturningFileHandle(original)) {
                   wrapFileHandle(value)
                 }
-                finishChannel.publish(message)
+                finishChannel.publish()
                 return value
               },
               error => {
                 errorChannel.publish(error)
-                finishChannel.publish(message)
+                finishChannel.publish()
                 throw error
               }
             )
           }
 
-          finishChannel.publish(message)
+          finishChannel.publish()
 
           return result
         } catch (error) {
+          if (this && this.parentAsyncId && this.parentAsyncId === innerResource.asyncId()) {
+            this.parentAsyncId = undefined
+          }
           errorChannel.publish(error)
-          finishChannel.publish(message)
+          finishChannel.publish()
           throw error
         }
       })

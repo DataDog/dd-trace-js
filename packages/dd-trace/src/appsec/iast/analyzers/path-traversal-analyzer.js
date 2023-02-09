@@ -2,27 +2,13 @@
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
 const InjectionAnalyzer = require('./injection-analyzer')
-const IAST_FS_DEPTH = Symbol('_dd.iast.fs.depth')
 
 class PathTraversalAnalyzer extends InjectionAnalyzer {
   constructor () {
     super('PATH_TRAVERSAL')
-    this.addSub('apm:fs:operation:finish', obj => {
-      console.log('apm:fs:operation:finish', obj.operation)
-      if (obj.operation.includes('Sync')) {
-        const iastContext = getIastContext(storage.getStore())
-        if (iastContext.hasOwnProperty(IAST_FS_DEPTH)) iastContext[IAST_FS_DEPTH]--
-        console.log('apm:fs:operation:finish', obj.operation, iastContext[IAST_FS_DEPTH])
-      }
-    })
     this.addSub('apm:fs:operation:start', obj => {
-      console.log('apm:fs:operation:start', obj.operation)
-      if (obj.operation.includes('Sync')) {
-        const iastContext = getIastContext(storage.getStore())
-        iastContext.hasOwnProperty(IAST_FS_DEPTH) ? iastContext[IAST_FS_DEPTH]++ : iastContext[IAST_FS_DEPTH] = 0
-        console.log('apm:fs:operation:start', obj.operation, iastContext[IAST_FS_DEPTH])
-        if (iastContext[IAST_FS_DEPTH] > 0) return
-      }
+      console.log('apm:fs:operation:start', obj.operation, obj.innerCall)
+      if (obj.innerCall) return
       const pathArguments = []
       if (obj.dest) {
         pathArguments.push(obj.dest)
@@ -51,11 +37,11 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
       if (obj.target) {
         pathArguments.push(obj.target)
       }
-      pathArguments.length > 0 && this.analyze(pathArguments)
+      pathArguments.length > 0 && this.analyze(pathArguments, obj.operation)
     })
   }
 
-  analyze (value) {
+  analyze (value, operation) {
     const iastContext = getIastContext(storage.getStore())
     if (!iastContext) {
       return
