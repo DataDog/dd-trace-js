@@ -76,6 +76,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     '_dd.runtime_family': 'nodejs',
     [HTTP_CLIENT_IP]: clientIp
   })
+
   const wafContext = waf.wafManager && waf.wafManager.createDDWAFContext(req)
   if (clientIp && wafContext) {
     const results = wafContext.run({
