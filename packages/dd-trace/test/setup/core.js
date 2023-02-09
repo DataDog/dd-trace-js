@@ -1,5 +1,5 @@
 'use strict'
-const SegfaultHandler = require('segfault-handler')
+
 const sinon = require('sinon')
 const chai = require('chai')
 const sinonChai = require('sinon-chai')
@@ -11,8 +11,6 @@ const metrics = require('../../src/metrics')
 const agent = require('../plugins/agent')
 const externals = require('../plugins/externals.json')
 const { storage } = require('../../../datadog-core')
-
-SegfaultHandler.registerHandler('crash.log')
 
 chai.use(sinonChai)
 chai.use(require('../asserts/profile'))
