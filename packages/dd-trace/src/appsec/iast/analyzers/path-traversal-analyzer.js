@@ -7,7 +7,6 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
   constructor () {
     super('PATH_TRAVERSAL')
     this.addSub('apm:fs:operation:start', obj => {
-      console.log('apm:fs:operation:start', obj.operation, obj.innerCall)
       if (obj.innerCall) return
       const pathArguments = []
       if (obj.dest) {
@@ -42,7 +41,6 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
   }
 
   analyze (value, operation) {
-    console.log('Path traversal analyzer', operation)
     const iastContext = getIastContext(storage.getStore())
     if (!iastContext) {
       return
@@ -51,7 +49,6 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
     if (value && value.constructor === Array) {
       for (const val of value) {
         if (this._isVulnerable(val, iastContext) && this._checkOCE(iastContext)) {
-          console.log('Path traversal reporter', operation)
           this._report(val, iastContext)
           // no support several evidences in the same vulnerability, just report the 1st one
           break

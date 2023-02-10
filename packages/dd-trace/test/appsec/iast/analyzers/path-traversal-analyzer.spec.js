@@ -259,7 +259,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     runFsMethodTest(`test fs.createReadStream method`, 0, (args) => {
       const rs = fs.createReadStream(...args)
       rs.close()
-    }, 2, __filename)
+    }, 1, __filename)
   })
 
   describe('test createWriteStream', () => {
@@ -282,7 +282,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
           resolve()
         })
       })
-    }, 2, filepath)
+    }, 1, filepath)
   })
 
   describe('test link', () => {
