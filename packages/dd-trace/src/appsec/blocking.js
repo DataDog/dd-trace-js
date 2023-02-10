@@ -1,9 +1,12 @@
 'use strict'
 
 const fs = require('fs')
+
+// TODO: move template loading to a proper spot. See APPSEC-8135.
 let templateLoaded = false
 let templateHtml, templateJson
-function block ({ req, res, topSpan, abortController }) {
+
+function block (req, res, topSpan, abortController) {
   let type
   let body
 

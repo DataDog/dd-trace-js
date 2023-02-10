@@ -31,7 +31,7 @@ function checkUserAndSetUser (tracer, user) {
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
-    log.warn('Root span not available, checkUserAndSetUser failed')
+    log.warn('Root span not available in checkUserAndSetUser')
     return false
   }
 
@@ -39,36 +39,32 @@ function checkUserAndSetUser (tracer, user) {
   if (!userId) {
     setUserTags(user, rootSpan)
   }
+
   return isUserBlocked(user)
 }
 
 function blockRequest (tracer, req, res) {
-  let request, response
   if (!req || !res) {
     const store = storage.getStore()
-    request = req || (store && store.req)
-    response = res || (store && store.res)
-  } else {
-    request = req
-    response = res
+    if (store) {
+      req = req || store.req
+      res = res || store.res
+    }
   }
 
-  if (!request || !response) {
-    log.warn('Requests or response object not available, blockRequest failed')
+  if (!req || !res) {
+    log.warn('Requests or response object not available in blockRequest')
     return false
   }
 
   const topSpan = getRootSpan(tracer)
   if (!topSpan) {
-    log.warn('Root span not available, blockRequest failed')
+    log.warn('Root span not available in blockRequest')
     return false
   }
 
-  block({
-    req: request,
-    res: response,
-    topSpan: topSpan
-  })
+  block(req, res, topSpan)
+
   return true
 }
 

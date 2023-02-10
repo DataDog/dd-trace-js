@@ -387,5 +387,5 @@ const resUserBlock: Boolean = tracer.appsec.isUserBlocked(user)
 let resBlockRequest: Boolean = tracer.appsec.blockRequest()
 const req = {} as IncomingMessage
 const res = {} as OutgoingMessage
-resBlockRequest  = tracer.appsec.blockRequest(req, res)
+resBlockRequest = tracer.appsec.blockRequest(req, res)
 tracer.appsec.setUser(user)

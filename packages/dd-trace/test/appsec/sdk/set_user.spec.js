@@ -63,28 +63,13 @@ describe('setUser', () => {
       expect(mockSetTag.secondCall).to.have.been.calledWithExactly('usr.email', 'a@b.c')
       expect(mockSetTag.thirdCall).to.have.been.calledWithExactly('usr.custom', 'hello')
     })
-  })
-
-  describe('Check internal callings, no rootSpan', () => {
-    const tracer = {}
-    const getRootSpan = sinon.stub().returns(undefined)
-    const setUserTagsStub = sinon.stub()
-
-    const { setUser } = proxyquire('../../../src/appsec/sdk/set_user', {
-      './utils': { getRootSpan },
-      setUserTags: setUserTagsStub
-    })
-
-    const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
-      './set_user': { setUser }
-    })
-
-    const sdk = new AppsecSdk(tracer)
 
     it('setUser should not call setUserTags when rootSpan is not available', () => {
+      getRootSpan.returns(undefined)
+
       sdk.setUser({ id: 'user' })
       expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
-      expect(setUserTagsStub).not.to.have.been.called
+      expect(mockSetTag).not.to.have.been.called
     })
   })
 

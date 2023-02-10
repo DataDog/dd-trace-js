@@ -20,7 +20,7 @@ describe('User blocking API', () => {
       return { req: mockReq, res: mockRes }
     } }
 
-    let block, getRootSpan, mockRootSpan, mockSetTag, userBlocking, isUserBlocked
+    let block, getRootSpan, mockRootSpan, mockSetTag, userBlocking
 
     beforeEach(() => {
       block = sinon.stub()
@@ -32,12 +32,10 @@ describe('User blocking API', () => {
         setTag: mockSetTag
       }
       getRootSpan = sinon.stub().returns(mockRootSpan)
-      isUserBlocked = sinon.stub()
       userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
         './utils': { getRootSpan },
         '../blocking': { block },
-        '../../../../datadog-core': { storage },
-        'isUserBlocked': isUserBlocked
+        '../../../../datadog-core': { storage }
       })
     })
 
@@ -45,86 +43,37 @@ describe('User blocking API', () => {
       const user = {}
       const ret = userBlocking.checkUserAndSetUser(tracer, user)
       expect(ret).to.be.false
-      expect(isUserBlocked).not.to.have.been.called
     })
 
     it('checkUserAndSetUser should return false with no user', () => {
       const ret = userBlocking.checkUserAndSetUser()
       expect(ret).to.be.false
-      expect(isUserBlocked).not.to.have.been.called
     })
 
     it('blockRequest should call block with proper arguments', () => {
       userBlocking.blockRequest(tracer, {}, {})
-      expect(block).to.be.calledOnceWithExactly({ req: {}, res: {}, topSpan: mockRootSpan })
+      expect(block).to.be.calledOnceWithExactly({}, {}, mockRootSpan)
     })
 
     it('blockRequest should get req and res from local storage when they are not passed', () => {
       userBlocking.blockRequest(tracer)
-      expect(block).to.be.calledOnceWithExactly({ req: mockReq, res: mockRes, topSpan: mockRootSpan })
-    })
-  })
-
-  describe('Test internal API, no rootSpan', () => {
-    const tracer = {}
-    const mockReq = { protocol: 'https' }
-    const mockRes = { headersSent: false }
-    const storage = { getStore: () => {
-      return { req: mockReq, res: mockRes }
-    } }
-
-    let block, getRootSpan, userBlocking, isUserBlocked
-
-    beforeEach(() => {
-      block = sinon.stub()
-      getRootSpan = sinon.stub().returns(undefined)
-      isUserBlocked = sinon.stub()
-      userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
-        './utils': { getRootSpan },
-        '../blocking': { block },
-        '../../../../datadog-core': { storage },
-        'isUserBlocked': isUserBlocked
-      })
+      expect(block).to.be.calledOnceWithExactly(mockReq, mockRes, mockRootSpan)
     })
 
     it('blockRequest should return proper value when there is no rootSpan available', () => {
+      getRootSpan.returns(undefined)
+
       const ret = userBlocking.blockRequest({}, {})
       expect(ret).to.be.false
       expect(block).not.to.have.been.called
     })
 
     it('checkUserAndSetUser should return false when there is no rootSpan available', () => {
+      getRootSpan.returns(undefined)
+
       const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
       expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
       expect(ret).to.be.false
-      expect(isUserBlocked).not.to.have.been.called
-    })
-  })
-
-  describe('Test internal API, no storage', () => {
-    const tracer = {}
-    const storage = { getStore: () => {
-      return undefined
-    } }
-
-    let block, getRootSpan, userBlocking, isUserBlocked
-
-    beforeEach(() => {
-      block = sinon.stub()
-      getRootSpan = sinon.stub().returns(undefined)
-      isUserBlocked = sinon.stub()
-      userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
-        './utils': { getRootSpan },
-        '../blocking': { block },
-        '../../../../datadog-core': { storage },
-        'isUserBlocked': isUserBlocked
-      })
-    })
-
-    it('blockRequest should return false when the storage is not available', () => {
-      const ret = userBlocking.blockRequest(tracer)
-      expect(ret).to.be.false
-      expect(getRootSpan).not.to.have.been.called
     })
   })
 

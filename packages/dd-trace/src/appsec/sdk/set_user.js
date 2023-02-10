@@ -11,12 +11,13 @@ function setUserTags (user, rootSpan) {
 
 function setUser (tracer, user) {
   if (!user || !user.id) {
+    log.warn('User not available in setUser')
     return
   }
 
   const rootSpan = getRootSpan(tracer)
   if (!rootSpan) {
-    log.warn('Root span not available, setUser failed')
+    log.warn('Root span not available in setUser')
     return
   }
 
