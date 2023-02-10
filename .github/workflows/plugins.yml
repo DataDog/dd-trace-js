@@ -65,29 +65,12 @@ jobs:
     runs-on: ubuntu-latest
     services:
       localstack:
-        image: localstack/localstack:0.11.2
+        image: localstack/localstack:1.1.0
         env:
-          LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs
+          LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless
           EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
-          FORCE_NONINTERACTIVE: 'true'
-          START_WEB: '0'
-          EDGE_PORT: '4565'
-        ports:
-          - 4569:4569 # DynamoDB
-          - 4568:4568 # Kinesis
-          - 4572:4572 # S3
-          - 4576:4576 # SQS
-          - 4575:4575 # SNS
-          - 4580:4580 # Route53
-          - 4586:4586 # CloudWatch Logs
-          - 4577:4577 # Redshift
-      localstack-serverless:
-        image: localstack/localstack:0.12.4
-        env:
-          LOCALSTACK_SERVICES: serverless
-          EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
-          EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
+          AWS_DEFAULT_REGION: us-east-1
           FORCE_NONINTERACTIVE: 'true'
           LAMBDA_EXECUTOR: local
           START_WEB: '0'

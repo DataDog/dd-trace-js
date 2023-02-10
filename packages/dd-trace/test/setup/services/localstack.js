@@ -14,23 +14,16 @@ function waitForAWS () {
     // Set the region
     AWS.config.update({ region: 'us-east-1' })
 
-    const ddbEndpoint = new AWS.Endpoint('http://127.0.0.1:4569')
-    const kinesisEndpoint = new AWS.Endpoint('http://127.0.0.1:4568')
-    const s3Endpoint = new AWS.Endpoint('http://127.0.0.1:4572')
-    const sqsEndpoint = new AWS.Endpoint('http://127.0.0.1:4576')
-    const snsEndpoint = new AWS.Endpoint('http://127.0.0.1:4575')
-    const route53Endpoint = new AWS.Endpoint('http://127.0.0.1:4580')
-    const redshiftEndpoint = new AWS.Endpoint('http://127.0.0.1:4577')
-    const lambdaEndpoint = new AWS.Endpoint('http://127.0.0.1:4566')
+    const endpoint = new AWS.Endpoint('http://127.0.0.1:4566')
 
-    const ddb = new AWS.DynamoDB({ endpoint: ddbEndpoint })
-    const kinesis = new AWS.Kinesis({ endpoint: kinesisEndpoint })
-    const route53 = new AWS.Route53({ endpoint: route53Endpoint })
-    const s3 = new AWS.S3({ endpoint: s3Endpoint, s3ForcePathStyle: true })
-    const sqs = new AWS.SQS({ endpoint: sqsEndpoint })
-    const sns = new AWS.SNS({ endpoint: snsEndpoint })
-    const redshift = new AWS.Redshift({ endpoint: redshiftEndpoint })
-    const lambda = new AWS.Lambda({ endpoint: lambdaEndpoint })
+    const ddb = new AWS.DynamoDB({ endpoint })
+    const kinesis = new AWS.Kinesis({ endpoint })
+    const route53 = new AWS.Route53({ endpoint })
+    const s3 = new AWS.S3({ endpoint, s3ForcePathStyle: true })
+    const sqs = new AWS.SQS({ endpoint })
+    const sns = new AWS.SNS({ endpoint })
+    const redshift = new AWS.Redshift({ endpoint })
+    const lambda = new AWS.Lambda({ endpoint })
 
     operation.attempt(currentAttempt => {
       Promise.all([

@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@cucumber/cucumber' () { return require('../../../datadog-plugin-cucumber/src') },
   get '@playwright/test' () { return require('../../../datadog-plugin-playwright/src') },
   get '@elastic/elasticsearch' () { return require('../../../datadog-plugin-elasticsearch/src') },
