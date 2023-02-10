@@ -11,11 +11,11 @@ function publishRequestBodyAndNext (req, res, next) {
       const abortController = new AbortController()
       bodyParserReadCh.publish({ req, res, abortController })
       if (abortController.signal.aborted) {
-        return res.end()
+        res.end()
+        return
       }
-    } else {
-      next.apply(this, arguments)
     }
+    next.apply(this, arguments)
   }
 }
 
