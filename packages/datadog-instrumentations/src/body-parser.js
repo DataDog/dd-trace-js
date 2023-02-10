@@ -1,26 +1,32 @@
 'use strict'
 
-const { channel, addHook, AsyncResource } = require('./helpers/instrument')
+const { AbortController } = require('node-abort-controller') // AbortController is not available in node <15
 
+const { channel, addHook, AsyncResource } = require('./helpers/instrument')
 const bodyParserReadCh = channel('datadog:body-parser:read:finish')
 
-function publishRequestBodyAndNext (request, next) {
+function publishRequestBodyAndNext (req, res, next) {
   return function () {
-    if (bodyParserReadCh.hasSubscribers && request) {
-      bodyParserReadCh.publish({ request })
+    if (bodyParserReadCh.hasSubscribers && req) {
+      const abortController = new AbortController()
+      bodyParserReadCh.publish({ req, res, abortController })
+      if (abortController.signal.aborted) {
+        return res.end()
+      }
+    } else {
+      next.apply(this, arguments)
     }
-    next.apply(this, arguments)
   }
 }
 
 addHook({
   name: 'body-parser',
   file: 'lib/read.js',
-  versions: ['>=1']
+  versions: ['>=1.4.0']
 }, read => {
   return function (req, res, next) {
     const nextResource = new AsyncResource('bound-anonymous-fn')
-    arguments[2] = nextResource.bind(publishRequestBodyAndNext(req, next))
+    arguments[2] = nextResource.bind(publishRequestBodyAndNext(req, res, next))
     read.apply(this, arguments)
   }
 })
