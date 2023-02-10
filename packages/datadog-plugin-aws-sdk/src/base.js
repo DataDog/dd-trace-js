@@ -23,13 +23,12 @@ class BaseAwsSdkPlugin extends Plugin {
       request,
       operation,
       awsRegion,
-      awsService,
-      serviceIdentifier
+      awsService
     }) => {
       if (!this.isEnabled(request)) {
         return
       }
-      const serviceName = this.getServiceName(serviceIdentifier)
+      const serviceName = this.getServiceName()
       const childOf = this.tracer.scope().active()
       const tags = {
         'span.kind': 'client',
@@ -50,6 +49,14 @@ class BaseAwsSdkPlugin extends Plugin {
       const store = storage.getStore()
 
       this.enter(span, store)
+    })
+
+    this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, region => {
+      const store = storage.getStore()
+      if (!store) return
+      const { span } = store
+      if (!span) return
+      span.setTag('aws.region', region)
     })
 
     this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response }) => {
@@ -109,10 +116,10 @@ class BaseAwsSdkPlugin extends Plugin {
   }
 
   // TODO: test splitByAwsService when the test suite is fixed
-  getServiceName (serviceIdentifier) {
+  getServiceName () {
     return this.config.service
       ? this.config.service
-      : `${this.tracer._service}-aws-${serviceIdentifier}`
+      : `${this.tracer._service}-aws-${this.serviceIdentifier}`
   }
 }
 
