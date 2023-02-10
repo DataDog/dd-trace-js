@@ -134,6 +134,20 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
+  body-parser:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: body-parser
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - uses: codecov/codecov-action@v2
+
   bunyan:
     runs-on: ubuntu-latest
     env:
