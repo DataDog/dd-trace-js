@@ -63,9 +63,9 @@ describe('User blocking API', () => {
     it('blockRequest should return proper value when there is no rootSpan available', () => {
       getRootSpan.returns(undefined)
 
-      const ret = userBlocking.blockRequest({}, {})
-      expect(ret).to.be.false
-      expect(block).not.to.have.been.called
+      const ret = userBlocking.blockRequest(tracer, {}, {})
+      expect(ret).to.be.true
+      expect(block).to.have.been.calledOnceWithExactly({}, {}, undefined)
     })
 
     it('checkUserAndSetUser should return false when there is no rootSpan available', () => {

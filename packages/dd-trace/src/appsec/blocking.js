@@ -2,7 +2,7 @@
 
 const fs = require('fs')
 
-// TODO: move template loading to a proper spot. See APPSEC-8135.
+// TODO: move template loading to a proper spot.
 let templateLoaded = false
 let templateHtml, templateJson
 
@@ -21,9 +21,11 @@ function block (req, res, topSpan, abortController) {
     body = templateJson
   }
 
-  topSpan.addTags({
-    'appsec.blocked': 'true'
-  })
+  if (topSpan) {
+    topSpan.addTags({
+      'appsec.blocked': 'true'
+    })
+  }
 
   res.statusCode = 403
   res.setHeader('Content-Type', type)

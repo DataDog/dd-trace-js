@@ -60,7 +60,7 @@ function blockRequest (tracer, req, res) {
   const topSpan = getRootSpan(tracer)
   if (!topSpan) {
     log.warn('Root span not available in blockRequest')
-    return false
+    // return false
   }
 
   block(req, res, topSpan)
