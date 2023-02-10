@@ -154,8 +154,10 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
             callArgs[vulnerableIndex] = newTaintedString(iastCtx, callArgs[vulnerableIndex], 'param', 'Request')
           }
           fn(callArgs)
-          expect(pathTraversalAnalyzer._report.callCount).to.be.equal(expectedReportCallCount)
         }, 'PATH_TRAVERSAL')
+        afterEach(() => {
+          expect(pathTraversalAnalyzer._report.callCount).to.be.equal(expectedReportCallCount)
+        })
       })
       describe('no vulnerable', () => {
         testThatRequestHasNoVulnerability(function () {
@@ -257,7 +259,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     runFsMethodTest(`test fs.createReadStream method`, 0, (args) => {
       const rs = fs.createReadStream(...args)
       rs.close()
-    }, 1, __filename)
+    }, 2, __filename)
   })
 
   describe('test createWriteStream', () => {
@@ -280,7 +282,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
           resolve()
         })
       })
-    }, 1, filepath)
+    }, 2, filepath)
   })
 
   describe('test link', () => {
