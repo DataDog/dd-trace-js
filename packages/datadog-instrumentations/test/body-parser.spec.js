@@ -48,6 +48,7 @@ withVersions('body-parser', 'body-parser', version => {
     it('should not abort the request with non blocker subscription', async () => {
       function noop () { }
       bodyParserReadCh.subscribe(noop)
+
       const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
       expect(requestBody).to.be.calledOnce
