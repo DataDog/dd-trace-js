@@ -8,7 +8,12 @@ beforeEach(() => {
   })
 })
 
+before(() => {
+  cy.task('dd:testSuiteStart', Cypress.mocha.getRootSuite().file)
+})
+
 after(() => {
+  cy.task('dd:testSuiteFinish', Cypress.mocha.getRunner().stats)
   cy.window().then(win => {
     win.dispatchEvent(new Event('beforeunload'))
   })
