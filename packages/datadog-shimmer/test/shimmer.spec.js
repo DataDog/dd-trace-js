@@ -14,6 +14,18 @@ describe('shimmer', () => {
       expect(obj.count(1)).to.equal(2)
     })
 
+    it('should wrap the method on a frozen object', () => {
+      const count = inc => inc
+
+      let obj = { count }
+
+      Object.freeze(obj)
+
+      obj = shimmer.wrap(obj, 'count', count => inc => count(inc) + 1)
+
+      expect(obj.count(1)).to.equal(2)
+    })
+
     it('should mass wrap targets', () => {
       const count = inc => inc
       const foo = { count }
@@ -72,34 +84,23 @@ describe('shimmer', () => {
       expect(counter).to.be.an.instanceof(Counter)
     })
 
-    it('should not wrap a class constructor', () => {
+    it('should wrap a class constructor', () => {
       class Counter {
         constructor (start) {
           this.value = start
         }
       }
 
-      const obj = { Counter }
-
-      expect(() => shimmer.wrap(obj, 'Counter', function () {})).to.throw(
-        'Target is a native class constructor and cannot be wrapped.'
-      )
-    })
-
-    it('should not wrap a class constructor with invalid toString()', () => {
-      class Counter {
-        constructor (start) {
-          this.value = start
-        }
-      }
-
-      Counter.toString = 'invalid'
+      class SubCounter extends Counter {}
 
       const obj = { Counter }
 
-      expect(() => shimmer.wrap(obj, 'Counter', function () {})).to.throw(
-        'Target is a native class constructor and cannot be wrapped.'
-      )
+      shimmer.wrap(obj, 'Counter', () => SubCounter)
+
+      const counter = new obj.Counter()
+
+      expect(counter).to.be.instanceof(SubCounter)
+      expect(counter).to.be.instanceof(Counter)
     })
 
     it('should preserve property descriptors from the original', () => {
