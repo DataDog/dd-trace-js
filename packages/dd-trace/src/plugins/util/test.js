@@ -24,7 +24,6 @@ const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../
 const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { version: ddTraceVersion } = require('../../../../../package.json')
-const DatadogSpanContext = require('../../opentracing/span_context')
 
 const TEST_FRAMEWORK = 'test.framework'
 const TEST_FRAMEWORK_VERSION = 'test.framework_version'
@@ -166,9 +165,9 @@ function finishAllTraceSpans (span) {
 }
 
 function getTestParentSpan (tracer) {
-  return new DatadogSpanContext({
-    traceId: id(),
-    spanId: null
+  return tracer.extract('text_map', {
+    'x-datadog-trace-id': id().toString(10),
+    'x-datadog-parent-id': '0000000000000000'
   })
 }
 

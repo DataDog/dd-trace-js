@@ -164,7 +164,7 @@ class TextMapPropagator {
 
     const {
       _sampling: { priority, mechanism },
-      _tracestate: ts,
+      _tracestate: ts = new TraceState(),
       _trace: { origin, tags }
     } = spanContext
 
@@ -270,8 +270,7 @@ class TextMapPropagator {
         return new DatadogSpanContext({
           traceId: id(),
           spanId: null,
-          sampling: { priority },
-          tracestate: this._shouldMakeTraceState()
+          sampling: { priority }
         })
       }
 
@@ -362,12 +361,10 @@ class TextMapPropagator {
   _extractGenericContext (carrier, traceKey, spanKey, radix) {
     if (carrier[traceKey] && carrier[spanKey]) {
       if (invalidSegment.test(carrier[traceKey])) return null
-      if (invalidSegment.test(carrier[spanKey])) return null
 
       return new DatadogSpanContext({
         traceId: id(carrier[traceKey], radix),
-        spanId: id(carrier[spanKey], radix),
-        tracestate: this._shouldMakeTraceState()
+        spanId: id(carrier[spanKey], radix)
       })
     }
 
@@ -501,11 +498,6 @@ class TextMapPropagator {
     } else if (sampled === '0') {
       return AUTO_REJECT
     }
-  }
-
-  _shouldMakeTraceState () {
-    return this._hasPropagationStyle('inject', 'tracecontext') ||
-      this._hasPropagationStyle('extract', 'tracecontext')
   }
 }
 

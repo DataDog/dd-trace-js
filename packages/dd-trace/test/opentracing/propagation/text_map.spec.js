@@ -21,7 +21,6 @@ describe('TextMapPropagator', () => {
     const spanContext = new SpanContext({
       traceId: id('123', 10),
       spanId: id('-456', 10),
-      tracestate: true,
       baggageItems,
       ...params,
       trace: {

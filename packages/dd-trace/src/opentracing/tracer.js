@@ -22,7 +22,6 @@ class DatadogTracer {
   constructor (config) {
     const Exporter = getExporter(config.experimental.exporter)
 
-    this._tracePropagationStyle = config.tracePropagationStyle
     this._service = config.service
     this._version = config.version
     this._env = config.env

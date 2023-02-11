@@ -1,16 +1,10 @@
 'use strict'
 
 const { AUTO_KEEP } = require('../../../../ext/priority')
-const TraceState = require('./propagation/tracestate')
 
 class DatadogSpanContext {
   constructor (props) {
     props = props || {}
-
-    let { tracestate } = props
-    if (tracestate === true) {
-      tracestate = new TraceState()
-    }
 
     this._traceId = props.traceId
     this._spanId = props.spanId
@@ -20,7 +14,7 @@ class DatadogSpanContext {
     this._tags = props.tags || {}
     this._sampling = props.sampling || {}
     this._baggageItems = props.baggageItems || {}
-    this._tracestate = tracestate
+    this._tracestate = props.tracestate
     this._noop = props.noop || null
     this._trace = props.trace || {
       started: [],

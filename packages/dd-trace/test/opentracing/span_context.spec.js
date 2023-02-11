@@ -1,5 +1,6 @@
 'use strict'
 
+const { expect } = require('chai')
 const id = require('../../src/id')
 
 describe('SpanContext', () => {

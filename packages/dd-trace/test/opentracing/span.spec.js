@@ -29,12 +29,7 @@ describe('Span', () => {
     id.onFirstCall().returns('123')
     id.onSecondCall().returns('456')
 
-    tracer = {
-      _tracePropagationStyle: {
-        extract: ['tracecontext'],
-        inject: ['tracecontext']
-      }
-    }
+    tracer = {}
 
     processor = {
       process: sinon.stub()
