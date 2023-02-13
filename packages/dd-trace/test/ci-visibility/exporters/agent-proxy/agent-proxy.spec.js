@@ -70,19 +70,6 @@ describe('AgentProxyCiVisibilityExporter', () => {
       expect(agentProxyCiVisibilityExporter._writer).to.be.instanceOf(AgentlessWriter)
       expect(agentProxyCiVisibilityExporter._coverageWriter).to.be.instanceOf(CoverageWriter)
     })
-    it('should upload git metadata if configured', async () => {
-      const scope = nock('http://localhost:8126')
-        .post('/evp_proxy/v2/api/v2/git/repository/search_commits')
-        .reply(200, JSON.stringify({ data: [] }))
-        .post('/evp_proxy/v2/api/v2/git/repository/packfile')
-        .reply(204)
-
-      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({
-        port, tags, isGitUploadEnabled: true
-      })
-      await agentProxyCiVisibilityExporter._gitUploadPromise
-      expect(scope.isDone()).to.be.true
-    })
 
     it('should process test suite level visibility spans', async () => {
       const mockWriter = {

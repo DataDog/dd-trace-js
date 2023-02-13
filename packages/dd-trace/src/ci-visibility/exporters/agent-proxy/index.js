@@ -20,8 +20,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       prioritySampler,
       lookup,
       protocolVersion,
-      headers,
-      isGitUploadEnabled
+      headers
     } = config
 
     this.getAgentInfo((err, agentInfo) => {
@@ -38,9 +37,6 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           url: this._url,
           evpProxyPrefix: AGENT_EVP_PROXY_PATH
         })
-        if (isGitUploadEnabled) {
-          this.sendGitMetadata({ url: this._url, isEvpProxy: true })
-        }
       } else {
         this._writer = new AgentWriter({
           url: this._url,

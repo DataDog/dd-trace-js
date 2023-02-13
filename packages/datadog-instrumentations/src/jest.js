@@ -186,13 +186,12 @@ function cliWrapper (cli) {
 
     try {
       const { err, itrConfig } = await configurationPromise
-      if (err) {
-        log.error(err)
+      if (!err) {
+        isCodeCoverageEnabled = itrConfig.isCodeCoverageEnabled
+        isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled
       }
-      isCodeCoverageEnabled = itrConfig.isCodeCoverageEnabled
-      isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled
-    } catch (e) {
-      log.error(e)
+    } catch (err) {
+      log.error(err)
     }
 
     if (isSuitesSkippingEnabled) {
@@ -206,13 +205,11 @@ function cliWrapper (cli) {
 
       try {
         const { err, skippableSuites: receivedSkippableSuites } = await skippableSuitesPromise
-        if (err) {
-          log.error(err)
-        } else {
+        if (!err) {
           skippableSuites = receivedSkippableSuites
         }
-      } catch (e) {
-        log.error(e)
+      } catch (err) {
+        log.error(err)
       }
     }
 
