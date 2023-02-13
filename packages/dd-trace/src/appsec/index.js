@@ -88,39 +88,35 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
 
   const context = store.get('context')
 
-  if (clientIp) {
-    const results = Gateway.propagate({
-      [addresses.HTTP_CLIENT_IP]: clientIp
-    }, context)
+  const requestHeaders = Object.assign({}, req.headers)
+  delete requestHeaders.cookie
 
-    if (!results || !abortController) return
-
-    for (const entry of results) {
-      if (entry && entry.includes('block')) {
-        block(req, res, topSpan, abortController)
-        break
-      }
-    }
+  const payload = {
+    [addresses.HTTP_INCOMING_URL]: req.url,
+    [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
+    [addresses.HTTP_INCOMING_METHOD]: req.method,
+    [addresses.HTTP_INCOMING_REMOTE_IP]: req.socket.remoteAddress,
+    [addresses.HTTP_INCOMING_REMOTE_PORT]: req.socket.remotePort
   }
+
+  if (clientIp) {
+    payload[addresses.HTTP_CLIENT_IP] = clientIp
+  }
+
+  const results = Gateway.propagate(payload, context)
+
+  handleResults(results, req, res, topSpan, abortController)
 }
 
 function incomingHttpEndTranslator (data) {
   const context = Gateway.getContext()
   if (!context) return
 
-  const requestHeaders = Object.assign({}, data.req.headers)
-  delete requestHeaders.cookie
-
   // TODO: this doesn't support headers sent with res.writeHead()
   const responseHeaders = Object.assign({}, data.res.getHeaders())
   delete responseHeaders['set-cookie']
 
   const payload = {
-    [addresses.HTTP_INCOMING_URL]: data.req.url,
-    [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
-    [addresses.HTTP_INCOMING_METHOD]: data.req.method,
-    [addresses.HTTP_INCOMING_REMOTE_IP]: data.req.socket.remoteAddress,
-    [addresses.HTTP_INCOMING_REMOTE_PORT]: data.req.socket.remotePort,
     [addresses.HTTP_INCOMING_RESPONSE_CODE]: data.res.statusCode,
     [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
   }
@@ -165,6 +161,17 @@ function disable () {
   // Channel#unsubscribe() is undefined for non active channels
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
+}
+
+function handleResults (results, req, res, topSpan, abortController) {
+  if (!results || !req || !res || !topSpan || !abortController) return
+
+  for (const entry of results) {
+    if (entry && entry.includes('block')) {
+      block(req, res, topSpan, abortController)
+      break
+    }
+  }
 }
 
 module.exports = {
