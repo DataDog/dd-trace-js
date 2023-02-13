@@ -1,6 +1,6 @@
 'use strict'
 
-const RemoteConfigCapabilities = require('../../../src/appsec/remote_config/capabilities')
+const Capabilities = require('../../../src/appsec/remote_config/capabilities')
 
 let config
 let rc
@@ -47,7 +47,7 @@ describe('Remote Config enable', () => {
     remoteConfig.enable(config)
 
     expect(RemoteConfigManager).to.have.been.calledOnceWith(config)
-    expect(rc.updateCapabilities).to.have.been.calledOnceWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+    expect(rc.updateCapabilities).to.have.been.calledOnceWithExactly(Capabilities.ASM_ACTIVATION, true)
     expect(rc.on).to.have.been.calledOnceWith('ASM_FEATURES')
     expect(rc.on.firstCall.args[1]).to.be.a('function')
   })
@@ -154,8 +154,9 @@ describe('Remote Config enable', () => {
         remoteConfig.enable(config)
         remoteConfig.enableAsmData(config.appsec)
 
-        expect(rc.updateCapabilities).to.have.been.calledOnceWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
-        expect(rc.updateCapabilities).to.have.been.calledOnceWithExactly(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
+        expect(rc.updateCapabilities).to.have.been.calledTwice
+        expect(rc.updateCapabilities.firstCall).to.have.been.calledWithExactly(Capabilities.ASM_IP_BLOCKING, true)
+        expect(rc.updateCapabilities.secondCall).to.have.been.calledWithExactly(Capabilities.ASM_USER_BLOCKING, true)
         expect(rc.on).to.have.been.calledOnceWith('ASM_DATA')
       })
 
@@ -164,8 +165,10 @@ describe('Remote Config enable', () => {
         remoteConfig.enable(config)
         remoteConfig.enableAsmData(config.appsec)
 
-        expect(rc.updateCapabilities).to.have.been.calledOnceWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
-        expect(rc.updateCapabilities).to.have.been.calledOnceWithExactly(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
+        expect(rc.updateCapabilities).to.have.been.calledThrice
+        expect(rc.updateCapabilities.firstCall).to.have.been.calledWithExactly(Capabilities.ASM_ACTIVATION, true)
+        expect(rc.updateCapabilities.secondCall).to.have.been.calledWithExactly(Capabilities.ASM_IP_BLOCKING, true)
+        expect(rc.updateCapabilities.thirdCall).to.have.been.calledWithExactly(Capabilities.ASM_USER_BLOCKING, true)
         expect(rc.on.lastCall).to.have.been.calledWith('ASM_DATA')
       })
     })
