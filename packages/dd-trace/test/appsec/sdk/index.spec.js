@@ -34,24 +34,28 @@ describe('Appsec SDK', () => {
     })
 
     it('trackUserLoginSuccessEvent should call internal function with proper params', () => {
-      const user = { id: 'user' }
-      const metadata = {}
+      const user = { id: 'user_id' }
+      const metadata = { key: 'value' }
       appsecSdk.trackUserLoginSuccessEvent(user, metadata)
-      expect(trackUserLoginSuccessEvent).to.be.calledWith(tracer, user, metadata)
+
+      expect(trackUserLoginSuccessEvent).to.have.been.calledOnceWithExactly(tracer, user, metadata)
     })
 
     it('trackUserLoginFailureEvent should call internal function with proper params', () => {
-      const user = { id: 'user' }
-      const metadata = {}
-      appsecSdk.trackUserLoginFailureEvent(user, metadata)
-      expect(trackUserLoginFailureEvent).to.be.calledWith(tracer, user, metadata)
+      const userId = 'user_id'
+      const exists = false
+      const metadata = { key: 'value' }
+      appsecSdk.trackUserLoginFailureEvent(userId, exists, metadata)
+
+      expect(trackUserLoginFailureEvent).to.have.been.calledOnceWithExactly(tracer, userId, exists, metadata)
     })
 
     it('trackCustomEvent should call internal function with proper params', () => {
       const eventName = 'customEvent'
-      const metadata = {}
-      appsecSdk.trackUserLoginFailureEvent(eventName, metadata)
-      expect(trackUserLoginFailureEvent).to.be.calledWith(tracer, eventName, metadata)
+      const metadata = { key: 'value' }
+      appsecSdk.trackCustomEvent(eventName, metadata)
+
+      expect(trackCustomEvent).to.have.been.calledOnceWithExactly(tracer, eventName, metadata)
     })
 
     it('isUserBlocked should call internal function with proper params', () => {
