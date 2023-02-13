@@ -7,9 +7,9 @@ const {
   TEST_CODE_OWNERS,
   CI_APP_ORIGIN
 } = require('./util/test')
-const { COMPONENT } = require('../constants')
-
 const Plugin = require('./plugin')
+const { COMPONENT } = require('../constants')
+const log = require('../log')
 
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
@@ -20,7 +20,9 @@ module.exports = class CiPlugin extends Plugin {
         return onDone({ err: new Error('CI Visibility was not initialized correctly') })
       }
       this.tracer._exporter.getItrConfiguration(this.testConfiguration, (err, itrConfig) => {
-        if (!err) {
+        if (err) {
+          log.error(`Error fetching intelligent test runner configuration: ${err.message}`)
+        } else {
           this.itrConfig = itrConfig
         }
         onDone({ err, itrConfig })
@@ -32,6 +34,9 @@ module.exports = class CiPlugin extends Plugin {
         return onDone({ err: new Error('CI Visibility was not initialized correctly') })
       }
       this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites) => {
+        if (err) {
+          log.error(`Error fetching skippable suites: ${err.message}`)
+        }
         onDone({ err, skippableSuites })
       })
     })

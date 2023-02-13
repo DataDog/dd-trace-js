@@ -14,6 +14,9 @@ function getIsTestSessionTrace (trace) {
   )
 }
 
+const GIT_UPLOAD_TIMEOUT = 60000 // 60 seconds
+const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
+
 class CiVisibilityExporter extends AgentInfoExporter {
   constructor (config) {
     super(config)
@@ -24,14 +27,24 @@ class CiVisibilityExporter extends AgentInfoExporter {
     // AKA CI Vis Protocol
     this._canUseCiVisProtocol = false
 
-    // TODO: add timeout to reject this promise
+    const gitUploadTimeoutId = setTimeout(() => {
+      this._resolveGit(new Error('Timeout while uploading git metadata'))
+    }, GIT_UPLOAD_TIMEOUT).unref()
+
+    const canUseCiVisProtocolTimeoutId = setTimeout(() => {
+      this._resolveCanUseCiVisProtocol(false)
+    }, CAN_USE_CI_VIS_PROTOCOL_TIMEOUT).unref()
+
     this._gitUploadPromise = new Promise(resolve => {
-      this._resolveGit = resolve
+      this._resolveGit = (err) => {
+        clearTimeout(gitUploadTimeoutId)
+        resolve(err)
+      }
     })
 
-    // TODO: add timeout to reject this promise
     this._canUseCiVisProtocolPromise = new Promise(resolve => {
       this._resolveCanUseCiVisProtocol = (canUseCiVisProtocol) => {
+        clearTimeout(canUseCiVisProtocolTimeoutId)
         this._canUseCiVisProtocol = canUseCiVisProtocol
         resolve(canUseCiVisProtocol)
       }
@@ -93,6 +106,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
    * CI Visibility Protocol, hence the this._canUseCiVisProtocol promise.
    */
   getItrConfiguration (testConfiguration, callback) {
+    this.sendGitMetadata()
     if (!this.shouldRequestItrConfiguration()) {
       return callback(null, {})
     }
@@ -118,14 +132,22 @@ class CiVisibilityExporter extends AgentInfoExporter {
     })
   }
 
-  sendGitMetadata ({ url, isEvpProxy }) {
-    sendGitMetadataRequest(url, isEvpProxy, (err) => {
-      if (err) {
-        log.error(`Error uploading git metadata: ${err.message}`)
-      } else {
-        log.debug('Successfully uploaded git metadata')
+  sendGitMetadata () {
+    if (!this._config.isGitUploadEnabled) {
+      return
+    }
+    this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
+      if (!canUseCiVisProtocol) {
+        return
       }
-      this._resolveGit(err)
+      sendGitMetadataRequest(this._getApiUrl(), !!this._isUsingEvpProxy, (err) => {
+        if (err) {
+          log.error(`Error uploading git metadata: ${err.message}`)
+        } else {
+          log.debug('Successfully uploaded git metadata')
+        }
+        this._resolveGit(err)
+      })
     })
   }
 
