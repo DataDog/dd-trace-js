@@ -17,8 +17,7 @@ const {
   TEST_MODULE_ID,
   TEST_SUITE_ID,
   TEST_COMMAND,
-  TEST_BUNDLE,
-  TEST_FRAMEWORK_VERSION
+  TEST_BUNDLE
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
@@ -106,7 +105,7 @@ class JestPlugin extends CiPlugin {
       })
     })
 
-    this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions, jestVersion }) => {
+    this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions, frameworkVersion }) => {
       const {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
@@ -120,7 +119,7 @@ class JestPlugin extends CiPlugin {
         'x-datadog-parent-id': testModuleId
       })
 
-      const testSuiteMetadata = getTestSuiteCommonTags(testCommand, jestVersion, testSuite)
+      const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite)
 
       const testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
         childOf: testSessionSpanContext,
@@ -185,7 +184,7 @@ class JestPlugin extends CiPlugin {
   }
 
   startTestSpan (test) {
-    let childOf, frameworkVersion
+    let childOf
     const suiteTags = {}
     const store = storage.getStore()
     const testSuiteSpan = store ? store.span : undefined
@@ -202,10 +201,9 @@ class JestPlugin extends CiPlugin {
       childOf = getTestParentSpan(this.tracer)
       childOf._trace.startTime = testSuiteSpan.context()._trace.startTime
       childOf._trace.ticks = testSuiteSpan.context()._trace.ticks
-      frameworkVersion = testSuiteSpan.context()._tags[TEST_FRAMEWORK_VERSION]
     }
 
-    const { suite, name, runner, testParameters } = test
+    const { suite, name, runner, testParameters, frameworkVersion } = test
 
     const extraTags = {
       [JEST_TEST_RUNNER]: runner,
