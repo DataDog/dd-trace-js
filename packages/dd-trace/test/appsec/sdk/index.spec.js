@@ -12,7 +12,7 @@ describe('Appsec SDK', () => {
     const mockReq = { protocol: 'https' }
     const mockRes = { headersSent: false }
     const loadTemplates = sinon.stub()
-    let sdk, checkUserAndSetUser, blockRequest, setUser, trackUserLoginSuccessEvent, trackUserLoginFailureEvent,
+    let appsecSdk, checkUserAndSetUser, blockRequest, setUser, trackUserLoginSuccessEvent, trackUserLoginFailureEvent,
       trackCustomEvent
 
     beforeEach(() => {
@@ -30,44 +30,44 @@ describe('Appsec SDK', () => {
         '../blocking': { loadTemplates }
       })
 
-      sdk = new AppsecSdk(tracer)
+      appsecSdk = new AppsecSdk(tracer)
     })
 
     it('trackUserLoginSuccessEvent should call internal function with proper params', () => {
       const user = { id: 'user' }
       const metadata = {}
-      sdk.trackUserLoginSuccessEvent(user, metadata)
+      appsecSdk.trackUserLoginSuccessEvent(user, metadata)
       expect(trackUserLoginSuccessEvent).to.be.calledWith(tracer, user, metadata)
     })
 
     it('trackUserLoginFailureEvent should call internal function with proper params', () => {
       const user = { id: 'user' }
       const metadata = {}
-      sdk.trackUserLoginFailureEvent(user, metadata)
+      appsecSdk.trackUserLoginFailureEvent(user, metadata)
       expect(trackUserLoginFailureEvent).to.be.calledWith(tracer, user, metadata)
     })
 
     it('trackCustomEvent should call internal function with proper params', () => {
       const eventName = 'customEvent'
       const metadata = {}
-      sdk.trackUserLoginFailureEvent(eventName, metadata)
+      appsecSdk.trackUserLoginFailureEvent(eventName, metadata)
       expect(trackUserLoginFailureEvent).to.be.calledWith(tracer, eventName, metadata)
     })
 
     it('isUserBlocked should call internal function with proper params', () => {
       const user = { id: 'user' }
-      sdk.isUserBlocked(user)
+      appsecSdk.isUserBlocked(user)
       expect(checkUserAndSetUser).to.be.calledOnceWithExactly(tracer, user)
     })
 
     it('blockRequest should call internal function wit proper params', () => {
-      sdk.blockRequest(mockReq, mockRes)
+      appsecSdk.blockRequest(mockReq, mockRes)
       expect(blockRequest).to.be.calledOnceWithExactly(tracer, mockReq, mockRes)
     })
 
     it('setUser should call internal function with proper params', () => {
       const user = { id: 'user' }
-      sdk.setUser(user)
+      appsecSdk.setUser(user)
       expect(setUser).to.be.calledOnceWithExactly(tracer, user)
     })
   })
