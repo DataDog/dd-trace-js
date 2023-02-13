@@ -170,7 +170,7 @@ addHook({
   versions: ['>=24.8.0']
 }, getTestEnvironment)
 
-function cliWrapper (cli) {
+function cliWrapper (cli, jestVersion) {
   const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
     let onDone
     const configurationPromise = new Promise((resolve) => {
@@ -215,19 +215,9 @@ function cliWrapper (cli) {
 
     const isSuitesSkipped = !!skippableSuites.length
 
-    let testFrameworkVersion
-    try {
-      testFrameworkVersion = this.getVersion()
-    } catch (e) {
-      try {
-        testFrameworkVersion = this.default.getVersion()
-      } catch (e) {
-        // ignore errors
-      }
-    }
     const processArgv = process.argv.slice(2).join(' ')
     sessionAsyncResource.runInAsyncScope(() => {
-      testSessionStartCh.publish({ command: `jest ${processArgv}`, testFrameworkVersion })
+      testSessionStartCh.publish({ command: `jest ${processArgv}`, frameworkVersion: jestVersion })
     })
 
     const result = await runCLI.apply(this, arguments)
@@ -295,7 +285,7 @@ addHook({
   versions: ['>=24.8.0']
 }, cliWrapper)
 
-function jestAdapterWrapper (jestAdapter) {
+function jestAdapterWrapper (jestAdapter, jestVersion) {
   const adapter = jestAdapter.default ? jestAdapter.default : jestAdapter
   const newAdapter = shimmer.wrap(adapter, function () {
     const environment = arguments[2]
@@ -306,7 +296,8 @@ function jestAdapterWrapper (jestAdapter) {
     return asyncResource.runInAsyncScope(() => {
       testSuiteStartCh.publish({
         testSuite: environment.testSuite,
-        testEnvironmentOptions: environment.testEnvironmentOptions
+        testEnvironmentOptions: environment.testEnvironmentOptions,
+        frameworkVersion: jestVersion
       })
       return adapter.apply(this, arguments).then(suiteResults => {
         const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults

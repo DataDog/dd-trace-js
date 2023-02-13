@@ -17,7 +17,8 @@ const {
   TEST_MODULE_ID,
   TEST_SUITE_ID,
   TEST_COMMAND,
-  TEST_BUNDLE
+  TEST_BUNDLE,
+  TEST_FRAMEWORK_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
@@ -49,10 +50,10 @@ class JestPlugin extends CiPlugin {
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
-    this.addSub('ci:jest:session:start', ({ command, testFrameworkVersion }) => {
+    this.addSub('ci:jest:session:start', ({ command, frameworkVersion }) => {
       const childOf = getTestParentSpan(this.tracer)
-      const testSessionSpanMetadata = getTestSessionCommonTags(command, testFrameworkVersion)
-      const testModuleSpanMetadata = getTestModuleCommonTags(command, testFrameworkVersion)
+      const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion)
+      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion)
 
       this.testSessionSpan = this.tracer.startSpan('jest.test_session', {
         childOf,
@@ -105,7 +106,7 @@ class JestPlugin extends CiPlugin {
       })
     })
 
-    this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions }) => {
+    this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions, jestVersion }) => {
       const {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
@@ -119,7 +120,7 @@ class JestPlugin extends CiPlugin {
         'x-datadog-parent-id': testModuleId
       })
 
-      const testSuiteMetadata = getTestSuiteCommonTags(testCommand, this.tracer._version, testSuite)
+      const testSuiteMetadata = getTestSuiteCommonTags(testCommand, jestVersion, testSuite)
 
       const testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
         childOf: testSessionSpanContext,
@@ -184,7 +185,7 @@ class JestPlugin extends CiPlugin {
   }
 
   startTestSpan (test) {
-    let childOf
+    let childOf, frameworkVersion
     const suiteTags = {}
     const store = storage.getStore()
     const testSuiteSpan = store ? store.span : undefined
@@ -194,13 +195,14 @@ class JestPlugin extends CiPlugin {
       suiteTags[TEST_SESSION_ID] = testSuiteSpan.context().toTraceId()
       suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
       suiteTags[TEST_COMMAND] = testSuiteSpan.context()._tags[TEST_COMMAND]
-      suiteTags[TEST_BUNDLE] = testSuiteSpan.context()._tags[TEST_COMMAND]
+      suiteTags[TEST_BUNDLE] = suiteTags[TEST_COMMAND]
       // TODO: move this logic to CiPlugin once every framework supports test suite level visibility
       // This is a hack to get good time resolution on test events, while keeping
       // the test event as the root span of its trace.
       childOf = getTestParentSpan(this.tracer)
       childOf._trace.startTime = testSuiteSpan.context()._trace.startTime
       childOf._trace.ticks = testSuiteSpan.context()._trace.ticks
+      frameworkVersion = testSuiteSpan.context()._tags[TEST_FRAMEWORK_VERSION]
     }
 
     const { suite, name, runner, testParameters } = test
@@ -211,7 +213,7 @@ class JestPlugin extends CiPlugin {
       ...suiteTags
     }
 
-    return super.startTestSpan(name, suite, extraTags, childOf)
+    return super.startTestSpan(name, suite, childOf, frameworkVersion, extraTags)
   }
 }
 
