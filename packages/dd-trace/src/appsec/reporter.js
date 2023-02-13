@@ -86,28 +86,28 @@ function formatHeaderName (name) {
 
 function reportMetrics (metrics, store) {
   const req = store && store.get('req')
-  const topSpan = web.root(req)
-  if (!topSpan) return false
+  const rootSpan = web.root(req)
+  if (!rootSpan) return false
 
   if (metrics.duration) {
-    topSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
+    rootSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
   }
 
   if (metrics.durationExt) {
-    topSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
+    rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
   }
 
   if (metrics.rulesVersion) {
-    topSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
+    rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
 }
 
 function reportAttack (attackData, store) {
   const req = store && store.get('req')
-  const topSpan = web.root(req)
-  if (!topSpan) return false
+  const rootSpan = web.root(req)
+  if (!rootSpan) return false
 
-  const currentTags = topSpan.context()._tags
+  const currentTags = rootSpan.context()._tags
 
   const newTags = {
     'appsec.event': 'true'
@@ -146,20 +146,20 @@ function reportAttack (attackData, store) {
     newTags['network.client.ip'] = resolvedRequest.remote_ip
   }
 
-  topSpan.addTags(newTags)
+  rootSpan.addTags(newTags)
 }
 
 function finishRequest (req, context) {
-  const topSpan = web.root(req)
-  if (!topSpan) return false
+  const rootSpan = web.root(req)
+  if (!rootSpan) return false
 
   if (metricsQueue.size) {
-    topSpan.addTags(Object.fromEntries(metricsQueue))
+    rootSpan.addTags(Object.fromEntries(metricsQueue))
 
     metricsQueue.clear()
   }
 
-  if (!context || !topSpan.context()._tags['appsec.event']) return false
+  if (!context || !rootSpan.context()._tags['appsec.event']) return false
 
   const resolvedResponse = resolveHTTPResponse(context)
 
@@ -169,7 +169,7 @@ function finishRequest (req, context) {
     newTags['http.endpoint'] = resolvedResponse.endpoint
   }
 
-  topSpan.addTags(newTags)
+  rootSpan.addTags(newTags)
 }
 
 function setRateLimit (rateLimit) {
