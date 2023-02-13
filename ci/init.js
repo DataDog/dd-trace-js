@@ -11,7 +11,8 @@ const options = {
   tags: {
     [ORIGIN_KEY]: 'ciapp-test'
   },
-  isCiVisibility: true
+  isCiVisibility: true,
+  flushInterval: 5000
 }
 
 let shouldInit = true
