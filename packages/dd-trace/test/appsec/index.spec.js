@@ -183,11 +183,11 @@ describe('AppSec Index', () => {
     it('should propagate incoming http start data', () => {
       const store = new Map()
       sinon.stub(Gateway, 'startContext').returns(store)
-      const topSpan = {
+      const rootSpan = {
         addTags: sinon.stub()
       }
 
-      web.root.returns(topSpan)
+      web.root.returns(rootSpan)
 
       const req = {
         url: '/path',
@@ -213,7 +213,7 @@ describe('AppSec Index', () => {
       expect(store.get('req')).to.equal(req)
       expect(store.get('res')).to.equal(res)
 
-      expect(topSpan.addTags).to.have.been.calledOnceWithExactly({
+      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
         '_dd.appsec.enabled': 1,
         '_dd.runtime_family': 'nodejs',
         'http.client_ip': '127.0.0.1'
@@ -227,10 +227,10 @@ describe('AppSec Index', () => {
   describe('incomingHttpEndTranslator', () => {
     beforeEach(() => {
       AppSec.enable(config)
-      const topSpan = {
+      const rootSpan = {
         addTags: sinon.stub()
       }
-      web.root.returns(topSpan)
+      web.root.returns(rootSpan)
     })
 
     it('should do nothing when context is not found', () => {
