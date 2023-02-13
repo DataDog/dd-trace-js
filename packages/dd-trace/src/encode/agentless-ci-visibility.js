@@ -243,8 +243,9 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       event => event.type === 'test_session_end' || event.type === 'test_suite_end' || event.type === 'test_module_end'
     )
 
-    const isTestSessionTrace = !!testSessionEvents.length
-    const events = isTestSessionTrace ? testSessionEvents : rawEvents
+    const isTestTrace = rawEvents.find(event => event.type === 'test')
+
+    const events = isTestTrace ? rawEvents : testSessionEvents
 
     this._eventCount += events.length
 
