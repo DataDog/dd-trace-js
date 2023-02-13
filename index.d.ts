@@ -625,22 +625,21 @@ export declare interface Appsec {
   trackCustomEvent(eventName: string, metadata?: { [key: string]: string }): void
 
   /**
-   * Checks if the user passed as parameter is excluded
-   * Checks if the user is excluded. If no user is linked to the current trace
-   * the one passed as parameter will be used for that purpose.
+   * Checks if the passed user should be blocked according to AppSec rules.
+   * If no user is linked to the current trace, will link the passed user to it.
    * @param {User} user Properties of the authenticated user. Accepts custom fields.
-   * @return {Boolean} indicates whether the user is blocked.
+   * @return {boolean} Indicates whether the user should be blocked.
    *
    * @beta This method is in beta and could change in the future
    */
   isUserBlocked(user: User): Boolean
 
   /**
-   * Ends the server response and sends a template reponse based on the request
-   * accept header type. The template body can be customized through remote configuration.
-   * @param {IncomingMessage}
-   * @param {OutgoingMessage}
-   * @return {Boolean} indicates if the action of blocking the request has succeded.
+   * Sends a "blocked" template response based on the request accept header and ends the response.
+   * **You should stop processing the request after calling this function!**
+   * @param {IncomingMessage} req Can be passed to force which request to act on. Optional.
+   * @param {OutgoingMessage} res Can be passed to force which response to act on. Optional.
+   * @return {Boolean} Indicates if the action was successful.
    *
    * @beta This method is in beta and could change in the future
    */
