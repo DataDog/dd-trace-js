@@ -195,6 +195,7 @@ class JestPlugin extends CiPlugin {
       suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
       suiteTags[TEST_COMMAND] = testSuiteSpan.context()._tags[TEST_COMMAND]
       suiteTags[TEST_BUNDLE] = testSuiteSpan.context()._tags[TEST_COMMAND]
+      // TODO: move this logic to CiPlugin once every framework supports test suite level visibility
       // This is a hack to get good time resolution on test events, while keeping
       // the test event as the root span of its trace.
       childOf = getTestParentSpan(this.tracer)
