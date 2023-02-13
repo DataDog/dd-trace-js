@@ -383,8 +383,8 @@ tracer.appsec.trackCustomEvent('event_name', meta)
 
 tracer.setUser(user)
 
-const resUserBlock: Boolean = tracer.appsec.isUserBlocked(user)
-let resBlockRequest: Boolean = tracer.appsec.blockRequest()
+const resUserBlock: boolean = tracer.appsec.isUserBlocked(user)
+let resBlockRequest: boolean = tracer.appsec.blockRequest()
 const req = {} as IncomingMessage
 const res = {} as OutgoingMessage
 resBlockRequest = tracer.appsec.blockRequest(req, res)

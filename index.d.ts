@@ -632,18 +632,18 @@ export declare interface Appsec {
    *
    * @beta This method is in beta and could change in the future
    */
-  isUserBlocked(user: User): Boolean
+  isUserBlocked(user: User): boolean
 
   /**
    * Sends a "blocked" template response based on the request accept header and ends the response.
    * **You should stop processing the request after calling this function!**
    * @param {IncomingMessage} req Can be passed to force which request to act on. Optional.
    * @param {OutgoingMessage} res Can be passed to force which response to act on. Optional.
-   * @return {Boolean} Indicates if the action was successful.
+   * @return {boolean} Indicates if the action was successful.
    *
    * @beta This method is in beta and could change in the future
    */
-  blockRequest(req?: IncomingMessage, res?: OutgoingMessage): Boolean
+  blockRequest(req?: IncomingMessage, res?: OutgoingMessage): boolean
 
   /**
    * Links an authenticated user to the current trace.
