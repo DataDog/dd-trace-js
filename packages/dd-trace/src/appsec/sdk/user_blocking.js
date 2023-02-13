@@ -1,6 +1,6 @@
 'use strict'
 
-const addresses = require('../addresses')
+const { USER_ID } = require('../addresses')
 const Gateway = require('../gateway/engine')
 const { getRootSpan } = require('./utils')
 const { block } = require('../blocking')
@@ -9,7 +9,7 @@ const { setUserTags } = require('./set_user')
 const log = require('../../log')
 
 function isUserBlocked (user) {
-  const results = Gateway.propagate({ [addresses.USER_ID]: user.id })
+  const results = Gateway.propagate({ [USER_ID]: user.id })
 
   if (!results) {
     return false
@@ -26,18 +26,15 @@ function isUserBlocked (user) {
 
 function checkUserAndSetUser (tracer, user) {
   if (!user || !user.id) {
+    log.warn('Invalid user provided to isUserBlocked')
     return false
   }
 
   const rootSpan = getRootSpan(tracer)
-  if (!rootSpan) {
-    log.warn('Root span not available in checkUserAndSetUser')
-    return false
-  }
-
-  const userId = rootSpan.context()._tags['usr.id']
-  if (!userId) {
+  if (rootSpan && !rootSpan.context()._tags['usr.id']) {
     setUserTags(user, rootSpan)
+  } else {
+    log.warn('Root span not available in isUserBlocked')
   }
 
   return isUserBlocked(user)
@@ -57,13 +54,13 @@ function blockRequest (tracer, req, res) {
     return false
   }
 
-  const topSpan = getRootSpan(tracer)
-  if (!topSpan) {
+  const rootSpan = getRootSpan(tracer)
+  if (!rootSpan) {
     log.warn('Root span not available in blockRequest')
-    // return false
+    return false
   }
 
-  block(req, res, topSpan)
+  block(req, res, rootSpan)
 
   return true
 }

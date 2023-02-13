@@ -6,7 +6,7 @@ const fs = require('fs')
 let templateLoaded = false
 let templateHtml, templateJson
 
-function block (req, res, topSpan, abortController) {
+function block (req, res, rootSpan, abortController) {
   let type
   let body
 
@@ -21,11 +21,9 @@ function block (req, res, topSpan, abortController) {
     body = templateJson
   }
 
-  if (topSpan) {
-    topSpan.addTags({
-      'appsec.blocked': 'true'
-    })
-  }
+  rootSpan.addTags({
+    'appsec.blocked': 'true'
+  })
 
   res.statusCode = 403
   res.setHeader('Content-Type', type)
