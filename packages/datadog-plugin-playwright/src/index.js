@@ -139,6 +139,7 @@ class PlaywrightPlugin extends CiPlugin {
 
   startTestSpan (testName, testSuite) {
     const childOf = getTestParentSpan(this.tracer)
+    // TODO: move this logic to CiPlugin once every framework supports test suite level visibility
     // This is a hack to get good time resolution on test events, while keeping
     // the test event as the root span of its trace.
     childOf._trace.startTime = this.testSessionSpan.context()._trace.startTime
