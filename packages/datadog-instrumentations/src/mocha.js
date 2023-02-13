@@ -2,7 +2,6 @@ const { createCoverageMap } = require('istanbul-lib-coverage')
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const log = require('../../dd-trace/src/log')
 const {
   getCoveredFilenamesFromCoverage,
   resetCoverage,
@@ -331,7 +330,6 @@ addHook({
 
     const onReceivedSkippableSuites = ({ err, skippableSuites }) => {
       if (err) {
-        log.error(err)
         suitesToSkip = []
       } else {
         suitesToSkip = skippableSuites
@@ -343,7 +341,6 @@ addHook({
 
     const onReceivedConfiguration = ({ err }) => {
       if (err) {
-        log.error(err)
         return global.run()
       }
       if (!skippableSuitesCh.hasSubscribers) {
