@@ -3,15 +3,13 @@
 const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
 const tracer = require('../../../../../index')
-const appsec = require('../../../src/appsec')
-const Config = require('../../../src/config')
 const getPort = require('get-port')
 const axios = require('axios')
 
 describe('setUser', () => {
   describe('Check internal callings', () => {
     const tracer = {}
-    let sdk, mockSetTag, mockRootSpan, getRootSpan
+    let setUser, mockSetTag, mockRootSpan, getRootSpan
 
     beforeEach(() => {
       mockSetTag = sinon.stub()
@@ -22,31 +20,27 @@ describe('setUser', () => {
         setTag: mockSetTag }
       getRootSpan = sinon.stub().returns(mockRootSpan)
 
-      const { setUser } = proxyquire('../../../src/appsec/sdk/set_user', {
+      const setUserModule = proxyquire('../../../src/appsec/sdk/set_user', {
         './utils': { getRootSpan }
       })
 
-      const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
-        './set_user': { setUser }
-      })
-
-      sdk = new AppsecSdk(tracer)
+      setUser = setUserModule.setUser
     })
 
     it('setUser should call setTag with proper values', () => {
       const user = { id: 'user' }
-      sdk.setUser(user)
+      setUser(tracer, user)
       expect(mockSetTag).to.be.calledOnceWithExactly('usr.id', 'user')
     })
 
     it('setUser should not call setTag when no user is passed', () => {
-      sdk.setUser()
+      setUser(tracer)
       expect(mockSetTag).not.to.have.been.called
     })
 
     it('setUser should not call setTag when user is empty', () => {
       const user = {}
-      sdk.setUser(user)
+      setUser(tracer, user)
       expect(mockSetTag).not.to.have.been.called
     })
 
@@ -57,7 +51,7 @@ describe('setUser', () => {
         custom: 'hello'
       }
 
-      sdk.setUser(user)
+      setUser(tracer, user)
       expect(mockSetTag).to.have.been.calledThrice
       expect(mockSetTag.firstCall).to.have.been.calledWithExactly('usr.id', '123')
       expect(mockSetTag.secondCall).to.have.been.calledWithExactly('usr.email', 'a@b.c')
@@ -67,7 +61,7 @@ describe('setUser', () => {
     it('setUser should not call setUserTags when rootSpan is not available', () => {
       getRootSpan.returns(undefined)
 
-      sdk.setUser({ id: 'user' })
+      setUser(tracer, { id: 'user' })
       expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
       expect(mockSetTag).not.to.have.been.called
     })
@@ -98,18 +92,8 @@ describe('setUser', () => {
     })
 
     after(() => {
-      appsec.disable()
       appListener.close()
       return agent.close({ ritmReset: false })
-    })
-
-    beforeEach(() => {
-      const config = new Config({
-        appsec: {
-          enabled: true
-        }
-      })
-      appsec.enable(config)
     })
 
     describe('setUser', () => {

@@ -227,5 +227,47 @@ describe('Appsec SDK', () => {
         axios.get(`http://localhost:${port}/`)
       })
     })
+
+    describe('setUser', () => {
+      it('should set the proper tags', (done) => {
+        controller = (req, res) => {
+          tracer.appsec.setUser({ id: 'user' })
+          res.end()
+        }
+        agent.use(traces => {
+          expect(traces[0][0].meta).to.have.property('usr.id', 'user')
+        }).then(done).catch(done)
+        axios.get(`http://localhost:${port}/`)
+      })
+    })
+
+    describe('blockRequest', () => {
+      it('should set the proper tags', (done) => {
+        controller = (req, res) => {
+          if (!tracer.appsec.blockRequest(req, res)) {
+            res.end()
+          }
+        }
+        agent.use(traces => {
+          expect(traces[0][0].meta).to.have.property('appsec.blocked', 'true')
+          expect(traces[0][0].meta).to.have.property('http.status_code', '403')
+        }).then(done).catch(done)
+        axios.get(`http://localhost:${port}/`)
+      })
+    })
+
+    describe('isUserBlocked', () => {
+      it('should set the proper tags', (done) => {
+        controller = (req, res) => {
+          if (!tracer.appsec.isUserBlocked({ id: 'user' })) {
+            res.end()
+          }
+        }
+        agent.use(traces => {
+          expect(traces[0][0].meta).to.have.property('usr.id', 'user')
+        }).then(done).catch(done)
+        axios.get(`http://localhost:${port}/`)
+      })
+    })
   })
 })

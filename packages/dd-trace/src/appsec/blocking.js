@@ -4,7 +4,8 @@ const fs = require('fs')
 
 // TODO: move template loading to a proper spot.
 let templateLoaded = false
-let templateHtml, templateJson
+let templateHtml = ''
+let templateJson = ''
 
 function block (req, res, rootSpan, abortController) {
   let type
