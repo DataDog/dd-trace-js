@@ -14,7 +14,7 @@ float64Array[0] = -1
 const bigEndian = uInt8Float64Array[7] === 0
 
 function formatSpan (span) {
-  return normalizeSpan(truncateSpan(span))
+  return normalizeSpan(truncateSpan(span, false))
 }
 
 class AgentEncoder {
