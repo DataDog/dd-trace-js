@@ -180,7 +180,7 @@ addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.0.0'],
   file: 'lib/runtime/index.js'
-}, (runtimePackage, frameworkVersion) => {
+}, (runtimePackage, cucumberVersion) => {
   shimmer.wrap(runtimePackage.default.prototype, 'start', start => async function () {
     pickleByFile = getPickleByFile(this)
 
@@ -189,7 +189,7 @@ addHook({
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     asyncResource.runInAsyncScope(() => {
-      sessionStartCh.publish({ command, frameworkVersion })
+      sessionStartCh.publish({ command, frameworkVersion: cucumberVersion })
     })
     const success = await start.apply(this, arguments)
 

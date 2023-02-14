@@ -54,6 +54,7 @@ class MochaPlugin extends CiPlugin {
       const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion)
 
       this.command = command
+      this.frameworkVersion = frameworkVersion
       this.testSessionSpan = this.tracer.startSpan('mocha.test_session', {
         childOf,
         tags: {
@@ -78,7 +79,7 @@ class MochaPlugin extends CiPlugin {
       const store = storage.getStore()
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
-        this.tracer._version,
+        this.frameworkVersion,
         getTestSuitePath(suite.file, this.sourceRoot)
       )
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
@@ -212,7 +213,7 @@ class MochaPlugin extends CiPlugin {
       extraTags[TEST_PARAMETERS] = testParametersString
     }
 
-    return super.startTestSpan(fullTestName, testSuite, extraTags, childOf)
+    return super.startTestSpan(fullTestName, testSuite, childOf, this.frameworkVersion, extraTags)
   }
 }
 
