@@ -165,7 +165,7 @@ class PlaywrightPlugin extends CiPlugin {
       testSuiteTags[TEST_BUNDLE] = this.command
     }
 
-    return super.startTestSpan(testName, testSuite, testSuiteTags, childOf)
+    return super.startTestSpan(testName, testSuite, childOf, this.frameworkVersion, testSuiteTags)
   }
 }
 
