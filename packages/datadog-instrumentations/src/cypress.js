@@ -5,4 +5,4 @@ const { addHook } = require('./helpers/instrument')
 addHook({
   name: 'cypress',
   versions: ['>=6.7.0']
-})
+}, lib => lib)
