@@ -212,7 +212,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
       sinon.restore()
     })
 
-    runFsMethodTestThreeWay('appendFile', 0, null,  1, filename, 'test-content')
+    runFsMethodTestThreeWay('appendFile', 0, null, 1, filename, 'test-content')
   })
 
   describe('test chmod', () => {
@@ -455,10 +455,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
           })
         })
       }, 1, ...args)
-      // fs.promises.rm launches fs.promises.lstat not innerCall
+      // fs.promises.rm launches fs.promises.lstat not innerCall unless in windows
+      const expectedReportCallCount = process.platform === 'win32' ? 2 : 1
       runFsMethodTest(`test fs.promises.${methodName} method`, vulnerableIndex, (args) => {
         return fs.promises[methodName](...args).then(cb).catch(cb)
-      }, 2, ...args)
+      }, expectedReportCallCount, ...args)
     })
   }
 
