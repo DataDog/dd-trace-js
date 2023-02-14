@@ -2,6 +2,7 @@
 
 const os = require('os')
 const path = require('path')
+const semver = require('semver')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const expect = require('chai').expect
@@ -256,14 +257,17 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
   }
 
   describe('test createReadStream', () => {
+    const expectedReportCallCount = semver.satisfies(process.versions.node, '>=16.19.0') ? 2 : 1
     runFsMethodTest(`test fs.createReadStream method`, 0, (args) => {
       const rs = fs.createReadStream(...args)
       rs.close()
-    }, 1, __filename)
+    }, expectedReportCallCount, __filename)
   })
 
   describe('test createWriteStream', () => {
     const filepath = path.join(os.tmpdir(), 'test-createWriteStream')
+    const expectedReportCallCount = semver.satisfies(process.versions.node, '>=16.19.0') ? 2 : 1
+
     beforeEach(() => {
       fs.writeFileSync(filepath, '')
     })
@@ -282,7 +286,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
           resolve()
         })
       })
-    }, 1, filepath)
+    }, expectedReportCallCount, filepath)
   })
 
   describe('test link', () => {
