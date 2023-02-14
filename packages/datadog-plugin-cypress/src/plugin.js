@@ -15,7 +15,8 @@ const {
   TEST_MODULE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND,
-  TEST_BUNDLE
+  TEST_BUNDLE,
+  finishAllTraceSpans
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -123,12 +124,19 @@ module.exports = (on, config) => {
     testModuleSpan.finish()
     testSessionSpan.finish()
 
+    finishAllTraceSpans(testSessionSpan)
+
     return new Promise(resolve => {
-      tracer._tracer._exporter._writer.flush(() => resolve(null))
+      tracer._tracer._exporter._writer.flush(() => {
+        resolve(null)
+      })
     })
   })
   on('task', {
     'dd:testSuiteStart': (suite) => {
+      if (testSuiteSpan) {
+        return null
+      }
       const testSuiteSpanMetadata = getTestSuiteCommonTags(command, frameworkVersion, suite)
       testSuiteSpan = tracer.startSpan('cypress.test_suite', {
         childOf: testModuleSpan,
@@ -144,6 +152,7 @@ module.exports = (on, config) => {
       const status = getSuiteStatus(suiteStats)
       testSuiteSpan.setTag(TEST_STATUS, status)
       testSuiteSpan.finish()
+      testSuiteSpan = null
       return null
     },
     'dd:beforeEach': (test) => {
