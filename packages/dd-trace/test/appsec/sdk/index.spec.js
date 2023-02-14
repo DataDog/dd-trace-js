@@ -228,11 +228,12 @@ describe('Appsec SDK', () => {
       })
     })
 
-    describe('setUser', () => {
+    describe('isUserBlocked', () => {
       it('should set the proper tags', (done) => {
         controller = (req, res) => {
-          tracer.appsec.setUser({ id: 'user' })
-          res.end()
+          if (!tracer.appsec.isUserBlocked({ id: 'user' })) {
+            res.end()
+          }
         }
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('usr.id', 'user')
@@ -256,12 +257,11 @@ describe('Appsec SDK', () => {
       })
     })
 
-    describe('isUserBlocked', () => {
+    describe('setUser', () => {
       it('should set the proper tags', (done) => {
         controller = (req, res) => {
-          if (!tracer.appsec.isUserBlocked({ id: 'user' })) {
-            res.end()
-          }
+          tracer.appsec.setUser({ id: 'user' })
+          res.end()
         }
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('usr.id', 'user')
