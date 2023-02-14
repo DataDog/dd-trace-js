@@ -457,15 +457,18 @@ describe('AppSec Index', () => {
     })
   })
 
+  // TODO When the waf is updated and we have whole information, we should add more plugin style tests,
+  //  to execute real express/body-parser/cookie-parser and do request that will be blocked or not.
   describe('checkRequestData', () => {
     let abortController, req, res, rootSpan
     beforeEach(() => {
-      AppSec.enable(config)
       rootSpan = {
         addTags: sinon.stub()
       }
       web.root.returns(rootSpan)
+
       abortController = { abort: sinon.stub() }
+
       req = {
         url: '/path',
         headers: {
@@ -486,6 +489,8 @@ describe('AppSec Index', () => {
         setHeader: sinon.stub(),
         end: sinon.stub()
       }
+
+      AppSec.enable(config)
       AppSec.incomingHttpStartTranslator({ req, res })
     })
 
@@ -495,22 +500,23 @@ describe('AppSec Index', () => {
 
     describe('onRequestBodyParsed', () => {
       const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
-      beforeEach(() => {
 
-      })
       it('Should not block without body', () => {
         bodyParserChannel.publish({
           req, res, abortController
         })
+
         expect(abortController.abort).not.to.been.called
         expect(res.end).not.to.been.called
       })
 
       it('Should not block with body by default', () => {
         req.body = { key: 'value' }
+
         bodyParserChannel.publish({
           req, res, abortController
         })
+
         expect(abortController.abort).not.to.been.called
         expect(res.end).not.to.been.called
       })
@@ -518,9 +524,11 @@ describe('AppSec Index', () => {
       it('Should block when it is detected as attack', () => {
         req.body = { key: 'value' }
         sinon.stub(Gateway, 'propagate').returns(['block'])
+
         bodyParserChannel.publish({
           req, res, abortController
         })
+
         expect(abortController.abort).to.been.called
         expect(res.end).to.been.called
       })
@@ -528,9 +536,11 @@ describe('AppSec Index', () => {
       it('Should propagate request body', () => {
         req.body = { key: 'value' }
         sinon.stub(Gateway, 'propagate')
+
         bodyParserChannel.publish({
           req, res, abortController
         })
+
         expect(Gateway.propagate).to.been.calledOnceWith({
           'server.request.body': { key: 'value' }
         })
@@ -544,6 +554,7 @@ describe('AppSec Index', () => {
         cookieParserChannel.publish({
           req, res, abortController
         })
+
         expect(abortController.abort).not.to.been.called
         expect(res.end).not.to.been.called
       })
@@ -553,6 +564,7 @@ describe('AppSec Index', () => {
         cookieParserChannel.publish({
           req, res, abortController
         })
+
         expect(abortController.abort).not.to.been.called
         expect(res.end).not.to.been.called
       })
@@ -560,9 +572,11 @@ describe('AppSec Index', () => {
       it('Should block when it is detected as attack', () => {
         req.cookies = { key: 'value' }
         sinon.stub(Gateway, 'propagate').returns(['block'])
+
         cookieParserChannel.publish({
           req, res, abortController
         })
+
         expect(abortController.abort).to.been.called
         expect(res.end).to.been.called
       })
@@ -570,9 +584,11 @@ describe('AppSec Index', () => {
       it('Should propagate request cookies', () => {
         req.cookies = { key: 'value' }
         sinon.stub(Gateway, 'propagate')
+
         cookieParserChannel.publish({
           req, res, abortController
         })
+
         expect(Gateway.propagate).to.been.calledOnceWith({
           'server.request.cookies': { key: ['value'] }
         })
@@ -580,6 +596,7 @@ describe('AppSec Index', () => {
     })
   })
 })
+
 describe('IP blocking', () => {
   const invalidIp = '1.2.3.4'
   const validIp = '4.3.2.1'
