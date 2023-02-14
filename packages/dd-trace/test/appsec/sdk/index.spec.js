@@ -58,22 +58,25 @@ describe('Appsec SDK', () => {
     })
 
     it('isUserBlocked should call internal function with proper params', () => {
-      const user = { id: 'user' }
+      const user = { id: 'user_id' }
       appsecSdk.isUserBlocked(user)
-      expect(checkUserAndSetUser).to.be.calledOnceWithExactly(tracer, user)
+
+      expect(checkUserAndSetUser).to.have.been.calledOnceWithExactly(tracer, user)
     })
 
-    it('blockRequest should call internal function wit proper params', () => {
-      const mockReq = { protocol: 'https' }
-      const mockRes = { headersSent: false }
-      appsecSdk.blockRequest(mockReq, mockRes)
-      expect(blockRequest).to.be.calledOnceWithExactly(tracer, mockReq, mockRes)
+    it('blockRequest should call internal function with proper params', () => {
+      const req = { protocol: 'https' }
+      const res = { headersSent: false }
+      appsecSdk.blockRequest(req, res)
+
+      expect(blockRequest).to.have.been.calledOnceWithExactly(tracer, req, res)
     })
 
     it('setUser should call internal function with proper params', () => {
-      const user = { id: 'user' }
+      const user = { id: 'user_id' }
       appsecSdk.setUser(user)
-      expect(setUser).to.be.calledOnceWithExactly(tracer, user)
+
+      expect(setUser).to.have.been.calledOnceWithExactly(tracer, user)
     })
   })
 
