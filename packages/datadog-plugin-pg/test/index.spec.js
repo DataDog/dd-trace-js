@@ -77,6 +77,22 @@ describe('Plugin', () => {
             })
           })
 
+          it('should send long queries to agent', done => {
+            agent.use(traces => {
+              expect(traces[0][0]).to.have.property('resource', `SELECT '${'x'.repeat(5000)}'::text as message`)
+
+              done()
+            })
+
+            client.query(`SELECT '${'x'.repeat(5000)}'::text as message`, (err, result) => {
+              if (err) throw err
+
+              client.end((err) => {
+                if (err) throw err
+              })
+            })
+          })
+
           if (semver.intersects(version, '>=5.1')) { // initial promise support
             it('should do automatic instrumentation when using promises', done => {
               agent.use(traces => {
