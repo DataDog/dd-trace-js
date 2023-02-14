@@ -221,6 +221,11 @@ describe('AppSec Index', () => {
         'http.client_ip': '127.0.0.1'
       })
       expect(Gateway.propagate).to.have.been.calledOnceWith({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+        'server.request.method': 'POST',
+        'server.request.client_ip': '127.0.0.1',
+        'server.request.client_port': 8080,
         'http.client_ip': '127.0.0.1'
       })
     })
@@ -283,14 +288,6 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(Gateway.propagate).to.have.been.calledOnceWith({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': {
-          'user-agent': 'Arachni',
-          'host': 'localhost'
-        },
-        'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080,
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
@@ -302,7 +299,8 @@ describe('AppSec Index', () => {
 
     it('should propagate incoming http end data with invalid framework properties', () => {
       const context = {
-        dispatch: sinon.stub()
+        dispatch: sinon.stub(),
+        setValue: sinon.stub()
       }
       const store = new Map()
       store.set('context', context)
@@ -345,14 +343,6 @@ describe('AppSec Index', () => {
       expect(store.get('req')).to.equal(req)
       expect(store.get('res')).to.equal(res)
       expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': {
-          'user-agent': 'Arachni',
-          'host': 'localhost'
-        },
-        'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080,
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
@@ -363,7 +353,11 @@ describe('AppSec Index', () => {
     })
 
     it('should propagate incoming http end data with express', () => {
-      const context = { dispatch: sinon.stub() }
+      const context = {
+        dispatch: sinon.stub(),
+        setValue: sinon.stub()
+
+      }
       const store = new Map()
       store.set('context', context)
       sinon.stub(Gateway, 'startContext').returns(store)
@@ -415,14 +409,6 @@ describe('AppSec Index', () => {
       expect(store.get('req')).to.equal(req)
       expect(store.get('res')).to.equal(res)
       expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': {
-          'user-agent': 'Arachni',
-          'host': 'localhost'
-        },
-        'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080,
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
