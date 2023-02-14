@@ -14,6 +14,7 @@ class DatadogSpanContext {
     this._tags = props.tags || {}
     this._sampling = props.sampling || {}
     this._baggageItems = props.baggageItems || {}
+    this._tracestate = props.tracestate
     this._noop = props.noop || null
     this._trace = props.trace || {
       started: [],
