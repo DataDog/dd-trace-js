@@ -181,17 +181,15 @@ function dispatcherHookNew (dispatcherExport) {
   return dispatcherExport
 }
 
-function runnerHook (runnerExport) {
+function runnerHook (runnerExport, playwrightVersion) {
   shimmer.wrap(runnerExport.Runner.prototype, 'runAllTests', runAllTests => async function () {
     const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
-    const { version: frameworkVersion } = getPlaywrightConfig(this)
-
     const rootDir = getRootDir(this)
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
     testSessionAsyncResource.runInAsyncScope(() => {
-      testSessionStartCh.publish({ command, frameworkVersion, rootDir })
+      testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
     })
 
     const res = await runAllTests.apply(this, arguments)

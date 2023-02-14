@@ -70,9 +70,9 @@ module.exports = class CiPlugin extends Plugin {
     }
   }
 
-  startTestSpan (name, suite, extraTags, childOf) {
+  startTestSpan (name, suite, childOf, frameworkVersion, extraTags) {
     const parent = childOf || getTestParentSpan(this.tracer)
-    const testCommonTags = getTestCommonTags(name, suite, this.tracer._version)
+    const testCommonTags = getTestCommonTags(name, suite, frameworkVersion)
 
     const testTags = {
       ...testCommonTags,
