@@ -259,7 +259,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
   }
 
   describe('test createReadStream', () => {
-    const expectedReportCallCount = semver.satisfies(process.versions.node, '>=16.19.0') ? 2 : 1
+    const expectedReportCallCount = semver.satisfies(process.versions.node, '>=16.0.0') ? 2 : 1
     runFsMethodTest(`test fs.createReadStream method`, 0, (args) => {
       const rs = fs.createReadStream(...args)
       rs.close()
@@ -268,7 +268,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
   describe('test createWriteStream', () => {
     const filepath = path.join(os.tmpdir(), 'test-createWriteStream')
-    const expectedReportCallCount = semver.satisfies(process.versions.node, '>=16.19.0') ? 2 : 1
+    const expectedReportCallCount = semver.satisfies(process.versions.node, '>=16.0.0') ? 2 : 1
 
     beforeEach(() => {
       fs.writeFileSync(filepath, '')
