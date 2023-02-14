@@ -12,6 +12,7 @@ const startChannel = channel('apm:fs:operation:start')
 const finishChannel = channel('apm:fs:operation:finish')
 const errorChannel = channel('apm:fs:operation:error')
 const ddFhSym = Symbol('ddFileHandle')
+const ddFsParentSym = Symbol('ddFsParentCallAsyncId')
 let kHandle, kDirReadPromisified, kDirClosePromisified
 
 const paramsByMethod = {
@@ -179,6 +180,23 @@ function createWrapDirAsyncIterator () {
   }
 }
 
+function isInnerCall (innerResource) {
+  if (this === undefined) return true
+
+  if (!this[ddFsParentSym]) {
+    this[ddFsParentSym] = innerResource.asyncId()
+    return false
+  }
+
+  return this[ddFsParentSym] !== innerResource.asyncId()
+}
+
+function removeFlagForInnerCall (innerResource) {
+  if (this && this[ddFsParentSym] && this[ddFsParentSym] === innerResource.asyncId()) {
+    this[ddFsParentSym] = undefined
+  }
+}
+
 function wrapCreateStream (original) {
   const classes = {
     createReadStream: 'ReadStream',
@@ -193,20 +211,13 @@ function wrapCreateStream (original) {
     const message = getMessage(name, ['path', 'options'], arguments)
 
     return innerResource.runInAsyncScope(() => {
-      if (this && !this.parentAsyncId) this.parentAsyncId = innerResource.asyncId()
-      if (this && this.parentAsyncId) {
-        message.innerCall = this.parentAsyncId !== innerResource.asyncId()
-      } else {
-        message.innerCall = true
-      }
+      message.innerCall = isInnerCall.apply(this, [innerResource])
       startChannel.publish(message)
 
       try {
         const stream = original.apply(this, arguments)
 
-        if (this && this.parentAsyncId && this.parentAsyncId === innerResource.asyncId()) {
-          this.parentAsyncId = undefined
-        }
+        removeFlagForInnerCall.apply(this, [innerResource])
 
         const onError = innerResource.bind(error => {
           errorChannel.publish(error)
@@ -227,10 +238,7 @@ function wrapCreateStream (original) {
 
         return stream
       } catch (error) {
-        if (this && this.parentAsyncId && this.parentAsyncId === innerResource.asyncId()) {
-          this.parentAsyncId = undefined
-        }
-
+        removeFlagForInnerCall.apply(this, [innerResource])
         errorChannel.publish(error)
         finishChannel.publish()
       }
@@ -299,19 +307,11 @@ function createWrapFunction (prefix = '', override = '') {
       }
 
       return innerResource.runInAsyncScope(() => {
-        if (this && !this.parentAsyncId) this.parentAsyncId = innerResource.asyncId()
-        if (this && this.parentAsyncId) {
-          message.innerCall = this.parentAsyncId !== innerResource.asyncId()
-        } else {
-          message.innerCall = true
-        }
+        message.innerCall = isInnerCall.apply(this, [innerResource])
         startChannel.publish(message)
         try {
           const result = original.apply(this, arguments)
-
-          if (this && this.parentAsyncId && this.parentAsyncId === innerResource.asyncId()) {
-            this.parentAsyncId = undefined
-          }
+          removeFlagForInnerCall.apply(this, [innerResource])
 
           if (cb) return result
           if (result && typeof result.then === 'function') {
@@ -320,7 +320,7 @@ function createWrapFunction (prefix = '', override = '') {
             return result.then(
               value => {
                 if (isFirstMethodReturningFileHandle(original)) {
-                  wrapFileHandle(value)
+                  wrapFileHandle(value) // check this, maybe the solution is in the wrap file handle
                 }
                 finishChannel.publish()
                 return value
@@ -337,9 +337,7 @@ function createWrapFunction (prefix = '', override = '') {
 
           return result
         } catch (error) {
-          if (this && this.parentAsyncId && this.parentAsyncId === innerResource.asyncId()) {
-            this.parentAsyncId = undefined
-          }
+          removeFlagForInnerCall.apply(this, [innerResource])
           errorChannel.publish(error)
           finishChannel.publish()
           throw error
