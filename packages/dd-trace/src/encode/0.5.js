@@ -7,7 +7,7 @@ const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9c
 
 function formatSpan (span) {
-  return normalizeSpan(truncateSpan(span))
+  return normalizeSpan(truncateSpan(span, false))
 }
 
 class AgentEncoder extends BaseEncoder {

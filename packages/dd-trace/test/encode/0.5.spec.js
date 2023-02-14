@@ -78,23 +78,6 @@ describe('encode 0.5', () => {
     expect(trace[0][5].toString(16)).to.equal('1234abcd1234abcd')
   })
 
-  it('should truncate long fields', function () {
-    this.timeout(5000)
-    const flushSize = 8 * 1024 * 1024
-    const tooLongString = randString(flushSize)
-
-    data[0].service = tooLongString
-    data[0].name = tooLongString
-    data[0].type = tooLongString
-    data[0].resource = tooLongString
-    data[0].meta.foo = tooLongString
-    data[0].metrics.foo = tooLongString
-
-    encoder.encode(data)
-
-    expect(writer.flush).to.not.have.been.called
-  })
-
   it('should report its count', () => {
     expect(encoder.count()).to.equal(0)
 
