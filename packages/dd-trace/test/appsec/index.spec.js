@@ -1,8 +1,10 @@
 'use strict'
 
+const dc = require('diagnostics_channel')
 const fs = require('fs')
 const path = require('path')
 const proxyquire = require('proxyquire')
+
 const log = require('../../src/log')
 const RuleManager = require('../../src/appsec/rule_manager')
 const remoteConfig = require('../../src/appsec/remote_config')
@@ -100,6 +102,18 @@ describe('AppSec Index', () => {
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
       expect(Gateway.manager.addresses).to.be.empty
     })
+
+    it('should subscribe to blockable channels', () => {
+      const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
+      const cookieParserChannel = dc.channel('datadog:cookie-parser:read:finish')
+      expect(bodyParserChannel.hasSubscribers).to.be.false
+      expect(cookieParserChannel.hasSubscribers).to.be.false
+
+      AppSec.enable(config)
+
+      expect(bodyParserChannel.hasSubscribers).to.be.true
+      expect(cookieParserChannel.hasSubscribers).to.be.true
+    })
   })
 
   describe('enableAsync', () => {
@@ -143,6 +157,18 @@ describe('AppSec Index', () => {
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
       expect(Gateway.manager.addresses).to.be.empty
     })
+
+    it('should subscribe to blockable channels', async () => {
+      const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
+      const cookieParserChannel = dc.channel('datadog:cookie-parser:read:finish')
+      expect(bodyParserChannel.hasSubscribers).to.be.false
+      expect(cookieParserChannel.hasSubscribers).to.be.false
+
+      await AppSec.enableAsync(config)
+
+      expect(bodyParserChannel.hasSubscribers).to.be.true
+      expect(cookieParserChannel.hasSubscribers).to.be.true
+    })
   })
 
   describe('disable', () => {
@@ -174,6 +200,17 @@ describe('AppSec Index', () => {
       expect(AppSec.disable).to.not.throw()
 
       expect(RuleManager.clearAllRules).to.have.been.calledOnce
+    })
+
+    it('should unsubscribe to blockable channels', () => {
+      const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
+      const cookieParserChannel = dc.channel('datadog:cookie-parser:read:finish')
+      AppSec.enable(config)
+
+      AppSec.disable()
+
+      expect(bodyParserChannel.hasSubscribers).to.be.false
+      expect(cookieParserChannel.hasSubscribers).to.be.false
     })
   })
 
@@ -414,13 +451,134 @@ describe('AppSec Index', () => {
           'content-type': 'application/json',
           'content-lenght': 42
         },
-        'server.request.body': { a: '1' },
         'server.request.query': { b: '2' },
         'server.request.framework_endpoint': '/path/:c',
-        'server.request.path_params': { c: '3' },
-        'server.request.cookies': { d: [ '4' ], e: [ '5' ] }
+        'server.request.path_params': { c: '3' }
       }, context)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, context)
+    })
+  })
+
+  describe('checkRequestData', () => {
+    let abortController, req, res, rootSpan
+    beforeEach(() => {
+      AppSec.enable(config)
+      rootSpan = {
+        addTags: sinon.stub()
+      }
+      web.root.returns(rootSpan)
+      abortController = { abort: sinon.stub() }
+      req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        setHeader: sinon.stub(),
+        end: sinon.stub()
+      }
+      AppSec.incomingHttpStartTranslator({ req, res })
+    })
+
+    afterEach(() => {
+      AppSec.disable()
+    })
+
+    describe('onRequestBodyParsed', () => {
+      const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
+      beforeEach(() => {
+
+      })
+      it('Should not block without body', () => {
+        bodyParserChannel.publish({
+          req, res, abortController
+        })
+        expect(abortController.abort).not.to.been.called
+        expect(res.end).not.to.been.called
+      })
+
+      it('Should not block with body by default', () => {
+        req.body = { key: 'value' }
+        bodyParserChannel.publish({
+          req, res, abortController
+        })
+        expect(abortController.abort).not.to.been.called
+        expect(res.end).not.to.been.called
+      })
+
+      it('Should block when it is detected as attack', () => {
+        req.body = { key: 'value' }
+        sinon.stub(Gateway, 'propagate').returns(['block'])
+        bodyParserChannel.publish({
+          req, res, abortController
+        })
+        expect(abortController.abort).to.been.called
+        expect(res.end).to.been.called
+      })
+
+      it('Should propagate request body', () => {
+        req.body = { key: 'value' }
+        sinon.stub(Gateway, 'propagate')
+        bodyParserChannel.publish({
+          req, res, abortController
+        })
+        expect(Gateway.propagate).to.been.calledOnceWith({
+          'server.request.body': { key: 'value' }
+        })
+      })
+    })
+
+    describe('onRequestCookieParsed', () => {
+      const cookieParserChannel = dc.channel('datadog:cookie-parser:read:finish')
+
+      it('Should not block without cookies', () => {
+        cookieParserChannel.publish({
+          req, res, abortController
+        })
+        expect(abortController.abort).not.to.been.called
+        expect(res.end).not.to.been.called
+      })
+
+      it('Should not block with body by default', () => {
+        req.cookies = { key: 'value' }
+        cookieParserChannel.publish({
+          req, res, abortController
+        })
+        expect(abortController.abort).not.to.been.called
+        expect(res.end).not.to.been.called
+      })
+
+      it('Should block when it is detected as attack', () => {
+        req.cookies = { key: 'value' }
+        sinon.stub(Gateway, 'propagate').returns(['block'])
+        cookieParserChannel.publish({
+          req, res, abortController
+        })
+        expect(abortController.abort).to.been.called
+        expect(res.end).to.been.called
+      })
+
+      it('Should propagate request cookies', () => {
+        req.cookies = { key: 'value' }
+        sinon.stub(Gateway, 'propagate')
+        cookieParserChannel.publish({
+          req, res, abortController
+        })
+        expect(Gateway.propagate).to.been.calledOnceWith({
+          'server.request.cookies': { key: ['value'] }
+        })
+      })
     })
   })
 })

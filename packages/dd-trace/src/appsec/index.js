@@ -1,5 +1,6 @@
 'use strict'
 
+const dc = require('diagnostics_channel')
 const fs = require('fs')
 const path = require('path')
 const log = require('../log')
@@ -13,6 +14,9 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { block, loadTemplates, loadTemplatesAsync } = require('./blocking')
+
+const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
+const cookieParserChannel = dc.channel('datadog:cookie-parser:read:finish')
 
 let isEnabled = false
 let config
@@ -49,6 +53,8 @@ function enableFromRules (_config, rules) {
 
   incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
   incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
+  bodyParserChannel.subscribe(onRequestBodyParsed)
+  cookieParserChannel.subscribe(onRequestCookieParsed)
 
   // add fields needed for HTTP context reporting
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_HEADERS)
@@ -122,10 +128,6 @@ function incomingHttpEndTranslator (data) {
   }
 
   // TODO: temporary express instrumentation, will use express plugin later
-  if (data.req.body !== undefined && data.req.body !== null) {
-    payload[addresses.HTTP_INCOMING_BODY] = data.req.body
-  }
-
   if (data.req.query && typeof data.req.query === 'object') {
     payload[addresses.HTTP_INCOMING_QUERY] = data.req.query
   }
@@ -138,17 +140,53 @@ function incomingHttpEndTranslator (data) {
     payload[addresses.HTTP_INCOMING_PARAMS] = data.req.params
   }
 
-  if (data.req.cookies && typeof data.req.cookies === 'object') {
-    payload[addresses.HTTP_INCOMING_COOKIES] = {}
-
-    for (const k of Object.keys(data.req.cookies)) {
-      payload[addresses.HTTP_INCOMING_COOKIES][k] = [data.req.cookies[k]]
-    }
-  }
-
   Gateway.propagate(payload, context)
 
   Reporter.finishRequest(data.req, context)
+}
+
+function getBodyPayload (req) {
+  if (req.body !== undefined && req.body !== null) {
+    return {
+      [addresses.HTTP_INCOMING_BODY]: req.body
+    }
+  }
+  return null
+}
+
+function onRequestBodyParsed (channelData) {
+  checkRequestData(channelData, getBodyPayload(channelData.req))
+}
+
+function getCookiesPayload (req) {
+  if (req.cookies && typeof req.cookies === 'object') {
+    const incomingCookiesPayload = {}
+
+    for (const k of Object.keys(req.cookies)) {
+      incomingCookiesPayload[k] = [req.cookies[k]]
+    }
+
+    return { [addresses.HTTP_INCOMING_COOKIES]: incomingCookiesPayload }
+  }
+  return null
+}
+
+function onRequestCookieParsed (channelData) {
+  checkRequestData(channelData, getCookiesPayload(channelData.req))
+}
+
+function checkRequestData ({ req, res, abortController }, payload) {
+  if (payload) {
+    const context = Gateway.getContext()
+    if (!context) return
+
+    const rootSpan = web.root(req)
+    if (!rootSpan) return
+
+    const results = Gateway.propagate(payload, context)
+
+    handleResults(results, req, res, rootSpan, abortController)
+  }
 }
 
 function disable () {
@@ -161,6 +199,8 @@ function disable () {
   // Channel#unsubscribe() is undefined for non active channels
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
+  if (bodyParserChannel.hasSubscribers) bodyParserChannel.unsubscribe(onRequestBodyParsed)
+  if (cookieParserChannel.hasSubscribers) cookieParserChannel.unsubscribe(onRequestCookieParsed)
 }
 
 function handleResults (results, req, res, topSpan, abortController) {
