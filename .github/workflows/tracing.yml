@@ -42,6 +42,8 @@ jobs:
       - run: MOCHA_FILE=test-results/tracing/linux-18.xml yarn test:trace:core:ci
       - uses: ./.github/actions/node/latest
       - run: MOCHA_FILE=test-results/tracing/linux-latest.xml yarn test:trace:core:ci
+      - uses: ./.github/actions/node/16.13.1
+      - run: MOCHA_FILE=test-results/tracing/linux-16.13.1.xml yarn test:trace:core:ci
       - uses: ./.github/actions/datadog-ci
       - run: |
           datadog-ci junit upload --service dd-trace-js-tests --tags os.platform:linux --tags runtime.version:14 test-results/tracing/linux-14.xml

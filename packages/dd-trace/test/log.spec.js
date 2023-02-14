@@ -278,4 +278,18 @@ describe('log', () => {
       expect(console.error).to.have.been.calledOnce
     })
   })
+
+  describe('unsubscribe', () => {
+    it('should fail when invoking unsubscribe with 16.13.1 node version', () => {
+      const dc = require('diagnostics_channel')
+      const ddTestChannel = dc.channel('dd:test:unsubscribe')
+
+      const version = process.version
+      if (version === 'v16.13.1') {
+        expect(() => ddTestChannel.unsubscribe(() => {})).to.throw
+      } else {
+        expect(() => ddTestChannel.unsubscribe(() => {})).to.not.throw
+      }
+    })
+  })
 })

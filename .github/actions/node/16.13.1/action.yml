@@ -1,0 +1,8 @@
+name: Node 16.13.1
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v3
+      # channel.unsubscribe bug
+      with:
+        node-version: '16.13.1'
