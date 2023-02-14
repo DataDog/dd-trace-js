@@ -7,13 +7,11 @@ const axios = require('axios')
 const tracer = require('../../../../../index')
 
 describe('Appsec SDK', () => {
-  describe('Test public API', () => {
+  describe('calls to internal functions', () => {
+    let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
+    let checkUserAndSetUser, blockRequest, setUser, loadTemplates
+    let appsecSdk
     const tracer = {}
-    const mockReq = { protocol: 'https' }
-    const mockRes = { headersSent: false }
-    const loadTemplates = sinon.stub()
-    let appsecSdk, checkUserAndSetUser, blockRequest, setUser, trackUserLoginSuccessEvent, trackUserLoginFailureEvent,
-      trackCustomEvent
 
     beforeEach(() => {
       trackUserLoginSuccessEvent = sinon.stub()
@@ -21,13 +19,14 @@ describe('Appsec SDK', () => {
       trackCustomEvent = sinon.stub()
       checkUserAndSetUser = sinon.stub()
       blockRequest = sinon.stub()
+      loadTemplates = sinon.stub()
       setUser = sinon.stub()
 
       const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
         './track_event': { trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent },
         './user_blocking': { checkUserAndSetUser, blockRequest },
-        './set_user': { setUser },
-        '../blocking': { loadTemplates }
+        '../blocking': { loadTemplates },
+        './set_user': { setUser }
       })
 
       appsecSdk = new AppsecSdk(tracer)
@@ -65,6 +64,8 @@ describe('Appsec SDK', () => {
     })
 
     it('blockRequest should call internal function wit proper params', () => {
+      const mockReq = { protocol: 'https' }
+      const mockRes = { headersSent: false }
       appsecSdk.blockRequest(mockReq, mockRes)
       expect(blockRequest).to.be.calledOnceWithExactly(tracer, mockReq, mockRes)
     })
