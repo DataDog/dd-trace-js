@@ -38,11 +38,12 @@ function truncateToLength (value, maxLength) {
   return value
 }
 
-function truncateSpan (span) {
+// normally the agent truncates the resource and parses it in certain scenarios (e.g. SQL Queries)
+function truncateSpan (span, shouldTruncateResourceName = true) {
   return fromEntries(Object.entries(span).map(([key, value]) => {
     switch (key) {
       case 'resource':
-        return ['resource', truncateToLength(value, MAX_RESOURCE_NAME_LENGTH)]
+        return ['resource', shouldTruncateResourceName ? truncateToLength(value, MAX_RESOURCE_NAME_LENGTH) : value]
       case 'meta':
         return ['meta', fromEntries(Object.entries(value).map(([metaKey, metaValue]) =>
           [truncateToLength(metaKey, MAX_META_KEY_LENGTH), truncateToLength(metaValue, MAX_META_VALUE_LENGTH)]
