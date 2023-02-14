@@ -150,7 +150,8 @@ class DatadogSpan {
         parentId: parent._spanId,
         sampling: parent._sampling,
         baggageItems: Object.assign({}, parent._baggageItems),
-        trace: parent._trace
+        trace: parent._trace,
+        tracestate: parent._tracestate
       })
     } else {
       const spanId = id()

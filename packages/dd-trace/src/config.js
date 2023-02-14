@@ -51,6 +51,32 @@ function remapify (input, mappings) {
   return output
 }
 
+function propagationStyle (key, option, defaultValue) {
+  // Extract by key if in object-form value
+  if (typeof option === 'object' && !Array.isArray(option)) {
+    option = option[key]
+  }
+
+  // Should be an array at this point
+  if (Array.isArray(option)) return option.map(v => v.toLowerCase())
+
+  // If it's not an array but not undefined there's something wrong with the input
+  if (typeof option !== 'undefined') {
+    log.warn('Unexpected input for config.tracePropagationStyle')
+  }
+
+  // Otherwise, fallback to env var parsing
+  const envKey = `DD_TRACE_PROPAGATION_STYLE_${key.toUpperCase()}`
+  const envVar = coalesce(process.env[envKey], process.env.DD_TRACE_PROPAGATION_STYLE)
+  if (typeof envVar !== 'undefined') {
+    return envVar.split(',')
+      .filter(v => v !== '')
+      .map(v => v.trim().toLowerCase())
+  }
+
+  return defaultValue
+}
+
 class Config {
   constructor (options) {
     options = options || {}
@@ -192,15 +218,36 @@ class Config {
       process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       '.*'
     )
+    // TODO: Remove the experimental env vars as a major?
     const DD_TRACE_B3_ENABLED = coalesce(
       options.experimental && options.experimental.b3,
       process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
       false
     )
-    const DD_TRACE_TRACEPARENT_ENABLED = coalesce(
-      options.experimental && options.experimental.traceparent,
-      process.env.DD_TRACE_EXPERIMENTAL_TRACEPARENT_ENABLED,
-      false
+    const defaultPropagationStyle = ['tracecontext', 'datadog']
+    if (isTrue(DD_TRACE_B3_ENABLED)) {
+      defaultPropagationStyle.push('b3')
+      defaultPropagationStyle.push('b3 single header')
+    }
+    if (process.env.DD_TRACE_PROPAGATION_STYLE && (
+      process.env.DD_TRACE_PROPAGATION_STYLE_INJECT ||
+      process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT
+    )) {
+      log.warn(
+        'Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate ' +
+        'DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT ' +
+        'environment variables'
+      )
+    }
+    const DD_TRACE_PROPAGATION_STYLE_INJECT = propagationStyle(
+      'inject',
+      options.tracePropagationStyle,
+      defaultPropagationStyle
+    )
+    const DD_TRACE_PROPAGATION_STYLE_EXTRACT = propagationStyle(
+      'extract',
+      options.tracePropagationStyle,
+      defaultPropagationStyle
     )
     const DD_TRACE_RUNTIME_ID_ENABLED = coalesce(
       options.experimental && options.experimental.runtimeId,
@@ -386,9 +433,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       port: String(coalesce(dogstatsd.port, process.env.DD_DOGSTATSD_PORT, 8125))
     }
     this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
+    this.tracePropagationStyle = {
+      inject: DD_TRACE_PROPAGATION_STYLE_INJECT,
+      extract: DD_TRACE_PROPAGATION_STYLE_EXTRACT
+    }
     this.experimental = {
-      b3: isTrue(DD_TRACE_B3_ENABLED),
-      traceparent: isTrue(DD_TRACE_TRACEPARENT_ENABLED),
       runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
       exporter: DD_TRACE_EXPORTER,
       enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED)
