@@ -631,6 +631,7 @@ describe('IP blocking', () => {
     appListener = server
       .listen(port, 'localhost', () => done())
   })
+
   beforeEach(() => {
     appsec.enable(new Config({
       appsec: {
@@ -639,9 +640,14 @@ describe('IP blocking', () => {
     }))
     RuleManager.updateAsmData('apply', ruleData, 'asm_data')
   })
+
   afterEach(() => {
     appsec.disable()
-    resetTemplates()
+  })
+
+  after(() => {
+    appListener && appListener.close()
+    return agent.close({ ritmReset: false })
   })
 
   describe('do not block the request', () => {
@@ -650,11 +656,6 @@ describe('IP blocking', () => {
         expect(res.status).to.be.equal(200)
       })
     })
-  })
-
-  after(() => {
-    appListener && appListener.close()
-    return agent.close({ ritmReset: false })
   })
   const ipHeaderList = [
     'x-forwarded-for',
