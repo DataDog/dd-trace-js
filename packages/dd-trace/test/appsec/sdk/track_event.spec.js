@@ -3,10 +3,10 @@
 const proxyquire = require('proxyquire')
 
 describe('track_event', () => {
+  const tracer = {}
   let log
   let rootSpan
   let getRootSpan
-  let tracer
   let setUserTags
   let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
 
@@ -19,9 +19,9 @@ describe('track_event', () => {
       addTags: sinon.stub()
     }
 
-    setUserTags = sinon.stub()
-
     getRootSpan = sinon.stub().callsFake(() => rootSpan)
+
+    setUserTags = sinon.stub()
 
     const trackEvent = proxyquire('../../../src/appsec/sdk/track_event', {
       '../../log': log,
