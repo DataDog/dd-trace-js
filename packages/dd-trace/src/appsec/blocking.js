@@ -57,5 +57,8 @@ function resetTemplates () {
 }
 
 module.exports = {
-  block, loadTemplates, loadTemplatesAsync, resetTemplates
+  block,
+  loadTemplates,
+  loadTemplatesAsync,
+  resetTemplates
 }
