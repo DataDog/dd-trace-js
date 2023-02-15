@@ -21,6 +21,24 @@ const {
 
 const GIT_REV_LIST_MAX_BUFFER = 8 * 1024 * 1024 // 8MB
 
+function isShallowRepository () {
+  const output = sanitizedExec('git rev-parse --is-shallow-repository', { stdio: 'pipe' })
+  console.log('output', output)
+  return output === 'true'
+}
+
+function unshallowRepository () {
+  let output
+  try {
+    output = sanitizedExec('git config remote.origin.partialclonefilter "blob:none"', { stdio: 'pipe' })
+    console.log('config change: ', output)
+    output = sanitizedExec('git fetch --shallow-since="1 month ago" --update-shallow --refetch', { stdio: 'pipe' })
+    console.log('unshallow: ', output)
+  } catch (e) {
+    log.error(e)
+  }
+}
+
 function getRepositoryUrl () {
   return sanitizedExec('git config --get remote.origin.url', { stdio: 'pipe' })
 }
@@ -146,5 +164,7 @@ module.exports = {
   getRepositoryUrl,
   generatePackFilesForCommits,
   getCommitsToUpload,
-  GIT_REV_LIST_MAX_BUFFER
+  GIT_REV_LIST_MAX_BUFFER,
+  isShallowRepository,
+  unshallowRepository
 }
