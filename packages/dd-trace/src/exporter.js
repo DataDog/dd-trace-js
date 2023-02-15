@@ -23,7 +23,7 @@ module.exports = name => {
     case exporters.AGENT_PROXY:
       return AgentProxyCiVisibilityExporter
     case exporters.NAPI_RS:
-        return NAPIRSExporter
+      return NAPIRSExporter
     default:
       return inAWSLambda && !usingLambdaExtension ? LogExporter : AgentExporter
   }
