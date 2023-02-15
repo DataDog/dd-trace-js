@@ -2,8 +2,12 @@
 'use strict'
 
 const addons = {
-    'linux-x64': './addons/node-napi-rs.linux-x64.node',
-    'darwin-arm64': './addons/node-napi-rs.darwin-arm64.node',
+  'linux-x64': './addons/linux-x64.node',
+  'linux-arm64': './addons/linux-arm64.node',
+  'darwin-arm64': './addons/darwin-arm64.node',
+  'darwin-x64': './addons/darwin-x64.node',
+  'win32-ia32': './addons/win32-ia32.node',
+  'win32-x64': './addons/win32-x64.node'
 }  
 
 const target = `${process.platform}-${process.arch}`
