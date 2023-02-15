@@ -30,12 +30,13 @@ function isShallowRepository () {
 function unshallowRepository () {
   let output
   try {
-    output = sanitizedExec('git config remote.origin.partialclonefilter "blob:none"', { stdio: 'pipe' })
+    output = execSync('git config remote.origin.partialclonefilter "blob:none"', { stdio: 'pipe' }).toString()
     console.log('config change: ', output)
-    output = sanitizedExec('git fetch --shallow-since="1 month ago" --update-shallow --refetch', { stdio: 'pipe' })
+    output = execSync('git fetch --shallow-since="1 month ago" --update-shallow --refetch', { stdio: 'pipe' })
+      .toString()
     console.log('unshallow: ', output)
-  } catch (e) {
-    log.error(e)
+  } catch (err) {
+    console.log('error unshallowRepository:', err)
   }
 }
 
