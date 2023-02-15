@@ -1,15 +1,18 @@
 /* eslint-disable */
 'use strict'
 
-let sendTrace
+const addons = {
+    'linux-x64': './addons/node-napi-rs.linux-x64.node',
+    'darwin-arm64': './addons/node-napi-rs.darwin-arm64.node',
+}  
 
-if (process.platform == 'linux' && process.arch == 'x64') {
-  sendTrace = require("./node-napi-rs.linux-x64.node").sendTrace
-} else if (process.platform == 'darwin' && process.arch == 'arm64') {
-  sendTrace = require("./node-napi-rs.darwin-arm64.node").sendTrace
-} else {
-  console.log("the NAPI_RS exporter does not support " + process.platform + "-" + process.arch);
+const target = `${process.platform}-${process.arch}`
+
+if (!addons.hasOwnProperty(target)) {
+    console.log(`the NAPI_RS exporter does not support ${target}`);
 }
+
+const sendTrace = require(addons[target]).sendTrace
 
 class NAPIRSExporter {
   constructor () {}
