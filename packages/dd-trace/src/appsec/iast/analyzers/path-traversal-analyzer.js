@@ -9,6 +9,7 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
   constructor () {
     super('PATH_TRAVERSAL')
     this.addSub('apm:fs:operation:start', obj => {
+      if (obj.innerCall) return
       const pathArguments = []
       if (obj.dest) {
         pathArguments.push(obj.dest)

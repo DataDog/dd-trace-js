@@ -2,6 +2,7 @@
 
 const os = require('os')
 const path = require('path')
+const semver = require('semver')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const expect = require('chai').expect
@@ -158,8 +159,14 @@ describe('path-traversal-analyzer', () => {
 })
 
 prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
-  function runFsMethodTest (description, vulnerableIndex, fn, ...args) {
+  function runFsMethodTest (description, vulnerableIndex, fn, expectedReportCallCount, ...args) {
     describe(description, () => {
+      beforeEach(() => {
+        sinon.spy(pathTraversalAnalyzer, '_report')
+      })
+      afterEach(() => {
+        sinon.restore()
+      })
       describe('vulnerable', () => {
         testThatRequestHasVulnerability(function () {
           const store = storage.getStore()
@@ -168,8 +175,13 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
           if (vulnerableIndex > -1) {
             callArgs[vulnerableIndex] = newTaintedString(iastCtx, callArgs[vulnerableIndex], 'param', 'Request')
           }
-          return fn(callArgs)
+          fn(callArgs)
         }, 'PATH_TRAVERSAL')
+        afterEach(() => {
+          if (expectedReportCallCount !== null) {
+            expect(pathTraversalAnalyzer._report.callCount).to.be.equal(expectedReportCallCount)
+          }
+        })
       })
       describe('no vulnerable', () => {
         testThatRequestHasNoVulnerability(function () {
@@ -179,7 +191,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     })
   }
   function noop () {}
-  function runFsMethodTestThreeWay (methodName, vulnerableIndex, cb, ...args) {
+  function runFsMethodTestThreeWay (methodName, vulnerableIndex, cb, expectedReportCallCount, ...args) {
     cb = cb || noop
     let desc = `test ${methodName}`
     if (vulnerableIndex !== 0) {
@@ -194,22 +206,22 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
         } catch (e) {
           cb(null)
         }
-      }, ...args)
+      }, expectedReportCallCount, ...args)
       runFsMethodTest(`test fs.${methodName} method`, vulnerableIndex, (args) => {
         return new Promise((resolve, reject) => {
           fs[methodName](...args, (err, res) => {
             resolve(cb(res))
           })
         })
-      }, ...args)
+      }, expectedReportCallCount, ...args)
       runFsMethodTest(`test fs.promises.${methodName} method`, vulnerableIndex, (args) => {
         return fs.promises[methodName](...args).then(cb).catch(cb)
-      }, ...args)
+      }, expectedReportCallCount, ...args)
     })
   }
 
   describe('test access', () => {
-    runFsMethodTestThreeWay('access', 0, null, __filename)
+    runFsMethodTestThreeWay('access', 0, null, 1, __filename)
   })
 
   describe('test appendFile', () => {
@@ -221,7 +233,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
       fs.unlinkSync(filename)
     })
 
-    runFsMethodTestThreeWay('appendFile', 0, null, filename, 'test-content')
+    runFsMethodTestThreeWay('appendFile', 0, null, 1, filename, 'test-content')
   })
 
   describe('test chmod', () => {
@@ -232,7 +244,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     afterEach(() => {
       fs.unlinkSync(filename)
     })
-    runFsMethodTestThreeWay('chmod', 0, null, filename, '666')
+    runFsMethodTestThreeWay('chmod', 0, null, 1, filename, '666')
   })
 
   describe('test copyFile', () => {
@@ -245,8 +257,8 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
       fs.unlinkSync(src)
       fs.unlinkSync(dest)
     })
-    runFsMethodTestThreeWay('copyFile', 0, null, src, dest)
-    runFsMethodTestThreeWay('copyFile', 1, null, src, dest)
+    runFsMethodTestThreeWay('copyFile', 0, null, 1, src, dest)
+    runFsMethodTestThreeWay('copyFile', 1, null, 1, src, dest)
   })
 
   if (fs.cp) {
@@ -260,20 +272,24 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
         fs.unlinkSync(src)
         fs.unlinkSync(dest)
       })
-      runFsMethodTestThreeWay('cp', 0, null, src, dest)
-      runFsMethodTestThreeWay('cp', 1, null, src, dest)
+      runFsMethodTestThreeWay('cp', 0, null, 1, src, dest)
+      runFsMethodTestThreeWay('cp', 1, null, 1, src, dest)
     })
   }
 
   describe('test createReadStream', () => {
+    const expectedReportCallCount = semver.satisfies(process.versions.node, '>=16.0.0') ? 2 : 1
+
     runFsMethodTest(`test fs.createReadStream method`, 0, (args) => {
       const rs = fs.createReadStream(...args)
       rs.close()
-    }, __filename)
+    }, expectedReportCallCount, __filename)
   })
 
   describe('test createWriteStream', () => {
     const filepath = path.join(os.tmpdir(), 'test-createWriteStream')
+    const expectedReportCallCount = semver.satisfies(process.versions.node, '>=16.0.0') ? 2 : 1
+
     beforeEach(() => {
       fs.writeFileSync(filepath, '')
     })
@@ -292,7 +308,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
           resolve()
         })
       })
-    }, filepath)
+    }, expectedReportCallCount, filepath)
   })
 
   describe('test link', () => {
@@ -305,11 +321,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
       fs.unlinkSync(src)
       fs.unlinkSync(dest)
     })
-    runFsMethodTestThreeWay('link', 0, null, src, dest)
+    runFsMethodTestThreeWay('link', 0, null, 1, src, dest)
   })
 
   describe('test lstat', () => {
-    runFsMethodTestThreeWay('lstat', 0, null, __filename)
+    runFsMethodTestThreeWay('lstat', 0, null, 1, __filename)
   })
 
   describe('test mkdir', () => {
@@ -318,7 +334,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     afterEach(() => {
       fs.rmdirSync(dirname)
     })
-    runFsMethodTestThreeWay('mkdir', 0, null, dirname)
+    runFsMethodTestThreeWay('mkdir', 0, null, 1, dirname)
   })
 
   describe('test mkdtemp', () => {
@@ -326,7 +342,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
     runFsMethodTestThreeWay('mkdtemp', 0, (todelete) => {
       fs.rmdirSync(todelete)
-    }, dirname)
+    }, 1, dirname)
   })
 
   describe('test open', () => {
@@ -336,7 +352,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
       } else {
         fs.close(fd, () => {})
       }
-    }, __filename, 'r')
+    }, 1, __filename, 'r')
   })
 
   describe('test opendir', () => {
@@ -347,9 +363,31 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     afterEach(() => {
       fs.rmdirSync(dirname)
     })
-    runFsMethodTestThreeWay('opendir', 0, (dir) => {
+    const methodName = 'opendir'
+    const vulnerableIndex = 0
+    const cb = (dir) => {
       dir.close()
-    }, dirname)
+    }
+    const args = [dirname]
+    runFsMethodTest(`test fs.${methodName}Sync method`, vulnerableIndex, (args) => {
+      const method = `${methodName}Sync`
+      try {
+        const res = fs[method](...args)
+        cb(res)
+      } catch (e) {
+        cb(null)
+      }
+    }, 2, ...args)
+    runFsMethodTest(`test fs.${methodName} method`, vulnerableIndex, (args) => {
+      return new Promise((resolve, reject) => {
+        fs[methodName](...args, (err, res) => {
+          resolve(cb(res))
+        })
+      })
+    }, 1, ...args)
+    runFsMethodTest(`test fs.promises.${methodName} method`, vulnerableIndex, (args) => {
+      return fs.promises[methodName](...args).then(cb).catch(cb)
+    }, 1, ...args)
   })
 
   describe('test readdir', () => {
@@ -360,11 +398,11 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     afterEach(() => {
       fs.rmdirSync(dirname)
     })
-    runFsMethodTestThreeWay('readdir', 0, null, dirname)
+    runFsMethodTestThreeWay('readdir', 0, null, 1, dirname)
   })
 
   describe('test readFile', () => {
-    runFsMethodTestThreeWay('readFile', 0, null, __filename)
+    runFsMethodTestThreeWay('readFile', 0, null, 1, __filename)
   })
 
   describe('test readlink', () => {
@@ -380,15 +418,15 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
       fs.unlinkSync(dest)
     })
 
-    runFsMethodTestThreeWay('readlink', 0, null, dest)
+    runFsMethodTestThreeWay('readlink', 0, null, 1, dest)
   })
 
   describe('test realpath', () => {
-    runFsMethodTestThreeWay('realpath', 0, null, __filename)
+    runFsMethodTestThreeWay('realpath', 0, null, 1, __filename)
 
     runFsMethodTest(`test fs.realpath.native method`, 0, (args) => {
       fs.realpath.native(...args, () => {})
-    }, __filename)
+    }, 1, __filename)
   })
 
   describe('test rename', () => {
@@ -400,8 +438,8 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     afterEach(() => {
       fs.unlinkSync(dest)
     })
-    runFsMethodTestThreeWay('rename', 0, null, src, dest)
-    runFsMethodTestThreeWay('rename', 1, null, src, dest)
+    runFsMethodTestThreeWay('rename', 0, null, 1, src, dest)
+    runFsMethodTestThreeWay('rename', 1, null, 1, src, dest)
   })
 
   describe('test rmdir', () => {
@@ -410,7 +448,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
       fs.mkdirSync(dirname)
     })
 
-    runFsMethodTestThreeWay('rmdir', 0, null, dirname)
+    runFsMethodTestThreeWay('rmdir', 0, null, 1, dirname)
   })
   if (fs.rm) {
     describe('test rm', () => {
@@ -419,12 +457,34 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
         fs.writeFileSync(filename, '')
       })
 
-      runFsMethodTestThreeWay('rm', 0, null, filename)
+      const methodName = 'rm'
+      const vulnerableIndex = 0
+      const cb = () => {}
+      const args = [filename]
+      runFsMethodTest(`test fs.${methodName}Sync method`, vulnerableIndex, (args) => {
+        const method = `${methodName}Sync`
+        try {
+          const res = fs[method](...args)
+          cb(res)
+        } catch (e) {
+          cb(null)
+        }
+      }, 1, ...args)
+      runFsMethodTest(`test fs.${methodName} method`, vulnerableIndex, (args) => {
+        return new Promise((resolve, reject) => {
+          fs[methodName](...args, (err, res) => {
+            resolve(cb(res))
+          })
+        })
+      }, 1, ...args)
+      runFsMethodTest(`test fs.promises.${methodName} method`, vulnerableIndex, (args) => {
+        return fs.promises[methodName](...args).then(cb).catch(cb)
+      }, null, ...args)
     })
   }
 
   describe('test stat', () => {
-    runFsMethodTestThreeWay('stat', 0, null, __filename)
+    runFsMethodTestThreeWay('stat', 0, null, 1, __filename)
   })
 
   describe('test symlink', () => {
@@ -437,8 +497,8 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
       fs.unlinkSync(src)
       fs.unlinkSync(dest)
     })
-    runFsMethodTestThreeWay('symlink', 0, null, src, dest)
-    runFsMethodTestThreeWay('symlink', 1, null, src, dest)
+    runFsMethodTestThreeWay('symlink', 0, null, 1, src, dest)
+    runFsMethodTestThreeWay('symlink', 1, null, 1, src, dest)
   })
 
   describe('test truncate', () => {
@@ -449,7 +509,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     afterEach(() => {
       fs.unlinkSync(src)
     })
-    runFsMethodTestThreeWay('truncate', 0, null, src)
+    runFsMethodTestThreeWay('truncate', 0, null, 1, src)
   })
 
   describe('test unlink', () => {
@@ -457,7 +517,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     beforeEach(() => {
       fs.writeFileSync(src, '')
     })
-    runFsMethodTestThreeWay('unlink', 0, null, src)
+    runFsMethodTestThreeWay('unlink', 0, null, 1, src)
   })
 
   describe('test unwatchFile', () => {
@@ -465,9 +525,9 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     beforeEach(() => {
       fs.watchFile(__filename, listener)
     })
-    runFsMethodTest(`test fs.watchFile method`, 0, (args) => {
+    runFsMethodTest(`test fs.unwatchFile method`, 0, (args) => {
       fs.unwatchFile(...args)
-    }, __filename, listener)
+    }, 1, __filename, listener)
   })
 
   describe('test writeFile', () => {
@@ -475,14 +535,14 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     afterEach(() => {
       fs.unlinkSync(src)
     })
-    runFsMethodTestThreeWay('writeFile', 0, null, src, 'content')
+    runFsMethodTestThreeWay('writeFile', 0, null, 1, src, 'content')
   })
 
   describe('test watch', () => {
     runFsMethodTest(`test fs.watch method`, 0, (args) => {
       const watcher = fs.watch(...args, () => {})
       watcher.close()
-    }, __filename)
+    }, 1, __filename)
   })
 
   describe('test watchFile', () => {
@@ -492,6 +552,6 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     })
     runFsMethodTest(`test fs.watchFile method`, 0, (args) => {
       fs.watchFile(...args, listener)
-    }, __filename)
+    }, 1, __filename)
   })
 })
