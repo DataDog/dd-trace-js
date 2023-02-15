@@ -3,14 +3,34 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const runStartCh = channel('ci:cucumber:run:start')
-const runFinishCh = channel('ci:cucumber:run:finish')
-const runStepStartCh = channel('ci:cucumber:run-step:start')
+const testStartCh = channel('ci:cucumber:test:start')
+const testFinishCh = channel('ci:cucumber:test:finish') // used for test steps too
+
+const testStepStartCh = channel('ci:cucumber:test-step:start')
+
 const errorCh = channel('ci:cucumber:error')
+
+const testSuiteStartCh = channel('ci:cucumber:test-suite:start')
+const testSuiteFinishCh = channel('ci:cucumber:test-suite:finish')
+
+const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
 
 // TODO: remove in a later major version
 const patched = new WeakSet()
+
+let pickleByFile = {}
+const pickleResultByFile = {}
+
+function getSuiteStatusFromTestStatuses (testStatuses) {
+  if (testStatuses.some(status => status === 'fail')) {
+    return 'fail'
+  }
+  if (testStatuses.every(status => status === 'skip')) {
+    return 'skip'
+  }
+  return 'pass'
+}
 
 function getStatusFromResult (result) {
   if (result.status === 1) {
@@ -44,13 +64,18 @@ function wrapRun (pl, isLatestVersion) {
   patched.add(pl)
 
   shimmer.wrap(pl.prototype, 'run', run => function () {
-    if (!runStartCh.hasSubscribers) {
+    if (!testStartCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
-      runStartCh.publish({ testName: this.pickle.name, fullTestSuite: this.pickle.uri })
+      const testSuiteFullPath = this.pickle.uri
+
+      if (!pickleResultByFile[testSuiteFullPath]) { // first test in suite
+        testSuiteStartCh.publish(testSuiteFullPath)
+      }
+      testStartCh.publish({ testName: this.pickle.name, fullTestSuite: testSuiteFullPath })
       try {
         const promise = run.apply(this, arguments)
         promise.finally(() => {
@@ -58,7 +83,17 @@ function wrapRun (pl, isLatestVersion) {
           const { status, skipReason, errorMessage } = isLatestVersion
             ? getStatusFromResultLatest(result) : getStatusFromResult(result)
 
-          runFinishCh.publish({ status, skipReason, errorMessage })
+          if (!pickleResultByFile[testSuiteFullPath]) {
+            pickleResultByFile[testSuiteFullPath] = [status]
+          } else {
+            pickleResultByFile[testSuiteFullPath].push(status)
+          }
+          // last test in suite
+          if (pickleResultByFile[testSuiteFullPath].length === pickleByFile[testSuiteFullPath].length) {
+            const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testSuiteFullPath])
+            testSuiteFinishCh.publish(testSuiteStatus)
+          }
+          testFinishCh.publish({ status, skipReason, errorMessage })
         })
         return promise
       } catch (err) {
@@ -68,7 +103,7 @@ function wrapRun (pl, isLatestVersion) {
     })
   })
   shimmer.wrap(pl.prototype, 'runStep', runStep => function () {
-    if (!runStepStartCh.hasSubscribers) {
+    if (!testStepStartCh.hasSubscribers) {
       return runStep.apply(this, arguments)
     }
     const testStep = arguments[0]
@@ -82,7 +117,7 @@ function wrapRun (pl, isLatestVersion) {
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
-      runStepStartCh.publish({ resource })
+      testStepStartCh.publish({ resource })
       try {
         const promise = runStep.apply(this, arguments)
 
@@ -90,7 +125,7 @@ function wrapRun (pl, isLatestVersion) {
           const { status, skipReason, errorMessage } = isLatestVersion
             ? getStatusFromResultLatest(result) : getStatusFromResult(result)
 
-          runFinishCh.publish({ isStep: true, status, skipReason, errorMessage })
+          testFinishCh.publish({ isStep: true, status, skipReason, errorMessage })
         })
         return promise
       } catch (err) {
@@ -129,16 +164,40 @@ addHook({
   file: 'lib/runtime/test_case_runner.js'
 }, testCaseHook)
 
+function getPickleByFile (runtime) {
+  return runtime.pickleIds.reduce((acc, pickleId) => {
+    const test = runtime.eventDataCollector.getPickle(pickleId)
+    if (acc[test.uri]) {
+      acc[test.uri].push(test)
+    } else {
+      acc[test.uri] = [test]
+    }
+    return acc
+  }, {})
+}
+
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.0.0'],
   file: 'lib/runtime/index.js'
-}, (Runtime) => {
-  shimmer.wrap(Runtime.default.prototype, 'start', start => async function () {
-    const result = await start.apply(this, arguments)
-    sessionFinishCh.publish(undefined)
-    return result
+}, (runtimePackage, cucumberVersion) => {
+  shimmer.wrap(runtimePackage.default.prototype, 'start', start => async function () {
+    pickleByFile = getPickleByFile(this)
+
+    const processArgv = process.argv.slice(2).join(' ')
+    const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
+
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    asyncResource.runInAsyncScope(() => {
+      sessionStartCh.publish({ command, frameworkVersion: cucumberVersion })
+    })
+    const success = await start.apply(this, arguments)
+
+    asyncResource.runInAsyncScope(() => {
+      sessionFinishCh.publish(success ? 'pass' : 'fail')
+    })
+    return success
   })
 
-  return Runtime
+  return runtimePackage
 })

@@ -14,11 +14,13 @@ describe('Plugin', () => {
   describe('aws-sdk (sqs)', function () {
     setup()
 
-    withVersions('aws-sdk', 'aws-sdk', version => {
+    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
       let AWS
       let sqs
       let QueueUrl
       let tracer
+
+      const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
 
       describe('without configuration', () => {
         before(() => {
@@ -28,11 +30,9 @@ describe('Plugin', () => {
         })
 
         before(done => {
-          AWS = require(`../../../versions/aws-sdk@${version}`).get()
+          AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
 
-          const endpoint = new AWS.Endpoint('http://127.0.0.1:4576')
-
-          sqs = new AWS.SQS({ endpoint, region: 'us-east-1' })
+          sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
           sqs.createQueue(queueOptions, (err, res) => {
             if (err) return done(err)
 
@@ -150,11 +150,9 @@ describe('Plugin', () => {
         })
 
         before(done => {
-          AWS = require(`../../../versions/aws-sdk@${version}`).get()
+          AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
 
-          const endpoint = new AWS.Endpoint('http://127.0.0.1:4576')
-
-          sqs = new AWS.SQS({ endpoint, region: 'us-east-1' })
+          sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
           sqs.createQueue(queueOptions, (err, res) => {
             if (err) return done(err)
 
@@ -180,7 +178,7 @@ describe('Plugin', () => {
 
             expect(span).to.include({
               name: 'aws.request',
-              resource: 'sendMessage http://localhost:4576/queue/SQS_QUEUE_NAME'
+              resource: `sendMessage ${QueueUrl}`
             })
 
             total++
@@ -191,7 +189,7 @@ describe('Plugin', () => {
 
             expect(span).to.include({
               name: 'aws.request',
-              resource: 'receiveMessage http://localhost:4576/queue/SQS_QUEUE_NAME'
+              resource: `receiveMessage ${QueueUrl}`
             })
 
             total++

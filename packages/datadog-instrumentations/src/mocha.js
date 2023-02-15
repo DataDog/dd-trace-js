@@ -2,7 +2,6 @@ const { createCoverageMap } = require('istanbul-lib-coverage')
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const log = require('../../dd-trace/src/log')
 const {
   getCoveredFilenamesFromCoverage,
   resetCoverage,
@@ -39,7 +38,7 @@ const testFileToSuiteAr = new Map()
 const originalCoverageMap = createCoverageMap()
 
 let suitesToSkip = []
-let mochaVersion
+let frameworkVersion
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -129,7 +128,7 @@ function mochaHook (Runner) {
     this.once('start', testRunAsyncResource.bind(function () {
       const processArgv = process.argv.slice(2).join(' ')
       const command = `mocha ${processArgv}`
-      testSessionStartCh.publish({ command, frameworkVersion: mochaVersion })
+      testSessionStartCh.publish({ command, frameworkVersion })
     }))
 
     this.on('suite', function (suite) {
@@ -314,14 +313,14 @@ addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
   file: 'lib/mocha.js'
-}, (Mocha) => {
+}, (Mocha, mochaVersion) => {
+  frameworkVersion = mochaVersion
   const mochaRunAsyncResource = new AsyncResource('bound-anonymous-fn')
   /**
    * Get ITR configuration and skippable suites
    * If ITR is disabled, `onDone` is called immediately on the subscriber
    */
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
-    mochaVersion = this.version
     if (!itrConfigurationCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
@@ -331,7 +330,6 @@ addHook({
 
     const onReceivedSkippableSuites = ({ err, skippableSuites }) => {
       if (err) {
-        log.error(err)
         suitesToSkip = []
       } else {
         suitesToSkip = skippableSuites
@@ -343,7 +341,6 @@ addHook({
 
     const onReceivedConfiguration = ({ err }) => {
       if (err) {
-        log.error(err)
         return global.run()
       }
       if (!skippableSuitesCh.hasSubscribers) {

@@ -22,36 +22,51 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/packfile')
         .reply(202, '')
 
-      const ciVisibilityExporter = new CiVisibilityExporter({ port })
+      const url = new URL(`http://localhost:${port}`)
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
         expect(err).not.to.exist
         expect(scope.isDone()).to.be.true
         done()
       })
-
-      const url = new URL(`http://localhost:${port}`)
-      ciVisibilityExporter.sendGitMetadata({ url, isEvpProxy: false })
+      ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      ciVisibilityExporter.sendGitMetadata()
     })
     it('should resolve _gitUploadPromise with an error when git metadata request fails', (done) => {
       const scope = nock(`http://localhost:${port}`)
         .post('/api/v2/git/repository/search_commits')
         .reply(404)
 
-      const ciVisibilityExporter = new CiVisibilityExporter({ port })
+      const url = new URL(`http://localhost:${port}`)
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
         expect(err.message).to.include('Error fetching commits to exclude')
         expect(scope.isDone()).to.be.true
         done()
       })
-
-      const url = new URL(`http://localhost:${port}`)
-      ciVisibilityExporter.sendGitMetadata({ url, isEvpProxy: false })
+      ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      ciVisibilityExporter.sendGitMetadata()
     })
   })
 
   describe('getItrConfiguration', () => {
+    it('should upload git metadata when getItrConfiguration is called, regardless of ITR config', (done) => {
+      const scope = nock(`http://localhost:${port}`)
+        .post('/api/v2/git/repository/search_commits')
+        .reply(200, JSON.stringify({
+          data: []
+        }))
+        .post('/api/v2/git/repository/packfile')
+        .reply(202, '')
+
+      const ciVisibilityExporter = new CiVisibilityExporter({ port, isGitUploadEnabled: true })
+      ciVisibilityExporter.getItrConfiguration({}, () => {
+        expect(scope.isDone()).not.to.be.true
+        done()
+      })
+    })
     context('if ITR is not enabled', () => {
       it('should resolve immediately if ITR is not enabled', (done) => {
         const scope = nock(`http://localhost:${port}`)
@@ -154,6 +169,14 @@ describe('CI Visibility Exporter', () => {
     })
     context('if ITR is enabled and the tracer can use CI Vis Protocol', () => {
       it('should request the API after git upload promise is resolved', (done) => {
+        nock(`http://localhost:${port}`)
+          .post('/api/v2/git/repository/search_commits')
+          .reply(200, JSON.stringify({
+            data: []
+          }))
+          .post('/api/v2/git/repository/packfile')
+          .reply(202, '')
+
         const scope = nock(`http://localhost:${port}`)
           .post('/api/v2/ci/tests/skippable')
           .reply(200, JSON.stringify({
@@ -165,7 +188,11 @@ describe('CI Visibility Exporter', () => {
             }]
           }))
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ port, isIntelligentTestRunnerEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          port,
+          isIntelligentTestRunnerEnabled: true,
+          isGitUploadEnabled: true
+        })
 
         ciVisibilityExporter._itrConfig = { isSuitesSkippingEnabled: true }
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
@@ -176,7 +203,7 @@ describe('CI Visibility Exporter', () => {
           expect(scope.isDone()).to.be.true
           done()
         })
-        ciVisibilityExporter._resolveGit()
+        ciVisibilityExporter.sendGitMetadata()
       })
     })
     context('if ITR is enabled and the tracer can use CI Vis Protocol but git upload fails', () => {

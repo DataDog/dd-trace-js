@@ -9,7 +9,7 @@ const log = require('../../../log')
 class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
   constructor (config) {
     super(config)
-    const { tags, site, url, isGitUploadEnabled } = config
+    const { tags, site, url } = config
     // we don't need to request /info because we are using agentless by configuration
     this._isInitialized = true
     this._resolveCanUseCiVisProtocol(true)
@@ -21,10 +21,6 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     this._coverageWriter = new CoverageWriter({ url: this._coverageUrl })
 
     this._apiUrl = url || new URL(`https://api.${site}`)
-
-    if (isGitUploadEnabled) {
-      this.sendGitMetadata({ url: this._getApiUrl() })
-    }
   }
 
   setUrl (url, coverageUrl = url, apiUrl = url) {
