@@ -5,7 +5,7 @@
   "scripts": {
     "build": "typedoc",
     "pretest": "tsc -p . && tsc test",
-    "test": "node test"
+    "test": "node -v && tsc -v && node test"
   },
   "license": "BSD-3-Clause",
   "private": true,
