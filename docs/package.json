@@ -4,8 +4,8 @@
   "main": "typedoc.js",
   "scripts": {
     "build": "typedoc",
-    "pretest": "tsc -p . && tsc test",
-    "test": "node -v && tsc -v && node test"
+    "pretest": "node -v && tsc -v && tsc -p . && tsc test",
+    "test": "node test"
   },
   "license": "BSD-3-Clause",
   "private": true,
