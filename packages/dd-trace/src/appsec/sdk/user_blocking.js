@@ -31,8 +31,10 @@ function checkUserAndSetUser (tracer, user) {
   }
 
   const rootSpan = getRootSpan(tracer)
-  if (rootSpan && !rootSpan.context()._tags['usr.id']) {
-    setUserTags(user, rootSpan)
+  if (rootSpan) {
+    if (!rootSpan.context()._tags['usr.id']) {
+      setUserTags(user, rootSpan)
+    }
   } else {
     log.warn('Root span not available in isUserBlocked')
   }
