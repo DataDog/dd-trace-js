@@ -99,8 +99,7 @@ describe('setUser', () => {
     describe('setUser', () => {
       it('should set a proper user', (done) => {
         controller = (req, res) => {
-          const user = { id: 'testUser' }
-          tracer.appsec.setUser(user)
+          tracer.appsec.setUser({ id: 'testUser' })
           res.end()
         }
         agent.use(traces => {

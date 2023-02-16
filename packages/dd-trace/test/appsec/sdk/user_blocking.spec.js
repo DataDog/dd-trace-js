@@ -207,22 +207,24 @@ describe('User blocking API', () => {
     describe('blockRequest', () => {
       it('should set the proper tag', (done) => {
         controller = (req, res) => {
-          tracer.appsec.blockRequest(req, res)
+          const ret = tracer.appsec.blockRequest(req, res)
+          expect(ret).to.be.true
         }
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('appsec.blocked', 'true')
+          expect(traces[0][0].meta).to.have.property('http.status_code', '403')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
 
       it('should get the params from the store if they are not passed', (done) => {
         controller = (req, res) => {
-          if (!tracer.appsec.blockRequest()) {
-            res.end()
-          }
+          const ret = tracer.appsec.blockRequest()
+          expect(ret).to.be.true
         }
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('appsec.blocked', 'true')
+          expect(traces[0][0].meta).to.have.property('http.status_code', '403')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
