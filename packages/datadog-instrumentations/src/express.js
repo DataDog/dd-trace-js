@@ -2,7 +2,8 @@
 
 const { createWrapRouterMethod } = require('./router')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel } = require('./helpers/instrument')
+const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { AbortController } = require('node-abort-controller')
 
 const handleChannel = channel('apm:express:request:handle')
 
@@ -24,4 +25,36 @@ addHook({ name: 'express', versions: ['>=4'] }, express => {
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
 
   return express
+})
+
+const queryParserReadCh = channel('datadog:query:read:finish')
+
+function publishQueryParsedAndNext (req, res, next) {
+  return function () {
+    if (queryParserReadCh.hasSubscribers && req) {
+      const abortController = new AbortController()
+      queryParserReadCh.publish({ req, res, abortController })
+
+      if (abortController.signal.aborted) {
+        res.end()
+        return
+      }
+    }
+    next.apply(this, arguments)
+  }
+}
+
+addHook({
+  name: 'express',
+  versions: ['>=4'],
+  file: 'lib/middleware/query.js'
+}, query => {
+  return shimmer.wrap(query, function () {
+    const queryMiddleware = query.apply(this, arguments)
+    return shimmer.wrap(queryMiddleware, function (req, res, next) {
+      const nextResource = new AsyncResource('bound-anonymous-fn')
+      arguments[2] = nextResource.bind(publishQueryParsedAndNext(req, res, next))
+      return queryMiddleware.apply(this, arguments)
+    })
+  })
 })
