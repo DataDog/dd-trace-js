@@ -7,126 +7,146 @@ const appsec = require('../../../src/appsec')
 const Config = require('../../../src/config')
 const getPort = require('get-port')
 const axios = require('axios')
-const RuleManager = require('../../../src/appsec/rule_manager')
-const fs = require('fs')
-const crypto = require('crypto')
+const path = require('path')
 
-describe('User blocking API', () => {
-  describe('Test internal API', () => {
+describe('user_blocking', () => {
+  describe('Internal API', () => {
+    const req = { protocol: 'https' }
+    const res = { headersSent: false }
     const tracer = {}
-    const mockReq = { protocol: 'https' }
-    const mockRes = { headersSent: false }
-    const storage = { getStore: () => {
-      return { req: mockReq, res: mockRes }
-    } }
 
-    let block, getRootSpan, mockRootSpan, mockSetTag, userBlocking
+    let propagate, rootSpan, getRootSpan, block, storage, log, userBlocking
 
     beforeEach(() => {
-      block = sinon.stub()
-      mockSetTag = sinon.stub()
-      mockRootSpan = {
+      propagate = sinon.stub().returns([['something'], ['block']])
+
+      rootSpan = {
         context: () => {
-          return { _tags: { 'usr.id': 'mockUser' } }
+          return { _tags: {} }
         },
-        setTag: mockSetTag
+        setTag: sinon.stub()
       }
-      getRootSpan = sinon.stub().returns(mockRootSpan)
+      getRootSpan = sinon.stub().returns(rootSpan)
+
+      block = sinon.stub()
+
+      storage = {
+        getStore: sinon.stub().returns({ req, res })
+      }
+
+      log = {
+        warn: sinon.stub()
+      }
+
       userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
+        '../gateway/engine': { propagate },
         './utils': { getRootSpan },
         '../blocking': { block },
-        '../../../../datadog-core': { storage }
+        '../../../../datadog-core': { storage },
+        '../../log': log
       })
     })
 
-    it('checkUserAndSetUser should return false with an empty user', () => {
-      const user = {}
-      const ret = userBlocking.checkUserAndSetUser(tracer, user)
-      expect(ret).to.be.false
+    describe('checkUserAndSetUser', () => {
+      it('should return false and log warn when passed no user', () => {
+        const ret = userBlocking.checkUserAndSetUser()
+        expect(ret).to.be.false
+        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid user provided to isUserBlocked')
+      })
+
+      it('should return false and log warn when passed invalid user', () => {
+        const ret = userBlocking.checkUserAndSetUser({})
+        expect(ret).to.be.false
+        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid user provided to isUserBlocked')
+      })
+
+      it('should set user when not already set', () => {
+        const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
+        expect(ret).to.be.true
+        expect(getRootSpan).to.have.been.calledOnceWithExactly(tracer)
+        expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('usr.id', 'user')
+      })
+
+      it('should not override user when already set', () => {
+        rootSpan.context = () => {
+          return { _tags: { 'usr.id': 'mockUser' } }
+        }
+
+        const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
+        expect(ret).to.be.true
+        expect(getRootSpan).to.have.been.calledOnceWithExactly(tracer)
+        expect(rootSpan.setTag).to.not.have.been.called
+      })
+
+      it('should log warn when rootSpan is not available', () => {
+        getRootSpan.returns(undefined)
+
+        const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
+        expect(ret).to.be.true
+        expect(getRootSpan).to.have.been.calledOnceWithExactly(tracer)
+        expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in isUserBlocked')
+        expect(rootSpan.setTag).to.not.have.been.called
+      })
+
+      it('should return false when received no results', () => {
+        propagate.returns([])
+
+        const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'gooduser' })
+        expect(ret).to.be.false
+        expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('usr.id', 'gooduser')
+      })
     })
 
-    it('checkUserAndSetUser should return false with no user', () => {
-      const ret = userBlocking.checkUserAndSetUser()
-      expect(ret).to.be.false
-    })
+    describe('blockRequest', () => {
+      it('should get req and res from local storage when they are not passed', () => {
+        const ret = userBlocking.blockRequest(tracer)
+        expect(ret).to.be.true
+        expect(storage.getStore).to.have.been.calledOnce
+        expect(block).to.be.calledOnceWithExactly(req, res, rootSpan)
+      })
 
-    it('blockRequest should call block with proper arguments', () => {
-      userBlocking.blockRequest(tracer, {}, {})
-      expect(block).to.be.calledOnceWithExactly({}, {}, mockRootSpan)
-    })
+      it('should log warning when req or res is not available', () => {
+        storage.getStore.returns(undefined)
 
-    it('blockRequest should get req and res from local storage when they are not passed', () => {
-      userBlocking.blockRequest(tracer)
-      expect(block).to.be.calledOnceWithExactly(mockReq, mockRes, mockRootSpan)
-    })
+        const ret = userBlocking.blockRequest(tracer)
+        expect(ret).to.be.false
+        expect(storage.getStore).to.have.been.calledOnce
+        expect(log.warn).to.have.been.calledOnceWithExactly('Requests or response object not available in blockRequest')
+        expect(block).to.not.have.been.called
+      })
 
-    it('blockRequest should return proper value when there is no rootSpan available', () => {
-      getRootSpan.returns(undefined)
+      it('should return false and log warn when rootSpan is not available', () => {
+        getRootSpan.returns(undefined)
 
-      const ret = userBlocking.blockRequest(tracer, {}, {})
-      expect(ret).to.be.false
-      expect(block).not.to.have.been.called
-    })
+        const ret = userBlocking.blockRequest(tracer, {}, {})
+        expect(ret).to.be.false
+        expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in blockRequest')
+        expect(block).to.not.have.been.called
+      })
 
-    it('checkUserAndSetUser should return false when there is no rootSpan available', () => {
-      getRootSpan.returns(undefined)
-
-      const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
-      expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
-      expect(ret).to.be.false
+      it('should call block with proper arguments', () => {
+        const req = {}
+        const res = {}
+        const ret = userBlocking.blockRequest(tracer, req, res)
+        expect(ret).to.be.true
+        expect(log.warn).to.not.have.been.called
+        expect(block).to.have.been.calledOnceWithExactly(req, res, rootSpan)
+      })
     })
   })
 
   describe('Integration with the tracer', () => {
+    const config = new Config({
+      appsec: {
+        enabled: true,
+        rules: path.join(__dirname, './user_blocking_rules.json')
+      }
+    })
+
     let http
     let controller
     let appListener
     let port
-    const blockedUser = 'blockedUser'
-    const blockRuleData = {
-      rules_data: [{
-        data: [
-          { value: blockedUser }
-        ],
-        id: 'blocked_users',
-        type: 'data_with_expiration'
-      }
-      ] }
-    const rules = JSON.stringify({
-      version: '2.2',
-      metadata: {
-        rules_version: '1.4.2'
-      },
-      rules: [
-        {
-          id: 'blk-001-002',
-          name: 'Block User Addresses',
-          tags: {
-            type: 'block_user',
-            category: 'security_response'
-          },
-          conditions: [
-            {
-              parameters: {
-                inputs: [
-                  {
-                    address: 'usr.id'
-                  }
-                ],
-                data: 'blocked_users'
-              },
-              operator: 'exact_match'
-            }
-          ],
-          transformers: [],
-          on_match: [
-            'block'
-          ]
-        }
-      ]
-    })
-
-    const rulesPath = `block_rule_${crypto.randomUUID()}`
 
     function listener (req, res) {
       if (controller) {
@@ -141,28 +161,18 @@ describe('User blocking API', () => {
     })
 
     before(done => {
-      fs.writeFileSync(rulesPath, rules)
       const server = new http.Server(listener)
       appListener = server
         .listen(port, 'localhost', () => done())
+
+      appsec.enable(config)
     })
 
     after(() => {
-      fs.rmSync(rulesPath)
       appsec.disable()
+
       appListener.close()
       return agent.close({ ritmReset: false })
-    })
-
-    beforeEach(() => {
-      const config = new Config({
-        appsec: {
-          enabled: true,
-          rules: rulesPath
-        }
-      })
-      appsec.enable(config)
-      RuleManager.updateAsmData('apply', blockRuleData, 'asm_data')
     })
 
     describe('isUserBlocked', () => {
@@ -181,6 +191,7 @@ describe('User blocking API', () => {
       it('should not set the user if user is already defined', (done) => {
         controller = (req, res) => {
           tracer.setUser({ id: 'testUser' })
+
           const ret = tracer.appsec.isUserBlocked({ id: 'testUser3' })
           expect(ret).to.be.false
           res.end()
@@ -205,7 +216,7 @@ describe('User blocking API', () => {
     })
 
     describe('blockRequest', () => {
-      it('should set the proper tag', (done) => {
+      it('should set the proper tags', (done) => {
         controller = (req, res) => {
           const ret = tracer.appsec.blockRequest(req, res)
           expect(ret).to.be.true
@@ -217,7 +228,7 @@ describe('User blocking API', () => {
         axios.get(`http://localhost:${port}/`)
       })
 
-      it('should get the params from the store if they are not passed', (done) => {
+      it('should set the proper tags even when not passed req and res', (done) => {
         controller = (req, res) => {
           const ret = tracer.appsec.blockRequest()
           expect(ret).to.be.true
