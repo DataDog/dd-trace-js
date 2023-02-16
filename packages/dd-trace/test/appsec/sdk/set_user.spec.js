@@ -13,9 +13,6 @@ describe('set_user', () => {
 
     beforeEach(() => {
       rootSpan = {
-        context: () => {
-          return { _tags: { 'usr.id': 'mockUser' } }
-        },
         setTag: sinon.stub()
       }
       getRootSpan = sinon.stub().returns(rootSpan)
