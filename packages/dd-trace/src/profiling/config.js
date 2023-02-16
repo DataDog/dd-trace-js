@@ -23,7 +23,8 @@ const {
   DD_AGENT_HOST,
   DD_TRACE_AGENT_PORT,
   DD_PROFILING_UPLOAD_TIMEOUT,
-  DD_PROFILING_SOURCE_MAP
+  DD_PROFILING_SOURCE_MAP,
+  DD_PROFILING_PPROF_PREFIX
 } = process.env
 
 class Config {
@@ -42,6 +43,8 @@ class Config {
       DD_PROFILING_SOURCE_MAP, true)
     const endpointCollection = coalesce(options.endpointCollection,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED, false)
+    const pprofPrefix = coalesce(options.pprofPrefix,
+      DD_PROFILING_PPROF_PREFIX)
 
     this.enabled = String(enabled) !== 'false'
     this.service = service
@@ -60,6 +63,7 @@ class Config {
     this.uploadTimeout = uploadTimeout
     this.sourceMap = sourceMap
     this.endpointCollection = endpointCollection
+    this.pprofPrefix = pprofPrefix
 
     const hostname = coalesce(options.hostname, DD_AGENT_HOST) || 'localhost'
     const port = coalesce(options.port, DD_TRACE_AGENT_PORT) || 8126
