@@ -16,6 +16,8 @@ describe('git_metadata', () => {
   let getRepositoryUrlStub
   let getCommitsToUploadStub
   let generatePackFilesForCommitsStub
+  let isShallowRepositoryStub
+  let unshallowRepositoryStub
 
   before(() => {
     process.env.DD_API_KEY = 'api-key'
@@ -33,6 +35,8 @@ describe('git_metadata', () => {
     getLatestCommitsStub = sinon.stub().returns(latestCommits)
     getCommitsToUploadStub = sinon.stub().returns(latestCommits)
     getRepositoryUrlStub = sinon.stub().returns('git@github.com:DataDog/dd-trace-js.git')
+    isShallowRepositoryStub = sinon.stub().returns(false)
+    unshallowRepositoryStub = sinon.stub()
 
     generatePackFilesForCommitsStub = sinon.stub().returns([temporaryPackFile])
 
@@ -41,13 +45,31 @@ describe('git_metadata', () => {
         getLatestCommits: getLatestCommitsStub,
         getRepositoryUrl: getRepositoryUrlStub,
         generatePackFilesForCommits: generatePackFilesForCommitsStub,
-        getCommitsToUpload: getCommitsToUploadStub
+        getCommitsToUpload: getCommitsToUploadStub,
+        isShallowRepository: isShallowRepositoryStub,
+        unshallowRepository: unshallowRepositoryStub
       }
     })
   })
 
   afterEach(() => {
     nock.cleanAll()
+  })
+
+  it('should unshallow if the repo is shallow', (done) => {
+    const scope = nock('https://api.test.com')
+      .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({ data: [] }))
+      .post('/api/v2/git/repository/packfile')
+      .reply(204)
+
+    isShallowRepositoryStub.returns(true)
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+      expect(unshallowRepositoryStub).to.have.been.called
+      expect(err).to.be.null
+      expect(scope.isDone()).to.be.true
+      done()
+    })
   })
 
   it('should request to /api/v2/git/repository/search_commits and /api/v2/git/repository/packfile', (done) => {
