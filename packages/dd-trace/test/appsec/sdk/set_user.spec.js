@@ -6,19 +6,19 @@ const tracer = require('../../../../../index')
 const getPort = require('get-port')
 const axios = require('axios')
 
-describe('setUser', () => {
-  describe('Check internal callings', () => {
+describe('set_user', () => {
+  describe('Internal API', () => {
     const tracer = {}
-    let setUser, mockSetTag, mockRootSpan, getRootSpan
+    let rootSpan, getRootSpan, setUser
 
     beforeEach(() => {
-      mockSetTag = sinon.stub()
-      mockRootSpan = {
+      rootSpan = {
         context: () => {
           return { _tags: { 'usr.id': 'mockUser' } }
         },
-        setTag: mockSetTag }
-      getRootSpan = sinon.stub().returns(mockRootSpan)
+        setTag: sinon.stub()
+      }
+      getRootSpan = sinon.stub().returns(rootSpan)
 
       const setUserModule = proxyquire('../../../src/appsec/sdk/set_user', {
         './utils': { getRootSpan }
@@ -27,43 +27,39 @@ describe('setUser', () => {
       setUser = setUserModule.setUser
     })
 
-    it('setUser should call setTag with proper values', () => {
-      const user = { id: 'user' }
-      setUser(tracer, user)
-      expect(mockSetTag).to.be.calledOnceWithExactly('usr.id', 'user')
-    })
+    describe('setUser', () => {
+      it('should not call setTag when no user is passed', () => {
+        setUser(tracer)
+        expect(rootSpan.setTag).to.not.have.been.called
+      })
 
-    it('setUser should not call setTag when no user is passed', () => {
-      setUser(tracer)
-      expect(mockSetTag).not.to.have.been.called
-    })
+      it('should not call setTag when user is empty', () => {
+        const user = {}
+        setUser(tracer, user)
+        expect(rootSpan.setTag).to.not.have.been.called
+      })
 
-    it('setUser should not call setTag when user is empty', () => {
-      const user = {}
-      setUser(tracer, user)
-      expect(mockSetTag).not.to.have.been.called
-    })
+      it('should not call setTag when rootSpan is not available', () => {
+        getRootSpan.returns(undefined)
 
-    it('setUser should call setTag with every attribute', () => {
-      const user = {
-        id: '123',
-        email: 'a@b.c',
-        custom: 'hello'
-      }
+        setUser(tracer, { id: 'user' })
+        expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
+        expect(rootSpan.setTag).to.not.have.been.called
+      })
 
-      setUser(tracer, user)
-      expect(mockSetTag).to.have.been.calledThrice
-      expect(mockSetTag.firstCall).to.have.been.calledWithExactly('usr.id', '123')
-      expect(mockSetTag.secondCall).to.have.been.calledWithExactly('usr.email', 'a@b.c')
-      expect(mockSetTag.thirdCall).to.have.been.calledWithExactly('usr.custom', 'hello')
-    })
+      it('should call setTag with every attribute', () => {
+        const user = {
+          id: '123',
+          email: 'a@b.c',
+          custom: 'hello'
+        }
 
-    it('setUser should not call setUserTags when rootSpan is not available', () => {
-      getRootSpan.returns(undefined)
-
-      setUser(tracer, { id: 'user' })
-      expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
-      expect(mockSetTag).not.to.have.been.called
+        setUser(tracer, user)
+        expect(rootSpan.setTag).to.have.been.calledThrice
+        expect(rootSpan.setTag.firstCall).to.have.been.calledWithExactly('usr.id', '123')
+        expect(rootSpan.setTag.secondCall).to.have.been.calledWithExactly('usr.email', 'a@b.c')
+        expect(rootSpan.setTag.thirdCall).to.have.been.calledWithExactly('usr.custom', 'hello')
+      })
     })
   })
 
@@ -99,16 +95,22 @@ describe('setUser', () => {
     describe('setUser', () => {
       it('should set a proper user', (done) => {
         controller = (req, res) => {
-          tracer.appsec.setUser({ id: 'testUser' })
+          tracer.appsec.setUser({
+            id: 'testUser',
+            email: 'a@b.c',
+            custom: 'hello'
+          })
           res.end()
         }
         agent.use(traces => {
           expect(traces[0][0].meta).to.have.property('usr.id', 'testUser')
+          expect(traces[0][0].meta).to.have.property('usr.email', 'a@b.c')
+          expect(traces[0][0].meta).to.have.property('usr.custom', 'hello')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
 
-      it('should prevail last user on consecutive callings', (done) => {
+      it('should override user on consecutive callings', (done) => {
         controller = (req, res) => {
           tracer.appsec.setUser({ id: 'testUser' })
           tracer.appsec.setUser({ id: 'testUser2' })
