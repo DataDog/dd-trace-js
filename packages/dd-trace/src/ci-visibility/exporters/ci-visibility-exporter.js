@@ -108,6 +108,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         env: this._config.env,
         service: this._config.service,
         isEvpProxy: !!this._isUsingEvpProxy,
+        custom: getTestConfigurationTags(this._config.tags),
         ...testConfiguration
       }
       getSkippableSuitesRequest(configuration, callback)

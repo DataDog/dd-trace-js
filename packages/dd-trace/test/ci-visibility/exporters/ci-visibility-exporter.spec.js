@@ -201,6 +201,52 @@ describe('CI Visibility Exporter', () => {
       })
     })
     context('if ITR is enabled and the tracer can use CI Vis Protocol', () => {
+      it('should add custom configurations', (done) => {
+        let customConfig
+
+        nock(`http://localhost:${port}`)
+          .post('/api/v2/git/repository/search_commits')
+          .reply(200, JSON.stringify({
+            data: []
+          }))
+          .post('/api/v2/git/repository/packfile')
+          .reply(202, '')
+
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/tests/skippable', function (body) {
+            customConfig = body.data.attributes.configurations.custom
+            return true
+          })
+          .reply(200, JSON.stringify({
+            data: [{
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/test/ci-visibility-test.js'
+              }
+            }]
+          }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          port,
+          isIntelligentTestRunnerEnabled: true,
+          isGitUploadEnabled: true,
+          tags: {
+            'test.configuration.my_custom_config_2': 'my_custom_config_value_2'
+          }
+        })
+
+        ciVisibilityExporter._itrConfig = { isSuitesSkippingEnabled: true }
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+
+        ciVisibilityExporter.getSkippableSuites({}, () => {
+          expect(scope.isDone()).to.be.true
+          expect(customConfig).to.eql({
+            'my_custom_config_2': 'my_custom_config_value_2'
+          })
+          done()
+        })
+        ciVisibilityExporter.sendGitMetadata()
+      })
       it('should request the API after git upload promise is resolved', (done) => {
         nock(`http://localhost:${port}`)
           .post('/api/v2/git/repository/search_commits')
