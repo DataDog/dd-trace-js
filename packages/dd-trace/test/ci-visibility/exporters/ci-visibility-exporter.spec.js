@@ -83,6 +83,39 @@ describe('CI Visibility Exporter', () => {
       })
     })
     context('if ITR is enabled', () => {
+      it('should add custom configurations', (done) => {
+        let customConfig
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/libraries/tests/services/setting', function (body) {
+            customConfig = body.data.attributes.configurations.custom
+            return true
+          })
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                code_coverage: true,
+                tests_skipping: true
+              }
+            }
+          }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          port,
+          isIntelligentTestRunnerEnabled: true,
+          tags: {
+            'test.configuration.my_custom_config': 'my_custom_config_value'
+          }
+        })
+
+        ciVisibilityExporter.getItrConfiguration({}, (err, itrConfig) => {
+          expect(scope.isDone()).to.be.true
+          expect(customConfig).to.eql({
+            'my_custom_config': 'my_custom_config_value'
+          })
+          done()
+        })
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      })
       it('should request the API after EVP proxy is resolved', (done) => {
         const scope = nock(`http://localhost:${port}`)
           .post('/api/v2/libraries/tests/services/setting')

@@ -8,6 +8,19 @@ const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligen
 const log = require('../../log')
 const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
 
+function getTestConfigurationTags (tags) {
+  if (!tags) {
+    return {}
+  }
+  return Object.keys(tags).reduce((acc, key) => {
+    if (key.startsWith('test.configuration.')) {
+      const [, configKey] = key.split('test.configuration.')
+      acc[configKey] = tags[key]
+    }
+    return acc
+  }, {})
+}
+
 function getIsTestSessionTrace (trace) {
   return trace.some(span =>
     span.type === 'test_session_end' || span.type === 'test_suite_end' || span.type === 'test_module_end'
@@ -119,6 +132,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         env: this._config.env,
         service: this._config.service,
         isEvpProxy: !!this._isUsingEvpProxy,
+        custom: getTestConfigurationTags(this._config.tags),
         ...testConfiguration
       }
       getItrConfigurationRequest(configuration, (err, itrConfig) => {
