@@ -14,7 +14,7 @@ const { gunzipSync } = require('zlib')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const logger = require('../../../src/log')
-const { perftools } = require('@datadog/pprof/proto/profile')
+const { perftools } = require('../proto/profile')
 const semver = require('semver')
 const version = require('../../../../../package.json').version
 
