@@ -71,7 +71,7 @@ describe('path-traversal-analyzer', () => {
     })
 
     proxyPathAnalyzer._isVulnerable(undefined, iastContext)
-    expect(isTainted).to.have.been.callCount(0)
+    expect(isTainted).not.to.have.been.called
   })
 
   it('if context and value are valid it should call isTainted', () => {
@@ -152,7 +152,7 @@ describe('path-traversal-analyzer', () => {
     hasQuota.returns(true)
 
     proxyPathAnalyzer.analyze(['arg1'])
-    expect(addVulnerability).to.be.callCount(0)
+    expect(addVulnerability).not.have.been.called
   })
 })
 
