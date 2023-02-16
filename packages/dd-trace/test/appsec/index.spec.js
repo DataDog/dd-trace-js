@@ -457,8 +457,6 @@ describe('AppSec Index', () => {
     })
   })
 
-  // TODO When the waf is updated and we have whole information, we should add more plugin style tests,
-  //  to execute real express/body-parser/cookie-parser and do request that will be blocked or not.
   describe('checkRequestData', () => {
     let abortController, req, res, rootSpan
     beforeEach(() => {
@@ -591,6 +589,55 @@ describe('AppSec Index', () => {
 
         expect(Gateway.propagate).to.been.calledOnceWith({
           'server.request.cookies': { key: ['value'] }
+        })
+      })
+    })
+
+    describe('onRequestQueryParsed', () => {
+      const queryParserReadChannel = dc.channel('datadog:query:read:finish')
+
+      it('Should not block without query', () => {
+        queryParserReadChannel.publish({
+          req, res, abortController
+        })
+
+        expect(abortController.abort).not.to.been.called
+        expect(res.end).not.to.been.called
+      })
+
+      it('Should not block with query by default', () => {
+        req.query = { key: 'value' }
+
+        queryParserReadChannel.publish({
+          req, res, abortController
+        })
+
+        expect(abortController.abort).not.to.been.called
+        expect(res.end).not.to.been.called
+      })
+
+      it('Should block when it is detected as attack', () => {
+        req.query = { key: 'value' }
+        sinon.stub(Gateway, 'propagate').returns(['block'])
+
+        queryParserReadChannel.publish({
+          req, res, abortController
+        })
+
+        expect(abortController.abort).to.been.called
+        expect(res.end).to.been.called
+      })
+
+      it('Should propagate request query', () => {
+        req.query = { key: 'value' }
+        sinon.stub(Gateway, 'propagate')
+
+        queryParserReadChannel.publish({
+          req, res, abortController
+        })
+
+        expect(Gateway.propagate).to.been.calledOnceWith({
+          'server.request.query': { key: 'value' }
         })
       })
     })
