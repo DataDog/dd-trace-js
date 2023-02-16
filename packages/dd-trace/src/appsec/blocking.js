@@ -3,6 +3,8 @@
 const fs = require('fs')
 let templateHtml, templateJson
 function block (req, res, topSpan, abortController) {
+  if (res.headersSent) return 
+
   let type
   let body
 
