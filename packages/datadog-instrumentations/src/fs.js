@@ -12,7 +12,7 @@ const startChannel = channel('apm:fs:operation:start')
 const finishChannel = channel('apm:fs:operation:finish')
 const errorChannel = channel('apm:fs:operation:error')
 const ddFhSym = Symbol('ddFileHandle')
-const ddFsParentSym = Symbol('ddFsParentCallAsyncId')
+const parentIdMap = new WeakMap()
 let kHandle, kDirReadPromisified, kDirClosePromisified
 
 const paramsByMethod = {
@@ -183,17 +183,17 @@ function createWrapDirAsyncIterator () {
 function isInnerCall (innerResource) {
   if (this === undefined) return true
 
-  if (!this[ddFsParentSym]) {
-    this[ddFsParentSym] = innerResource.asyncId()
+  if (!parentIdMap.has(this)) {
+    parentIdMap.set(this, innerResource.asyncId())
     return false
   }
 
-  return this[ddFsParentSym] !== innerResource.asyncId()
+  return parentIdMap.get(this) !== innerResource.asyncId()
 }
 
 function removeFlagForInnerCall (innerResource) {
-  if (this && this[ddFsParentSym] && this[ddFsParentSym] === innerResource.asyncId()) {
-    this[ddFsParentSym] = undefined
+  if (this && parentIdMap.get(this) === innerResource.asyncId()) {
+    parentIdMap.delete(this)
   }
 }
 
