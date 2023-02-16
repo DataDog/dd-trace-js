@@ -41,4 +41,7 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn type:test
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 14
       - run: yarn type:doc
