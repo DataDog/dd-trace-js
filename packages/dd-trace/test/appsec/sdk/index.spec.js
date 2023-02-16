@@ -7,6 +7,7 @@ describe('Appsec SDK', () => {
   let checkUserAndSetUser, blockRequest, setUser, loadTemplates
   let appsecSdk
   const tracer = {}
+  const config = {}
 
   beforeEach(() => {
     trackUserLoginSuccessEvent = sinon.stub()
@@ -24,7 +25,11 @@ describe('Appsec SDK', () => {
       './set_user': { setUser }
     })
 
-    appsecSdk = new AppsecSdk(tracer)
+    appsecSdk = new AppsecSdk(tracer, config)
+  })
+
+  it('should call loadTemplates when instanciated', () => {
+    expect(loadTemplates).to.have.been.calledOnceWithExactly(config)
   })
 
   it('trackUserLoginSuccessEvent should call internal function with proper params', () => {
