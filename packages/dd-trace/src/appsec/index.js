@@ -17,6 +17,7 @@ const { block, loadTemplates, loadTemplatesAsync } = require('./blocking')
 
 const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
 const cookieParserChannel = dc.channel('datadog:cookie-parser:read:finish')
+const queryParserChannel = dc.channel('datadog:query:read:finish')
 
 let isEnabled = false
 let config
@@ -55,6 +56,7 @@ function enableFromRules (_config, rules) {
   incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
   bodyParserChannel.subscribe(onRequestBodyParsed)
   cookieParserChannel.subscribe(onRequestCookieParsed)
+  queryParserChannel.subscribe(onRequestQueryParsed)
 
   // add fields needed for HTTP context reporting
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_HEADERS)
@@ -174,6 +176,17 @@ function getCookiesPayload (req) {
 function onRequestCookieParsed (channelData) {
   checkRequestData(channelData, getCookiesPayload(channelData.req))
 }
+function getQueryPayload (req) {
+  if (req.query && typeof req.query === 'object') {
+    return {
+      [addresses.HTTP_INCOMING_QUERY]: req.query
+    }
+  }
+  return null
+}
+function onRequestQueryParsed (channelData) {
+  checkRequestData(channelData, getQueryPayload(channelData.req))
+}
 
 function checkRequestData ({ req, res, abortController }, payload) {
   if (payload) {
@@ -201,6 +214,7 @@ function disable () {
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
   if (bodyParserChannel.hasSubscribers) bodyParserChannel.unsubscribe(onRequestBodyParsed)
   if (cookieParserChannel.hasSubscribers) cookieParserChannel.unsubscribe(onRequestCookieParsed)
+  if (queryParserChannel.hasSubscribers) queryParserChannel.unsubscribe(onRequestQueryParsed)
 }
 
 function handleResults (results, req, res, topSpan, abortController) {
