@@ -24,6 +24,7 @@ const {
   DD_TRACE_AGENT_PORT,
   DD_PROFILING_UPLOAD_TIMEOUT,
   DD_PROFILING_SOURCE_MAP,
+  DD_PROFILING_UPLOAD_PERIOD,
   DD_PROFILING_PPROF_PREFIX
 } = process.env
 
@@ -36,9 +37,9 @@ class Config {
     const version = coalesce(options.version, DD_VERSION)
     const functionname = process.env.AWS_LAMBDA_FUNCTION_NAME
     // Must be longer than one minute so pad with five seconds
-    const flushInterval = coalesce(options.interval, 65 * 1000)
+    const flushInterval = coalesce(options.interval, Number(DD_PROFILING_UPLOAD_PERIOD) * 1000, 65 * 1000)
     const uploadTimeout = coalesce(options.uploadTimeout,
-      DD_PROFILING_UPLOAD_TIMEOUT, 60 * 1000)
+      Number(DD_PROFILING_UPLOAD_TIMEOUT), 60 * 1000)
     const sourceMap = coalesce(options.sourceMap,
       DD_PROFILING_SOURCE_MAP, true)
     const endpointCollection = coalesce(options.endpointCollection,
