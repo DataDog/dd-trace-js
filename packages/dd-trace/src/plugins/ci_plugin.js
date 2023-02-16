@@ -5,7 +5,14 @@ const {
   getTestCommonTags,
   getCodeOwnersForFilename,
   TEST_CODE_OWNERS,
-  CI_APP_ORIGIN
+  CI_APP_ORIGIN,
+  getTestSessionCommonTags,
+  getTestModuleCommonTags,
+  TEST_SUITE_ID,
+  TEST_MODULE_ID,
+  TEST_SESSION_ID,
+  TEST_COMMAND,
+  TEST_BUNDLE
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -40,6 +47,34 @@ module.exports = class CiPlugin extends Plugin {
         onDone({ err, skippableSuites })
       })
     })
+
+    this.addSub(`ci:${this.constructor.name}:session:start`, ({ command, frameworkVersion, rootDir }) => {
+      const childOf = getTestParentSpan(this.tracer)
+      const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion)
+      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion)
+
+      this.command = command
+      this.frameworkVersion = frameworkVersion
+      // only for playwright
+      this.rootDir = rootDir
+
+      this.testSessionSpan = this.tracer.startSpan(`${this.constructor.name}.test_session`, {
+        childOf,
+        tags: {
+          [COMPONENT]: this.constructor.name,
+          ...this.testEnvironmentMetadata,
+          ...testSessionSpanMetadata
+        }
+      })
+      this.testModuleSpan = this.tracer.startSpan(`${this.constructor.name}.test_module`, {
+        childOf: this.testSessionSpan,
+        tags: {
+          [COMPONENT]: this.constructor.name,
+          ...this.testEnvironmentMetadata,
+          ...testModuleSpanMetadata
+        }
+      })
+    })
   }
 
   configure (config) {
@@ -70,25 +105,42 @@ module.exports = class CiPlugin extends Plugin {
     }
   }
 
-  startTestSpan (name, suite, childOf, frameworkVersion, extraTags) {
-    const parent = childOf || getTestParentSpan(this.tracer)
-    const testCommonTags = getTestCommonTags(name, suite, frameworkVersion)
+  startTestSpan (testName, testSuite, testSuiteSpan, extraTags = {}) {
+    const childOf = getTestParentSpan(this.tracer)
 
-    const testTags = {
-      ...testCommonTags,
+    let testTags = {
+      ...getTestCommonTags(testName, testSuite, this.frameworkVersion),
       [COMPONENT]: this.constructor.name,
       ...extraTags
     }
 
-    const codeOwners = getCodeOwnersForFilename(suite, this.codeOwnersEntries)
-
+    const codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
     if (codeOwners) {
       testTags[TEST_CODE_OWNERS] = codeOwners
     }
 
+    if (testSuiteSpan) {
+      // This is a hack to get good time resolution on test events, while keeping
+      // the test event as the root span of its trace.
+      childOf._trace.startTime = testSuiteSpan.context()._trace.startTime
+      childOf._trace.ticks = testSuiteSpan.context()._trace.ticks
+
+      const suiteTags = {
+        [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
+        [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
+        [TEST_MODULE_ID]: testSuiteSpan.context()._parentId.toString(10),
+        [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
+        [TEST_BUNDLE]: testSuiteSpan.context()._tags[TEST_COMMAND]
+      }
+      testTags = {
+        ...testTags,
+        ...suiteTags
+      }
+    }
+
     const testSpan = this.tracer
       .startSpan(`${this.constructor.name}.test`, {
-        childOf: parent,
+        childOf,
         tags: {
           ...this.testEnvironmentMetadata,
           ...testTags

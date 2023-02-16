@@ -8,15 +8,7 @@ const {
   TEST_STATUS,
   finishAllTraceSpans,
   getTestSuitePath,
-  getTestParentSpan,
-  getTestSessionCommonTags,
-  getTestModuleCommonTags,
-  getTestSuiteCommonTags,
-  TEST_SUITE_ID,
-  TEST_MODULE_ID,
-  TEST_SESSION_ID,
-  TEST_COMMAND,
-  TEST_BUNDLE
+  getTestSuiteCommonTags
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -30,32 +22,6 @@ class CucumberPlugin extends CiPlugin {
     super(...args)
 
     this.sourceRoot = process.cwd()
-
-    this.addSub('ci:cucumber:session:start', ({ command, frameworkVersion }) => {
-      const childOf = getTestParentSpan(this.tracer)
-      const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion)
-
-      this.command = command
-      this.frameworkVersion = frameworkVersion
-      this.testSessionSpan = this.tracer.startSpan('cucumber.test_session', {
-        childOf,
-        tags: {
-          [COMPONENT]: this.constructor.name,
-          ...this.testEnvironmentMetadata,
-          ...testSessionSpanMetadata
-        }
-      })
-
-      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion)
-      this.testModuleSpan = this.tracer.startSpan('cucumber.test_module', {
-        childOf: this.testSessionSpan,
-        tags: {
-          [COMPONENT]: this.constructor.name,
-          ...this.testEnvironmentMetadata,
-          ...testModuleSpanMetadata
-        }
-      })
-    })
 
     this.addSub('ci:cucumber:session:finish', (status) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -138,32 +104,10 @@ class CucumberPlugin extends CiPlugin {
   }
 
   startTestSpan (testName, testSuite) {
-    const childOf = getTestParentSpan(this.tracer)
-    // TODO: move this logic to CiPlugin once every framework supports test suite level visibility
-    // This is a hack to get good time resolution on test events, while keeping
-    // the test event as the root span of its trace.
-    childOf._trace.startTime = this.testSessionSpan.context()._trace.startTime
-    childOf._trace.ticks = this.testSessionSpan.context()._trace.ticks
-
-    const testSuiteTags = {}
-    const testSuiteId = this.testSuiteSpan.context().toSpanId()
-    testSuiteTags[TEST_SUITE_ID] = testSuiteId
-
-    const testSessionId = this.testSessionSpan.context().toTraceId()
-    testSuiteTags[TEST_SESSION_ID] = testSessionId
-    testSuiteTags[TEST_COMMAND] = this.command
-
-    const testModuleId = this.testModuleSpan.context().toSpanId()
-    testSuiteTags[TEST_MODULE_ID] = testModuleId
-    testSuiteTags[TEST_COMMAND] = this.command
-    testSuiteTags[TEST_BUNDLE] = this.command
-
     return super.startTestSpan(
       testName,
       testSuite,
-      childOf,
-      this.frameworkVersion,
-      testSuiteTags
+      this.testSuiteSpan
     )
   }
 }
