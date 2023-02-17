@@ -1,4 +1,4 @@
-import { ClientRequest, IncomingMessage, ServerResponse } from "http";
+import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
 import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
@@ -643,6 +643,35 @@ export declare interface Appsec {
    * @beta This method is in beta and could change in future versions.
    */
   trackCustomEvent(eventName: string, metadata?: { [key: string]: string }): void
+
+  /**
+   * Checks if the passed user should be blocked according to AppSec rules.
+   * If no user is linked to the current trace, will link the passed user to it.
+   * @param {User} user Properties of the authenticated user. Accepts custom fields.
+   * @return {boolean} Indicates whether the user should be blocked.
+   *
+   * @beta This method is in beta and could change in the future
+   */
+  isUserBlocked(user: User): boolean
+
+  /**
+   * Sends a "blocked" template response based on the request accept header and ends the response.
+   * **You should stop processing the request after calling this function!**
+   * @param {IncomingMessage} req Can be passed to force which request to act on. Optional.
+   * @param {OutgoingMessage} res Can be passed to force which response to act on. Optional.
+   * @return {boolean} Indicates if the action was successful.
+   *
+   * @beta This method is in beta and could change in the future
+   */
+  blockRequest(req?: IncomingMessage, res?: OutgoingMessage): boolean
+
+  /**
+   * Links an authenticated user to the current trace.
+   * @param {User} user Properties of the authenticated user. Accepts custom fields.
+   *
+   * @beta This method is in beta and could change in the future
+   */
+  setUser(user: User): void
 }
 
 /** @hidden */
