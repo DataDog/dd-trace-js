@@ -23,7 +23,7 @@ let __lambdaTimeout
  */
 function checkTimeout (context) {
   let remainingTimeInMillis = context.getRemainingTimeInMillis()
-  const apmFlushDeadline = parseInt(process.env.DD_APM_FLUSH_DEADLINE)
+  const apmFlushDeadline = parseInt(process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS)
   if (apmFlushDeadline && apmFlushDeadline <= remainingTimeInMillis) {
     remainingTimeInMillis = apmFlushDeadline
   }
