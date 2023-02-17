@@ -399,7 +399,7 @@ describe('Plugin', () => {
 
             expect(queryText).to.equal(
               `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0',` +
-              `traceparent='01-${traceId}-${spanId}-00'*/ SELECT $1::text as message`)
+              `traceparent='00-${traceId}-${spanId}-00'*/ SELECT $1::text as message`)
           }).then(done, done)
 
           client.query('SELECT $1::text as message', ['Hello World!'], (err, result) => {

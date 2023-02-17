@@ -302,6 +302,7 @@ class TextMapPropagator {
     const matches = headerValue.trim().match(traceparentExpr)
     if (matches.length) {
       const [ version, traceId, spanId, flags, tail ] = matches.slice(1)
+      const traceparent = { version }
       const tracestate = TraceState.fromString(carrier.tracestate)
       if (invalidSegment.test(traceId)) return null
       if (invalidSegment.test(spanId)) return null
@@ -316,6 +317,7 @@ class TextMapPropagator {
         traceId: id(traceId, 16),
         spanId: id(spanId, 16),
         sampling: { priority: parseInt(flags, 10) & 1 ? 1 : 0 },
+        traceparent,
         tracestate
       })
 
