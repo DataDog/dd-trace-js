@@ -10,7 +10,8 @@ describe('CI Visibility Agentless Exporter', () => {
   const url = new URL('http://www.example.com')
 
   beforeEach(() => {
-    sinon.stub(cp, 'execSync').returns('falsssse')
+    // to make sure `isShallowRepository` in `git.js` returns false
+    sinon.stub(cp, 'execSync').returns('false')
     nock.cleanAll()
   })
   afterEach(() => {
