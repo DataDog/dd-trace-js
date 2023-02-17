@@ -9,7 +9,8 @@ const axios = require('axios')
 describe('set_user', () => {
   describe('Internal API', () => {
     const tracer = {}
-    let rootSpan, getRootSpan, setUser
+
+    let rootSpan, getRootSpan, setUser, log
 
     beforeEach(() => {
       rootSpan = {
@@ -17,8 +18,13 @@ describe('set_user', () => {
       }
       getRootSpan = sinon.stub().returns(rootSpan)
 
+      log = {
+        warn: sinon.stub()
+      }
+
       const setUserModule = proxyquire('../../../src/appsec/sdk/set_user', {
-        './utils': { getRootSpan }
+        './utils': { getRootSpan },
+        '../../log': log
       })
 
       setUser = setUserModule.setUser
@@ -27,12 +33,14 @@ describe('set_user', () => {
     describe('setUser', () => {
       it('should not call setTag when no user is passed', () => {
         setUser(tracer)
+        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid user provided to setUser')
         expect(rootSpan.setTag).to.not.have.been.called
       })
 
       it('should not call setTag when user is empty', () => {
         const user = {}
         setUser(tracer, user)
+        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid user provided to setUser')
         expect(rootSpan.setTag).to.not.have.been.called
       })
 
@@ -41,6 +49,7 @@ describe('set_user', () => {
 
         setUser(tracer, { id: 'user' })
         expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
+        expect(log.warn).to.have.been.calledOnceWithExactly('Root span not available in setUser')
         expect(rootSpan.setTag).to.not.have.been.called
       })
 
@@ -52,6 +61,7 @@ describe('set_user', () => {
         }
 
         setUser(tracer, user)
+        expect(log.warn).to.not.have.been.called
         expect(rootSpan.setTag).to.have.been.calledThrice
         expect(rootSpan.setTag.firstCall).to.have.been.calledWithExactly('usr.id', '123')
         expect(rootSpan.setTag.secondCall).to.have.been.calledWithExactly('usr.email', 'a@b.c')
