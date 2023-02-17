@@ -26,6 +26,7 @@ function isShallowRepository () {
 }
 
 function unshallowRepository () {
+  console.log('calling unshallow!')
   try {
     execSync('git config remote.origin.partialclonefilter "blob:none"', { stdio: 'pipe' })
     execSync('git fetch --shallow-since="1 month ago" --update-shallow --refetch', { stdio: 'pipe' })

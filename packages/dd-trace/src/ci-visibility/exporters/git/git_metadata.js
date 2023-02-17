@@ -158,7 +158,7 @@ function sendGitMetadata (url, isEvpProxy, callback) {
   if (!repositoryUrl) {
     return callback(new Error('Repository URL is empty'))
   }
-
+  console.log('isShallowRepository', isShallowRepository())
   if (isShallowRepository()) {
     unshallowRepository()
   }
