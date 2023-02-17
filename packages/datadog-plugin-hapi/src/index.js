@@ -26,7 +26,11 @@ class HapiPlugin extends RouterPlugin {
       web.setRoute(req, route)
     })
 
-    this.addSub(`apm:hapi:request:error`, this.addError)
+    this.addSub('apm:hapi:request:error', error => {
+      if (!error || !error.isBoom || !this.config.validateStatus(error.output.statusCode)) {
+        this.addError(error)
+      }
+    })
 
     this.addSub('apm:hapi:extension:enter', ({ req }) => {
       this.enter(this._requestSpans.get(req))
