@@ -315,6 +315,35 @@ describe('Plugin', () => {
           .get(`http://localhost:${port}/user/123`)
           .catch(() => {})
       })
+
+      it('should handle boom client errors', done => {
+        const Boom = require('../../../versions/@hapi/boom@9.1.4').get()
+        const error = Boom.badRequest()
+
+        server.route({
+          method: 'GET',
+          path: '/user/{id}',
+          handler: async (request, h) => {
+            if (typeof h === 'function') {
+              h(error)
+            } else {
+              throw error
+            }
+          }
+        })
+
+        agent
+          .use(traces => {
+            expect(traces[0][0]).to.have.property('error', 0)
+            expect(traces[0][0].meta).to.have.property('component', 'hapi')
+          })
+          .then(done)
+          .catch(done)
+
+        axios
+          .get(`http://localhost:${port}/user/123`)
+          .catch(() => {})
+      })
     })
   })
 })
