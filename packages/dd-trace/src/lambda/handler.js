@@ -25,7 +25,7 @@ function checkTimeout (context) {
   let remainingTimeInMillis = context.getRemainingTimeInMillis()
 
   let apmFlushDeadline = process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS
-  if (!apmFlushDeadline) { 
+  if (!apmFlushDeadline) {
     apmFlushDeadline = process.env.DD_APM_FLUSH_DEADLINE
   }
   apmFlushDeadline = parseInt(apmFlushDeadline)

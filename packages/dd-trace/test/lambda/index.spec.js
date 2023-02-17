@@ -53,53 +53,61 @@ describe('lambda', () => {
       await checkTraces
     })
 
-    it('traces error on impending timeout with default deadline', async () => {
-      const _context = {
-        getRemainingTimeInMillis: () => 150
-      }
-      const _event = {}
-      const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
-      const app = require(_handlerPath)
-      datadog = require('./fixtures/datadog-lambda')
-      let result
-      (datadog(app.handler)(_event, _context)).then((data) => { result = data })
-      setTimeout(() => {
-        expect(result).to.equal(undefined)
-      }, _context.getRemainingTimeInMillis())
+    describe('timeout spans', () => {
+      const deadlines = [
+        {
+          envVar: 'default'
+        },
+        {
+          envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
+          value: 100
+        },
+        {
+          envVar: 'DD_APM_FLUSH_DEADLINE',
+          value: 100
+        }
+      ]
 
-      const checkTraces = agent.use((_traces) => {
-        // First trace, since errors are tagged at root span level.
-        const trace = _traces[0][0]
-        expect(trace.error).to.equal(1)
-        expect(trace.meta['error.type']).to.equal('Impending Timeout')
+      deadlines.forEach(deadline => {
+        const flushDeadlineEnvVar = deadline.envVar
+        const customDeadline = deadline.value
+        const isDefault = flushDeadlineEnvVar === 'default'
+
+        it(`traces error on impending timeout using ${flushDeadlineEnvVar} deadline`, () => {
+          process.env[flushDeadlineEnvVar] = customDeadline
+
+          const _context = {
+            // If using default, we set the value to 150, since the
+            // fixture function we're using sleeps for 200ms
+            getRemainingTimeInMillis: () => isDefault ? 150 : 400
+          }
+          const _event = {}
+
+          const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
+          const app = require(_handlerPath)
+          datadog = require('./fixtures/datadog-lambda')
+          let result
+          (datadog(app.handler)(_event, _context)).then((data) => { result = data })
+
+          // If default, then we don't wait for value from deadline, we just use
+          // AWS Lambda remaining time in millis
+          const timeoutDeadline = isDefault ? _context.getRemainingTimeInMillis() : customDeadline - 50
+          setTimeout(() => {
+            expect(result).to.equal(undefined)
+          }, timeoutDeadline)
+
+          const checkTraces = agent.use((_traces) => {
+            // First trace, since errors are tagged at root span level.
+            const trace = _traces[0][0]
+            expect(trace.error).to.equal(1)
+            expect(trace.meta['error.type']).to.equal('Impending Timeout')
+          })
+
+          // We change from async/await here since testing multiple tests
+          // with iterators is tricky, forof won't work to use it here.
+          checkTraces.then(() => {})
+        })
       })
-      await checkTraces
-    })
-
-    it('traces error on impending timeout with custom deadline using DD_APM_FLUSH_DEADLINE_MILLISECONDS', async () => {
-      const CUSTOM_DEADLINE = 100
-      process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS = CUSTOM_DEADLINE
-
-      const _context = {
-        getRemainingTimeInMillis: () => 400
-      }
-      const _event = {}
-      const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
-      const app = require(_handlerPath)
-      datadog = require('./fixtures/datadog-lambda')
-      let result
-      (datadog(app.handler)(_event, _context)).then((data) => { result = data })
-      setTimeout(() => {
-        expect(result).to.equal(undefined)
-      }, CUSTOM_DEADLINE - 50)
-
-      const checkTraces = agent.use((_traces) => {
-        // First trace, since errors are tagged at root span level.
-        const trace = _traces[0][0]
-        expect(trace.error).to.equal(1)
-        expect(trace.meta['error.type']).to.equal('Impending Timeout')
-      })
-      await checkTraces
     })
   })
 })
