@@ -239,6 +239,19 @@ describe('user_blocking', () => {
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
       })
+
+      it('should not set the proper tags when response has already been sent', (done) => {
+        controller = (req, res) => {
+          res.end()
+          const ret = tracer.appsec.blockRequest()
+          expect(ret).to.be.true
+        }
+        agent.use(traces => {
+          expect(traces[0][0].meta).to.not.have.property('appsec.blocked', 'true')
+          expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+        }).then(done).catch(done)
+        axios.get(`http://localhost:${port}/`)
+      })
     })
   })
 })
