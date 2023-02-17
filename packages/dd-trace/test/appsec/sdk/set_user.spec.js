@@ -10,7 +10,7 @@ describe('set_user', () => {
   describe('Internal API', () => {
     const tracer = {}
 
-    let rootSpan, getRootSpan, setUser, log
+    let rootSpan, getRootSpan, log, setUser
 
     beforeEach(() => {
       rootSpan = {
