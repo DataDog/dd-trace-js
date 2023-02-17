@@ -3,6 +3,7 @@
 const log = require('../../log')
 const { getRootSpan } = require('./utils')
 const { MANUAL_KEEP } = require('../../../../../ext/tags')
+const { setUserTags } = require('./set_user')
 
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
@@ -17,8 +18,7 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
     return
   }
 
-  // TODO: use sdk._setUser(user, rootSpan) (available in User Blocking PR #2710)
-  tracer.setUser(user)
+  setUserTags(user, rootSpan)
 
   trackEvent(tracer, 'users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan)
 }

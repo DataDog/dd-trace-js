@@ -70,12 +70,12 @@ function abortEnable (err) {
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
-  const topSpan = web.root(req)
-  if (!topSpan) return
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
 
   const clientIp = extractIp(config, req)
 
-  topSpan.addTags({
+  rootSpan.addTags({
     '_dd.appsec.enabled': 1,
     '_dd.runtime_family': 'nodejs',
     [HTTP_CLIENT_IP]: clientIp
@@ -97,7 +97,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
 
     for (const entry of results) {
       if (entry && entry.includes('block')) {
-        block(req, res, topSpan, abortController)
+        block(req, res, rootSpan, abortController)
         break
       }
     }

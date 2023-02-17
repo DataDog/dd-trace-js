@@ -1,0 +1,44 @@
+{
+  "version": "2.2",
+  "metadata": {
+    "rules_version": "1.4.2"
+  },
+  "rules": [
+    {
+      "id": "blk-001-002",
+      "name": "Block User Addresses",
+      "tags": {
+        "type": "block_user",
+        "category": "security_response"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "usr.id"
+              }
+            ],
+            "data": "blocked_users"
+          },
+          "operator": "exact_match"
+        }
+      ],
+      "transformers": [],
+      "on_match": [
+        "block"
+      ]
+    }
+  ],
+  "rules_data": [
+    {
+      "data": [
+        {
+          "value": "blockedUser"
+        }
+      ],
+      "id": "blocked_users",
+      "type": "data_with_expiration"
+    }
+  ]
+}
