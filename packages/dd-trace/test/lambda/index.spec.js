@@ -53,7 +53,7 @@ describe('lambda', () => {
       await checkTraces
     })
 
-    it('returns traces with error when handler is about to timeout', async () => {
+    it('traces error on impending timeout with default deadline', async () => {
       const _context = {
         getRemainingTimeInMillis: () => 150
       }
@@ -68,6 +68,33 @@ describe('lambda', () => {
       }, _context.getRemainingTimeInMillis())
 
       const checkTraces = agent.use((_traces) => {
+        // First trace, since errors are tagged at root span level.
+        const trace = _traces[0][0]
+        expect(trace.error).to.equal(1)
+        expect(trace.meta['error.type']).to.equal('Impending Timeout')
+      })
+      await checkTraces
+    })
+
+    it('traces error on impending timeout with custom deadline using DD_APM_FLUSH_DEADLINE_MILLISECONDS', async () => {
+      const CUSTOM_DEADLINE = 100
+      process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS = CUSTOM_DEADLINE
+
+      const _context = {
+        getRemainingTimeInMillis: () => 400
+      }
+      const _event = {}
+      const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
+      const app = require(_handlerPath)
+      datadog = require('./fixtures/datadog-lambda')
+      let result
+      (datadog(app.handler)(_event, _context)).then((data) => { result = data })
+      setTimeout(() => {
+        expect(result).to.equal(undefined)
+      }, CUSTOM_DEADLINE - 50)
+
+      const checkTraces = agent.use((_traces) => {
+        // First trace, since errors are tagged at root span level.
         const trace = _traces[0][0]
         expect(trace.error).to.equal(1)
         expect(trace.meta['error.type']).to.equal('Impending Timeout')
