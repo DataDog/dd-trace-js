@@ -16,5 +16,7 @@ module.exports = {
   HTTP_INCOMING_REMOTE_IP: 'server.request.client_ip',
   HTTP_INCOMING_REMOTE_PORT: 'server.request.client_port',
 
-  HTTP_CLIENT_IP: 'http.client_ip'
+  HTTP_CLIENT_IP: 'http.client_ip',
+
+  USER_ID: 'usr.id'
 }

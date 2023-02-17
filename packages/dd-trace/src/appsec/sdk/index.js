@@ -1,10 +1,16 @@
 'use strict'
 
 const { trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent } = require('./track_event')
+const { checkUserAndSetUser, blockRequest } = require('./user_blocking')
+const { loadTemplates } = require('../blocking')
+const { setUser } = require('./set_user')
 
 class AppsecSdk {
-  constructor (tracer) {
+  constructor (tracer, config) {
     this._tracer = tracer
+    if (config) {
+      loadTemplates(config)
+    }
   }
 
   trackUserLoginSuccessEvent (user, metadata) {
@@ -17,6 +23,18 @@ class AppsecSdk {
 
   trackCustomEvent (eventName, metadata) {
     return trackCustomEvent(this._tracer, eventName, metadata)
+  }
+
+  isUserBlocked (user) {
+    return checkUserAndSetUser(this._tracer, user)
+  }
+
+  blockRequest (req, res) {
+    return blockRequest(this._tracer, req, res)
+  }
+
+  setUser (user) {
+    return setUser(this._tracer, user)
   }
 }
 
