@@ -22,7 +22,9 @@ const {
 const GIT_REV_LIST_MAX_BUFFER = 8 * 1024 * 1024 // 8MB
 
 function isShallowRepository () {
-  return sanitizedExec('git rev-parse --is-shallow-repository', { stdio: 'pipe' }) === 'true'
+  const res = sanitizedExec('git rev-parse --is-shallow-repository', { stdio: 'pipe' })
+  console.log('isShallowRepository:', res)
+  return res === 'true'
 }
 
 function unshallowRepository () {
