@@ -6,7 +6,7 @@ const nock = require('nock')
 
 const AgentlessCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agentless')
 
-describe.only('CI Visibility Agentless Exporter', () => {
+describe('CI Visibility Agentless Exporter', () => {
   const url = new URL('http://www.example.com')
 
   beforeEach(() => {
@@ -33,7 +33,7 @@ describe.only('CI Visibility Agentless Exporter', () => {
   })
 
   describe('when ITR is enabled', () => {
-    it.only('will request configuration to api.site by default', (done) => {
+    it('will request configuration to api.site by default', (done) => {
       const scope = nock('https://api.datadoge.c0m')
         .post('/api/v2/libraries/tests/services/setting')
         .reply(200, JSON.stringify({
