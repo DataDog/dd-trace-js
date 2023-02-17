@@ -1,5 +1,6 @@
 'use strict'
 
+const log = require('../log')
 const fs = require('fs')
 
 // TODO: move template loading to a proper spot.
@@ -8,7 +9,10 @@ let templateHtml = ''
 let templateJson = ''
 
 function block (req, res, rootSpan, abortController) {
-  if (res.headersSent) return
+  if (res.headersSent) {
+    log.warn('Cannot send blocking response when headers have already been sent')
+    return
+  }
 
   let type
   let body
