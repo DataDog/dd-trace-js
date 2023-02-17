@@ -10,11 +10,15 @@ describe('blocking', () => {
     }
   }
 
-  let fs
+  let log, fs
   let block, loadTemplates, loadTemplatesAsync, resetTemplates
   let req, res, rootSpan
 
   beforeEach(() => {
+    log = {
+      warn: sinon.stub()
+    }
+
     fs = {
       readFileSync: sinon.stub().callsFake(getBody),
       promises: {
@@ -22,7 +26,10 @@ describe('blocking', () => {
       }
     }
 
-    const blocking = proxyquire('../src/appsec/blocking', { fs })
+    const blocking = proxyquire('../src/appsec/blocking', {
+      '../log': log,
+      fs
+    })
 
     block = blocking.block
     loadTemplates = blocking.loadTemplates
@@ -50,6 +57,17 @@ describe('blocking', () => {
 
     afterEach(() => {
       resetTemplates()
+    })
+
+    it('should log warn and not send blocking response when headers have already been sent', () => {
+      res.headersSent = true
+      block(req, res, rootSpan)
+
+      expect(log.warn).to.have.been
+        .calledOnceWithExactly('Cannot send blocking response when headers have already been sent')
+      expect(rootSpan.addTags).to.not.have.been.called
+      expect(res.setHeader).to.not.have.been.called
+      expect(res.end).to.not.have.been.called
     })
 
     it('should send blocking response with html type if present in the headers', () => {
