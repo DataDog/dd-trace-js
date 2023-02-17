@@ -15,6 +15,7 @@ const agent = require('../plugins/agent')
 const Config = require('../../src/config')
 const axios = require('axios')
 const getPort = require('get-port')
+const { resetTemplates } = require('../../src/appsec/blocking')
 
 describe('AppSec Index', () => {
   let config
@@ -43,6 +44,8 @@ describe('AppSec Index', () => {
       '../plugins/util/web': web
     })
 
+    resetTemplates()
+
     sinon.stub(fs, 'readFileSync').returns('{"rules": [{"a": 1}]}')
     sinon.stub(fs.promises, 'readFile').returns('{"rules": [{"a": 1}]}')
     sinon.stub(RuleManager, 'applyRules')
@@ -56,7 +59,6 @@ describe('AppSec Index', () => {
 
   afterEach(() => {
     sinon.restore()
-    AppSec.disable()
   })
 
   describe('enable', () => {
@@ -436,6 +438,7 @@ describe('AppSec Index', () => {
     })
   })
 })
+
 describe('IP blocking', () => {
   const invalidIp = '1.2.3.4'
   const validIp = '4.3.2.1'
@@ -476,6 +479,11 @@ describe('IP blocking', () => {
     }))
     RuleManager.updateAsmData('apply', ruleData, 'asm_data')
   })
+  afterEach(() => {
+    appsec.disable()
+    resetTemplates()
+  })
+
   describe('do not block the request', () => {
     it('should not block the request by default', async () => {
       await axios.get(`http://localhost:${port}/`).then((res) => {

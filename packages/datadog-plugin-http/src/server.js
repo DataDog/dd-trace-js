@@ -23,7 +23,7 @@ class HttpServerPlugin extends Plugin {
       span.setTag(COMPONENT, this.constructor.name)
 
       this._parentStore = store
-      this.enter(span, { ...store, req })
+      this.enter(span, { ...store, req, res })
 
       const context = web.getContext(req)
 

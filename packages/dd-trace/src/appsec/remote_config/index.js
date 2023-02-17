@@ -35,12 +35,15 @@ function enable (config) {
 function enableAsmData (appsecConfig) {
   if (rc && appsecConfig && appsecConfig.rules === undefined) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
     rc.on('ASM_DATA', _asmDataListener)
   }
 }
 
 function disableAsmData () {
   if (rc) {
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, false)
     rc.off('ASM_DATA', _asmDataListener)
   }
 }
