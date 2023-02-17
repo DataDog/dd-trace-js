@@ -30,6 +30,7 @@ describe('SpanContext', () => {
         finished: ['span1'],
         tags: { foo: 'bar' }
       },
+      traceparent: '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01',
       tracestate: TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
     }
     const spanContext = new SpanContext(props)
@@ -49,6 +50,7 @@ describe('SpanContext', () => {
         finished: ['span1'],
         tags: { foo: 'bar' }
       },
+      _traceparent: '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01',
       _tracestate: TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
     })
   })
@@ -74,6 +76,7 @@ describe('SpanContext', () => {
         finished: [],
         tags: {}
       },
+      _traceparent: undefined,
       _tracestate: undefined
     })
   })

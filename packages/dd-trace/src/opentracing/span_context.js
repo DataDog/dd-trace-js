@@ -14,6 +14,7 @@ class DatadogSpanContext {
     this._tags = props.tags || {}
     this._sampling = props.sampling || {}
     this._baggageItems = props.baggageItems || {}
+    this._traceparent = props.traceparent
     this._tracestate = props.tracestate
     this._noop = props.noop || null
     this._trace = props.trace || {
@@ -32,10 +33,11 @@ class DatadogSpanContext {
   }
 
   toTraceparent () {
-    const sampling = this._sampling.priority >= AUTO_KEEP ? '01' : '00'
+    const flags = this._sampling.priority >= AUTO_KEEP ? '01' : '00'
     const traceId = this._traceId.toString(16).padStart(32, '0')
     const spanId = this._spanId.toString(16).padStart(16, '0')
-    return `01-${traceId}-${spanId}-${sampling}`
+    const version = (this._traceparent && this._traceparent.version) || '00'
+    return `${version}-${traceId}-${spanId}-${flags}`
   }
 }
 

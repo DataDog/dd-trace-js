@@ -228,7 +228,7 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      expect(carrier).to.have.property('traceparent', '01-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01')
+      expect(carrier).to.have.property('traceparent', '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01')
       expect(carrier).to.have.property(
         'tracestate',
         'dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo_bar~;t.dm:4,other=bleh'
@@ -623,6 +623,19 @@ describe('TextMapPropagator', () => {
           '_dd.p.foo_bar_baz_',
           'abc_!@#$%^&*()_+`-='
         )
+      })
+
+      it('should propagate the version', () => {
+        textMap['traceparent'] = '01-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        textMap['tracestate'] = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const carrier = {}
+        const spanContext = propagator.extract(textMap)
+
+        propagator.inject(spanContext, carrier)
+
+        expect(carrier.traceparent).to.match(/^01/)
       })
     })
   })
