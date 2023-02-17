@@ -22,7 +22,7 @@ class Http2ServerPlugin extends Plugin {
 
       span.setTag(COMPONENT, this.constructor.name)
 
-      this.enter(span, { ...store, req })
+      this.enter(span, { ...store, req, res })
 
       const context = web.getContext(req)
 

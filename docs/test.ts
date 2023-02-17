@@ -23,6 +23,7 @@ import {
 } from '../ext/tags'
 import { HTTP, WEB } from '../ext/types'
 import * as opentracing from 'opentracing';
+import { IncomingMessage, OutgoingMessage } from 'http';
 
 opentracing.initGlobalTracer(tracer);
 
@@ -388,8 +389,6 @@ const user: User = {
   custom: 'hello'
 }
 
-tracer.setUser(user)
-
 const meta = {
   metakey: 'metavalue',
   metakey2: 'metavalue2'
@@ -405,3 +404,12 @@ tracer.appsec.trackUserLoginFailureEvent('user_id', false, meta)
 
 tracer.appsec.trackCustomEvent('event_name')
 tracer.appsec.trackCustomEvent('event_name', meta)
+
+tracer.setUser(user)
+
+const resUserBlock: boolean = tracer.appsec.isUserBlocked(user)
+let resBlockRequest: boolean = tracer.appsec.blockRequest()
+const req = {} as IncomingMessage
+const res = {} as OutgoingMessage
+resBlockRequest = tracer.appsec.blockRequest(req, res)
+tracer.appsec.setUser(user)

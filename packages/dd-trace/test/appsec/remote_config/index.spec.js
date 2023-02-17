@@ -1,5 +1,7 @@
 'use strict'
 
+const Capabilities = require('../../../src/appsec/remote_config/capabilities')
+
 let config
 let rc
 let RemoteConfigManager
@@ -45,7 +47,7 @@ describe('Remote Config enable', () => {
     remoteConfig.enable(config)
 
     expect(RemoteConfigManager).to.have.been.calledOnceWith(config)
-    expect(rc.updateCapabilities).to.have.been.calledOnceWithExactly(2n, true)
+    expect(rc.updateCapabilities).to.have.been.calledOnceWithExactly(Capabilities.ASM_ACTIVATION, true)
     expect(rc.on).to.have.been.calledOnceWith('ASM_FEATURES')
     expect(rc.on.firstCall.args[1]).to.be.a('function')
   })
@@ -130,9 +132,11 @@ describe('Remote Config enable', () => {
     })
 
     describe('enable', () => {
-      it('should not not fail if remote config is not enabled before', () => {
+      it('should not fail if remote config is not enabled before', () => {
         config.appsec = {}
         remoteConfig.enableAsmData(config.appsec)
+
+        expect(rc.updateCapabilities).to.not.have.been.called
         expect(rc.on).to.not.have.been.calledWith('ASM_DATA')
       })
 
@@ -140,6 +144,8 @@ describe('Remote Config enable', () => {
         config.appsec = { enabled: true, rules: './path/rules.json' }
         remoteConfig.enable(config)
         remoteConfig.enableAsmData(config.appsec)
+
+        expect(rc.updateCapabilities).to.not.have.been.called
         expect(rc.on).to.not.have.been.calledWith('ASM_DATA')
       })
 
@@ -147,6 +153,10 @@ describe('Remote Config enable', () => {
         config.appsec = { enabled: true }
         remoteConfig.enable(config)
         remoteConfig.enableAsmData(config.appsec)
+
+        expect(rc.updateCapabilities).to.have.been.calledTwice
+        expect(rc.updateCapabilities.firstCall).to.have.been.calledWithExactly(Capabilities.ASM_IP_BLOCKING, true)
+        expect(rc.updateCapabilities.secondCall).to.have.been.calledWithExactly(Capabilities.ASM_USER_BLOCKING, true)
         expect(rc.on).to.have.been.calledOnceWith('ASM_DATA')
       })
 
@@ -154,6 +164,11 @@ describe('Remote Config enable', () => {
         config.appsec = {}
         remoteConfig.enable(config)
         remoteConfig.enableAsmData(config.appsec)
+
+        expect(rc.updateCapabilities).to.have.been.calledThrice
+        expect(rc.updateCapabilities.firstCall).to.have.been.calledWithExactly(Capabilities.ASM_ACTIVATION, true)
+        expect(rc.updateCapabilities.secondCall).to.have.been.calledWithExactly(Capabilities.ASM_IP_BLOCKING, true)
+        expect(rc.updateCapabilities.thirdCall).to.have.been.calledWithExactly(Capabilities.ASM_USER_BLOCKING, true)
         expect(rc.on.lastCall).to.have.been.calledWith('ASM_DATA')
       })
     })
