@@ -6,6 +6,12 @@ class NoopAppsecSdk {
   trackUserLoginFailureEvent () {}
 
   trackCustomEvent () {}
+
+  isUserBlocked () {}
+
+  blockRequest () {}
+
+  setUser () {}
 }
 
 module.exports = NoopAppsecSdk

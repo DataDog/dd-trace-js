@@ -71,8 +71,8 @@ class Tracer {
     return this._tracer.getRumData.apply(this._tracer, arguments)
   }
 
-  setUser () {
-    this._tracer.setUser.apply(this._tracer, arguments)
+  setUser (user) {
+    this.appsec.setUser(user)
     return this
   }
 }

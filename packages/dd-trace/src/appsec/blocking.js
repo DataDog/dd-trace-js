@@ -1,9 +1,14 @@
 'use strict'
 
 const fs = require('fs')
-let templateHtml, templateJson
-function block (req, res, topSpan, abortController) {
-  if (res.headersSent) return 
+
+// TODO: move template loading to a proper spot.
+let templateLoaded = false
+let templateHtml = ''
+let templateJson = ''
+
+function block (req, res, rootSpan, abortController) {
+  if (res.headersSent) return
 
   let type
   let body
@@ -19,7 +24,7 @@ function block (req, res, topSpan, abortController) {
     body = templateJson
   }
 
-  topSpan.addTags({
+  rootSpan.addTags({
     'appsec.blocked': 'true'
   })
 
@@ -28,19 +33,34 @@ function block (req, res, topSpan, abortController) {
   res.setHeader('Content-Length', Buffer.byteLength(body))
   res.end(body)
 
-  abortController.abort()
+  if (abortController) {
+    abortController.abort()
+  }
 }
 
 function loadTemplates (config) {
-  templateHtml = fs.readFileSync(config.appsec.blockedTemplateHtml)
-  templateJson = fs.readFileSync(config.appsec.blockedTemplateJson)
+  if (!templateLoaded) {
+    templateHtml = fs.readFileSync(config.appsec.blockedTemplateHtml)
+    templateJson = fs.readFileSync(config.appsec.blockedTemplateJson)
+    templateLoaded = true
+  }
 }
 
 async function loadTemplatesAsync (config) {
-  templateHtml = await fs.promises.readFile(config.appsec.blockedTemplateHtml)
-  templateJson = await fs.promises.readFile(config.appsec.blockedTemplateJson)
+  if (!templateLoaded) {
+    templateHtml = await fs.promises.readFile(config.appsec.blockedTemplateHtml)
+    templateJson = await fs.promises.readFile(config.appsec.blockedTemplateJson)
+    templateLoaded = true
+  }
+}
+
+function resetTemplates () {
+  templateLoaded = false
 }
 
 module.exports = {
-  block, loadTemplates, loadTemplatesAsync
+  block,
+  loadTemplates,
+  loadTemplatesAsync,
+  resetTemplates
 }
