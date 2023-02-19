@@ -55,8 +55,10 @@ describe('AppSec Index', () => {
     sinon.stub(WAFManager.prototype, 'createDDWAFContext').callThrough()
     sinon.stub(WAFContextWrapper.prototype, 'run')
     sinon.stub(RuleManager, 'applyRules')
+    sinon.stub(remoteConfig, 'enableAsm')
     sinon.stub(remoteConfig, 'enableAsmData')
     sinon.stub(remoteConfig, 'enableAsmDDRules')
+    sinon.stub(remoteConfig, 'disableAsm')
     sinon.stub(remoteConfig, 'disableAsmData')
     sinon.stub(remoteConfig, 'disableAsmDDRules')
     sinon.stub(Reporter, 'setRateLimit')
@@ -77,6 +79,7 @@ describe('AppSec Index', () => {
       expect(fs.readFileSync).to.have.been.calledWithExactly(config.appsec.blockedTemplateHtml)
       expect(fs.readFileSync).to.have.been.calledWithExactly(config.appsec.blockedTemplateJson)
       expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] }, config.appsec)
+      expect(remoteConfig.enableAsm).to.have.been.calledOnce
       expect(remoteConfig.enableAsmData).to.have.been.calledOnce
       expect(remoteConfig.enableAsmDDRules).to.have.been.calledOnce
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
@@ -97,6 +100,7 @@ describe('AppSec Index', () => {
       expect(log.error).to.have.been.calledTwice
       expect(log.error.firstCall).to.have.been.calledWithExactly('Unable to start AppSec')
       expect(log.error.secondCall).to.have.been.calledWithExactly(err)
+      expect(remoteConfig.disableAsm).to.have.been.calledOnce
       expect(remoteConfig.disableAsmData).to.have.been.calledOnce
       expect(remoteConfig.disableAsmDDRules).to.have.been.calledOnce
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
@@ -115,6 +119,7 @@ describe('AppSec Index', () => {
       expect(fs.promises.readFile).to.have.been.calledWithExactly(config.appsec.blockedTemplateHtml)
       expect(fs.promises.readFile).to.have.been.calledWithExactly(config.appsec.blockedTemplateJson)
       expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] }, config.appsec)
+      expect(remoteConfig.enableAsm).to.have.been.calledOnce
       expect(remoteConfig.enableAsmData).to.have.been.calledOnce
       expect(remoteConfig.enableAsmDDRules).to.have.been.calledOnce
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
@@ -135,6 +140,7 @@ describe('AppSec Index', () => {
       expect(log.error).to.have.been.calledTwice
       expect(log.error.firstCall).to.have.been.calledWithExactly('Unable to start AppSec')
       expect(log.error.secondCall).to.have.been.calledWithExactly(err)
+      expect(remoteConfig.disableAsm).to.have.been.calledOnce
       expect(remoteConfig.disableAsmData).to.have.been.calledOnce
       expect(remoteConfig.disableAsmDDRules).to.have.been.calledOnce
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
@@ -157,6 +163,7 @@ describe('AppSec Index', () => {
       AppSec.disable()
 
       expect(RuleManager.clearAllRules).to.have.been.calledOnce
+      expect(remoteConfig.disableAsm).to.have.been.calledOnce
       expect(remoteConfig.disableAsmData).to.have.been.calledOnce
       expect(remoteConfig.disableAsmDDRules).to.have.been.calledOnce
       expect(incomingHttpRequestStart.unsubscribe)

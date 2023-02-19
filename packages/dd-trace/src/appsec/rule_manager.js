@@ -3,9 +3,14 @@
 const waf = require('./waf')
 const log = require('../log')
 
+const RULES_OVERRIDE_KEY = 'rules_override'
+const EXCLUSIONS_KEY = 'exclusions'
+const RULES_DATA_KEY = 'rules_data'
+
 const appliedAsmData = new Map()
-let defaultRules
-let asmDDRules
+let defaultRules, asmDDRules
+let rulesOverride
+let exclusions
 
 function applyRules (rules, config) {
   if (waf.wafManager) return
@@ -20,15 +25,50 @@ function updateAsmDDRules (action, asmRules) {
     asmDDRules = asmRules
   }
   updateAppliedRules()
-  updateAppliedRuleData()
 }
 
 function updateAppliedRules () {
-  const rules = asmDDRules || defaultRules
+  const rules = { ...(asmDDRules || defaultRules) }
+  if (rulesOverride) {
+    rules[RULES_OVERRIDE_KEY] = rulesOverride
+  }
+  if (exclusions) {
+    rules[EXCLUSIONS_KEY] = exclusions
+  }
+  if (appliedAsmData && appliedAsmData.size > 0) {
+    rules[RULES_DATA_KEY] = mergeRuleData(appliedAsmData.values())
+  }
   try {
-    waf.wafManager.reload(rules)
+    waf.wafManager.update(rules)
   } catch {
     log.error('AppSec could not load native package. Applied rules have not been updated')
+  }
+}
+
+function updateAsm (action, asm) {
+  if (action === 'apply') {
+    let rulesObject
+    if (asm.hasOwnProperty(RULES_OVERRIDE_KEY)) {
+      rulesOverride = asm[RULES_OVERRIDE_KEY]
+      rulesObject = { [RULES_OVERRIDE_KEY]: rulesOverride }
+      // TODO Should we check if the array is empty?
+      // TODO Should we do some merge beteween different applies?
+    }
+    if (asm.hasOwnProperty(EXCLUSIONS_KEY)) {
+      exclusions = asm[EXCLUSIONS_KEY]
+      rulesObject = { ...rulesObject, exclusions }
+      // TODO Should we check if the array is empty?
+      // TODO Should we do some merge beteween different applies?
+    }
+    if (rulesObject) {
+      applyRulesObject(rulesObject)
+    }
+  }
+}
+
+function applyRulesObject (rulesObject) {
+  if (rulesObject && waf.wafManager) {
+    waf.wafManager.update(rulesObject)
   }
 }
 
@@ -44,14 +84,14 @@ function updateAsmData (action, asmData, asmDataId) {
 
 function updateAppliedRuleData () {
   const mergedRuleData = mergeRuleData(appliedAsmData.values())
-  waf.wafManager && waf.wafManager.updateRuleData(mergedRuleData)
+  waf.wafManager && waf.wafManager.update({ [RULES_DATA_KEY]: mergedRuleData })
 }
 
 function mergeRuleData (asmDataValues) {
   const mergedRulesData = new Map()
   for (const asmData of asmDataValues) {
-    if (!asmData.rules_data) continue
-    for (const rulesData of asmData.rules_data) {
+    if (!asmData[RULES_DATA_KEY]) continue
+    for (const rulesData of asmData[RULES_DATA_KEY]) {
       const key = `${rulesData.id}+${rulesData.type}`
       if (mergedRulesData.has(key)) {
         const existingRulesData = mergedRulesData.get(key)
@@ -91,11 +131,15 @@ function copyRulesData (rulesData) {
 function clearAllRules () {
   waf.destroy()
   appliedAsmData.clear()
+  asmDDRules = null
+  rulesOverride = null
+  exclusions = null
 }
 
 module.exports = {
   applyRules,
   clearAllRules,
+  updateAsm,
   updateAsmData,
   updateAsmDDRules
 }

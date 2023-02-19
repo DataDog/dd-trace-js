@@ -2,7 +2,7 @@
 
 const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
-const { updateAsmDDRules, updateAsmData } = require('../rule_manager')
+const { updateAsmDDRules, updateAsmData, updateAsm } = require('../rule_manager')
 
 let rc
 
@@ -48,6 +48,22 @@ function disableAsmData () {
   }
 }
 
+function enableAsm (appsecConfig) {
+  if (rc && appsecConfig && appsecConfig.rules === undefined) {
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
+    rc.on('ASM', updateAsm)
+  }
+}
+
+function disableAsm () {
+  if (rc) {
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSIONS, false)
+    rc.off('ASM', updateAsm)
+  }
+}
+
 function enableAsmDDRules (appsecConfig) {
   if (rc && appsecConfig && appsecConfig.rules === undefined) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, true)
@@ -64,8 +80,10 @@ function disableAsmDDRules () {
 
 module.exports = {
   enable,
+  enableAsm,
   enableAsmData,
   enableAsmDDRules,
+  disableAsm,
   disableAsmData,
   disableAsmDDRules
 }
