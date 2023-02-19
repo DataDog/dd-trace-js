@@ -20,7 +20,7 @@ describe('WAF Manager', () => {
     DDWAF.prototype.constructor.version = sinon.stub()
     DDWAF.prototype.dispose = sinon.stub()
     DDWAF.prototype.createContext = sinon.stub()
-    DDWAF.prototype.updateRuleData = sinon.stub()
+    DDWAF.prototype.update = sinon.stub()
     DDWAF.prototype.rulesInfo = {
       loaded: true, failed: 0
     }
@@ -163,28 +163,30 @@ describe('WAF Manager', () => {
     })
   })
 
-  describe('wafManager.updateRuleData', () => {
+  describe('wafManager.update', () => {
     beforeEach(() => {
       waf.init(rules, config.appsec)
     })
 
-    it('should call ddwaf.updateRuleData', () => {
-      const ruleData = [
-        {
-          id: 'blocked_users',
-          type: 'data_with_expiration',
-          data: [
-            {
-              expiration: 9999999999,
-              value: 'user1'
-            }
-          ]
-        }
-      ]
+    it('should call ddwaf.update', () => {
+      const rules = {
+        'rules_data': [
+          {
+            id: 'blocked_users',
+            type: 'data_with_expiration',
+            data: [
+              {
+                expiration: 9999999999,
+                value: 'user1'
+              }
+            ]
+          }
+        ]
+      }
 
-      waf.wafManager.updateRuleData(ruleData)
+      waf.wafManager.update(rules)
 
-      expect(DDWAF.prototype.updateRuleData).to.be.calledOnceWithExactly(ruleData)
+      expect(DDWAF.prototype.update).to.be.calledOnceWithExactly(rules)
     })
   })
 

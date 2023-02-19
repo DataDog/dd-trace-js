@@ -30,6 +30,7 @@ function enable (_config) {
 
 function enableFromRules (_config, rules) {
   RuleManager.applyRules(rules, _config.appsec)
+  remoteConfig.enableAsm(_config.appsec)
   remoteConfig.enableAsmData(_config.appsec)
   remoteConfig.enableAsmDDRules(_config.appsec)
 
@@ -48,6 +49,7 @@ function abortEnable (err) {
 
   // abort AppSec start
   RuleManager.clearAllRules()
+  remoteConfig.disableAsm()
   remoteConfig.disableAsmData()
   remoteConfig.disableAsmDDRules()
 }
@@ -137,6 +139,7 @@ function disable () {
   config = null
 
   RuleManager.clearAllRules()
+  remoteConfig.disableAsm()
   remoteConfig.disableAsmData()
   remoteConfig.disableAsmDDRules()
 

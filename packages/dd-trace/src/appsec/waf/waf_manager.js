@@ -89,8 +89,8 @@ class WAFManager {
     return requestContext[WAF_ENGINE_CONTEXT_KEY]
   }
 
-  updateRuleData (ruleData) {
-    this.ddwaf.updateRuleData(ruleData)
+  update (rules) {
+    this.ddwaf.update(rules)
   }
 
   destroy () {

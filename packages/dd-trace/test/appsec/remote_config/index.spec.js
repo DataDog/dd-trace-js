@@ -32,6 +32,7 @@ describe('Remote Config enable', () => {
     }
 
     RuleManager = {
+      updateAsm: sinon.stub(),
       updateAsmData: sinon.stub(),
       updateAsmDDRules: sinon.stub()
     }
@@ -244,6 +245,74 @@ describe('Remote Config enable', () => {
         rc.updateCapabilities.resetHistory()
         remoteConfig.disableAsmDDRules()
         expect(rc.updateCapabilities).to.have.been.calledOnceWith(RemoteConfigCapabilities.ASM_DD_RULES, false)
+        expect(rc.off).to.be.calledOnce
+      })
+    })
+  })
+
+  describe('ASM remote config', () => {
+    describe('listener', () => {
+      let listener
+
+      beforeEach(() => {
+        config.appsec = { enabled: undefined }
+
+        remoteConfig.enable(config)
+        remoteConfig.enableAsm(config.appsec)
+        listener = rc.on.secondCall.args[1]
+      })
+
+      it('should call RuleManager.updateAsmDDRules', () => {
+        const rules = {}
+        listener('apply', rules)
+        expect(RuleManager.updateAsm).to.have.been.calledOnceWithExactly('apply', rules)
+      })
+    })
+
+    describe('enable', () => {
+      it('should not fail if remote config is not enabled before', () => {
+        config.appsec = {}
+        remoteConfig.enableAsm(config.appsec)
+        expect(rc.updateCapabilities).to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_DD_RULES, true)
+        expect(rc.updateCapabilities).to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
+        expect(rc.on).to.not.have.been.calledWith('ASM')
+      })
+
+      it('should not activate if rules is configured', () => {
+        config.appsec = { enabled: true, rules: './path/rules.json' }
+        remoteConfig.enable(config)
+        remoteConfig.enableAsm(config.appsec)
+        expect(rc.updateCapabilities).to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_DD_RULES, true)
+        expect(rc.updateCapabilities).to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
+        expect(rc.on).to.not.have.been.calledWith('ASM')
+      })
+
+      it('should activate if appsec is manually enabled', () => {
+        config.appsec = { enabled: true }
+        remoteConfig.enable(config)
+        remoteConfig.enableAsm(config.appsec)
+        expect(rc.updateCapabilities).to.have.been.calledWith(RemoteConfigCapabilities.ASM_DD_RULES, true)
+        expect(rc.updateCapabilities).to.have.been.calledWith(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
+        expect(rc.on).to.have.been.calledOnceWith('ASM')
+      })
+
+      it('should activate if appsec enabled is not defined', () => {
+        config.appsec = {}
+        remoteConfig.enable(config)
+        remoteConfig.enableAsm(config.appsec)
+        expect(rc.updateCapabilities).to.have.been.calledWith(RemoteConfigCapabilities.ASM_DD_RULES, true)
+        expect(rc.updateCapabilities).to.have.been.calledWith(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
+        expect(rc.on).to.have.been.calledWith('ASM')
+      })
+    })
+
+    describe('disable', () => {
+      it('should update capabilities and unsubscribe listener', () => {
+        remoteConfig.enable(config)
+        rc.updateCapabilities.resetHistory()
+        remoteConfig.disableAsm()
+        expect(rc.updateCapabilities).to.have.been.calledWith(RemoteConfigCapabilities.ASM_DD_RULES, false)
+        expect(rc.updateCapabilities).to.have.been.calledWith(RemoteConfigCapabilities.ASM_EXCLUSIONS, false)
         expect(rc.off).to.be.calledOnce
       })
     })
