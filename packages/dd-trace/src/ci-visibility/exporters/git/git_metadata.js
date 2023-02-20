@@ -10,7 +10,9 @@ const {
   getLatestCommits,
   getRepositoryUrl,
   generatePackFilesForCommits,
-  getCommitsToUpload
+  getCommitsToUpload,
+  isShallowRepository,
+  unshallowRepository
 } = require('../../../plugins/util/git')
 
 const isValidSha = (sha) => /[0-9a-f]{40}/.test(sha)
@@ -155,6 +157,10 @@ function sendGitMetadata (url, isEvpProxy, callback) {
 
   if (!repositoryUrl) {
     return callback(new Error('Repository URL is empty'))
+  }
+
+  if (isShallowRepository()) {
+    unshallowRepository()
   }
 
   getCommitsToExclude({ url, repositoryUrl, isEvpProxy }, (err, commitsToExclude, headCommit) => {

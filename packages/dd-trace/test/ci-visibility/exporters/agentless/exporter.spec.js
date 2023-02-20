@@ -1,4 +1,6 @@
 'use strict'
+const cp = require('child_process')
+
 const { expect } = require('chai')
 const nock = require('nock')
 
@@ -8,7 +10,12 @@ describe('CI Visibility Agentless Exporter', () => {
   const url = new URL('http://www.example.com')
 
   beforeEach(() => {
+    // to make sure `isShallowRepository` in `git.js` returns false
+    sinon.stub(cp, 'execSync').returns('false')
     nock.cleanAll()
+  })
+  afterEach(() => {
+    sinon.restore()
   })
 
   before(() => {
