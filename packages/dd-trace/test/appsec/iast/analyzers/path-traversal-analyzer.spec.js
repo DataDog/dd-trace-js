@@ -136,13 +136,14 @@ describe('path-traversal-analyzer', () => {
   })
 
   it('Should not report the vulnerability if it comes from send module', () => {
+    const mockPath = path.join('node_modules', 'send', 'send.js')
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
       './injection-analyzer': InjectionAnalyzer,
       '../iast-context': { getIastContext: () => iastContext }
     })
 
     proxyPathAnalyzer._getLocation = function () {
-      return { path: 'node_modules/send/send.js', line: 3 }
+      return { path: mockPath, line: 3 }
     }
 
     addVulnerability.reset()
