@@ -13,7 +13,8 @@ function getItrConfiguration ({
   osArchitecture,
   runtimeName,
   runtimeVersion,
-  branch
+  branch,
+  custom
 }, done) {
   const options = {
     path: '/api/v2/libraries/tests/services/setting',
@@ -53,7 +54,8 @@ function getItrConfiguration ({
           'os.version': osVersion,
           'os.architecture': osArchitecture,
           'runtime.name': runtimeName,
-          'runtime.version': runtimeVersion
+          'runtime.version': runtimeVersion,
+          custom
         },
         service,
         env,
