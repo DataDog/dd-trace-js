@@ -11,7 +11,8 @@ function getSkippableSuites ({
   osPlatform,
   osArchitecture,
   runtimeName,
-  runtimeVersion
+  runtimeVersion,
+  custom
 }, done) {
   const options = {
     path: '/api/v2/ci/tests/skippable',
@@ -51,7 +52,8 @@ function getSkippableSuites ({
           'os.version': osVersion,
           'os.architecture': osArchitecture,
           'runtime.name': runtimeName,
-          'runtime.version': runtimeVersion
+          'runtime.version': runtimeVersion,
+          custom
         },
         service,
         env,
