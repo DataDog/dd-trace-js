@@ -1,4 +1,5 @@
 'use strict'
+const cp = require('child_process')
 
 const CiVisibilityExporter = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
 const nock = require('nock')
@@ -7,9 +8,15 @@ describe('CI Visibility Exporter', () => {
   const port = 8126
 
   beforeEach(() => {
+    // to make sure `isShallowRepository` in `git.js` returns false
+    sinon.stub(cp, 'execSync').returns('false')
     process.env.DD_API_KEY = '1'
     process.env.DD_APP_KEY = '1'
     nock.cleanAll()
+  })
+
+  afterEach(() => {
+    sinon.restore()
   })
 
   describe('sendGitMetadata', () => {
