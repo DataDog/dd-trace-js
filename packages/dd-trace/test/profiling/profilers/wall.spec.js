@@ -55,10 +55,28 @@ describe('profilers/native/wall', () => {
     sinon.assert.calledWith(pprof.time.start, samplingInterval)
   })
 
+  it('should not stop when not started', () => {
+    const profiler = new NativeWallProfiler()
+
+    profiler.stop()
+
+    sinon.assert.notCalled(stop)
+  })
+
   it('should stop the internal time profiler', () => {
     const profiler = new NativeWallProfiler()
 
     profiler.start()
+    profiler.stop()
+
+    sinon.assert.calledOnce(stop)
+  })
+
+  it('should stop the internal time profiler only once', () => {
+    const profiler = new NativeWallProfiler()
+
+    profiler.start()
+    profiler.stop()
     profiler.stop()
 
     sinon.assert.calledOnce(stop)
