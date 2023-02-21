@@ -12,7 +12,7 @@ class DatadogSpanContext {
     this._name = props.name
     this._isFinished = props.isFinished || false
     this._tags = props.tags || {}
-    this._sampling = props.sampling || {}
+    this._sampling = Object.assign({}, props.sampling)
     this._baggageItems = props.baggageItems || {}
     this._traceparent = props.traceparent
     this._tracestate = props.tracestate
