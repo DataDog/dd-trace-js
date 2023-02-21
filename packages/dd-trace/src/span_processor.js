@@ -17,7 +17,7 @@ class SpanProcessor {
     this._killAll = false
 
     this._stats = new SpanStatsProcessor(config)
-    this._spanSampler = new SpanSampler(config)
+    this._spanSampler = new SpanSampler(config.sampler)
   }
 
   process (span) {
