@@ -25,6 +25,8 @@ function checkTimeout (context) {
   let remainingTimeInMillis = context.getRemainingTimeInMillis()
 
   let apmFlushDeadline = process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS
+  // TODO: Remove this condition and parse int above
+  // once `datadog-lambda-js` updates tracer to v3
   if (!apmFlushDeadline) {
     apmFlushDeadline = process.env.DD_APM_FLUSH_DEADLINE
   }
