@@ -169,7 +169,6 @@ function getCiVisAgentlessConfig (port) {
     DD_APP_KEY: '1',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
-    DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 1,
     DD_CIVISIBILITY_ITR_ENABLED: 1,
     NODE_OPTIONS: '-r dd-trace/ci/init'
   }
@@ -179,7 +178,6 @@ function getCiVisEvpProxyConfig (port) {
   return {
     ...process.env,
     DD_TRACE_AGENT_PORT: port,
-    DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 1,
     DD_CIVISIBILITY_ITR_ENABLED: 1,
     NODE_OPTIONS: '-r dd-trace/ci/init'
   }
