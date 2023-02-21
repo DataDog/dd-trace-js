@@ -16,6 +16,7 @@ const os = require('os')
 const path = require('path')
 const rimraf = promisify(require('rimraf'))
 const id = require('../packages/dd-trace/src/id')
+const upload = require('multer')()
 
 class FakeAgent extends EventEmitter {
   constructor (port = 0) {
@@ -32,6 +33,14 @@ class FakeAgent extends EventEmitter {
       this.emit('message', {
         headers: req.headers,
         payload: msgpack.decode(req.body, { codec })
+      })
+    })
+    app.post('/profiling/v1/input', upload.any(), (req, res) => {
+      res.status(200).send()
+      this.emit('message', {
+        headers: req.headers,
+        payload: req.body,
+        files: req.files
       })
     })
 
