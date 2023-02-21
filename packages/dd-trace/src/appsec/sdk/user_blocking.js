@@ -6,12 +6,12 @@ const { block } = require('../blocking')
 const { storage } = require('../../../../datadog-core')
 const { setUserTags } = require('./set_user')
 const log = require('../../log')
-const WAFManagerModule = require('../waf_manager')
+const waf = require('../waf')
 
 function isUserBlocked (user) {
   const store = storage.getStore()
   const req = store && store.req
-  const wafContext = WAFManagerModule.wafManager && WAFManagerModule.wafManager.getDDWAFContext(req)
+  const wafContext = waf.wafManager && waf.wafManager.getDDWAFContext(req)
   if (!wafContext) {
     log.warn('WAF context not available in isUserBlocked')
     return false

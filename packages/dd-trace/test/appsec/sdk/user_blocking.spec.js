@@ -41,7 +41,7 @@ describe('user_blocking', () => {
       getDDWAFContext = sinon.stub().returns({ run })
 
       userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
-        '../waf_manager': {
+        '../waf': {
           wafManager: {
             getDDWAFContext
           }
