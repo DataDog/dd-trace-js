@@ -4,11 +4,22 @@ const fs = require('fs')
 const { promisify } = require('util')
 const writeFile = promisify(fs.writeFile)
 
+function formatDateTime (t) {
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${t.getUTCFullYear()}${pad(t.getUTCMonth() + 1)}${pad(t.getUTCDate())}` +
+         `T${pad(t.getUTCHours())}${pad(t.getUTCMinutes())}${pad(t.getUTCSeconds())}Z`
+}
+
 class FileExporter {
-  export ({ profiles }) {
+  constructor ({ pprofPrefix } = {}) {
+    this._pprofPrefix = pprofPrefix || ''
+  }
+
+  export ({ profiles, end }) {
     const types = Object.keys(profiles)
+    const dateStr = formatDateTime(end)
     const tasks = types.map(type => {
-      return writeFile(`${type}.pb.gz`, profiles[type])
+      return writeFile(`${this._pprofPrefix}${type}_${dateStr}.pprof`, profiles[type])
     })
 
     return Promise.all(tasks)
