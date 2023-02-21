@@ -38,7 +38,7 @@ errorChannel.subscribe(error => {
   encoder.encodeError(error)
 })
 
-asyncEndChannel.subscribe(res => {
+asyncEndChannel.subscribe(({ res }) => {
   encoder.encodeKoaRequestFinish(res)
 
   // TODO: restore parent context

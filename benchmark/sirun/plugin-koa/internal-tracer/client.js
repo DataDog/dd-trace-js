@@ -14,7 +14,7 @@ class Client {
   request (options, done) {
     if (options.count === 0) return
 
-    const url = new URL(DD_TRACE_AGENT_URL || 'http://127.0.0.1:8126')
+    const url = new URL(DD_TRACE_AGENT_URL || 'http://127.0.0.1:8127')
     const isSecure = url.protocol === 'https:'
     const isUnix = url.protocol === 'unix:'
     const client = isSecure ? https : http

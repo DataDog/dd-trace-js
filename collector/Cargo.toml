@@ -1,0 +1,15 @@
+[package]
+name = "dd-trace-collector"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+axum = "0.6.7"
+reqwest = "0.11.14"
+rmp = "0.8.11"
+rmp-serde = "1.1.1"
+serde = { version = "1.0.152", features = ["derive"] }
+serde_json = "1.0.93"
+tokio = { version = "1.25.0", features = ["full"] }

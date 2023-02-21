@@ -4,6 +4,10 @@ const Chunk = require('../../../../packages/dd-trace/src/encode/chunk')
 const { storage } = require('../../../../packages/datadog-core')
 const { Client } = require('./client')
 
+const processStartTime = BigInt(Date.now() * 1e6)
+const processStartTicks = process.hrtime.bigint()
+const now = () => Number(processStartTime + process.hrtime.bigint() - processStartTicks)
+const service = process.env.DD_SERVICE || 'unnamed-node-app'
 const ARRAY_OF_TWO = 0x92
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 const flushInterval = 2000
@@ -49,7 +53,7 @@ class Encoder {
 
     this._encodeFixArray(bytes, 7)
     this._encodeShort(bytes, eventTypes.KOA_REQUEST_START) // implied: name
-    this._encodeLong(bytes, 0) // figure out timestamp
+    this._encodeLong(bytes, now())
     this._encodeId(bytes, store.traceContext.traceId)
     this._encodeId(bytes, store.traceContext.spanId)
     this._encodeId(bytes, store.traceContext.parentId) // ???
@@ -67,7 +71,7 @@ class Encoder {
 
     this._encodeFixArray(bytes, 5)
     this._encodeShort(bytes, eventTypes.KOA_REQUEST_FINISH) // implied: name
-    this._encodeLong(bytes, 0) // figure out timestamp
+    this._encodeLong(bytes, now())
     this._encodeId(bytes, store.traceContext.traceId)
     this._encodeId(bytes, store.traceContext.spanId)
     this._encodeShort(bytes, res.statusCode)
@@ -83,7 +87,7 @@ class Encoder {
 
     this._encodeFixArray(bytes, 7)
     this._encodeShort(bytes, eventTypes.ERROR) // implied: name
-    this._encodeLong(bytes, 0) // figure out timestamp
+    this._encodeLong(bytes, now())
     this._encodeId(bytes, store.traceContext.traceId)
     this._encodeId(bytes, store.traceContext.spanId)
     this._encodeString(bytes, error.name)
@@ -93,7 +97,8 @@ class Encoder {
     this._afterEncode()
   }
 
-  makePayload () {
+  // TODO: support new payload format
+  makePayload05 () {
     const prefixSize = 1
     const stringSize = this._stringBytes.length + 5
     const eventSize = this._eventBytes.length + 5
@@ -111,11 +116,23 @@ class Encoder {
     return buffer
   }
 
-  makePayload04 () {
+  makePayload () {
     const eventSize = this._eventBytes.length + 5
-    const buffer = Buffer.allocUnsafe(eventSize)
+    const serviceLength = Buffer.byteLength(service)
+    const buffer = Buffer.allocUnsafe(eventSize + 18 + serviceLength)
 
-    this._writeEvents(buffer)
+    let offset = 0
+
+    buffer[offset++] = 0x82 // fixmap(2)
+
+    buffer[offset++] = 0xa7 // fixstr(7)
+    offset += buffer.write('service', offset)
+    buffer[offset++] = 0xd9 // str8
+    buffer[offset++] = serviceLength
+    offset += buffer.write(service, offset)
+    buffer[offset++] = 0xa6 // fixstr(6)
+    offset += buffer.write('events', offset)
+    offset = this._writeEvents(buffer, offset)
 
     this._reset()
 
@@ -128,7 +145,7 @@ class Encoder {
     if (count === 0) return
 
     const data = this.makePayload()
-    const path = `/v1.0/events`
+    const path = `/v0.1/events`
 
     this._timer = clearTimeout(this._timer)
     this._client.request({ data, path, count }, done)
@@ -287,12 +304,12 @@ class Encoder {
     }
   }
 
-  _encodeString (bytes, value = '') {
+  _encodeString05 (bytes, value = '') {
     this._cacheString(value)
     this._encodeInteger(bytes, this._stringMap[value])
   }
 
-  _encodeString04 (bytes, value = '') {
+  _encodeString (bytes, value = '') {
     this._cacheString(value)
 
     const { start, end } = this._stringMap[value]
@@ -320,14 +337,14 @@ class Encoder {
     }
   }
 
-  _cacheString (value) {
+  _cacheString05 (value) {
     if (!(value in this._stringMap)) {
       this._stringMap[value] = this._stringCount++
       this._stringBytes.write(value)
     }
   }
 
-  _cacheString04 (value) {
+  _cacheString (value) {
     if (!(value in this._stringMap)) {
       this._stringCount++
       this._stringMap[value] = {
