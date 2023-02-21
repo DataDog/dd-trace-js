@@ -78,7 +78,7 @@ describe('lambda', () => {
 
           const _context = {
             // If using default, we set the value to 150, since the
-            // fixture function we're using sleeps for 200ms
+            // fixture function we're sleeping for 200ms
             getRemainingTimeInMillis: () => isDefault ? 150 : 400
           }
           const _event = {}
@@ -91,10 +91,10 @@ describe('lambda', () => {
 
           // If default, then we don't wait for value from deadline, we just use
           // AWS Lambda remaining time in millis
-          const timeoutDeadline = isDefault ? _context.getRemainingTimeInMillis() : customDeadline - 50
+          const timeoutDeadline = isDefault ? _context.getRemainingTimeInMillis() : customDeadline
           setTimeout(() => {
             expect(result).to.equal(undefined)
-          }, timeoutDeadline)
+          }, timeoutDeadline - 50)
 
           const checkTraces = agent.use((_traces) => {
             // First trace, since errors are tagged at root span level.
