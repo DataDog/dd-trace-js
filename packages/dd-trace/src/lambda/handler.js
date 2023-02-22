@@ -24,21 +24,14 @@ let __lambdaTimeout
 function checkTimeout (context) {
   let remainingTimeInMillis = context.getRemainingTimeInMillis()
 
-  let apmFlushDeadline = process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS
-  // TODO: Remove this condition and parse int above
-  // once `datadog-lambda-js` updates tracer to v3
+  let apmFlushDeadline = parseInt(process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS)
   if (!apmFlushDeadline) {
-    apmFlushDeadline = process.env.DD_APM_FLUSH_DEADLINE
-  }
-  apmFlushDeadline = parseInt(apmFlushDeadline)
-
-  if (apmFlushDeadline && apmFlushDeadline <= remainingTimeInMillis) {
-    remainingTimeInMillis = apmFlushDeadline
+    apmFlushDeadline = 50
   }
 
   __lambdaTimeout = setTimeout(() => {
     timeoutChannel.publish(undefined)
-  }, remainingTimeInMillis - 50)
+  }, remainingTimeInMillis - apmFlushDeadline)
 }
 
 /**
