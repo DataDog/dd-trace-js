@@ -22,7 +22,7 @@ let __lambdaTimeout
  * @param {*} context AWS Lambda context object.
  */
 function checkTimeout (context) {
-  let remainingTimeInMillis = context.getRemainingTimeInMillis()
+  const remainingTimeInMillis = context.getRemainingTimeInMillis()
 
   let apmFlushDeadline = parseInt(process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS)
   if (!apmFlushDeadline) {
