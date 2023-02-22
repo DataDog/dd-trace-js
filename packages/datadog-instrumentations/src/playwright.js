@@ -25,6 +25,17 @@ const STATUS_TO_TEST_STATUS = {
 
 let remainingTestsByFile = {}
 
+function getTestsBySuiteFromTestGroups (testGroups) {
+  return testGroups.reduce((acc, { requireFile, tests }) => {
+    if (acc[requireFile]) {
+      acc[requireFile] = acc[requireFile].concat(tests)
+    } else {
+      acc[requireFile] = tests
+    }
+    return acc
+  }, {})
+}
+
 function getTestsBySuiteFromTestsById (testsById) {
   const testsByTestSuite = {}
   for (const { test } of testsById.values()) {
@@ -48,7 +59,7 @@ function getPlaywrightConfig (playwrightRunner) {
     try {
       return playwrightRunner._loader.fullConfig()
     } catch (e) {
-      return {}
+      return playwrightRunner._config || {}
     }
   }
 }
@@ -135,6 +146,13 @@ function dispatcherRunWrapper (run) {
   }
 }
 
+function dispatcherRunWrapperNew (run) {
+  return function () {
+    remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
+    return run.apply(this, arguments)
+  }
+}
+
 function dispatcherHook (dispatcherExport) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', dispatcherRunWrapper)
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
@@ -160,8 +178,8 @@ function dispatcherHook (dispatcherExport) {
   return dispatcherExport
 }
 
-function dispatcherHookNew (dispatcherExport) {
-  shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', dispatcherRunWrapper)
+function dispatcherHookNew (dispatcherExport, runWrapper) {
+  shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', runWrapper)
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
     const worker = createWorker.apply(this, arguments)
@@ -192,24 +210,23 @@ function runnerHook (runnerExport, playwrightVersion) {
       testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
     })
 
-    const res = await runAllTests.apply(this, arguments)
-    const sessionStatus = STATUS_TO_TEST_STATUS[res.status]
+    const runAllTestsReturn = await runAllTests.apply(this, arguments)
+    const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 
     let onDone
 
     const flushWait = new Promise(resolve => {
       onDone = resolve
     })
-
     testSessionAsyncResource.runInAsyncScope(() => {
-      testSessionFinishCh.publish({ status: sessionStatus, onDone })
+      testSessionFinishCh.publish({ status: STATUS_TO_TEST_STATUS[sessionStatus], onDone })
     })
     await flushWait
 
     startedSuites = []
     remainingTestsByFile = {}
 
-    return res
+    return runAllTestsReturn
   })
 
   return runnerExport
@@ -218,7 +235,7 @@ function runnerHook (runnerExport, playwrightVersion) {
 addHook({
   name: '@playwright/test',
   file: 'lib/runner.js',
-  versions: ['>=1.18.0']
+  versions: ['>=1.18.0 <1.30.0']
 }, runnerHook)
 
 addHook({
@@ -230,5 +247,17 @@ addHook({
 addHook({
   name: '@playwright/test',
   file: 'lib/dispatcher.js',
-  versions: ['>=1.30.0']
-}, dispatcherHookNew)
+  versions: ['>=1.30.0 <1.31.0']
+}, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapper))
+
+addHook({
+  name: '@playwright/test',
+  file: 'lib/runner/dispatcher.js',
+  versions: ['>=1.31.0']
+}, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
+
+addHook({
+  name: '@playwright/test',
+  file: 'lib/runner/runner.js',
+  versions: ['>=1.31.0']
+}, runnerHook)
