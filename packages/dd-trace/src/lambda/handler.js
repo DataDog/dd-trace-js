@@ -26,7 +26,7 @@ function checkTimeout (context) {
 
   let apmFlushDeadline = parseInt(process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS)
   if (!apmFlushDeadline) {
-    apmFlushDeadline = 50
+    apmFlushDeadline = 100
   }
 
   __lambdaTimeout = setTimeout(() => {
