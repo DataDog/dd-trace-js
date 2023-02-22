@@ -35,7 +35,7 @@ function wrapEmitter (corkedEmitter) {
       }
       arguments[1] = bindedFn
     }
-    on.apply(this, arguments)
+    return on.apply(this, arguments)
   }
   shimmer.wrap(corkedEmitter, 'on', addListener)
   shimmer.wrap(corkedEmitter, 'addListener', addListener)
@@ -47,7 +47,7 @@ function wrapEmitter (corkedEmitter) {
         arguments[1] = emitterOn
       }
     }
-    off.apply(this, arguments)
+    return off.apply(this, arguments)
   }
   shimmer.wrap(corkedEmitter, 'off', removeListener)
   shimmer.wrap(corkedEmitter, 'removeListener', removeListener)
