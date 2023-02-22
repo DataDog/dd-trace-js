@@ -171,10 +171,14 @@ class FakeCiVisIntake extends FakeAgent {
 
   gatherPayloads (payloadMatch, gatheringTime = 15000) {
     const payloads = []
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       setTimeout(() => {
         this.off('message', messageHandler)
-        resolve(payloads)
+        if (payloads.length === 0) {
+          reject(new Error('No payloads were received'))
+        } else {
+          resolve(payloads)
+        }
       }, gatheringTime)
       const messageHandler = (message) => {
         if (!payloadMatch || payloadMatch(message)) {
