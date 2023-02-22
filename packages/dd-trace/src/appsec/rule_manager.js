@@ -18,60 +18,6 @@ function applyRules (rules, config) {
   waf.init(rules, config)
 }
 
-function updateAsmDDRules (action, asmRules) {
-  if (action === 'unapply') {
-    asmDDRules = undefined
-  } else {
-    asmDDRules = asmRules
-  }
-  updateAppliedRules()
-}
-
-function updateAppliedRules () {
-  const rules = { ...(asmDDRules || defaultRules) }
-  if (rulesOverride) {
-    rules[RULES_OVERRIDE_KEY] = rulesOverride
-  }
-  if (exclusions) {
-    rules[EXCLUSIONS_KEY] = exclusions
-  }
-  if (appliedAsmData && appliedAsmData.size > 0) {
-    rules[RULES_DATA_KEY] = mergeRuleData(appliedAsmData.values())
-  }
-  try {
-    waf.wafManager.update(rules)
-  } catch {
-    log.error('AppSec could not load native package. Applied rules have not been updated')
-  }
-}
-
-function updateAsm (action, asm) {
-  if (action === 'apply') {
-    let rulesObject
-    if (asm.hasOwnProperty(RULES_OVERRIDE_KEY)) {
-      rulesOverride = asm[RULES_OVERRIDE_KEY]
-      rulesObject = { [RULES_OVERRIDE_KEY]: rulesOverride }
-      // TODO Should we check if the array is empty?
-      // TODO Should we do some merge beteween different applies?
-    }
-    if (asm.hasOwnProperty(EXCLUSIONS_KEY)) {
-      exclusions = asm[EXCLUSIONS_KEY]
-      rulesObject = { ...rulesObject, exclusions }
-      // TODO Should we check if the array is empty?
-      // TODO Should we do some merge beteween different applies?
-    }
-    if (rulesObject) {
-      applyRulesObject(rulesObject)
-    }
-  }
-}
-
-function applyRulesObject (rulesObject) {
-  if (rulesObject && waf.wafManager) {
-    waf.wafManager.update(rulesObject)
-  }
-}
-
 function updateAsmData (action, asmData, asmDataId) {
   if (action === 'unapply') {
     appliedAsmData.delete(asmDataId)
@@ -128,6 +74,63 @@ function copyRulesData (rulesData) {
   }
   return copy
 }
+
+function updateAsmDD (action, asmRules) {
+  // ASM_DD: When a new rules file is received from remote config, the file will replace the embed rules completely.
+  if (action === 'unapply') {
+    asmDDRules = undefined
+  } else {
+    asmDDRules = asmRules
+  }
+  updateAppliedRules()
+}
+
+function updateAppliedRules () {
+  const rules = { ...(asmDDRules || defaultRules) }
+  // TODO: We don't need to pass all the things again
+  if (rulesOverride) {
+    rules[RULES_OVERRIDE_KEY] = rulesOverride
+  }
+  if (exclusions) {
+    rules[EXCLUSIONS_KEY] = exclusions
+  }
+  if (appliedAsmData && appliedAsmData.size > 0) {
+    rules[RULES_DATA_KEY] = mergeRuleData(appliedAsmData.values())
+  }
+  try {
+    waf.wafManager.update(rules)
+  } catch {
+    log.error('AppSec could not load native package. Applied rules have not been updated')
+  }
+}
+
+function updateAsm (action, asm) {
+  if (action === 'apply') {
+    let rulesObject
+    if (asm.hasOwnProperty(RULES_OVERRIDE_KEY)) {
+      rulesOverride = asm[RULES_OVERRIDE_KEY]
+      rulesObject = { [RULES_OVERRIDE_KEY]: rulesOverride }
+      // TODO Should we check if the array is empty?
+      // TODO Should we do some merge beteween different applies?
+    }
+    if (asm.hasOwnProperty(EXCLUSIONS_KEY)) {
+      exclusions = asm[EXCLUSIONS_KEY]
+      rulesObject = { ...rulesObject, exclusions }
+      // TODO Should we check if the array is empty?
+      // TODO Should we do some merge beteween different applies?
+    }
+    if (rulesObject) {
+      applyRulesObject(rulesObject)
+    }
+  }
+}
+
+function applyRulesObject (rulesObject) {
+  if (rulesObject && waf.wafManager) {
+    waf.wafManager.update(rulesObject)
+  }
+}
+
 function clearAllRules () {
   waf.destroy()
   appliedAsmData.clear()
@@ -138,8 +141,8 @@ function clearAllRules () {
 
 module.exports = {
   applyRules,
-  clearAllRules,
-  updateAsm,
   updateAsmData,
-  updateAsmDDRules
+  updateAsmDD,
+  updateAsm,
+  clearAllRules
 }

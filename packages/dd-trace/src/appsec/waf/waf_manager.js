@@ -9,7 +9,6 @@ const WAFContextWrapper = require('./waf_context_wrapper')
 
 const validAddressSet = new Set(Object.values(addresses))
 const WAF_ENGINE_CONTEXT_KEY = Symbol('WAF_ENGINE_CONTEXT')
-// TODO MAX_CONTEXT_SIZE = 1024
 
 class WAFManager {
   constructor (rules, config) {

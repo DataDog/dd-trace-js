@@ -1,7 +1,6 @@
 'use strict'
 
-const { applyRules, clearAllRules, updateAsm,
-  updateAsmData, updateAsmDDRules } = require('../../src/appsec/rule_manager')
+const { applyRules, clearAllRules, updateAsmData, updateAsmDD, updateAsm } = require('../../src/appsec/rule_manager')
 const Config = require('../../src/config')
 
 const rules = require('../../src/appsec/recommended.json')
@@ -53,72 +52,6 @@ describe('AppSec Rule Manager', () => {
       applyRules(rules, config.appsec)
 
       expect(waf.init).to.have.been.calledTwice
-    })
-  })
-
-  describe('updateAsm', () => {
-    beforeEach(() => {
-      applyRules(rules, config.appsec)
-    })
-
-    it('should apply only rules_override', () => {
-      const asm = {
-        'rules_override': {
-          key: 'value'
-        }
-      }
-
-      updateAsm('apply', asm)
-
-      expect(WAFManager.prototype.update).to.have.been.calledOnceWithExactly(asm)
-    })
-
-    it('should apply only exclusions', () => {
-      const asm = {
-        'exclusions': {
-          key: 'value'
-        }
-      }
-
-      updateAsm('apply', asm)
-
-      expect(WAFManager.prototype.update).to.have.been.calledOnceWithExactly(asm)
-    })
-
-    it('should apply both rules_override and exclusions', () => {
-      const asm = {
-        'exclusions': {
-          ekey: 'eValue'
-        },
-        'rules_override': {
-          roKey: 'roValue'
-        }
-      }
-
-      updateAsm('apply', asm)
-
-      expect(WAFManager.prototype.update).to.have.been.calledOnceWithExactly(asm)
-    })
-
-    it('should ignore other properties', () => {
-      const asm = {
-        'exclusions': {
-          ekey: 'eValue'
-        },
-        'rules_override': {
-          roKey: 'roValue'
-        },
-        'not_supported': {
-          nsKey: 'nsValue'
-        }
-      }
-
-      updateAsm('apply', asm)
-
-      expect(WAFManager.prototype.update).to.have.been.calledOnceWithExactly({
-        'exclusions': asm['exclusions'],
-        'rules_override': asm['rules_override']
-      })
     })
   })
 
@@ -407,7 +340,7 @@ describe('AppSec Rule Manager', () => {
     })
   })
 
-  describe('updateAsmDDRules', () => {
+  describe('updateAsmDD', () => {
     beforeEach(() => {
       applyRules(rules, config.appsec)
     })
@@ -429,7 +362,7 @@ describe('AppSec Rule Manager', () => {
         }]
       }
 
-      updateAsmDDRules('apply', testRules)
+      updateAsmDD('apply', testRules)
 
       expect(WAFManager.prototype.update).to.have.been.calledOnceWithExactly(testRules)
     })
@@ -451,7 +384,7 @@ describe('AppSec Rule Manager', () => {
         }]
       }
 
-      updateAsmDDRules('unapply', testRules)
+      updateAsmDD('unapply', testRules)
 
       expect(WAFManager.prototype.update).to.have.been.calledOnceWithExactly(rules)
     })
@@ -481,9 +414,75 @@ describe('AppSec Rule Manager', () => {
       }
 
       updateAsm('apply', asm)
-      updateAsmDDRules('apply', testRules)
+      updateAsmDD('apply', testRules)
 
       expect(WAFManager.prototype.update.lastCall).to.have.been.calledWithExactly({ ...testRules, ...asm })
+    })
+  })
+
+  describe('updateAsm', () => {
+    beforeEach(() => {
+      applyRules(rules, config.appsec)
+    })
+
+    it('should apply only rules_override', () => {
+      const asm = {
+        'rules_override': {
+          key: 'value'
+        }
+      }
+
+      updateAsm('apply', asm)
+
+      expect(WAFManager.prototype.update).to.have.been.calledOnceWithExactly(asm)
+    })
+
+    it('should apply only exclusions', () => {
+      const asm = {
+        'exclusions': {
+          key: 'value'
+        }
+      }
+
+      updateAsm('apply', asm)
+
+      expect(WAFManager.prototype.update).to.have.been.calledOnceWithExactly(asm)
+    })
+
+    it('should apply both rules_override and exclusions', () => {
+      const asm = {
+        'exclusions': {
+          ekey: 'eValue'
+        },
+        'rules_override': {
+          roKey: 'roValue'
+        }
+      }
+
+      updateAsm('apply', asm)
+
+      expect(WAFManager.prototype.update).to.have.been.calledOnceWithExactly(asm)
+    })
+
+    it('should ignore other properties', () => {
+      const asm = {
+        'exclusions': {
+          ekey: 'eValue'
+        },
+        'rules_override': {
+          roKey: 'roValue'
+        },
+        'not_supported': {
+          nsKey: 'nsValue'
+        }
+      }
+
+      updateAsm('apply', asm)
+
+      expect(WAFManager.prototype.update).to.have.been.calledOnceWithExactly({
+        'exclusions': asm['exclusions'],
+        'rules_override': asm['rules_override']
+      })
     })
   })
 })
