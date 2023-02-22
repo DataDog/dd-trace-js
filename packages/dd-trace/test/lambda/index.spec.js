@@ -60,20 +60,20 @@ describe('lambda', () => {
         },
         {
           envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
-          value: 100
+          value: '-100'
         },
         {
-          envVar: 'DD_APM_FLUSH_DEADLINE',
-          value: 100
+          envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
+          value: '50'
         }
       ]
 
       deadlines.forEach(deadline => {
         const flushDeadlineEnvVar = deadline.envVar
-        const customDeadline = deadline.value
+        const customDeadline = deadline.value ? deadline.value : ''
         const isDefault = flushDeadlineEnvVar === 'default'
 
-        it(`traces error on impending timeout using ${flushDeadlineEnvVar} deadline`, () => {
+        it(`traces error on impending timeout using ${flushDeadlineEnvVar} ${customDeadline} deadline`, () => {
           process.env[flushDeadlineEnvVar] = customDeadline
 
           const _context = {
