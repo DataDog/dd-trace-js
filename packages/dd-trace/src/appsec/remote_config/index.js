@@ -2,7 +2,7 @@
 
 const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
-const { updateAsmDDRules, updateAsmData, updateAsm } = require('../rule_manager')
+const { updateAsmData, updateAsmDD, updateAsm } = require('../rule_manager')
 
 let rc
 
@@ -48,8 +48,23 @@ function disableAsmData () {
   }
 }
 
+function enableAsmDD (appsecConfig) {
+  if (rc && appsecConfig && appsecConfig.rules === undefined) {
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, true)
+    rc.on('ASM_DD', updateAsmDD)
+  }
+}
+
+function disableAsmDD () {
+  if (rc) {
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, false)
+    rc.off('ASM_DD', updateAsmDD)
+  }
+}
+
 function enableAsm (appsecConfig) {
   if (rc && appsecConfig && appsecConfig.rules === undefined) {
+    // TODO: we should have a different capability for rule override
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
     rc.on('ASM', updateAsm)
@@ -64,26 +79,12 @@ function disableAsm () {
   }
 }
 
-function enableAsmDDRules (appsecConfig) {
-  if (rc && appsecConfig && appsecConfig.rules === undefined) {
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, true)
-    rc.on('ASM_DD', updateAsmDDRules)
-  }
-}
-
-function disableAsmDDRules () {
-  if (rc) {
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, false)
-    rc.off('ASM_DD', updateAsmDDRules)
-  }
-}
-
 module.exports = {
   enable,
-  enableAsm,
   enableAsmData,
-  enableAsmDDRules,
-  disableAsm,
   disableAsmData,
-  disableAsmDDRules
+  enableAsmDD,
+  disableAsmDD,
+  enableAsm,
+  disableAsm
 }

@@ -43,9 +43,10 @@ async function enableAsync (_config) {
 
 function enableFromRules (_config, rules) {
   RuleManager.applyRules(rules, _config.appsec)
-  remoteConfig.enableAsm(_config.appsec)
+
   remoteConfig.enableAsmData(_config.appsec)
-  remoteConfig.enableAsmDDRules(_config.appsec)
+  remoteConfig.enableAsmDD(_config.appsec)
+  remoteConfig.enableAsm(_config.appsec)
 
   Reporter.setRateLimit(_config.appsec.rateLimit)
 
@@ -62,9 +63,10 @@ function abortEnable (err) {
 
   // abort AppSec start
   RuleManager.clearAllRules()
-  remoteConfig.disableAsm()
+
   remoteConfig.disableAsmData()
-  remoteConfig.disableAsmDDRules()
+  remoteConfig.disableAsmDD()
+  remoteConfig.disableAsm()
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
@@ -152,9 +154,10 @@ function disable () {
   config = null
 
   RuleManager.clearAllRules()
-  remoteConfig.disableAsm()
+
   remoteConfig.disableAsmData()
-  remoteConfig.disableAsmDDRules()
+  remoteConfig.disableAsmDD()
+  remoteConfig.disableAsm()
 
   // Channel#unsubscribe() is undefined for non active channels
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
