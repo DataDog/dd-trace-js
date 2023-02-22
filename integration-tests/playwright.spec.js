@@ -19,7 +19,7 @@ const { TEST_STATUS } = require('../packages/dd-trace/src/plugins/util/test')
 // This is done because from playwright@>=1.22.0 node 12 is not supported
 // TODO: figure out why playwright 1.31.0 fails
 const isOldNode = semver.satisfies(process.version, '<=12')
-const versions = ['1.18.0', isOldNode ? '1.21.0' : '1.30.0']
+const versions = ['1.18.0', isOldNode ? '1.21.0' : 'latest']
 
 versions.forEach((version) => {
   describe(`playwright@${version}`, () => {
