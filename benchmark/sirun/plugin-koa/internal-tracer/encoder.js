@@ -28,6 +28,7 @@ const bigEndian = uInt8Float64Array[7] === 0
 class Encoder {
   constructor (limit = SOFT_LIMIT) {
     this._limit = limit
+    this._metadataBytes = new Chunk(1024)
     this._eventBytes = new Chunk()
     this._stringBytes = new Chunk()
     this._client = new Client()
@@ -117,19 +118,21 @@ class Encoder {
   }
 
   makePayload () {
-    const eventSize = this._eventBytes.length + 5
-    const serviceLength = Buffer.byteLength(service)
-    const buffer = Buffer.allocUnsafe(eventSize + 18 + serviceLength)
+    this._encodeMap(this._metadataBytes, { service }) // HACK
+
+    const metadataBytes = this._metadataBytes
+    const metadataSize = metadataBytes.length + 9
+    const eventSize = this._eventBytes.length + 5 + 7
+    const buffer = Buffer.allocUnsafe(1 + metadataSize + eventSize)
 
     let offset = 0
 
     buffer[offset++] = 0x82 // fixmap(2)
 
-    buffer[offset++] = 0xa7 // fixstr(7)
-    offset += buffer.write('service', offset)
-    buffer[offset++] = 0xd9 // str8
-    buffer[offset++] = serviceLength
-    offset += buffer.write(service, offset)
+    buffer[offset++] = 0xa8 // fixstr(8)
+    offset += buffer.write('metadata', offset)
+    offset += metadataBytes.buffer.copy(buffer, offset, 0, metadataBytes.length)
+
     buffer[offset++] = 0xa6 // fixstr(6)
     offset += buffer.write('events', offset)
     offset = this._writeEvents(buffer, offset)
@@ -167,6 +170,7 @@ class Encoder {
   }
 
   _reset () {
+    this._metadataBytes.length = 0
     this._eventCount = 0
     this._eventBytes.length = 0
     this._stringCount = 0

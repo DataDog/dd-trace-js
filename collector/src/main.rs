@@ -1,17 +1,13 @@
-use axum::body::Bytes;
-use axum::extract::{DefaultBodyLimit,State};
-use axum::routing::put;
-use axum::Router;
+use hyper::{Body, Error, Method, Server, Version};
+use hyper::http::Response;
+use hyper::service::{make_service_fn, service_fn};
 use rmp::encode;
 use rmp::encode::ByteBuf;
-use serde_json::Value;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::Sender;
-use tokio::sync::mpsc::Receiver;
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
 use serde::Deserialize;
+use serde_json::Value;
+use std::collections::HashMap;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::{Receiver,Sender};
 
 type Traces = HashMap<u64, Trace>;
 
@@ -39,20 +35,20 @@ struct Trace {
 }
 
 #[derive(Deserialize, Debug)]
+struct Metadata {
+    service: String
+}
+
+#[derive(Deserialize, Debug)]
 struct Payload {
-    service: String,
-    events: Value
+    metadata: Metadata,
+    events: Vec<Value>
 }
 
-struct AppState {
-    tx: Sender<Payload>
-}
-
-// TODO: Use hyper directly instead of axum/reqwest.
 // TODO: Decouple processing from transport.
-// TODO: Store traces per connection and cleanup on connection close.
+// TODO: Cleanup traces on connection close.
 // TODO: Read MsgPack manually and copy bytes to span buffer directly.
-// TODO: Add support for payload metadata (i.e. service, language).
+// TODO: Add support for more payload metadata (i.e. language).
 // TODO: Use string table.
 // TODO: Read events into structs instead of serde values.
 // TODO: Event for adding trace tags.
@@ -65,53 +61,70 @@ struct AppState {
 // TODO: Add benchmarks.
 
 #[tokio::main]
-async fn main() {
-    let (tx, mut rx): (Sender<Payload>, Receiver<Payload>) = mpsc::channel(100);
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let addr = ([127, 0, 0, 1], 8127).into();
+    let make_svc = make_service_fn(|_conn| {
+        let (tx, mut rx): (Sender<Payload>, Receiver<Payload>) = mpsc::channel(100);
 
-    let processor = tokio::spawn(async move {
-        let mut traces = Traces::new();
+        tokio::spawn(async move {
+            let mut traces = Traces::new();
 
-        while let Some(payload) = rx.recv().await {
-            let events = payload.events.as_array().unwrap().to_vec();
+            while let Some(payload) = rx.recv().await {
+                // println!("{:#?}", payload);
 
-            for event in events {
-                process_event(&mut traces, event, &payload);
+                let metadata = payload.metadata;
+                let events = payload.events;
+
+                for event in events {
+                    process_event(&mut traces, event, &metadata);
+                }
+
+                flush(&mut traces).await;
             }
+        });
 
-            flush(&mut traces).await;
+        async move {
+            Ok::<_, Error>(service_fn(move |mut req| {
+                let tx = tx.clone();
+
+                async move {
+                    let method = req.method();
+                    let path = req.uri().path();
+                    let version = req.version();
+
+                    if version == Version::HTTP_11 && method == Method::PUT && path == "/v0.1/events" {
+                        let bytes = hyper::body::to_bytes(req.body_mut()).await.unwrap();
+                        let data: Vec<u8> = bytes.try_into().unwrap();
+                        let payload: Payload = rmp_serde::from_slice(&data).unwrap();
+
+                        tx.send(payload).await.unwrap();
+
+                        Ok(Response::new(Body::from("")))
+                    } else {
+                        Err("Unsupported request") // TODO: not a 500
+                    }
+                }
+            }))
         }
     });
 
-    let state = Arc::new(AppState { tx });
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8127));
-    let app = Router::new()
-        .route("/v0.1/events", put(handle_events))
-        .layer(DefaultBodyLimit::max(1024 * 1024 * 16)) // 16MB
-        .with_state(state);
+    let server = Server::bind(&addr).serve(make_svc);
 
-    let server = axum::Server::bind(&addr)
-        .serve(app.into_make_service());
+    println!("Listening on http://{}", addr);
 
-    let (_, _) = tokio::join!(server, processor);
+    server.await?;
+
+    Ok(())
 }
 
-async fn handle_events(State(state): State<Arc<AppState>>, bytes: Bytes) {
-    let data: Vec<u8> = bytes.try_into().unwrap();
-    let payload: Payload = rmp_serde::from_slice(&data).unwrap();
-
-    // println!("{:#?}", payload);
-
-    state.tx.send(payload).await.unwrap();
-}
-
-fn process_event(traces: &mut Traces, event: Value, payload: &Payload) {
+fn process_event(traces: &mut Traces, event: Value, metadata: &Metadata) {
     let event_type = event.get(0).unwrap().as_u64().unwrap();
 
     match event_type {
-        1 => process_start_koa_request(traces, &event, payload),
+        1 => process_start_koa_request(traces, &event, &metadata),
         2 => process_add_error(traces, &event),
         3 => process_finish_koa_request(traces, &event),
-        4 => process_start_span(traces, &event, payload),
+        4 => process_start_span(traces, &event, &metadata),
         5 => process_finish_span(traces, &event),
         6 => process_add_tags(traces, &event),
         _ => ()
@@ -157,7 +170,7 @@ fn process_add_tags(traces: &mut Traces, event: &Value) {
     }
 }
 
-fn process_start_span(traces: &mut Traces, event: &Value, payload: &Payload) {
+fn process_start_span(traces: &mut Traces, event: &Value, metadata: &Metadata) {
     let mut meta = HashMap::new();
     let mut metrics = HashMap::new();
 
@@ -182,7 +195,7 @@ fn process_start_span(traces: &mut Traces, event: &Value, payload: &Payload) {
         parent_id: event[4].as_u64().unwrap(),
         name: event[6].as_str().unwrap().to_string(),
         resource: event[7].as_str().unwrap().to_string(),
-        service: if service.is_empty() { payload.service.to_string() } else { service.to_string() },
+        service: if service.is_empty() { metadata.service.to_string() } else { service.to_string() },
         error: 0,
         start: event[1].as_u64().unwrap(),
         duration: 0,
@@ -217,7 +230,7 @@ fn process_finish_span(traces: &mut Traces, event: &Value) {
     }
 }
 
-fn process_start_koa_request(traces: &mut Traces, event: &Value, payload: &Payload) {
+fn process_start_koa_request(traces: &mut Traces, event: &Value, metadata: &Metadata) {
     let mut meta = HashMap::new();
     let metrics = HashMap::new();
 
@@ -235,7 +248,7 @@ fn process_start_koa_request(traces: &mut Traces, event: &Value, payload: &Paylo
         parent_id: event[4].as_u64().unwrap(),
         name: String::from("koa.request"),
         resource,
-        service: payload.service.to_string(),
+        service: metadata.service.to_string(),
         error: 0,
         start: event[1].as_u64().unwrap(),
         duration: 0,
@@ -302,22 +315,21 @@ async fn flush(traces: &mut Traces) {
 
         traces.retain(|_, t| t.started != t.finished);
 
-        let client = reqwest::Client::new();
+        let client = hyper::Client::new();
         let data: Vec<u8> = wr.as_vec().to_vec();
-
-        // println!("{:#?}", data);
-
-        client.put("http://localhost:8126/v0.4/traces")
+        let req = hyper::Request::builder()
+            .method(hyper::Method::PUT)
+            .uri("http://localhost:8126/v0.4/traces")
             .header("Content-Type", "application/msgpack")
             .header("X-Datadog-Trace-Count", trace_count.to_string())
             // .header("Datadog-Meta-Tracer-Version", "")
             // .header("Datadog-Meta-Lang", "")
             // .header("Datadog-Meta-Lang-Version", "")
             // .header("Datadog-Meta-Lang-Interpreter", "")
-            .body(data)
-            .send()
-            .await
+            .body(hyper::Body::from(data))
             .unwrap();
+
+        client.request(req).await.unwrap();
     }
 }
 
@@ -333,8 +345,6 @@ fn encode_trace(wr: &mut ByteBuf, trace: &Trace) {
     encode::write_array_len(wr, trace.spans.len() as u32).unwrap();
 
     for span in trace.spans.values() {
-        // println!("{:#?}", test);
-
         match &span.span_type {
             Some(span_type) => {
                 encode::write_map_len(wr, 12).unwrap();
