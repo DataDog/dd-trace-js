@@ -53,7 +53,7 @@ function wrapEmitter (corkedEmitter) {
   shimmer.wrap(corkedEmitter, 'removeListener', removeListener)
 }
 
-addHook({ name: 'ldapjs', versions: ['>=2 <3'] }, ldapjs => {
+addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
   const ldapSearchCh = channel('datadog:ldapjs:client:search')
 
   shimmer.wrap(ldapjs.Client.prototype, 'search', search => function (base, options) {
