@@ -72,7 +72,7 @@ describe('Plugin', () => {
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
-                expect(traces[0][0].meta).to.have.property('db.port', url.port)
+                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
               }
             }).then(done, done)
             connection.execute(dbQuery)
@@ -98,7 +98,7 @@ describe('Plugin', () => {
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
-                expect(traces[0][0].meta).to.have.property('db.port', url.port)
+                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
               }
             }).then(done, done)
 
@@ -132,7 +132,7 @@ describe('Plugin', () => {
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
-                expect(traces[0][0].meta).to.have.property('db.port', url.port)
+                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
               }
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
@@ -191,7 +191,7 @@ describe('Plugin', () => {
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
-                expect(traces[0][0].meta).to.have.property('db.port', url.port)
+                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
               }
             }).then(done, done)
             connection.execute(dbQuery)
@@ -216,7 +216,7 @@ describe('Plugin', () => {
               if (url) {
                 expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
                 expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
-                expect(traces[0][0].meta).to.have.property('db.port', url.port)
+                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
               }
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
