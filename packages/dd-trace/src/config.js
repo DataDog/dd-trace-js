@@ -376,7 +376,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
-      false
+      true
     )
 
     const ingestion = options.ingestion || {}
