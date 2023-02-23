@@ -866,21 +866,27 @@ describe('Config', () => {
       beforeEach(() => {
         options = { isCiVisibility: true }
       })
-      it('should activate git upload if the env var is passed', () => {
-        process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'true'
+      it('should activate git upload by default', () => {
         const config = new Config(options)
         expect(config).to.have.property('isGitUploadEnabled', true)
       })
-      it('should activate intelligent test runner if the env var is passed', () => {
-        process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
+      it('should disable git upload if the DD_CIVISIBILITY_GIT_UPLOAD_ENABLED is set to false', () => {
+        process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'false'
         const config = new Config(options)
-        expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
+        expect(config).to.have.property('isGitUploadEnabled', false)
       })
-      it('should activate git upload automatically if intelligent test runner is activated', () => {
-        process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
-        const config = new Config(options)
-        expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
-        expect(config).to.have.property('isGitUploadEnabled', true)
+      context('DD_CIVISIBILITY_ITR_ENABLED is true', () => {
+        it('should enable intelligent test runner', () => {
+          process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
+          const config = new Config(options)
+          expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
+        })
+        it('should enable git upload, regardless of DD_CIVISIBILITY_GIT_UPLOAD_ENABLED', () => {
+          process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
+          process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'false'
+          const config = new Config(options)
+          expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
+        })
       })
     })
     context('ci visibility mode is not enabled', () => {
