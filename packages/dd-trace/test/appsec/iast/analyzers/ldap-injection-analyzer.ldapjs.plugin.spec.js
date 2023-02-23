@@ -53,8 +53,9 @@ describe('ldap-injection-analyzer with ldapjs', () => {
               if (err) {
                 return reject(err)
               }
-              searchRes.on('end', resolve)
-              searchRes.on('error', reject)
+              searchRes
+                .on('end', resolve)
+                .on('error', reject)
             })
           })
         }, 'LDAP_INJECTION')
@@ -68,8 +69,9 @@ describe('ldap-injection-analyzer with ldapjs', () => {
               if (err) {
                 return reject(err)
               }
-              searchRes.on('end', resolve)
-              searchRes.on('error', reject)
+              searchRes
+                .on('end', resolve)
+                .on('error', reject)
             })
           })
         }, 'LDAP_INJECTION')
@@ -94,8 +96,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
                 expect(iastCtxEnd).to.not.be.undefined
 
                 resolve()
-              })
-              searchRes.on('error', reject)
+              }).on('error', reject)
             })
           })
         }, 'LDAP_INJECTION')
@@ -117,8 +118,9 @@ describe('ldap-injection-analyzer with ldapjs', () => {
               }
               const onSearchEnd = () => {
                 searchResOnEndInvocations++
-                searchRes.off('end', onSearchEnd)
-                searchRes.emit('end')
+                searchRes
+                  .off('end', onSearchEnd)
+                  .emit('end')
 
                 // if .off method wouldn't work the test will never reach this lines because it will loop forever :S
                 expect(searchResOnEndInvocations).to.be.eq(1)
