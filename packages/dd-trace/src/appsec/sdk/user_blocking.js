@@ -1,34 +1,19 @@
 'use strict'
 
 const { USER_ID } = require('../addresses')
+const waf = require('../waf')
 const { getRootSpan } = require('./utils')
 const { block } = require('../blocking')
 const { storage } = require('../../../../datadog-core')
 const { setUserTags } = require('./set_user')
 const log = require('../../log')
-const waf = require('../waf')
 
 function isUserBlocked (user) {
-  const store = storage.getStore()
-  const req = store && store.req
-  const wafContext = waf.wafManager && waf.wafManager.getDDWAFContext(req)
-  if (!wafContext) {
-    log.warn('WAF context not available in isUserBlocked')
-    return false
-  }
-  const results = wafContext.run({ [USER_ID]: user.id })
+  const actions = waf.run({ [USER_ID]: user.id })
 
-  if (!results) {
-    return false
-  }
+  if (!actions) return false
 
-  for (const entry of results) {
-    if (entry && entry.includes('block')) {
-      return true
-    }
-  }
-
-  return false
+  return actions.includes('block')
 }
 
 function checkUserAndSetUser (tracer, user) {
