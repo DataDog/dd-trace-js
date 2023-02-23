@@ -1,5 +1,6 @@
 'use strict'
 
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class CassandraDriverPlugin extends DatabasePlugin {
@@ -21,7 +22,7 @@ class CassandraDriverPlugin extends DatabasePlugin {
         'cassandra.query': query,
         'cassandra.keyspace': keyspace,
         'out.host': connectionOptions.host,
-        'out.port': connectionOptions.port
+        [CLIENT_PORT_KEY]: connectionOptions.port
       }
     })
   }
