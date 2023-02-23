@@ -1,11 +1,14 @@
-use hyper::{Body, Error, Method, Server, Version};
+use hyper::{Body, Method, StatusCode, Error};
 use hyper::http::Response;
-use hyper::service::{make_service_fn, service_fn};
+use hyper::server::conn::Http;
+use hyper::service::service_fn;
 use rmp::encode;
 use rmp::encode::ByteBuf;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver,Sender};
 
@@ -46,7 +49,8 @@ struct Payload {
 }
 
 // TODO: Decouple processing from transport.
-// TODO: Cleanup traces on connection close.
+// TODO: Stream the data somehow.
+// TODO: Make sure that traces are cleaned up on connection close.
 // TODO: Read MsgPack manually and copy bytes to span buffer directly.
 // TODO: Add support for more payload metadata (i.e. language).
 // TODO: Use string table.
@@ -62,8 +66,11 @@ struct Payload {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let addr = ([127, 0, 0, 1], 8127).into();
-    let make_svc = make_service_fn(|_conn| {
+    let addr = SocketAddr::from(([127, 0, 0, 1], 8127));
+    let listener = TcpListener::bind(addr).await?;
+
+    loop {
+        let (stream, _) = listener.accept().await?;
         let (tx, mut rx): (Sender<Payload>, Receiver<Payload>) = mpsc::channel(100);
 
         tokio::spawn(async move {
@@ -83,38 +90,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         });
 
-        async move {
-            Ok::<_, Error>(service_fn(move |mut req| {
-                let tx = tx.clone();
+        tokio::spawn(async move {
+            Http::new()
+                .http1_only(true)
+                .http1_keep_alive(true)
+                .serve_connection(stream, service_fn(move |mut req| {
+                    let tx = tx.clone();
 
-                async move {
-                    let method = req.method();
-                    let path = req.uri().path();
-                    let version = req.version();
+                    async move {
+                        let method = req.method();
+                        let path = req.uri().path();
+                        let body;
 
-                    if version == Version::HTTP_11 && method == Method::PUT && path == "/v0.1/events" {
-                        let bytes = hyper::body::to_bytes(req.body_mut()).await.unwrap();
-                        let data: Vec<u8> = bytes.try_into().unwrap();
-                        let payload: Payload = rmp_serde::from_slice(&data).unwrap();
+                        if method == Method::PUT && path == "/v0.1/events" {
+                            let bytes = hyper::body::to_bytes(req.body_mut()).await.unwrap();
+                            let data: Vec<u8> = bytes.try_into().unwrap();
+                            let payload: Payload = rmp_serde::from_slice(&data).unwrap();
 
-                        tx.send(payload).await.unwrap();
+                            tx.send(payload).await.unwrap();
 
-                        Ok(Response::new(Body::from("")))
-                    } else {
-                        Err("Unsupported request") // TODO: not a 500
+                            body = Response::new(Body::from(""));
+                        } else {
+                            body = Response::builder().status(StatusCode::NOT_FOUND).body(Body::from("")).unwrap()
+                        }
+
+                        Ok::<_, Error>(body)
                     }
-                }
-            }))
-        }
-    });
-
-    let server = Server::bind(&addr).serve(make_svc);
-
-    println!("Listening on http://{}", addr);
-
-    server.await?;
-
-    Ok(())
+                }))
+                .await
+                .unwrap();
+        });
+    }
 }
 
 fn process_event(traces: &mut Traces, event: Value, metadata: &Metadata) {
