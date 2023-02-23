@@ -20,8 +20,14 @@ describe('ldap-injection-analyzer with ldapjs', () => {
         client = ldapjs.createClient({
           url: 'ldap://localhost:1389'
         })
-        return new Promise((resolve) => {
-          client.bind(`cn=admin,${base}`, 'adminpassword', resolve)
+        return new Promise((resolve, reject) => {
+          client.bind(`cn=admin,${base}`, 'adminpassword', (err) => {
+            if (err) {
+              reject(err)
+            } else {
+              resolve()
+            }
+          })
         })
       })
 
@@ -39,6 +45,9 @@ describe('ldap-injection-analyzer with ldapjs', () => {
             filter = newTaintedString(iastCtx, filter, 'param', 'Request')
 
             client.search(base, filter, (err, searchRes) => {
+              if (err) {
+                return reject(err)
+              }
               searchRes.on('end', resolve)
               searchRes.on('error', reject)
             })
@@ -51,6 +60,9 @@ describe('ldap-injection-analyzer with ldapjs', () => {
           return new Promise((resolve, reject) => {
             const filter = '(objectClass=*)'
             client.search(base, filter, (err, searchRes) => {
+              if (err) {
+                return reject(err)
+              }
               searchRes.on('end', resolve)
               searchRes.on('error', reject)
             })
@@ -68,6 +80,9 @@ describe('ldap-injection-analyzer with ldapjs', () => {
             filter = newTaintedString(iastCtx, filter, 'param', 'Request')
 
             client.search(base, filter, (err, searchRes) => {
+              if (err) {
+                return reject(err)
+              }
               searchRes.on('end', () => {
                 const storeEnd = storage.getStore()
                 const iastCtxEnd = iastContextFunctions.getIastContext(storeEnd)
@@ -92,6 +107,9 @@ describe('ldap-injection-analyzer with ldapjs', () => {
 
             let searchResOnEndInvocations = 0
             client.search(base, filter, (err, searchRes) => {
+              if (err) {
+                return reject(err)
+              }
               const onSearchEnd = () => {
                 searchResOnEndInvocations++
                 searchRes.off('end', onSearchEnd)
