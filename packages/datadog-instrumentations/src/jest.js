@@ -482,9 +482,10 @@ const JEST_WORKER_SHUTDOWN_TIMEOUT = 20
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
 
+// 25.1.0 is where waitForExit
 addHook({
   name: 'jest-worker',
-  versions: ['>=24.8.0'],
+  versions: ['>=24.9.0'],
   file: 'build/base/BaseWorkerPool.js'
 }, (baseWorkerPool) => {
   const BaseWorkerPool = baseWorkerPool.default ? baseWorkerPool.default : baseWorkerPool
