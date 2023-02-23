@@ -24,10 +24,8 @@ let __lambdaTimeout
 function checkTimeout (context) {
   const remainingTimeInMillis = context.getRemainingTimeInMillis()
 
-  let apmFlushDeadline = parseInt(process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS)
-  if (!apmFlushDeadline || apmFlushDeadline < 0) {
-    apmFlushDeadline = 100
-  }
+  let apmFlushDeadline = parseInt(process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS) || 100
+  apmFlushDeadline = apmFlushDeadline < 0 ? 100 : apmFlushDeadline
 
   __lambdaTimeout = setTimeout(() => {
     timeoutChannel.publish(undefined)
