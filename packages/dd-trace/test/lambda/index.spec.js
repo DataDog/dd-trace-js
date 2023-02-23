@@ -32,7 +32,7 @@ describe('lambda', () => {
 
     it('patches lambda function correctly', async () => {
       const _context = {
-        getRemainingTimeInMillis: () => 300
+        getRemainingTimeInMillis: () => 150
       }
       const _event = {}
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
@@ -57,55 +57,48 @@ describe('lambda', () => {
       const deadlines = [
         {
           envVar: 'default'
+          // will use default remaining time
         },
         {
           envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
-          value: '-100'
+          value: '-100' // will default to 0
         },
         {
           envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
-          value: '50'
+          value: '10' // subtract 10 from the remaining time
         }
       ]
 
       deadlines.forEach(deadline => {
         const flushDeadlineEnvVar = deadline.envVar
         const customDeadline = deadline.value ? deadline.value : ''
-        const isDefault = flushDeadlineEnvVar === 'default'
 
-        it(`traces error on impending timeout using ${flushDeadlineEnvVar} ${customDeadline} deadline`, () => {
+        it(`traces error on impending timeout using ${flushDeadlineEnvVar} ${customDeadline} deadline`, (done) => {
           process.env[flushDeadlineEnvVar] = customDeadline
 
           const _context = {
-            // If using default, we set the value to 150, since the
-            // fixture function we're sleeping for 200ms
-            getRemainingTimeInMillis: () => isDefault ? 150 : 400
+            getRemainingTimeInMillis: () => 25
           }
           const _event = {}
 
           const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
           const app = require(_handlerPath)
           datadog = require('./fixtures/datadog-lambda')
-          let result
-          (datadog(app.handler)(_event, _context)).then((data) => { result = data })
 
-          // If default, then we don't wait for value from deadline, we just use
-          // AWS Lambda remaining time in millis
-          const timeoutDeadline = isDefault ? _context.getRemainingTimeInMillis() : customDeadline
-          setTimeout(() => {
-            expect(result).to.equal(undefined)
-          }, timeoutDeadline - 50)
-
-          const checkTraces = agent.use((_traces) => {
+          let error = false
+          agent.use((_traces) => {
             // First trace, since errors are tagged at root span level.
             const trace = _traces[0][0]
             expect(trace.error).to.equal(1)
+            error = true
             expect(trace.meta['error.type']).to.equal('Impending Timeout')
-          })
+            // Ensure that once this finish, an error was tagged.
+          }).then(() => expect(error).to.equal(true))
 
-          // We change from async/await here since testing multiple tests
-          // with iterators is tricky, forof won't work to use it here.
-          checkTraces.then(() => {})
+          // Since these are expected to timeout and one can't kill the
+          // environment, one has to wait for the result to come in so
+          // the traces are verified above.
+          datadog(app.handler)(_event, _context).then(_ => done(), done)
         })
       })
     })
