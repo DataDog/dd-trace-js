@@ -11,6 +11,7 @@ const testSessionConfigurationCh = channel('ci:jest:session:configuration')
 
 const testSuiteStartCh = channel('ci:jest:test-suite:start')
 const testSuiteFinishCh = channel('ci:jest:test-suite:finish')
+
 const testSuiteCodeCoverageCh = channel('ci:jest:test-suite:code-coverage')
 
 const testStartCh = channel('ci:jest:test:start')
@@ -475,3 +476,45 @@ addHook({
   versions: ['>=24.8.0'],
   file: 'build/jasmineAsyncInstall.js'
 }, jasmineAsyncInstallWraper)
+
+// Maximum time we allow the workers to shutdown
+const JEST_WORKER_SHUTDOWN_TIMEOUT = 20
+// https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
+const CHILD_MESSAGE_END = 2
+
+// 25.1.0 is where waitForExit
+addHook({
+  name: 'jest-worker',
+  versions: ['>=24.9.0'],
+  file: 'build/base/BaseWorkerPool.js'
+}, (baseWorkerPool) => {
+  const BaseWorkerPool = baseWorkerPool.default ? baseWorkerPool.default : baseWorkerPool
+  shimmer.wrap(BaseWorkerPool.prototype, 'end', end => async function () {
+    let timeoutId
+
+    try {
+      // End everything: we listen to this message and attempt to flush everything
+      this._workers.forEach(worker => {
+        worker.send([CHILD_MESSAGE_END], () => {}, () => {}, () => {})
+      })
+
+      const killPromise = new Promise((resolve) => {
+        timeoutId = setTimeout(() => {
+          resolve()
+        }, JEST_WORKER_SHUTDOWN_TIMEOUT * 1000)
+      })
+
+      const workersWaitForExitPromise = Promise.all(this._workers.map(worker =>
+        worker.waitForExit()
+      ))
+
+      // If the workers are able to shut down gracefully before the timeout, we proceed
+      await Promise.race([workersWaitForExitPromise, killPromise])
+      clearTimeout(timeoutId)
+    } catch (e) {
+      // ignore error
+    }
+    return end.apply(this, arguments)
+  })
+  return baseWorkerPool
+})
