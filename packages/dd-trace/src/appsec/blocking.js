@@ -5,8 +5,8 @@ const fs = require('fs')
 
 // TODO: move template loading to a proper spot.
 let templateLoaded = false
-let templateHtml = ''
-let templateJson = ''
+let templateHtml = '<html>blocked</html>'
+let templateJson = '{"error": "blocked"}'
 
 function block (req, res, rootSpan, abortController) {
   if (res.headersSent) {
@@ -44,16 +44,36 @@ function block (req, res, rootSpan, abortController) {
 
 function loadTemplates (config) {
   if (!templateLoaded) {
-    templateHtml = fs.readFileSync(config.appsec.blockedTemplateHtml)
-    templateJson = fs.readFileSync(config.appsec.blockedTemplateJson)
+    try {
+      templateHtml = fs.readFileSync(config.appsec.blockedTemplateHtml)
+    } catch (err) {
+      log.warn(`Unable to read ${config.appsec.blockedTemplateHtml} from disk.`)
+    }
+
+    try {
+      templateJson = fs.readFileSync(config.appsec.blockedTemplateJson)
+    } catch (err) {
+      log.warn(`Unable to read ${config.appsec.blockedTemplateJson} from disk.`)
+    }
+
     templateLoaded = true
   }
 }
 
 async function loadTemplatesAsync (config) {
   if (!templateLoaded) {
-    templateHtml = await fs.promises.readFile(config.appsec.blockedTemplateHtml)
-    templateJson = await fs.promises.readFile(config.appsec.blockedTemplateJson)
+    try {
+      templateHtml = await fs.promises.readFile(config.appsec.blockedTemplateHtml)
+    } catch (err) {
+      log.warn(`Unable to read ${config.appsec.blockedTemplateHtml} from disk.`)
+    }
+
+    try {
+      templateJson = await fs.promises.readFile(config.appsec.blockedTemplateJson)
+    } catch (err) {
+      log.warn(`Unable to read ${config.appsec.blockedTemplateJson} from disk.`)
+    }
+
     templateLoaded = true
   }
 }
