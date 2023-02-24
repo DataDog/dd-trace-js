@@ -452,7 +452,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
   })
   if (fs.rm) {
     describe('test rm', () => {
-      const filename = path.join(os.tmpdir(), 'test-rmdir')
+      const filename = path.join(os.tmpdir(), 'test-rm')
       beforeEach(() => {
         fs.writeFileSync(filename, '')
       })

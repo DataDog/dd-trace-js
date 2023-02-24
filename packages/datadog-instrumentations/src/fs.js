@@ -191,9 +191,9 @@ function isInnerCall (innerResource) {
   return parentIdMap.get(this) !== innerResource.asyncId()
 }
 
-function removeFlagForInnerCall (innerResource) {
-  if (this && parentIdMap.get(this) === innerResource.asyncId()) {
-    parentIdMap.delete(this)
+function removeCallFromParentIdMap (thiz, innerResource) {
+  if (thiz && parentIdMap.get(thiz) === innerResource.asyncId()) {
+    parentIdMap.delete(thiz)
   }
 }
 
@@ -217,7 +217,7 @@ function wrapCreateStream (original) {
       try {
         const stream = original.apply(this, arguments)
 
-        removeFlagForInnerCall.apply(this, [innerResource])
+        removeCallFromParentIdMap(this, innerResource)
 
         const onError = innerResource.bind(error => {
           errorChannel.publish(error)
@@ -238,7 +238,7 @@ function wrapCreateStream (original) {
 
         return stream
       } catch (error) {
-        removeFlagForInnerCall.apply(this, [innerResource])
+        removeCallFromParentIdMap(this, innerResource)
         errorChannel.publish(error)
         finishChannel.publish()
       }
@@ -312,7 +312,7 @@ function createWrapFunction (prefix = '', override = '') {
         try {
           const result = original.apply(this, arguments)
 
-          removeFlagForInnerCall.apply(this, [innerResource])
+          removeCallFromParentIdMap(this, innerResource)
 
           if (cb) return result
           if (result && typeof result.then === 'function') {
@@ -338,7 +338,7 @@ function createWrapFunction (prefix = '', override = '') {
 
           return result
         } catch (error) {
-          removeFlagForInnerCall.apply(this, [innerResource])
+          removeCallFromParentIdMap(this, innerResource)
           errorChannel.publish(error)
           finishChannel.publish()
           throw error
