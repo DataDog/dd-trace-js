@@ -18,6 +18,7 @@ const { block, loadTemplates, loadTemplatesAsync } = require('./blocking')
 const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
 const cookieParserChannel = dc.channel('datadog:cookie-parser:read:finish')
 const queryParserChannel = dc.channel('datadog:query:read:finish')
+const pathParamsParserChannel = dc.channel('apm:express:middleware:enter')
 
 let isEnabled = false
 let config
@@ -57,6 +58,7 @@ function enableFromRules (_config, rules) {
   bodyParserChannel.subscribe(onRequestBodyParsed)
   cookieParserChannel.subscribe(onRequestCookieParsed)
   queryParserChannel.subscribe(onRequestQueryParsed)
+  pathParamsParserChannel.subscribe(onPathParamsParsed)
 
   // add fields needed for HTTP context reporting
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_HEADERS)
@@ -176,6 +178,7 @@ function getCookiesPayload (req) {
 function onRequestCookieParsed (channelData) {
   checkRequestData(channelData, getCookiesPayload(channelData.req))
 }
+
 function getQueryPayload (req) {
   if (req.query && typeof req.query === 'object') {
     return {
@@ -184,8 +187,22 @@ function getQueryPayload (req) {
   }
   return null
 }
+
 function onRequestQueryParsed (channelData) {
   checkRequestData(channelData, getQueryPayload(channelData.req))
+}
+
+function getPathParamsPayload (req) {
+  if (req.params && typeof req.params === 'object') {
+    return {
+      [addresses.HTTP_INCOMING_PARAMS]: req.params
+    }
+  }
+  return null
+}
+
+function onPathParamsParsed (channelData) {
+  checkRequestData(channelData, getPathParamsPayload(channelData.req))
 }
 
 function checkRequestData ({ req, res, abortController }, payload) {
@@ -215,6 +232,7 @@ function disable () {
   if (bodyParserChannel.hasSubscribers) bodyParserChannel.unsubscribe(onRequestBodyParsed)
   if (cookieParserChannel.hasSubscribers) cookieParserChannel.unsubscribe(onRequestCookieParsed)
   if (queryParserChannel.hasSubscribers) queryParserChannel.unsubscribe(onRequestQueryParsed)
+  if (pathParamsParserChannel.hasSubscribers) pathParamsParserChannel.unsubscribe(onPathParamsParsed)
 }
 
 function handleResults (results, req, res, topSpan, abortController) {
