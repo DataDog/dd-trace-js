@@ -3,13 +3,15 @@ const tracer = require('../packages/dd-trace')
 const { ORIGIN_KEY } = require('../packages/dd-trace/src/constants')
 const { isTrue } = require('../packages/dd-trace/src/util')
 
+const isJestWorker = () => !!process.env.JEST_WORKER_ID
+
 const options = {
   startupLogs: false,
   tags: {
     [ORIGIN_KEY]: 'ciapp-test'
   },
   isCiVisibility: true,
-  flushInterval: 5000
+  flushInterval: isJestWorker() ? 120000 : 5000
 }
 
 let shouldInit = true
