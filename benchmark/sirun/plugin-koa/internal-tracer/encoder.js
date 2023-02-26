@@ -7,7 +7,7 @@ const { Client } = require('./client')
 const processStartTime = BigInt(Date.now() * 1e6)
 const processStartTicks = process.hrtime.bigint()
 const now = () => Number(processStartTime + process.hrtime.bigint() - processStartTicks)
-const service = process.env.DD_SERVICE || 'unnamed-node-app'
+// const service = process.env.DD_SERVICE || 'unnamed-node-app'
 const ARRAY_OF_TWO = 0x92
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 const flushInterval = 2000
@@ -52,8 +52,9 @@ class Encoder {
     // resource comes from mixing http method and route
     // error will be its own event
 
-    this._encodeFixArray(bytes, 7)
+    this._encodeFixArray(bytes, 2)
     this._encodeShort(bytes, eventTypes.KOA_REQUEST_START) // implied: name
+    this._encodeFixArray(bytes, 6)
     this._encodeLong(bytes, now())
     this._encodeId(bytes, store.traceContext.traceId)
     this._encodeId(bytes, store.traceContext.spanId)
@@ -70,8 +71,9 @@ class Encoder {
 
     if (!store || !store.traceContext) return
 
-    this._encodeFixArray(bytes, 5)
+    this._encodeFixArray(bytes, 2)
     this._encodeShort(bytes, eventTypes.KOA_REQUEST_FINISH) // implied: name
+    this._encodeFixArray(bytes, 4)
     this._encodeLong(bytes, now())
     this._encodeId(bytes, store.traceContext.traceId)
     this._encodeId(bytes, store.traceContext.spanId)
@@ -86,8 +88,9 @@ class Encoder {
 
     if (!store || !store.traceContext) return // TODO: support errors without tracing
 
-    this._encodeFixArray(bytes, 7)
+    this._encodeFixArray(bytes, 2)
     this._encodeShort(bytes, eventTypes.ERROR) // implied: name
+    this._encodeFixArray(bytes, 6)
     this._encodeLong(bytes, now())
     this._encodeId(bytes, store.traceContext.traceId)
     this._encodeId(bytes, store.traceContext.spanId)
@@ -98,8 +101,7 @@ class Encoder {
     this._afterEncode()
   }
 
-  // TODO: support new payload format
-  makePayload05 () {
+  makePayload () {
     const prefixSize = 1
     const stringSize = this._stringBytes.length + 5
     const eventSize = this._eventBytes.length + 5
@@ -110,31 +112,7 @@ class Encoder {
     buffer[offset++] = ARRAY_OF_TWO
 
     offset = this._writeStrings(buffer, offset)
-    offset = this._writeEvents(buffer, offset)
-
-    this._reset()
-
-    return buffer
-  }
-
-  makePayload () {
-    this._encodeMap(this._metadataBytes, { service }) // HACK
-
-    const metadataBytes = this._metadataBytes
-    const metadataSize = metadataBytes.length + 9
-    const eventSize = this._eventBytes.length + 5 + 7
-    const buffer = Buffer.allocUnsafe(1 + metadataSize + eventSize)
-
-    let offset = 0
-
-    buffer[offset++] = 0x82 // fixmap(2)
-
-    buffer[offset++] = 0xa8 // fixstr(8)
-    offset += buffer.write('metadata', offset)
-    offset += metadataBytes.buffer.copy(buffer, offset, 0, metadataBytes.length)
-
-    buffer[offset++] = 0xa6 // fixstr(6)
-    offset += buffer.write('events', offset)
+    // TODO: add metadata
     offset = this._writeEvents(buffer, offset)
 
     this._reset()
@@ -308,17 +286,9 @@ class Encoder {
     }
   }
 
-  _encodeString05 (bytes, value = '') {
-    this._cacheString(value)
-    this._encodeInteger(bytes, this._stringMap[value])
-  }
-
   _encodeString (bytes, value = '') {
     this._cacheString(value)
-
-    const { start, end } = this._stringMap[value]
-
-    this._stringBytes.copy(bytes, start, end)
+    this._encodeInteger(bytes, this._stringMap[value])
   }
 
   _encodeFloat (bytes, value) {
@@ -341,20 +311,10 @@ class Encoder {
     }
   }
 
-  _cacheString05 (value) {
+  _cacheString (value) {
     if (!(value in this._stringMap)) {
       this._stringMap[value] = this._stringCount++
       this._stringBytes.write(value)
-    }
-  }
-
-  _cacheString (value) {
-    if (!(value in this._stringMap)) {
-      this._stringCount++
-      this._stringMap[value] = {
-        start: this._stringBytes.length,
-        end: this._stringBytes.length + this._stringBytes.write(value)
-      }
     }
   }
 
