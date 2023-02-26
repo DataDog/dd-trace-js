@@ -1,12 +1,13 @@
-use hyper::{Body, Method, StatusCode, Error};
+use hyper::body::{Buf, Bytes};
+use hyper::{Body, Method, StatusCode};
 use hyper::http::Response;
 use hyper::server::conn::Http;
 use hyper::service::service_fn;
+use rmp::decode::{NumValueReadError, read_array_len, read_f64, read_map_len, read_str_len};
 use rmp::encode;
 use rmp::encode::ByteBuf;
-use serde::Deserialize;
-use serde_json::Value;
 use std::collections::HashMap;
+use std::io::Read;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
@@ -37,30 +38,18 @@ struct Trace {
     spans: HashMap<u64, Span>
 }
 
-#[derive(Deserialize, Debug)]
-struct Metadata {
-    service: String
-}
-
-#[derive(Deserialize, Debug)]
-struct Payload {
-    metadata: Metadata,
-    events: Vec<Value>
-}
-
 // TODO: Decouple processing from transport.
 // TODO: Stream the data somehow.
 // TODO: Make sure that traces are cleaned up on connection close.
-// TODO: Read MsgPack manually and copy bytes to span buffer directly.
 // TODO: Add support for more payload metadata (i.e. language).
-// TODO: Use string table.
-// TODO: Read events into structs instead of serde values.
+// TODO: Use 0.5 endpoint.
 // TODO: Event for adding trace tags.
 // TODO: Event for adding baggage items.
 // TODO: Add support for sampling.
 // TODO: Support sending traces directly to Datadog.
 // TODO: Optimize to minimize allocations and copies.
 // TODO: Split in modules.
+// TODO: Add proper error handling.
 // TODO: Add tests.
 // TODO: Add benchmarks.
 
@@ -71,19 +60,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     loop {
         let (stream, _) = listener.accept().await?;
-        let (tx, mut rx): (Sender<Payload>, Receiver<Payload>) = mpsc::channel(100);
+        let (tx, mut rx): (Sender<Bytes>, Receiver<Bytes>) = mpsc::channel(100);
 
         tokio::spawn(async move {
             let mut traces = Traces::new();
 
             while let Some(payload) = rx.recv().await {
-                // println!("{:#?}", payload);
+                let mut rd = payload.reader();
 
-                let metadata = payload.metadata;
-                let events = payload.events;
+                read_array_len(&mut rd).unwrap();
 
-                for event in events {
-                    process_event(&mut traces, event, &metadata);
+                let string_count = read_array_len(&mut rd).unwrap();
+                let mut strings: Vec<String> = Vec::with_capacity(string_count as usize);
+
+                for _ in 0..string_count {
+                    strings.push(read_str(&mut rd));
+                }
+
+                let event_count = read_array_len(&mut rd).unwrap();
+
+                for _ in 0..event_count {
+                    process_event(&mut traces, &strings, &mut rd);
                 }
 
                 flush(&mut traces).await;
@@ -98,23 +95,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     let tx = tx.clone();
 
                     async move {
-                        let method = req.method();
-                        let path = req.uri().path();
                         let body;
 
-                        if method == Method::PUT && path == "/v0.1/events" {
-                            let bytes = hyper::body::to_bytes(req.body_mut()).await.unwrap();
-                            let data: Vec<u8> = bytes.try_into().unwrap();
-                            let payload: Payload = rmp_serde::from_slice(&data).unwrap();
+                        match (req.method(), req.uri().path()) {
+                            (&Method::PUT, "/v0.1/events") => {
+                                // TODO: use body::aggregate instead
+                                let bytes = hyper::body::to_bytes(req.body_mut()).await?;
 
-                            tx.send(payload).await.unwrap();
+                                tx.send(bytes).await.unwrap();
 
-                            body = Response::new(Body::from(""));
-                        } else {
-                            body = Response::builder().status(StatusCode::NOT_FOUND).body(Body::from("")).unwrap()
+                                body = Response::new(Body::from(""));
+                            },
+                            _ => {
+                                body = Response::builder()
+                                    .status(StatusCode::NOT_FOUND)
+                                    .body(Body::from(""))
+                                    .unwrap()
+                            }
                         }
 
-                        Ok::<_, Error>(body)
+                        Ok::<_, hyper::Error>(body)
                     }
                 }))
                 .await
@@ -123,140 +123,162 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 }
 
-fn process_event(traces: &mut Traces, event: Value, metadata: &Metadata) {
-    let event_type = event.get(0).unwrap().as_u64().unwrap();
+fn process_event<R: Read>(traces: &mut Traces, strings: &[String], mut rd: R) {
+    read_array_len(&mut rd).unwrap();
+
+    let event_type = read_u64(&mut rd).unwrap();
 
     match event_type {
-        1 => process_start_koa_request(traces, &event, &metadata),
-        2 => process_add_error(traces, &event),
-        3 => process_finish_koa_request(traces, &event),
-        4 => process_start_span(traces, &event, &metadata),
-        5 => process_finish_span(traces, &event),
-        6 => process_add_tags(traces, &event),
+        1 => process_start_koa_request(traces, strings, rd),
+        2 => process_add_error(traces, strings, rd),
+        3 => process_finish_koa_request(traces, strings, rd),
+        4 => process_start_span(traces, strings, rd),
+        5 => process_finish_span(traces, strings, rd),
+        6 => process_add_tags(traces, strings, rd),
         _ => ()
     }
 }
 
-fn process_add_error(traces: &mut Traces, event: &Value) {
-    let maybe_trace = traces.get_mut(&event[2].as_u64().unwrap());
+fn process_add_error<R: Read>(traces: &mut Traces, strings: &[String], mut rd: R) {
+    let size = read_array_len(&mut rd).unwrap();
 
-    match maybe_trace {
-        Some(trace) => {
-            let maybe_span = trace.spans.get_mut(&event[3].as_u64().unwrap());
+    read_u64(&mut rd).unwrap();
 
-            match maybe_span {
-                Some(mut span) => {
-                    span.error = 1;
-                    span.meta.insert(String::from("error.type"), event[4].as_str().unwrap().to_string());
-                    span.meta.insert(String::from("error.message"), event[5].as_str().unwrap().to_string());
-                    span.meta.insert(String::from("error.stack"), event[6].as_str().unwrap().to_string());
-                },
-                None => ()
+    let trace_id = read_u64(&mut rd).unwrap();
+    let span_id = read_u64(&mut rd).unwrap();
+    let message = if size >= 4 {
+        &strings[read_u32(&mut rd).unwrap() as usize]
+    } else {
+        ""
+    };
+    let stack = if size >= 5 {
+        &strings[read_u32(&mut rd).unwrap() as usize]
+    } else {
+        ""
+    };
+    let name = if size >= 6 {
+        &strings[read_u32(&mut rd).unwrap() as usize]
+    } else {
+        ""
+    };
+
+    if let Some(trace) = traces.get_mut(&trace_id) {
+        if let Some(mut span) = trace.spans.get_mut(&span_id) {
+            span.error = 1;
+
+            if !message.is_empty() {
+                span.meta.insert(String::from("error.message"), String::from(message));
             }
-        },
-        None => ()
-    }
-}
 
-fn process_add_tags(traces: &mut Traces, event: &Value) {
-    let maybe_trace = traces.get_mut(&event[2].as_u64().unwrap());
-
-    match maybe_trace {
-        Some(trace) => {
-            let maybe_span = trace.spans.get_mut(&event[3].as_u64().unwrap());
-
-            match maybe_span {
-                Some(span) => {
-                    add_tags_from_value(span, &event[4]);
-                },
-                None => ()
+            if !stack.is_empty() {
+                span.meta.insert(String::from("error.stack"), String::from(stack));
             }
-        },
-        None => ()
-    }
-}
 
-fn process_start_span(traces: &mut Traces, event: &Value, metadata: &Metadata) {
-    let mut meta = HashMap::new();
-    let mut metrics = HashMap::new();
-
-    for (k, v) in event[9].as_object().unwrap() {
-        match v {
-            Value::Number(v) => {
-                metrics.insert(k.to_string(), v.as_f64().unwrap());
-            },
-            Value::String(v) => {
-                meta.insert(k.to_string(), v.to_string());
+            if !name.is_empty() {
+                span.meta.insert(String::from("error.type"), String::from(name));
             }
-            _ => ()
         }
     }
+}
 
-    let span_type = event[5].as_str().unwrap();
-    let service = event[8].as_str().unwrap();
-    let mut span = Span {
-        span_type: if span_type.is_empty() { None } else { Some(span_type.to_string()) },
-        trace_id: event[2].as_u64().unwrap(),
-        span_id: event[3].as_u64().unwrap(),
-        parent_id: event[4].as_u64().unwrap(),
-        name: event[6].as_str().unwrap().to_string(),
-        resource: event[7].as_str().unwrap().to_string(),
-        service: if service.is_empty() { metadata.service.to_string() } else { service.to_string() },
+fn process_add_tags<R: Read>(traces: &mut Traces, strings: &[String], mut rd: R) {
+    read_array_len(&mut rd).unwrap();
+    read_u64(&mut rd).unwrap();
+
+    let trace_id = read_u64(&mut rd).unwrap();
+    let span_id = read_u64(&mut rd).unwrap();
+    let (meta, metrics) = read_tags(&mut rd, strings);
+
+    if let Some(trace) = traces.get_mut(&trace_id) {
+        if let Some(span) = trace.spans.get_mut(&span_id) {
+            span.meta.extend(meta);
+            span.metrics.extend(metrics);
+        }
+    }
+}
+
+fn process_start_span<R: Read>(traces: &mut Traces, strings: &[String], mut rd: R) {
+    let size = read_array_len(&mut rd).unwrap();
+    let start = read_u64(&mut rd).unwrap();
+    let trace_id = read_u64(&mut rd).unwrap();
+    let span_id = read_u64(&mut rd).unwrap();
+    let parent_id = read_u64(&mut rd).unwrap();
+    let service = strings[read_u32(&mut rd).unwrap() as usize].to_owned();
+    let name = strings[read_u32(&mut rd).unwrap() as usize].to_owned();
+    let resource = strings[read_u32(&mut rd).unwrap() as usize].to_owned();
+    let (meta, metrics) = read_tags(&mut rd, strings);
+    let span_type: Option<String> = if size >= 10 {
+        Some(strings[read_u32(&mut rd).unwrap() as usize].to_owned())
+    } else {
+        None
+    };
+
+    let span = Span {
+        start,
+        trace_id,
+        span_id,
+        parent_id,
+        span_type,
+        name,
+        resource,
+        service,
         error: 0,
-        start: event[1].as_u64().unwrap(),
         duration: 0,
         meta,
         metrics
     };
 
-    add_tags_from_value(&mut span, &event[9]);
-
     start_span(traces, span);
 }
 
-fn process_finish_span(traces: &mut Traces, event: &Value) {
-    let maybe_trace = traces.get_mut(&event[2].as_u64().unwrap());
+fn process_finish_span<R: Read>(traces: &mut Traces, strings: &[String], mut rd: R) {
+    read_array_len(&mut rd).unwrap();
 
-    match maybe_trace {
-        Some(mut trace) => {
-            let maybe_span = trace.spans.get_mut(&event[3].as_u64().unwrap());
+    let start = read_u64(&mut rd).unwrap();
+    let trace_id = read_u64(&mut rd).unwrap();
+    let span_id = read_u64(&mut rd).unwrap();
+    let (meta, metrics) = read_tags(&mut rd, strings);
 
-            match maybe_span {
-                Some(mut span) => {
-                    trace.finished += 1;
+    if let Some(mut trace) = traces.get_mut(&trace_id) {
+        if let Some(mut span) = trace.spans.get_mut(&span_id) {
+            trace.finished += 1;
 
-                    span.duration = event[1].as_u64().unwrap() - span.start;
+            span.duration = start - span.start;
 
-                    add_tags_from_value(span, &event[4]);
-                },
-                None => ()
-            }
-        },
-        None => ()
+            span.meta.extend(meta);
+            span.metrics.extend(metrics);
+        }
     }
 }
 
-fn process_start_koa_request(traces: &mut Traces, event: &Value, metadata: &Metadata) {
+fn process_start_koa_request<R: Read>(traces: &mut Traces, strings: &[String], mut rd: R) {
     let mut meta = HashMap::new();
     let metrics = HashMap::new();
 
-    let method = event[5].as_str().unwrap().to_string();
-    let url = event[6].as_str().unwrap().to_string(); // TODO: route not url
+    read_array_len(&mut rd).unwrap();
+
+    let start = read_u64(&mut rd).unwrap();
+    let trace_id = read_u64(&mut rd).unwrap();
+    let span_id = read_u64(&mut rd).unwrap();
+    let parent_id = read_u64(&mut rd).unwrap();
+    let method = strings[read_u32(&mut rd).unwrap() as usize].to_owned();
+    let url = strings[read_u32(&mut rd).unwrap() as usize].to_owned(); // TODO: route not url
+
     let resource = format!("{method} {url}");
 
     meta.insert(String::from("http.method"), method);
     meta.insert(String::from("http.url"), url);
 
     let span = Span {
+        start,
+        trace_id,
+        span_id,
+        parent_id,
         span_type: Some(String::from("web")),
-        trace_id: event[2].as_u64().unwrap(),
-        span_id: event[3].as_u64().unwrap(),
-        parent_id: event[4].as_u64().unwrap(),
         name: String::from("koa.request"),
         resource,
-        service: metadata.service.to_string(),
+        service: String::from("unnamed-app"),
         error: 0,
-        start: event[1].as_u64().unwrap(),
         duration: 0,
         meta,
         metrics
@@ -265,25 +287,68 @@ fn process_start_koa_request(traces: &mut Traces, event: &Value, metadata: &Meta
     start_span(traces, span);
 }
 
-fn process_finish_koa_request(traces: &mut Traces, event: &Value) {
-    let maybe_trace = traces.get_mut(&event[2].as_u64().unwrap());
+fn process_finish_koa_request<R: Read>(traces: &mut Traces, _: &[String], mut rd: R) {
+    read_array_len(&mut rd).unwrap();
 
-    match maybe_trace {
-        Some(mut trace) => {
-            let maybe_span = trace.spans.get_mut(&event[3].as_u64().unwrap());
+    let start = read_u64(&mut rd).unwrap();
+    let trace_id = read_u64(&mut rd).unwrap();
+    let span_id = read_u64(&mut rd).unwrap();
+    let status_code = read_u16(&mut rd).unwrap().to_string();
 
-            match maybe_span {
-                Some(mut span) => {
-                    trace.finished += 1;
+    if let Some(mut trace) = traces.get_mut(&trace_id) {
+        if let Some(mut span) = trace.spans.get_mut(&span_id) {
+            trace.finished += 1;
 
-                    span.duration = event[1].as_u64().unwrap() - span.start;
-                    span.meta.insert(String::from("http.status_code"), event[4].as_u64().unwrap().to_string());
-                },
-                None => ()
-            }
-        },
-        None => ()
+            span.duration = start - span.start;
+            span.meta.insert(String::from("http.status_code"), status_code);
+        }
     }
+}
+
+fn read_u16<R: Read>(mut rd: R) -> Result<u16, NumValueReadError> {
+    rmp::decode::read_int(&mut rd)
+}
+
+fn read_u32<R: Read>(mut rd: R) -> Result<u32, NumValueReadError> {
+    rmp::decode::read_int(&mut rd)
+}
+
+fn read_u64<R: Read>(mut rd: R) -> Result<u64, NumValueReadError> {
+    rmp::decode::read_int(&mut rd)
+}
+
+fn read_str<R: Read>(mut rd: R) -> String {
+    let limit = read_str_len(&mut rd).unwrap() as u64;
+    let mut str = String::new();
+
+    rd.by_ref().take(limit).read_to_string(&mut str).unwrap();
+
+    str
+}
+
+fn read_tags<R: Read>(mut rd: R, strings: &[String]) -> (HashMap<String, String>, HashMap<String, f64>){
+    let mut meta = HashMap::new();
+    let mut metrics = HashMap::new();
+
+    let meta_size = read_map_len(&mut rd).unwrap();
+
+    for _ in 0..meta_size {
+        meta.insert(
+            strings[read_u32(&mut rd).unwrap() as usize].to_owned(),
+            strings[read_u32(&mut rd).unwrap() as usize].to_owned()
+        );
+    }
+
+    let metrics_size = read_map_len(&mut rd).unwrap();
+
+    for _ in 0..metrics_size {
+        metrics.insert(
+            strings[read_u32(&mut rd).unwrap() as usize].to_owned(),
+            read_f64(&mut rd).unwrap()
+        );
+    }
+
+    (meta, metrics)
 }
 
 fn start_span(traces: &mut Traces, span: Span) {
@@ -297,26 +362,14 @@ fn start_span(traces: &mut Traces, span: Span) {
     trace.spans.insert(span.span_id, span);
 }
 
-fn add_tags_from_value(span: &mut Span, value: &Value) {
-    for (k, v) in value.as_object().unwrap() {
-        match v {
-            Value::Number(v) => {
-                span.metrics.insert(k.to_string(), v.as_f64().unwrap());
-            },
-            Value::String(v) => {
-                span.meta.insert(k.to_string(), v.to_string());
-            }
-            _ => ()
-        }
-    }
-}
-
 async fn flush(traces: &mut Traces) {
     let mut wr = ByteBuf::new();
     let finished_traces: Vec<&Trace> = traces.values().filter(|t| t.started == t.finished).collect();
     let trace_count = finished_traces.len();
 
     if trace_count > 0 {
+        // println!("{:#?}", finished_traces);
+
         encode_traces(&mut wr, finished_traces);
 
         traces.retain(|_, t| t.started != t.finished);
