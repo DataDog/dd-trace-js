@@ -5,12 +5,7 @@ const { randomFillSync } = require('crypto')
 const UINT_MAX = 4294967296
 
 const data = new Uint8Array(8 * 8192)
-const zeroIdBuffer = new Uint8Array(8)
-const zeroId = {
-  toArray: () => zeroIdBuffer,
-  toString: () => '0',
-  toJSON: () => '0'
-}
+const zeroId = new Uint8Array(8)
 
 let batch = 0
 
@@ -19,11 +14,7 @@ function id (value, raddix) {
     ? fromNumberString(value, raddix)
     : pseudoRandom()
 
-  return {
-    toArray: () => buffer,
-    toString: (raddix) => toNumberString(buffer, raddix),
-    toJSON: () => toNumberString(buffer)
-  }
+  return buffer
 }
 
 function pseudoRandom () {
@@ -123,4 +114,4 @@ function writeUInt32BE (buffer, value, offset) {
   buffer[0 + offset] = value & 255
 }
 
-module.exports = { id, zeroId }
+module.exports = { id, zeroId, toNumberString }

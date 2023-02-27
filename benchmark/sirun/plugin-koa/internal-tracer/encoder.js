@@ -205,8 +205,6 @@ class Encoder {
     bytes.reserve(9)
     bytes.length += 9
 
-    id = id.toArray()
-
     bytes.buffer[offset] = 0xcf
     bytes.buffer[offset + 1] = id[0]
     bytes.buffer[offset + 2] = id[1]
