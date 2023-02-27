@@ -115,6 +115,8 @@ describe('metrics', () => {
       expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile')
       expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.count')
 
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.utilization')
+
       expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.max')
       expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.min')
       expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.sum')
