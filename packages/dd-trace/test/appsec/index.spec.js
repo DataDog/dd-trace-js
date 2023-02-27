@@ -18,6 +18,7 @@ const Config = require('../../src/config')
 const axios = require('axios')
 const getPort = require('get-port')
 const { resetTemplates } = require('../../src/appsec/blocking')
+const { storage } = require('../../../datadog-core')
 
 describe('AppSec Index', () => {
   let config
@@ -709,6 +710,7 @@ describe('AppSec Index', () => {
       it('Should block when it is detected as attack', () => {
         req.params = { key: 'value' }
         sinon.stub(Gateway, 'propagate').returns(['block'])
+        sinon
 
         pathParamsParserChannel.publish({
           req, res, abortController
@@ -728,6 +730,57 @@ describe('AppSec Index', () => {
 
         expect(Gateway.propagate).to.have.been.calledOnceWith({
           'server.request.path_params': { key: 'value' }
+        })
+      })
+
+      it('Should not propagate the same request parameters more than once', () => {
+        const map = new Map()
+
+        req.params = { key: 'value' }
+        sinon.stub(Gateway, 'propagate')
+        sinon.stub(storage, 'getStore').returns(map)
+
+        pathParamsParserChannel.publish({
+          req, res, abortController
+        })
+
+        pathParamsParserChannel.publish({
+          req, res, abortController
+        })
+
+        expect(Gateway.propagate).to.have.been.calledOnceWith({
+          'server.request.path_params': { key: 'value' }
+        })
+      })
+
+      it('Should propagate the request parameters if they differ from the previous ones', () => {
+        const map = new Map()
+
+        req.params = { key: 'value' }
+        sinon.stub(Gateway, 'propagate')
+        sinon.stub(storage, 'getStore').returns(map)
+
+        pathParamsParserChannel.publish({
+          req, res, abortController
+        })
+
+        req.params = {
+          key: 'value',
+          anotherKey: 'anotherValue'
+        }
+
+        pathParamsParserChannel.publish({
+          req, res, abortController
+        })
+
+        expect(Gateway.propagate).to.have.been.calledTwice
+        expect(Gateway.propagate.getCall(0)).to.have.been.calledWith({ 'server.request.path_params': { key: 'value' } })
+        expect(Gateway.propagate.getCall(1)).to.have.been.calledWith({
+          'server.request.path_params':
+          {
+            key: 'value',
+            anotherKey: 'anotherValue'
+          }
         })
       })
     })

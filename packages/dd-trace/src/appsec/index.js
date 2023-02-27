@@ -14,6 +14,9 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { block, loadTemplates, loadTemplatesAsync } = require('./blocking')
+const { storage } = require('../../../datadog-core')
+
+const BLOCKING_PATH_PARAMS_KEY = Symbol('_dd.blocking.pathParams')
 
 const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
 const cookieParserChannel = dc.channel('datadog:cookie-parser:read:finish')
@@ -192,10 +195,26 @@ function onRequestQueryParsed (channelData) {
   checkRequestData(channelData, getQueryPayload(channelData.req))
 }
 
+function hasPathParamsChanged (store, params) {
+  if (store) {
+    if (JSON.stringify(store[BLOCKING_PATH_PARAMS_KEY]) !== JSON.stringify(params)) {
+      store[BLOCKING_PATH_PARAMS_KEY] = params
+      return true
+    } else {
+      return false
+    }
+  }
+  // REVIEW: If store can't be accesed better to return true?
+  return true
+}
+
 function getPathParamsPayload (req) {
   if (req.params && typeof req.params === 'object') {
-    return {
-      [addresses.HTTP_INCOMING_PARAMS]: req.params
+    const store = storage.getStore()
+    if (hasPathParamsChanged(store, req.params)) {
+      return {
+        [addresses.HTTP_INCOMING_PARAMS]: req.params
+      }
     }
   }
   return null
