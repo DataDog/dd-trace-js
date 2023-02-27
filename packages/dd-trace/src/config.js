@@ -161,7 +161,7 @@ class Config {
 
     const DD_CIVISIBILITY_ITR_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_ITR_ENABLED,
-      false
+      true
     )
 
     const DD_SERVICE = options.service ||
