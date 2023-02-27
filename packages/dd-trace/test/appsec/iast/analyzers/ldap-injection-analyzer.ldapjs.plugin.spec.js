@@ -132,6 +132,37 @@ describe('ldap-injection-analyzer with ldapjs', () => {
           })
         }, 'LDAP_INJECTION')
       })
+
+      describe('search inside bind should detect the vulnerability and not lose the context', () => {
+        testThatRequestHasVulnerability(() => {
+          return new Promise((resolve, reject) => {
+            client.bind(`cn=admin,${base}`, 'adminpassword', (err) => {
+              if (err) {
+                reject(err)
+              } else {
+                const store = storage.getStore()
+                const iastCtx = iastContextFunctions.getIastContext(store)
+
+                let filter = '(objectClass=*)'
+                filter = newTaintedString(iastCtx, filter, 'param', 'Request')
+
+                client.search(base, filter, (err, searchRes) => {
+                  if (err) {
+                    return reject(err)
+                  }
+                  searchRes.on('end', () => {
+                    const storeEnd = storage.getStore()
+                    const iastCtxEnd = iastContextFunctions.getIastContext(storeEnd)
+                    expect(iastCtxEnd).to.not.be.undefined
+
+                    resolve()
+                  }).on('error', reject)
+                })
+              }
+            })
+          })
+        }, 'LDAP_INJECTION')
+      })
     })
   })
 })
