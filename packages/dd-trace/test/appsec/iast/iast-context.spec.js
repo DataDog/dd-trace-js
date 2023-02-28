@@ -18,6 +18,20 @@ describe('IAST context', () => {
     it('should return undefined when no store is provided', () => {
       expect(iastContextHandler.getIastContext()).to.be.undefined
     })
+
+    it('should obtain iast context from topContext if store does not provide one', () => {
+      const store = {}
+      const topContext = {
+        [iastContextHandler.IAST_CONTEXT_KEY]: iastContext
+      }
+      expect(iastContextHandler.getIastContext(store, topContext)).to.be.equal(iastContext)
+    })
+
+    it('should not fail if no topContext is provided', () => {
+      const store = {}
+      const topContext = undefined
+      expect(iastContextHandler.getIastContext(store, topContext)).to.be.undefined
+    })
   })
 
   describe('saveIastContext', () => {
