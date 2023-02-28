@@ -106,19 +106,16 @@ describe('AppSec Index', () => {
 
     it('should subscribe to blockable channels', () => {
       const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
-      const cookieParserChannel = dc.channel('datadog:cookie-parser:read:finish')
       const queryParserChannel = dc.channel('datadog:query:read:finish')
       const pathParamsParserChannel = dc.channel('apm:express:middleware:enter')
 
       expect(bodyParserChannel.hasSubscribers).to.be.false
-      expect(cookieParserChannel.hasSubscribers).to.be.false
       expect(queryParserChannel.hasSubscribers).to.be.false
       expect(pathParamsParserChannel.hasSubscribers).to.be.false
 
       AppSec.enable(config)
 
       expect(bodyParserChannel.hasSubscribers).to.be.true
-      expect(cookieParserChannel.hasSubscribers).to.be.true
       expect(queryParserChannel.hasSubscribers).to.be.true
       expect(pathParamsParserChannel.hasSubscribers).to.be.true
     })
@@ -168,19 +165,16 @@ describe('AppSec Index', () => {
 
     it('should subscribe to blockable channels', async () => {
       const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
-      const cookieParserChannel = dc.channel('datadog:cookie-parser:read:finish')
       const queryParserChannel = dc.channel('datadog:query:read:finish')
       const pathParamsParserChannel = dc.channel('apm:express:middleware:enter')
 
       expect(bodyParserChannel.hasSubscribers).to.be.false
-      expect(cookieParserChannel.hasSubscribers).to.be.false
       expect(queryParserChannel.hasSubscribers).to.be.false
       expect(pathParamsParserChannel.hasSubscribers).to.be.false
 
       await AppSec.enableAsync(config)
 
       expect(bodyParserChannel.hasSubscribers).to.be.true
-      expect(cookieParserChannel.hasSubscribers).to.be.true
       expect(queryParserChannel.hasSubscribers).to.be.true
       expect(pathParamsParserChannel.hasSubscribers).to.be.true
     })
@@ -219,7 +213,6 @@ describe('AppSec Index', () => {
 
     it('should unsubscribe to blockable channels', () => {
       const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
-      const cookieParserChannel = dc.channel('datadog:cookie-parser:read:finish')
       const queryParserChannel = dc.channel('datadog:query:read:finish')
       const pathParamsParserChannel = dc.channel('apm:express:middleware:enter')
 
@@ -228,7 +221,6 @@ describe('AppSec Index', () => {
       AppSec.disable()
 
       expect(bodyParserChannel.hasSubscribers).to.be.false
-      expect(cookieParserChannel.hasSubscribers).to.be.false
       expect(queryParserChannel.hasSubscribers).to.be.false
       expect(pathParamsParserChannel.hasSubscribers).to.be.false
     })
@@ -568,59 +560,6 @@ describe('AppSec Index', () => {
 
         expect(Gateway.propagate).to.have.been.calledOnceWith({
           'server.request.body': { key: 'value' }
-        })
-      })
-    })
-
-    describe('onRequestCookieParsed', () => {
-      const cookieParserChannel = dc.channel('datadog:cookie-parser:read:finish')
-
-      it('Should not block without cookies', () => {
-        sinon.stub(Gateway, 'propagate')
-        cookieParserChannel.publish({
-          req, res, abortController
-        })
-
-        expect(Gateway.propagate).not.to.have.been.called
-        expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
-      })
-
-      it('Should not block with body by default', () => {
-        req.cookies = { key: 'value' }
-        sinon.stub(Gateway, 'propagate')
-
-        cookieParserChannel.publish({
-          req, res, abortController
-        })
-
-        expect(Gateway.propagate).to.have.been.called
-        expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
-      })
-
-      it('Should block when it is detected as attack', () => {
-        req.cookies = { key: 'value' }
-        sinon.stub(Gateway, 'propagate').returns(['block'])
-
-        cookieParserChannel.publish({
-          req, res, abortController
-        })
-
-        expect(abortController.abort).to.have.been.called
-        expect(res.end).to.have.been.called
-      })
-
-      it('Should propagate request cookies', () => {
-        req.cookies = { key: 'value' }
-        sinon.stub(Gateway, 'propagate')
-
-        cookieParserChannel.publish({
-          req, res, abortController
-        })
-
-        expect(Gateway.propagate).to.have.been.calledOnceWith({
-          'server.request.cookies': { key: ['value'] }
         })
       })
     })

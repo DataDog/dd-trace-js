@@ -19,7 +19,6 @@ const { storage } = require('../../../datadog-core')
 const BLOCKING_PATH_PARAMS_KEY = Symbol('_dd.blocking.pathParams')
 
 const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
-const cookieParserChannel = dc.channel('datadog:cookie-parser:read:finish')
 const queryParserChannel = dc.channel('datadog:query:read:finish')
 const pathParamsParserChannel = dc.channel('apm:express:middleware:enter')
 
@@ -59,7 +58,6 @@ function enableFromRules (_config, rules) {
   incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
   incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
   bodyParserChannel.subscribe(onRequestBodyParsed)
-  cookieParserChannel.subscribe(onRequestCookieParsed)
   queryParserChannel.subscribe(onRequestQueryParsed)
   pathParamsParserChannel.subscribe(onPathParamsParsed)
 
@@ -165,23 +163,6 @@ function onRequestBodyParsed (channelData) {
   checkRequestData(channelData, getBodyPayload(channelData.req))
 }
 
-function getCookiesPayload (req) {
-  if (req.cookies && typeof req.cookies === 'object') {
-    const incomingCookiesPayload = {}
-
-    for (const k of Object.keys(req.cookies)) {
-      incomingCookiesPayload[k] = [req.cookies[k]]
-    }
-
-    return { [addresses.HTTP_INCOMING_COOKIES]: incomingCookiesPayload }
-  }
-  return null
-}
-
-function onRequestCookieParsed (channelData) {
-  checkRequestData(channelData, getCookiesPayload(channelData.req))
-}
-
 function getQueryPayload (req) {
   if (req.query && typeof req.query === 'object') {
     return {
@@ -248,7 +229,6 @@ function disable () {
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
   if (bodyParserChannel.hasSubscribers) bodyParserChannel.unsubscribe(onRequestBodyParsed)
-  if (cookieParserChannel.hasSubscribers) cookieParserChannel.unsubscribe(onRequestCookieParsed)
   if (queryParserChannel.hasSubscribers) queryParserChannel.unsubscribe(onRequestQueryParsed)
   if (pathParamsParserChannel.hasSubscribers) pathParamsParserChannel.unsubscribe(onPathParamsParsed)
 }
