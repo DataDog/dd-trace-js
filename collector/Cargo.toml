@@ -18,3 +18,5 @@ hashbrown = "0.13.2"
 hyper = { version = "0.14.24", features = ["full"] }
 rmp = "0.8.11"
 tokio = { version = "1.25.0", features = ["full"] }
+serde = {version = "1.0", features = ["derive"]}
+rmp-serde = {version = "1.1"}
