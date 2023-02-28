@@ -195,7 +195,9 @@ function onRequestQueryParsed (channelData) {
   checkRequestData(channelData, getQueryPayload(channelData.req))
 }
 
-function hasPathParamsChanged (store, params) {
+function hasPathParamsChanged (params) {
+  const store = storage.getStore()
+
   if (store) {
     if (JSON.stringify(store[BLOCKING_PATH_PARAMS_KEY]) !== JSON.stringify(params)) {
       store[BLOCKING_PATH_PARAMS_KEY] = params
@@ -209,12 +211,9 @@ function hasPathParamsChanged (store, params) {
 }
 
 function getPathParamsPayload (req) {
-  if (req.params && typeof req.params === 'object') {
-    const store = storage.getStore()
-    if (hasPathParamsChanged(store, req.params)) {
-      return {
-        [addresses.HTTP_INCOMING_PARAMS]: req.params
-      }
+  if (req.params && typeof req.params === 'object' && hasPathParamsChanged(req.params)) {
+    return {
+      [addresses.HTTP_INCOMING_PARAMS]: req.params
     }
   }
   return null
