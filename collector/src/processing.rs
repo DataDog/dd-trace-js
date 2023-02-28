@@ -39,7 +39,7 @@ impl Processor {
         let event_count = read_array_len(&mut rd).unwrap();
 
         for _ in 0..event_count {
-            self.process_event(&strings, &mut rd);
+            self.process_event(&mut strings, &mut rd);
         }
     }
 
@@ -51,7 +51,7 @@ impl Processor {
         self.exporter.export(finished_traces).await;
     }
 
-    fn process_event<R: Read>(&mut self, strings: &[String], mut rd: R) {
+    fn process_event<R: Read>(&mut self, strings: &mut Vec<String>, mut rd: R) {
         read_array_len(&mut rd).unwrap();
 
         let event_type = read_u64(&mut rd).unwrap();
@@ -63,7 +63,18 @@ impl Processor {
             4 => self.process_start_span(strings, rd),
             5 => self.process_finish_span(strings, rd),
             6 => self.process_add_tags(strings, rd),
+            7 => self.process_strings(strings, rd),
             _ => ()
+        }
+    }
+
+    fn process_strings<R: Read>(&mut self, strings: &mut Vec<String>, mut rd: R) {
+        let size = read_array_len(&mut rd).unwrap();
+
+        strings.reserve(size as usize);
+
+        for _ in 0..size {
+            strings.push(read_str(&mut rd));
         }
     }
 
