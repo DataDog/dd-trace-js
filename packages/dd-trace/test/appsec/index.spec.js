@@ -61,6 +61,12 @@ describe('AppSec Index', () => {
 
   afterEach(() => {
     sinon.restore()
+    AppSec.disable()
+  })
+
+  after(() => {
+    resetTemplates()
+    AppSec.disable()
   })
 
   describe('enable', () => {
