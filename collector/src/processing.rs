@@ -1,8 +1,9 @@
 use crate::exporting::Exporter;
 use crate::msgpack::{read_array_len, read_f64, read_map_len, read_str, read_u16, read_u32, read_u64};
-use crate::tracing::{Span, Trace, Traces};
+use crate::tracing::{Span, Trace, Traces, Meta, Metrics};
 use hashbrown::HashMap;
 use std::io::Read;
+use std::rc::Rc;
 
 pub struct Processor {
     exporter: Box<dyn Exporter + Send + Sync>,
@@ -30,10 +31,10 @@ impl Processor {
         read_array_len(&mut rd).unwrap();
 
         let string_count = read_array_len(&mut rd).unwrap();
-        let mut strings: Vec<String> = Vec::with_capacity(string_count as usize);
+        let mut strings: Vec<Rc<str>> = Vec::with_capacity(string_count as usize);
 
         for _ in 0..string_count {
-            strings.push(read_str(&mut rd));
+            strings.push(Rc::from(read_str(&mut rd).as_str()));
         }
 
         let event_count = read_array_len(&mut rd).unwrap();
@@ -43,15 +44,15 @@ impl Processor {
         }
     }
 
-    pub async fn flush(&mut self) {
+    pub fn flush(&mut self) {
         let finished_traces: HashMap<u64, Trace> = self.traces
             .drain_filter(|_, v| v.started == v.finished)
             .collect();
 
-        self.exporter.export(finished_traces).await;
+        self.exporter.export(finished_traces);
     }
 
-    fn process_event<R: Read>(&mut self, strings: &mut Vec<String>, mut rd: R) {
+    fn process_event<R: Read>(&mut self, strings: &mut Vec<Rc<str>>, mut rd: R) {
         read_array_len(&mut rd).unwrap();
 
         let event_type = read_u64(&mut rd).unwrap();
@@ -68,17 +69,17 @@ impl Processor {
         }
     }
 
-    fn process_strings<R: Read>(&mut self, strings: &mut Vec<String>, mut rd: R) {
+    fn process_strings<R: Read>(&mut self, strings: &mut Vec<Rc<str>>, mut rd: R) {
         let size = read_array_len(&mut rd).unwrap();
 
         strings.reserve(size as usize);
 
         for _ in 0..size {
-            strings.push(read_str(&mut rd));
+            strings.push(Rc::from(read_str(&mut rd).as_str()));
         }
     }
 
-    fn process_add_error<R: Read>(&mut self, strings: &[String], mut rd: R) {
+    fn process_add_error<R: Read>(&mut self, strings: &[Rc<str>], mut rd: R) {
         let size = read_array_len(&mut rd).unwrap();
 
         read_u64(&mut rd).unwrap();
@@ -86,19 +87,19 @@ impl Processor {
         let trace_id = read_u64(&mut rd).unwrap();
         let span_id = read_u64(&mut rd).unwrap();
         let message = if size >= 4 {
-            &strings[read_u32(&mut rd).unwrap() as usize]
+            strings[read_u32(&mut rd).unwrap() as usize].clone()
         } else {
-            ""
+            Rc::from("")
         };
         let stack = if size >= 5 {
-            &strings[read_u32(&mut rd).unwrap() as usize]
+            strings[read_u32(&mut rd).unwrap() as usize].clone()
         } else {
-            ""
+            Rc::from("")
         };
         let name = if size >= 6 {
-            &strings[read_u32(&mut rd).unwrap() as usize]
+            strings[read_u32(&mut rd).unwrap() as usize].clone()
         } else {
-            ""
+            Rc::from("")
         };
 
         if let Some(trace) = self.traces.get_mut(&trace_id) {
@@ -106,21 +107,21 @@ impl Processor {
                 span.error = 1;
 
                 if !message.is_empty() {
-                    span.meta.insert(String::from("error.message"), String::from(message));
+                    span.meta.insert(Rc::from("error.message"), message);
                 }
 
                 if !stack.is_empty() {
-                    span.meta.insert(String::from("error.stack"), String::from(stack));
+                    span.meta.insert(Rc::from("error.stack"), stack);
                 }
 
                 if !name.is_empty() {
-                    span.meta.insert(String::from("error.type"), String::from(name));
+                    span.meta.insert(Rc::from("error.type"), name);
                 }
             }
         }
     }
 
-    fn process_add_tags<R: Read>(&mut self, strings: &[String], mut rd: R) {
+    fn process_add_tags<R: Read>(&mut self, strings: &[Rc<str>], mut rd: R) {
         read_array_len(&mut rd).unwrap();
         read_u64(&mut rd).unwrap();
 
@@ -136,20 +137,20 @@ impl Processor {
         }
     }
 
-    fn process_start_span<R: Read>(&mut self, strings: &[String], mut rd: R) {
+    fn process_start_span<R: Read>(&mut self, strings: &[Rc<str>], mut rd: R) {
         let size = read_array_len(&mut rd).unwrap();
         let start = read_u64(&mut rd).unwrap();
         let trace_id = read_u64(&mut rd).unwrap();
         let span_id = read_u64(&mut rd).unwrap();
         let parent_id = read_u64(&mut rd).unwrap();
-        let service = strings[read_u32(&mut rd).unwrap() as usize].to_owned();
-        let name = strings[read_u32(&mut rd).unwrap() as usize].to_owned();
-        let resource = strings[read_u32(&mut rd).unwrap() as usize].to_owned();
+        let service = strings[read_u32(&mut rd).unwrap() as usize].clone();
+        let name = strings[read_u32(&mut rd).unwrap() as usize].clone();
+        let resource = strings[read_u32(&mut rd).unwrap() as usize].clone();
         let (meta, metrics) = self.read_tags(&mut rd, strings);
-        let span_type: Option<String> = if size >= 10 {
-            Some(strings[read_u32(&mut rd).unwrap() as usize].to_owned())
+        let span_type: Rc<str> = if size >= 10 {
+            strings[read_u32(&mut rd).unwrap() as usize].clone()
         } else {
-            None
+            Rc::from("")
         };
 
         let span = Span {
@@ -170,7 +171,7 @@ impl Processor {
         self.start_span(span);
     }
 
-    fn process_finish_span<R: Read>(&mut self, strings: &[String], mut rd: R) {
+    fn process_finish_span<R: Read>(&mut self, strings: &[Rc<str>], mut rd: R) {
         read_array_len(&mut rd).unwrap();
 
         let start = read_u64(&mut rd).unwrap();
@@ -190,7 +191,7 @@ impl Processor {
         }
     }
 
-    fn process_start_koa_request<R: Read>(&mut self, strings: &[String], mut rd: R) {
+    fn process_start_koa_request<R: Read>(&mut self, strings: &[Rc<str>], mut rd: R) {
         let mut meta = HashMap::new();
         let metrics = HashMap::new();
 
@@ -200,23 +201,23 @@ impl Processor {
         let trace_id = read_u64(&mut rd).unwrap();
         let span_id = read_u64(&mut rd).unwrap();
         let parent_id = read_u64(&mut rd).unwrap();
-        let method = strings[read_u32(&mut rd).unwrap() as usize].to_owned();
-        let url = strings[read_u32(&mut rd).unwrap() as usize].to_owned(); // TODO: route not url
+        let method = strings[read_u32(&mut rd).unwrap() as usize].clone();
+        let url = strings[read_u32(&mut rd).unwrap() as usize].clone(); // TODO: route not url
 
-        let resource = format!("{method} {url}");
+        let resource = Rc::from(format!("{method} {url}"));
 
-        meta.insert(String::from("http.method"), method);
-        meta.insert(String::from("http.url"), url);
+        meta.insert(Rc::from("http.method"), method);
+        meta.insert(Rc::from("http.url"), url);
 
         let span = Span {
             start,
             trace_id,
             span_id,
             parent_id,
-            span_type: Some(String::from("web")),
-            name: String::from("koa.request"),
+            span_type: Rc::from("web"),
+            name: Rc::from("koa.request"),
             resource,
-            service: String::from("unnamed-app"),
+            service: Rc::from("unnamed-app"),
             error: 0,
             duration: 0,
             meta,
@@ -226,25 +227,25 @@ impl Processor {
         self.start_span(span);
     }
 
-    fn process_finish_koa_request<R: Read>(&mut self, _: &[String], mut rd: R) {
+    fn process_finish_koa_request<R: Read>(&mut self, _: &[Rc<str>], mut rd: R) {
         read_array_len(&mut rd).unwrap();
 
         let start = read_u64(&mut rd).unwrap();
         let trace_id = read_u64(&mut rd).unwrap();
         let span_id = read_u64(&mut rd).unwrap();
-        let status_code = read_u16(&mut rd).unwrap().to_string();
+        let status_code = Rc::from(read_u16(&mut rd).unwrap().to_string());
 
         if let Some(mut trace) = self.traces.get_mut(&trace_id) {
             if let Some(mut span) = trace.spans.get_mut(&span_id) {
                 trace.finished += 1;
 
                 span.duration = start - span.start;
-                span.meta.insert(String::from("http.status_code"), status_code);
+                span.meta.insert(Rc::from("http.status_code"), status_code);
             }
         }
     }
 
-    fn read_tags<R: Read>(&self, mut rd: R, strings: &[String]) -> (HashMap<String, String>, HashMap<String, f64>){
+    fn read_tags<R: Read>(&self, mut rd: R, strings: &[Rc<str>]) -> (Meta, Metrics){
         let mut meta = HashMap::new();
         let mut metrics = HashMap::new();
 
@@ -252,8 +253,8 @@ impl Processor {
 
         for _ in 0..meta_size {
             meta.insert(
-                strings[read_u32(&mut rd).unwrap() as usize].to_owned(),
-                strings[read_u32(&mut rd).unwrap() as usize].to_owned()
+                strings[read_u32(&mut rd).unwrap() as usize].clone(),
+                strings[read_u32(&mut rd).unwrap() as usize].clone()
             );
         }
 
@@ -261,7 +262,7 @@ impl Processor {
 
         for _ in 0..metrics_size {
             metrics.insert(
-                strings[read_u32(&mut rd).unwrap() as usize].to_owned(),
+                strings[read_u32(&mut rd).unwrap() as usize].clone(),
                 read_f64(&mut rd).unwrap()
             );
         }
