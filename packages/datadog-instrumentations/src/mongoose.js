@@ -19,7 +19,7 @@ function wrapAddQueue (addQueue) {
 
 addHook({
   name: 'mongoose',
-  versions: ['>=4.6.4']
+  versions: ['>=4.6.4 <7'] // TODO: Mongoose v7 compat
 }, mongoose => {
   if (mongoose.Promise !== global.Promise) {
     shimmer.wrap(mongoose.Promise.prototype, 'then', wrapThen)
