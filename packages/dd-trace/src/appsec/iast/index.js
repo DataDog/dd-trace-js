@@ -58,7 +58,8 @@ function onIncomingHttpRequestStart (data) {
 function onIncomingHttpRequestEnd (data) {
   if (data && data.req) {
     const store = storage.getStore()
-    const iastContext = iastContextFunctions.getIastContext(storage.getStore())
+    const topContext = web.getContext(data.req)
+    const iastContext = iastContextFunctions.getIastContext(store, topContext)
     if (iastContext && iastContext.rootSpan) {
       const vulnerabilities = iastContext.vulnerabilities
       const rootSpan = iastContext.rootSpan
@@ -66,7 +67,7 @@ function onIncomingHttpRequestEnd (data) {
       removeTransaction(iastContext)
     }
     // TODO web.getContext(data.req) is required when the request is aborted
-    if (iastContextFunctions.cleanIastContext(store, web.getContext(data.req), iastContext)) {
+    if (iastContextFunctions.cleanIastContext(store, topContext, iastContext)) {
       overheadController.releaseRequest()
     }
   }
