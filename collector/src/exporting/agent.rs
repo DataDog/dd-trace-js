@@ -1,11 +1,15 @@
 use crate::tracing::{Trace, Traces};
 use super::Exporter;
 use async_trait::async_trait;
+use hyper::{Body, Client, Request};
+use hyper::client::HttpConnector;
 use rmp::encode;
 use rmp::encode::ByteBuf;
 use hashbrown::HashMap;
 
-pub struct AgentExporter {}
+pub struct AgentExporter {
+    client: Client<HttpConnector>
+}
 
 #[async_trait]
 impl Exporter for AgentExporter {
@@ -18,9 +22,8 @@ impl Exporter for AgentExporter {
 
             self.encode_traces(&mut wr, traces);
 
-            let client = hyper::Client::new();
             let data: Vec<u8> = wr.as_vec().to_vec();
-            let req = hyper::Request::builder()
+            let req = Request::builder()
                 .method(hyper::Method::PUT)
                 .uri("http://localhost:8126/v0.4/traces")
                 .header("Content-Type", "application/msgpack")
@@ -29,10 +32,10 @@ impl Exporter for AgentExporter {
                 // .header("Datadog-Meta-Lang", "")
                 // .header("Datadog-Meta-Lang-Version", "")
                 // .header("Datadog-Meta-Lang-Interpreter", "")
-                .body(hyper::Body::from(data))
+                .body(Body::from(data))
                 .unwrap();
 
-            client.request(req).await.unwrap();
+            self.client.request(req).await.unwrap();
         }
     }
 }
@@ -45,7 +48,9 @@ impl Default for AgentExporter {
 
 impl AgentExporter {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            client: Client::new()
+        }
     }
 
     fn encode_traces(&self, wr: &mut ByteBuf, traces: Traces) {
