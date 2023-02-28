@@ -265,10 +265,7 @@ describe('log', () => {
     it('should log a deprecation warning', () => {
       log.deprecate('test', 'message')
 
-      expect(console.error).to.have.been.calledOnce
-      const consoleErrorArg = console.error.getCall(0).args[0]
-      expect(typeof consoleErrorArg).to.be.eq('object')
-      expect(consoleErrorArg.message).to.be.eq('message')
+      expect(console.error).to.have.been.calledWith('message')
     })
 
     it('should only log once for a given code', () => {
