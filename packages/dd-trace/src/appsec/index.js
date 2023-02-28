@@ -14,13 +14,9 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { block, loadTemplates, loadTemplatesAsync } = require('./blocking')
-const { storage } = require('../../../datadog-core')
-
-const BLOCKING_PATH_PARAMS_KEY = Symbol('_dd.blocking.pathParams')
 
 const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
 const queryParserChannel = dc.channel('datadog:query:read:finish')
-const pathParamsParserChannel = dc.channel('apm:express:middleware:enter')
 
 let isEnabled = false
 let config
@@ -59,7 +55,6 @@ function enableFromRules (_config, rules) {
   incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
   bodyParserChannel.subscribe(onRequestBodyParsed)
   queryParserChannel.subscribe(onRequestQueryParsed)
-  pathParamsParserChannel.subscribe(onPathParamsParsed)
 
   // add fields needed for HTTP context reporting
   Gateway.manager.addresses.add(addresses.HTTP_INCOMING_HEADERS)
@@ -176,34 +171,6 @@ function onRequestQueryParsed (channelData) {
   checkRequestData(channelData, getQueryPayload(channelData.req))
 }
 
-function hasPathParamsChanged (params) {
-  const store = storage.getStore()
-
-  if (store) {
-    if (JSON.stringify(store[BLOCKING_PATH_PARAMS_KEY]) !== JSON.stringify(params)) {
-      store[BLOCKING_PATH_PARAMS_KEY] = params
-      return true
-    } else {
-      return false
-    }
-  }
-  // REVIEW: If store can't be accesed better to return true?
-  return true
-}
-
-function getPathParamsPayload (req) {
-  if (req.params && typeof req.params === 'object' && hasPathParamsChanged(req.params)) {
-    return {
-      [addresses.HTTP_INCOMING_PARAMS]: req.params
-    }
-  }
-  return null
-}
-
-function onPathParamsParsed (channelData) {
-  checkRequestData(channelData, getPathParamsPayload(channelData.req))
-}
-
 function checkRequestData ({ req, res, abortController }, payload) {
   if (payload) {
     const context = Gateway.getContext()
@@ -230,7 +197,6 @@ function disable () {
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
   if (bodyParserChannel.hasSubscribers) bodyParserChannel.unsubscribe(onRequestBodyParsed)
   if (queryParserChannel.hasSubscribers) queryParserChannel.unsubscribe(onRequestQueryParsed)
-  if (pathParamsParserChannel.hasSubscribers) pathParamsParserChannel.unsubscribe(onPathParamsParsed)
 }
 
 function handleResults (results, req, res, topSpan, abortController) {

@@ -4,7 +4,6 @@ const METHODS = require('methods').concat('all')
 const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
-const { AbortController } = require('node-abort-controller')
 
 function createWrapRouterMethod (name) {
   const enterChannel = channel(`apm:${name}:middleware:enter`)
@@ -26,7 +25,6 @@ function createWrapRouterMethod (name) {
       const lastIndex = arguments.length - 1
       const name = original._name || original.name
       const req = arguments[arguments.length > 3 ? 1 : 0]
-      const res = arguments[arguments.length > 3 ? 2 : 1]
       const next = arguments[lastIndex]
 
       if (typeof next === 'function') {
@@ -46,14 +44,9 @@ function createWrapRouterMethod (name) {
         }
       }
 
-      const abortController = new AbortController()
-      enterChannel.publish({ name, req, res, route, abortController })
+      enterChannel.publish({ name, req, route })
 
       try {
-        if (abortController.signal.aborted) {
-          return res.end()
-        }
-
         return original.apply(this, arguments)
       } catch (error) {
         errorChannel.publish({ req, error })

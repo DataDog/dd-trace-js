@@ -18,7 +18,6 @@ const Config = require('../../src/config')
 const axios = require('axios')
 const getPort = require('get-port')
 const { resetTemplates } = require('../../src/appsec/blocking')
-const { storage } = require('../../../datadog-core')
 
 describe('AppSec Index', () => {
   let config
@@ -107,17 +106,14 @@ describe('AppSec Index', () => {
     it('should subscribe to blockable channels', () => {
       const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
       const queryParserChannel = dc.channel('datadog:query:read:finish')
-      const pathParamsParserChannel = dc.channel('apm:express:middleware:enter')
 
       expect(bodyParserChannel.hasSubscribers).to.be.false
       expect(queryParserChannel.hasSubscribers).to.be.false
-      expect(pathParamsParserChannel.hasSubscribers).to.be.false
 
       AppSec.enable(config)
 
       expect(bodyParserChannel.hasSubscribers).to.be.true
       expect(queryParserChannel.hasSubscribers).to.be.true
-      expect(pathParamsParserChannel.hasSubscribers).to.be.true
     })
   })
 
@@ -166,17 +162,14 @@ describe('AppSec Index', () => {
     it('should subscribe to blockable channels', async () => {
       const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
       const queryParserChannel = dc.channel('datadog:query:read:finish')
-      const pathParamsParserChannel = dc.channel('apm:express:middleware:enter')
 
       expect(bodyParserChannel.hasSubscribers).to.be.false
       expect(queryParserChannel.hasSubscribers).to.be.false
-      expect(pathParamsParserChannel.hasSubscribers).to.be.false
 
       await AppSec.enableAsync(config)
 
       expect(bodyParserChannel.hasSubscribers).to.be.true
       expect(queryParserChannel.hasSubscribers).to.be.true
-      expect(pathParamsParserChannel.hasSubscribers).to.be.true
     })
   })
 
@@ -214,7 +207,6 @@ describe('AppSec Index', () => {
     it('should unsubscribe to blockable channels', () => {
       const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
       const queryParserChannel = dc.channel('datadog:query:read:finish')
-      const pathParamsParserChannel = dc.channel('apm:express:middleware:enter')
 
       AppSec.enable(config)
 
@@ -222,7 +214,6 @@ describe('AppSec Index', () => {
 
       expect(bodyParserChannel.hasSubscribers).to.be.false
       expect(queryParserChannel.hasSubscribers).to.be.false
-      expect(pathParamsParserChannel.hasSubscribers).to.be.false
     })
   })
 
@@ -614,112 +605,6 @@ describe('AppSec Index', () => {
 
         expect(Gateway.propagate).to.have.been.calledOnceWith({
           'server.request.query': { key: 'value' }
-        })
-      })
-    })
-
-    describe('onPathParamsParsed', () => {
-      const pathParamsParserChannel = dc.channel('apm:express:middleware:enter')
-
-      it('Should not block without params', () => {
-        sinon.stub(Gateway, 'propagate')
-
-        pathParamsParserChannel.publish({
-          req, res, abortController
-        })
-
-        expect(Gateway.propagate).not.to.have.been.called
-        expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
-      })
-
-      it('Should not block with param by default', () => {
-        req.params = { key: 'value' }
-        sinon.stub(Gateway, 'propagate')
-
-        pathParamsParserChannel.publish({
-          req, res, abortController
-        })
-
-        expect(Gateway.propagate).to.have.been.called
-        expect(abortController.abort).not.to.have.been.called
-        expect(res.end).not.to.have.been.called
-      })
-
-      it('Should block when it is detected as attack', () => {
-        req.params = { key: 'value' }
-        sinon.stub(Gateway, 'propagate').returns(['block'])
-        sinon
-
-        pathParamsParserChannel.publish({
-          req, res, abortController
-        })
-
-        expect(abortController.abort).to.have.been.called
-        expect(res.end).to.have.been.called
-      })
-
-      it('Should propagate request param', () => {
-        req.params = { key: 'value' }
-        sinon.stub(Gateway, 'propagate')
-
-        pathParamsParserChannel.publish({
-          req, res, abortController
-        })
-
-        expect(Gateway.propagate).to.have.been.calledOnceWith({
-          'server.request.path_params': { key: 'value' }
-        })
-      })
-
-      it('Should not propagate the same request parameters more than once', () => {
-        const map = new Map()
-
-        req.params = { key: 'value' }
-        sinon.stub(Gateway, 'propagate')
-        sinon.stub(storage, 'getStore').returns(map)
-
-        pathParamsParserChannel.publish({
-          req, res, abortController
-        })
-
-        pathParamsParserChannel.publish({
-          req, res, abortController
-        })
-
-        expect(Gateway.propagate).to.have.been.calledOnceWith({
-          'server.request.path_params': { key: 'value' }
-        })
-      })
-
-      it('Should propagate the request parameters if they differ from the previous ones', () => {
-        const map = new Map()
-
-        req.params = { key: 'value' }
-        sinon.stub(Gateway, 'propagate')
-        sinon.stub(storage, 'getStore').returns(map)
-
-        pathParamsParserChannel.publish({
-          req, res, abortController
-        })
-
-        req.params = {
-          key: 'value',
-          anotherKey: 'anotherValue'
-        }
-
-        pathParamsParserChannel.publish({
-          req, res, abortController
-        })
-
-        expect(Gateway.propagate).to.have.been.calledTwice
-        expect(Gateway.propagate.getCall(0)).to.have.been.calledWith({ 'server.request.path_params': { key: 'value' } })
-        expect(Gateway.propagate.getCall(1)).to.have.been.calledWith({
-          'server.request.path_params':
-          {
-            key: 'value',
-            anotherKey: 'anotherValue'
-          }
         })
       })
     })
