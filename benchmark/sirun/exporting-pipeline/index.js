@@ -8,6 +8,9 @@ const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler
 const id = require('../../../packages/dd-trace/src/id')
 const hostname = require('os').hostname()
 
+const log = require('../../../packages/dd-trace/src/log')
+log.toggle(true, 'info')
+
 const config = {
   url: 'http://localhost:8126',
   flushInterval: 1000,
