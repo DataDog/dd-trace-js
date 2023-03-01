@@ -14,6 +14,10 @@ pub fn read_u64<R: Read>(mut rd: R) -> Result<u64, NumValueReadError> {
     rmp::decode::read_int(&mut rd)
 }
 
+pub fn read_usize<R: Read>(mut rd: R) -> Result<usize, NumValueReadError> {
+    rmp::decode::read_int(&mut rd)
+}
+
 pub fn read_str<R: Read>(mut rd: R) -> String {
     let limit = read_str_len(&mut rd).unwrap() as u64;
     let mut str = String::new();

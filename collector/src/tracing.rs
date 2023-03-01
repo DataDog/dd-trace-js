@@ -27,3 +27,13 @@ pub struct Trace {
     pub finished: u64,
     pub spans: HashMap<u64, Span>
 }
+
+impl Default for Trace {
+    fn default() -> Self {
+        Self {
+            started: 0,
+            finished: 0,
+            spans: HashMap::new()
+        }
+    }
+}
