@@ -5,6 +5,7 @@ use hyper::{Body, Method, StatusCode};
 use hyper::http::Response;
 use hyper::server::conn::Http;
 use hyper::service::service_fn;
+use hyper_client::HyperClient;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
@@ -27,14 +28,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let (tx, mut rx): (Sender<Bytes>, Receiver<Bytes>) = mpsc::channel(100);
 
         tokio::spawn(async move {
-            let exporter = Box::new(AgentExporter::new());
-            let mut processor = Processor::new(exporter);
-
             while let Some(payload) = rx.recv().await {
+                let client = Box::new(HyperClient::new());
+                let exporter = Box::new(AgentExporter::new(client));
+                let mut processor = Processor::new(exporter);
                 let mut rd = payload.reader();
 
                 processor.process(&mut rd);
-                processor.flush().await;
+                processor.flush();
             }
         });
 

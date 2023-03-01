@@ -1,19 +1,16 @@
+use crate::client::Client;
 use crate::tracing::{Trace, Traces};
 use super::Exporter;
-use async_trait::async_trait;
-use hyper::{Body, Client, Request};
-use hyper::client::HttpConnector;
 use rmp::encode;
 use rmp::encode::ByteBuf;
 use hashbrown::HashMap;
 
 pub struct AgentExporter {
-    client: Client<HttpConnector>
+    client: Box<dyn Client + Send + Sync>
 }
 
-#[async_trait]
 impl Exporter for AgentExporter {
-    async fn export(&self, traces: Traces) {
+    fn export(&self, traces: Traces) {
         let mut wr = ByteBuf::new();
         let trace_count = traces.len();
 
@@ -23,33 +20,18 @@ impl Exporter for AgentExporter {
             self.encode_traces(&mut wr, traces);
 
             let data: Vec<u8> = wr.as_vec().to_vec();
-            let req = Request::builder()
-                .method(hyper::Method::PUT)
-                .uri("http://localhost:8126/v0.4/traces")
-                .header("Content-Type", "application/msgpack")
-                .header("X-Datadog-Trace-Count", trace_count.to_string())
-                // .header("Datadog-Meta-Tracer-Version", "")
-                // .header("Datadog-Meta-Lang", "")
-                // .header("Datadog-Meta-Lang-Version", "")
-                // .header("Datadog-Meta-Lang-Interpreter", "")
-                .body(Body::from(data))
-                .unwrap();
 
-            self.client.request(req).await.unwrap();
+            // TODO: Get the response somehow (with a channel?)
+            // TODO: Make client reusable between requests (with a channel?)
+            self.client.request(data);
         }
     }
 }
 
-impl Default for AgentExporter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl AgentExporter {
-    pub fn new() -> Self {
+    pub fn new(client: Box<dyn Client + Send + Sync>) -> Self {
         Self {
-            client: Client::new()
+            client
         }
     }
 

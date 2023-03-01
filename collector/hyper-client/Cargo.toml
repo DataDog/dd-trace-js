@@ -1,5 +1,5 @@
 [package]
-name = "server"
+name = "hyper-client"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,6 +7,5 @@ edition = "2021"
 
 [dependencies]
 common = { path = "../common" }
-hyper-client = { path = "../hyper-client" }
-hyper = "0.14.24"
-tokio = "1.25.0"
+hyper = { version = "0.14.24", features = ["full"] }
+tokio = { version = "1.25.0", features = ["full"] }

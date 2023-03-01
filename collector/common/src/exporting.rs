@@ -1,9 +1,7 @@
-use crate::tracing::{Traces};
-use async_trait::async_trait;
+use crate::tracing::Traces;
 
 pub mod agent;
 
-#[async_trait]
 pub trait Exporter {
-    async fn export(&self, traces: Traces);
+    fn export(&self, traces: Traces);
 }

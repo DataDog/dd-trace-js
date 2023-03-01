@@ -43,12 +43,12 @@ impl Processor {
         }
     }
 
-    pub async fn flush(&mut self) {
+    pub fn flush(&mut self) {
         let finished_traces: HashMap<u64, Trace> = self.traces
             .drain_filter(|_, v| v.started == v.finished)
             .collect();
 
-        self.exporter.export(finished_traces).await;
+        self.exporter.export(finished_traces);
     }
 
     fn process_event<R: Read>(&mut self, strings: &mut Vec<String>, mut rd: R) {
