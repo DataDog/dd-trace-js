@@ -93,6 +93,29 @@ testFrameworks.forEach(({
       await receiver.stop()
     })
 
+    if (name === 'jest') {
+      it('does not crash when jest is badly initialized', (done) => {
+        childProcess = fork('ci-visibility/run-jest-bad-init.js', {
+          cwd,
+          env: {
+            DD_TRACE_AGENT_PORT: receiver.port
+          },
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('message', () => {
+          assert.notInclude(testOutput, 'TypeError')
+          assert.include(testOutput, expectedStdout)
+          done()
+        })
+      })
+    }
+
     it('can run tests and report spans', (done) => {
       receiver.setInfoResponse({ endpoints: [] })
       receiver.payloadReceived(({ url }) => url === '/v0.4/traces').then(({ payload }) => {
