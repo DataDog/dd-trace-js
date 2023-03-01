@@ -128,10 +128,13 @@ module.exports = class CiPlugin extends Plugin {
       const suiteTags = {
         [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
         [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
-        [TEST_MODULE_ID]: testSuiteSpan.context()._parentId.toString(10),
         [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
         [TEST_BUNDLE]: testSuiteSpan.context()._tags[TEST_COMMAND]
       }
+      if (testSuiteSpan.context()._parentId) {
+        suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
+      }
+
       testTags = {
         ...testTags,
         ...suiteTags
