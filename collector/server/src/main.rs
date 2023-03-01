@@ -1,5 +1,5 @@
-use ddcollector::exporting::agent::AgentExporter;
-use ddcollector::processing::Processor;
+use common::exporting::agent::AgentExporter;
+use common::processing::Processor;
 use hyper::body::{Buf, Bytes};
 use hyper::{Body, Method, StatusCode};
 use hyper::http::Response;

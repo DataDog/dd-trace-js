@@ -1,7 +1,8 @@
-[package]
-name = "ddcollector"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+members = [
+  "common",
+  "server"
+]
 
 [profile.release]
 codegen-units = 1
@@ -11,10 +12,3 @@ panic = "abort"
 strip = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-async-trait = "0.1.64"
-hashbrown = "0.13.2"
-hyper = { version = "0.14.24", features = ["full"] }
-rmp = "0.8.11"
-tokio = { version = "1.25.0", features = ["full"] }
