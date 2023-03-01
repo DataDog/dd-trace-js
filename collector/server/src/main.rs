@@ -11,7 +11,6 @@ use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver,Sender};
 
-// TODO: Move HTTP server to its own module.
 // TODO: Stream the data somehow.
 // TODO: Make sure that processor is cleaned up on connection close.
 // TODO: Add proper error handling.
