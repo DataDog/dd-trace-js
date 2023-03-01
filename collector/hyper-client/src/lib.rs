@@ -19,7 +19,7 @@ impl Client for HyperClient {
         // TODO: configuration options
         let req = hyper::Request::builder()
             .method(hyper::Method::PUT)
-            .uri("http://localhost:8126/v0.4/traces")
+            .uri("http://localhost:8126/v0.5/traces")
             .header("Content-Type", "application/msgpack")
             // .header("X-Datadog-Trace-Count", trace_count.to_string())
             // .header("Datadog-Meta-Tracer-Version", "")

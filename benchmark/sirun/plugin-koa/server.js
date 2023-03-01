@@ -27,13 +27,17 @@ const requests = parseInt(REQUESTS)
 let readyServer
 let total = 0
 
-app.use(ctx => {
+app.use(async ctx => {
   ctx.body = 'OK'
 
   if (++total === requests) {
     server.close()
     readyServer.close()
   }
+
+  await new Promise((resolve) => {
+    setTimeout(resolve(), 500)
+  })
 })
 
 const server = http.createServer(app.callback())

@@ -15,7 +15,10 @@ const noop = () => {}
 const eventTypes = {
   KOA_REQUEST_START: 1,
   ERROR: 2,
-  KOA_REQUEST_FINISH: 3
+  KOA_REQUEST_FINISH: 3,
+  START_SPAN: 4,
+  FINISH_SPAN: 5,
+  ADD_TAGS: 6
 }
 
 const float64Array = new Float64Array(1)
@@ -41,6 +44,33 @@ class Encoder {
     return this._eventCount
   }
 
+  // encodeKoaRequestStart (req) {
+  //   const bytes = this._eventBytes
+  //   const store = storage.getStore()
+
+  //   if (!store || !store.traceContext) return
+
+  //   this._encodeFixArray(bytes, 2)
+  //   this._encodeShort(bytes, eventTypes.START_SPAN)
+  //   this._encodeFixArray(bytes, 10)
+  //   this._encodeLong(bytes, now())
+  //   this._encodeId(bytes, store.traceContext.traceId)
+  //   this._encodeId(bytes, store.traceContext.spanId)
+  //   this._encodeId(bytes, store.traceContext.parentId)
+  //   this._encodeString(bytes, service)
+  //   this._encodeString(bytes, 'koa.request')
+  //   this._encodeString(bytes, `${req.method} ${req.url}`)
+  //   this._encodeFixMap(bytes, 2)
+  //   this._encodeString(bytes, 'http.method')
+  //   this._encodeString(bytes, req.method)
+  //   this._encodeString(bytes, 'http.url')
+  //   this._encodeString(bytes, req.url)
+  //   this._encodeFixMap(bytes, 0)
+  //   this._encodeString(bytes, 'web')
+
+  //   this._afterEncode()
+  // }
+
   encodeKoaRequestStart (req) {
     const bytes = this._eventBytes
     const store = storage.getStore()
@@ -53,7 +83,7 @@ class Encoder {
     // error will be its own event
 
     this._encodeFixArray(bytes, 2)
-    this._encodeShort(bytes, eventTypes.KOA_REQUEST_START) // implied: name
+    this._encodeUnsigned(bytes, eventTypes.KOA_REQUEST_START) // implied: name
     this._encodeFixArray(bytes, 6)
     this._encodeLong(bytes, now())
     this._encodeId(bytes, store.traceContext.traceId)
@@ -65,6 +95,26 @@ class Encoder {
     this._afterEncode()
   }
 
+  // encodeKoaRequestFinish (res) {
+  //   const bytes = this._eventBytes
+  //   const store = storage.getStore()
+
+  //   if (!store || !store.traceContext) return
+
+  //   this._encodeFixArray(bytes, 2)
+  //   this._encodeShort(bytes, eventTypes.FINISH_SPAN)
+  //   this._encodeFixArray(bytes, 5)
+  //   this._encodeLong(bytes, now())
+  //   this._encodeId(bytes, store.traceContext.traceId)
+  //   this._encodeId(bytes, store.traceContext.spanId)
+  //   this._encodeFixMap(bytes, 1)
+  //   this._encodeString(bytes, 'http.status_code')
+  //   this._encodeString(bytes, String(res.statusCode || 0))
+  //   this._encodeFixMap(bytes, 0)
+
+  //   this._afterEncode()
+  // }
+
   encodeKoaRequestFinish (res) {
     const bytes = this._eventBytes
     const store = storage.getStore()
@@ -72,12 +122,12 @@ class Encoder {
     if (!store || !store.traceContext) return
 
     this._encodeFixArray(bytes, 2)
-    this._encodeShort(bytes, eventTypes.KOA_REQUEST_FINISH) // implied: name
+    this._encodeUnsigned(bytes, eventTypes.KOA_REQUEST_FINISH) // implied: name
     this._encodeFixArray(bytes, 4)
     this._encodeLong(bytes, now())
     this._encodeId(bytes, store.traceContext.traceId)
     this._encodeId(bytes, store.traceContext.spanId)
-    this._encodeShort(bytes, res.statusCode)
+    this._encodeUnsigned(bytes, res.statusCode)
 
     this._afterEncode()
   }
@@ -181,6 +231,15 @@ class Encoder {
     bytes.buffer[offset + 4] = length
   }
 
+  _encodeFixMap (bytes, size = 0) {
+    const offset = bytes.length
+
+    bytes.reserve(1)
+    bytes.length += 1
+
+    bytes.buffer[offset] = 0x80 + size
+  }
+
   _encodeMapPrefix (bytes, keysLength) {
     const offset = bytes.length
 
@@ -259,6 +318,50 @@ class Encoder {
     bytes.buffer[offset + 8] = lo
   }
 
+  _encodeUnsigned (bytes, value) {
+    const offset = bytes.length
+
+    if (value <= 0xff) {
+      bytes.reserve(2)
+      bytes.length += 2
+
+      bytes.buffer[offset] = 0xcc
+      bytes.buffer[offset + 1] = value
+    } else if (value <= 0xffff) {
+      bytes.reserve(3)
+      bytes.length += 3
+
+      bytes.buffer[offset] = 0xcd
+      bytes.buffer[offset + 1] = value >> 8
+      bytes.buffer[offset + 2] = value
+    } else if (value <= 0xffffffff) {
+      bytes.reserve(5)
+      bytes.length += 5
+
+      bytes.buffer[offset] = 0xce
+      bytes.buffer[offset + 1] = value >> 24
+      bytes.buffer[offset + 2] = value >> 16
+      bytes.buffer[offset + 3] = value >> 8
+      bytes.buffer[offset + 4] = value
+    } else {
+      const hi = (value / Math.pow(2, 32)) >> 0
+      const lo = value >>> 0
+
+      bytes.reserve(9)
+      bytes.length += 9
+
+      bytes.buffer[offset] = 0xcf
+      bytes.buffer[offset + 1] = hi >> 24
+      bytes.buffer[offset + 2] = hi >> 16
+      bytes.buffer[offset + 3] = hi >> 8
+      bytes.buffer[offset + 4] = hi
+      bytes.buffer[offset + 5] = lo >> 24
+      bytes.buffer[offset + 6] = lo >> 16
+      bytes.buffer[offset + 7] = lo >> 8
+      bytes.buffer[offset + 8] = lo
+    }
+  }
+
   _encodeMap (bytes, value) {
     const keys = Object.keys(value)
     const validKeys = keys.filter(key => typeof value[key] === 'string' || typeof value[key] === 'number')
@@ -284,9 +387,14 @@ class Encoder {
     }
   }
 
+  _encodeFixString (bytes, value = '') {
+    this._cacheString(value)
+    this._encodeUnsigned(bytes, this._stringMap[value])
+  }
+
   _encodeString (bytes, value = '') {
     this._cacheString(value)
-    this._encodeInteger(bytes, this._stringMap[value])
+    this._encodeUnsigned(bytes, this._stringMap[value])
   }
 
   _encodeFloat (bytes, value) {
