@@ -3,6 +3,7 @@
 const Chunk = require('../../../../packages/dd-trace/src/encode/chunk')
 const { storage } = require('../../../../packages/datadog-core')
 const { Client } = require('./client')
+const { zeroId } = require('./id')
 
 const processStartTime = BigInt(Date.now() * 1e6)
 const processStartTicks = process.hrtime.bigint()
@@ -13,12 +14,13 @@ const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 const flushInterval = 2000
 const noop = () => {}
 const eventTypes = {
-  KOA_REQUEST_START: 1,
+  WEB_REQUEST_START: 1,
   ERROR: 2,
-  KOA_REQUEST_FINISH: 3,
+  WEB_REQUEST_FINISH: 3,
   START_SPAN: 4,
   FINISH_SPAN: 5,
-  ADD_TAGS: 6
+  ADD_TAGS: 6,
+  MYSQL_START_SPAN: 8
 }
 
 const float64Array = new Float64Array(1)
@@ -44,90 +46,80 @@ class Encoder {
     return this._eventCount
   }
 
-  // encodeKoaRequestStart (req) {
-  //   const bytes = this._eventBytes
-  //   const store = storage.getStore()
-
-  //   if (!store || !store.traceContext) return
-
-  //   this._encodeFixArray(bytes, 2)
-  //   this._encodeShort(bytes, eventTypes.START_SPAN)
-  //   this._encodeFixArray(bytes, 10)
-  //   this._encodeLong(bytes, now())
-  //   this._encodeId(bytes, store.traceContext.traceId)
-  //   this._encodeId(bytes, store.traceContext.spanId)
-  //   this._encodeId(bytes, store.traceContext.parentId)
-  //   this._encodeString(bytes, service)
-  //   this._encodeString(bytes, 'koa.request')
-  //   this._encodeString(bytes, `${req.method} ${req.url}`)
-  //   this._encodeFixMap(bytes, 2)
-  //   this._encodeString(bytes, 'http.method')
-  //   this._encodeString(bytes, req.method)
-  //   this._encodeString(bytes, 'http.url')
-  //   this._encodeString(bytes, req.url)
-  //   this._encodeFixMap(bytes, 0)
-  //   this._encodeString(bytes, 'web')
-
-  //   this._afterEncode()
-  // }
-
-  encodeKoaRequestStart (req) {
+  encodeWebRequestStart (req, component) {
     const bytes = this._eventBytes
     const store = storage.getStore()
 
     if (!store || !store.traceContext) return
 
-    // service name comes from process
-    // span name comes from event type
-    // resource comes from mixing http method and route
-    // error will be its own event
-
     this._encodeFixArray(bytes, 2)
-    this._encodeUnsigned(bytes, eventTypes.KOA_REQUEST_START) // implied: name
-    this._encodeFixArray(bytes, 6)
+    this._encodeByte(bytes, eventTypes.WEB_REQUEST_START)
+    this._encodeFixArray(bytes, 8)
     this._encodeLong(bytes, now())
     this._encodeId(bytes, store.traceContext.traceId)
     this._encodeId(bytes, store.traceContext.spanId)
-    this._encodeId(bytes, store.traceContext.parentId) // ???
+    this._encodeId(bytes, store.traceContext.parentId)
+    this._encodeString(bytes, component)
     this._encodeString(bytes, req.method)
     this._encodeString(bytes, req.url)
+    this._encodeString(bytes, req.url) // route
 
     this._afterEncode()
   }
 
-  // encodeKoaRequestFinish (res) {
-  //   const bytes = this._eventBytes
-  //   const store = storage.getStore()
-
-  //   if (!store || !store.traceContext) return
-
-  //   this._encodeFixArray(bytes, 2)
-  //   this._encodeShort(bytes, eventTypes.FINISH_SPAN)
-  //   this._encodeFixArray(bytes, 5)
-  //   this._encodeLong(bytes, now())
-  //   this._encodeId(bytes, store.traceContext.traceId)
-  //   this._encodeId(bytes, store.traceContext.spanId)
-  //   this._encodeFixMap(bytes, 1)
-  //   this._encodeString(bytes, 'http.status_code')
-  //   this._encodeString(bytes, String(res.statusCode || 0))
-  //   this._encodeFixMap(bytes, 0)
-
-  //   this._afterEncode()
-  // }
-
-  encodeKoaRequestFinish (res) {
+  encodeWebRequestFinish (res) {
     const bytes = this._eventBytes
     const store = storage.getStore()
 
     if (!store || !store.traceContext) return
 
     this._encodeFixArray(bytes, 2)
-    this._encodeUnsigned(bytes, eventTypes.KOA_REQUEST_FINISH) // implied: name
-    this._encodeFixArray(bytes, 4)
+    this._encodeByte(bytes, eventTypes.WEB_REQUEST_FINISH)
+    this._encodeFixArray(bytes, 3)
     this._encodeLong(bytes, now())
     this._encodeId(bytes, store.traceContext.traceId)
     this._encodeId(bytes, store.traceContext.spanId)
-    this._encodeUnsigned(bytes, res.statusCode)
+    this._encodeShort(bytes, res.statusCode)
+
+    this._afterEncode()
+  }
+
+  encodeMysqlQueryStart (query) {
+    const bytes = this._eventBytes
+    const store = storage.getStore()
+
+    if (!store || !store.traceContext) return
+
+    this._encodeFixArray(bytes, 2)
+    this._encodeByte(bytes, eventTypes.MYSQL_START_SPAN)
+    this._encodeFixArray(bytes, 9)
+    this._encodeLong(bytes, now())
+    this._encodeId(bytes, store.traceContext.traceId)
+    this._encodeId(bytes, store.traceContext.spanId)
+    this._encodeId(bytes, store.traceContext.parentId)
+    this._encodeString(bytes, query.sql)
+    this._encodeString(bytes, query.conf.database)
+    this._encodeString(bytes, query.conf.user)
+    this._encodeString(bytes, query.conf.host)
+    this._encodeString(bytes, query.conf.port)
+
+    this._afterEncode()
+  }
+
+  encodeFinish () {
+    const bytes = this._eventBytes
+    const store = storage.getStore()
+
+    if (!store || !store.traceContext) return
+
+    this._encodeFixArray(bytes, 2)
+    this._encodeByte(bytes, eventTypes.FINISH_SPAN)
+    this._encodeFixArray(bytes, 5)
+    this._encodeLong(bytes, now())
+    this._encodeId(bytes, store.traceContext.traceId)
+    this._encodeId(bytes, store.traceContext.spanId)
+    this._encodeFixMap(bytes, 0)
+    this._encodeFixMap(bytes, 0)
 
     this._afterEncode()
   }
@@ -139,14 +131,17 @@ class Encoder {
     if (!store || !store.traceContext) return // TODO: support errors without tracing
 
     this._encodeFixArray(bytes, 2)
-    this._encodeShort(bytes, eventTypes.ERROR) // implied: name
-    this._encodeFixArray(bytes, 6)
+    this._encodeByte(bytes, eventTypes.ERROR) // implied: name
+    this._encodeFixArray(bytes, error ? 6 : 3)
     this._encodeLong(bytes, now())
     this._encodeId(bytes, store.traceContext.traceId)
     this._encodeId(bytes, store.traceContext.spanId)
-    this._encodeString(bytes, error.name)
-    this._encodeString(bytes, error.message)
-    this._encodeString(bytes, error.stack)
+
+    if (error) {
+      this._encodeString(bytes, error.name)
+      this._encodeString(bytes, error.message)
+      this._encodeString(bytes, error.stack)
+    }
 
     this._afterEncode()
   }
@@ -261,18 +256,25 @@ class Encoder {
   _encodeId (bytes, id) {
     const offset = bytes.length
 
-    bytes.reserve(9)
-    bytes.length += 9
+    if (id === zeroId) {
+      bytes.reserve(1)
+      bytes.length += 1
 
-    bytes.buffer[offset] = 0xcf
-    bytes.buffer[offset + 1] = id[0]
-    bytes.buffer[offset + 2] = id[1]
-    bytes.buffer[offset + 3] = id[2]
-    bytes.buffer[offset + 4] = id[3]
-    bytes.buffer[offset + 5] = id[4]
-    bytes.buffer[offset + 6] = id[5]
-    bytes.buffer[offset + 7] = id[6]
-    bytes.buffer[offset + 8] = id[7]
+      bytes.buffer[offset] = 0x00
+    } else {
+      bytes.reserve(9)
+      bytes.length += 9
+
+      bytes.buffer[offset] = 0xcf
+      bytes.buffer[offset + 1] = id[0]
+      bytes.buffer[offset + 2] = id[1]
+      bytes.buffer[offset + 3] = id[2]
+      bytes.buffer[offset + 4] = id[3]
+      bytes.buffer[offset + 5] = id[4]
+      bytes.buffer[offset + 6] = id[5]
+      bytes.buffer[offset + 7] = id[6]
+      bytes.buffer[offset + 8] = id[7]
+    }
   }
 
   _encodeInteger (bytes, value) {
@@ -321,7 +323,12 @@ class Encoder {
   _encodeUnsigned (bytes, value) {
     const offset = bytes.length
 
-    if (value <= 0xff) {
+    if (value <= 0x7f) {
+      bytes.reserve(1)
+      bytes.length += 1
+
+      bytes.buffer[offset] = value
+    } else if (value <= 0xff) {
       bytes.reserve(2)
       bytes.length += 2
 
@@ -446,4 +453,4 @@ class Encoder {
   }
 }
 
-module.exports = { Encoder }
+module.exports = { Encoder, encoder: new Encoder() }

@@ -13,7 +13,9 @@ pub struct Processor {
 
 // TODO: Decouple processing from exporting.
 // TODO: Add support for more payload metadata (i.e. language).
-// TODO: Use 0.5 endpoint.
+// TODO: Custom more efficient events depending on span type.
+// TODO: Store service metadata that can be used on every span like service name.
+// TODO: Cache things like outgoing host/port or MySQL connection information.
 // TODO: Event for adding trace tags.
 // TODO: Event for adding baggage items.
 // TODO: Add support for sampling.
@@ -26,18 +28,7 @@ impl Processor {
             exporter,
             traces: Traces::new(),
             // TODO: Figure out how to cache those properly.
-            strings: HashSet::from([
-                Rc::from(""),
-                Rc::from("error.message"),
-                Rc::from("error.stack"),
-                Rc::from("error.type"),
-                Rc::from("http.method"),
-                Rc::from("http.status_code"),
-                Rc::from("http.url"),
-                Rc::from("koa.request"),
-                Rc::from("web"),
-                Rc::from("unnamed-app")
-            ])
+            strings: HashSet::from([Rc::from("")])
         }
     }
 
@@ -72,13 +63,14 @@ impl Processor {
         let event_type = read_u64(&mut rd).unwrap();
 
         match event_type {
-            1 => self.process_start_koa_request(strings, rd),
+            1 => self.process_start_web_request(strings, rd),
             2 => self.process_add_error(strings, rd),
-            3 => self.process_finish_koa_request(strings, rd),
+            3 => self.process_finish_web_request(strings, rd),
             4 => self.process_start_span(strings, rd),
             5 => self.process_finish_span(strings, rd),
             6 => self.process_add_tags(strings, rd),
             7 => self.process_strings(strings, rd),
+            8 => self.process_start_mysql_query(strings, rd),
             _ => ()
         }
     }
@@ -93,7 +85,6 @@ impl Processor {
         }
     }
 
-    // TODO: Update this to use string cache.
     // TODO: Store an error object instead of tags on the span.
     fn process_add_error<R: Read>(&mut self, strings: &[Rc<str>], mut rd: R) {
         let size = read_array_len(&mut rd).unwrap();
@@ -103,36 +94,27 @@ impl Processor {
         let trace_id = read_u64(&mut rd).unwrap();
         let span_id = read_u64(&mut rd).unwrap();
 
-        let message = if size >= 4 {
-            strings[read_usize(&mut rd).unwrap()].clone()
-        } else {
-            Rc::from("")
-        };
-        let stack = if size >= 5 {
-            strings[read_usize(&mut rd).unwrap()].clone()
-        } else {
-            Rc::from("")
-        };
-        let name = if size >= 6 {
-            strings[read_usize(&mut rd).unwrap()].clone()
-        } else {
-            Rc::from("")
-        };
-
-        if let Some(trace) = self.traces.get_mut(&trace_id) {
-            if let Some(mut span) = trace.spans.get_mut(&span_id) {
-                span.error = 1;
-
-                if !message.is_empty() {
-                    span.meta.insert(Rc::from("error.message"), message);
+        if size < 4 {
+            if let Some(trace) = self.traces.get_mut(&trace_id) {
+                if let Some(mut span) = trace.spans.get_mut(&span_id) {
+                    span.error = 1;
                 }
+            }
+        } else {
+            let name_key = self.from_str("error.name");
+            let name = strings[read_usize(&mut rd).unwrap()].clone();
+            let message_key = self.from_str("error.message");
+            let message = strings[read_usize(&mut rd).unwrap()].clone();
+            let stack_key = self.from_str("error.stack");
+            let stack = strings[read_usize(&mut rd).unwrap()].clone();
 
-                if !stack.is_empty() {
-                    span.meta.insert(Rc::from("error.stack"), stack);
-                }
+            if let Some(trace) = self.traces.get_mut(&trace_id) {
+                if let Some(mut span) = trace.spans.get_mut(&span_id) {
+                    span.error = 1;
 
-                if !name.is_empty() {
-                    span.meta.insert(Rc::from("error.type"), name);
+                    span.meta.insert(name_key, name);
+                    span.meta.insert(message_key, message);
+                    span.meta.insert(stack_key, stack);
                 }
             }
         }
@@ -205,7 +187,7 @@ impl Processor {
         }
     }
 
-    fn process_start_koa_request<R: Read>(&mut self, strings: &[Rc<str>], mut rd: R) {
+    fn process_start_web_request<R: Read>(&mut self, strings: &[Rc<str>], mut rd: R) {
         let mut meta = HashMap::new();
         let metrics = HashMap::new();
 
@@ -215,11 +197,14 @@ impl Processor {
         let trace_id = read_u64(&mut rd).unwrap();
         let span_id = read_u64(&mut rd).unwrap();
         let parent_id = read_u64(&mut rd).unwrap();
+        let component = strings[read_usize(&mut rd).unwrap()].clone();
         let method = strings[read_usize(&mut rd).unwrap()].clone();
-        let url = strings[read_usize(&mut rd).unwrap()].clone(); // TODO: route not url
+        let url = strings[read_usize(&mut rd).unwrap()].clone();
+        let route = strings[read_usize(&mut rd).unwrap()].clone();
 
         // TODO: How to cache string concatenation?
-        let resource = Rc::from(format!("{method} {url}"));
+        let name = Rc::from(format!("{component}.request"));
+        let resource = Rc::from(format!("{method} {route}"));
 
         meta.insert(self.from_str("http.method"), method);
         meta.insert(self.from_str("http.url"), url);
@@ -230,7 +215,7 @@ impl Processor {
             span_id,
             parent_id,
             span_type: self.from_str("web"),
-            name: self.from_str("koa.request"),
+            name,
             resource,
             service: self.from_str("unnamed-app"),
             error: 0,
@@ -242,7 +227,48 @@ impl Processor {
         self.start_span(span);
     }
 
-    fn process_finish_koa_request<R: Read>(&mut self, _: &[Rc<str>], mut rd: R) {
+    fn process_start_mysql_query<R: Read>(&mut self, strings: &[Rc<str>], mut rd: R) {
+        let mut meta = HashMap::new();
+        let mut metrics = HashMap::new();
+
+        read_array_len(&mut rd).unwrap();
+
+        let start = read_u64(&mut rd).unwrap();
+        let trace_id = read_u64(&mut rd).unwrap();
+        let span_id = read_u64(&mut rd).unwrap();
+        let parent_id = read_u64(&mut rd).unwrap();
+        let sql = strings[read_usize(&mut rd).unwrap()].clone();
+        let database = strings[read_usize(&mut rd).unwrap()].clone();
+        let user = strings[read_usize(&mut rd).unwrap()].clone();
+        let host = strings[read_usize(&mut rd).unwrap()].clone();
+        let port = read_u16(&mut rd).unwrap();
+
+        // TODO: How to cache string concatenation?
+        meta.insert(self.from_str("db.type"), self.from_str("mysql"));
+        meta.insert(self.from_str("db.user"), user);
+        meta.insert(self.from_str("db.name"), database);
+        meta.insert(self.from_str("out.host"), host);
+        metrics.insert(self.from_str("out.port"), port as f64);
+
+        let span = Span {
+            start,
+            trace_id,
+            span_id,
+            parent_id,
+            span_type: self.from_str("sql"),
+            name: self.from_str("mysql.query"),
+            resource: sql,
+            service: self.from_str("unnamed-app-mysql"),
+            error: 0,
+            duration: 0,
+            meta,
+            metrics
+        };
+
+        self.start_span(span);
+    }
+
+    fn process_finish_web_request<R: Read>(&mut self, _: &[Rc<str>], mut rd: R) {
         read_array_len(&mut rd).unwrap();
 
         let start = read_u64(&mut rd).unwrap();
@@ -293,7 +319,14 @@ impl Processor {
         trace.spans.insert(span.span_id, span);
     }
 
-    fn from_str(&self, s: &str) -> Rc<str> {
-        self.strings.get(s).unwrap().clone()
+    fn from_str(&mut self, s: &str) -> Rc<str> {
+        match self.strings.get(s) {
+            Some(s) => s.clone(),
+            None => {
+                let s: Rc<str> = Rc::from(s);
+                self.strings.insert(s.clone());
+                s
+            }
+        }
     }
 }
