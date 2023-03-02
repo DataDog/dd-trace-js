@@ -113,8 +113,6 @@ function incomingHttpEndTranslator (data) {
     [addresses.HTTP_INCOMING_URL]: data.req.url,
     [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
     [addresses.HTTP_INCOMING_METHOD]: data.req.method,
-    [addresses.HTTP_INCOMING_REMOTE_IP]: data.req.socket.remoteAddress,
-    [addresses.HTTP_INCOMING_REMOTE_PORT]: data.req.socket.remotePort,
     [addresses.HTTP_INCOMING_RESPONSE_CODE]: data.res.statusCode,
     [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
   }
@@ -126,10 +124,6 @@ function incomingHttpEndTranslator (data) {
 
   if (data.req.query && typeof data.req.query === 'object') {
     payload[addresses.HTTP_INCOMING_QUERY] = data.req.query
-  }
-
-  if (data.req.route && typeof data.req.route.path === 'string') {
-    payload[addresses.HTTP_INCOMING_ENDPOINT] = data.req.route.path
   }
 
   if (data.req.params && typeof data.req.params === 'object') {

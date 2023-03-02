@@ -48,9 +48,7 @@ describe('reporter', () => {
           'user-agent': 'arachni',
           secret: 'password'
         },
-        [addresses.HTTP_INCOMING_METHOD]: 'GET',
-        [addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8',
-        [addresses.HTTP_INCOMING_REMOTE_PORT]: 1337
+        [addresses.HTTP_INCOMING_METHOD]: 'GET'
       }
 
       const result = Reporter.resolveHTTPRequest(params)
@@ -74,7 +72,6 @@ describe('reporter', () => {
 
     it('should return resolved addresses', () => {
       const params = {
-        [addresses.HTTP_INCOMING_ENDPOINT]: '/path/:param',
         [addresses.HTTP_INCOMING_RESPONSE_CODE]: 201,
         [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
           'content-type': 'application/json',
@@ -186,7 +183,7 @@ describe('reporter', () => {
       expect(Reporter.reportAttack('', null)).to.be.false
       expect(Reporter.reportAttack('', {})).to.be.false
 
-      storage.enterWith({ })
+      storage.enterWith({})
       expect(Reporter.reportAttack('', { req: null })).to.be.false
     })
 
@@ -197,8 +194,7 @@ describe('reporter', () => {
           host: 'localhost',
           'user-agent': 'arachni',
           secret: 'password'
-        },
-        [addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8'
+        }
       }
 
       const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]', params)
@@ -219,7 +215,7 @@ describe('reporter', () => {
 
     it('should not add manual.keep when rate limit is reached', (done) => {
       const addTags = span.addTags
-      const params = { }
+      const params = {}
 
       expect(Reporter.reportAttack('', params)).to.not.be.false
       expect(addTags.getCall(0).firstArg).to.have.property('manual.keep').that.equals('true')
@@ -266,8 +262,7 @@ describe('reporter', () => {
         [addresses.HTTP_INCOMING_HEADERS]: {
           host: 'localhost',
           secret: 'password'
-        },
-        [addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8'
+        }
       }
 
       const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]', params)
@@ -324,7 +319,6 @@ describe('reporter', () => {
       const req = {}
 
       const params = {
-        [addresses.HTTP_INCOMING_ENDPOINT]: '/path/:param',
         [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
           'content-type': 'application/json',
           'content-length': 42,
@@ -342,7 +336,6 @@ describe('reporter', () => {
       const req = {}
 
       const params = {
-        [addresses.HTTP_INCOMING_ENDPOINT]: '/path/:param',
         [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
           'content-type': 'application/json',
           'content-length': 42,

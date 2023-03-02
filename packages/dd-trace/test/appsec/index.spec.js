@@ -292,8 +292,6 @@ describe('AppSec Index', () => {
           'host': 'localhost'
         },
         'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080,
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
@@ -346,8 +344,6 @@ describe('AppSec Index', () => {
           'host': 'localhost'
         },
         'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080,
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
@@ -412,8 +408,6 @@ describe('AppSec Index', () => {
           'host': 'localhost'
         },
         'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080,
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
@@ -421,7 +415,6 @@ describe('AppSec Index', () => {
         },
         'server.request.body': { a: '1' },
         'server.request.query': { b: '2' },
-        'server.request.framework_endpoint': '/path/:c',
         'server.request.path_params': { c: '3' },
         'server.request.cookies': { d: ['4'], e: ['5'] }
       }
