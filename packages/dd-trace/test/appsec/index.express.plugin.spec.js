@@ -9,7 +9,7 @@ const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 
-withVersions('body-parser', 'body-parser', version => {
+withVersions('express', 'express', version => {
   describe('Suspicious request blocking - query', () => {
     let port, server, requestBody, rulesPath
 

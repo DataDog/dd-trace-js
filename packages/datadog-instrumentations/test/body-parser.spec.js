@@ -8,7 +8,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 withVersions('body-parser', 'body-parser', version => {
   describe('body parser instrumentation', () => {
     const bodyParserReadCh = dc.channel('datadog:body-parser:read:finish')
-    let port, server, requestBody
+    let port, server, middlewareProcessBodyStub
 
     before(() => {
       return agent.load(['express', 'body-parser'], { client: false })
@@ -19,7 +19,7 @@ withVersions('body-parser', 'body-parser', version => {
       const app = express()
       app.use(bodyParser.json())
       app.post('/', (req, res) => {
-        requestBody()
+        middlewareProcessBodyStub()
         res.end('DONE')
       })
       getPort().then(newPort => {
@@ -30,7 +30,7 @@ withVersions('body-parser', 'body-parser', version => {
       })
     })
     beforeEach(async () => {
-      requestBody = sinon.stub()
+      middlewareProcessBodyStub = sinon.stub()
     })
 
     after(() => {
@@ -41,7 +41,7 @@ withVersions('body-parser', 'body-parser', version => {
     it('should not abort the request by default', async () => {
       const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
-      expect(requestBody).to.be.calledOnce
+      expect(middlewareProcessBodyStub).to.be.calledOnce
       expect(res.data).to.be.equal('DONE')
     })
 
@@ -51,7 +51,7 @@ withVersions('body-parser', 'body-parser', version => {
 
       const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
-      expect(requestBody).to.be.calledOnce
+      expect(middlewareProcessBodyStub).to.be.calledOnce
       expect(res.data).to.be.equal('DONE')
 
       bodyParserReadCh.unsubscribe(noop)
@@ -66,7 +66,7 @@ withVersions('body-parser', 'body-parser', version => {
 
       const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
-      expect(requestBody).not.to.be.called
+      expect(middlewareProcessBodyStub).not.to.be.called
       expect(res.data).to.be.equal('BLOCKED')
 
       bodyParserReadCh.unsubscribe(blockRequest)
@@ -80,7 +80,7 @@ withVersions('body-parser', 'body-parser', version => {
 
       await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
-      expect(requestBody).not.to.be.called
+      expect(middlewareProcessBodyStub).not.to.be.called
 
       bodyParserReadCh.unsubscribe(blockRequest)
     })
