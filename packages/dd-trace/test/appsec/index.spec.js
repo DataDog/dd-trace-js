@@ -460,9 +460,10 @@ describe('AppSec Index', () => {
           'content-type': 'application/json',
           'content-lenght': 42
         },
-        'server.request.query': { b: '2' },
         'server.request.framework_endpoint': '/path/:c',
-        'server.request.path_params': { c: '3' }
+        'server.request.path_params': { c: '3' },
+        'server.request.cookies': { d: [ '4' ], e: [ '5' ]
+        }
       }, context)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, context)
     })
