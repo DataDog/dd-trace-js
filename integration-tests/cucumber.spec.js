@@ -21,7 +21,7 @@ versions.forEach(version => {
   describe(`cucumber@${version}`, () => {
     let sandbox, cwd, receiver, childProcess
     before(async () => {
-      sandbox = await createSandbox(['@cucumber/cucumber', 'assert'], true)
+      sandbox = await createSandbox([`@cucumber/cucumber@${version}`, 'assert'], true)
       cwd = sandbox.folder
     })
 
