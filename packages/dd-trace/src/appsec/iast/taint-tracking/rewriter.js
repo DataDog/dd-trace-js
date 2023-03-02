@@ -41,7 +41,9 @@ function getCompileMethodFn (compileMethod) {
     try {
       if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
         const rewritten = rewriter.rewrite(content, filename)
-        return compileMethod.apply(this, [rewritten, filename])
+        if (rewritten && rewritten.content) {
+          return compileMethod.apply(this, [rewritten.content, filename])
+        }
       }
     } catch (e) {
       log.error(e)
