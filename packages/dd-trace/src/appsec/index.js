@@ -128,16 +128,19 @@ function incomingHttpEndTranslator (data) {
   }
 
   // TODO: temporary express instrumentation, will use express plugin later
-  if (data.req.query && typeof data.req.query === 'object') {
-    payload[addresses.HTTP_INCOMING_QUERY] = data.req.query
-  }
-
   if (data.req.route && typeof data.req.route.path === 'string') {
     payload[addresses.HTTP_INCOMING_ENDPOINT] = data.req.route.path
   }
 
   if (data.req.params && typeof data.req.params === 'object') {
     payload[addresses.HTTP_INCOMING_PARAMS] = data.req.params
+  }
+
+  if (data.req.cookies && typeof data.req.cookies === 'object') {
+    payload[addresses.HTTP_INCOMING_COOKIES] = {}
+    for (const k of Object.keys(data.req.cookies)) {
+      payload[addresses.HTTP_INCOMING_COOKIES][k] = [data.req.cookies[k]]
+    }
   }
 
   Gateway.propagate(payload, context)
