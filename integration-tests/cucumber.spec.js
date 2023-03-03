@@ -3,6 +3,7 @@
 const { exec } = require('child_process')
 
 const getPort = require('get-port')
+const semver = require('semver')
 const { assert } = require('chai')
 
 const {
@@ -13,13 +14,14 @@ const {
 const { FakeCiVisIntake } = require('./ci-visibility-intake')
 const { TEST_STATUS, TEST_COMMAND, TEST_BUNDLE } = require('../packages/dd-trace/src/plugins/util/test')
 
-const versions = ['7.0.0', 'latest']
+const isOldNode = semver.satisfies(process.version, '<=12')
+const versions = ['7.0.0', isOldNode ? '8' : 'latest']
 
 versions.forEach(version => {
   describe(`cucumber@${version}`, () => {
     let sandbox, cwd, receiver, childProcess
     before(async () => {
-      sandbox = await createSandbox(['@cucumber/cucumber', 'assert'], true)
+      sandbox = await createSandbox([`@cucumber/cucumber@${version}`, 'assert'], true)
       cwd = sandbox.folder
     })
 

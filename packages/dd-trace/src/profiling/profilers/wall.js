@@ -35,6 +35,7 @@ class NativeWallProfiler {
   stop () {
     if (!this._stop) return
     this._stop()
+    this._stop = undefined
   }
 
   _record () {

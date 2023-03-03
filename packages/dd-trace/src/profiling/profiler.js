@@ -56,7 +56,7 @@ class Profiler extends EventEmitter {
       this._capture(this._timeoutInterval)
     } catch (e) {
       this._logger.error(e)
-      this.stop()
+      this._stop()
     }
   }
 
@@ -64,7 +64,16 @@ class Profiler extends EventEmitter {
     this._timeoutInterval = this._config.flushInterval
   }
 
-  stop () {
+  async stop () {
+    if (!this._enabled) return
+
+    // collect and export current profiles
+    // once collect returns, profilers can be safely stopped
+    this._collect()
+    this._stop()
+  }
+
+  _stop () {
     if (!this._enabled) return
 
     this._enabled = false
@@ -92,16 +101,24 @@ class Profiler extends EventEmitter {
   }
 
   async _collect () {
+    if (!this._enabled) return
+
     const start = this._lastStart
     const end = new Date()
-    const profiles = {}
+    const profiles = []
+    const encodedProfiles = {}
 
     try {
+      // collect profiles synchronously so that profilers can be safely stopped asynchronously
       for (const profiler of this._config.profilers) {
         const profile = profiler.profile()
         if (!profile) continue
+        profiles.push({ profiler, profile })
+      }
 
-        profiles[profiler.type] = await profiler.encode(profile)
+      // encode and export asynchronously
+      for (const { profiler, profile } of profiles) {
+        encodedProfiles[profiler.type] = await profiler.encode(profile)
         this._logger.debug(() => {
           const profileJson = JSON.stringify(profile, (key, value) => {
             return typeof value === 'bigint' ? value.toString() : value
@@ -111,11 +128,11 @@ class Profiler extends EventEmitter {
       }
 
       this._capture(this._timeoutInterval)
-      await this._submit(profiles, start, end)
+      await this._submit(encodedProfiles, start, end)
       this._logger.debug('Submitted profiles')
     } catch (err) {
       this._logger.error(err)
-      this.stop()
+      this._stop()
     }
   }
 

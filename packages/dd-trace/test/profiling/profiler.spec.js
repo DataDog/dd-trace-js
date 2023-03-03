@@ -202,6 +202,16 @@ describe('profiler', function () {
       sinon.assert.calledOnce(exporter.export)
     })
 
+    it('should flush when the profiler is stopped', async () => {
+      await profiler._start({ profilers, exporters })
+
+      profiler.stop()
+
+      await waitForExport()
+
+      sinon.assert.calledOnce(exporter.export)
+    })
+
     it('should export profiles', async () => {
       await profiler._start({ profilers, exporters, tags: { foo: 'foo' } })
 

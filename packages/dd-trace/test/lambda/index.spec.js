@@ -32,7 +32,7 @@ describe('lambda', () => {
 
     it('patches lambda function correctly', async () => {
       const _context = {
-        getRemainingTimeInMillis: () => 300
+        getRemainingTimeInMillis: () => 150
       }
       const _event = {}
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
@@ -53,26 +53,54 @@ describe('lambda', () => {
       await checkTraces
     })
 
-    it('returns traces with error when handler is about to timeout', async () => {
-      const _context = {
-        getRemainingTimeInMillis: () => 150
-      }
-      const _event = {}
-      const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
-      const app = require(_handlerPath)
-      datadog = require('./fixtures/datadog-lambda')
-      let result
-      (datadog(app.handler)(_event, _context)).then((data) => { result = data })
-      setTimeout(() => {
-        expect(result).to.equal(undefined)
-      }, _context.getRemainingTimeInMillis())
+    describe('timeout spans', () => {
+      const deadlines = [
+        {
+          envVar: 'default'
+          // will use default remaining time
+        },
+        {
+          envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
+          value: '-100' // will default to 0
+        },
+        {
+          envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
+          value: '10' // subtract 10 from the remaining time
+        }
+      ]
 
-      const checkTraces = agent.use((_traces) => {
-        const trace = _traces[0][0]
-        expect(trace.error).to.equal(1)
-        expect(trace.meta['error.type']).to.equal('Impending Timeout')
+      deadlines.forEach(deadline => {
+        const flushDeadlineEnvVar = deadline.envVar
+        const customDeadline = deadline.value ? deadline.value : ''
+
+        it(`traces error on impending timeout using ${flushDeadlineEnvVar} ${customDeadline} deadline`, (done) => {
+          process.env[flushDeadlineEnvVar] = customDeadline
+
+          const _context = {
+            getRemainingTimeInMillis: () => 25
+          }
+          const _event = {}
+
+          const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
+          const app = require(_handlerPath)
+          datadog = require('./fixtures/datadog-lambda')
+
+          let error = false
+          agent.use((_traces) => {
+            // First trace, since errors are tagged at root span level.
+            const trace = _traces[0][0]
+            expect(trace.error).to.equal(1)
+            error = true
+            expect(trace.meta['error.type']).to.equal('Impending Timeout')
+            // Ensure that once this finish, an error was tagged.
+          }).then(() => expect(error).to.equal(true))
+
+          // Since these are expected to timeout and one can't kill the
+          // environment, one has to wait for the result to come in so
+          // the traces are verified above.
+          datadog(app.handler)(_event, _context).then(_ => done(), done)
+        })
       })
-      await checkTraces
     })
   })
 })

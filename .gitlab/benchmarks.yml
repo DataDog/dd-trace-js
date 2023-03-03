@@ -48,6 +48,24 @@ benchmarks-pr-comment:
 
     KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
 
+check-big-regressions:
+  stage: benchmarks-pr-comment
+  when: on_success
+  tags: ["arch:amd64"]
+  image: $BASE_CI_IMAGE
+  script:
+    - export REPORTS_DIR="$(pwd)/reports/" && (mkdir "${REPORTS_DIR}" || :)
+    - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/".insteadOf "https://github.com/DataDog/"
+    - git clone --branch dd-trace-js https://github.com/DataDog/relenv-microbenchmarking-platform /platform && cd /platform
+    - ./steps/fail-on-regression.sh
+  variables:
+    UPSTREAM_PROJECT_ID: $CI_PROJECT_ID # The ID of the current project. This ID is unique across all projects on the GitLab instance.
+    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME # "dd-trace-js"
+    UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME # The branch or tag name for which project is built.
+    UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA # The commit revision the project is built for.
+
+    KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
+
 benchmark-v14:
   extends: .benchmarks
   variables:

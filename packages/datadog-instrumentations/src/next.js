@@ -127,7 +127,8 @@ function finish (req, res, result, err) {
   return result
 }
 
-addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js' }, nextServer => {
+// TODO: 13.2 support
+addHook({ name: 'next', versions: ['>=11.1 <13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
