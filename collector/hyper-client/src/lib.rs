@@ -1,10 +1,20 @@
 use common::client::Client;
+use tokio::sync::mpsc::Sender;
 
-pub struct HyperClient {}
+pub struct HyperClient {
+    tx: Option<Sender<()>>
+}
 
 impl HyperClient {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            tx: None
+        }
+    }
+
+    // TODO: Require a sender in `new()` instead.
+    pub fn on_response (&mut self, tx: Sender<()>) {
+        self.tx = Some(tx);
     }
 }
 
@@ -29,8 +39,17 @@ impl Client for HyperClient {
             .body(hyper::Body::from(data))
             .unwrap();
 
+        let tx = self.tx.clone();
+
         tokio::spawn(async move {
-            hyper::Client::new().request(req).await.unwrap();
+            let res = hyper::Client::new().request(req).await.unwrap();
+
+            // Discard the response for now.
+            hyper::body::to_bytes(res.into_body()).await.unwrap();
+
+            if let Some(tx) = tx {
+                tx.send(()).await.unwrap();
+            }
         });
     }
 }

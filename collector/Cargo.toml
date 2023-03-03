@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "common",
+  "ffi",
   "hyper-client",
   "server"
 ]

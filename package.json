@@ -86,6 +86,7 @@
     "path-to-regexp": "^0.1.2",
     "protobufjs": "^7.1.2",
     "retry": "^0.10.1",
+    "sbffi": "bengl/sbffi",
     "semver": "^5.5.0"
   },
   "devDependencies": {

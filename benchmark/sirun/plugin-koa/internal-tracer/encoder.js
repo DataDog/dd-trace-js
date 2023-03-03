@@ -4,10 +4,8 @@ const Chunk = require('../../../../packages/dd-trace/src/encode/chunk')
 const { storage } = require('../../../../packages/datadog-core')
 const { Client } = require('./client')
 const { zeroId } = require('./id')
+const { now } = require('./now')
 
-const processStartTime = BigInt(Date.now() * 1e6)
-const processStartTicks = process.hrtime.bigint()
-const now = () => Number(processStartTime + process.hrtime.bigint() - processStartTicks)
 // const service = process.env.DD_SERVICE || 'unnamed-node-app'
 const ARRAY_OF_TWO = 0x92
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
@@ -171,10 +169,31 @@ class Encoder {
     if (count === 0) return
 
     const data = this.makePayload()
-    const path = `/v0.1/events`
 
     this._timer = clearTimeout(this._timer)
-    this._client.request({ data, path, count }, done)
+
+    if (process.env.WITH_NATIVE_COLLECTOR) {
+      this.flushFfi(data, done)
+    } else {
+      const path = `/v0.1/events`
+      this._client.request({ data, path, count }, done)
+    }
+  }
+
+  // TODO: Use node:ffi when it lands.
+  // https://github.com/nodejs/node/pull/46905
+  flushFfi (data, done) {
+    const path = require('path')
+    const { getNativeFunction, getBufferPointer } = require('sbffi')
+    const libPath = path.normalize(
+      path.join(__dirname, '../../../../collector/target/release/libffi.dylib')
+    )
+    const submit = getNativeFunction(libPath, 'submit', 'uint32_t', ['uint32_t', 'uint8_t *'])
+    const ptr = getBufferPointer(data)
+
+    submit(data.length, ptr)
+
+    done()
   }
 
   reset () {
