@@ -78,39 +78,47 @@ function reset () {
 }
 
 function onError (err) {
-  if (enabled) {
-    if (typeof err !== 'object' || !err) {
-      err = String(err)
-    } else if (!err.stack) {
-      err = String(err.message || err)
-    }
-
-    if (typeof err === 'string') {
-      err = new Error(err)
-    }
-
-    withNoop(() => logger.error(err))
-  }
+  if (enabled) error(err)
 }
 
 function onWarn (message) {
-  if (!logger.warn) return onDebug(message)
-  if (enabled) {
-    withNoop(() => logger.warn(message))
-  }
+  if (enabled) warn(message)
 }
 
 function onInfo (message) {
-  if (!logger.info) return onDebug(message)
-  if (enabled) {
-    withNoop(() => logger.info(message))
-  }
+  if (enabled) info(message)
 }
 
 function onDebug (message) {
-  if (enabled) {
-    withNoop(() => logger.debug(message))
-  }
+  if (enabled) debug(message)
 }
 
-module.exports = { use, toggle, reset }
+function error (err) {
+  if (typeof err !== 'object' || !err) {
+    err = String(err)
+  } else if (!err.stack) {
+    err = String(err.message || err)
+  }
+
+  if (typeof err === 'string') {
+    err = new Error(err)
+  }
+
+  withNoop(() => logger.error(err))
+}
+
+function warn (message) {
+  if (!logger.warn) return debug(message)
+  withNoop(() => logger.warn(message))
+}
+
+function info (message) {
+  if (!logger.info) return debug(message)
+  withNoop(() => logger.info(message))
+}
+
+function debug (message) {
+  withNoop(() => logger.debug(message))
+}
+
+module.exports = { use, toggle, reset, error, warn, info, debug }
