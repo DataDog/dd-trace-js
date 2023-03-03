@@ -1,13 +1,10 @@
 'use strict'
 
-const mainLogger = require('./log')
+const { info, warn } = require('./log/writer')
 
 const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
-
-const logger = Object.create(mainLogger)
-logger.toggle(true)
 
 let config
 let pluginManager
@@ -89,9 +86,9 @@ function startupLog ({ agentError } = {}) {
   // out.service_mapping
   // out.service_mapping_error
 
-  logger.info('DATADOG TRACER CONFIGURATION - ' + out)
+  info('DATADOG TRACER CONFIGURATION - ' + out)
   if (agentError) {
-    logger.warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
+    warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
   }
 
   config = undefined
