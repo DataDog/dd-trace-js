@@ -13,12 +13,14 @@
     "with-internal-tracer": {
       "env": {
         "WITH_INTERNAL_TRACER": "true",
-        "DD_TRACE_AGENT_PROTOCOL_VERSION": "0.5"
+        "WITH_FAKE_DB": "true",
+        "WITH_NATIVE_COLLECTOR": "true"
       }
     },
     "with-tracer": {
       "env": {
         "WITH_TRACER": "true",
+        "WITH_FAKE_DB": "true",
         "DD_TRACE_AGENT_PROTOCOL_VERSION": "0.5"
       }
     }
