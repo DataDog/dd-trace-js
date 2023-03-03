@@ -2,9 +2,9 @@
 
 const log = require('../log')
 const RuleManager = require('./rule_manager')
-const waf = require('./waf')
 const remoteConfig = require('./remote_config')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('./channels')
+const waf = require('./waf')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
@@ -48,12 +48,7 @@ function abortEnable (err) {
   log.error('Unable to start AppSec')
   log.error(err)
 
-  // abort AppSec start
-  RuleManager.clearAllRules()
-
-  remoteConfig.disableAsmData()
-  remoteConfig.disableAsmDD()
-  remoteConfig.disableAsm()
+  disable()
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
