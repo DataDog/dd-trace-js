@@ -183,17 +183,20 @@ class Encoder {
   // TODO: Use node:ffi when it lands.
   // https://github.com/nodejs/node/pull/46905
   flushFfi (data, done) {
-    const path = require('path')
-    const { getNativeFunction, getBufferPointer } = require('sbffi')
-    const libPath = path.normalize(
-      path.join(__dirname, '../../../../collector/target/release/libffi.dylib')
-    )
-    const submit = getNativeFunction(libPath, 'submit', 'uint32_t', ['uint32_t', 'uint8_t *'])
-    const ptr = getBufferPointer(data)
+    try {
+      const path = require('path')
+      const { getNativeFunction, getBufferPointer } = require('sbffi')
+      const libPath = path.normalize(
+        path.join(__dirname, '../../../../collector/target/release/libffi.dylib')
+      )
+      const submit = getNativeFunction(libPath, 'submit', 'uint32_t', ['uint32_t', 'uint8_t *'])
+      const ptr = getBufferPointer(data)
 
-    submit(data.length, ptr)
-
-    done()
+      submit(data.length, ptr)
+      done()
+    } catch (e) {
+      done(e)
+    }
   }
 
   reset () {
