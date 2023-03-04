@@ -1,11 +1,12 @@
 'use strict'
 
+const log = require('../../log')
 const Reporter = require('../reporter')
 
 class WAFContextWrapper {
-  constructor (ddwafContext, acceptedAddresses, wafTimeout, rulesInfo) {
+  constructor (ddwafContext, requiredAddresses, wafTimeout, rulesInfo) {
     this.ddwafContext = ddwafContext
-    this.acceptedAddresses = acceptedAddresses
+    this.requiredAddresses = requiredAddresses
     this.wafTimeout = wafTimeout
     this.rulesInfo = rulesInfo
   }
@@ -13,41 +14,43 @@ class WAFContextWrapper {
   run (params) {
     const inputs = {}
     let someInputAdded = false
-    params && Object.keys(params).forEach((key) => {
-      if (this.acceptedAddresses.has(key)) {
+
+    // TODO: possible optimizaion: only send params that haven't already been sent to this wafContext
+    for (const key of Object.keys(params)) {
+      if (this.requiredAddresses.has(key)) {
         inputs[key] = params[key]
         someInputAdded = true
       }
-    })
+    }
 
-    if (someInputAdded) {
+    if (!someInputAdded) return
+
+    try {
       const start = process.hrtime.bigint()
 
-      const ddwafResult = this.ddwafContext.run(inputs, this.wafTimeout)
+      const result = this.ddwafContext.run(inputs, this.wafTimeout)
 
-      ddwafResult.durationExt = parseInt(process.hrtime.bigint() - start)
-      return this._applyResult(ddwafResult, inputs)
+      const durationExt = parseInt(process.hrtime.bigint() - start)
+
+      Reporter.reportMetrics({
+        duration: result.totalRuntime / 1e3,
+        durationExt: durationExt / 1e3,
+        rulesVersion: this.rulesInfo.version
+      })
+
+      if (result.data && result.data !== '[]') {
+        Reporter.reportAttack(result.data)
+      }
+
+      return result.actions
+    } catch (err) {
+      log.error('Error while running the AppSec WAF')
+      log.error(err)
     }
-    return []
   }
 
-  _applyResult (result, params) {
-    Reporter.reportMetrics({
-      duration: result.totalRuntime / 1e3,
-      durationExt: result.durationExt / 1e3,
-      rulesVersion: this.rulesInfo.version
-    })
-
-    if (result.data && result.data !== '[]') {
-      Reporter.reportAttack(result.data, params)
-    }
-
-    return result.actions
-  }
   dispose () {
-    if (!this.ddwafContext.disposed) {
-      this.ddwafContext.dispose()
-    }
+    this.ddwafContext.dispose()
   }
 }
 
