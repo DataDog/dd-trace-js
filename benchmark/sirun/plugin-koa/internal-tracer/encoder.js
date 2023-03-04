@@ -174,6 +174,8 @@ class Encoder {
 
     if (process.env.WITH_NATIVE_COLLECTOR) {
       this.flushFfi(data, done)
+    } else if (process.env.WITH_WASM_COLLECTOR) {
+      this.flushWasm(data, done)
     } else {
       const path = `/v0.1/events`
       this._client.request({ data, path, count }, done)
@@ -197,6 +199,21 @@ class Encoder {
     } catch (e) {
       done(e)
     }
+  }
+
+  // In collector folder:
+  // cargo build -r -p wasm --target wasm32-unknown-unknown
+  // wasm-bindgen
+  //   --target nodejs ./target/wasm32-unknown-unknown/release/wasm.wasm
+  //   --out-dir=./target/wasm32-unknown-unknown/release/
+  flushWasm (payload, done) {
+    const libPath = '../../../../collector/target/wasm32-unknown-unknown/release/wasm.js'
+    const { collect } = require(libPath)
+
+    const data = collect(payload)
+    const path = `/v0.5/traces`
+
+    this._client.request({ data, path, port: 8126 }, done)
   }
 
   reset () {

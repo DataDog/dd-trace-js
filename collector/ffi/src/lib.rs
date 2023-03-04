@@ -1,6 +1,5 @@
 use common::exporting::agent::AgentExporter;
 use common::processing::Processor;
-use hyper::body::Buf;
 use hyper_client::HyperClient;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
@@ -23,7 +22,7 @@ async fn internal_submit(payload: &[u8]) -> u32 {
 
     let exporter = Box::new(AgentExporter::new(client));
     let mut processor = Processor::new(exporter);
-    let mut rd = payload.reader();
+    let mut rd = payload;
 
     processor.process(&mut rd);
     processor.flush();

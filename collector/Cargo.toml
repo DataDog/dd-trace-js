@@ -3,7 +3,8 @@ members = [
   "common",
   "ffi",
   "hyper-client",
-  "server"
+  "server",
+  "wasm"
 ]
 
 [profile.release]

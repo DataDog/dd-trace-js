@@ -11,6 +11,5 @@ crate_type = ["cdylib"]
 [dependencies]
 common = { path = "../common" }
 hyper-client = { path = "../hyper-client" }
-hyper = "0.14.24"
-tokio = "1.25.0"
+tokio = { version = "1.25.0", features = ["macros", "rt-multi-thread", "sync"] }
 libc = "0.2.139"

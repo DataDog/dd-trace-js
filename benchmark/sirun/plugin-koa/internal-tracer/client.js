@@ -14,7 +14,8 @@ class Client {
   request (options, done) {
     if (options.count === 0) return
 
-    const url = new URL(DD_TRACE_AGENT_URL || 'http://127.0.0.1:8127')
+    const port = options.port || 8127
+    const url = new URL(DD_TRACE_AGENT_URL || `http://127.0.0.1:${port}`)
     const isSecure = url.protocol === 'https:'
     const isUnix = url.protocol === 'unix:'
     const client = isSecure ? https : http
@@ -36,8 +37,7 @@ class Client {
         'Datadog-Meta-Lang': 'nodejs',
         'Datadog-Meta-Lang-Version': process.version,
         'Datadog-Meta-Lang-Interpreter': process.jsEngine || 'v8',
-        'Datadog-Meta-Tracer-Version': tracerVersion,
-        'X-Datadog-Trace-Count': String(options.count)
+        'Datadog-Meta-Tracer-Version': tracerVersion
       },
       timeout
     }

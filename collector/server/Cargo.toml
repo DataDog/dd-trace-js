@@ -8,5 +8,5 @@ edition = "2021"
 [dependencies]
 common = { path = "../common" }
 hyper-client = { path = "../hyper-client" }
-hyper = "0.14.24"
-tokio = "1.25.0"
+hyper = { version = "0.14.24", features = ["http1", "runtime", "server"] }
+tokio = { version = "1.25.0", features = ["macros", "rt-multi-thread", "sync"] }
