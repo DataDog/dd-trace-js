@@ -42,13 +42,13 @@ function run (data, req) {
     req = store.req
   }
 
-  const wafContext = waf.wafManager.getDDWAFContext(req)
+  const wafContext = waf.wafManager.getWAFContext(req)
 
   return wafContext.run(data)
 }
 
 function disposeContext (req) {
-  const wafContext = waf.wafManager.getDDWAFContext(req)
+  const wafContext = waf.wafManager.getWAFContext(req)
 
   if (wafContext) {
     wafContext.dispose()
