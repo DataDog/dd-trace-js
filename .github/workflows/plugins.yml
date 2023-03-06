@@ -11,6 +11,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  SLACK_REPORT_ENABLE: ${{ github.event.schedule }} # should be empty for non-nightly jobs
+  SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
 # TODO: upstream jobs
 
 jobs:
