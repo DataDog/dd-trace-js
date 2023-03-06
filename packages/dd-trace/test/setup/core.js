@@ -11,6 +11,7 @@ const metrics = require('../../src/metrics')
 const agent = require('../plugins/agent')
 const externals = require('../plugins/externals.json')
 const { storage } = require('../../../datadog-core')
+const slackReport = require('./slack-report')
 
 chai.use(sinonChai)
 chai.use(require('../asserts/profile'))
@@ -22,6 +23,8 @@ global.withVersions = withVersions
 global.withExports = withExports
 
 process.env.DD_TRACE_TELEMETRY_ENABLED = 'false'
+
+const packageVersionFailures = Object.create({})
 
 afterEach(() => {
   agent.reset()
@@ -102,6 +105,10 @@ function withVersions (plugin, modules, range, cb) {
       .forEach(v => {
         const versionPath = `${__dirname}/../../../../versions/${moduleName}@${v.test}/node_modules`
 
+        // afterEach contains currentTest data
+        // after doesn't contain test data nor know if any tests passed/failed
+        let moduleVersionDidFail = false
+
         describe(`with ${moduleName} ${v.range} (${v.version})`, () => {
           let nodePath
 
@@ -116,7 +123,21 @@ function withVersions (plugin, modules, range, cb) {
 
           cb(v.test, moduleName)
 
+          afterEach(function () {
+            if (this.currentTest.state === 'failed') {
+              moduleVersionDidFail = true
+            }
+          })
+
           after(() => {
+            if (moduleVersionDidFail) {
+              if (!packageVersionFailures[moduleName]) {
+                packageVersionFailures[moduleName] = new Set()
+              }
+
+              packageVersionFailures[moduleName].add(v.version)
+            }
+
             process.env.NODE_PATH = nodePath
             require('module').Module._initPaths()
           })
@@ -124,6 +145,10 @@ function withVersions (plugin, modules, range, cb) {
       })
   })
 }
+
+after(async () => {
+  await slackReport(packageVersionFailures)
+})
 
 function withExports (moduleName, version, exportNames, versionRange, fn) {
   const getExport = () => require(`../../../../versions/${moduleName}@${version}`).get()
