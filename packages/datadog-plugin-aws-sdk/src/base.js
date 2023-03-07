@@ -76,7 +76,7 @@ class BaseAwsSdkPlugin extends Plugin {
 
   isEnabled (request) {
     const serviceId = this.serviceIdentifier.toUpperCase()
-    const envVarValue = process.env[`DD_TRACE_AWSSDK_${serviceId}_ENABLED`]
+    const envVarValue = process.env[`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`]
     return envVarValue ? isTrue(envVarValue) : true
   }
 

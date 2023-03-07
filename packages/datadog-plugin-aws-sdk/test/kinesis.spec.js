@@ -114,11 +114,11 @@ describe('Kinesis', () => {
 
     describe('Disabled', () => {
       before(() => {
-        process.env.DD_TRACE_AWSSDK_KINESIS_ENABLED = 'false'
+        process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = 'false'
       })
 
       after(() => {
-        delete process.env.DD_TRACE_AWSSDK_KINESIS_ENABLED
+        delete process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED
       })
 
       it('skip injects trace context to Kinesis putRecord when disabled', done => {
