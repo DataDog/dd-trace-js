@@ -83,4 +83,15 @@ describe('docker', () => {
 
     expect(docker.id()).to.equal('34dc0b5e626f2c5c4c5170e34b10e7654ce36f0fcd532739f4445baabea03376')
   })
+
+  it('should support Cloud Foundry', () => {
+    const cgroup = [
+      '1:name=systemd:/system.slice/garden.service/garden/6f265890-5165-7fab-6b52-18d1'
+    ].join('\n')
+
+    fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
+    docker = proxyquire('../src/exporters/common/docker', { fs })
+
+    expect(docker.id()).to.equal('6f265890-5165-7fab-6b52-18d1')
+  })
 })
