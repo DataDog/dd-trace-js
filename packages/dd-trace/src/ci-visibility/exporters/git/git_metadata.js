@@ -23,11 +23,10 @@ function validateCommits (commits) {
     if (type !== 'commit') {
       throw new Error('Invalid commit type response')
     }
-    const sanitizedCommit = commitSha.replace(/[^0-9a-f]+/g, '')
-    if (!isValidSha1(sanitizedCommit) && !isValidSha256(sanitizedCommit)) {
-      throw new Error('Invalid commit format')
+    if (isValidSha1(commitSha) || isValidSha256(commitSha)) {
+      return commitSha.replace(/[^0-9a-f]+/g, '')
     }
-    return sanitizedCommit
+    throw new Error('Invalid commit format')
   })
 }
 
