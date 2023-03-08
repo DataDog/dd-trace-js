@@ -2,18 +2,18 @@
 
 const BlockList = require('./ip_blocklist')
 const net = require('net')
-const log = require('../../log')
 
 const ipHeaderList = [
   'x-forwarded-for',
   'x-real-ip',
-  'client-ip',
+  'true-client-ip',
+  'x-client-ip',
   'x-forwarded',
-  'x-cluster-client-ip',
   'forwarded-for',
-  'forwarded',
-  'via',
-  'true-client-ip'
+  'x-cluster-client-ip',
+  'fastly-client-ip',
+  'cf-connecting-ip',
+  'cf-connecting-ipv6'
 ]
 
 const privateCIDRs = [
@@ -41,35 +41,31 @@ function extractIp (config, req) {
   const headers = req.headers
   if (config.clientIpHeader) {
     if (!headers) return
-    const header = headers[config.clientIpHeader]
-    if (!header) return
 
-    return findFirstIp(header)
+    const ip = findFirstIp(headers[config.clientIpHeader])
+    return ip && (ip.public || ip.private)
   }
 
-  const foundHeaders = []
+  let foundPrivateIp
   if (headers) {
     for (let i = 0; i < ipHeaderList.length; i++) {
-      if (headers[ipHeaderList[i]]) {
-        foundHeaders.push(ipHeaderList[i])
+      const firstIp = findFirstIp(headers[ipHeaderList[i]])
+      if (!firstIp) continue
+
+      if (firstIp.public) {
+        return firstIp.public
+      } else if (!foundPrivateIp && firstIp.private) {
+        foundPrivateIp = firstIp.private
       }
     }
   }
 
-  if (foundHeaders.length === 1) {
-    const header = headers[foundHeaders[0]]
-    const firstIp = findFirstIp(header)
-
-    if (firstIp) return firstIp
-  } else if (foundHeaders.length > 1) {
-    log.error(`Cannot find client IP: multiple IP headers detected ${foundHeaders}`)
-    return
-  }
-
-  return req.socket && req.socket.remoteAddress
+  return foundPrivateIp || (req.socket && req.socket.remoteAddress)
 }
 
 function findFirstIp (str) {
+  if (!str) return
+
   let firstPrivateIp
   const splitted = str.split(',')
 
@@ -83,11 +79,11 @@ function findFirstIp (str) {
 
     if (!privateIPMatcher.check(chunk, type === 6 ? 'ipv6' : 'ipv4')) {
       // it's public, return it immediately
-      return chunk
+      return { public: chunk, private: firstPrivateIp }
     }
 
     // it's private, only save the first one found
-    if (!firstPrivateIp) firstPrivateIp = chunk
+    if (!firstPrivateIp) firstPrivateIp = { private: chunk }
   }
 
   return firstPrivateIp
