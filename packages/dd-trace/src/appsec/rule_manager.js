@@ -1,18 +1,21 @@
 'use strict'
 
-const callbacks = require('./callbacks')
-const Gateway = require('./gateway/engine')
+const waf = require('./waf')
+const log = require('../log')
 
-const appliedCallbacks = new Map()
+const RULES_OVERRIDE_KEY = 'rules_override'
+const EXCLUSIONS_KEY = 'exclusions'
+const RULES_DATA_KEY = 'rules_data'
+
 const appliedAsmData = new Map()
+let defaultRules, asmDDRules
+let rulesOverride
+let exclusions
 
 function applyRules (rules, config) {
-  if (appliedCallbacks.has(rules)) return
-
-  // for now there is only WAF
-  const callback = new callbacks.DDWAF(rules, config)
-
-  appliedCallbacks.set(rules, callback)
+  if (waf.wafManager) return
+  defaultRules = rules
+  waf.init(rules, config)
 }
 
 function updateAsmData (action, asmData, asmDataId) {
@@ -22,17 +25,19 @@ function updateAsmData (action, asmData, asmDataId) {
     appliedAsmData.set(asmDataId, asmData)
   }
 
+  updateAppliedRuleData()
+}
+
+function updateAppliedRuleData () {
   const mergedRuleData = mergeRuleData(appliedAsmData.values())
-  for (const callback of appliedCallbacks.values()) {
-    callback.updateRuleData(mergedRuleData)
-  }
+  waf.wafManager && waf.wafManager.update({ [RULES_DATA_KEY]: mergedRuleData })
 }
 
 function mergeRuleData (asmDataValues) {
   const mergedRulesData = new Map()
   for (const asmData of asmDataValues) {
-    if (!asmData.rules_data) continue
-    for (const rulesData of asmData.rules_data) {
+    if (!asmData[RULES_DATA_KEY]) continue
+    for (const rulesData of asmData[RULES_DATA_KEY]) {
       const key = `${rulesData.id}+${rulesData.type}`
       if (mergedRulesData.has(key)) {
         const existingRulesData = mergedRulesData.get(key)
@@ -69,19 +74,75 @@ function copyRulesData (rulesData) {
   }
   return copy
 }
-function clearAllRules () {
-  Gateway.manager.clear()
 
-  for (const [key, callback] of appliedCallbacks) {
-    callback.clear()
-
-    appliedCallbacks.delete(key)
+function updateAsmDD (action, asmRules) {
+  // ASM_DD: When a new rules file is received from remote config, the file will replace the embed rules completely.
+  if (action === 'unapply') {
+    asmDDRules = undefined
+  } else {
+    asmDDRules = asmRules
   }
+  updateAppliedRules()
+}
+
+function updateAppliedRules () {
+  const rules = { ...(asmDDRules || defaultRules) }
+  // TODO: We don't need to pass all the things again
+  if (rulesOverride) {
+    rules[RULES_OVERRIDE_KEY] = rulesOverride
+  }
+  if (exclusions) {
+    rules[EXCLUSIONS_KEY] = exclusions
+  }
+  if (appliedAsmData && appliedAsmData.size > 0) {
+    rules[RULES_DATA_KEY] = mergeRuleData(appliedAsmData.values())
+  }
+  try {
+    waf.wafManager.update(rules)
+  } catch {
+    log.error('AppSec could not load native package. Applied rules have not been updated')
+  }
+}
+
+function updateAsm (action, asm) {
+  if (action === 'apply') {
+    let rulesObject
+    if (asm.hasOwnProperty(RULES_OVERRIDE_KEY)) {
+      rulesOverride = asm[RULES_OVERRIDE_KEY]
+      rulesObject = { [RULES_OVERRIDE_KEY]: rulesOverride }
+      // TODO Should we check if the array is empty?
+      // TODO Should we do some merge beteween different applies?
+    }
+    if (asm.hasOwnProperty(EXCLUSIONS_KEY)) {
+      exclusions = asm[EXCLUSIONS_KEY]
+      rulesObject = { ...rulesObject, exclusions }
+      // TODO Should we check if the array is empty?
+      // TODO Should we do some merge beteween different applies?
+    }
+    if (rulesObject) {
+      applyRulesObject(rulesObject)
+    }
+  }
+}
+
+function applyRulesObject (rulesObject) {
+  if (rulesObject && waf.wafManager) {
+    waf.wafManager.update(rulesObject)
+  }
+}
+
+function clearAllRules () {
+  waf.destroy()
   appliedAsmData.clear()
+  asmDDRules = null
+  rulesOverride = null
+  exclusions = null
 }
 
 module.exports = {
   applyRules,
-  clearAllRules,
-  updateAsmData
+  updateAsmData,
+  updateAsmDD,
+  updateAsm,
+  clearAllRules
 }

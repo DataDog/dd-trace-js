@@ -3,7 +3,7 @@ const { AbortController } = require('node-abort-controller') // AbortController 
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios')
-const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/gateway/channels')
+const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
 
 describe('Plugin', () => {
   let http
