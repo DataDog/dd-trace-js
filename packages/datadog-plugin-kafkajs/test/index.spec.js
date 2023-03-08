@@ -25,7 +25,7 @@ describe('Plugin', () => {
           } = require(`../../../versions/kafkajs@${version}`).get()
           kafka = new Kafka({
             clientId: `kafkajs-test-${version}`,
-            brokers: ['localhost:9092']
+            brokers: ['127.0.0.1:9092']
           })
         })
         describe('producer', () => {
