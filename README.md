@@ -24,11 +24,11 @@ Most of the documentation for `dd-trace` is available on these webpages:
 
 ## Version Release Lines and Maintenance
 
-| Release Line                                             | Latest Version                                                                                         | Status          |Initial Release | End of Life |
-| :--:                                                     | :--:                                                                                                   | :---:           | :---:          | :---:       |
-| [`v1`](https://github.com/DataDog/dd-trace-js/tree/v1.x) | ![npm v1](https://img.shields.io/npm/v/dd-trace/legacy-v1?color=white&label=%20&style=flat-square)     | **End of Life** | 2021-07-13     | 2022-02-25  |
-| [`v2`](https://github.com/DataDog/dd-trace-js/tree/v2.x) | ![npm v2](https://img.shields.io/npm/v/dd-trace/latest-node12?color=white&label=%20&style=flat-square) | **Maintenance** | 2022-01-28     | 2023-08-15  |
-| [`v3`](https://github.com/DataDog/dd-trace-js/tree/v3.x) | ![npm v3](https://img.shields.io/npm/v/dd-trace/latest?color=white&label=%20&style=flat-square)        | **Current**     | 2022-08-15     | Unknown     |
+| Release Line                                             | Latest Version                                                                                         | Node.js  | Status          |Initial Release | End of Life |
+| :---:                                                    | :---:                                                                                                  | :---:    | :---:           | :---:          | :---:       |
+| [`v1`](https://github.com/DataDog/dd-trace-js/tree/v1.x) | ![npm v1](https://img.shields.io/npm/v/dd-trace/legacy-v1?color=white&label=%20&style=flat-square)     | `>= v12` | **End of Life** | 2021-07-13     | 2022-02-25  |
+| [`v2`](https://github.com/DataDog/dd-trace-js/tree/v2.x) | ![npm v2](https://img.shields.io/npm/v/dd-trace/latest-node12?color=white&label=%20&style=flat-square) | `>= v12` | **Maintenance** | 2022-01-28     | 2023-08-15  |
+| [`v3`](https://github.com/DataDog/dd-trace-js/tree/v3.x) | ![npm v3](https://img.shields.io/npm/v/dd-trace/latest?color=white&label=%20&style=flat-square)        | `>= v14` | **Current**     | 2022-08-15     | Unknown     |
 
 We currently maintain two release lines, namely `v2` and `v3`.
 Features and bug fixes that are merged are released to the `v3` line and, if appropriate, also the `v2` line.
