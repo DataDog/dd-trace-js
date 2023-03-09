@@ -33,65 +33,6 @@ describe('reporter', () => {
     Reporter.metricsQueue.clear()
   })
 
-  describe('resolveHTTPRequest', () => {
-    it('should return empty object when passed no params', () => {
-      const result = Reporter.resolveHTTPRequest()
-
-      expect(result).to.be.an('object').that.is.empty
-    })
-
-    it('should return resolved addresses', () => {
-      const params = {
-        [addresses.HTTP_INCOMING_URL]: '/path?query=string',
-        [addresses.HTTP_INCOMING_HEADERS]: {
-          host: 'localhost',
-          'user-agent': 'arachni',
-          secret: 'password'
-        },
-        [addresses.HTTP_INCOMING_METHOD]: 'GET'
-      }
-
-      const result = Reporter.resolveHTTPRequest(params)
-
-      expect(result).to.deep.equal({
-        headers: {
-          'http.request.headers.host': 'localhost',
-          'http.request.headers.user-agent': 'arachni'
-        },
-        remote_ip: '8.8.8.8'
-      })
-    })
-  })
-
-  describe('resolveHTTPResponse', () => {
-    it('should return empty object when passed no context', () => {
-      const result = Reporter.resolveHTTPResponse()
-
-      expect(result).to.be.an('object').that.is.empty
-    })
-
-    it('should return resolved addresses', () => {
-      const params = {
-        [addresses.HTTP_INCOMING_RESPONSE_CODE]: 201,
-        [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
-          'content-type': 'application/json',
-          'content-length': 42,
-          secret: 'password'
-        }
-      }
-
-      const result = Reporter.resolveHTTPResponse(params)
-
-      expect(result).to.deep.equal({
-        endpoint: '/path/:param',
-        headers: {
-          'http.response.headers.content-type': 'application/json',
-          'http.response.headers.content-length': '42'
-        }
-      })
-    })
-  })
-
   describe('filterHeaders', () => {
     it('should return empty object when providing no headers', () => {
       const result = Reporter.filterHeaders(null)
@@ -141,10 +82,9 @@ describe('reporter', () => {
     it('should do nothing when passed incomplete objects', () => {
       web.root.returns(null)
 
-      expect(Reporter.reportMetrics({}, null)).to.be.false
-      expect(Reporter.reportMetrics({}, new Map())).to.be.false
-      expect(Reporter.reportMetrics({}, new Map([['req', null]]))).to.be.false
-      expect(Reporter.reportMetrics({}, new Map([['req', req]]))).to.be.false
+      Reporter.reportMetrics({})
+
+      expect(span.setTag).not.to.have.been.called
     })
 
     it('should set duration metrics if set', () => {
@@ -173,31 +113,20 @@ describe('reporter', () => {
     let req
 
     beforeEach(() => {
-      req = {}
+      req = {
+        socket: {
+          remoteAddress: '8.8.8.8'
+        },
+        headers: {
+          host: 'localhost',
+          'user-agent': 'arachni'
+        }
+      }
       storage.enterWith({ req })
     })
 
-    it('should do nothing when passed incomplete objects', () => {
-      web.root.returns(null)
-
-      expect(Reporter.reportAttack('', null)).to.be.false
-      expect(Reporter.reportAttack('', {})).to.be.false
-
-      storage.enterWith({})
-      expect(Reporter.reportAttack('', { req: null })).to.be.false
-    })
-
     it('should add tags to request span', () => {
-      const params = {
-        [addresses.HTTP_INCOMING_URL]: '/path?query=string',
-        [addresses.HTTP_INCOMING_HEADERS]: {
-          host: 'localhost',
-          'user-agent': 'arachni',
-          secret: 'password'
-        }
-      }
-
-      const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]', params)
+      const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]')
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
@@ -248,33 +177,31 @@ describe('reporter', () => {
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
+        'http.request.headers.host': 'localhost',
+        'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
         'manual.keep': 'true',
-        '_dd.appsec.json': '{"triggers":[]}'
+        '_dd.appsec.json': '{"triggers":[]}',
+        'http.useragent': 'arachni',
+        'network.client.ip': '8.8.8.8'
       })
     })
 
     it('should merge attacks json', () => {
       span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 
-      const params = {
-        [addresses.HTTP_INCOMING_URL]: '/path?query=string',
-        [addresses.HTTP_INCOMING_HEADERS]: {
-          host: 'localhost',
-          secret: 'password'
-        }
-      }
-
-      const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]', params)
+      const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]')
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
+        'http.request.headers.host': 'localhost',
+        'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
         'manual.keep': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
-        'http.request.headers.host': 'localhost',
+        'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
     })
@@ -292,14 +219,17 @@ describe('reporter', () => {
     it('should do nothing when passed incomplete objects', () => {
       const req = {}
 
-      web.root.returns(null)
+      span.context()._tags['appsec.event'] = 'true'
 
-      expect(Reporter.finishRequest(null, null, null)).to.be.false
-      expect(Reporter.finishRequest(req, null, null)).to.be.false
-      expect(Reporter.finishRequest(req, { dispose: sinon.stub() }, null)).to.be.false
-      expect(Reporter.finishRequest(req, null, {})).to.be.false
-      expect(Reporter.finishRequest(req)).to.be.false
-      expect(Reporter.finishRequest()).to.be.false
+      web.root.withArgs(null).returns(null)
+      web.root.withArgs({}).returns(span)
+
+      Reporter.finishRequest(null, null)
+      expect(span.addTags).not.to.have.been.called
+      Reporter.finishRequest(req, null)
+      expect(span.addTags).to.have.been.called
+      Reporter.finishRequest(req)
+      expect(span.addTags).to.have.been.called
     })
 
     it('should add metrics tags from metricsQueue', () => {
@@ -318,35 +248,30 @@ describe('reporter', () => {
     it('should not add http response data when no attack was previously found', () => {
       const req = {}
 
-      const params = {
-        [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
-          'content-type': 'application/json',
-          'content-length': 42,
-          secret: 'password'
-        }
-      }
-
-      const result = Reporter.finishRequest(req, wafContext, params)
-      expect(result).to.be.false
+      Reporter.finishRequest(req)
       expect(web.root).to.have.been.calledOnceWith(req)
       expect(span.addTags).to.not.have.been.called
     })
 
     it('should add http response data inside request span', () => {
-      const req = {}
+      const req = {
+        route: {
+          path: '/path/:param'
+        }
+      }
 
-      const params = {
-        [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
-          'content-type': 'application/json',
-          'content-length': 42,
-          secret: 'password'
+      const res = {
+        getHeaders: () => {
+          return {
+            'content-type': 'application/json',
+            'content-length': '42'
+          }
         }
       }
 
       span.context()._tags['appsec.event'] = 'true'
 
-      const result = Reporter.finishRequest(req, wafContext, params)
-      expect(result).to.not.be.false
+      Reporter.finishRequest(req, res)
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
@@ -358,19 +283,18 @@ describe('reporter', () => {
 
     it('should add http response data inside request span without endpoint', () => {
       const req = {}
-
-      const params = {
-        [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
-          'content-type': 'application/json',
-          'content-length': 42,
-          secret: 'password'
+      const res = {
+        getHeaders: () => {
+          return {
+            'content-type': 'application/json',
+            'content-length': '42'
+          }
         }
       }
 
       span.context()._tags['appsec.event'] = 'true'
 
-      const result = Reporter.finishRequest(req, wafContext, params)
-      expect(result).to.not.be.false
+      Reporter.finishRequest(req, res)
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
