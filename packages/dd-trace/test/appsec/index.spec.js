@@ -54,8 +54,6 @@ describe('AppSec Index', () => {
     readFilePromiseStub.withArgs('./path/rules.json').returns('{"rules": [{"a": 1}]}')
     readFilePromiseStub.callThrough()
     sinon.stub(waf, 'init').callThrough()
-    sinon.stub(WAFManager.prototype, 'createDDWAFContext').callThrough()
-    sinon.stub(WAFContextWrapper.prototype, 'run')
     sinon.stub(RuleManager, 'applyRules')
     sinon.stub(remoteConfig, 'enableAsmData')
     sinon.stub(remoteConfig, 'enableAsmDD')
@@ -232,6 +230,7 @@ describe('AppSec Index', () => {
     beforeEach(() => {
       AppSec.enable(config)
       waf.init(require('../../src/appsec/recommended.json'), config.appsec)
+      sinon.stub(waf, 'run')
     })
 
     it('should propagate incoming http start data', () => {
@@ -258,14 +257,12 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpStartTranslator({ req, res })
 
-      expect(WAFManager.prototype.createDDWAFContext).to.have.been.calledOnceWithExactly(req)
-
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
         '_dd.appsec.enabled': 1,
         '_dd.runtime_family': 'nodejs',
         'http.client_ip': '127.0.0.1'
       })
-      expect(WAFContextWrapper.prototype.run).to.have.been.calledOnceWith({
+      expect(waf.run).to.have.been.calledOnceWith({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
         'server.request.method': 'POST',
@@ -281,29 +278,12 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
 
       waf.init(require('../../src/appsec/recommended.json'), config.appsec)
+      sinon.stub(waf, 'run')
 
       const rootSpan = {
         addTags: sinon.stub()
       }
       web.root.returns(rootSpan)
-    })
-
-    it('should do nothing when context is not found', () => {
-      const req = {}
-      const res = {
-        getHeaders: () => ({
-          'content-type': 'application/json',
-          'content-lenght': 42
-        }),
-        statusCode: 201
-      }
-
-      sinon.stub(Reporter, 'finishRequest')
-
-      AppSec.incomingHttpEndTranslator({ req, res })
-
-      expect(WAFContextWrapper.prototype.run).to.not.have.been.called
-      expect(Reporter.finishRequest).to.not.have.been.called
     })
 
     it('should propagate incoming http end data', () => {
@@ -332,17 +312,25 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpStartTranslator({ req, res })
       sinon.stub(Reporter, 'finishRequest')
-      WAFContextWrapper.prototype.run.resetHistory()
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(WAFContextWrapper.prototype.run).to.have.been.calledOnceWithExactly({
+      expect(waf.run).to.have.been.calledTwice
+      expect(waf.run.firstCall).to.have.been.calledWithExactly({ 'http.client_ip': '127.0.0.1' }, req)
+      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': {
+          'user-agent': 'Arachni',
+          'host': 'localhost'
+        },
+        'server.request.method': 'POST',
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
           'content-lenght': 42
         }
-      })
+      },
+      req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWith(req)
     })
 
@@ -377,21 +365,26 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpStartTranslator({ req, res })
       sinon.stub(Reporter, 'finishRequest')
-      WAFContextWrapper.prototype.run.resetHistory()
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(WAFManager.prototype.createDDWAFContext).to.have.been.calledOnceWithExactly(req)
-      const expectedPayload = {
+      expect(waf.run).to.have.been.calledTwice
+      expect(waf.run.firstCall).to.have.been.calledWithExactly({ 'http.client_ip': '127.0.0.1' }, req)
+      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': {
+          'user-agent': 'Arachni',
+          'host': 'localhost'
+        },
+        'server.request.method': 'POST',
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
           'content-lenght': 42
         }
-      }
-      expect(WAFContextWrapper.prototype.run).to.have.been.calledOnceWithExactly(expectedPayload)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req,
-        waf.wafManager.getDDWAFContext(req), expectedPayload)
+      }, req)
+
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
 
     it('should propagate incoming http end data with express', () => {
@@ -435,12 +428,18 @@ describe('AppSec Index', () => {
       web.patch(req)
 
       AppSec.incomingHttpStartTranslator({ req, res })
-      WAFContextWrapper.prototype.run.resetHistory()
       sinon.stub(Reporter, 'finishRequest')
-      const ddwafContext = waf.wafManager.getDDWAFContext(req)
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      const expectedPayload = {
+      expect(waf.run).to.have.been.calledTwice
+      expect(waf.run.firstCall).to.have.been.calledWithExactly({ 'http.client_ip': '127.0.0.1' }, req)
+      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': {
+          'user-agent': 'Arachni',
+          'host': 'localhost'
+        },
+        'server.request.method': 'POST',
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
@@ -449,9 +448,8 @@ describe('AppSec Index', () => {
         'server.request.path_params': { c: '3' },
         'server.request.cookies': { d: [ '4' ], e: [ '5' ]
         }
-      }, context)
-      expect(WAFContextWrapper.prototype.run).to.have.been.calledOnceWithExactly(expectedPayload)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, ddwafContext, expectedPayload)
+      }, req)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
   })
 
