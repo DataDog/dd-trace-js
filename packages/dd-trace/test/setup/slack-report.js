@@ -7,6 +7,7 @@
 
 const SLACK_WEBHOOK = process.env.SLACK_WEBHOOK
 const SLACK_REPORT_ENABLE = process.env.SLACK_REPORT_ENABLE
+const SLACK_MOREINFO = process.env.SLACK_MOREINFO
 
 const VERSION_EXTRACT = /^v?(\d+)\.(\d+)\.(\d+)$/
 
@@ -44,7 +45,14 @@ module.exports = async (failures) => {
     descriptions.push(description)
   }
 
-  const message = descriptions.join('\n\n')
+  let message = descriptions.join('\n\n')
+
+  if (SLACK_MOREINFO) {
+    // It's not easy to contextually link to individual job failures.
+    // @see https://github.com/community/community/discussions/8945
+    // Instead we add a single link at the end to the overall run.
+    message += `\n<${SLACK_MOREINFO}|View the failing test(s) here>.`
+  }
 
   reportToSlack(message)
 }
