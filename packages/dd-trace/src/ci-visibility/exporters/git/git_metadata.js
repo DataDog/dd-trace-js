@@ -15,18 +15,18 @@ const {
   unshallowRepository
 } = require('../../../plugins/util/git')
 
-const isValidSha = (sha) => /[0-9a-f]{40}/.test(sha)
+const isValidSha1 = (sha) => /^[0-9a-f]{40}$/.test(sha)
+const isValidSha256 = (sha) => /^[0-9a-f]{64}$/.test(sha)
 
-function sanitizeCommits (commits) {
+function validateCommits (commits) {
   return commits.map(({ id: commitSha, type }) => {
     if (type !== 'commit') {
       throw new Error('Invalid commit type response')
     }
-    const sanitizedCommit = commitSha.replace(/[^0-9a-f]+/g, '')
-    if (sanitizedCommit !== commitSha || !isValidSha(sanitizedCommit)) {
-      throw new Error('Invalid commit format')
+    if (isValidSha1(commitSha) || isValidSha256(commitSha)) {
+      return commitSha.replace(/[^0-9a-f]+/g, '')
     }
-    return sanitizedCommit
+    throw new Error('Invalid commit format')
   })
 }
 
@@ -84,7 +84,7 @@ function getCommitsToExclude ({ url, isEvpProxy, repositoryUrl }, callback) {
     }
     let commitsToExclude
     try {
-      commitsToExclude = sanitizeCommits(JSON.parse(response).data)
+      commitsToExclude = validateCommits(JSON.parse(response).data)
     } catch (e) {
       return callback(new Error(`Can't parse commits to exclude response: ${e.message}`))
     }
