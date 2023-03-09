@@ -79,7 +79,7 @@ function findFirstIp (str) {
 
     if (!privateIPMatcher.check(chunk, type === 6 ? 'ipv6' : 'ipv4')) {
       // it's public, return it immediately
-      return { public: chunk, private: firstPrivateIp }
+      return { public: chunk }
     }
 
     // it's private, only save the first one found
