@@ -63,28 +63,30 @@ function extractIp (config, req) {
 }
 
 function findFirstIp (str) {
-  let firstPrivateIp
-  if (str) {
-    const splitted = str.split(',')
+  const result = {}
+  if (!str) return result
 
-    for (let i = 0; i < splitted.length; i++) {
-      const chunk = splitted[i].trim()
+  const splitted = str.split(',')
 
-      // TODO: strip port and interface data ?
+  for (let i = 0; i < splitted.length; i++) {
+    const chunk = splitted[i].trim()
 
-      const type = net.isIP(chunk)
-      if (!type) continue
+    // TODO: strip port and interface data ?
 
-      if (!privateIPMatcher.check(chunk, type === 6 ? 'ipv6' : 'ipv4')) {
-        // it's public, return it immediately
-        return { public: chunk }
-      }
+    const type = net.isIP(chunk)
+    if (!type) continue
 
-      // it's private, only save the first one found
-      if (!firstPrivateIp) firstPrivateIp = { private: chunk }
+    if (!privateIPMatcher.check(chunk, type === 6 ? 'ipv6' : 'ipv4')) {
+      // it's public, return it immediately
+      result.public = chunk
+      break
     }
+
+    // it's private, only save the first one found
+    if (!result.private) result.private = chunk
   }
-  return firstPrivateIp || {}
+
+  return result
 }
 
 module.exports = {
