@@ -43,50 +43,48 @@ function extractIp (config, req) {
     if (!headers) return
 
     const ip = findFirstIp(headers[config.clientIpHeader])
-    return ip && (ip.public || ip.private)
+    return ip.public || ip.private
   }
 
-  let foundPrivateIp
+  let firstPrivateIp
   if (headers) {
     for (let i = 0; i < ipHeaderList.length; i++) {
       const firstIp = findFirstIp(headers[ipHeaderList[i]])
-      if (!firstIp) continue
 
       if (firstIp.public) {
         return firstIp.public
-      } else if (!foundPrivateIp && firstIp.private) {
-        foundPrivateIp = firstIp.private
+      } else if (!firstPrivateIp && firstIp.private) {
+        firstPrivateIp = firstIp.private
       }
     }
   }
 
-  return foundPrivateIp || (req.socket && req.socket.remoteAddress)
+  return firstPrivateIp || (req.socket && req.socket.remoteAddress)
 }
 
 function findFirstIp (str) {
-  if (!str) return
-
   let firstPrivateIp
-  const splitted = str.split(',')
+  if (str) {
+    const splitted = str.split(',')
 
-  for (let i = 0; i < splitted.length; i++) {
-    const chunk = splitted[i].trim()
+    for (let i = 0; i < splitted.length; i++) {
+      const chunk = splitted[i].trim()
 
-    // TODO: strip port and interface data ?
+      // TODO: strip port and interface data ?
 
-    const type = net.isIP(chunk)
-    if (!type) continue
+      const type = net.isIP(chunk)
+      if (!type) continue
 
-    if (!privateIPMatcher.check(chunk, type === 6 ? 'ipv6' : 'ipv4')) {
-      // it's public, return it immediately
-      return { public: chunk }
+      if (!privateIPMatcher.check(chunk, type === 6 ? 'ipv6' : 'ipv4')) {
+        // it's public, return it immediately
+        return { public: chunk }
+      }
+
+      // it's private, only save the first one found
+      if (!firstPrivateIp) firstPrivateIp = { private: chunk }
     }
-
-    // it's private, only save the first one found
-    if (!firstPrivateIp) firstPrivateIp = { private: chunk }
   }
-
-  return firstPrivateIp
+  return firstPrivateIp || {}
 }
 
 module.exports = {
