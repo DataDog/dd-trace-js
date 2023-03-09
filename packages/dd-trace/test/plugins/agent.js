@@ -1,5 +1,7 @@
 'use strict'
 
+const axios = require('axios').default
+const log = require('../../src/log')
 const http = require('http')
 const bodyParser = require('body-parser')
 const msgpack = require('msgpack-lite')
@@ -82,6 +84,20 @@ module.exports = {
 
     const port = await getPort()
 
+    const testAgentUrl = 'http://127.0.0.1:9126'
+
+    axios.get(`${testAgentUrl}/test/session/agent_port`, {
+      params: {
+        agent_port: port
+      }
+    })
+      .then(response => {
+        log.info(response.data)
+      })
+      .catch(error => {
+        log.error(error)
+      })
+
     const server = this.server = http.createServer(agent)
     const emit = server.emit
 
@@ -111,7 +127,7 @@ module.exports = {
       flushInterval: 0,
       plugins: false
     }, tracerConfig))
-    tracer.setUrl(`http://127.0.0.1:${port}`)
+    tracer.setUrl(testAgentUrl)
 
     for (let i = 0, l = pluginName.length; i < l; i++) {
       tracer.use(pluginName[i], config[i])

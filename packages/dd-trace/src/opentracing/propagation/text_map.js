@@ -342,7 +342,7 @@ class TextMapPropagator {
               const mechanism = parseInt(value, 10)
               if (Number.isInteger(mechanism)) {
                 spanContext._sampling.mechanism = mechanism
-                spanContext._trace.tags['_dd.p.dm'] = mechanism
+                spanContext._trace.tags['_dd.p.dm'] = mechanism.toString()
               }
               break
             }

@@ -124,3 +124,16 @@ services:
       - LDAP_ADMIN_PASSWORD=adminpassword
       - LDAP_USERS=user01,user02
       - LDAP_PASSWORDS=password1,password2
+
+  testagent:
+    # image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+    build: 
+        context: https://github.com/DataDog/dd-apm-test-agent.git#add-span-tag-validation
+    ports:
+        - "127.0.0.1:9126:8126"
+    volumes:
+        - ./specifications:/specifications
+    environment:
+        - LOG_LEVEL=INFO
+        - TRACE_LANGUAGE=javascript
+        - PROXY_HOST=host.docker.internal
