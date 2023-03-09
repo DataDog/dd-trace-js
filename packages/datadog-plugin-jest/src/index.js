@@ -90,7 +90,7 @@ class JestPlugin extends CiPlugin {
         'x-datadog-parent-id': testModuleId
       })
 
-      const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite)
+      const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest')
 
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
         childOf: testSessionSpanContext,

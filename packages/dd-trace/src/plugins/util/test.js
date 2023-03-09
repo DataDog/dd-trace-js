@@ -261,28 +261,29 @@ function getTestLevelCommonTags (command, testFrameworkVersion) {
   }
 }
 
-function getTestSessionCommonTags (command, testFrameworkVersion) {
+function getTestSessionCommonTags (command, testFrameworkVersion, testFramework) {
   return {
     [SPAN_TYPE]: 'test_session_end',
     [RESOURCE_NAME]: `test_session.${command}`,
+    [TEST_BUNDLE]: testFramework,
     ...getTestLevelCommonTags(command, testFrameworkVersion)
   }
 }
 
-function getTestModuleCommonTags (command, testFrameworkVersion) {
+function getTestModuleCommonTags (command, testFrameworkVersion, testFramework) {
   return {
     [SPAN_TYPE]: 'test_module_end',
     [RESOURCE_NAME]: `test_module.${command}`,
-    [TEST_BUNDLE]: command,
+    [TEST_BUNDLE]: testFramework,
     ...getTestLevelCommonTags(command, testFrameworkVersion)
   }
 }
 
-function getTestSuiteCommonTags (command, testFrameworkVersion, testSuite) {
+function getTestSuiteCommonTags (command, testFrameworkVersion, testSuite, testFramework) {
   return {
     [SPAN_TYPE]: 'test_suite_end',
     [RESOURCE_NAME]: `test_suite.${testSuite}`,
-    [TEST_BUNDLE]: command,
+    [TEST_BUNDLE]: testFramework,
     [TEST_SUITE]: testSuite,
     ...getTestLevelCommonTags(command, testFrameworkVersion)
   }
