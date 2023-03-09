@@ -16,6 +16,7 @@ const {
   TEST_SESSION_ID,
   TEST_COMMAND,
   TEST_BUNDLE,
+  TEST_MODULE,
   finishAllTraceSpans
 } = require('../../dd-trace/src/plugins/util/test')
 
@@ -167,7 +168,8 @@ module.exports = (on, config) => {
         [TEST_COMMAND]: command,
         [TEST_MODULE_ID]: testModuleId,
         [TEST_COMMAND]: command,
-        [TEST_BUNDLE]: 'cypress'
+        [TEST_BUNDLE]: 'cypress',
+        [TEST_MODULE]: 'cypress'
       }
 
       const {
