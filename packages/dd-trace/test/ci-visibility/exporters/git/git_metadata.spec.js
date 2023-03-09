@@ -9,6 +9,12 @@ describe('git_metadata', () => {
   let gitMetadata
 
   const latestCommits = ['87ce64f636853fbebc05edfcefe9cccc28a7968b', 'cc424c261da5e261b76d982d5d361a023556e2aa']
+  // same character range but invalid length
+  const badLatestCommits = [
+    '87ce64f636853fbebc05edfcefe9cccc28a7968b8b',
+    'cc424c261da5e261b76d982d5d361a023556e2aacc424c261da5e261b76d982d5d361a023556e2aa'
+  ]
+
   const temporaryPackFile = `${os.tmpdir()}/1111-87ce64f636853fbebc05edfcefe9cccc28a7968b.pack`
   const secondTemporaryPackFile = `${os.tmpdir()}/1111-cc424c261da5e261b76d982d5d361a023556e2aa.pack`
 
@@ -130,6 +136,22 @@ describe('git_metadata', () => {
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
       expect(err.message).to.contain("Can't parse commits to exclude response: Invalid commit type response")
+      // to check that it is not called
+      expect(scope.isDone()).to.be.false
+      expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
+      done()
+    })
+  })
+
+  it('should fail and not continue if the response are badly formatted commits', (done) => {
+    const scope = nock('https://api.test.com')
+      .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({ data: badLatestCommits.map((sha) => ({ id: sha, type: 'commit' })) }))
+      .post('/api/v2/git/repository/packfile')
+      .reply(204)
+
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+      expect(err.message).to.contain("Can't parse commits to exclude response: Invalid commit format")
       // to check that it is not called
       expect(scope.isDone()).to.be.false
       expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
