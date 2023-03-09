@@ -2,6 +2,7 @@
 
 const { EventEmitter } = require('events')
 const { Config } = require('./config')
+const { SnapshotKinds } = require('./constants')
 
 function maybeSourceMap (sourceMap) {
   if (!sourceMap) return
@@ -47,9 +48,10 @@ class Profiler extends EventEmitter {
     }
 
     try {
+      const nearOOMCallback = (profileType, profile) => this._nearOOMExport(profileType, profile)
       for (const profiler of config.profilers) {
         // TODO: move this out of Profiler when restoring sourcemap support
-        profiler.start({ mapper })
+        profiler.start({ mapper, nearOOMCallback })
         this._logger.debug(`Started ${profiler.type} profiler`)
       }
 
@@ -58,6 +60,12 @@ class Profiler extends EventEmitter {
       this._logger.error(e)
       this._stop()
     }
+  }
+
+  _nearOOMExport (profileType, encodedProfile) {
+    const start = this._lastStart
+    const end = new Date()
+    this._submit({ [profileType]: encodedProfile }, start, end, SnapshotKinds.OnOutOfMemory)
   }
 
   _setInterval () {
@@ -69,7 +77,7 @@ class Profiler extends EventEmitter {
 
     // collect and export current profiles
     // once collect returns, profilers can be safely stopped
-    this._collect()
+    this._collect(SnapshotKinds.OnShutdown)
     this._stop()
   }
 
@@ -93,14 +101,14 @@ class Profiler extends EventEmitter {
     if (!this._enabled) return
     this._lastStart = new Date()
     if (!this._timer || timeout !== this._timeoutInterval) {
-      this._timer = setTimeout(() => this._collect(), timeout)
+      this._timer = setTimeout(() => this._collect(SnapshotKinds.Periodic), timeout)
       this._timer.unref()
     } else {
       this._timer.refresh()
     }
   }
 
-  async _collect () {
+  async _collect (snapshotKind) {
     if (!this._enabled) return
 
     const start = this._lastStart
@@ -128,7 +136,7 @@ class Profiler extends EventEmitter {
       }
 
       this._capture(this._timeoutInterval)
-      await this._submit(encodedProfiles, start, end)
+      await this._submit(encodedProfiles, start, end, snapshotKind)
       this._logger.debug('Submitted profiles')
     } catch (err) {
       this._logger.error(err)
@@ -136,13 +144,14 @@ class Profiler extends EventEmitter {
     }
   }
 
-  _submit (profiles, start, end) {
+  _submit (profiles, start, end, snapshotKind) {
     if (!Object.keys(profiles).length) {
       return Promise.reject(new Error('No profiles to submit'))
     }
     const { tags } = this._config
     const tasks = []
 
+    tags.snapshot = snapshotKind
     for (const exporter of this._config.exporters) {
       const task = exporter.export({ profiles, start, end, tags })
         .catch(err => this._logger.error(err))
@@ -167,10 +176,10 @@ class ServerlessProfiler extends Profiler {
     this._flushAfterIntervals = this._config.flushInterval / 1000
   }
 
-  async _collect () {
+  async _collect (snapshotKind) {
     if (this._profiledIntervals >= this._flushAfterIntervals) {
       this._profiledIntervals = 0
-      await super._collect()
+      await super._collect(snapshotKind)
     } else {
       this._profiledIntervals += 1
       this._capture(this._timeoutInterval)
@@ -179,4 +188,4 @@ class ServerlessProfiler extends Profiler {
   }
 }
 
-module.exports = { Profiler, ServerlessProfiler }
+module.exports = { Profiler, ServerlessProfiler, SnapshotKinds }

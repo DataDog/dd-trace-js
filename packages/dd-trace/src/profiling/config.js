@@ -9,6 +9,7 @@ const { ConsoleLogger } = require('./loggers/console')
 const CpuProfiler = require('./profilers/cpu')
 const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
+const { OOMExportStrategies } = require('./constants')
 const { tagger } = require('./tagger')
 
 const {
@@ -25,7 +26,11 @@ const {
   DD_PROFILING_UPLOAD_TIMEOUT,
   DD_PROFILING_SOURCE_MAP,
   DD_PROFILING_UPLOAD_PERIOD,
-  DD_PROFILING_PPROF_PREFIX
+  DD_PROFILING_PPROF_PREFIX,
+  DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
+  DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
+  DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
+  DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES
 } = process.env
 
 class Config {
@@ -66,6 +71,18 @@ class Config {
     this.endpointCollection = endpointCollection
     this.pprofPrefix = pprofPrefix
 
+    const oomMonitoringEnabled = coalesce(options.oomMonitoring,
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED, false)
+    const heapLimitExtensionSize = coalesce(options.oomHeapLimitExtensionSize,
+      Number(DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE), 0)
+    const maxHeapExtensionCount = coalesce(options.oomMaxHeapExtensionCount,
+      Number(DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT), 0)
+    const exportStrategies = ensureOOMExportStrategies(coalesce(options.oomExportStrategies,
+      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES), this)
+    this.oomMonitoring = { enabled: oomMonitoringEnabled,
+      heapLimitExtensionSize,
+      maxHeapExtensionCount,
+      exportStrategies }
     const hostname = coalesce(options.hostname, DD_AGENT_HOST) || 'localhost'
     const port = coalesce(options.port, DD_TRACE_AGENT_PORT) || 8126
     this.url = new URL(coalesce(options.url, DD_TRACE_AGENT_URL, format({
@@ -88,6 +105,33 @@ class Config {
 }
 
 module.exports = { Config }
+
+function getExportStrategy (name, options) {
+  const strategy = Object.values(OOMExportStrategies).find(value => value === name)
+  if (strategy === undefined) {
+    options.logger.error(`Unknown oom export strategy "${name}"`)
+  }
+  return strategy
+}
+
+function ensureOOMExportStrategies (strategies, options) {
+  if (!strategies) {
+    return []
+  }
+
+  if (typeof strategies === 'string') {
+    strategies = strategies.split(',')
+  }
+
+  for (let i = 0; i < strategies.length; i++) {
+    const strategy = strategies[i]
+    if (typeof strategy === 'string') {
+      strategies[i] = getExportStrategy(strategy, options)
+    }
+  }
+
+  return strategies
+}
 
 function getExporter (name, options) {
   switch (name) {
