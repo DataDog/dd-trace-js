@@ -1,0 +1,28 @@
+name: Alls Green
+
+on:
+  pull_request:
+    branches:
+      - "master"
+
+jobs:
+  check:
+    if: always()
+
+    needs:
+    - system-tests
+    - parametric
+    - package-size-report
+    - amqp10
+    - mysql
+    # plus a ton more
+
+    runs-on: Ubuntu-latest
+
+    steps:
+    - name: Determine if everything is passing
+      uses: re-actors/alls-green@release/v1
+      with:
+        #allowed-failures: docs, linters
+        #allowed-skips: non-voting-flaky-job
+        jobs: ${{ toJSON(needs) }}
