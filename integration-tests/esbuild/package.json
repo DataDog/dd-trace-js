@@ -16,9 +16,5 @@
     "apm"
   ],
   "author": "Thomas Hunter II <tlhunter@datadog.com>",
-  "license": "ISC",
-  "dependencies": {
-    "esbuild": "0.16.12",
-    "express": "^4.18.2"
-  }
+  "license": "ISC"
 }

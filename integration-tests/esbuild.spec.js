@@ -5,6 +5,7 @@
 const chproc = require('child_process')
 const path = require('path')
 
+const CWD = process.cwd()
 const TEST_DIR = path.join(__dirname, 'esbuild')
 
 // eslint-disable-next-line no-console
@@ -17,6 +18,14 @@ chproc.execSync('npm run build')
 
 // eslint-disable-next-line no-console
 console.log('npm run built')
-chproc.execSync('npm run built', {
-  timeout: 1000 * 30
-})
+try {
+  chproc.execSync('npm run built', {
+    timeout: 1000 * 30
+  })
+} catch (err) {
+  // eslint-disable-next-line no-console
+  console.error(err)
+  process.exit(1)
+} finally {
+    process.chdir(CWD)
+}
