@@ -36,9 +36,15 @@ function getItrConfiguration ({
       process.env.DATADOG_APPLICATION_KEY ||
       process.env.DD_APPLICATION_KEY
 
-    if (!apiKey || !appKey) {
-      return done(new Error('App key or API key undefined'))
+    const messagePrefix = "Configuration can't be fetched:"
+
+    if (!appKey) {
+      return done(new Error(`${messagePrefix} Application key is undefined.`))
     }
+    if (!apiKey) {
+      return done(new Error(`${messagePrefix} API key is undefined.`))
+    }
+
     options.headers['dd-api-key'] = apiKey
     options.headers['dd-application-key'] = appKey
   }
