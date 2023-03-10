@@ -36,13 +36,13 @@ function getItrConfiguration ({
       process.env.DATADOG_APPLICATION_KEY ||
       process.env.DD_APPLICATION_KEY
 
-    const messagePrefix = "Configuration can't be fetched:"
+    const messagePrefix = 'Request to settings endpoint was not done because Datadog'
 
     if (!appKey) {
-      return done(new Error(`${messagePrefix} Application key is undefined.`))
+      return done(new Error(`${messagePrefix} application key is not defined.`))
     }
     if (!apiKey) {
-      return done(new Error(`${messagePrefix} API key is undefined.`))
+      return done(new Error(`${messagePrefix} API key is not defined.`))
     }
 
     options.headers['dd-api-key'] = apiKey
