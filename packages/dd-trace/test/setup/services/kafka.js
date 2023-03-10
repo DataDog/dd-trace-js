@@ -5,7 +5,7 @@ const { Kafka } = require('../../../../../versions/kafkajs').get()
 
 const kafka = new Kafka({
   clientId: 'setup-client',
-  brokers: ['localhost:9092']
+  brokers: ['127.0.0.1:9092']
 })
 const producer = kafka.producer()
 const consumer = kafka.consumer({ groupId: 'test-group' })
