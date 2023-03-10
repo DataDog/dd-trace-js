@@ -35,13 +35,13 @@ function getSkippableSuites ({
       process.env.DATADOG_APPLICATION_KEY ||
       process.env.DD_APPLICATION_KEY
 
-    const messagePrefix = "Skippable suites can't be fetched:"
+    const messagePrefix = 'Skippable suites were not fetched because Datadog'
 
     if (!appKey) {
-      return done(new Error(`${messagePrefix} Application key is undefined.`))
+      return done(new Error(`${messagePrefix} application key is not defined.`))
     }
     if (!apiKey) {
-      return done(new Error(`${messagePrefix} API key is undefined.`))
+      return done(new Error(`${messagePrefix} API key is not defined.`))
     }
 
     options.headers['dd-api-key'] = apiKey
