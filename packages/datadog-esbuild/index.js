@@ -1,6 +1,6 @@
 'use strict'
 
-// eslint-disable no-console
+/* eslint-disable no-console */
 
 const NAMESPACE = 'datadog'
 
