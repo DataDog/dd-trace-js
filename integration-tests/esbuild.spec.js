@@ -27,5 +27,5 @@ try {
   console.error(err)
   process.exit(1)
 } finally {
-    process.chdir(CWD)
+  process.chdir(CWD)
 }

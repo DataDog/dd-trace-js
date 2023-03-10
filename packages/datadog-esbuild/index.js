@@ -1,7 +1,13 @@
+'use strict'
+
+// eslint-disable no-console
+
 const NAMESPACE = 'datadog'
 
 const instrumented = Object.keys(require('../datadog-instrumentations/src/helpers/hooks.js'))
 const rawBuiltins = require('module').builtinModules
+
+warnIfUnsupported()
 
 const builtins = new Set()
 
@@ -37,7 +43,6 @@ module.exports.setup = function (build) {
       const pkg = require(pathToPackageJson)
 
       if (DEBUG) {
-        // eslint-disable-next-line no-console
         console.log(`resolve ${packageName}@${pkg.version}`)
       }
 
@@ -64,7 +69,6 @@ module.exports.setup = function (build) {
 
   build.onLoad({ filter: /.*/, namespace: NAMESPACE }, args => {
     if (DEBUG) {
-      // eslint-disable-next-line no-console
       console.log(`load ${args.path}@${args.pluginData.version}`)
     }
 
@@ -87,4 +91,14 @@ module.exports.setup = function (build) {
       loader: 'js'
     }
   })
+}
+
+function warnIfUnsupported () {
+  const [major, minor] = process.versions.node.split('.').map(Number)
+  if (major < 14 || (major === 14 && minor < 17)) {
+    console.error('WARNING: Esbuild support isn\'t available for older versions of Node.js.')
+    console.error(`Expected: Node.js >= v14.17. Actual: Node.js = ${process.version}.`)
+    console.error('This application may build properly with this version of Node.js, but unless a')
+    console.error('more recent version is used at runtime, third party packages won\'t be instrumented.')
+  }
 }
