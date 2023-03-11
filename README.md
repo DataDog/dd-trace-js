@@ -202,7 +202,7 @@ For these reasons it's necessary to have custom-built bundler plugins. Such plug
 
 ### Esbuild Support
 
-This library supports bundling via esbuild. To use the bundler, make sure you have `dd-trace` installed, and then require the `dd-trace/esbuild` module when running your bundle.
+This library provides experimental esbuild support in the v3 release line and requires at least Node.js v14.17. To use the bundler, make sure you have `dd-trace` installed, and then require the `dd-trace/esbuild` module when building your bundle.
 
 Here's an example of how one might use `dd-trace` with esbuild:
 
