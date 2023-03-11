@@ -19,7 +19,7 @@ const server = app.listen(PORT, () => {
 
 app.get('/', async (_req, res) => {
   assert.equal(
-    tracer?.scope()?.active()?.context()?._tags?.component,
+    tracer.scope().active().context()._tags.component,
     'express',
     'the sample app bundled by esbuild is not properly instrumented'
   ) // bad exit
