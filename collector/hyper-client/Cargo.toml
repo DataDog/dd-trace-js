@@ -1,0 +1,11 @@
+[package]
+name = "hyper-client"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+common = { path = "../common" }
+hyper = { version = "0.14.24", features = ["client", "http1", "runtime"] }
+tokio = { version = "1.25.0", features = ["rt-multi-thread", "sync"] }

@@ -1,0 +1,15 @@
+[package]
+name = "ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate_type = ["cdylib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+common = { path = "../common" }
+hyper-client = { path = "../hyper-client" }
+tokio = { version = "1.25.0", features = ["macros", "rt-multi-thread", "sync"] }
+libc = "0.2.139"

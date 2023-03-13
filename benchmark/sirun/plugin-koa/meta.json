@@ -1,0 +1,28 @@
+{
+  "name": "koa",
+  "setup": "node setup",
+  "run": "node server",
+  "env": {
+    "PORT": "3030",
+    "REQUESTS": "100000"
+  },
+  "iterations": 10,
+  "cachegrind": false,
+  "variants": {
+    "baseline": {},
+    "with-internal-tracer": {
+      "env": {
+        "WITH_INTERNAL_TRACER": "true",
+        "WITH_FAKE_DB": "true",
+        "WITH_NATIVE_COLLECTOR": "true"
+      }
+    },
+    "with-tracer": {
+      "env": {
+        "WITH_TRACER": "true",
+        "WITH_FAKE_DB": "true",
+        "DD_TRACE_AGENT_PROTOCOL_VERSION": "0.5"
+      }
+    }
+  }
+}
