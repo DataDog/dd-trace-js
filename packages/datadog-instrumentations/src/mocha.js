@@ -91,7 +91,7 @@ function getTestAsyncResource (test) {
 
 function getSuitesToRun (originalSuites) {
   return originalSuites.filter(suite =>
-    !suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
+    !suitesToSkip.includes(getTestSuitePath(suite, process.cwd()))
   )
 }
 
@@ -315,48 +315,13 @@ addHook({
   file: 'lib/mocha.js'
 }, (Mocha, mochaVersion) => {
   frameworkVersion = mochaVersion
-  const mochaRunAsyncResource = new AsyncResource('bound-anonymous-fn')
   /**
    * Get ITR configuration and skippable suites
    * If ITR is disabled, `onDone` is called immediately on the subscriber
    */
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
-    if (!itrConfigurationCh.hasSubscribers) {
-      return run.apply(this, arguments)
-    }
-    this.options.delay = true
-
+    this.files = getSuitesToRun(this.files)
     const runner = run.apply(this, arguments)
-
-    const onReceivedSkippableSuites = ({ err, skippableSuites }) => {
-      if (err) {
-        suitesToSkip = []
-      } else {
-        suitesToSkip = skippableSuites
-      }
-      // We remove the suites that we skip through ITR
-      runner.suite.suites = getSuitesToRun(runner.suite.suites)
-      global.run()
-    }
-
-    const onReceivedConfiguration = ({ err }) => {
-      if (err) {
-        return global.run()
-      }
-      if (!skippableSuitesCh.hasSubscribers) {
-        return global.run()
-      }
-
-      skippableSuitesCh.publish({
-        onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
-      })
-    }
-
-    mochaRunAsyncResource.runInAsyncScope(() => {
-      itrConfigurationCh.publish({
-        onDone: mochaRunAsyncResource.bind(onReceivedConfiguration)
-      })
-    })
     return runner
   })
   return Mocha
@@ -374,12 +339,56 @@ addHook({
   file: 'lib/cli/run-helpers.js'
 }, (run) => {
   shimmer.wrap(run, 'runMocha', runMocha => async function () {
-    const mocha = arguments[0]
+    if (!itrConfigurationCh.hasSubscribers) {
+      return runMocha.apply(this, arguments)
+    }
+
+    const mochaRunAsyncResource = new AsyncResource('bound-anonymous-fn')
+
     /**
      * This attaches `run` to the global context, which we'll call after
      * our configuration and skippable suites requests
      */
-    mocha.options.delay = true
+    let onDone
+
+    const itrConfigPromise = new Promise(resolve => {
+      onDone = resolve
+    })
+
+    mochaRunAsyncResource.runInAsyncScope(() => {
+      itrConfigurationCh.publish({
+        onDone
+      })
+    })
+
+    const { err: configError } = await itrConfigPromise
+
+    if (configError) {
+      return runMocha.apply(this, arguments)
+    }
+
+    if (!skippableSuitesCh.hasSubscribers) {
+      return runMocha.apply(this, arguments)
+    }
+
+    const skippableSuitesPromise = new Promise(resolve => {
+      onDone = resolve
+    })
+
+    mochaRunAsyncResource.runInAsyncScope(() => {
+      skippableSuitesCh.publish({
+        onDone
+      })
+    })
+
+    const { err: skippableSuitesError, skippableSuites } = await skippableSuitesPromise
+
+    if (skippableSuitesError) {
+      suitesToSkip = []
+    } else {
+      suitesToSkip = skippableSuites
+    }
+
     return runMocha.apply(this, arguments)
   })
   return run
