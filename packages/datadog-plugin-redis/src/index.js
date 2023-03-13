@@ -1,5 +1,6 @@
 'use strict'
 
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const CachePlugin = require('../../dd-trace/src/plugins/cache')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
@@ -20,7 +21,7 @@ class RedisPlugin extends CachePlugin {
         'db.name': db || '0',
         'redis.raw_command': formatCommand(command, args),
         'out.host': connectionOptions.host,
-        'out.port': connectionOptions.port
+        [CLIENT_PORT_KEY]: connectionOptions.port
       }
     })
   }

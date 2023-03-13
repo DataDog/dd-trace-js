@@ -9,7 +9,7 @@ const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const { COMPONENT } = require('../../dd-trace/src/constants')
+const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
@@ -46,6 +46,7 @@ class Http2ClientPlugin extends Plugin {
         childOf,
         tags: {
           [COMPONENT]: this.constructor.name,
+          [CLIENT_PORT_KEY]: parseInt(sessionDetails.port),
           [SPAN_KIND]: CLIENT,
           'service.name': getServiceName(this.tracer, this.config, sessionDetails),
           'resource.name': method,
