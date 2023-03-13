@@ -60,6 +60,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
               expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
               expect(traces[0][0].meta).to.have.property('component', 'pg')
+              expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
 
               if (implementation !== 'pg.native') {
                 expect(traces[0][0].metrics).to.have.property('db.pid')
@@ -104,6 +105,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
                 expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
                 expect(traces[0][0].meta).to.have.property('component', 'pg')
+                expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
 
                 if (implementation !== 'pg.native') {
                   expect(traces[0][0].metrics).to.have.property('db.pid')
@@ -126,6 +128,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
               expect(traces[0][0].meta).to.have.property('component', 'pg')
+              expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
 
               done()
             })
@@ -147,6 +150,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
               expect(traces[0][0].meta).to.have.property('component', 'pg')
+              expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
 
               done()
             })

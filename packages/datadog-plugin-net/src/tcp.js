@@ -1,5 +1,6 @@
 'use strict'
 
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
 class NetTCPPlugin extends ClientPlugin {
@@ -37,7 +38,7 @@ class NetTCPPlugin extends ClientPlugin {
       metrics: {
         'tcp.remote.port': port,
         'tcp.local.port': 0,
-        'out.port': port
+        [CLIENT_PORT_KEY]: port
       }
     })
   }

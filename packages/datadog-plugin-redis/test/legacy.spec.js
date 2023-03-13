@@ -52,7 +52,6 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('out.host', '127.0.0.1')
               expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
               expect(traces[0][0].meta).to.have.property('component', 'redis')
-              expect(traces[0][0].metrics).to.have.property('out.port', 6379)
             })
             .then(done)
             .catch(done)
@@ -109,7 +108,7 @@ describe('Plugin', () => {
               expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(span.meta).to.have.property(ERROR_STACK, error.stack)
               expect(span.meta).to.have.property('component', 'redis')
-
+              expect(span.metrics).to.have.property('network.destination.port', 6379)
               done()
             } catch (e) {
               done(e)

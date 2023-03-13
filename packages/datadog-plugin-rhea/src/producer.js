@@ -1,5 +1,6 @@
 'use strict'
 
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 
 class RheaProducerPlugin extends ProducerPlugin {
@@ -24,7 +25,7 @@ class RheaProducerPlugin extends ProducerPlugin {
         'amqp.link.target.address': name,
         'amqp.link.role': 'sender',
         'out.host': host,
-        'out.port': port
+        [CLIENT_PORT_KEY]: port
       }
     })
   }
