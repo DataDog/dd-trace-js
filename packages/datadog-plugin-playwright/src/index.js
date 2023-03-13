@@ -39,7 +39,8 @@ class PlaywrightPlugin extends CiPlugin {
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
-        testSuite
+        testSuite,
+        'playwright'
       )
 
       const testSuiteSpan = this.tracer.startSpan('playwright.test_suite', {
