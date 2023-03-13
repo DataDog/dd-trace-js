@@ -46,7 +46,8 @@ class MochaPlugin extends CiPlugin {
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
-        getTestSuitePath(suite.file, this.sourceRoot)
+        getTestSuitePath(suite.file, this.sourceRoot),
+        'mocha'
       )
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testModuleSpan,

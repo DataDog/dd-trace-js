@@ -12,7 +12,8 @@ const {
   TEST_MODULE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND,
-  TEST_BUNDLE
+  TEST_BUNDLE,
+  TEST_MODULE
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -50,8 +51,8 @@ module.exports = class CiPlugin extends Plugin {
 
     this.addSub(`ci:${this.constructor.name}:session:start`, ({ command, frameworkVersion, rootDir }) => {
       const childOf = getTestParentSpan(this.tracer)
-      const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion)
-      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion)
+      const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, this.constructor.name)
+      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, this.constructor.name)
 
       this.command = command
       this.frameworkVersion = frameworkVersion
@@ -129,7 +130,8 @@ module.exports = class CiPlugin extends Plugin {
         [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
         [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
         [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
-        [TEST_BUNDLE]: testSuiteSpan.context()._tags[TEST_COMMAND]
+        [TEST_BUNDLE]: this.constructor.name,
+        [TEST_MODULE]: this.constructor.name
       }
       if (testSuiteSpan.context()._parentId) {
         suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
