@@ -16,6 +16,7 @@ const {
   TEST_SESSION_ID,
   TEST_COMMAND,
   TEST_BUNDLE,
+  TEST_MODULE,
   finishAllTraceSpans
 } = require('../../dd-trace/src/plugins/util/test')
 
@@ -95,8 +96,8 @@ module.exports = (on, config) => {
     command = getCypressCommand(details)
     frameworkVersion = getCypressVersion(details)
 
-    const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion)
-    const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion)
+    const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, 'cypress')
+    const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, 'cypress')
 
     testSessionSpan = tracer.startSpan('cypress.test_session', {
       childOf,
@@ -137,7 +138,7 @@ module.exports = (on, config) => {
       if (testSuiteSpan) {
         return null
       }
-      const testSuiteSpanMetadata = getTestSuiteCommonTags(command, frameworkVersion, suite)
+      const testSuiteSpanMetadata = getTestSuiteCommonTags(command, frameworkVersion, suite, 'cypress')
       testSuiteSpan = tracer.startSpan('cypress.test_suite', {
         childOf: testModuleSpan,
         tags: {
@@ -167,7 +168,8 @@ module.exports = (on, config) => {
         [TEST_COMMAND]: command,
         [TEST_MODULE_ID]: testModuleId,
         [TEST_COMMAND]: command,
-        [TEST_BUNDLE]: command
+        [TEST_BUNDLE]: 'cypress',
+        [TEST_MODULE]: 'cypress'
       }
 
       const {
