@@ -1,6 +1,7 @@
 'use strict'
 
 const { TEXT_MAP } = require('../../../ext/formats')
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { getResourceName } = require('./util')
 
@@ -18,7 +19,7 @@ class AmqplibProducerPlugin extends ProducerPlugin {
       kind: 'producer',
       meta: {
         'out.host': stream._host,
-        'out.port': stream.remotePort,
+        [CLIENT_PORT_KEY]: stream.remotePort,
         'amqp.queue': fields.queue,
         'amqp.exchange': fields.exchange,
         'amqp.routingKey': fields.routingKey,

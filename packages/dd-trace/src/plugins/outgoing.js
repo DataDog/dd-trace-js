@@ -1,5 +1,6 @@
 'use strict'
 
+const { CLIENT_PORT_KEY } = require('../constants')
 const TracingPlugin = require('./tracing')
 
 // TODO: Exit span on finish when AsyncResource instances are removed.
@@ -23,7 +24,7 @@ class OutgoingPlugin extends TracingPlugin {
 
     span.addTags({
       'out.host': hostname,
-      'out.port': port
+      [CLIENT_PORT_KEY]: port
     })
   }
 }
