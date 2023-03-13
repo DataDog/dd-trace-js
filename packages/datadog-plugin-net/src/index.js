@@ -3,7 +3,7 @@
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const { COMPONENT } = require('../../dd-trace/src/constants')
+const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 
 class NetPlugin extends Plugin {
   static get name () {
@@ -53,7 +53,7 @@ class NetPlugin extends Plugin {
           'tcp.remote.port': port,
           'tcp.family': `IPv${family}`,
           'out.host': host,
-          'out.port': port,
+          [CLIENT_PORT_KEY]: port,
           'span.kind': 'client',
           'service.name': this.config.service || this.tracer._service
         }
