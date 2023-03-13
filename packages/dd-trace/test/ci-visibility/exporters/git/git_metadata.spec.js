@@ -1,4 +1,7 @@
 'use strict'
+
+require('../../../../../dd-trace/test/setup/tap')
+
 const nock = require('nock')
 const os = require('os')
 const fs = require('fs')

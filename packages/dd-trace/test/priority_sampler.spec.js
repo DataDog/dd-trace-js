@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 const ext = require('../../../ext')
 
 const {

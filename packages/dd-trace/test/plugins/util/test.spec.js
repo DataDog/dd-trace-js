@@ -1,3 +1,7 @@
+'use strict'
+
+require('../../setup/tap')
+
 const path = require('path')
 const istanbul = require('istanbul-lib-coverage')
 

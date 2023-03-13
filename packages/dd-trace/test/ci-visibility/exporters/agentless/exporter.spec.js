@@ -1,4 +1,7 @@
 'use strict'
+
+require('../../../../../dd-trace/test/setup/tap')
+
 const cp = require('child_process')
 
 const { expect } = require('chai')

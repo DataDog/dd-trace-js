@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 const MEASURED = require('../../../ext/tags').MEASURED
 
 describe('analyticsSampler', () => {

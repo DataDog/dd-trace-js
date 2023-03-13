@@ -1,3 +1,7 @@
+'use strict'
+
+require('../../setup/tap')
+
 const fs = require('fs')
 const path = require('path')
 

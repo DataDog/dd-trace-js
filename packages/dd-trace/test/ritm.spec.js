@@ -1,4 +1,7 @@
 'use strict'
+
+require('./setup/tap')
+
 const dc = require('diagnostics_channel')
 const { assert } = require('chai')
 const Hook = require('../src/ritm')

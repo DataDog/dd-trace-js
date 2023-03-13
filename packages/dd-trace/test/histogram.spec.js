@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 const Histogram = require('../src/histogram')
 
 describe('Histogram', () => {
