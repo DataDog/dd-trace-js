@@ -36,7 +36,8 @@ class CucumberPlugin extends CiPlugin {
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
-        getTestSuitePath(testSuiteFullPath, this.sourceRoot)
+        getTestSuitePath(testSuiteFullPath, this.sourceRoot),
+        'cucumber'
       )
       this.testSuiteSpan = this.tracer.startSpan('cucumber.test_suite', {
         childOf: this.testModuleSpan,
