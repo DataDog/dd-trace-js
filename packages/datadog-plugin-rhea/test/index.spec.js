@@ -65,7 +65,7 @@ describe('Plugin', () => {
                   'component': 'rhea'
                 })
                 expect(span.metrics).to.include({
-                  'out.port': 5673
+                  'network.destination.port': 5673
                 })
               })
                 .then(done, done)
@@ -447,6 +447,8 @@ describe('Plugin', () => {
         describe('on disconnect', () => {
           beforeEach(() => agent.reload('rhea'))
 
+          let expectedServerPort
+
           beforeEach(done => {
             const rhea = require(`../../../versions/rhea@${version}`).get()
 
@@ -468,6 +470,7 @@ describe('Plugin', () => {
               connection = client.connect(Object.assign({ reconnect: false }, listener.address()))
               connection.open_receiver({ autoaccept: false })
               connection.open_sender()
+              expectedServerPort = listener.address().port
             })
           })
 
@@ -489,6 +492,9 @@ describe('Plugin', () => {
                 [ERROR_MESSAGE]: 'fake protocol error',
                 [ERROR_STACK]: err.stack,
                 'component': 'rhea'
+              })
+              expect(span.metrics).to.include({
+                'network.destination.port': expectedServerPort
               })
             }).then(done, done)
             connection.output = function () {

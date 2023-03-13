@@ -1,5 +1,6 @@
 'use strict'
 
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const log = require('../../dd-trace/src/log')
 
@@ -20,7 +21,7 @@ class OracledbPlugin extends DatabasePlugin {
         'db.user': this.config.user,
         'db.instance': url.pathname && url.pathname.substring(1),
         'db.hostname': url.hostname,
-        'db.port': url.port
+        [CLIENT_PORT_KEY]: url.port
       }
     })
   }
