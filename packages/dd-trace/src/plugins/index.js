@@ -39,6 +39,7 @@ module.exports = {
   get 'jest-environment-node' () { return require('../../../datadog-plugin-jest/src') },
   get 'jest-environment-jsdom' () { return require('../../../datadog-plugin-jest/src') },
   get 'jest-jasmine2' () { return require('../../../datadog-plugin-jest/src') },
+  get 'jest-worker' () { return require('../../../datadog-plugin-jest/src') },
   get 'koa' () { return require('../../../datadog-plugin-koa/src') },
   get 'koa-router' () { return require('../../../datadog-plugin-koa/src') },
   get 'kafkajs' () { return require('../../../datadog-plugin-kafkajs/src') },
