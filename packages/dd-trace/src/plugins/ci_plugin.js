@@ -29,7 +29,7 @@ module.exports = class CiPlugin extends Plugin {
       }
       this.tracer._exporter.getItrConfiguration(this.testConfiguration, (err, itrConfig) => {
         if (err) {
-          log.error(`Error fetching intelligent test runner configuration: ${err.message}`)
+          log.error(`Intelligent Test Runner configuration could not be fetched. ${err.message}`)
         } else {
           this.itrConfig = itrConfig
         }
@@ -43,7 +43,7 @@ module.exports = class CiPlugin extends Plugin {
       }
       this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites) => {
         if (err) {
-          log.error(`Error fetching skippable suites: ${err.message}`)
+          log.error(`Skippable suites could not be fetched. ${err.message}`)
         }
         onDone({ err, skippableSuites })
       })
