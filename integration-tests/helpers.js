@@ -65,10 +65,11 @@ class FakeAgent extends EventEmitter {
     })
   }
 
-  assertMessageReceived (fn, timeout) {
+  assertMessageReceived (fn, timeout, expectedMessageCount = 1) {
     timeout = timeout || 5000
     let resultResolve
     let resultReject
+    let msgCount = 0
     const errors = []
 
     const timeoutObj = setTimeout(() => {
@@ -88,9 +89,12 @@ class FakeAgent extends EventEmitter {
 
     const messageHandler = msg => {
       try {
+        msgCount += 1
         fn(msg)
-        resultResolve()
-        this.removeListener('message', messageHandler)
+        if (msgCount === expectedMessageCount) {
+          resultResolve()
+          this.removeListener('message', messageHandler)
+        }
       } catch (e) {
         errors.push(e)
       }
