@@ -25,6 +25,7 @@ const initHTTPServer = (port) => {
     server.listen(port, () => {
       resolve(() => {
         sockets.forEach(socket => socket.end())
+        server.close()
       })
     })
   })
@@ -218,8 +219,7 @@ describe('request', function () {
     })
   })
 
-  // TODO: make this work regardless of the test runner
-  it.skip('should be able to send concurrent requests to different hosts', function (done) {
+  it('should be able to send concurrent requests to different hosts', function (done) {
     // TODO: try to simplify the setup here. I haven't been able to reproduce the
     // concurrent socket issue using nock
     Promise.all([getPort(), getPort()]).then(([port1, port2]) => {
