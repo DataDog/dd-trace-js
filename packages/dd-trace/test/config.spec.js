@@ -875,18 +875,14 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('isGitUploadEnabled', false)
       })
-      context('DD_CIVISIBILITY_ITR_ENABLED is true', () => {
-        it('should enable intelligent test runner', () => {
-          process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
-          const config = new Config(options)
-          expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
-        })
-        it('should enable git upload, regardless of DD_CIVISIBILITY_GIT_UPLOAD_ENABLED', () => {
-          process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
-          process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'false'
-          const config = new Config(options)
-          expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
-        })
+      it('should activate ITR by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
+      })
+      it('should disable ITR if DD_CIVISIBILITY_ITR_ENABLED is set to false', () => {
+        process.env.DD_CIVISIBILITY_ITR_ENABLED = 'false'
+        const config = new Config(options)
+        expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
       })
     })
     context('ci visibility mode is not enabled', () => {
