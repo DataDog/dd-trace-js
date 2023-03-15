@@ -68,7 +68,7 @@
     "@datadog/native-iast-rewriter": "2.0.1",
     "@datadog/native-iast-taint-tracking": "1.1.1",
     "@datadog/native-metrics": "^1.5.0",
-    "@datadog/pprof": "^2.0.0",
+    "@datadog/pprof": "dev",
     "@datadog/sketches-js": "^2.1.0",
     "crypto-randomuuid": "^1.0.0",
     "diagnostics_channel": "^1.1.0",
