@@ -35,10 +35,13 @@ class MochaPlugin extends CiPlugin {
       const relativeCoverageFiles = [...coverageFiles, suiteFile]
         .map(filename => getTestSuitePath(filename, this.sourceRoot))
 
-      this.tracer._exporter.exportCoverage({
-        span: testSuiteSpan,
-        coverageFiles: relativeCoverageFiles
-      })
+      const formattedCoverage = {
+        traceId: testSuiteSpan.context()._traceId,
+        spanId: testSuiteSpan.context()._spanId,
+        files: relativeCoverageFiles
+      }
+
+      this.tracer._exporter.exportCoverage(formattedCoverage)
     })
 
     this.addSub('ci:mocha:test-suite:start', (suite) => {

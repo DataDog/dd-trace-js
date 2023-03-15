@@ -1,9 +1,5 @@
 'use strict'
 
-const AgentExporter = require('./exporters/agent')
-const LogExporter = require('./exporters/log')
-const AgentlessCiVisibilityExporter = require('./ci-visibility/exporters/agentless')
-const AgentProxyCiVisibilityExporter = require('./ci-visibility/exporters/agent-proxy')
 const exporters = require('../../../ext/exporters')
 const fs = require('fs')
 const constants = require('./constants')
@@ -14,14 +10,16 @@ module.exports = name => {
 
   switch (name) {
     case exporters.LOG:
-      return LogExporter
+      return require('./exporters/log')
     case exporters.AGENT:
-      return AgentExporter
+      return require('./exporters/agent')
     case exporters.DATADOG:
-      return AgentlessCiVisibilityExporter
+      return require('./ci-visibility/exporters/agentless')
     case exporters.AGENT_PROXY:
-      return AgentProxyCiVisibilityExporter
+      return require('./ci-visibility/exporters/agent-proxy')
+    case exporters.JEST_WORKER:
+      return require('./ci-visibility/exporters/jest-worker')
     default:
-      return inAWSLambda && !usingLambdaExtension ? LogExporter : AgentExporter
+      return inAWSLambda && !usingLambdaExtension ? require('./exporters/log') : require('./exporters/agent')
   }
 }
