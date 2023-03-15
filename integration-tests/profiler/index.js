@@ -21,7 +21,7 @@ function busyWait (ms) {
   })
 }
 
-// Runner expects child process to end a port
+// Runner expects child process to send a port
 process.send({ port: 0 })
 
 setImmediate(async () => busyWait(500))
