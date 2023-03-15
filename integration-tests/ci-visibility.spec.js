@@ -116,6 +116,72 @@ testFrameworks.forEach(({
       })
     }
 
+    if (name === 'jest') {
+      describe('when jest is using workers to run tests in parallel', () => {
+        it('reports tests when using the agent', (done) => {
+          receiver.setInfoResponse({ endpoints: [] })
+          childProcess = fork('ci-visibility/run-jest.js', {
+            cwd,
+            env: {
+              DD_TRACE_AGENT_PORT: receiver.port,
+              NODE_OPTIONS: '-r dd-trace/ci/init',
+              RUN_IN_PARALLEL: true
+            },
+            stdio: 'pipe'
+          })
+
+          receiver.gatherPayloads(({ url }) => url === '/v0.4/traces', 5000).then(tracesRequests => {
+            const testSpans = tracesRequests.flatMap(trace => trace.payload).flatMap(request => request)
+            assert.equal(testSpans.length, 2)
+            const spanTypes = testSpans.map(span => span.type)
+            assert.includeMembers(spanTypes, ['test'])
+            assert.notInclude(spanTypes, ['test_session_end', 'test_suite_end', 'test_module_end'])
+            receiver.setInfoResponse({ endpoints: ['/evp_proxy/v2'] })
+            done()
+          }).catch(done)
+        })
+        it('reports tests when using agentless', (done) => {
+          childProcess = fork('ci-visibility/run-jest.js', {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              RUN_IN_PARALLEL: true
+            },
+            stdio: 'pipe'
+          })
+
+          receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000).then(eventsRequests => {
+            const eventTypes = eventsRequests.map(({ payload }) => payload)
+              .flatMap(({ events }) => events)
+              .map(event => event.type)
+
+            assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+            done()
+          }).catch(done)
+        })
+        it('reports tests when using evp proxy', (done) => {
+          childProcess = fork('ci-visibility/run-jest.js', {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              RUN_IN_PARALLEL: true
+            },
+            stdio: 'pipe'
+          })
+
+          receiver.gatherPayloads(({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle', 5000)
+            .then(eventsRequests => {
+              const eventTypes = eventsRequests.map(({ payload }) => payload)
+                .flatMap(({ events }) => events)
+                .map(event => event.type)
+
+              assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+              done()
+            }).catch(done)
+        })
+      })
+    }
+
     it('can run tests and report spans', (done) => {
       receiver.setInfoResponse({ endpoints: [] })
       receiver.payloadReceived(({ url }) => url === '/v0.4/traces').then(({ payload }) => {
