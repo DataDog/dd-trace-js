@@ -415,9 +415,9 @@ describe('CI Visibility Exporter', () => {
           setUrl: sinon.spy()
         }
         const coverage = {
-          span: {
-            context: () => ({})
-          }
+          traceId: '1',
+          spanId: '2',
+          files: ['example.js']
         }
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
         ciVisibilityExporter._isInitialized = true
