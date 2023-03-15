@@ -218,11 +218,17 @@ describe('AgentProxyCiVisibilityExporter', () => {
       const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
       agentProxyCiVisibilityExporter._writer = mockWriter
       agentProxyCiVisibilityExporter._coverageWriter = mockCoverageWriter
-      agentProxyCiVisibilityExporter.setUrl('http://example2.com')
-      const url = new URL('http://example2.com')
+
+      const newUrl = 'http://example2.com'
+      const newCoverageUrl = 'http://example3.com'
+      agentProxyCiVisibilityExporter.setUrl(newUrl, newCoverageUrl)
+      const url = new URL(newUrl)
+      const coverageUrl = new URL(newCoverageUrl)
+
       expect(agentProxyCiVisibilityExporter._url).to.deep.equal(url)
+      expect(agentProxyCiVisibilityExporter._coverageUrl).to.deep.equal(coverageUrl)
       expect(mockWriter.setUrl).to.have.been.calledWith(url)
-      expect(mockCoverageWriter.setUrl).to.have.been.calledWith(url)
+      expect(mockCoverageWriter.setUrl).to.have.been.calledWith(coverageUrl)
     })
   })
 })
