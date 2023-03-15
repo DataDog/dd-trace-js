@@ -14,6 +14,9 @@ const {
   TEST_FRAMEWORK_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
+const id = require('../../dd-trace/src/id')
+
+const isJestWorker = !!process.env.JEST_WORKER_ID
 
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
@@ -26,19 +29,18 @@ class JestPlugin extends CiPlugin {
   constructor (...args) {
     super(...args)
 
-    // Used to handle the end of a jest worker to be able to flush
-    const handler = ([message]) => {
-      if (message === CHILD_MESSAGE_END) {
-        this.tracer._exporter.flush(() => {
-          // eslint-disable-next-line
-          // https://github.com/facebook/jest/blob/24ed3b5ecb419c023ee6fdbc838f07cc028fc007/packages/jest-worker/src/workers/processChild.ts#L118-L133
-          // Only after the flush is done we clean up open handles
-          // so the worker process can hopefully exit gracefully
+    if (isJestWorker) {
+      // Used to handle the end of a jest worker to be able to flush
+      const handler = ([message]) => {
+        if (message === CHILD_MESSAGE_END) {
+          this.testSuiteSpan.finish()
+          finishAllTraceSpans(this.testSuiteSpan)
+          this.tracer._exporter.flush()
           process.removeListener('message', handler)
-        })
+        }
       }
+      process.on('message', handler)
     }
-    process.on('message', handler)
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
     this.codeOwnersEntries = getCodeOwnersFileEntries()
@@ -100,6 +102,32 @@ class JestPlugin extends CiPlugin {
       })
     })
 
+    this.addSub('ci:jest:worker-report:trace', traces => {
+      const formattedTraces = JSON.parse(traces).map(trace =>
+        trace.map(span => ({
+          ...span,
+          span_id: id(span.span_id),
+          trace_id: id(span.trace_id),
+          parent_id: id(span.parent_id)
+        }))
+      )
+
+      formattedTraces.forEach(trace => {
+        this.tracer._exporter.export(trace)
+      })
+    })
+
+    this.addSub('ci:jest:worker-report:coverage', data => {
+      const formattedCoverages = JSON.parse(data).map(coverage => ({
+        traceId: id(coverage.traceId),
+        spanId: id(coverage.spanId),
+        files: coverage.files
+      }))
+      formattedCoverages.forEach(formattedCoverage => {
+        this.tracer._exporter.exportCoverage(formattedCoverage)
+      })
+    })
+
     this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage }) => {
       this.testSuiteSpan.setTag(TEST_STATUS, status)
       if (errorMessage) {
@@ -109,6 +137,12 @@ class JestPlugin extends CiPlugin {
       // Suites potentially run in a different process than the session,
       // so calling finishAllTraceSpans on the session span is not enough
       finishAllTraceSpans(this.testSuiteSpan)
+      // Flushing within jest workers is cheap, as it's just interprocess communication
+      // We do not want to flush after every suite if jest is running tests serially,
+      // as every flush is an HTTP request.
+      if (isJestWorker) {
+        this.tracer._exporter.flush()
+      }
     })
 
     /**
@@ -117,7 +151,12 @@ class JestPlugin extends CiPlugin {
      * fetching the ITR config.
      */
     this.addSub('ci:jest:test-suite:code-coverage', (coverageFiles) => {
-      this.tracer._exporter.exportCoverage({ span: this.testSuiteSpan, coverageFiles })
+      const formattedCoverage = {
+        traceId: this.testSuiteSpan.context()._traceId,
+        spanId: this.testSuiteSpan.context()._spanId,
+        files: coverageFiles
+      }
+      this.tracer._exporter.exportCoverage(formattedCoverage)
     })
 
     this.addSub('ci:jest:test:start', (test) => {

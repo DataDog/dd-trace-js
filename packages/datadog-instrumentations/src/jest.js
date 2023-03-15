@@ -2,7 +2,11 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
-const { getCoveredFilenamesFromCoverage } = require('../../dd-trace/src/plugins/util/test')
+const {
+  getCoveredFilenamesFromCoverage,
+  JEST_WORKER_TRACE_PAYLOAD_CODE,
+  JEST_WORKER_COVERAGE_PAYLOAD_CODE
+} = require('../../dd-trace/src/plugins/util/test')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -11,6 +15,10 @@ const testSessionConfigurationCh = channel('ci:jest:session:configuration')
 
 const testSuiteStartCh = channel('ci:jest:test-suite:start')
 const testSuiteFinishCh = channel('ci:jest:test-suite:finish')
+
+const workerReportTraceCh = channel('ci:jest:worker-report:trace')
+const workerReportCoverageCh = channel('ci:jest:worker-report:coverage')
+
 const testSuiteCodeCoverageCh = channel('ci:jest:test-suite:code-coverage')
 
 const testStartCh = channel('ci:jest:test:start')
@@ -214,7 +222,6 @@ function cliWrapper (cli, jestVersion) {
         log.error(err)
       }
     }
-
     const isSuitesSkipped = !!skippableSuites.length
 
     const processArgv = process.argv.slice(2).join(' ')
@@ -309,7 +316,6 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
         } else if (numFailingTests !== 0) {
           status = 'fail'
         }
-        testSuiteFinishCh.publish({ status, errorMessage })
 
         const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
           .map(filename => getTestSuitePath(filename, environment.rootDir))
@@ -326,6 +332,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
             testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
           })
         }
+        testSuiteFinishCh.publish({ status, errorMessage })
         return suiteResults
       })
     })
@@ -475,3 +482,28 @@ addHook({
   versions: ['>=24.8.0'],
   file: 'build/jasmineAsyncInstall.js'
 }, jasmineAsyncInstallWraper)
+
+addHook({
+  name: 'jest-worker',
+  versions: ['>=24.9.0'],
+  file: 'build/workers/ChildProcessWorker.js'
+}, (childProcessWorker) => {
+  const ChildProcessWorker = childProcessWorker.default
+  shimmer.wrap(ChildProcessWorker.prototype, '_onMessage', _onMessage => function () {
+    const [code, data] = arguments[0]
+    if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
+      sessionAsyncResource.runInAsyncScope(() => {
+        workerReportTraceCh.publish(data)
+      })
+      return
+    }
+    if (code === JEST_WORKER_COVERAGE_PAYLOAD_CODE) { // datadog coverage payload
+      sessionAsyncResource.runInAsyncScope(() => {
+        workerReportCoverageCh.publish(data)
+      })
+      return
+    }
+    return _onMessage.apply(this, arguments)
+  })
+  return childProcessWorker
+})

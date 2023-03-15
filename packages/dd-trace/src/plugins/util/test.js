@@ -56,6 +56,10 @@ const TEST_MODULE_CODE_COVERAGE_ENABLED = 'test_module.code_coverage.enabled'
 
 const TEST_CODE_COVERAGE_LINES_TOTAL = 'test.codecov_lines_total'
 
+// jest worker variables
+const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
+const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_FRAMEWORK,
@@ -71,6 +75,8 @@ module.exports = {
   TEST_SOURCE_FILE,
   CI_APP_ORIGIN,
   LIBRARY_VERSION,
+  JEST_WORKER_TRACE_PAYLOAD_CODE,
+  JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,

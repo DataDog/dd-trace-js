@@ -6,13 +6,15 @@ const { ORIGIN_KEY } = require('../packages/dd-trace/src/constants')
 const { mochaHook } = require('../packages/datadog-instrumentations/src/mocha')
 const { pickleHook, testCaseHook } = require('../packages/datadog-instrumentations/src/cucumber')
 
+const isJestWorker = !!process.env.JEST_WORKER_ID
+
 const options = {
   startupLogs: false,
   tags: {
     [ORIGIN_KEY]: 'ciapp-test'
   },
   isCiVisibility: true,
-  flushInterval: 5000
+  flushInterval: isJestWorker ? 0 : 5000
 }
 
 let shouldInit = true
@@ -55,6 +57,12 @@ try {
   }
 } catch (e) {
   // ignore error and let the tracer initialize anyway
+}
+
+if (isJestWorker) {
+  options.experimental = {
+    exporter: 'jest_worker'
+  }
 }
 
 if (shouldInit) {

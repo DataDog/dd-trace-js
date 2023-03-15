@@ -36,7 +36,11 @@ describe('AgentProxyCiVisibilityExporter', () => {
     const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
 
     const trace = [{ span_id: '1234' }]
-    const coverage = [{ span: {}, coverageFiles: [] }]
+    const coverage = {
+      traceId: '1',
+      spanId: '2',
+      files: ['example.js']
+    }
     agentProxyCiVisibilityExporter.export(trace)
     agentProxyCiVisibilityExporter.exportCoverage(coverage)
 
@@ -94,7 +98,11 @@ describe('AgentProxyCiVisibilityExporter', () => {
       const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       agentProxyCiVisibilityExporter._coverageWriter = mockWriter
-      const coverage = { span: { context: () => ({ _traceId: '1', _spanId: '1' }) }, coverageFiles: [] }
+      const coverage = {
+        traceId: '1',
+        spanId: '1',
+        files: []
+      }
       agentProxyCiVisibilityExporter._itrConfig = { isCodeCoverageEnabled: true }
       agentProxyCiVisibilityExporter.exportCoverage(coverage)
       expect(mockWriter.append).to.have.been.calledWith({ spanId: '1', traceId: '1', files: [] })
@@ -144,7 +152,11 @@ describe('AgentProxyCiVisibilityExporter', () => {
       const testSessionTrace = [{ type: 'test_session_end' }]
       agentProxyCiVisibilityExporter.export(testSuiteTrace)
       agentProxyCiVisibilityExporter.export(testSessionTrace)
-      agentProxyCiVisibilityExporter.exportCoverage({ span: {}, coverageFiles: [] })
+      agentProxyCiVisibilityExporter.exportCoverage({
+        traceId: '1',
+        spanId: '1',
+        files: []
+      })
       expect(mockWriter.append).not.to.have.been.called
     })
   })
@@ -193,7 +205,11 @@ describe('AgentProxyCiVisibilityExporter', () => {
       agentProxyCiVisibilityExporter._writer = mockWriter
       agentProxyCiVisibilityExporter._coverageWriter = mockWriter
 
-      const coverage = { span: { context: () => ({ _traceId: '1', _spanId: '1' }) }, coverageFiles: [] }
+      const coverage = {
+        traceId: '1',
+        spanId: '1',
+        files: []
+      }
       agentProxyCiVisibilityExporter._itrConfig = { isCodeCoverageEnabled: true }
       agentProxyCiVisibilityExporter.exportCoverage(coverage)
       expect(mockWriter.append).to.have.been.calledWith({ traceId: '1', spanId: '1', files: [] })
