@@ -110,6 +110,28 @@ describe('Plugin', function () {
               .catch(done)
           })
 
+          const pathTests = [
+            ['/api/hello', '/api/hello'],
+            ['/api/hello/world', '/api/hello/[name]'],
+            ['/api/hello/other', '/api/hello/other']
+          ]
+          pathTests.forEach(([url, expectedPath]) => {
+            it(`should infer the corrrect resource path (${expectedPath})`, done => {
+              agent
+                .use(traces => {
+                  const spans = traces[0]
+
+                  expect(spans[0]).to.have.property('resource', `GET ${expectedPath}`)
+                })
+                .then(done)
+                .catch(done)
+
+              axios
+                .get(`http://localhost:${port}${url}`)
+                .catch(done)
+            })
+          })
+
           it('should propagate context', done => {
             axios
               .get(`http://localhost:${port}/api/hello/world`)
@@ -185,6 +207,28 @@ describe('Plugin', function () {
             axios
               .get(`http://localhost:${port}/hello/world`)
               .catch(done)
+          })
+
+          const pathTests = [
+            ['/hello', '/hello'],
+            ['/hello/world', '/hello/[name]'],
+            ['/hello/other', '/hello/other']
+          ]
+          pathTests.forEach(([url, expectedPath]) => {
+            it(`should infer the corrrect resource (${expectedPath})`, done => {
+              agent
+                .use(traces => {
+                  const spans = traces[0]
+
+                  expect(spans[0]).to.have.property('resource', `GET ${expectedPath}`)
+                })
+                .then(done)
+                .catch(done)
+
+              axios
+                .get(`http://localhost:${port}${url}`)
+                .catch(done)
+            })
           })
 
           it('should handle pages not found', done => {
