@@ -37,7 +37,7 @@ const DC_CHANNEL = 'dd-trace:bundledModuleLoadStart'
 module.exports.name = 'datadog-esbuild'
 
 module.exports.setup = function (build) {
-  build.onResolve({ filter: /.*/ }, args => {
+  build.onResolve({ filter: /.*/ }, async args => {
     const packageName = args.path
 
     if (args.namespace === 'file') {
@@ -59,7 +59,7 @@ module.exports.setup = function (build) {
           }
         }
       } else {
-        const ddBundleData = getDDBundleData(packageName, args.resolveDir, builtins)
+        const ddBundleData = await getDDBundleData(packageName, args.resolveDir, builtins)
         if (ddBundleData) {
           return {
             path: packageName,
@@ -74,18 +74,16 @@ module.exports.setup = function (build) {
 
       if (builtins.has(packageName)) return
 
-      const path = require.resolve(packageName, { paths: [ args.resolveDir ] })
-
-      const ddBundleData = getDDBundleData(packageName, args.resolveDir, builtins)
+      const ddBundleData = await getDDBundleData(packageName, args.resolveDir, builtins)
       if (ddBundleData) {
         return {
-          path,
+          path: packageName,
           namespace: NAMESPACE_BUNDLE,
           pluginData: ddBundleData
         }
       } else {
         return {
-          path,
+          path: require.resolve(packageName, { paths: [ args.resolveDir ] }),
           namespace: 'file'
         }
       }
