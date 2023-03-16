@@ -58,7 +58,7 @@ class FakeAgent extends EventEmitter {
         }
           )
           .on('request', 
-          () => console.log('request')
+          () => console.log(`request at ${Date.now()}`)
           )
           .on('dropRequest', () => console.log('dropRequest'))
       this.server.listen(this.port, () => {

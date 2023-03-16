@@ -26,7 +26,7 @@ async function checkProfiles (agent, proc, timeout,
   await new Promise((resolve, reject) => {
     console.log(`Starting timer at ${Date.now()}`)
     const timeoutObj = setTimeout(() => {
-      console.log('TIMEOUTTTTTTTTTTTTTT !!!!!')
+      console.log(`TIMEOUTTTTTTTTTTTTTT !!!!! at ${Date.now()}`)
       console.log(proc)
       // setTimeout(reject, 10000000)
       // reject(new Error('Process timed out'))
