@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../setup/tap')
+
 const { expect } = require('chai')
 
 const URL = require('url').URL

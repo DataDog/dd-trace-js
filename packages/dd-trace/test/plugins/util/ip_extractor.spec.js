@@ -1,3 +1,7 @@
+'use strict'
+
+require('../../setup/tap')
+
 const getPort = require('get-port')
 const { extractIp } = require('../../../src/plugins/util/ip_extractor')
 const http = require('http')

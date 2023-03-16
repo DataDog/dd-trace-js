@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 const RateLimiter = require('../src/rate_limiter')
 
 describe('RateLimiter', () => {
