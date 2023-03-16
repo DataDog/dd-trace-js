@@ -50,12 +50,10 @@ const CI_APP_ORIGIN = 'ciapp-test'
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
 
 const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.tests_skipped'
-const TEST_SESSION_ITR_SKIPPING_ENABLED = 'test_session.itr.tests_skipping.enabled'
-const TEST_SESSION_CODE_COVERAGE_ENABLED = 'test_session.code_coverage.enabled'
-const TEST_MODULE_ITR_SKIPPING_ENABLED = 'test_module.itr.tests_skipping.enabled'
-const TEST_MODULE_CODE_COVERAGE_ENABLED = 'test_module.code_coverage.enabled'
+const TEST_ITR_SKIPPING_ENABLED = 'test.itr.tests_skipping.enabled'
+const TEST_CODE_COVERAGE_ENABLED = 'test.code_coverage.enabled'
 
-const TEST_CODE_COVERAGE_LINES_TOTAL = 'test.codecov_lines_total'
+const TEST_CODE_COVERAGE_LINES_PCT = 'test.code_coverage.lines_pct'
 
 // jest worker variables
 const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
@@ -97,11 +95,9 @@ module.exports = {
   TEST_SUITE_ID,
   TEST_ITR_TESTS_SKIPPED,
   TEST_MODULE,
-  TEST_SESSION_ITR_SKIPPING_ENABLED,
-  TEST_SESSION_CODE_COVERAGE_ENABLED,
-  TEST_MODULE_ITR_SKIPPING_ENABLED,
-  TEST_MODULE_CODE_COVERAGE_ENABLED,
-  TEST_CODE_COVERAGE_LINES_TOTAL,
+  TEST_ITR_SKIPPING_ENABLED,
+  TEST_CODE_COVERAGE_ENABLED,
+  TEST_CODE_COVERAGE_LINES_PCT,
   addIntelligentTestRunnerSpanTags,
   getCoveredFilenamesFromCoverage,
   resetCoverage,
@@ -316,17 +312,17 @@ function addIntelligentTestRunnerSpanTags (
   { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled, testCodeCoverageLinesTotal }
 ) {
   testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
-  testSessionSpan.setTag(TEST_SESSION_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
-  testSessionSpan.setTag(TEST_SESSION_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+  testSessionSpan.setTag(TEST_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
+  testSessionSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
 
   testModuleSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
-  testModuleSpan.setTag(TEST_MODULE_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
-  testModuleSpan.setTag(TEST_MODULE_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+  testModuleSpan.setTag(TEST_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
+  testModuleSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
 
   // If suites have been skipped we don't want to report the total coverage, as it will be wrong
   if (testCodeCoverageLinesTotal !== undefined && !isSuitesSkipped) {
-    testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
-    testModuleSpan.setTag(TEST_CODE_COVERAGE_LINES_TOTAL, testCodeCoverageLinesTotal)
+    testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
+    testModuleSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
   }
 }
 

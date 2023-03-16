@@ -15,10 +15,8 @@ const {
 const { FakeCiVisIntake } = require('./ci-visibility-intake')
 
 const {
-  TEST_SESSION_CODE_COVERAGE_ENABLED,
-  TEST_SESSION_ITR_SKIPPING_ENABLED,
-  TEST_MODULE_CODE_COVERAGE_ENABLED,
-  TEST_MODULE_ITR_SKIPPING_ENABLED,
+  TEST_CODE_COVERAGE_ENABLED,
+  TEST_ITR_SKIPPING_ENABLED,
   TEST_ITR_TESTS_SKIPPED,
   TEST_CODE_COVERAGE_LINES_TOTAL
 } = require('../packages/dd-trace/src/plugins/util/test')
@@ -465,12 +463,12 @@ testFrameworks.forEach(({
           assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
           const testSession = payload.events.find(event => event.type === 'test_session_end').content
           assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
-          assert.propertyVal(testSession.meta, TEST_SESSION_CODE_COVERAGE_ENABLED, 'false')
-          assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'false')
+          assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'false')
+          assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'false')
           const testModule = payload.events.find(event => event.type === 'test_module_end').content
           assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
-          assert.propertyVal(testModule.meta, TEST_MODULE_CODE_COVERAGE_ENABLED, 'false')
-          assert.propertyVal(testModule.meta, TEST_MODULE_ITR_SKIPPING_ENABLED, 'false')
+          assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'false')
+          assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'false')
         }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
         childProcess = exec(
@@ -520,12 +518,12 @@ testFrameworks.forEach(({
           assert.equal(numSuites, 1)
           const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
           assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
-          assert.propertyVal(testSession.meta, TEST_SESSION_CODE_COVERAGE_ENABLED, 'true')
-          assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'true')
+          assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+          assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
           const testModule = eventsRequest.payload.events.find(event => event.type === 'test_module_end').content
           assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'true')
-          assert.propertyVal(testModule.meta, TEST_MODULE_CODE_COVERAGE_ENABLED, 'true')
-          assert.propertyVal(testModule.meta, TEST_MODULE_ITR_SKIPPING_ENABLED, 'true')
+          assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+          assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
           done()
         }).catch(done)
 
@@ -564,12 +562,12 @@ testFrameworks.forEach(({
           assert.equal(numSuites, 2)
           const testSession = payload.events.find(event => event.type === 'test_session_end').content
           assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
-          assert.propertyVal(testSession.meta, TEST_SESSION_CODE_COVERAGE_ENABLED, 'true')
-          assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'true')
+          assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+          assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
           const testModule = payload.events.find(event => event.type === 'test_module_end').content
           assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
-          assert.propertyVal(testModule.meta, TEST_MODULE_CODE_COVERAGE_ENABLED, 'true')
-          assert.propertyVal(testModule.meta, TEST_MODULE_ITR_SKIPPING_ENABLED, 'true')
+          assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+          assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
         }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
         childProcess = exec(
