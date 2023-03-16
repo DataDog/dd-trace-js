@@ -93,6 +93,36 @@ testFrameworks.forEach(({
       await receiver.stop()
     })
 
+    if (name === 'mocha') {
+      it('does not init CI Visibility when running in parallel mode', (done) => {
+        receiver.assertPayloadReceived(() => {
+          const error = new Error('it should not report tests')
+          done(error)
+        }, ({ url }) => url === '/api/v2/citestcycle')
+
+        childProcess = fork('ci-visibility/run-mocha.js', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            RUN_IN_PARALLEL: true,
+            DD_TRACE_DEBUG: 1,
+            DD_TRACE_LOG_LEVEL: 'warn'
+          },
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('message', () => {
+          assert.include(testOutput, 'Unable to initialize CI Visibility because Mocha is running in parallel mode.')
+          done()
+        })
+      })
+    }
+
     if (name === 'jest') {
       it('does not crash when jest is badly initialized', (done) => {
         childProcess = fork('ci-visibility/run-jest-bad-init.js', {
@@ -114,9 +144,6 @@ testFrameworks.forEach(({
           done()
         })
       })
-    }
-
-    if (name === 'jest') {
       describe('when jest is using workers to run tests in parallel', () => {
         it('reports tests when using the agent', (done) => {
           receiver.setInfoResponse({ endpoints: [] })
