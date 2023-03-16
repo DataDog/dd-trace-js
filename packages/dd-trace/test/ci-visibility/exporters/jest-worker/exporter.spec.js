@@ -1,4 +1,7 @@
 'use strict'
+
+require('../../../../../dd-trace/test/setup/tap')
+
 const JestWorkerCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/jest-worker')
 const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
