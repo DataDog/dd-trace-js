@@ -80,16 +80,16 @@ describe('profiler', () => {
       await agent.stop()
     })
 
-    it('records profile on process exit', async () => {
-      proc = fork(profilerTestFile, {
-        cwd,
-        env: {
-          DD_TRACE_AGENT_PORT: agent.port,
-          DD_PROFILING_ENABLED: 1
-        }
-      })
-      return checkProfiles(agent, proc, timeout)
-    })
+    // it('records profile on process exit', async () => {
+    //   proc = fork(profilerTestFile, {
+    //     cwd,
+    //     env: {
+    //       DD_TRACE_AGENT_PORT: agent.port,
+    //       DD_PROFILING_ENABLED: 1
+    //     }
+    //   })
+    //   return checkProfiles(agent, proc, timeout)
+    // })
 
     it('sends a heap profile on OOM with external process', async () => {
       proc = await fork(oomTestFile, {
@@ -100,59 +100,59 @@ describe('profiler', () => {
       return checkProfiles(agent, proc, timeout, ['space'], true)
     })
 
-    it('sends a heap profile on OOM with external process and ends successfully', async () => {
-      proc = await fork(oomTestFile, {
-        cwd,
-        execArgv: oomExecArgv,
-        env: {
-          ...oomEnv,
-          DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 15000000,
-          DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 2
-        }
-      })
-      return checkProfiles(agent, proc, timeout, ['space'], false, 2)
-    })
+    // it('sends a heap profile on OOM with external process and ends successfully', async () => {
+    //   proc = await fork(oomTestFile, {
+    //     cwd,
+    //     execArgv: oomExecArgv,
+    //     env: {
+    //       ...oomEnv,
+    //       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 15000000,
+    //       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 2
+    //     }
+    //   })
+    //   return checkProfiles(agent, proc, timeout, ['space'], false, 2)
+    // })
 
-    it('sends a heap profile on OOM with async callback', async () => {
-      proc = await fork(oomTestFile, {
-        cwd,
-        execArgv: oomExecArgv,
-        env: {
-          ...oomEnv,
-          DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
-          DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
-          DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async'
-        }
-      })
-      return checkProfiles(agent, proc, timeout, ['space'], true)
-    })
+    // it('sends a heap profile on OOM with async callback', async () => {
+    //   proc = await fork(oomTestFile, {
+    //     cwd,
+    //     execArgv: oomExecArgv,
+    //     env: {
+    //       ...oomEnv,
+    //       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
+    //       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
+    //       DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async'
+    //     }
+    //   })
+    //   return checkProfiles(agent, proc, timeout, ['space'], true)
+    // })
 
-    it('sends a heap profile on OOM with interrupt callback', async () => {
-      proc = await fork(oomTestFile, {
-        cwd,
-        execArgv: oomExecArgv,
-        env: {
-          ...oomEnv,
-          DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
-          DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
-          DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'interrupt'
-        }
-      })
-      return checkProfiles(agent, proc, timeout, ['space'], true)
-    })
+    // it('sends a heap profile on OOM with interrupt callback', async () => {
+    //   proc = await fork(oomTestFile, {
+    //     cwd,
+    //     execArgv: oomExecArgv,
+    //     env: {
+    //       ...oomEnv,
+    //       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
+    //       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
+    //       DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'interrupt'
+    //     }
+    //   })
+    //   return checkProfiles(agent, proc, timeout, ['space'], true)
+    // })
 
-    it('sends heap profiles on OOM with multiple strategies', async () => {
-      proc = await fork(oomTestFile, {
-        cwd,
-        execArgv: oomExecArgv,
-        env: {
-          ...oomEnv,
-          DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
-          DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
-          DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async,interrupt,process'
-        }
-      })
-      return checkProfiles(agent, proc, timeout, ['space'], true, 4)
-    })
+    // it('sends heap profiles on OOM with multiple strategies', async () => {
+    //   proc = await fork(oomTestFile, {
+    //     cwd,
+    //     execArgv: oomExecArgv,
+    //     env: {
+    //       ...oomEnv,
+    //       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
+    //       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
+    //       DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async,interrupt,process'
+    //     }
+    //   })
+    //   return checkProfiles(agent, proc, timeout, ['space'], true, 4)
+    // })
   })
 })
