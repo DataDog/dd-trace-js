@@ -209,7 +209,7 @@ describe('IAST log', () => {
       const ddFrames = stack
         .split(EOL)
         .filter(line => line.includes(ddBasePath))
-        .map(line => line.replace(ddBasePath, '/'))
+        .map(line => line.replace(ddBasePath, ''))
 
       iastLog.errorAndPublish({ message: 'Error 1', stack })
 
@@ -237,7 +237,7 @@ describe('IAST log', () => {
       const ddFrames = stack
         .split(EOL)
         .filter(line => line.includes(ddBasePath))
-        .map(line => line.replace(ddBasePath, '/'))
+        .map(line => line.replace(ddBasePath, ''))
 
       iastLog.errorAndPublish({ message: 'Error 1', stack })
 
