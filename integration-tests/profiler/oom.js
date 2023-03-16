@@ -28,10 +28,7 @@ function foo (size) {
   if (count < maxCount) { setTimeout(() => foo(size), sleepMs) }
 }
 
-// Runner expects child process to send a port
-process.send({ port: 0 })
+const maxCount = process.argv[3] || 12
+const sleepMs = process.argv[4] || 50
 
-const maxCount = process.argv[3] || 5
-const sleepMs = process.argv[4] || 100
-
-setTimeout(() => foo(10 * 1024 * 1024), sleepMs)
+setTimeout(() => foo(5 * 1024 * 1024), sleepMs)
