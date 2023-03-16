@@ -29,7 +29,7 @@ async function checkProfiles (agent, proc, timeout,
       console.log(`TIMEOUTTTTTTTTTTTTTT !!!!! at ${Date.now()}`)
       console.log(proc)
       // setTimeout(reject, 10000000)
-      // reject(new Error('Process timed out'))
+      reject(new Error('Process timed out'))
     }, timeout)
 
     function CheckExitCode (code) {
