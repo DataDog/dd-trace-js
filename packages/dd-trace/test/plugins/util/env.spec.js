@@ -1,3 +1,7 @@
+'use strict'
+
+require('../../setup/tap')
+
 const os = require('os')
 const {
   getRuntimeAndOSMetadata,

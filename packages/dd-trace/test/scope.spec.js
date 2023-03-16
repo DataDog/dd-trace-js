@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 const Span = require('opentracing').Span
 const Scope = require('../src/scope')
 

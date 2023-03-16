@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 describe('id', () => {
   let id
   let crypto

@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 describe('tagger', () => {
   let carrier
   let tagger

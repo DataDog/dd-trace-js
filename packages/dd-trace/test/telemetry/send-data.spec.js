@@ -1,3 +1,7 @@
+'use strict'
+
+require('../setup/tap')
+
 const proxyquire = require('proxyquire')
 describe('sendData', () => {
   let sendDataModule

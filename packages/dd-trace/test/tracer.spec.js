@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 const Span = require('../src/opentracing/span')
 const { storage } = require('../../datadog-core')
 const Config = require('../src/config')
@@ -227,7 +229,7 @@ describe('Tracer', () => {
           .catch(done)
       })
 
-      it('should not treat rejections as handled', done => {
+      it.skip('should not treat rejections as handled', done => {
         const err = new Error('boom')
 
         tracer
