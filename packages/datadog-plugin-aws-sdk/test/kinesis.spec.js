@@ -111,5 +111,29 @@ describe('Kinesis', () => {
 
       helpers.putTestRecord(kinesis, helpers.dataBuffer, e => e && done(e))
     })
+
+    describe('Disabled', () => {
+      before(() => {
+        process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = 'false'
+      })
+
+      after(() => {
+        delete process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED
+      })
+
+      it('skip injects trace context to Kinesis putRecord when disabled', done => {
+        helpers.putTestRecord(kinesis, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
+
+          helpers.getTestData(kinesis, data, (err, data) => {
+            if (err) return done(err)
+
+            expect(data).not.to.have.property('_datadog')
+
+            done()
+          })
+        })
+      })
+    })
   })
 })
