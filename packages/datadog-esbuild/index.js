@@ -1,8 +1,11 @@
 'use strict'
 
+const { replaceDDBundle, getDDBundleData } = require('./dd-bundle.js')
+
 /* eslint-disable no-console */
 
 const NAMESPACE = 'datadog'
+const NAMESPACE_BUNDLE = 'datadog-bundle'
 
 const instrumented = Object.keys(require('../datadog-instrumentations/src/helpers/hooks.js'))
 const rawBuiltins = require('module').builtinModules
@@ -37,32 +40,54 @@ module.exports.setup = function (build) {
   build.onResolve({ filter: /.*/ }, args => {
     const packageName = args.path
 
-    if (args.namespace === 'file' && packagesOfInterest.has(packageName)) {
-      // The file namespace is used when requiring files from disk in userland
-      const pathToPackageJson = require.resolve(`${packageName}/package.json`, { paths: [ args.resolveDir ] })
-      const pkg = require(pathToPackageJson)
+    if (args.namespace === 'file') {
+      if (packagesOfInterest.has(packageName)) {
+        // The file namespace is used when requiring files from disk in userland
+        const pathToPackageJson = require.resolve(`${packageName}/package.json`, { paths: [ args.resolveDir ] })
+        const pkg = require(pathToPackageJson)
 
-      if (DEBUG) {
-        console.log(`resolve ${packageName}@${pkg.version}`)
-      }
+        if (DEBUG) {
+          console.log(`resolve ${packageName}@${pkg.version}`)
+        }
 
-      // https://esbuild.github.io/plugins/#on-resolve-arguments
-      return {
-        path: packageName,
-        namespace: NAMESPACE,
-        pluginData: {
-          version: pkg.version
+        // https://esbuild.github.io/plugins/#on-resolve-arguments
+        return {
+          path: packageName,
+          namespace: NAMESPACE,
+          pluginData: {
+            version: pkg.version
+          }
+        }
+      } else {
+        const ddBundleData = getDDBundleData(packageName, args.resolveDir, builtins)
+        if (ddBundleData) {
+          return {
+            path: packageName,
+            namespace: NAMESPACE_BUNDLE,
+            pluginData: ddBundleData
+          }
         }
       }
-    } else if (args.namespace === 'datadog') {
+    } else if (args.namespace === NAMESPACE || args.namespace === NAMESPACE_BUNDLE) {
       // The datadog namespace is used when requiring files that are injected during the onLoad stage
       // see note in onLoad
 
       if (builtins.has(packageName)) return
 
-      return {
-        path: require.resolve(packageName, { paths: [ args.resolveDir ] }),
-        namespace: 'file'
+      const path = require.resolve(packageName, { paths: [ args.resolveDir ] })
+
+      const ddBundleData = getDDBundleData(packageName, args.resolveDir, builtins)
+      if (ddBundleData) {
+        return {
+          path,
+          namespace: NAMESPACE_BUNDLE,
+          pluginData: ddBundleData
+        }
+      } else {
+        return {
+          path,
+          namespace: 'file'
+        }
       }
     }
   })
@@ -88,6 +113,22 @@ module.exports.setup = function (build) {
     // https://esbuild.github.io/plugins/#on-load-results
     return {
       contents,
+      loader: 'js'
+    }
+  })
+
+  build.onLoad({ filter: /.*/, namespace: NAMESPACE_BUNDLE }, args => {
+    const packagePath = args.pluginData.packagePath
+
+    if (DEBUG) {
+      console.log(`load dd-bundle ${args.path} - ${packagePath}`)
+    }
+
+    const { contents, resolveDir } = replaceDDBundle(args.pluginData)
+
+    return {
+      contents,
+      resolveDir,
       loader: 'js'
     }
   })

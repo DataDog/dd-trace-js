@@ -44,7 +44,10 @@ function block (req, res, rootSpan, abortController) {
 
 function loadTemplates (config) {
   if (!templateLoaded) {
+    /* @dd-bundle:templateHtml = ${template('./templates/blocked.html')} */
     templateHtml = fs.readFileSync(config.appsec.blockedTemplateHtml)
+
+    /* @dd-bundle:templateJson = ${template('./templates/blocked.json')} */
     templateJson = fs.readFileSync(config.appsec.blockedTemplateJson)
     templateLoaded = true
   }

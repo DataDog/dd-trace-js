@@ -22,8 +22,9 @@ function enable (_config) {
 
   try {
     loadTemplates(_config)
-    const rules = fs.readFileSync(_config.appsec.rules || path.join(__dirname, 'recommended.json'))
-    enableFromRules(_config, JSON.parse(rules))
+    /* @dd-bundle:const rules = require('./recommended.json') */
+    const rules = JSON.parse(fs.readFileSync(_config.appsec.rules || path.join(__dirname, 'recommended.json')))
+    enableFromRules(_config, rules)
   } catch (err) {
     abortEnable(err)
   }
