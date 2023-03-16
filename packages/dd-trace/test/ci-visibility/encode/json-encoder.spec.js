@@ -1,4 +1,7 @@
 'use strict'
+
+require('../../../../dd-trace/test/setup/tap')
+
 const { JSONEncoder } = require('../../../src/ci-visibility/encode/json-encoder')
 
 describe('CI Visibility JSON encoder', () => {
