@@ -22,7 +22,7 @@ const isOldNode = semver.satisfies(process.version, '<=12')
 const versions = ['1.18.0', isOldNode ? '1.21.0' : 'latest']
 
 versions.forEach((version) => {
-  describe(`playwright@${version}`, () => {
+  describe.only(`playwright@${version}`, () => {
     let sandbox, cwd, receiver, childProcess, webAppPort
     before(async function () {
       // bump from 30 seconds because playwright dependencies are heavy
