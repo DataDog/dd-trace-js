@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/tap')
+
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const id = require('../../src/id')
@@ -91,7 +93,6 @@ describe('encode 0.5', () => {
   })
 
   it('should flush when the payload size limit is reached', function () {
-    this.timeout(5000)
     // Make 8mb of data
     for (let i = 0; i < 8 * 1024; i++) {
       data[0].meta[`foo${i}`] = randString(1024)

@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 describe('TracerProxy', () => {
   let Proxy
   let proxy

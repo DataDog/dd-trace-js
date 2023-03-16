@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 describe('Sampler', () => {
   let Sampler
   let sampler
