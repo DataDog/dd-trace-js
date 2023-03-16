@@ -1,6 +1,8 @@
 const Mocha = require('mocha')
 
-const mocha = new Mocha()
+const mocha = new Mocha({
+  parallel: !!process.env.RUN_IN_PARALLEL
+})
 mocha.addFile(require.resolve('./test/ci-visibility-test.js'))
 mocha.addFile(require.resolve('./test/ci-visibility-test-2.js'))
 mocha.run(() => {
