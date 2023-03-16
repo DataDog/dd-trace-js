@@ -24,7 +24,7 @@ function sanitize (logEntry, stack) {
   const isDDCode = firstIndex > -1 ? stackLines[firstIndex].includes(ddBasePath) : false
   stackLines = stackLines
     .filter((line, index) => (isDDCode && index < firstIndex) || line.includes(ddBasePath))
-    .map(line => line.replace(ddBasePath, '/'))
+    .map(line => line.replace(ddBasePath, ''))
 
   logEntry.stack_trace = stackLines.join(EOL)
 
