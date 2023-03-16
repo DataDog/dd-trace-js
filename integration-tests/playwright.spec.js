@@ -24,7 +24,9 @@ const versions = ['1.18.0', isOldNode ? '1.21.0' : 'latest']
 versions.forEach((version) => {
   describe(`playwright@${version}`, () => {
     let sandbox, cwd, receiver, childProcess, webAppPort
-    before(async () => {
+    before(async function () {
+      // bump from 30 to 60 seconds because playwright dependencies are heavy
+      this.timeout(60000)
       sandbox = await createSandbox([`@playwright/test@${version}`], true)
       cwd = sandbox.folder
       // install necessary browser
