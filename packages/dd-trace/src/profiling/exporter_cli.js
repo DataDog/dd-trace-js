@@ -20,6 +20,7 @@ async function exportProfile (url, tags, profileType, profile) {
   const exporter = new AgentExporter({ url, logger, uploadTimeout: 10 * 1000 })
   const start = new Date()
   await exporter.export({ profiles: { [profileType]: encodedProfile }, start, end: start, tags })
+  console.log('After export')
 }
 
 /** Expected command line arguments are:
@@ -28,5 +29,8 @@ async function exportProfile (url, tags, profileType, profile) {
 * - Profiletype (eg. space,wall,cpu)
 * - JSON profile filepath
 **/
+console.log(`Starting export at ${Date.now()}`)
 exportProfile(new URL(process.argv[2]), tagger.parse(process.argv[3]),
   process.argv[4], JSON.parse(fs.readFileSync(process.argv[5])))
+console.log(`Finished export at ${Date.now()}`)
+process.on('exit', () => console.log(`Exiting export process at ${Date.now()}`))

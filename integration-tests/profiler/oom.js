@@ -25,7 +25,7 @@ function foo (size) {
   for (let i = 0; i < n; i++) { x[i] = Math.random() }
   leak.push(x)
 
-  if (count < maxCount) { setTimeout(() => foo(size), sleepMs) }
+  if (count < maxCount) { setTimeout(() => foo(size), sleepMs) } else { console.log('Finished!!!!!!!!!')}
 }
 
 const maxCount = process.argv[3] || 12

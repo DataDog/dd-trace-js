@@ -36,6 +36,7 @@ class FakeAgent extends EventEmitter {
       })
     })
     app.post('/profiling/v1/input', upload.any(), (req, res) => {
+      console.log('Received profile')
       res.status(200).send()
       this.emit('message', {
         headers: req.headers,
@@ -49,10 +50,21 @@ class FakeAgent extends EventEmitter {
         reject(new Error('agent timed out starting up'))
       }, 10000)
       this.server = http.createServer(app)
-      this.server.on('error', reject)
+      this.server
+         .on('error', (err) => {console.log('Server error', err); reject(err)})
+          .on('connection', 
+          () => {console.log('connection')
+          
+        }
+          )
+          .on('request', 
+          () => console.log('request')
+          )
+          .on('dropRequest', () => console.log('dropRequest'))
       this.server.listen(this.port, () => {
         this.port = this.server.address().port
         clearTimeout(timeoutObj)
+        console.log('Server is listening')
         resolve(this)
       })
     })
@@ -123,6 +135,7 @@ function spawnProc (filename, options = {}) {
 }
 
 async function createSandbox (dependencies = [], isGitRepo = false) {
+  return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, 'dd-trace.tgz')
   const allDependencies = [`file:${out}`].concat(dependencies)

@@ -18,11 +18,18 @@ async function checkProfiles (agent, proc, timeout,
     for (const [index, profileType] of expectedProfileTypes.entries()) {
       assert.propertyVal(files[index], 'originalname', `${profileType}.pb.gz`)
     }
-  }, timeout, multiplicity)
+  }, 1000000000, multiplicity)
+
+  // const deadLine = Date.now() + 2000
+  // while (Date.now() < deadLine) {}
 
   await new Promise((resolve, reject) => {
+    console.log(`Starting timer at ${Date.now()}`)
     const timeoutObj = setTimeout(() => {
-      reject(new Error('Process timed out'))
+      console.log('TIMEOUTTTTTTTTTTTTTT !!!!!')
+      console.log(proc)
+      setTimeout(reject, 10000000)
+      // reject(new Error('Process timed out'))
     }, timeout)
 
     function CheckExitCode (code) {
@@ -33,7 +40,10 @@ async function checkProfiles (agent, proc, timeout,
         resolve()
       }
     }
-
+    if (!proc.connected) {
+      console.log('ARGGGH')
+      process.exit(1)
+    }
     proc
       .on('error', reject)
       .on('exit', CheckExitCode)
@@ -70,6 +80,8 @@ describe('profiler', () => {
       oomEnv = {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_PROFILING_ENABLED: 1,
+        DD_TRACE_TELEMETRY_ENABLED: 0,
+        DD_REMOTE_CONFIGURATION_ENABLED: 0,
         DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: 1,
         DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process'
       }

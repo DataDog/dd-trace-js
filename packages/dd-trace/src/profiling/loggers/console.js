@@ -33,7 +33,9 @@ class ConsoleLogger {
 
   _log (level, message) {
     if (mapping[level] > this._level) return
-
+    if (typeof message === 'function') {
+      message = message()
+    }
     console[level](message)
   }
 }
