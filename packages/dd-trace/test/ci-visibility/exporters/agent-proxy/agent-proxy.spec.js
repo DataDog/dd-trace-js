@@ -1,4 +1,7 @@
 'use strict'
+
+require('../../../../../dd-trace/test/setup/tap')
+
 const nock = require('nock')
 
 const AgentProxyCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agent-proxy')
