@@ -1,3 +1,7 @@
+'use strict'
+
+require('../setup/tap')
+
 const LogPlugin = require('../../src/plugins/log_plugin')
 const Tracer = require('../../src/tracer')
 const Config = require('../../src/config')
