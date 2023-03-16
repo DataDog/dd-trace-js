@@ -18,7 +18,7 @@ async function checkProfiles (agent, proc, timeout,
     for (const [index, profileType] of expectedProfileTypes.entries()) {
       assert.propertyVal(files[index], 'originalname', `${profileType}.pb.gz`)
     }
-  }, 1000000000, multiplicity)
+  }, timeout, multiplicity)
 
   // const deadLine = Date.now() + 2000
   // while (Date.now() < deadLine) {}
@@ -28,7 +28,7 @@ async function checkProfiles (agent, proc, timeout,
     const timeoutObj = setTimeout(() => {
       console.log('TIMEOUTTTTTTTTTTTTTT !!!!!')
       console.log(proc)
-      setTimeout(reject, 10000000)
+      // setTimeout(reject, 10000000)
       // reject(new Error('Process timed out'))
     }, timeout)
 
