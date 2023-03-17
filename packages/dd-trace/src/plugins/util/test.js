@@ -43,6 +43,7 @@ const TEST_MODULE = 'test.module'
 const TEST_SESSION_ID = 'test_session_id'
 const TEST_MODULE_ID = 'test_module_id'
 const TEST_SUITE_ID = 'test_suite_id'
+const TEST_TOOLCHAIN = 'test.toolchain'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
@@ -89,6 +90,7 @@ module.exports = {
   getTestModuleCommonTags,
   getTestSuiteCommonTags,
   TEST_COMMAND,
+  TEST_TOOLCHAIN,
   TEST_SESSION_ID,
   TEST_MODULE_ID,
   TEST_SUITE_ID,
@@ -105,6 +107,15 @@ module.exports = {
   resetCoverage,
   mergeCoverage,
   fromCoverageMapToCoverage
+}
+
+// Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
+function getPkgManager () {
+  try {
+    return process.env.npm_config_user_agent.split(' ')[0].replace('/', '-')
+  } catch (e) {
+    return ''
+  }
 }
 
 function getTestEnvironmentMetadata (testFramework, config) {
@@ -275,6 +286,7 @@ function getTestSessionCommonTags (command, testFrameworkVersion, testFramework)
     [RESOURCE_NAME]: `test_session.${command}`,
     [TEST_BUNDLE]: testFramework,
     [TEST_MODULE]: testFramework,
+    [TEST_TOOLCHAIN]: getPkgManager(),
     ...getTestLevelCommonTags(command, testFrameworkVersion)
   }
 }
