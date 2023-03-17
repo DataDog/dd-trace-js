@@ -71,35 +71,34 @@ describe('telemetry logs', () => {
     })
 
     it('should call sendData periodically', () => {
-      const originalSetInterval = global.setInterval
+      const clock = sinon.useFakeTimers()
       const sendData = sinon.stub()
 
-      return new Promise(resolve => {
-        global.setInterval = (fn, interval) => {
-          expect(interval).eq(60000)
-          expect(fn.name).eq('sendLogs')
-          return setImmediate(() => {
-            resolve(fn())
-          })
-        }
-        const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
-          'diagnostics_channel': dc,
-          '../../../telemetry/send-data': { sendData },
-          './log_collector': {
-            drain: () => { return { message: 'Error 1', level: 'ERROR' } }
+      let logCollectorCalled = 0
+      const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
+        'diagnostics_channel': dc,
+        '../../../telemetry/send-data': { sendData },
+        './log_collector': {
+          drain: () => {
+            logCollectorCalled++
+            return { message: 'Error 1', level: 'ERROR' }
           }
-        })
-        logs.start()
-        onTelemetryStart()(onTelemetryStartMsg)
-
-        global.setInterval = originalSetInterval
-      }).then(() => {
-        expect(sendData).to.have.been.calledOnceWith(onTelemetryStartMsg.config,
-          onTelemetryStartMsg.application,
-          onTelemetryStartMsg.host,
-          'logs'
-        )
+        }
       })
+      logs.start()
+      onTelemetryStart()(onTelemetryStartMsg)
+
+      clock.tick(60000)
+      clock.tick(60000)
+
+      expect(logCollectorCalled).to.be.eq(2)
+      expect(sendData).to.have.been.calledTwice
+      expect(sendData).to.have.been.calledWith(onTelemetryStartMsg.config,
+        onTelemetryStartMsg.application,
+        onTelemetryStartMsg.host,
+        'logs'
+      )
+      clock.restore()
     })
   })
 
