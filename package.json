@@ -14,7 +14,6 @@
     "type:test": "cd docs && yarn && yarn test",
     "lint": "node scripts/check_licenses.js && eslint . && yarn audit --groups dependencies",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
-    "tdd": "node scripts/tdd.js",
     "test": "SERVICES=* yarn services && mocha --colors --exit --expose-gc 'packages/dd-trace/test/setup/node.js' 'packages/*/test/**/*.spec.js'",
     "test:trace:core": "mocha --colors --exit --expose-gc --file packages/dd-trace/test/setup/core.js --exclude \"packages/dd-trace/test/lambda/**/*.spec.js\" --exclude \"packages/dd-trace/test/profiling/**/*.spec.js\" --exclude \"packages/dd-trace/test/appsec/iast/**/*.plugin.spec.js\" \"packages/dd-trace/test/**/*.spec.js\"",
     "test:trace:core:ci": "nyc --no-clean --include \"packages/dd-trace/src/**/*.js\" --exclude \"packages/dd-trace/src/lambda/**/*.spec.js\" --exclude \"packages/dd-trace/src/profiling/**/*.js\" --exclude \"packages/dd-trace/test/appsec/iast/**/*.plugin.spec.js\" -- npm run test:trace:core -- --reporter mocha-multi-reporters --reporter-options configFile=mocha-reporter.json",
