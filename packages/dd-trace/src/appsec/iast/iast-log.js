@@ -13,15 +13,9 @@ function sanitize (logEntry, stack) {
 
   let stackLines = stack.split(EOL)
 
-  let firstIndex = -1
-  for (let i = 0; i < stackLines.length; i++) {
-    if (stackLines[i].match(STACK_FRAME_LINE_REGEX)) {
-      firstIndex = i
-      break
-    }
-  }
+  const firstIndex = stackLines.findIndex(l => l.match(STACK_FRAME_LINE_REGEX))
 
-  const isDDCode = firstIndex > -1 ? stackLines[firstIndex].includes(ddBasePath) : false
+  const isDDCode = firstIndex > -1 && stackLines[firstIndex].includes(ddBasePath)
   stackLines = stackLines
     .filter((line, index) => (isDDCode && index < firstIndex) || line.includes(ddBasePath))
     .map(line => line.replace(ddBasePath, ''))

@@ -10,10 +10,9 @@ let overflowedCount = 0
 
 function hashCode (hashSource) {
   let hash = 0
-  let offset = 0
   const size = hashSource.length
-  for (let i = 0; i < size; i++) {
-    hash = ((hash << 5) - hash) + hashSource.charCodeAt(offset++)
+  for (let offset = 0; offset < size; offset++) {
+    hash = (((hash * 31) | 0) + hashSource.charCodeAt(offset)) | 0
   }
   return hash
 }
@@ -22,13 +21,12 @@ function createHash (logEntry) {
   if (!logEntry) return 0
 
   const prime = 31
-  let result = 1
-  result = prime * result + ((!logEntry.level) ? 0 : hashCode(logEntry.level))
-  result = prime * result + ((!logEntry.message) ? 0 : hashCode(logEntry.message))
+  let result = ((!logEntry.level) ? 0 : hashCode(logEntry.level))
+  result = (((prime * result) | 0) + ((!logEntry.message) ? 0 : hashCode(logEntry.message))) | 0
 
   // NOTE: tags are not used at the moment
-  // result = prime * result + ((!log.tags) ? 0 : hashCode(log.tags))
-  result = prime * result + ((!logEntry.stack_trace) ? 0 : hashCode(logEntry.stack_trace))
+  // result = (((prime * result) | 0) + ((!logEntry.tags) ? 0 : hashCode(logEntry.tags))) | 0
+  result = (((prime * result) | 0) + ((!logEntry.stack_trace) ? 0 : hashCode(logEntry.stack_trace))) | 0
   return result
 }
 

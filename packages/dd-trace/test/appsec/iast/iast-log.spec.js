@@ -111,6 +111,16 @@ describe('IAST log', () => {
       expect(log.debug.getCall(2).args[0]).to.be.eq('debug2')
       expect(telemetryLogs.publish).to.be.calledOnceWith({ message: 'debugAndPublish', level: 'DEBUG' })
     })
+
+    it('should chain multiple debug calls', () => {
+      onTelemetryStart(telemetryDebugConfig)
+
+      iastLog.debug('debug')
+
+      telemetryLogs.stop()
+
+      iastLog.debugAndPublish('debugAndPublish').debug('debug2')
+    })
   })
 
   describe('info', () => {

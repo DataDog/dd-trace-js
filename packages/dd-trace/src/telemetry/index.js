@@ -138,6 +138,8 @@ function stop () {
   process.removeListener('beforeExit', onBeforeExit)
 
   telemetryStopChannel.publish(getTelemetryData())
+
+  config = undefined
 }
 
 function updateIntegrations () {
