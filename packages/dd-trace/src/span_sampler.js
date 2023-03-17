@@ -73,8 +73,9 @@ class SpanSampler {
 
     const { started } = spanContext._trace
     for (const span of started) {
-      const tags = span.context()._tags || {}
-      const name = span._name
+      const context = span.context()
+      const tags = context._tags || {}
+      const name = context._name
       const service = tags.service ||
         tags['service.name'] ||
         span.tracer()._service

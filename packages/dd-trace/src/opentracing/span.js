@@ -32,6 +32,11 @@ class DatadogSpan {
     this._processor = processor
     this._prioritySampler = prioritySampler
     this._store = storage.getStore()
+    this._duration = undefined
+
+    // For internal use only. You probably want `context()._name`.
+    // This name property is not updated when the span name changes.
+    // This is necessary for span count metrics.
     this._name = operationName
 
     this._spanContext = this._createContext(parent)
