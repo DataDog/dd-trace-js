@@ -42,19 +42,13 @@ function wrapHandleApiRequest (handleApiRequest) {
 function wrapHandleApiRequestWithMatch (handleApiRequest) {
   return function (req, res, query, match) {
     return instrument(req, res, () => {
-      const promise = handleApiRequest.apply(this, arguments)
+      const page = (typeof match === 'object' && typeof match.definition === 'object')
+        ? match.definition.pathname
+        : undefined
 
-      return promise.then(handled => {
-        if (!handled) return handled
+      pageLoadChannel.publish({ page })
 
-        const page = (typeof match === 'object' && typeof match.definition === 'object')
-          ? match.definition.page
-          : undefined
-
-        pageLoadChannel.publish({ page })
-
-        return handled
-      })
+      return handleApiRequest.apply(this, arguments)
     })
   }
 }
