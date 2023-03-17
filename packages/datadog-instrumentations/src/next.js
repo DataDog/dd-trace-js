@@ -26,11 +26,13 @@ function wrapHandleApiRequest (handleApiRequest) {
       return promise.then(handled => {
         if (!handled) return handled
 
-        const page = getPageFromPath(pathname, this.dynamicRoutes)
+        return this.hasPage(pathname).then(pageFound => {
+          const page = pageFound ? pathname : getPageFromPath(pathname, this.dynamicRoutes)
 
-        pageLoadChannel.publish({ page })
+          pageLoadChannel.publish({ page })
 
-        return handled
+          return handled
+        })
       })
     })
   }
