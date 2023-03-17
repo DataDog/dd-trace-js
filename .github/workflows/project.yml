@@ -48,11 +48,11 @@ jobs:
       - name: Remove temporary folder
         run: rm -rf $TEST_TMP_FOLDER
       - name: Install dependencies for cypress@latest
-        id: install-dependencies
+        id: install-dependencies-latest
         run: echo "folder=$(node integration-tests/scripts/sandbox.js cypress@latest)" >> $GITHUB_OUTPUT
       - run: yarn test:integration:ci integration-tests/cypress.spec.js
         env:
-          TEST_TMP_FOLDER: ${{ steps.install-dependencies.outputs.folder }}
+          TEST_TMP_FOLDER: ${{ steps.install-dependencies-latest.outputs.folder }}
           CYPRESS_VERSION: "latest"
       - name: Remove temporary folder
         run: rm -rf $TEST_TMP_FOLDER
@@ -82,14 +82,14 @@ jobs:
       - name: Remove temporary folder
         run: rm -rf $TEST_TMP_FOLDER
       - name: Install dependencies for playwright@latest
-        id: install-dependencies
+        id: install-dependencies-latest
         run: echo "folder=$(node integration-tests/scripts/sandbox.js @playwright/test@latest)" >> $GITHUB_OUTPUT
       - name: Install playwright dependencies
         run: npx playwright install
-        working-directory: ${{ steps.install-dependencies.outputs.folder }}
+        working-directory: ${{ steps.install-dependencies-latest.outputs.folder }}
       - run: yarn test:integration:ci integration-tests/playwright.spec.js
         env:
-          TEST_TMP_FOLDER: ${{ steps.install-dependencies.outputs.folder }}
+          TEST_TMP_FOLDER: ${{ steps.install-dependencies-latest.outputs.folder }}
           PLAYWRIGHT_VERSION: "latest"
       - name: Remove temporary folder
         run: rm -rf $TEST_TMP_FOLDER
