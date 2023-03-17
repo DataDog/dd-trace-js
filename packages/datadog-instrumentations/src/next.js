@@ -38,6 +38,19 @@ function wrapHandleApiRequest (handleApiRequest) {
   }
 }
 
+function wrapHandleApiRequest2 (handleApiRequest) {
+  return function (req, res, query, match) {
+    return instrument(req, res, () => {
+      // NOTE: There's also a `page` field. The difference between `pathname` and `page` is
+      // that `page` might include the locale (if using sub-path routing), whereas `pathname`
+      // will not include said locale.
+      const page = match.definition.pathname
+      pageLoadChannel.publish({ page })
+      return handleApiRequest.apply(this, arguments)
+    })
+  }
+}
+
 function wrapRenderToResponse (renderToResponse) {
   return function (ctx) {
     return instrument(ctx.req, ctx.res, () => renderToResponse.apply(this, arguments))
@@ -129,7 +142,18 @@ function finish (req, res, result, err) {
   return result
 }
 
-// TODO: 13.2 support
+addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
+  const Server = nextServer.default
+
+  shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
+  shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequest2)
+  shimmer.wrap(Server.prototype, 'renderToResponse', wrapRenderToResponse)
+  shimmer.wrap(Server.prototype, 'renderErrorToResponse', wrapRenderErrorToResponse)
+  shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
+
+  return nextServer
+})
+
 addHook({ name: 'next', versions: ['>=11.1 <13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
