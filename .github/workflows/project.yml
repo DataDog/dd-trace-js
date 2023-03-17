@@ -24,7 +24,77 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
-      - run: yarn test:integration
+      - run: yarn test:integration --exclude integration-tests/cypress.spec.js --exclude integration-tests/playwright.spec.js
+
+  integration-cypress:
+    strategy:
+      matrix:
+        version: [14, 16, 18, latest]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.version }}
+      - name: Install dependencies for cypress@6.7.0
+        id: install-dependencies
+        run: echo "folder=$(node integration-tests/scripts/sandbox.js cypress@6.7.0)" >> $GITHUB_OUTPUT
+      - run: yarn test:integration:ci integration-tests/cypress.spec.js
+        env:
+          TEST_TMP_FOLDER: ${{ steps.install-dependencies.outputs.folder }}
+          CYPRESS_VERSION: "6.7.0"
+      - name: Remove temporary folder
+        run: rm -rf $TEST_TMP_FOLDER
+      - name: Install dependencies for cypress@latest
+        id: install-dependencies
+        run: echo "folder=$(node integration-tests/scripts/sandbox.js cypress@latest)" >> $GITHUB_OUTPUT
+      - run: yarn test:integration:ci integration-tests/cypress.spec.js
+        env:
+          TEST_TMP_FOLDER: ${{ steps.install-dependencies.outputs.folder }}
+          CYPRESS_VERSION: "latest"
+      - name: Remove temporary folder
+        run: rm -rf $TEST_TMP_FOLDER
+
+  integration-playwright:
+    strategy:
+      matrix:
+        version: [14, 16, 18, latest]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.version }}
+      - name: Install dependencies for playwright@1.18.0
+        id: install-dependencies
+        run: echo "folder=$(node integration-tests/scripts/sandbox.js @playwright/test@1.18.0)" >> $GITHUB_OUTPUT
+      - name: Install playwright dependencies
+        run: npx playwright install
+        working-directory: ${{ steps.install-dependencies.outputs.folder }}
+      - run: yarn test:integration:ci integration-tests/playwright.spec.js
+        env:
+          TEST_TMP_FOLDER: ${{ steps.install-dependencies.outputs.folder }}
+          PLAYWRIGHT_VERSION: "1.18.0"
+      - name: Remove temporary folder
+        run: rm -rf $TEST_TMP_FOLDER
+      - name: Install dependencies for playwright@latest
+        id: install-dependencies
+        run: echo "folder=$(node integration-tests/scripts/sandbox.js @playwright/test@latest)" >> $GITHUB_OUTPUT
+      - name: Install playwright dependencies
+        run: npx playwright install
+        working-directory: ${{ steps.install-dependencies.outputs.folder }}
+      - run: yarn test:integration:ci integration-tests/playwright.spec.js
+        env:
+          TEST_TMP_FOLDER: ${{ steps.install-dependencies.outputs.folder }}
+          PLAYWRIGHT_VERSION: "latest"
+      - name: Remove temporary folder
+        run: rm -rf $TEST_TMP_FOLDER
+
+
 
   lint:
     runs-on: ubuntu-latest
