@@ -33,6 +33,8 @@ async function checkProfiles (agent, proc, timeout,
     }, timeout)
 
     function CheckExitCode (code) {
+      console.log(`CheckExitCode at ${Date.now()}`)
+
       clearTimeout(timeoutObj)
       if ((code !== 0) !== expectBadExit) {
         reject(new Error(`Process exited with unexepected status code ${code}.`))
