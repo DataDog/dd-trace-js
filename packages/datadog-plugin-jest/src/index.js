@@ -5,11 +5,9 @@ const {
   TEST_STATUS,
   JEST_TEST_RUNNER,
   finishAllTraceSpans,
-  getTestEnvironmentMetadata,
   getTestSuiteCommonTags,
   addIntelligentTestRunnerSpanTags,
   TEST_PARAMETERS,
-  getCodeOwnersFileEntries,
   TEST_COMMAND,
   TEST_FRAMEWORK_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
@@ -41,9 +39,6 @@ class JestPlugin extends CiPlugin {
       }
       process.on('message', handler)
     }
-
-    this.testEnvironmentMetadata = getTestEnvironmentMetadata('jest', this.config)
-    this.codeOwnersEntries = getCodeOwnersFileEntries()
 
     this.addSub('ci:jest:session:finish', ({
       status,

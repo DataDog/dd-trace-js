@@ -17,7 +17,8 @@ const {
   TEST_STATUS,
   TEST_COMMAND,
   TEST_BUNDLE,
-  TEST_FRAMEWORK_VERSION
+  TEST_FRAMEWORK_VERSION,
+  TEST_TOOLCHAIN
 } = require('../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
@@ -72,7 +73,8 @@ versions.forEach((version) => {
             const { content: testModuleEventContent } = testModuleEvent
 
             assert.exists(testSessionEventContent.test_session_id)
-            assert.exists(testModuleEventContent.meta[TEST_COMMAND])
+            assert.exists(testSessionEventContent.meta[TEST_COMMAND])
+            assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
             assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
             assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
