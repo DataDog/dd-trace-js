@@ -12,7 +12,7 @@ const {
   getCiVisEvpProxyConfig
 } = require('./helpers')
 const { FakeCiVisIntake } = require('./ci-visibility-intake')
-const { TEST_STATUS, TEST_COMMAND, TEST_BUNDLE } = require('../packages/dd-trace/src/plugins/util/test')
+const { TEST_STATUS, TEST_COMMAND, TEST_BUNDLE, TEST_TOOLCHAIN } = require('../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=12')
 const versions = ['7.0.0', isOldNode ? '8' : 'latest']
@@ -61,7 +61,8 @@ versions.forEach(version => {
             const { content: testModuleEventContent } = testModuleEvent
 
             assert.exists(testSessionEventContent.test_session_id)
-            assert.exists(testModuleEventContent.meta[TEST_COMMAND])
+            assert.exists(testSessionEventContent.meta[TEST_COMMAND])
+            assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
             assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
             assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
