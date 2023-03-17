@@ -45,7 +45,9 @@ function wrapHandleApiRequestWithMatch (handleApiRequest) {
       return promise.then(handled => {
         if (!handled) return handled
 
-        const page = match?.definitions?.page
+        const page = (typeof match === 'object' && typeof match.definitions === 'object')
+          ? match.definitions.page
+          : undefined
 
         pageLoadChannel.publish({ page })
 
