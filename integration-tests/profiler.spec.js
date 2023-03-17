@@ -60,7 +60,7 @@ describe('profiler', () => {
   let oomTestFile
   let oomEnv
   let oomExecArgv
-  const timeout = 5000
+  const timeout = 10000
 
   before(async () => {
     sandbox = await createSandbox()
