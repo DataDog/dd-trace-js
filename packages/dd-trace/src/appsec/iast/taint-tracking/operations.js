@@ -1,3 +1,5 @@
+'use strict'
+
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { IAST_TRANSACTION_ID } = require('../iast-context')
 const { TaintTracking, TaintTrackingDummy } = require('./taint-tracking-impl')
