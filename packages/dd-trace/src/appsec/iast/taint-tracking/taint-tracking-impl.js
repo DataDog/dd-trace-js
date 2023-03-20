@@ -3,7 +3,7 @@
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../iast-context')
-const log = require('../../../log')
+const iastLog = require('../iast-log')
 
 function noop (res) { return res }
 const TaintTrackingDummy = {
@@ -32,7 +32,8 @@ function getFilteredCsiFn (cb, filter) {
         return cb(transactionId, res, target, ...rest)
       }
     } catch (e) {
-      log.debug(e)
+      iastLog.error(`Error invoking CSI ${target}`)
+        .errorAndPublish(e)
     }
     return res
   }
@@ -80,7 +81,8 @@ const csiMethodsOverrides = {
         return TaintedUtils.concat(transactionId, res, op1, op2)
       }
     } catch (e) {
-      log.debug(e)
+      iastLog.error(`Error invoking CSI plusOperator`)
+        .errorAndPublish(e)
     }
     return res
   },
