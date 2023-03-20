@@ -1,5 +1,7 @@
 'use strict'
 
+const path = require('path')
+
 function isTrue (str) {
   str = String(str).toLowerCase()
   return str === 'true' || str === '1'
@@ -61,9 +63,16 @@ function globMatch (pattern, subject) {
   return true
 }
 
+function calculateDDBasePath (dirname) {
+  const dirSteps = dirname.split(path.sep)
+  const packagesIndex = dirSteps.lastIndexOf('packages')
+  return dirSteps.slice(0, packagesIndex).join(path.sep) + path.sep
+}
+
 module.exports = {
   isTrue,
   isFalse,
   isError,
-  globMatch
+  globMatch,
+  calculateDDBasePath
 }

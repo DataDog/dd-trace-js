@@ -194,6 +194,10 @@ class Config {
       process.env.DD_TRACE_TELEMETRY_ENABLED,
       !process.env.AWS_LAMBDA_FUNCTION_NAME
     )
+    const DD_TELEMETRY_DEBUG_ENABLED = coalesce(
+      process.env.DD_TELEMETRY_DEBUG_ENABLED,
+      false
+    )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
       options.protocolVersion,
       process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
@@ -349,6 +353,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       process.env.DD_IAST_ENABLED,
       false
     )
+    const DD_TELEMETRY_LOG_COLLECTION_ENABLED = coalesce(
+      process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED,
+      DD_IAST_ENABLED
+    )
 
     const defaultIastRequestSampling = 30
     const iastRequestSampling = coalesce(
@@ -453,7 +461,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
-    this.telemetryEnabled = DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED)
+    this.telemetry = {
+      enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
+      logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
+      debug: isTrue(DD_TELEMETRY_DEBUG_ENABLED)
+    }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
     this.appsec = {

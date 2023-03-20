@@ -6,7 +6,7 @@ const overheadController = require('./overhead-controller')
 const dc = require('diagnostics_channel')
 const iastContextFunctions = require('./iast-context')
 const { enableTaintTracking, disableTaintTracking, createTransaction, removeTransaction } = require('./taint-tracking')
-
+const telemetryLogs = require('./telemetry/logs')
 const IAST_ENABLED_TAG_KEY = '_dd.iast.enabled'
 
 // TODO Change to `apm:http:server:request:[start|close]` when the subscription
@@ -22,6 +22,7 @@ function enable (config, _tracer) {
   overheadController.configure(config.iast)
   overheadController.startGlobalContext()
   setTracer(_tracer)
+  telemetryLogs.start()
 }
 
 function disable () {
@@ -30,6 +31,7 @@ function disable () {
   overheadController.finishGlobalContext()
   if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
   if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestEnd)
+  telemetryLogs.stop()
 }
 
 function onIncomingHttpRequestStart (data) {

@@ -1,6 +1,7 @@
 'use strict'
 
 const als = require('../als')
+const log = require('../../../log')
 
 let lock = false // lock to prevent recursive calls to runSubscriptions
 
@@ -25,7 +26,7 @@ function runSubscriptions (subscriptions, params) {
     try {
       result = subscription.callback.method(params, store)
     } catch (err) {
-      // TODO: log ?
+      log.warn(`Error running subscription ${err}`)
     }
 
     results.push(result)
