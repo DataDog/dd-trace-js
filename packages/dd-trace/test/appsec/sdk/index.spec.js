@@ -4,7 +4,7 @@ const proxyquire = require('proxyquire')
 
 describe('Appsec SDK', () => {
   let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
-  let checkUserAndSetUser, blockRequest, setUser, loadTemplates
+  let checkUserAndSetUser, blockRequest, setUser, setTemplates
   let appsecSdk
   const tracer = {}
   const config = {}
@@ -15,13 +15,13 @@ describe('Appsec SDK', () => {
     trackCustomEvent = sinon.stub()
     checkUserAndSetUser = sinon.stub()
     blockRequest = sinon.stub()
-    loadTemplates = sinon.stub()
+    setTemplates = sinon.stub()
     setUser = sinon.stub()
 
     const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
       './track_event': { trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent },
       './user_blocking': { checkUserAndSetUser, blockRequest },
-      '../blocking': { loadTemplates },
+      '../blocking': { setTemplates },
       './set_user': { setUser }
     })
 
@@ -29,7 +29,7 @@ describe('Appsec SDK', () => {
   })
 
   it('should call loadTemplates when instanciated', () => {
-    expect(loadTemplates).to.have.been.calledOnceWithExactly(config)
+    expect(setTemplates).to.have.been.calledOnceWithExactly(config)
   })
 
   it('trackUserLoginSuccessEvent should call internal function with proper params', () => {

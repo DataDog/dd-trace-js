@@ -9,7 +9,6 @@ const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const uuid = require('crypto-randomuuid')
-const path = require('path')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -22,16 +21,7 @@ function maybeFile (filepath) {
   try {
     return fs.readFileSync(filepath, 'utf8')
   } catch (e) {
-    return undefined
-  }
-}
-
-function maybePath (filepath) {
-  if (!filepath) return
-  try {
-    fs.openSync(filepath, 'r')
-    return filepath
-  } catch (e) {
+    log.error(`Error reading file ${filepath}`)
     return undefined
   }
 }
@@ -298,8 +288,8 @@ class Config {
     )
 
     const DD_APPSEC_RULES = coalesce(
-      appsec.rules,
-      process.env.DD_APPSEC_RULES
+      safeJsonParse(maybeFile(appsec.rules)),
+      safeJsonParse(maybeFile(process.env.DD_APPSEC_RULES))
     )
     const DD_APPSEC_TRACE_RATE_LIMIT = coalesce(
       parseInt(appsec.rateLimit),
@@ -326,14 +316,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
     )
     const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = coalesce(
-      maybePath(appsec.blockedTemplateHtml),
-      maybePath(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML),
-      path.join(__dirname, 'appsec', 'templates', 'blocked.html')
+      maybeFile(appsec.blockedTemplateHtml),
+      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
     )
     const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = coalesce(
-      maybePath(appsec.blockedTemplateJson),
-      maybePath(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON),
-      path.join(__dirname, 'appsec', 'templates', 'blocked.json')
+      maybeFile(appsec.blockedTemplateJson),
+      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
     )
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined

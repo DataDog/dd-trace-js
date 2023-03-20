@@ -3,6 +3,7 @@
 require('./setup/tap')
 
 const { expect } = require('chai')
+const { EOL } = require('os')
 const path = require('path')
 describe('Config', () => {
   let Config
@@ -14,6 +15,8 @@ describe('Config', () => {
   let existsSyncParam
   let existsSyncReturn
   let osType
+
+  const RULES_JSON_PATH = require.resolve('./fixtures/config/appsec-rules.json')
 
   beforeEach(() => {
     pkg = {
@@ -161,7 +164,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_APPSEC_ENABLED = 'true'
-    process.env.DD_APPSEC_RULES = './path/rules.json'
+    process.env.DD_APPSEC_RULES = RULES_JSON_PATH
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = '42'
     process.env.DD_APPSEC_WAF_TIMEOUT = '42'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '.*'
@@ -219,7 +222,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
-    expect(config).to.have.nested.property('appsec.rules', './path/rules.json')
+    expect(config).to.have.nested.deep.property('appsec.rules', require(RULES_JSON_PATH))
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
@@ -555,13 +558,13 @@ describe('Config', () => {
       },
       appsec: {
         enabled: true,
-        rules: './path/rules.json',
+        rules: RULES_JSON_PATH,
         rateLimit: 42,
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
-        blockedTemplateHtml: __filename,
-        blockedTemplateJson: __filename
+        blockedTemplateHtml: require.resolve('./fixtures/config/appsec-blocked-template.html'),
+        blockedTemplateJson: require.resolve('./fixtures/config/appsec-blocked-template.json')
       },
       remoteConfig: {
         pollInterval: 42
@@ -592,13 +595,13 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
-    expect(config).to.have.nested.property('appsec.rules', './path/rules.json')
+    expect(config).to.have.nested.deep.property('appsec.rules', require(RULES_JSON_PATH))
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
-    expect(config).to.have.nested.property('appsec.blockedTemplateHtml', __filename)
-    expect(config).to.have.nested.property('appsec.blockedTemplateJson', __filename)
+    expect(config).to.have.nested.property('appsec.blockedTemplateHtml', '<html>blocked</html>' + EOL)
+    expect(config).to.have.nested.property('appsec.blockedTemplateJson', '{"error": "blocked"}' + EOL)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
@@ -611,7 +614,7 @@ describe('Config', () => {
     const config = new Config({
       appsec: {
         enabled: true,
-        rules: './path/rules.json',
+        rules: RULES_JSON_PATH,
         rateLimit: 42,
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
@@ -631,15 +634,13 @@ describe('Config', () => {
 
     expect(config).to.have.deep.property('appsec', {
       enabled: true,
-      rules: './path/rules.json',
+      rules: require(RULES_JSON_PATH),
       rateLimit: 42,
       wafTimeout: 42,
       obfuscatorKeyRegex: '.*',
       obfuscatorValueRegex: '.*',
-      blockedTemplateHtml:
-        path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.html'),
-      blockedTemplateJson:
-        path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.json')
+      blockedTemplateHtml: undefined,
+      blockedTemplateJson: undefined
     })
   })
 
@@ -821,10 +822,8 @@ describe('Config', () => {
         blockedTemplateJson: path.join(__dirname, 'DOES_NOT_EXIST.json')
       }
     })
-    expect(config.appsec.blockedTemplateHtml).to.be
-      .equal(path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.html'))
-    expect(config.appsec.blockedTemplateJson).to.be
-      .equal(path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.json'))
+    expect(config.appsec.blockedTemplateHtml).to.be.undefined
+    expect(config.appsec.blockedTemplateJson).to.be.undefined
   })
 
   context('auto configuration w/ unix domain sockets', () => {
