@@ -64,7 +64,7 @@ describe('telemetry', () => {
     circularObject.child.parent = circularObject
 
     telemetry.start({
-      telemetryEnabled: true,
+      telemetry: { enabled: true },
       hostname: 'localhost',
       port: traceAgent.address().port,
       service: 'test service',
@@ -94,7 +94,7 @@ describe('telemetry', () => {
         ],
         dependencies: []
       }).and.to.have.property('configuration').that.include.members([
-        { name: 'telemetryEnabled', value: true },
+        { name: 'telemetry.enabled', value: true },
         { name: 'hostname', value: 'localhost' },
         { name: 'port', value: traceAgent.address().port },
         { name: 'service', value: 'test service' },
@@ -154,7 +154,7 @@ describe('telemetry', () => {
       expect.fail('server should not be called')
     }).listen(0, () => {
       telemetry.start({
-        telemetryEnabled: false,
+        telemetry: { enabled: false },
         hostname: 'localhost',
         port: server.address().port
       })
@@ -190,7 +190,7 @@ describe('telemetry with interval change', () => {
     }
 
     telemetry.start({
-      telemetryEnabled: true,
+      telemetry: { enabled: true },
       hostname: 'localhost',
       port: 8126,
       service: 'test service',
