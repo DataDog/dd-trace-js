@@ -24,7 +24,8 @@ const {
   getCoveredFilenamesFromCoverage,
   resetCoverage,
   mergeCoverage,
-  fromCoverageMapToCoverage
+  fromCoverageMapToCoverage,
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 
 // We'll preserve the original coverage here
@@ -194,7 +195,7 @@ addHook({
 function getPicklesToRun (runtime, suitesToSkip) {
   return runtime.pickleIds.filter((pickleId) => {
     const test = runtime.eventDataCollector.getPickle(pickleId)
-    return !suitesToSkip.includes(test.uri)
+    return !suitesToSkip.includes(getTestSuitePath(test.uri, process.cwd()))
   }, {})
 }
 
