@@ -255,7 +255,10 @@ addHook({
     const success = await start.apply(this, arguments)
 
     asyncResource.runInAsyncScope(() => {
-      sessionFinishCh.publish({ status: success ? 'pass' : 'fail', isSuitesSkipped: !!skippableSuites.length })
+      sessionFinishCh.publish({
+        status: success ? 'pass' : 'fail',
+        isSuitesSkipped: skippableSuites ? !!skippableSuites.length : false
+      })
     })
     // restore the original coverage
     global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
