@@ -238,13 +238,16 @@ versions.forEach(version => {
                 .flatMap(file => file.files)
                 .map(file => file.filename)
 
-              // TODO: CHECK WHY FILE IS REPEATED
               assert.includeMembers(allCoverageFiles, [
                 'ci-visibility/features/support/steps.js',
                 'ci-visibility/features/farewell.feature',
-                'ci-visibility/features/support/steps.js',
                 'ci-visibility/features/greetings.feature'
               ])
+              // steps is twice because there are two suites using it
+              assert.equal(
+                allCoverageFiles.filter(file => file === 'ci-visibility/features/support/steps.js').length,
+                2
+              )
               assert.exists(coveragePayload.content.coverages[0].test_session_id)
               assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
