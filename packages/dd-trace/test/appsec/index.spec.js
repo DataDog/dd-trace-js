@@ -316,22 +316,21 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledTwice
-      expect(waf.run.firstCall).to.have.been.calledWithExactly({ 'http.client_ip': '127.0.0.1' }, req)
-      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+      expect(waf.run.firstCall).to.have.been.calledWithExactly({
         'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': {
-          'user-agent': 'Arachni',
-          'host': 'localhost'
-        },
+        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
         'server.request.method': 'POST',
+        'server.request.client_ip': '127.0.0.1',
+        'server.request.client_port': 8080,
+        'http.client_ip': '127.0.0.1'
+      }, req)
+
+      expect(waf.run.secondCall).to.have.been.calledWithExactly({
         'server.response.status': 201,
-        'server.response.headers.no_cookies': {
-          'content-type': 'application/json',
-          'content-lenght': 42
-        }
-      },
-      req)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWith(req)
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
+      }, req)
+
+      expect(Reporter.finishRequest).to.have.been.calledOnceWith(req, res)
     })
 
     it('should propagate incoming http end data with invalid framework properties', () => {
@@ -369,19 +368,17 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledTwice
-      expect(waf.run.firstCall).to.have.been.calledWithExactly({ 'http.client_ip': '127.0.0.1' }, req)
-      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+      expect(waf.run.firstCall).to.have.been.calledWithExactly({
         'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': {
-          'user-agent': 'Arachni',
-          'host': 'localhost'
-        },
+        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
         'server.request.method': 'POST',
+        'server.request.client_ip': '127.0.0.1',
+        'server.request.client_port': 8080,
+        'http.client_ip': '127.0.0.1'
+      }, req)
+      expect(waf.run.secondCall).to.have.been.calledWithExactly({
         'server.response.status': 201,
-        'server.response.headers.no_cookies': {
-          'content-type': 'application/json',
-          'content-lenght': 42
-        }
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
       }, req)
 
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
@@ -432,22 +429,19 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledTwice
-      expect(waf.run.firstCall).to.have.been.calledWithExactly({ 'http.client_ip': '127.0.0.1' }, req)
-      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+      expect(waf.run.firstCall).to.have.been.calledWithExactly({
         'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': {
-          'user-agent': 'Arachni',
-          'host': 'localhost'
-        },
+        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
         'server.request.method': 'POST',
+        'server.request.client_ip': '127.0.0.1',
+        'server.request.client_port': 8080,
+        'http.client_ip': '127.0.0.1'
+      }, req)
+      expect(waf.run.secondCall).to.have.been.calledWithExactly({
         'server.response.status': 201,
-        'server.response.headers.no_cookies': {
-          'content-type': 'application/json',
-          'content-lenght': 42
-        },
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
         'server.request.path_params': { c: '3' },
-        'server.request.cookies': { d: [ '4' ], e: [ '5' ]
-        }
+        'server.request.cookies': { d: [ '4' ], e: [ '5' ] }
       }, req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
@@ -496,33 +490,33 @@ describe('AppSec Index', () => {
       const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
 
       it('Should not block without body', () => {
-        sinon.stub(Gateway, 'propagate')
+        sinon.stub(waf, 'run')
 
         bodyParserChannel.publish({
           req, res, abortController
         })
 
-        expect(Gateway.propagate).not.to.have.been.called
+        expect(waf.run).not.to.have.been.called
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
       })
 
       it('Should not block with body by default', () => {
         req.body = { key: 'value' }
-        sinon.stub(Gateway, 'propagate')
+        sinon.stub(waf, 'run')
 
         bodyParserChannel.publish({
           req, res, abortController
         })
 
-        expect(Gateway.propagate).to.have.been.called
+        expect(waf.run).to.have.been.called
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
       })
 
       it('Should block when it is detected as attack', () => {
         req.body = { key: 'value' }
-        sinon.stub(Gateway, 'propagate').returns(['block'])
+        sinon.stub(waf, 'run').returns(['block'])
 
         bodyParserChannel.publish({
           req, res, abortController
@@ -534,13 +528,13 @@ describe('AppSec Index', () => {
 
       it('Should propagate request body', () => {
         req.body = { key: 'value' }
-        sinon.stub(Gateway, 'propagate')
+        sinon.stub(waf, 'run')
 
         bodyParserChannel.publish({
           req, res, abortController
         })
 
-        expect(Gateway.propagate).to.have.been.calledOnceWith({
+        expect(waf.run).to.have.been.calledOnceWith({
           'server.request.body': { key: 'value' }
         })
       })
@@ -550,33 +544,33 @@ describe('AppSec Index', () => {
       const queryParserReadChannel = dc.channel('datadog:query:read:finish')
 
       it('Should not block without query', () => {
-        sinon.stub(Gateway, 'propagate')
+        sinon.stub(waf, 'run')
 
         queryParserReadChannel.publish({
           req, res, abortController
         })
 
-        expect(Gateway.propagate).not.to.have.been.called
+        expect(waf.run).not.to.have.been.called
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
       })
 
       it('Should not block with query by default', () => {
         req.query = { key: 'value' }
-        sinon.stub(Gateway, 'propagate')
+        sinon.stub(waf, 'run')
 
         queryParserReadChannel.publish({
           req, res, abortController
         })
 
-        expect(Gateway.propagate).to.have.been.called
+        expect(waf.run).to.have.been.called
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
       })
 
       it('Should block when it is detected as attack', () => {
         req.query = { key: 'value' }
-        sinon.stub(Gateway, 'propagate').returns(['block'])
+        sinon.stub(waf, 'run').returns(['block'])
 
         queryParserReadChannel.publish({
           req, res, abortController
@@ -586,15 +580,15 @@ describe('AppSec Index', () => {
         expect(res.end).to.have.been.called
       })
 
-      it('Should propagate request query', () => {
+      it('Should run request query', () => {
         req.query = { key: 'value' }
-        sinon.stub(Gateway, 'propagate')
+        sinon.stub(waf, 'run')
 
         queryParserReadChannel.publish({
           req, res, abortController
         })
 
-        expect(Gateway.propagate).to.have.been.calledOnceWith({
+        expect(waf.run).to.have.been.calledOnceWith({
           'server.request.query': { key: 'value' }
         })
       })

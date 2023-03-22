@@ -160,13 +160,10 @@ function onRequestQueryParsed (channelData) {
 
 function checkRequestData ({ req, res, abortController }, payload) {
   if (payload) {
-    const context = Gateway.getContext()
-    if (!context) return
-
     const rootSpan = web.root(req)
     if (!rootSpan) return
 
-    const results = Gateway.propagate(payload, context)
+    const results = waf.run(payload, req)
 
     handleResults(results, req, res, rootSpan, abortController)
   }
@@ -189,8 +186,8 @@ function disable () {
   if (queryParserChannel.hasSubscribers) queryParserChannel.unsubscribe(onRequestQueryParsed)
 }
 
-function handleResults (actions, req, res, topSpan, abortController) {
-  if (!actions || !req || !res || !topSpan || !abortController) return
+function handleResults (actions, req, res, rootSpan, abortController) {
+  if (!actions || !req || !res || !rootSpan || !abortController) return
 
   if (actions.includes('block')) {
     block(req, res, rootSpan, abortController)

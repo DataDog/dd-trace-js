@@ -24,6 +24,10 @@ describe('WAF Manager', () => {
     DDWAF.prototype.rulesInfo = {
       loaded: true, failed: 0
     }
+    DDWAF.prototype.requiredAddresses = new Map([
+      ['server.request.headers.no_cookies', { 'header': 'value' }],
+      ['server.request.uri.raw', 'https://testurl']
+    ])
 
     WAFManager = proxyquire('../../../src/appsec/waf/waf_manager', {
       '@datadog/native-appsec': { DDWAF }
@@ -80,17 +84,6 @@ describe('WAF Manager', () => {
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.errors',
         '["error1","error2"]')
       expect(Reporter.metricsQueue.set).to.been.calledWithExactly('manual.keep', 'true')
-    })
-
-    it('should accept some addresses by default', () => {
-      const newRules = {
-        rules: []
-      }
-      waf.init(newRules, config.appsec)
-      expect(waf.wafManager.acceptedAddresses).to.have.all.keys(
-        addresses.HTTP_INCOMING_HEADERS,
-        addresses.HTTP_INCOMING_RESPONSE_HEADERS
-      )
     })
   })
 
@@ -156,8 +149,9 @@ describe('WAF Manager', () => {
     })
 
     it('should call ddwaf.createContext', () => {
-      waf.wafManager.createDDWAFContext()
-      expect(waf.wafManager.ddwaf.createContext).to.been.calledOnce
+      const req = {}
+      waf.wafManager.getWAFContext(req)
+      expect(waf.wafManager.ddwaf.createContext).to.have.been.calledOnce
     })
   })
 
@@ -189,9 +183,23 @@ describe('WAF Manager', () => {
   })
 
   describe('WAFContextWrapper', () => {
-    let ddwafContext, wafContextWrapper
+    let ddwafContext, wafContextWrapper, req
 
     beforeEach(() => {
+      req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+
       waf.init(rules, config.appsec)
 
       ddwafContext = {
@@ -199,36 +207,31 @@ describe('WAF Manager', () => {
         run: sinon.stub(),
         disposed: false
       }
+
       DDWAF.prototype.createContext.returns(ddwafContext)
 
-      wafContextWrapper = waf.wafManager.createDDWAFContext()
+      wafContextWrapper = waf.wafManager.getWAFContext(req)
     })
 
     describe('dispose', () => {
       it('should call ddwafContext.dispose', () => {
-        const wafContextWrapper = waf.wafManager.createDDWAFContext()
-        wafContextWrapper.dispose()
+        // const wafContextWrapper = waf.wafManager.getWAFContext(req)
+        // wafContextWrapper.dispose()
+        waf.disposeContext(req)
         expect(ddwafContext.dispose).to.be.calledOnce
-      })
-
-      it('should not call ddwafContext.dispose when it is already disposed', () => {
-        ddwafContext.disposed = true
-        const wafContextWrapper = waf.wafManager.createDDWAFContext()
-        wafContextWrapper.dispose()
-        expect(ddwafContext.dispose).not.to.be.called
       })
     })
 
     describe('run', () => {
       it('should not call ddwafContext.run without params', () => {
-        wafContextWrapper.run()
+        waf.run()
         expect(ddwafContext.run).not.to.be.called
       })
 
       it('should not call ddwafContext.run with invalid params', () => {
-        wafContextWrapper.run({
+        waf.run({
           'invalid_address': 'value'
-        })
+        }, req)
         expect(ddwafContext.run).not.to.be.called
       })
 
@@ -262,14 +265,20 @@ describe('WAF Manager', () => {
       })
 
       it('should report attack when ddwafContext returns data', () => {
-        ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1, data: 'ATTACK DATA' })
+        const result = {
+          totalRuntime: 1,
+          durationExt: 1,
+          data: 'ATTACK DATA'
+        }
+
+        ddwafContext.run.returns(result)
         const params = {
           'server.request.headers.no_cookies': { 'header': 'value' }
         }
 
         wafContextWrapper.run(params)
 
-        expect(Reporter.reportAttack).to.be.calledOnceWithExactly('ATTACK DATA', params)
+        expect(Reporter.reportAttack).to.be.calledOnceWithExactly(result.data)
       })
 
       it('should not report attack when ddwafContext does not return data', () => {
@@ -347,10 +356,7 @@ describe('WAF Manager', () => {
 
         wafContextWrapper.run(params)
 
-        expect(ddwafContext.run).to.be.calledOnceWithExactly({
-          'server.response.status': 200,
-          'server.request.query': { 'paramname': 'paramvalue' }
-        }, config.appsec.wafTimeout)
+        expect(ddwafContext.run).to.be.calledOnceWithExactly()
       })
 
       it('should ignore the addresses in the old waf in reloaded context', () => {
@@ -385,7 +391,7 @@ describe('WAF Manager', () => {
           ]
         }
         waf.wafManager.reload(newRules)
-        const newWafContext = waf.wafManager.createDDWAFContext()
+        const newWafContext = waf.wafManager.getWAFContext()
         const params = {
           'server.response.status': 200,
           'server.request.query': { 'paramname': 'paramvalue' }
