@@ -77,10 +77,10 @@ addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
           const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
           return innerAsyncResource.runInAsyncScope(() => {
             const { topic, partition, message } = eachMessageArgs[0]
-            consumerStartCh.publish({ topic, partition, message })
+            const groupId = arguments[0].groupId
+            consumerStartCh.publish({ topic, partition, message, groupId })
             try {
               const result = eachMessage.apply(this, eachMessageArgs)
-
               if (result && typeof result.then === 'function') {
                 result.then(
                   innerAsyncResource.bind(() => consumerFinishCh.publish(undefined)),

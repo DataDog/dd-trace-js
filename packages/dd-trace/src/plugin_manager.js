@@ -4,6 +4,7 @@ const { channel } = require('diagnostics_channel')
 const { isFalse } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
+const LatencyStatsProcessor = require('./latency_stats')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
@@ -71,6 +72,7 @@ module.exports = class PluginManager {
     }
     if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
 
+    this._latencyProcessor = new LatencyStatsProcessor(this._tracerConfig)
     const pluginConfig = this._configsByName[name] || {
       enabled: this._tracerConfig.plugins !== false
     }

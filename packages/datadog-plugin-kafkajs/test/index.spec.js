@@ -25,10 +25,33 @@ describe('Plugin', () => {
           } = require(`../../../versions/kafkajs@${version}`).get()
           kafka = new Kafka({
             clientId: `kafkajs-test-${version}`,
-            brokers: ['localhost:9092']
+            brokers: ['127.0.0.1:9092']
           })
         })
         describe('producer', () => {
+          it('creates root span', async () => {
+            const scope = tracer.scope()
+            const childOf = tracer.startSpan('fake consume', {
+              tags: {
+                name: 'kafka.consume',
+                service: 'test-kafka',
+                meta: {
+                  'span.kind': 'consumer',
+                  'component': 'kafkajs',
+                  'pathwayHash': 'placeholder hash',
+                  'originTs': 'origin timestamp',
+                  'currentTs': 'current timestamp'
+                },
+                resource: testTopic,
+                error: 0,
+                type: 'worker'
+              }
+            })
+            scope.activate(childOf, async () => {
+              await sendMessages(kafka, testTopic, messages)
+            })
+          })
+
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               name: 'kafka.produce',
@@ -120,10 +143,8 @@ describe('Plugin', () => {
           })
           it('should run the consumer in the context of the consumer span', done => {
             const firstSpan = tracer.scope().active()
-
             let eachMessage = async ({ topic, partition, message }) => {
               const currentSpan = tracer.scope().active()
-
               try {
                 expect(currentSpan).to.not.equal(firstSpan)
                 expect(currentSpan.context()._name).to.equal('kafka.consume')
