@@ -126,6 +126,11 @@ class Config {
       process.env.DD_DBM_PROPAGATION_MODE,
       'disabled'
     )
+    const DD_DATA_STREAMS_ENABLED = coalesce(
+      options.dsmEnabled,
+      process.env.DD_DATA_STREAMS_ENABLED,
+      'disabled'
+    )
     const DD_AGENT_HOST = coalesce(
       options.hostname,
       process.env.DD_AGENT_HOST,
@@ -428,6 +433,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
+    this.dsmEnabled = DD_DATA_STREAMS_ENABLED
     this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
