@@ -1,6 +1,6 @@
 'use strict'
 
-module.exports = ({ Assertion, expect }) => {
+module.exports = ({ Assertion, expect }, { expectTypes }) => {
   Assertion.addProperty('valueType', function () {
     const obj = this._obj
 
@@ -9,13 +9,17 @@ module.exports = ({ Assertion, expect }) => {
     expect(obj.unit).to.be.a('number')
   })
 
+  Assertion.addProperty('numeric', function () {
+    expectTypes(this, ['number', 'bigint'])
+  })
+
   Assertion.addProperty('profile', function () {
     const obj = this._obj
 
     expect(obj).to.be.an('object')
 
     expect(obj.timeNanos).to.be.a('bigint')
-    expect(obj.period).to.be.a('number')
+    expect(obj.period).to.be.numeric
     expect(obj.periodType).to.be.a.valueType
     expect(obj.sampleType).to.be.an('array').and.have.length(2)
     expect(obj.sample).to.be.an('array')
