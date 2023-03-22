@@ -19,6 +19,7 @@ class DatadogTracer extends Tracer {
 
     this._scope = new Scope()
     setStartupLogConfig(config)
+    startMiniAgent()
   }
 
   trace (name, options, fn) {
@@ -145,6 +146,20 @@ function addTags (span, options) {
   tags[MEASURED] = options.measured
 
   span.addTags(tags)
+}
+
+function startMiniAgent () {
+  const fs = require('fs');
+  fs.appendFileSync('/tmp/dd-trace-js-logs.txt', 'Attempting to start mini agent...');
+
+  try {
+    const addonName = "./libsidecar-node.linux-x64-gnu.node"
+    const napiStartMiniAgent = require(addonName).napiStartMiniAgent
+
+    napiStartMiniAgent()
+  } catch (e) {
+    fs.appendFileSync('/tmp/dd-trace-js-logs.txt', 'encountered an error when starting mini agent: ' + e);
+  }
 }
 
 module.exports = DatadogTracer
