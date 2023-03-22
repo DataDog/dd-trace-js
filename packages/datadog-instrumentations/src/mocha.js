@@ -125,7 +125,15 @@ function mochaHook (Runner) {
 
       const isSuitesSkipped = !!suitesToSkip.length
 
-      testSessionFinishCh.publish({ status, isSuitesSkipped })
+      // TODO: do not check this if coverage is disabled (global.__coverage__ is empty)
+      let testCodeCoverageLinesTotal
+      try {
+        testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
+      } catch (e) {
+        // ignore errors
+      }
+
+      testSessionFinishCh.publish({ status, isSuitesSkipped, testCodeCoverageLinesTotal })
       // restore the original coverage
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }))

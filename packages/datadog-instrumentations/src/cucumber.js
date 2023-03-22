@@ -254,10 +254,18 @@ addHook({
     })
     const success = await start.apply(this, arguments)
 
+    // TODO: do not check this if coverage is disabled (global.__coverage__ is empty)
+    let testCodeCoverageLinesTotal
+    try {
+      testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
+    } catch (e) {
+      // ignore errors
+    }
     asyncResource.runInAsyncScope(() => {
       sessionFinishCh.publish({
         status: success ? 'pass' : 'fail',
-        isSuitesSkipped: skippableSuites ? !!skippableSuites.length : false
+        isSuitesSkipped: skippableSuites ? !!skippableSuites.length : false,
+        testCodeCoverageLinesTotal
       })
     })
     // restore the original coverage
