@@ -9,13 +9,17 @@ module.exports = ({ Assertion, expect }, { expectTypes }) => {
     expect(obj.unit).to.be.a('number')
   })
 
+  Assertion.addProperty('numeric', function () {
+    expectTypes(this, ['number', 'bigint'])
+  })
+
   Assertion.addProperty('profile', function () {
     const obj = this._obj
 
     expect(obj).to.be.an('object')
 
     expect(obj.timeNanos).to.be.a('bigint')
-    expectTypes(expect(obj.period), ['number', 'bigint'])
+    expect(obj.period).to.be.numeric
     expect(obj.periodType).to.be.a.valueType
     expect(obj.sampleType).to.be.an('array').and.have.length(2)
     expect(obj.sample).to.be.an('array')
