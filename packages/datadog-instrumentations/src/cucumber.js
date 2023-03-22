@@ -1,4 +1,5 @@
 'use strict'
+const { createCoverageMap } = require('istanbul-lib-coverage')
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
@@ -12,9 +13,23 @@ const errorCh = channel('ci:cucumber:error')
 
 const testSuiteStartCh = channel('ci:cucumber:test-suite:start')
 const testSuiteFinishCh = channel('ci:cucumber:test-suite:finish')
+const testSuiteCodeCoverageCh = channel('ci:cucumber:test-suite:code-coverage')
 
+const itrConfigurationCh = channel('ci:cucumber:itr-configuration')
+const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
+
+const {
+  getCoveredFilenamesFromCoverage,
+  resetCoverage,
+  mergeCoverage,
+  fromCoverageMapToCoverage,
+  getTestSuitePath
+} = require('../../dd-trace/src/plugins/util/test')
+
+// We'll preserve the original coverage here
+const originalCoverageMap = createCoverageMap()
 
 // TODO: remove in a later major version
 const patched = new WeakSet()
@@ -88,12 +103,25 @@ function wrapRun (pl, isLatestVersion) {
           } else {
             pickleResultByFile[testSuiteFullPath].push(status)
           }
+          testFinishCh.publish({ status, skipReason, errorMessage })
           // last test in suite
           if (pickleResultByFile[testSuiteFullPath].length === pickleByFile[testSuiteFullPath].length) {
             const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testSuiteFullPath])
+            if (global.__coverage__) {
+              const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+
+              testSuiteCodeCoverageCh.publish({
+                coverageFiles,
+                suiteFile: testSuiteFullPath
+              })
+              // We need to reset coverage to get a code coverage per suite
+              // Before that, we preserve the original coverage
+              mergeCoverage(global.__coverage__, originalCoverageMap)
+              resetCoverage(global.__coverage__)
+            }
+
             testSuiteFinishCh.publish(testSuiteStatus)
           }
-          testFinishCh.publish({ status, skipReason, errorMessage })
         })
         return promise
       } catch (err) {
@@ -164,6 +192,13 @@ addHook({
   file: 'lib/runtime/test_case_runner.js'
 }, testCaseHook)
 
+function getPicklesToRun (runtime, suitesToSkip) {
+  return runtime.pickleIds.filter((pickleId) => {
+    const test = runtime.eventDataCollector.getPickle(pickleId)
+    return !suitesToSkip.includes(getTestSuitePath(test.uri, process.cwd()))
+  }, {})
+}
+
 function getPickleByFile (runtime) {
   return runtime.pickleIds.reduce((acc, pickleId) => {
     const test = runtime.eventDataCollector.getPickle(pickleId)
@@ -182,20 +217,51 @@ addHook({
   file: 'lib/runtime/index.js'
 }, (runtimePackage, cucumberVersion) => {
   shimmer.wrap(runtimePackage.default.prototype, 'start', start => async function () {
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+    let onDone
+
+    const configPromise = new Promise(resolve => {
+      onDone = resolve
+    })
+
+    asyncResource.runInAsyncScope(() => {
+      itrConfigurationCh.publish({ onDone })
+    })
+
+    await configPromise
+
+    const skippableSuitesPromise = new Promise(resolve => {
+      onDone = resolve
+    })
+
+    asyncResource.runInAsyncScope(() => {
+      skippableSuitesCh.publish({ onDone })
+    })
+
+    const { err, skippableSuites } = await skippableSuitesPromise
+
+    if (!err) {
+      this.pickleIds = getPicklesToRun(this, skippableSuites)
+    }
+
     pickleByFile = getPickleByFile(this)
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
     asyncResource.runInAsyncScope(() => {
       sessionStartCh.publish({ command, frameworkVersion: cucumberVersion })
     })
     const success = await start.apply(this, arguments)
 
     asyncResource.runInAsyncScope(() => {
-      sessionFinishCh.publish(success ? 'pass' : 'fail')
+      sessionFinishCh.publish({
+        status: success ? 'pass' : 'fail',
+        isSuitesSkipped: skippableSuites ? !!skippableSuites.length : false
+      })
     })
+    // restore the original coverage
+    global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     return success
   })
 
