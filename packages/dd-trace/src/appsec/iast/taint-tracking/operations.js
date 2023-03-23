@@ -87,6 +87,14 @@ function disableTaintOperations () {
   global._ddiast = TaintTrackingDummy
 }
 
+function setMaxTransactions (transactions) {
+  if (!transactions) {
+    return
+  }
+
+  TaintedUtils.setMaxTransactions(transactions)
+}
+
 module.exports = {
   createTransaction,
   removeTransaction,
@@ -96,5 +104,6 @@ module.exports = {
   getRanges,
   enableTaintOperations,
   disableTaintOperations,
+  setMaxTransactions,
   IAST_TRANSACTION_ID
 }
