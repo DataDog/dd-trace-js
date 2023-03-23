@@ -254,14 +254,25 @@ addHook({
     })
     const success = await start.apply(this, arguments)
 
+    let testCodeCoverageLinesTotal
+
+    if (global.__coverage__) {
+      try {
+        testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
+      } catch (e) {
+        // ignore errors
+      }
+      // restore the original coverage
+      global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
+    }
+
     asyncResource.runInAsyncScope(() => {
       sessionFinishCh.publish({
         status: success ? 'pass' : 'fail',
-        isSuitesSkipped: skippableSuites ? !!skippableSuites.length : false
+        isSuitesSkipped: skippableSuites ? !!skippableSuites.length : false,
+        testCodeCoverageLinesTotal
       })
     })
-    // restore the original coverage
-    global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     return success
   })
 
