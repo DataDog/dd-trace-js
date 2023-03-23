@@ -254,13 +254,18 @@ addHook({
     })
     const success = await start.apply(this, arguments)
 
-    // TODO: do not check this if coverage is disabled (global.__coverage__ is empty)
     let testCodeCoverageLinesTotal
-    try {
-      testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
-    } catch (e) {
-      // ignore errors
+
+    if (global.__coverage__) {
+      try {
+        testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
+      } catch (e) {
+        // ignore errors
+      }
+      // restore the original coverage
+      global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }
+
     asyncResource.runInAsyncScope(() => {
       sessionFinishCh.publish({
         status: success ? 'pass' : 'fail',
@@ -268,8 +273,6 @@ addHook({
         testCodeCoverageLinesTotal
       })
     })
-    // restore the original coverage
-    global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     return success
   })
 

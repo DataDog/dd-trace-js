@@ -125,17 +125,18 @@ function mochaHook (Runner) {
 
       const isSuitesSkipped = !!suitesToSkip.length
 
-      // TODO: do not check this if coverage is disabled (global.__coverage__ is empty)
       let testCodeCoverageLinesTotal
-      try {
-        testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
-      } catch (e) {
-        // ignore errors
+      if (global.__coverage__) {
+        try {
+          testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
+        } catch (e) {
+          // ignore errors
+        }
+        // restore the original coverage
+        global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
       }
 
       testSessionFinishCh.publish({ status, isSuitesSkipped, testCodeCoverageLinesTotal })
-      // restore the original coverage
-      global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }))
 
     this.once('start', testRunAsyncResource.bind(function () {
