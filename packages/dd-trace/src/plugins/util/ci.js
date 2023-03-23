@@ -534,6 +534,18 @@ module.exports = {
       }
     }
 
+    if (env.TEAMCITY_VERSION) {
+      const { BUILD_URL, TEAMCITY_BUILDCONF_NAME, DATADOG_BUILD_ID } = env
+      tags = {
+        [CI_PROVIDER_NAME]: 'teamcity',
+        [CI_JOB_URL]: BUILD_URL,
+        [CI_JOB_NAME]: TEAMCITY_BUILDCONF_NAME,
+        [CI_ENV_VARS]: JSON.stringify({
+          DATADOG_BUILD_ID
+        })
+      }
+    }
+
     normalizeTag(tags, CI_WORKSPACE_PATH, resolveTilde)
     normalizeTag(tags, GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository)
     normalizeTag(tags, GIT_BRANCH, normalizeRef)
