@@ -105,11 +105,13 @@ describe('Plugin', () => {
 
               expect(span).to.not.equal(beforeSpan)
               expect(span.context()._tags['aws.operation']).to.equal('receiveMessage')
-
+              expect(span.context()._tags['queuename']).to.equal(queueOptions.QueueName)
               done()
             })
           })
         })
+
+        
 
         it('should run the consumer in the context of its span, for async functions', (done) => {
           sqs.sendMessage({

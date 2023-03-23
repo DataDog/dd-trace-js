@@ -8,6 +8,7 @@ class EventBridge extends BaseAwsSdkPlugin {
 
     return {
       'resource.name': `${operation} ${params.source}`,
+      'rulename': params.RuleName,
       'aws.eventbridge.source': params.source
     }
   }

@@ -16,7 +16,6 @@ class BaseAwsSdkPlugin extends Plugin {
     })
     return id
   }
-
   constructor (...args) {
     super(...args)
 
@@ -36,7 +35,9 @@ class BaseAwsSdkPlugin extends Plugin {
         'service.name': serviceName,
         'aws.operation': operation,
         'aws.region': awsRegion,
+        'region': awsRegion,
         'aws.service': awsService,
+        'aws_service': awsService,
         'component': 'aws-sdk'
       }
       if (this.requestTags) this.requestTags.set(request, tags)

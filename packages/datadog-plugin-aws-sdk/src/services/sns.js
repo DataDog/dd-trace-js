@@ -10,6 +10,7 @@ class Sns extends BaseAwsSdkPlugin {
 
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
+      'topicname': params.TopicName,
       'aws.sns.topic_arn': params.TopicArn || response.data.TopicArn
     }
 

@@ -11,6 +11,7 @@ class Lambda extends BaseAwsSdkPlugin {
 
     return Object.assign(tags, {
       'resource.name': `${operation} ${params.FunctionName}`,
+      'functionname': params.FunctionName,
       'aws.lambda': params.FunctionName
     })
   }
