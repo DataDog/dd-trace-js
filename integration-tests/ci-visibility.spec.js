@@ -18,7 +18,7 @@ const {
   TEST_CODE_COVERAGE_ENABLED,
   TEST_ITR_SKIPPING_ENABLED,
   TEST_ITR_TESTS_SKIPPED,
-  TEST_CODE_COVERAGE_LINES_TOTAL
+  TEST_CODE_COVERAGE_LINES_PCT
 } = require('../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
@@ -418,7 +418,7 @@ testFrameworks.forEach(({
           assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
           const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
-          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_TOTAL])
+          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
 
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
@@ -736,7 +736,7 @@ testFrameworks.forEach(({
           assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
           const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
-          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_TOTAL])
+          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
 
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
