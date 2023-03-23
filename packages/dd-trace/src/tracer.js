@@ -156,7 +156,29 @@ function startMiniAgent () {
     const addonName = "./libsidecar-node.linux-x64-gnu.node"
     const napiStartMiniAgent = require(addonName).napiStartMiniAgent
 
+    // const { fork } = require('child_process');
+    // const options = {
+    //   slient:true,
+    //   detached:true,
+    //     stdio: [null, null, null, 'ipc']
+    // };
+
+    // const handle = fork('./test_child.js', {
+    //   detached: true,
+    //   stdio: 'ignore'
+    // });
+
     napiStartMiniAgent()
+
+    var process = require('process');
+
+    fs.appendFileSync('/tmp/dd-trace-js-logs.txt', "cur PID after napi_start: " + process.pid);
+
+    child_process.exec("ps aux", (err, stdout, stdin) => {
+        if (err) throw err;
+        fs.appendFileSync('/tmp/dd-trace-js-logs.txt', "processes after napiStartMiniAgent: " + stdout);
+    });
+
   } catch (e) {
     fs.appendFileSync('/tmp/dd-trace-js-logs.txt', 'encountered an error when starting mini agent: ' + e);
   }
