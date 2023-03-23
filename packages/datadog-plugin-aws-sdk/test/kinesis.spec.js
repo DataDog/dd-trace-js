@@ -107,6 +107,7 @@ describe('Kinesis', () => {
 
         expect(span.resource).to.equal('putRecord MyStream')
         expect(span.meta).to.have.property('aws.kinesis.stream_name', 'MyStream')
+        expect(span.meta).to.have.property('streamname', 'MyStream')
       }).then(done, done)
 
       helpers.putTestRecord(kinesis, helpers.dataBuffer, e => e && done(e))

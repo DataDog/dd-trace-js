@@ -28,6 +28,7 @@ class BaseAwsSdkPlugin extends Plugin {
       if (!this.isEnabled(request)) {
         return
       }
+      const accountId = request.httpRequest.headers['x-amz-account-id'] 
       const serviceName = this.getServiceName()
       const childOf = this.tracer.scope().active()
       const tags = {
@@ -38,7 +39,8 @@ class BaseAwsSdkPlugin extends Plugin {
         'region': awsRegion,
         'aws.service': awsService,
         'aws_service': awsService,
-        'component': 'aws-sdk'
+        'component': 'aws-sdk',
+        'aws_account_from_tracer': accountId
       }
       if (this.requestTags) this.requestTags.set(request, tags)
 

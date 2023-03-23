@@ -53,7 +53,8 @@ describe('EventBridge', () => {
       }
       expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({
         'aws.eventbridge.source': 'my.event',
-        'resource.name': 'putEvent my.event'
+        'resource.name': 'putEvent my.event',
+        'resource_name': 'putEvent my.event'
       })
     })
     it('won\'t create tags for a malformed event', () => {
