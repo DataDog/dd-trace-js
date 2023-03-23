@@ -132,7 +132,7 @@ class MochaPlugin extends CiPlugin {
       this._testNameToParams[name] = params
     })
 
-    this.addSub('ci:mocha:session:finish', ({ status, isSuitesSkipped }) => {
+    this.addSub('ci:mocha:session:finish', ({ status, isSuitesSkipped, testCodeCoverageLinesTotal }) => {
       if (this.testSessionSpan) {
         const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
         this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -141,7 +141,7 @@ class MochaPlugin extends CiPlugin {
         addIntelligentTestRunnerSpanTags(
           this.testSessionSpan,
           this.testModuleSpan,
-          { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled }
+          { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled, testCodeCoverageLinesTotal }
         )
 
         this.testModuleSpan.finish()
