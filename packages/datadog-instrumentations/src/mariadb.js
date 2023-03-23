@@ -41,7 +41,6 @@ function wrapCommandStart (start, callbackResource) {
     })
 
     return asyncResource.runInAsyncScope(() => {
-      unskipCh.publish() // Escape the noop store when in connection pool.
       startCh.publish({ sql: this.sql, conf: this.opts })
       return start.apply(this, arguments)
     })
@@ -120,11 +119,11 @@ function createWrapQueryCallback (options) {
   }
 }
 
-function wrapConnection (Connection) {
+function wrapConnection (Connection, promiseMethod) {
   return function (options) {
     Connection.apply(this, arguments)
 
-    shimmer.wrap(this, '_queryPromise', createWrapQuery(options))
+    shimmer.wrap(this, promiseMethod, createWrapQuery(options))
     shimmer.wrap(this, '_queryCallback', createWrapQueryCallback(options))
   }
 }
@@ -170,10 +169,14 @@ addHook({ name, file: 'lib/pool.js', versions: ['>=3'] }, (Pool) => {
   return Pool
 })
 
-addHook({ name, file: 'lib/connection.js', versions: ['>=2.0.3 <3'] }, (Connection) => {
-  return shimmer.wrap(Connection, wrapConnection(Connection))
+addHook({ name, file: 'lib/connection.js', versions: ['>=2.5.2 <3'] }, (Connection) => {
+  return shimmer.wrap(Connection, wrapConnection(Connection, '_queryPromise'))
 })
 
-addHook({ name, file: 'lib/pool-base.js', versions: ['>=2.0.3 <3'] }, (PoolBase) => {
+addHook({ name, file: 'lib/connection.js', versions: ['>=2.0.4 <=2.5.1'] }, (Connection) => {
+  return shimmer.wrap(Connection, wrapConnection(Connection, 'query'))
+})
+
+addHook({ name, file: 'lib/pool-base.js', versions: ['>=2.0.4 <3'] }, (PoolBase) => {
   return shimmer.wrap(PoolBase, wrapPoolBase(PoolBase))
 })
