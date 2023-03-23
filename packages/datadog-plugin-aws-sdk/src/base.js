@@ -28,7 +28,6 @@ class BaseAwsSdkPlugin extends Plugin {
       if (!this.isEnabled(request)) {
         return
       }
-      const accountId = request.httpRequest.headers['x-amz-account-id'] 
       const serviceName = this.getServiceName()
       const childOf = this.tracer.scope().active()
       const tags = {
@@ -40,11 +39,13 @@ class BaseAwsSdkPlugin extends Plugin {
         'aws.service': awsService,
         'aws_service': awsService,
         'component': 'aws-sdk',
-        'aws_account_from_tracer': accountId
       }
       if (this.requestTags) this.requestTags.set(request, tags)
 
       const span = this.tracer.startSpan('aws.request', { childOf, tags })
+      const http_url = span.get_tag('http.url')
+      console.log("http_url: "+ http_url)
+
 
       analyticsSampler.sample(span, this.config.measured)
 
