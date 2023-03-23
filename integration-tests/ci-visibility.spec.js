@@ -418,8 +418,6 @@ testFrameworks.forEach(({
           assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
           const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
-          console.log(testSession.meta)
-          console.log(testSession.metrics)
           assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
 
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
