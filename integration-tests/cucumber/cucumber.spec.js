@@ -17,12 +17,10 @@ const {
   TEST_COMMAND,
   TEST_MODULE,
   TEST_TOOLCHAIN,
-  TEST_SESSION_CODE_COVERAGE_ENABLED,
-  TEST_SESSION_ITR_SKIPPING_ENABLED,
-  TEST_MODULE_CODE_COVERAGE_ENABLED,
-  TEST_MODULE_ITR_SKIPPING_ENABLED,
+  TEST_CODE_COVERAGE_ENABLED,
+  TEST_ITR_SKIPPING_ENABLED,
   TEST_ITR_TESTS_SKIPPED,
-  TEST_CODE_COVERAGE_LINES_TOTAL
+  TEST_CODE_COVERAGE_LINES_PCT
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=12')
@@ -252,7 +250,10 @@ versions.forEach(version => {
               assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
               const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
-              assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_TOTAL])
+              console.log(testSession.meta)
+              console.log(testSession.metrics)
+
+              assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
 
               const eventTypes = eventsRequest.payload.events.map(event => event.type)
               assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
@@ -298,12 +299,12 @@ versions.forEach(version => {
               assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
               const testSession = payload.events.find(event => event.type === 'test_session_end').content
               assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
-              assert.propertyVal(testSession.meta, TEST_SESSION_CODE_COVERAGE_ENABLED, 'false')
-              assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'false')
+              assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'false')
+              assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'false')
               const testModule = payload.events.find(event => event.type === 'test_module_end').content
               assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
-              assert.propertyVal(testModule.meta, TEST_MODULE_CODE_COVERAGE_ENABLED, 'false')
-              assert.propertyVal(testModule.meta, TEST_MODULE_ITR_SKIPPING_ENABLED, 'false')
+              assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'false')
+              assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'false')
             }, ({ url }) => url.endsWith('/api/v2/citestcycle')).then(() => done()).catch(done)
 
             childProcess = exec(
@@ -362,12 +363,12 @@ versions.forEach(version => {
               assert.equal(numSuites, 1)
               const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
               assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
-              assert.propertyVal(testSession.meta, TEST_SESSION_CODE_COVERAGE_ENABLED, 'true')
-              assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'true')
+              assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+              assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
               const testModule = eventsRequest.payload.events.find(event => event.type === 'test_module_end').content
               assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'true')
-              assert.propertyVal(testModule.meta, TEST_MODULE_CODE_COVERAGE_ENABLED, 'true')
-              assert.propertyVal(testModule.meta, TEST_MODULE_ITR_SKIPPING_ENABLED, 'true')
+              assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+              assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
               done()
             }).catch(done)
 
@@ -405,12 +406,12 @@ versions.forEach(version => {
               assert.equal(numSuites, 2)
               const testSession = payload.events.find(event => event.type === 'test_session_end').content
               assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
-              assert.propertyVal(testSession.meta, TEST_SESSION_CODE_COVERAGE_ENABLED, 'true')
-              assert.propertyVal(testSession.meta, TEST_SESSION_ITR_SKIPPING_ENABLED, 'true')
+              assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+              assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
               const testModule = payload.events.find(event => event.type === 'test_module_end').content
               assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
-              assert.propertyVal(testModule.meta, TEST_MODULE_CODE_COVERAGE_ENABLED, 'true')
-              assert.propertyVal(testModule.meta, TEST_MODULE_ITR_SKIPPING_ENABLED, 'true')
+              assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+              assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
             }, ({ url }) => url.endsWith('/api/v2/citestcycle')).then(() => done()).catch(done)
 
             childProcess = exec(
