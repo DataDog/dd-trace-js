@@ -1,7 +1,5 @@
 'use strict'
 
-// TODO: Add tracing support for connection pool queries.
-
 const { channel, addHook, AsyncResource } = require('./helpers/instrument')
 
 const shimmer = require('../../datadog-shimmer')
