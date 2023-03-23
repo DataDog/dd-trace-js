@@ -1,5 +1,6 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const path = require('path')
 
 const testStartCh = channel('ci:playwright:test:start')
 const testFinishCh = channel('ci:playwright:test:finish')
@@ -15,6 +16,7 @@ const testSuiteToAr = new Map()
 const testSuiteToTestStatuses = new Map()
 
 let startedSuites = []
+let outputDir = ''
 
 const STATUS_TO_TEST_STATUS = {
   passed: 'pass',
@@ -25,12 +27,20 @@ const STATUS_TO_TEST_STATUS = {
 
 let remainingTestsByFile = {}
 
+// This is to ensure that if the tests are running in a different directory than the root directory
+// we can still get the relative path
+// It will also replace any .js files with .ts files
+function normalizeRequireFile (requireFile) {
+  return path.normalize(requireFile).replace(/\.js$/, '.ts').replace(outputDir, '')
+}
+
 function getTestsBySuiteFromTestGroups (testGroups) {
   return testGroups.reduce((acc, { requireFile, tests }) => {
+    const normalizedRequireFile = normalizeRequireFile(requireFile)
     if (acc[requireFile]) {
-      acc[requireFile] = acc[requireFile].concat(tests)
+      acc[normalizedRequireFile] = acc[normalizedRequireFile].concat(tests)
     } else {
-      acc[requireFile] = tests
+      acc[normalizedRequireFile] = tests
     }
     return acc
   }, {})
@@ -43,10 +53,11 @@ function getTestsBySuiteFromTestsById (testsById) {
     if (test._type === 'beforeAll' || test._type === 'afterAll') {
       continue
     }
-    if (testsByTestSuite[_requireFile]) {
-      testsByTestSuite[_requireFile].push(test)
+    const normalizedRequireFile = normalizeRequireFile(_requireFile)
+    if (testsByTestSuite[normalizedRequireFile]) {
+      testsByTestSuite[normalizedRequireFile].push(test)
     } else {
-      testsByTestSuite[_requireFile] = [test]
+      testsByTestSuite[normalizedRequireFile] = [test]
     }
   }
   return testsByTestSuite
@@ -73,6 +84,17 @@ function getRootDir (playwrightRunner) {
     return playwrightRunner._configDir
   }
   return process.cwd()
+}
+
+// Get the output directory for the test suite, if it's different from the root directory return the relative path.
+// This means if your tests are running from "test" and your output directory is "test/output" it will return "output"
+function getOutputDir (playwrightRunner) {
+  const config = getPlaywrightConfig(playwrightRunner);
+  const { globalOutputDir, configDir } = config._internal || {};
+
+  return globalOutputDir !== configDir
+    ? path.relative(globalOutputDir, configDir)
+    : ''
 }
 
 function testBeginHandler (test) {
@@ -119,7 +141,14 @@ function testEndHandler (test, testStatus, error) {
     testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
   }
 
-  remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
+  const normalizedTestSuiteAbsolutePath = normalizeRequireFile(testSuiteAbsolutePath)
+
+  // If the key is not in the map we need to initialize the array so the filter doesn't fail
+  if (!remainingTestsByFile[normalizedTestSuiteAbsolutePath]) {
+    remainingTestsByFile[normalizedTestSuiteAbsolutePath] = []
+  }
+
+  remainingTestsByFile[normalizedTestSuiteAbsolutePath] = remainingTestsByFile[normalizedTestSuiteAbsolutePath]
     .filter(currentTest => currentTest !== test)
 
   if (!remainingTestsByFile[testSuiteAbsolutePath].length) {
@@ -139,9 +168,21 @@ function testEndHandler (test, testStatus, error) {
   }
 }
 
+// This will normalize the keys of the remainingTestsByFile object to the normalized path
+// This will allow it to work on both Windows and Linux
+function normalizeRemainingTestsByFileKeys (remainingTestsByFile) {
+  const normalizedRemainingTestsByFile = {}
+  for (const key in remainingTestsByFile) {
+    const normalizedKey = path.normalize(key)
+    normalizedRemainingTestsByFile[normalizedKey] = remainingTestsByFile[key]
+  }
+  return normalizedRemainingTestsByFile
+}
+
 function dispatcherRunWrapper (run) {
   return function () {
     remainingTestsByFile = getTestsBySuiteFromTestsById(this._testById)
+    remainingTestsByFile = normalizeRemainingTestsByFileKeys(remainingTestsByFile)
     return run.apply(this, arguments)
   }
 }
@@ -149,6 +190,7 @@ function dispatcherRunWrapper (run) {
 function dispatcherRunWrapperNew (run) {
   return function () {
     remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
+    remainingTestsByFile = normalizeRemainingTestsByFileKeys(remainingTestsByFile)
     return run.apply(this, arguments)
   }
 }
@@ -203,6 +245,7 @@ function runnerHook (runnerExport, playwrightVersion) {
   shimmer.wrap(runnerExport.Runner.prototype, 'runAllTests', runAllTests => async function () {
     const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
     const rootDir = getRootDir(this)
+    outputDir = getOutputDir(this)
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
