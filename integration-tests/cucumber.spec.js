@@ -21,7 +21,8 @@ const {
   TEST_SESSION_ITR_SKIPPING_ENABLED,
   TEST_MODULE_CODE_COVERAGE_ENABLED,
   TEST_MODULE_ITR_SKIPPING_ENABLED,
-  TEST_ITR_TESTS_SKIPPED
+  TEST_ITR_TESTS_SKIPPED,
+  TEST_CODE_COVERAGE_LINES_TOTAL
 } = require('../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=12')
@@ -29,7 +30,7 @@ const versions = ['7.0.0', isOldNode ? '8' : 'latest']
 
 const runTestsCommand = './node_modules/.bin/cucumber-js ci-visibility/features/*.feature'
 const runTestsWithCoverageCommand =
-  './node_modules/nyc/bin/nyc.js node ./node_modules/.bin/cucumber-js ci-visibility/features/*.feature'
+  './node_modules/nyc/bin/nyc.js -r=text-summary node ./node_modules/.bin/cucumber-js ci-visibility/features/*.feature'
 
 versions.forEach(version => {
   describe(`cucumber@${version}`, () => {
@@ -205,6 +206,7 @@ versions.forEach(version => {
             )
           })
           it('can report code coverage', (done) => {
+            let testOutput
             const itrConfigRequestPromise = receiver.payloadReceived(
               ({ url }) => url.endsWith('/api/v2/libraries/tests/services/setting')
             )
@@ -251,13 +253,15 @@ versions.forEach(version => {
               assert.exists(coveragePayload.content.coverages[0].test_session_id)
               assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
+              const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
+              assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_TOTAL])
+
               const eventTypes = eventsRequest.payload.events.map(event => event.type)
               assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
               const numSuites = eventTypes.reduce(
                 (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
               )
               assert.equal(numSuites, 2)
-              done()
             }).catch(done)
 
             childProcess = exec(
@@ -265,9 +269,20 @@ versions.forEach(version => {
               {
                 cwd,
                 env: envVars,
-                stdio: 'inherit'
+                stdio: 'pipe'
               }
             )
+            childProcess.stdout.on('data', (chunk) => {
+              testOutput += chunk.toString()
+            })
+            childProcess.stderr.on('data', (chunk) => {
+              testOutput += chunk.toString()
+            })
+            childProcess.on('exit', () => {
+              // check that reported coverage is still the same
+              assert.include(testOutput, 'Lines        : 100% ( 18/18 )')
+              done()
+            })
           })
           it('does not report code coverage if disabled by the API', (done) => {
             receiver.setSettings({
