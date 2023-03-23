@@ -19,7 +19,8 @@ const {
   TEST_SESSION_ITR_SKIPPING_ENABLED,
   TEST_MODULE_CODE_COVERAGE_ENABLED,
   TEST_MODULE_ITR_SKIPPING_ENABLED,
-  TEST_ITR_TESTS_SKIPPED
+  TEST_ITR_TESTS_SKIPPED,
+  TEST_CODE_COVERAGE_LINES_TOTAL
 } = require('../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
@@ -39,7 +40,8 @@ const testFrameworks = [
       'ci-visibility/test/ci-visibility-test.js',
       'ci-visibility/test/ci-visibility-test-2.js'
     ],
-    runTestsWithCoverageCommand: './node_modules/nyc/bin/nyc.js node ./ci-visibility/run-mocha.js'
+    runTestsWithCoverageCommand: './node_modules/nyc/bin/nyc.js -r=text-summary node ./ci-visibility/run-mocha.js',
+    coverageMessage: 'Lines        : 80%'
   },
   {
     name: 'jest',
@@ -62,7 +64,8 @@ testFrameworks.forEach(({
   expectedStdout,
   extraStdout,
   expectedCoverageFiles,
-  runTestsWithCoverageCommand
+  runTestsWithCoverageCommand,
+  coverageMessage
 }) => {
   describe(name, () => {
     let receiver
@@ -361,6 +364,7 @@ testFrameworks.forEach(({
         })
       })
       it('can report code coverage', (done) => {
+        let testOutput
         const itrConfigRequestPromise = receiver.payloadReceived(
           ({ url }) => url === '/api/v2/libraries/tests/services/setting'
         )
@@ -393,13 +397,15 @@ testFrameworks.forEach(({
           assert.exists(coveragePayload.content.coverages[0].test_session_id)
           assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
+          const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
+          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_TOTAL])
+
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
           const numSuites = eventTypes.reduce(
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
           assert.equal(numSuites, 2)
-          done()
         }).catch(done)
 
         childProcess = exec(
@@ -407,9 +413,18 @@ testFrameworks.forEach(({
           {
             cwd,
             env: getCiVisAgentlessConfig(receiver.port),
-            stdio: 'inherit'
+            stdio: 'pipe'
           }
         )
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('exit', () => {
+          if (coverageMessage) {
+            assert.include(testOutput, coverageMessage)
+          }
+          done()
+        })
       })
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
@@ -665,6 +680,7 @@ testFrameworks.forEach(({
         })
       })
       it('can report code coverage', (done) => {
+        let testOutput
         const itrConfigRequestPromise = receiver.payloadReceived(
           ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting'
         )
@@ -699,13 +715,15 @@ testFrameworks.forEach(({
           assert.exists(coveragePayload.content.coverages[0].test_session_id)
           assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
+          const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
+          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_TOTAL])
+
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
           const numSuites = eventTypes.reduce(
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
           assert.equal(numSuites, 2)
-          done()
         }).catch(done)
 
         childProcess = exec(
@@ -713,9 +731,19 @@ testFrameworks.forEach(({
           {
             cwd,
             env: getCiVisEvpProxyConfig(receiver.port),
-            stdio: 'inherit'
+            stdio: 'pipe'
           }
         )
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('exit', () => {
+          // check that reported coverage is still the same
+          if (coverageMessage) {
+            assert.include(testOutput, coverageMessage)
+          }
+          done()
+        })
       })
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
