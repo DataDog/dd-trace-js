@@ -2,6 +2,7 @@
 
 const fs = require('fs')
 const path = require('path')
+const childProcess = require('child_process')
 
 const { prepareTestServerForIast, copyFileToTmp } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
@@ -72,7 +73,6 @@ describe('TaintTracking', () => {
               expect(commandResult).eq(commandResultOrig)
 
               try {
-                const childProcess = require('child_process')
                 childProcess.execSync(commandResult, { stdio: 'ignore' })
               } catch (e) {
                 // do nothing
