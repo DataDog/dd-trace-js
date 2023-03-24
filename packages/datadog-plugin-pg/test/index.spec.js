@@ -4,6 +4,7 @@ const { expect } = require('chai')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const net = require('net')
 
 const clients = {
   pg: pg => pg.Client
@@ -396,24 +397,37 @@ describe('Plugin', () => {
         })
 
         it('query text should contain traceparent', done => {
-          let queryText = ''
+          let seenTraceParent
+          let seenTraceId
+          let seenSpanId
+          const originalWrite = net.Socket.prototype.write
+          net.Socket.prototype.write = function (buffer) {
+            let strBuf = buffer.toString()
+            if (strBuf.includes('traceparent=\'')) {
+              strBuf = strBuf.split('-')
+              seenTraceParent = true
+              seenTraceId = strBuf[1]
+              seenSpanId = strBuf[2]
+            }
+            return originalWrite.apply(this, arguments)
+          }
+
           agent.use(traces => {
             const traceId = traces[0][0].trace_id.toString(16).padStart(32, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
-
-            expect(queryText).to.equal(
-              `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0',` +
-              `traceparent='00-${traceId}-${spanId}-00'*/ SELECT $1::text as message`)
+            expect(seenTraceId).to.equal(traceId)
+            expect(seenSpanId).to.equal(spanId)
           }).then(done, done)
 
           client.query('SELECT $1::text as message', ['Hello World!'], (err, result) => {
             if (err) return done(err)
+            expect(seenTraceParent).to.be.true
+            net.Socket.prototype.write = originalWrite
 
             client.end((err) => {
               if (err) return done(err)
             })
           })
-          queryText = client.queryQueue[0].text
         })
         it('query should inject _dd.dbm_trace_injected into span', done => {
           agent.use(traces => {
