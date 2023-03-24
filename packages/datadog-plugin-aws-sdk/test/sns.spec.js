@@ -171,7 +171,7 @@ describe('Sns', () => {
 
         expect(span.resource).to.equal(`publish ${TopicArn}`)
         expect(span.meta).to.have.property('aws.sns.topic_arn', TopicArn)
-        expect(span.meta).to.have.property('topicname', "TestTopic")
+        expect(span.meta).to.have.property('topicname', 'TestTopic')
       }).then(done, done)
 
       sns.publish({ TopicArn, Message: 'message 1' }, e => e && done(e))

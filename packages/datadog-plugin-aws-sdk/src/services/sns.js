@@ -9,15 +9,15 @@ class Sns extends BaseAwsSdkPlugin {
     if (!params.TopicArn && !(response.data && response.data.TopicArn)) return {}
     const TopicArn = params.TopicArn || response.data.TopicArn
     // Split the ARN into its parts
-    // ex. topicArn = 'arn:aws:sns:us-east-1:123456789012:my-topic';
-    const arnParts = topicArn.split(':');
+    // ex.'arn:aws:sns:us-east-1:123456789012:my-topic'
+    const arnParts = TopicArn.split(':')
 
     // Get the topic name from the last part of the ARN
-    const topicName = arnParts[arnParts.length - 1];
+    const topicName = arnParts[arnParts.length - 1]
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
       'aws.sns.topic_arn': TopicArn,
-      'topicname': topicName,
+      'topicname': topicName
     }
 
     // TODO: should arn be sanitized or quantized in some way here,
