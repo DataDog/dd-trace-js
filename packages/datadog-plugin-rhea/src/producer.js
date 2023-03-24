@@ -4,7 +4,7 @@ const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 
 class RheaProducerPlugin extends ProducerPlugin {
-  static get name () { return 'rhea' }
+  static get id () { return 'rhea' }
   static get operation () { return 'send' }
 
   constructor (...args) {

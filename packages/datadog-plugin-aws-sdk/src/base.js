@@ -7,7 +7,7 @@ const { isTrue } = require('../../dd-trace/src/util')
 
 class BaseAwsSdkPlugin extends Plugin {
   get serviceIdentifier () {
-    const id = this.constructor.name.toLowerCase()
+    const id = this.constructor.id.toLowerCase()
     Object.defineProperty(this, 'serviceIdentifier', {
       configurable: true,
       writable: true,

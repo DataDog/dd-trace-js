@@ -9,7 +9,7 @@ class TracingPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.component = this.constructor.component || this.constructor.name
+    this.component = this.constructor.component || this.constructor.id
     this.operation = this.constructor.operation
 
     this.addTraceSub('start', message => {

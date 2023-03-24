@@ -4,7 +4,7 @@ const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class CassandraDriverPlugin extends DatabasePlugin {
-  static get name () { return 'cassandra-driver' }
+  static get id () { return 'cassandra-driver' }
   static get system () { return 'cassandra' }
 
   start ({ keyspace, query, connectionOptions = {} }) {

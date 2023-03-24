@@ -3,7 +3,7 @@
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class MongodbCorePlugin extends DatabasePlugin {
-  static get name () { return 'mongodb-core' }
+  static get id () { return 'mongodb-core' }
   static get component () { return 'mongodb' }
 
   start ({ ns, ops, options = {}, name }) {
