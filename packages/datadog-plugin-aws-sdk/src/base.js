@@ -6,6 +6,8 @@ const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
 
 class BaseAwsSdkPlugin extends Plugin {
+  static get id () { return 'aws' }
+
   get serviceIdentifier () {
     const id = this.constructor.id.toLowerCase()
     Object.defineProperty(this, 'serviceIdentifier', {
