@@ -12,7 +12,6 @@ const {
   TEST_MODULE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND,
-  TEST_BUNDLE,
   TEST_MODULE
 } = require('./util/test')
 const Plugin = require('./plugin')
@@ -130,7 +129,6 @@ module.exports = class CiPlugin extends Plugin {
         [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
         [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
         [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
-        [TEST_BUNDLE]: this.constructor.name,
         [TEST_MODULE]: this.constructor.name
       }
       if (testSuiteSpan.context()._parentId) {
