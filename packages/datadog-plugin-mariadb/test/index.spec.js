@@ -334,6 +334,50 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with a connection pool started during a request', () => {
+        let pool
+
+        afterEach((done) => {
+          pool.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
+        })
+
+        beforeEach(async () => {
+          await agent.load(['mariadb', 'net'])
+          mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+        })
+
+        it('should not instrument connections to avoid leaks from internal queue', done => {
+          agent.use((traces) => {
+            expect(traces).to.have.length(1)
+            expect(traces[0].find(span => span.name === 'tcp.connect')).to.be.undefined
+          }).then(done, done)
+
+          const span = tracer.startSpan('test')
+
+          tracer.scope().activate(span, () => {
+            pool = pool || mariadb.createPool({
+              host: 'localhost',
+              user: 'root',
+              database: 'db',
+              connectionLimit: 3,
+              idleTimeout: 1,
+              minimumIdle: 1
+            })
+
+            pool.getConnection((err, conn) => {
+              if (err) return done(err)
+              conn.query('SELECT 1 + 1 AS solution', (err, results) => {
+                if (err) return done(err)
+                conn.end()
+                span.finish()
+              })
+            })
+          })
+        })
+      })
     })
   })
 })
