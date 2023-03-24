@@ -111,8 +111,6 @@ describe('Plugin', () => {
           })
         })
 
-        
-
         it('should run the consumer in the context of its span, for async functions', (done) => {
           sqs.sendMessage({
             MessageBody: 'test body',

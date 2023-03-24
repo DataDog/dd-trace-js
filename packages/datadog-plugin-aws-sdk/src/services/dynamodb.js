@@ -10,8 +10,8 @@ class DynamoDb extends BaseAwsSdkPlugin {
       if (params.TableName) {
         Object.assign(tags, {
           'resource.name': `${operation} ${params.TableName}`,
-          'tablename': params.TableName,
-          'aws.dynamodb.table_name': params.TableName
+          'aws.dynamodb.table_name': params.TableName,
+          'tablename': params.TableName
         })
       }
 

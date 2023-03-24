@@ -49,12 +49,13 @@ describe('EventBridge', () => {
     it('generates tags for an event', () => {
       const eventbridge = new EventBridge(tracer)
       const params = {
-        source: 'my.event'
+        source: 'my.event',
+        Name: 'myRuleName'
       }
       expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({
         'aws.eventbridge.source': 'my.event',
         'resource.name': 'putEvent my.event',
-        'resource_name': 'putEvent my.event'
+        'rulename': 'myRuleName'
       })
     })
     it('won\'t create tags for a malformed event', () => {

@@ -16,6 +16,7 @@ class BaseAwsSdkPlugin extends Plugin {
     })
     return id
   }
+  
   constructor (...args) {
     super(...args)
 
@@ -43,9 +44,6 @@ class BaseAwsSdkPlugin extends Plugin {
       if (this.requestTags) this.requestTags.set(request, tags)
 
       const span = this.tracer.startSpan('aws.request', { childOf, tags })
-      const http_url = span.get_tag('http.url')
-      console.log("http_url: "+ http_url)
-
 
       analyticsSampler.sample(span, this.config.measured)
 
