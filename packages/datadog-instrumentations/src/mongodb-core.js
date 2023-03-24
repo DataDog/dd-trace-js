@@ -25,10 +25,16 @@ addHook({ name: 'mongodb-core', versions: ['2 - 3.1.9'] }, Server => {
   return Server
 })
 
-addHook({ name: 'mongodb', versions: ['>=4'], file: 'lib/cmap/connection.js' }, Connection => {
+addHook({ name: 'mongodb', versions: ['>=4 <4.6.0'], file: 'lib/cmap/connection.js' }, Connection => {
   const proto = Connection.Connection.prototype
   shimmer.wrap(proto, 'command', command => wrapConnectionCommand(command, 'command'))
   shimmer.wrap(proto, 'query', query => wrapConnectionCommand(query, 'query'))
+  return Connection
+})
+
+addHook({ name: 'mongodb', versions: ['>=4.6.0'], file: 'lib/cmap/connection.js' }, Connection => {
+  const proto = Connection.Connection.prototype
+  shimmer.wrap(proto, 'command', command => wrapConnectionCommand(command, 'command'))
   return Connection
 })
 
@@ -46,7 +52,7 @@ addHook({ name: 'mongodb-core', versions: ['~3.1.10'], file: 'lib/wireprotocol/2
   return WireProtocol
 })
 
-addHook({ name: 'mongodb', versions: ['>=3.5.4'], file: 'lib/utils.js' }, util => {
+addHook({ name: 'mongodb', versions: ['>=3.5.4 <4.11.0'], file: 'lib/utils.js' }, util => {
   shimmer.wrap(util, 'maybePromise', maybePromise => function (parent, callback, fn) {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     const callbackIndex = arguments.length - 2
