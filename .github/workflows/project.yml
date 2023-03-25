@@ -24,6 +24,8 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
+      # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
+      - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
 
   lint:
