@@ -33,10 +33,11 @@ const {
   DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
   DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES
 } = process.env
+const { isTrue } = require('../util')
 
 class Config {
   constructor (options = {}) {
-    const enabled = coalesce(options.enabled, DD_PROFILING_ENABLED, true)
+    const enabled = isTrue(coalesce(options.enabled, DD_PROFILING_ENABLED, true))
     const env = coalesce(options.env, DD_ENV)
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
@@ -53,7 +54,7 @@ class Config {
     const pprofPrefix = coalesce(options.pprofPrefix,
       DD_PROFILING_PPROF_PREFIX)
 
-    this.enabled = String(enabled) !== 'false'
+    this.enabled = enabled
     this.service = service
     this.env = env
     this.host = host
@@ -84,8 +85,8 @@ class Config {
       new AgentExporter(this)
     ], this)
 
-    const oomMonitoringEnabled = coalesce(options.oomMonitoring,
-      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED, false)
+    const oomMonitoringEnabled = isTrue(coalesce(options.oomMonitoring,
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED, false))
     const heapLimitExtensionSize = coalesce(options.oomHeapLimitExtensionSize,
       Number(DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE), 0)
     const maxHeapExtensionCount = coalesce(options.oomMaxHeapExtensionCount,
