@@ -215,12 +215,6 @@ esbuild.build({
   bundle: true,
   outfile: 'out.js',
   plugins: [ddPlugin],
-  external: [ // this depends on the native modules used by your app
-    'pg-native',
-    'graphql/language/visitor',
-    'graphql/language/printer',
-    'graphql/utilities',
-  ],
   platform: 'node', // allows built-in modules to be required
   target: ['node16']
 }).catch((err) => {
@@ -228,8 +222,6 @@ esbuild.build({
   process.exit(1)
 })
 ```
-
-When you run your build, if you get errors when encountering native modules, you'll need to add them to the `external` list. In the above example the application is using the native Postgres library as well as some native GraphQL libraries.
 
 
 ## Security Vulnerabilities
