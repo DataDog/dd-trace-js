@@ -25,7 +25,7 @@ const {
   TEST_SUITE_ID,
   TEST_SESSION_ID,
   TEST_MODULE_ID,
-  TEST_BUNDLE
+  TEST_MODULE
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { version: ddTraceVersion } = require('../../../package.json')
@@ -363,12 +363,12 @@ describe('Plugin', function () {
                   expect(testModuleSpan[TEST_SUITE_ID]).to.equal(undefined)
                   expect(testModuleSpan[TEST_MODULE_ID]).not.to.equal(undefined)
                   expect(testModuleSpan[TEST_SESSION_ID]).not.to.equal(undefined)
-                  expect(testModuleSpan.meta[TEST_BUNDLE]).not.to.equal(undefined)
+                  expect(testModuleSpan.meta[TEST_MODULE]).not.to.equal(undefined)
                 }
                 if (type === 'test_suite_end') {
                   expect(span.meta[TEST_SUITE]).to.equal(suite)
                   expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
-                  expect(span.meta[TEST_BUNDLE]).not.to.equal(undefined)
+                  expect(span.meta[TEST_MODULE]).not.to.equal(undefined)
                   expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
                   expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
                   expect(span[TEST_MODULE_ID]).not.to.equal(undefined)
@@ -377,7 +377,7 @@ describe('Plugin', function () {
                   expect(span.meta[TEST_SUITE]).to.equal(suite)
                   expect(span.meta[TEST_NAME]).to.equal(name)
                   expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
-                  expect(span.meta[TEST_BUNDLE]).not.to.equal(undefined)
+                  expect(span.meta[TEST_MODULE]).not.to.equal(undefined)
                   expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
                   expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
                   expect(span[TEST_MODULE_ID]).not.to.equal(undefined)
