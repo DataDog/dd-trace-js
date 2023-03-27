@@ -3,7 +3,7 @@
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 class FsPlugin extends TracingPlugin {
-  static get name () { return 'fs' }
+  static get id () { return 'fs' }
   static get operation () { return 'operation' }
 
   configure (...args) {
