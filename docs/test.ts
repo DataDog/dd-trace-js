@@ -115,7 +115,8 @@ tracer.init({
       enabled: true,
       requestSampling: 50,
       maxConcurrentRequests: 4,
-      maxContextOperations: 30
+      maxContextOperations: 30,
+      deduplicationEnabled: true
     }
   }
 })
