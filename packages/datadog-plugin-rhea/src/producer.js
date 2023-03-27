@@ -2,6 +2,7 @@
 
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+const Naming = require('../../dd-trace/src/service-naming')
 
 class RheaProducerPlugin extends ProducerPlugin {
   static get id () { return 'rhea' }
@@ -9,15 +10,15 @@ class RheaProducerPlugin extends ProducerPlugin {
 
   constructor (...args) {
     super(...args)
-
     this.addTraceSub('encode', this.encode.bind(this))
   }
 
   start ({ targetAddress, host, port }) {
     const name = targetAddress || 'amq.topic'
+    const naming = Naming.schema.messaging.outbound.rhea
 
-    this.startSpan('amqp.send', {
-      service: this.config.service || `${this.tracer._service}-amqp-producer`,
+    this.startSpan(naming.opName(), {
+      service: this.config.service || naming.serviceName(this.tracer._service),
       resource: name,
       kind: 'producer',
       meta: {
