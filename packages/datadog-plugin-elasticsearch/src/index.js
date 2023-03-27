@@ -3,7 +3,7 @@
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class ElasticsearchPlugin extends DatabasePlugin {
-  static get name () { return 'elasticsearch' }
+  static get id () { return 'elasticsearch' }
 
   start ({ params }) {
     const body = getBody(params.body || params.bulkBody)

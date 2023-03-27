@@ -7,7 +7,7 @@ const { storage } = require('../../datadog-core')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class RouterPlugin extends WebPlugin {
-  static get name () {
+  static get id () {
     return 'router'
   }
 
@@ -17,7 +17,7 @@ class RouterPlugin extends WebPlugin {
     this._storeStack = []
     this._contexts = new WeakMap()
 
-    this.addSub(`apm:${this.constructor.name}:middleware:enter`, ({ req, name, route }) => {
+    this.addSub(`apm:${this.constructor.id}:middleware:enter`, ({ req, name, route }) => {
       const childOf = this._getActive(req) || this._getStoreSpan()
 
       if (!childOf) return
@@ -37,7 +37,7 @@ class RouterPlugin extends WebPlugin {
       web.setRoute(req, context.route)
     })
 
-    this.addSub(`apm:${this.constructor.name}:middleware:next`, ({ req }) => {
+    this.addSub(`apm:${this.constructor.id}:middleware:next`, ({ req }) => {
       const context = this._contexts.get(req)
 
       if (!context) return
@@ -45,7 +45,7 @@ class RouterPlugin extends WebPlugin {
       context.stack.pop()
     })
 
-    this.addSub(`apm:${this.constructor.name}:middleware:finish`, ({ req }) => {
+    this.addSub(`apm:${this.constructor.id}:middleware:finish`, ({ req }) => {
       const context = this._contexts.get(req)
 
       if (!context || context.middleware.length === 0) return
@@ -53,13 +53,13 @@ class RouterPlugin extends WebPlugin {
       context.middleware.pop().finish()
     })
 
-    this.addSub(`apm:${this.constructor.name}:middleware:exit`, ({ req }) => {
+    this.addSub(`apm:${this.constructor.id}:middleware:exit`, ({ req }) => {
       const savedStore = this._storeStack.pop()
       const span = savedStore && savedStore.span
       this.enter(span, savedStore)
     })
 
-    this.addSub(`apm:${this.constructor.name}:middleware:error`, ({ req, error }) => {
+    this.addSub(`apm:${this.constructor.id}:middleware:error`, ({ req, error }) => {
       web.addError(req, error)
 
       if (!this.config.middleware) return
@@ -104,10 +104,10 @@ class RouterPlugin extends WebPlugin {
       return childOf
     }
 
-    const span = this.tracer.startSpan(`${this.constructor.name}.middleware`, {
+    const span = this.tracer.startSpan(`${this.constructor.id}.middleware`, {
       childOf,
       tags: {
-        [COMPONENT]: this.constructor.name,
+        [COMPONENT]: this.constructor.id,
         'resource.name': name || '<anonymous>'
       }
     })

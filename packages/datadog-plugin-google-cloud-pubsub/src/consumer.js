@@ -3,7 +3,7 @@
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 
 class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
-  static get name () { return 'google-cloud-pubsub' }
+  static get id () { return 'google-cloud-pubsub' }
   static get operation () { return 'receive' }
 
   start ({ message }) {

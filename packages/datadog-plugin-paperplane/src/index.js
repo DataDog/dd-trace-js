@@ -5,7 +5,7 @@ const PaperplaneLoggerPlugin = require('./logger')
 const PaperplaneServerPlugin = require('./server')
 
 class PaperplanePlugin extends Plugin {
-  static get name () {
+  static get id () {
     return 'paperplane'
   }
 

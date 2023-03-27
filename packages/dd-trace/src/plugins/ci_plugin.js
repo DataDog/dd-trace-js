@@ -22,7 +22,7 @@ module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub(`ci:${this.constructor.name}:itr-configuration`, ({ onDone }) => {
+    this.addSub(`ci:${this.constructor.id}:itr-configuration`, ({ onDone }) => {
       if (!this.tracer._exporter || !this.tracer._exporter.getItrConfiguration) {
         return onDone({ err: new Error('CI Visibility was not initialized correctly') })
       }
@@ -36,7 +36,7 @@ module.exports = class CiPlugin extends Plugin {
       })
     })
 
-    this.addSub(`ci:${this.constructor.name}:test-suite:skippable`, ({ onDone }) => {
+    this.addSub(`ci:${this.constructor.id}:test-suite:skippable`, ({ onDone }) => {
       if (!this.tracer._exporter || !this.tracer._exporter.getSkippableSuites) {
         return onDone({ err: new Error('CI Visibility was not initialized correctly') })
       }
@@ -48,28 +48,28 @@ module.exports = class CiPlugin extends Plugin {
       })
     })
 
-    this.addSub(`ci:${this.constructor.name}:session:start`, ({ command, frameworkVersion, rootDir }) => {
+    this.addSub(`ci:${this.constructor.id}:session:start`, ({ command, frameworkVersion, rootDir }) => {
       const childOf = getTestParentSpan(this.tracer)
-      const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, this.constructor.name)
-      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, this.constructor.name)
+      const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, this.constructor.id)
+      const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, this.constructor.id)
 
       this.command = command
       this.frameworkVersion = frameworkVersion
       // only for playwright
       this.rootDir = rootDir
 
-      this.testSessionSpan = this.tracer.startSpan(`${this.constructor.name}.test_session`, {
+      this.testSessionSpan = this.tracer.startSpan(`${this.constructor.id}.test_session`, {
         childOf,
         tags: {
-          [COMPONENT]: this.constructor.name,
+          [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSessionSpanMetadata
         }
       })
-      this.testModuleSpan = this.tracer.startSpan(`${this.constructor.name}.test_module`, {
+      this.testModuleSpan = this.tracer.startSpan(`${this.constructor.id}.test_module`, {
         childOf: this.testSessionSpan,
         tags: {
-          [COMPONENT]: this.constructor.name,
+          [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testModuleSpanMetadata
         }
@@ -79,7 +79,7 @@ module.exports = class CiPlugin extends Plugin {
 
   configure (config) {
     super.configure(config)
-    this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.name, this.config)
+    this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config)
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
     const {
@@ -110,7 +110,7 @@ module.exports = class CiPlugin extends Plugin {
 
     let testTags = {
       ...getTestCommonTags(testName, testSuite, this.frameworkVersion),
-      [COMPONENT]: this.constructor.name,
+      [COMPONENT]: this.constructor.id,
       ...extraTags
     }
 
@@ -129,7 +129,7 @@ module.exports = class CiPlugin extends Plugin {
         [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
         [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
         [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
-        [TEST_MODULE]: this.constructor.name
+        [TEST_MODULE]: this.constructor.id
       }
       if (testSuiteSpan.context()._parentId) {
         suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
@@ -142,7 +142,7 @@ module.exports = class CiPlugin extends Plugin {
     }
 
     const testSpan = this.tracer
-      .startSpan(`${this.constructor.name}.test`, {
+      .startSpan(`${this.constructor.id}.test`, {
         childOf,
         tags: {
           ...this.testEnvironmentMetadata,

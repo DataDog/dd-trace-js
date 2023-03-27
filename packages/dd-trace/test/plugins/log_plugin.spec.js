@@ -12,7 +12,7 @@ const { expect } = require('chai')
 const testLogChannel = channel('apm:test:log')
 
 class TestLog extends LogPlugin {
-  static get name () {
+  static get id () {
     return 'test'
   }
 }

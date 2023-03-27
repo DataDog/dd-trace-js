@@ -39,7 +39,7 @@ module.exports = class LogPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub(`apm:${this.constructor.name}:log`, (arg) => {
+    this.addSub(`apm:${this.constructor.id}:log`, (arg) => {
       const store = storage.getStore()
       const span = store && store.span
 

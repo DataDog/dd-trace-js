@@ -4,7 +4,7 @@ const CLIENT_PORT_KEY = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class MySQLPlugin extends DatabasePlugin {
-  static get name () { return 'mysql' }
+  static get id () { return 'mysql' }
   static get system () { return 'mysql' }
 
   start (payload) {

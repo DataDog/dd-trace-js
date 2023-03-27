@@ -3,7 +3,7 @@
 const RedisPlugin = require('../../datadog-plugin-redis/src')
 
 class IORedisPlugin extends RedisPlugin {
-  static get name () {
+  static get id () {
     return 'ioredis'
   }
 }
