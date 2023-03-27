@@ -25,5 +25,10 @@ describe('encoding', () => {
       const decoded = decodeVarint(encoded)
       expect(decoded).to.equal(n)
     })
+    it('encoding a number bigger than Max safe int fails.', () => {
+      const n = Number.MAX_SAFE_INTEGER + 10
+      const encoded = encodeVarint(n)
+      expect(encoded).to.undefined
+    })
   })
 })

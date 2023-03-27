@@ -1,9 +1,13 @@
 // encodes positive and negative numbers, using zig zag encoding to reduce the size of the variable length encoding.
 // uses high and low part to ensure those parts are under the limit for byte operations in javascript (32 bits)
+// maximum number possible to encode is MAX_SAFE_INTEGER/2 (using zig zag shifts the bits by 1 to the left)
 function encodeVarint (v) {
   const sign = v >= 0 ? 0 : 1
   // we leave the least significant bit for the sign.
   const double = Math.abs(v) * 2
+  if (double > Number.MAX_SAFE_INTEGER) {
+    return undefined
+  }
   const high = Math.floor(double / 0x100000000)
   const low = (double & 0xffffffff) | sign
   return encodeUvarint64(low, high)
