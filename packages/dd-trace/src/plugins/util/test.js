@@ -38,7 +38,6 @@ const TEST_CODE_OWNERS = 'test.codeowners'
 const TEST_SOURCE_FILE = 'test.source.file'
 const LIBRARY_VERSION = 'library_version'
 const TEST_COMMAND = 'test.command'
-const TEST_BUNDLE = 'test.bundle'
 const TEST_MODULE = 'test.module'
 const TEST_SESSION_ID = 'test_session_id'
 const TEST_MODULE_ID = 'test_module_id'
@@ -95,7 +94,6 @@ module.exports = {
   TEST_MODULE_ID,
   TEST_SUITE_ID,
   TEST_ITR_TESTS_SKIPPED,
-  TEST_BUNDLE,
   TEST_MODULE,
   TEST_SESSION_ITR_SKIPPING_ENABLED,
   TEST_SESSION_CODE_COVERAGE_ENABLED,
@@ -284,7 +282,6 @@ function getTestSessionCommonTags (command, testFrameworkVersion, testFramework)
   return {
     [SPAN_TYPE]: 'test_session_end',
     [RESOURCE_NAME]: `test_session.${command}`,
-    [TEST_BUNDLE]: testFramework,
     [TEST_MODULE]: testFramework,
     [TEST_TOOLCHAIN]: getPkgManager(),
     ...getTestLevelCommonTags(command, testFrameworkVersion)
@@ -295,7 +292,6 @@ function getTestModuleCommonTags (command, testFrameworkVersion, testFramework) 
   return {
     [SPAN_TYPE]: 'test_module_end',
     [RESOURCE_NAME]: `test_module.${command}`,
-    [TEST_BUNDLE]: testFramework,
     [TEST_MODULE]: testFramework,
     ...getTestLevelCommonTags(command, testFrameworkVersion)
   }
@@ -305,7 +301,6 @@ function getTestSuiteCommonTags (command, testFrameworkVersion, testSuite, testF
   return {
     [SPAN_TYPE]: 'test_suite_end',
     [RESOURCE_NAME]: `test_suite.${testSuite}`,
-    [TEST_BUNDLE]: testFramework,
     [TEST_MODULE]: testFramework,
     [TEST_SUITE]: testSuite,
     ...getTestLevelCommonTags(command, testFrameworkVersion)
