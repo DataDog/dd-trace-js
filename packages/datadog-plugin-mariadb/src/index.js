@@ -6,7 +6,7 @@ const MySQLPlugin = require('../../datadog-plugin-mysql/src')
 let skippedStore
 
 class MariadbPlugin extends MySQLPlugin {
-  static get name () { return 'mariadb' }
+  static get id () { return 'mariadb' }
   static get system () { return 'mariadb' }
 
   constructor (...args) {

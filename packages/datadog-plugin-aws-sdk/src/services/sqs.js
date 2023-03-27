@@ -5,6 +5,8 @@ const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')
 
 class Sqs extends BaseAwsSdkPlugin {
+  static get id () { return 'sqs' }
+
   constructor (...args) {
     super(...args)
     //

@@ -3,6 +3,8 @@
 const BaseAwsSdkPlugin = require('../base')
 
 class Redshift extends BaseAwsSdkPlugin {
+  static get id () { return 'redshift' }
+
   generateTags (params, operation, response) {
     const tags = {}
 

@@ -8,7 +8,7 @@ const GraphQLValidatePlugin = require('./validate')
 const GraphQLResolvePlugin = require('./resolve')
 
 class GraphQLPlugin extends CompositePlugin {
-  static get name () { return 'graphql' }
+  static get id () { return 'graphql' }
   static get plugins () {
     return {
       execute: GraphQLExecutePlugin,

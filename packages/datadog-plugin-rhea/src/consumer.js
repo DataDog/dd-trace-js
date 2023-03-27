@@ -4,7 +4,7 @@ const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { storage } = require('../../datadog-core')
 
 class RheaConsumerPlugin extends ConsumerPlugin {
-  static get name () { return 'rhea' }
+  static get id () { return 'rhea' }
 
   constructor (...args) {
     super(...args)
