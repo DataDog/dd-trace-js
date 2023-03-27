@@ -15,7 +15,6 @@ const {
   TEST_MODULE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND,
-  TEST_BUNDLE,
   TEST_MODULE,
   finishAllTraceSpans
 } = require('../../dd-trace/src/plugins/util/test')
@@ -168,7 +167,6 @@ module.exports = (on, config) => {
       const testSuiteTags = {
         [TEST_COMMAND]: command,
         [TEST_COMMAND]: command,
-        [TEST_BUNDLE]: TEST_FRAMEWORK_NAME,
         [TEST_MODULE]: TEST_FRAMEWORK_NAME
       }
       if (testSuiteSpan) {
