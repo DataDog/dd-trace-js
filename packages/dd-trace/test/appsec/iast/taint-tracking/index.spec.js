@@ -38,7 +38,7 @@ describe('IAST TaintTracking', () => {
   afterEach(sinon.restore)
 
   it('Should enable rewriter, taint tracking operations and plugin', () => {
-    taintTracking.enableTaintTracking(config)
+    taintTracking.enableTaintTracking(config.iast)
     expect(rewriter.enableRewriter).to.be.calledOnce
     expect(taintTrackingOperations.enableTaintOperations).to.be.calledOnce
     expect(taintTrackingPlugin.enable).to.be.calledOnce
