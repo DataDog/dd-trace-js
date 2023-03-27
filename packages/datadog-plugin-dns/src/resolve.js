@@ -3,7 +3,7 @@
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
 class DNSResolvePlugin extends ClientPlugin {
-  static get name () { return 'dns' }
+  static get id () { return 'dns' }
   static get operation () { return 'resolve' }
 
   start ([hostname, maybeType]) {

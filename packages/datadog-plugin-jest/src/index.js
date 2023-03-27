@@ -20,7 +20,7 @@ const isJestWorker = !!process.env.JEST_WORKER_ID
 const CHILD_MESSAGE_END = 2
 
 class JestPlugin extends CiPlugin {
-  static get name () {
+  static get id () {
     return 'jest'
   }
 
@@ -90,7 +90,7 @@ class JestPlugin extends CiPlugin {
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
         childOf: testSessionSpanContext,
         tags: {
-          [COMPONENT]: this.constructor.name,
+          [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
         }

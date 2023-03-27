@@ -2,6 +2,8 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 class Kinesis extends BaseAwsSdkPlugin {
+  static get id () { return 'kinesis' }
+
   generateTags (params, operation, response) {
     if (!params || !params.StreamName) return {}
 

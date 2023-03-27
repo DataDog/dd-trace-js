@@ -28,17 +28,17 @@ loadChannel.subscribe(({ name }) => {
   const Plugin = plugins[name]
 
   if (!Plugin || typeof Plugin !== 'function') return
-  if (!pluginClasses[Plugin.name]) {
-    const envName = `DD_TRACE_${Plugin.name.toUpperCase()}_ENABLED`
+  if (!pluginClasses[Plugin.id]) {
+    const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
     const enabled = process.env[envName.replace(/[^a-z0-9_]/ig, '_')]
 
     // TODO: remove the need to load the plugin class in order to disable the plugin
-    if (isFalse(enabled) || disabledPlugins.has(Plugin.name)) {
-      log.debug(`Plugin "${Plugin.name}" was disabled via configuration option.`)
+    if (isFalse(enabled) || disabledPlugins.has(Plugin.id)) {
+      log.debug(`Plugin "${Plugin.id}" was disabled via configuration option.`)
 
-      pluginClasses[Plugin.name] = null
+      pluginClasses[Plugin.id] = null
     } else {
-      pluginClasses[Plugin.name] = Plugin
+      pluginClasses[Plugin.id] = Plugin
     }
   }
 })
@@ -56,7 +56,7 @@ module.exports = class PluginManager {
 
       if (!Plugin || typeof Plugin !== 'function') return
 
-      this.loadPlugin(Plugin.name)
+      this.loadPlugin(Plugin.id)
     }
 
     loadChannel.subscribe(this._loadedSubscriber)

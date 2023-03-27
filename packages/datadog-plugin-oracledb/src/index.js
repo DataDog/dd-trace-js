@@ -5,7 +5,7 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const log = require('../../dd-trace/src/log')
 
 class OracledbPlugin extends DatabasePlugin {
-  static get name () { return 'oracledb' }
+  static get id () { return 'oracledb' }
   static get system () { return 'oracle' }
 
   start ({ query, connAttrs }) {

@@ -5,7 +5,7 @@ const NetIPCPlugin = require('./ipc')
 const NetTCPPlugin = require('./tcp')
 
 class NetPlugin extends Plugin {
-  static get name () { return 'net' }
+  static get id () { return 'net' }
 
   constructor (...args) {
     super(...args)

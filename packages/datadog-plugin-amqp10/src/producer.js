@@ -5,7 +5,7 @@ const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const { getAddress, getShortName } = require('./util')
 
 class Amqp10ProducerPlugin extends ProducerPlugin {
-  static get name () { return 'amqp10' }
+  static get id () { return 'amqp10' }
   static get operation () { return 'send' }
   static get system () { return 'amqp' }
 

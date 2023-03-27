@@ -9,7 +9,7 @@ const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/gateway/
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class Http2ServerPlugin extends Plugin {
-  static get name () {
+  static get id () {
     return 'http2'
   }
 
@@ -20,7 +20,7 @@ class Http2ServerPlugin extends Plugin {
       const store = storage.getStore()
       const span = web.startSpan(this.tracer, this.config, req, res, 'web.request')
 
-      span.setTag(COMPONENT, this.constructor.name)
+      span.setTag(COMPONENT, this.constructor.id)
 
       this.enter(span, { ...store, req, res })
 

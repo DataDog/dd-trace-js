@@ -3,7 +3,7 @@
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 
 class KafkajsProducerPlugin extends ProducerPlugin {
-  static get name () { return 'kafkajs' }
+  static get id () { return 'kafkajs' }
   static get operation () { return 'produce' }
 
   start ({ topic, messages }) {
