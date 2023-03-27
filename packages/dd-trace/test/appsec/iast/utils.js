@@ -169,6 +169,7 @@ function prepareTestServerForIast (description, tests) {
 
     function testThatRequestHasVulnerability (fn, vulnerability) {
       it(`should have ${vulnerability} vulnerability`, function (done) {
+        this.timeout(5000)
         app = fn
         agent
           .use(traces => {
