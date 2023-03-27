@@ -5,7 +5,7 @@ const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 class CouchBasePlugin extends Plugin {
-  static get name () {
+  static get id () {
     return 'couchbase'
   }
 

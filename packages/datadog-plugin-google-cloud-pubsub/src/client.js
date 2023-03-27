@@ -3,7 +3,7 @@
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
 class GoogleCloudPubsubClientPlugin extends ClientPlugin {
-  static get name () { return 'google-cloud-pubsub' }
+  static get id () { return 'google-cloud-pubsub' }
   static get operation () { return 'request' }
 
   start ({ request, api, projectId }) {

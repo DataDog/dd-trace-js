@@ -5,7 +5,7 @@ const { TEXT_MAP } = require('../../../ext/formats')
 const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
 
 class GrpcClientPlugin extends ClientPlugin {
-  static get name () { return 'grpc' }
+  static get id () { return 'grpc' }
   static get operation () { return 'client:request' }
 
   start ({ metadata, path, type }) {

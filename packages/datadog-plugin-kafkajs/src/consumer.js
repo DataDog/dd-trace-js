@@ -3,7 +3,7 @@
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 
 class KafkajsConsumerPlugin extends ConsumerPlugin {
-  static get name () { return 'kafkajs' }
+  static get id () { return 'kafkajs' }
   static get operation () { return 'consume' }
 
   start ({ topic, partition, message }) {
