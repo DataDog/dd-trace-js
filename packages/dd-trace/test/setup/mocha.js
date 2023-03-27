@@ -13,6 +13,7 @@ const { storage } = require('../../../datadog-core')
 
 global.withVersions = withVersions
 global.withExports = withExports
+global.withNamingSchema = withNamingSchema
 
 const packageVersionFailures = Object.create({})
 
@@ -41,6 +42,23 @@ function loadInstFile (file, instrumentations) {
   proxyquire.noPreserveCache()(instPath, {
     './helpers/instrument': instrument,
     '../helpers/instrument': instrument
+  })
+}
+
+function withNamingSchema (naming, callback) {
+  let env
+  Object.entries(naming).forEach(entry => {
+    const [versionName, namingSchema] = entry
+    describe(`With naming schema ${versionName}`, () => {
+      before(() => {
+        env = process.env
+        process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = versionName.toString()
+        const schema = require('../../src/service-naming')
+        schema.reload()
+      })
+      after(() => { process.env = env })
+      callback(namingSchema)
+    })
   })
 }
 
