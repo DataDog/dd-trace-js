@@ -12,31 +12,31 @@ const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { tagger } = require('./tagger')
-
-const {
-  DD_PROFILING_ENABLED,
-  DD_PROFILING_PROFILERS,
-  DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
-  DD_ENV,
-  DD_TAGS,
-  DD_SERVICE,
-  DD_VERSION,
-  DD_TRACE_AGENT_URL,
-  DD_AGENT_HOST,
-  DD_TRACE_AGENT_PORT,
-  DD_PROFILING_UPLOAD_TIMEOUT,
-  DD_PROFILING_SOURCE_MAP,
-  DD_PROFILING_UPLOAD_PERIOD,
-  DD_PROFILING_PPROF_PREFIX,
-  DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
-  DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
-  DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
-  DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES
-} = process.env
 const { isTrue } = require('../util')
 
 class Config {
   constructor (options = {}) {
+    const {
+      DD_PROFILING_ENABLED,
+      DD_PROFILING_PROFILERS,
+      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
+      DD_ENV,
+      DD_TAGS,
+      DD_SERVICE,
+      DD_VERSION,
+      DD_TRACE_AGENT_URL,
+      DD_AGENT_HOST,
+      DD_TRACE_AGENT_PORT,
+      DD_PROFILING_UPLOAD_TIMEOUT,
+      DD_PROFILING_SOURCE_MAP,
+      DD_PROFILING_UPLOAD_PERIOD,
+      DD_PROFILING_PPROF_PREFIX,
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
+      DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
+      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES
+    } = process.env
+
     const enabled = isTrue(coalesce(options.enabled, DD_PROFILING_ENABLED, true))
     const env = coalesce(options.env, DD_ENV)
     const service = options.service || DD_SERVICE || 'node'
