@@ -438,7 +438,11 @@ export declare interface TracerOptions {
        * Controls how many code vulnerabilities can be detected in the same request
        * @default 2
        */
-      maxContextOperations?: number
+      maxContextOperations?: number,
+      /**
+       * Whether to enable vulnerability deduplication
+       */
+      deduplicationEnabled?: boolean
     }
   };
 

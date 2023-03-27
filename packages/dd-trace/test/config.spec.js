@@ -172,6 +172,7 @@ describe('Config', () => {
     process.env.DD_IAST_REQUEST_SAMPLING = '40'
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
+    process.env.DD_IAST_DEDUPLICATION_ENABLED = false
 
     const config = new Config()
 
@@ -229,6 +230,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.requestSampling', 40)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 3)
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
+    expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -339,7 +341,8 @@ describe('Config', () => {
           enabled: true,
           requestSampling: 50,
           maxConcurrentRequests: 4,
-          maxContextOperations: 5
+          maxContextOperations: 5,
+          deduplicationEnabled: false
         }
       },
       appsec: false,
@@ -386,6 +389,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.requestSampling', 50)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 4)
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
+    expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.deep.nested.property('sampler', {
       sampleRate: 0.5,
       rateLimit: 1000,
@@ -600,6 +604,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.requestSampling', 30)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 2)
     expect(config).to.have.nested.property('iast.maxContextOperations', 2)
+    expect(config).to.have.nested.property('iast.deduplicationEnabled', true)
   })
 
   it('should give priority to non-experimental options', () => {
