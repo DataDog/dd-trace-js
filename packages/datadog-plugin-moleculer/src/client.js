@@ -4,7 +4,7 @@ const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { moleculerTags } = require('./util')
 
 class MoleculerClientPlugin extends ClientPlugin {
-  static get name () { return 'moleculer' }
+  static get id () { return 'moleculer' }
   static get operation () { return 'call' }
 
   start ({ actionName, opts }) {

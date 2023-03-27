@@ -5,7 +5,7 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 let tools
 
 class GraphQLExecutePlugin extends TracingPlugin {
-  static get name () { return 'graphql' }
+  static get id () { return 'graphql' }
   static get operation () { return 'execute' }
 
   start ({ operation, args, docSource }) {

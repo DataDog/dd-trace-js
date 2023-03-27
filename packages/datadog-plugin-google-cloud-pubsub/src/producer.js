@@ -3,7 +3,7 @@
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 
 class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
-  static get name () { return 'google-cloud-pubsub' }
+  static get id () { return 'google-cloud-pubsub' }
   static get operation () { return 'request' }
 
   start ({ request, api, projectId }) {

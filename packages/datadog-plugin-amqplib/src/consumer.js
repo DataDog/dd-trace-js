@@ -5,7 +5,7 @@ const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getResourceName } = require('./util')
 
 class AmqplibConsumerPlugin extends ConsumerPlugin {
-  static get name () { return 'amqplib' }
+  static get id () { return 'amqplib' }
   static get operation () { return 'command' }
 
   start ({ method, fields, message }) {
