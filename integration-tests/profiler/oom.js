@@ -2,7 +2,7 @@
 
 require('dd-trace').init()
 
-const { Worker, isMainThread } = require('node:worker_threads')
+const { Worker, isMainThread } = require('worker_threads')
 
 if (isMainThread) {
   const nworkers = Number(process.argv[2])
