@@ -4,7 +4,7 @@ require('./setup/tap')
 
 const { expect } = require('chai')
 const { EOL } = require('os')
-const path = require('path')
+
 describe('Config', () => {
   let Config
   let log
@@ -818,8 +818,8 @@ describe('Config', () => {
     const config = new Config({
       appsec: {
         enabled: true,
-        blockedTemplateHtml: path.join(__dirname, 'DOES_NOT_EXIST.html'),
-        blockedTemplateJson: path.join(__dirname, 'DOES_NOT_EXIST.json')
+        blockedTemplateHtml: 'DOES_NOT_EXIST.html',
+        blockedTemplateJson: 'DOES_NOT_EXIST.json'
       }
     })
     expect(config.appsec.blockedTemplateHtml).to.be.undefined
