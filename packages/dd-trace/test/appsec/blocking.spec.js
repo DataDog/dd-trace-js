@@ -1,6 +1,5 @@
 'use strict'
 
-const { expect } = require('chai')
 const { AbortController } = require('node-abort-controller')
 
 describe('blocking', () => {
