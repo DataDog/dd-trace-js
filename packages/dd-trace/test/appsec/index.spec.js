@@ -70,8 +70,8 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
       AppSec.enable(config)
 
-      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly(RULES, config.appsec)
       expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
+      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly(RULES, config.appsec)
       expect(remoteConfig.enableAsmData).to.have.been.calledOnce
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
