@@ -3,6 +3,11 @@
 const { AbortController } = require('node-abort-controller')
 
 describe('blocking', () => {
+  const defaultBlockedTemplate = {
+    html: 'block test',
+    json: '{ "block": true }'
+  }
+
   const config = {
     appsec: {
       blockedTemplateHtml: 'htmlBodyéé',
@@ -11,7 +16,7 @@ describe('blocking', () => {
   }
 
   let log
-  let block, setTemplates, blockedTemplate
+  let block, setTemplates
   let req, res, rootSpan
 
   beforeEach(() => {
@@ -19,13 +24,9 @@ describe('blocking', () => {
       warn: sinon.stub()
     }
 
-    blockedTemplate = {
-      html: 'block test',
-      json: '{ "block": true }'
-    }
     const blocking = proxyquire('../src/appsec/blocking', {
       '../log': log,
-      './blocked_templates': blockedTemplate
+      './blocked_templates': defaultBlockedTemplate
     })
 
     block = blocking.block
@@ -48,9 +49,6 @@ describe('blocking', () => {
   describe('block', () => {
     beforeEach(() => {
       setTemplates(config)
-    })
-
-    afterEach(() => {
     })
 
     it('should log warn and not send blocking response when headers have already been sent', () => {
@@ -117,21 +115,21 @@ describe('blocking', () => {
       }
     }
 
-    it('should require templates/blocked and use html property', () => {
+    it('should block with default html template', () => {
       req.headers.accept = 'text/html'
       setTemplates(config)
 
       block(req, res, rootSpan)
 
-      expect(res.end).to.have.been.calledOnceWithExactly(blockedTemplate.html)
+      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
     })
 
-    it('should require templates/blocked and use json property', () => {
+    it('should block with default json template', () => {
       setTemplates(config)
 
       block(req, res, rootSpan)
 
-      expect(res.end).to.have.been.calledOnceWithExactly(blockedTemplate.json)
+      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
     })
   })
 })
