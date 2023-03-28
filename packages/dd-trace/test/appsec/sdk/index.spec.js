@@ -28,7 +28,7 @@ describe('Appsec SDK', () => {
     appsecSdk = new AppsecSdk(tracer, config)
   })
 
-  it('should call loadTemplates when instanciated', () => {
+  it('should call setTemplates when instanciated', () => {
     expect(setTemplates).to.have.been.calledOnceWithExactly(config)
   })
 
