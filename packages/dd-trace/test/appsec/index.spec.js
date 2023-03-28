@@ -21,6 +21,7 @@ describe('AppSec Index', () => {
   let config
   let AppSec
   let web
+  let blocking
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -42,8 +43,13 @@ describe('AppSec Index', () => {
       root: sinon.stub()
     }
 
+    blocking = {
+      setTemplates: sinon.stub()
+    }
+
     AppSec = proxyquire('../../src/appsec', {
-      '../plugins/util/web': web
+      '../plugins/util/web': web,
+      './blocking': blocking
     })
 
     sinon.stub(RuleManager, 'applyRules')
@@ -65,6 +71,7 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
 
       expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly(RULES, config.appsec)
+      expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
       expect(remoteConfig.enableAsmData).to.have.been.calledOnce
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
