@@ -116,6 +116,7 @@ describe('blocking', () => {
         blockedTemplateJson: undefined
       }
     }
+
     it('should require templates/blocked and use html property', () => {
       req.headers.accept = 'text/html'
       setTemplates(config)
