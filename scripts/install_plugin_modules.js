@@ -1,7 +1,7 @@
 'use strict'
 
 const fs = require('fs')
-const os = require('node:os')
+const os = require('os')
 const path = require('path')
 const crypto = require('crypto')
 const semver = require('semver')
