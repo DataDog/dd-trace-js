@@ -1,6 +1,5 @@
 'use strict'
 
-const path = require('path')
 const proxyquire = require('proxyquire')
 const log = require('../../src/log')
 const RuleManager = require('../../src/appsec/rule_manager')
@@ -15,7 +14,8 @@ const Config = require('../../src/config')
 const axios = require('axios')
 const getPort = require('get-port')
 
-const blockedTemplate = require(path.join(__dirname, '..', '..', 'src', 'appsec', 'blocked_templates'))
+const blockedTemplate = require('../../src/appsec/blocked_templates')
+const recommendedJson = require('../../src/appsec/recommended.json')
 
 describe('AppSec Index', () => {
   let config
@@ -94,6 +94,13 @@ describe('AppSec Index', () => {
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
       expect(Gateway.manager.addresses).to.be.empty
+    })
+
+    it('should load recommended.json rules if not provided by the user', () => {
+      config.appsec.rules = undefined
+      AppSec.enable(config)
+
+      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly(recommendedJson, config.appsec)
     })
   })
 
