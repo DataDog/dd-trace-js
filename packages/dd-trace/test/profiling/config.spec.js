@@ -145,7 +145,7 @@ describe('config', () => {
     expect(exporterUrl).to.equal(expectedUrl)
   })
 
-  it('should support disable OOM heap profiler by default', () => {
+  it('should disable OOM heap profiler by default', () => {
     const config = new Config()
     expect(config.oomMonitoring).to.deep.equal({
       enabled: false,
