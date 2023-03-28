@@ -12,31 +12,32 @@ const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { tagger } = require('./tagger')
-
-const {
-  DD_PROFILING_ENABLED,
-  DD_PROFILING_PROFILERS,
-  DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
-  DD_ENV,
-  DD_TAGS,
-  DD_SERVICE,
-  DD_VERSION,
-  DD_TRACE_AGENT_URL,
-  DD_AGENT_HOST,
-  DD_TRACE_AGENT_PORT,
-  DD_PROFILING_UPLOAD_TIMEOUT,
-  DD_PROFILING_SOURCE_MAP,
-  DD_PROFILING_UPLOAD_PERIOD,
-  DD_PROFILING_PPROF_PREFIX,
-  DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
-  DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
-  DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
-  DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES
-} = process.env
+const { isTrue } = require('../util')
 
 class Config {
   constructor (options = {}) {
-    const enabled = coalesce(options.enabled, DD_PROFILING_ENABLED, true)
+    const {
+      DD_PROFILING_ENABLED,
+      DD_PROFILING_PROFILERS,
+      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
+      DD_ENV,
+      DD_TAGS,
+      DD_SERVICE,
+      DD_VERSION,
+      DD_TRACE_AGENT_URL,
+      DD_AGENT_HOST,
+      DD_TRACE_AGENT_PORT,
+      DD_PROFILING_UPLOAD_TIMEOUT,
+      DD_PROFILING_SOURCE_MAP,
+      DD_PROFILING_UPLOAD_PERIOD,
+      DD_PROFILING_PPROF_PREFIX,
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
+      DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
+      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES
+    } = process.env
+
+    const enabled = isTrue(coalesce(options.enabled, DD_PROFILING_ENABLED, true))
     const env = coalesce(options.env, DD_ENV)
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
@@ -53,7 +54,7 @@ class Config {
     const pprofPrefix = coalesce(options.pprofPrefix,
       DD_PROFILING_PPROF_PREFIX)
 
-    this.enabled = String(enabled) !== 'false'
+    this.enabled = enabled
     this.service = service
     this.env = env
     this.host = host
@@ -84,8 +85,8 @@ class Config {
       new AgentExporter(this)
     ], this)
 
-    const oomMonitoringEnabled = coalesce(options.oomMonitoring,
-      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED, false)
+    const oomMonitoringEnabled = isTrue(coalesce(options.oomMonitoring,
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED, false))
     const heapLimitExtensionSize = coalesce(options.oomHeapLimitExtensionSize,
       Number(DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE), 0)
     const maxHeapExtensionCount = coalesce(options.oomMaxHeapExtensionCount,
@@ -136,7 +137,7 @@ function ensureOOMExportStrategies (strategies, options) {
     }
   }
 
-  return strategies
+  return [ ...new Set(strategies) ]
 }
 
 function getExporter (name, options) {
