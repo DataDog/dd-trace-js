@@ -51,7 +51,9 @@ describe('config', () => {
       },
       exporters: 'agent,file',
       profilers: 'wall,cpu-experimental',
-      url: 'http://localhost:1234/'
+      url: 'http://localhost:1234/',
+      traceId128BitGenerationEnabled: true,
+      traceId128BitLoggingEnabled: true
     }
 
     const config = new Config(options)
@@ -65,6 +67,8 @@ describe('config', () => {
     expect(config.tags.service).to.equal(options.service)
     expect(config.tags.version).to.equal(options.version)
     expect(config.flushInterval).to.equal(65 * 1000)
+    expect(config.traceId128BitGenerationEnabled).to.equal(true)
+    expect(config.traceId128BitLoggingEnabled).to.equal(true)
     expect(config.exporters).to.be.an('array')
     expect(config.exporters.length).to.equal(2)
     expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
