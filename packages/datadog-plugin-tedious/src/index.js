@@ -1,9 +1,10 @@
 'use strict'
 
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class TediousPlugin extends DatabasePlugin {
-  static get name () { return 'tedious' }
+  static get id () { return 'tedious' }
   static get operation () { return 'request' } // TODO: change to match other database plugins
   static get system () { return 'mssql' }
 
@@ -17,7 +18,7 @@ class TediousPlugin extends DatabasePlugin {
         'db.type': 'mssql',
         'component': 'tedious',
         'out.host': connectionConfig.server,
-        'out.port': connectionConfig.options.port,
+        [CLIENT_PORT_KEY]: connectionConfig.options.port,
         'db.user': connectionConfig.userName || connectionConfig.authentication.options.userName,
         'db.name': connectionConfig.options.database,
         'db.instance': connectionConfig.options.instanceName

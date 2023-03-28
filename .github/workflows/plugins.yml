@@ -14,6 +14,7 @@ concurrency:
 env:
   SLACK_REPORT_ENABLE: ${{ github.event.schedule }} # should be empty for non-nightly jobs
   SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+  SLACK_MOREINFO: https://github.com/${{ github.repository_owner }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 # TODO: upstream jobs
 
@@ -468,31 +469,6 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - uses: codecov/codecov-action@v2
-
-  ldapjs:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: ldapjs
-    services:
-      openldap:
-        image: bitnami/openldap:latest
-        ports:
-          - '1389:1389'
-          - '1636:1636'
-        env:
-          LDAP_ADMIN_USERNAME: 'admin'
-          LDAP_ADMIN_PASSWORD: 'adminpassword'
-          LDAP_USERS: 'user01,user02'
-          LDAP_PASSWORDS: 'password1,password2'
-    steps:
-      - uses: actions/checkout@v2
-      - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
   limitd-client:

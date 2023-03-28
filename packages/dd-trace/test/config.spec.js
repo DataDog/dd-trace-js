@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 const { expect } = require('chai')
 const path = require('path')
 describe('Config', () => {
@@ -170,6 +172,7 @@ describe('Config', () => {
     process.env.DD_IAST_REQUEST_SAMPLING = '40'
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
+    process.env.DD_IAST_DEDUPLICATION_ENABLED = false
 
     const config = new Config()
 
@@ -227,6 +230,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.requestSampling', 40)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 3)
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
+    expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -337,7 +341,8 @@ describe('Config', () => {
           enabled: true,
           requestSampling: 50,
           maxConcurrentRequests: 4,
-          maxContextOperations: 5
+          maxContextOperations: 5,
+          deduplicationEnabled: false
         }
       },
       appsec: false,
@@ -384,6 +389,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.requestSampling', 50)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 4)
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
+    expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.deep.nested.property('sampler', {
       sampleRate: 0.5,
       rateLimit: 1000,
@@ -598,6 +604,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.requestSampling', 30)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 2)
     expect(config).to.have.nested.property('iast.maxContextOperations', 2)
+    expect(config).to.have.nested.property('iast.deduplicationEnabled', true)
   })
 
   it('should give priority to non-experimental options', () => {
@@ -717,7 +724,60 @@ describe('Config', () => {
 
     const config = new Config()
 
-    expect(config.telemetryEnabled).to.be.false
+    expect(config.telemetry.enabled).to.be.false
+  })
+
+  it('should set telemetry default values', () => {
+    const config = new Config()
+
+    expect(config.telemetry).to.not.be.undefined
+    expect(config.telemetry.enabled).to.be.true
+    expect(config.telemetry.logCollection).to.be.false
+    expect(config.telemetry.debug).to.be.false
+  })
+
+  it('should not set DD_TRACE_TELEMETRY_ENABLED', () => {
+    const origTraceTelemetryValue = process.env.DD_TRACE_TELEMETRY_ENABLED
+    process.env.DD_TRACE_TELEMETRY_ENABLED = 'false'
+
+    const config = new Config()
+
+    expect(config.telemetry.enabled).to.be.false
+
+    process.env.DD_TRACE_TELEMETRY_ENABLED = origTraceTelemetryValue
+  })
+
+  it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
+    const origLogCollectionValue = process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED
+    process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = 'false'
+
+    const config = new Config()
+
+    expect(config.telemetry.logCollection).to.be.false
+
+    process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = origLogCollectionValue
+  })
+
+  it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED = true if DD_IAST_ENABLED', () => {
+    const origIastEnabledValue = process.env.DD_IAST_ENABLED
+    process.env.DD_IAST_ENABLED = 'true'
+
+    const config = new Config()
+
+    expect(config.telemetry.logCollection).to.be.true
+
+    process.env.DD_IAST_ENABLED = origIastEnabledValue
+  })
+
+  it('should set DD_TELEMETRY_DEBUG_ENABLED', () => {
+    const origTelemetryDebugValue = process.env.DD_TELEMETRY_DEBUG_ENABLED
+    process.env.DD_TELEMETRY_DEBUG_ENABLED = 'true'
+
+    const config = new Config()
+
+    expect(config.telemetry.debug).to.be.true
+
+    process.env.DD_TELEMETRY_DEBUG_ENABLED = origTelemetryDebugValue
   })
 
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
@@ -875,18 +935,14 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('isGitUploadEnabled', false)
       })
-      context('DD_CIVISIBILITY_ITR_ENABLED is true', () => {
-        it('should enable intelligent test runner', () => {
-          process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
-          const config = new Config(options)
-          expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
-        })
-        it('should enable git upload, regardless of DD_CIVISIBILITY_GIT_UPLOAD_ENABLED', () => {
-          process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
-          process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'false'
-          const config = new Config(options)
-          expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
-        })
+      it('should activate ITR by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
+      })
+      it('should disable ITR if DD_CIVISIBILITY_ITR_ENABLED is set to false', () => {
+        process.env.DD_CIVISIBILITY_ITR_ENABLED = 'false'
+        const config = new Config(options)
+        expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
       })
     })
     context('ci visibility mode is not enabled', () => {

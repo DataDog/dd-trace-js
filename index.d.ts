@@ -98,7 +98,7 @@ export declare interface Tracer extends opentracing.Tracer {
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
    */
-  wrap<T = (...args: any[]) => any> (name: string, fn: T, requiresParent?: boolean): T;
+  wrap<T = (...args: any[]) => any> (name: string, fn: T): T;
   wrap<T = (...args: any[]) => any> (name: string, options: TraceOptions & SpanOptions, fn: T): T;
   wrap<T = (...args: any[]) => any> (name: string, options: (...args: any[]) => TraceOptions & SpanOptions, fn: T): T;
 
@@ -438,7 +438,11 @@ export declare interface TracerOptions {
        * Controls how many code vulnerabilities can be detected in the same request
        * @default 2
        */
-      maxContextOperations?: number
+      maxContextOperations?: number,
+      /**
+       * Whether to enable vulnerability deduplication
+       */
+      deduplicationEnabled?: boolean
     }
   };
 

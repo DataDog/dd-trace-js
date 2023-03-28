@@ -114,6 +114,8 @@ describe('IAST Index', () => {
 
     beforeEach(() => {
       mockVulnerabilityReporter = {
+        start: sinon.stub(),
+        stop: sinon.stub(),
         sendVulnerabilities: sinon.stub()
       }
       mockOverheadController = {
@@ -143,6 +145,19 @@ describe('IAST Index', () => {
       it('should finish global context refresher on iast disabled', () => {
         mockIast.disable()
         expect(mockOverheadController.finishGlobalContext).to.have.been.calledOnce
+      })
+    })
+
+    describe('managing vulnerability reporter', () => {
+      it('should start vulnerability reporter on iast enabled', () => {
+        const fakeTracer = {}
+        mockIast.enable(config, fakeTracer)
+        expect(mockVulnerabilityReporter.start).to.have.been.calledOnceWithExactly(config, fakeTracer)
+      })
+
+      it('should stop vulnerability reporter on iast disabled', () => {
+        mockIast.disable()
+        expect(mockVulnerabilityReporter.stop).to.have.been.calledOnce
       })
     })
 

@@ -13,7 +13,7 @@ const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class PlaywrightPlugin extends CiPlugin {
-  static get name () {
+  static get id () {
     return 'playwright'
   }
 
@@ -39,13 +39,14 @@ class PlaywrightPlugin extends CiPlugin {
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
-        testSuite
+        testSuite,
+        'playwright'
       )
 
       const testSuiteSpan = this.tracer.startSpan('playwright.test_suite', {
         childOf: this.testModuleSpan,
         tags: {
-          [COMPONENT]: this.constructor.name,
+          [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
         }
@@ -87,7 +88,7 @@ class PlaywrightPlugin extends CiPlugin {
           childOf: span,
           startTime: stepStartTime,
           tags: {
-            [COMPONENT]: this.constructor.name,
+            [COMPONENT]: this.constructor.id,
             'playwright.step': step.title,
             [RESOURCE_NAME]: step.title
           }

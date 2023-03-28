@@ -133,7 +133,7 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('db.type', 'mssql')
             expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-            expect(traces[0][0].metrics).to.have.property('out.port', 1433)
+            expect(traces[0][0].metrics).to.have.property('network.destination.port', 1433)
           })
 
         const request = new tds.Request(query, (err) => {

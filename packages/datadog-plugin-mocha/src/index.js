@@ -15,7 +15,7 @@ const {
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class MochaPlugin extends CiPlugin {
-  static get name () {
+  static get id () {
     return 'mocha'
   }
 
@@ -35,10 +35,13 @@ class MochaPlugin extends CiPlugin {
       const relativeCoverageFiles = [...coverageFiles, suiteFile]
         .map(filename => getTestSuitePath(filename, this.sourceRoot))
 
-      this.tracer._exporter.exportCoverage({
-        span: testSuiteSpan,
-        coverageFiles: relativeCoverageFiles
-      })
+      const formattedCoverage = {
+        traceId: testSuiteSpan.context()._traceId,
+        spanId: testSuiteSpan.context()._spanId,
+        files: relativeCoverageFiles
+      }
+
+      this.tracer._exporter.exportCoverage(formattedCoverage)
     })
 
     this.addSub('ci:mocha:test-suite:start', (suite) => {
@@ -46,12 +49,13 @@ class MochaPlugin extends CiPlugin {
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
-        getTestSuitePath(suite.file, this.sourceRoot)
+        getTestSuitePath(suite.file, this.sourceRoot),
+        'mocha'
       )
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testModuleSpan,
         tags: {
-          [COMPONENT]: this.constructor.name,
+          [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
         }
@@ -128,7 +132,7 @@ class MochaPlugin extends CiPlugin {
       this._testNameToParams[name] = params
     })
 
-    this.addSub('ci:mocha:session:finish', ({ status, isSuitesSkipped }) => {
+    this.addSub('ci:mocha:session:finish', ({ status, isSuitesSkipped, testCodeCoverageLinesTotal }) => {
       if (this.testSessionSpan) {
         const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
         this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -137,7 +141,7 @@ class MochaPlugin extends CiPlugin {
         addIntelligentTestRunnerSpanTags(
           this.testSessionSpan,
           this.testModuleSpan,
-          { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled }
+          { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled, testCodeCoverageLinesTotal }
         )
 
         this.testModuleSpan.finish()

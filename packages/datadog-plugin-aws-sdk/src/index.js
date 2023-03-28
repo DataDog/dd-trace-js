@@ -5,7 +5,7 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const services = require('./services')
 
 class AwsSdkPlugin extends Plugin {
-  static get name () {
+  static get id () {
     return 'aws-sdk'
   }
 

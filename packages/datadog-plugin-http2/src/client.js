@@ -9,7 +9,7 @@ const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const { COMPONENT } = require('../../dd-trace/src/constants')
+const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
@@ -25,7 +25,7 @@ const HTTP2_HEADER_STATUS = ':status'
 const HTTP2_METHOD_GET = 'GET'
 
 class Http2ClientPlugin extends Plugin {
-  static get name () {
+  static get id () {
     return 'http2'
   }
 
@@ -45,7 +45,8 @@ class Http2ClientPlugin extends Plugin {
       const span = this.tracer.startSpan('http.request', {
         childOf,
         tags: {
-          [COMPONENT]: this.constructor.name,
+          [COMPONENT]: this.constructor.id,
+          [CLIENT_PORT_KEY]: parseInt(sessionDetails.port),
           [SPAN_KIND]: CLIENT,
           'service.name': getServiceName(this.tracer, this.config, sessionDetails),
           'resource.name': method,

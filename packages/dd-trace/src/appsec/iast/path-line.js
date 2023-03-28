@@ -1,5 +1,8 @@
+'use strict'
+
 const path = require('path')
 const process = require('process')
+const { calculateDDBasePath } = require('../../util')
 const pathLine = {
   getFirstNonDDPathAndLine,
   getFirstNonDDPathAndLineFromCallsites, // Exported only for test purposes
@@ -18,12 +21,6 @@ const EXCLUDED_PATH_PREFIXES = [
   'node:async_hooks',
   'async_hooks'
 ]
-
-function calculateDDBasePath (dirname) {
-  const dirSteps = dirname.split(path.sep)
-  const packagesIndex = dirSteps.lastIndexOf('packages')
-  return dirSteps.slice(0, packagesIndex).join(path.sep) + path.sep
-}
 
 function getCallSiteInfo () {
   const previousPrepareStackTrace = Error.prepareStackTrace

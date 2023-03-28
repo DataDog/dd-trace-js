@@ -1,4 +1,7 @@
 'use strict'
+
+require('../../../../../dd-trace/test/setup/tap')
+
 const cp = require('child_process')
 
 const { expect } = require('chai')
@@ -152,7 +155,9 @@ describe('CI Visibility Agentless Exporter', () => {
       expect(agentlessExporter.shouldRequestItrConfiguration()).to.be.true
       agentlessExporter.getItrConfiguration({}, (err) => {
         expect(scope.isDone()).not.to.be.true
-        expect(err.message).to.contain('App key or API key undefined')
+        expect(err.message).to.contain(
+          'Request to settings endpoint was not done because Datadog application key is not defined'
+        )
         expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.false
         done()
       })

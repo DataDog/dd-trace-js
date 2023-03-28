@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup')
+
 const StorageBackend = require('../../src/storage/async_resource')
 const testStorage = require('./test')
 
