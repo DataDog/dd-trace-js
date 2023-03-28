@@ -127,9 +127,20 @@ describe('SpanContext', () => {
       expect(spanContext.toTraceparent()).to.equal('00-00000000000000000000000000000123-0000000000000456-00')
     })
 
-    it('should return the traceparent with 128-bit trace ID', () => {
+    it('should return the traceparent with 128-bit trace ID from the tag', () => {
       const spanContext = new SpanContext({
         traceId: id('123', 16),
+        spanId: id('456', 16)
+      })
+
+      spanContext._trace.tags['_dd.p.tid'] = '0000000000000789'
+
+      expect(spanContext.toTraceparent()).to.equal('00-00000000000007890000000000000123-0000000000000456-00')
+    })
+
+    it('should return the traceparent with 128-bit trace ID from the traceparent', () => {
+      const spanContext = new SpanContext({
+        traceId: id('00000000000007890000000000000123', 16),
         spanId: id('456', 16)
       })
 

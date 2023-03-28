@@ -489,7 +489,7 @@ class TextMapPropagator {
   }
 
   _extract128BitTraceId (traceId, spanContext) {
-    if (!this._config.traceId128BitGenerationEnabled || !spanContext) return
+    if (!spanContext) return
 
     const buffer = spanContext._traceId.toBuffer()
 
@@ -517,7 +517,7 @@ class TextMapPropagator {
   }
 
   _getB3TraceId (spanContext) {
-    if (spanContext._traceId.toBuffer().length <= 16 && spanContext._trace.tags['_dd.p.tid']) {
+    if (spanContext._traceId.toBuffer().length <= 8 && spanContext._trace.tags['_dd.p.tid']) {
       return spanContext._trace.tags['_dd.p.tid'] + spanContext._traceId.toString(16)
     }
 

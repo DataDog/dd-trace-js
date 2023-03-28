@@ -211,10 +211,28 @@ describe('TextMapPropagator', () => {
       expect(carrier).to.have.property('x-b3-flags', '1')
     })
 
-    it('should inject the 128-bit trace ID in B3 headers when available', () => {
+    it('should inject the 128-bit trace ID in B3 headers when available as tag', () => {
       const carrier = {}
       const spanContext = createContext({
         traceId: id('0000000000000123'),
+        trace: {
+          tags: {
+            '_dd.p.tid': '0000000000000234'
+          }
+        }
+      })
+
+      config.tracePropagationStyle.inject = ['b3']
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.have.property('x-b3-traceid', '00000000000002340000000000000123')
+    })
+
+    it('should inject the 128-bit trace ID in B3 headers when available as ID', () => {
+      const carrier = {}
+      const spanContext = createContext({
+        traceId: id('00000000000002340000000000000123'),
         trace: {
           tags: {
             '_dd.p.tid': '0000000000000234'
