@@ -137,7 +137,7 @@ function ensureOOMExportStrategies (strategies, options) {
     }
   }
 
-  return strategies
+  return [ ...new Set(strategies) ]
 }
 
 function getExporter (name, options) {

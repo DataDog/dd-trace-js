@@ -185,7 +185,7 @@ describe('config', () => {
       enabled: true,
       heapLimitExtensionSize: 1000000,
       maxHeapExtensionCount: 2,
-      exportStrategies: ['process', 'interrupt', 'async', 'interrupt'],
+      exportStrategies: ['process', 'interrupt', 'async'],
       exportCommand: [
         process.execPath,
         path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
