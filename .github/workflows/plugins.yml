@@ -30,7 +30,7 @@ jobs:
         ports:
           - 5673:5672
     env:
-      PLUGINS: amqp10|rhea # TODO: move rhea to its own job
+      PLUGINS: amqp10|rhea
       SERVICES: qpid
     steps:
       - uses: actions/checkout@v2
@@ -650,11 +650,8 @@ jobs:
       RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v2
-      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/node/${{ matrix.node-version }}
       - run: yarn install
-      - uses: ./.github/actions/node/14
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
