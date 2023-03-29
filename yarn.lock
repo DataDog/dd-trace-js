@@ -267,10 +267,10 @@
   dependencies:
     node-gyp-build "^4.5.0"
 
-"@datadog/native-iast-taint-tracking@1.1.1":
-  version "1.1.1"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-1.1.1.tgz#cbeace022b6c1f3a0a40dc0000cc40079c6d4895"
-  integrity sha512-VkESVYpVlLHqw38UHqqEYsJaJTp3+JpKIJhfB9nlQO13dYBc3Sgq/QJZNdPViU73SVsCJtuw4D0SXRyjTXP1IA==
+"@datadog/native-iast-taint-tracking@1.3.1":
+  version "1.3.1"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-1.3.1.tgz#49b3befc3049370f4034babcf57c3d67e9f4d56b"
+  integrity sha512-KWKmK4/GANisxqVZ1TtGlBIOw2RIXdUO0r7361QJHiBVUxwNKmKNVDVuCTKGpRRH/0GZcxY0yVgl38ee/6HM3A==
   dependencies:
     node-gyp-build "^3.9.0"
 
