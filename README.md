@@ -151,7 +151,7 @@ $ yarn lint
 ```
 
 
-### Expermental ESM Support
+### Experimental ESM Support
 
 ESM support is currently in the experimental stages, while CJS has been supported
 since inception. This means that code loaded using `require()` should work fine
