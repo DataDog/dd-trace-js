@@ -11,8 +11,9 @@ describe('encoding', () => {
       const encoded = encodeVarint(n)
       expect(encoded.length).to.equal(expectedEncoded.length)
       expect(encoded.every((val, i) => val === expectedEncoded[i])).to.true
-      const decoded = decodeVarint(encoded)
+      const [decoded, bytes] = decodeVarint(encoded)
       expect(decoded).to.equal(n)
+      expect(bytes).to.length(0)
     })
     it('encoding then decoding should be a no op for bigger than int32 numbers', () => {
       const n = 1679711644352
@@ -22,8 +23,13 @@ describe('encoding', () => {
       const encoded = encodeVarint(n)
       expect(encoded.length).to.equal(expectedEncoded.length)
       expect(encoded.every((val, i) => val === expectedEncoded[i])).to.true
-      const decoded = decodeVarint(encoded)
+      const toDecode = [...encoded, ...encoded]
+      const [decoded, bytes] = decodeVarint(toDecode)
       expect(decoded).to.equal(n)
+      expect(bytes.every((val, i) => val === expectedEncoded[i])).to.true
+      const [decoded2, bytes2] = decodeVarint(bytes)
+      expect(decoded2).to.equal(n)
+      expect(bytes2).to.length(0)
     })
     it('encoding a number bigger than Max safe int fails.', () => {
       const n = Number.MAX_SAFE_INTEGER + 10
