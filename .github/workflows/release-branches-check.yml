@@ -1,0 +1,28 @@
+name: Release branches check
+
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  check-release-branch-v2:
+    if: "!contains(github.event.pull_request.labels.*.name, 'dont-land-on-v2.x')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/check-release-branch
+        with:
+          release-branch: v2.x
+
+  check-release-branch-v3:
+    if: "!contains(github.event.pull_request.labels.*.name, 'dont-land-on-v3.x')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/check-release-branch
+        with:
+          release-branch: v3.x
