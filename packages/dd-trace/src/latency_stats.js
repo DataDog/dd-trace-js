@@ -5,69 +5,47 @@ const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 
 const { DSMStatsExporter } = require('./exporters/dsm-stats')
 
-const {
-  DEFAULT_SPAN_SERVICE
-} = require('./encode/tags-processors')
-
-class SpanAggStats {
-  constructor (aggKey) {
-    this.aggKey = aggKey
+class HeaderAggStats {
+  constructor (hash) {
+    this.hash = hash
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
   }
 
   record (header) {
     // TODO
-    const edgeLatency = header.edgeLatency
-    const pathwayLatency = header.pathwayLatency
+    const edgeLatency = header.metrics.edgeLatency
+    const pathwayLatency = header.metrics.pathwayLatency
     this.edgeLatency.accept(edgeLatency)
     this.pathwayLatency.accept(pathwayLatency)
   }
 
   toJSON () {
-    const {
-      service,
-      edgeTags,
-      hash,
-      parentHash
-    } = this.aggKey
-
     return {
-      Service: service,
-      EdgeTags: edgeTags,
-      Hash: hash,
-      ParentHash: parentHash,
+      Hash: this.hash,
       EdgeLatency: this.edgeLatency.toProto(), // TODO: custom proto encoding
       PathwayLatency: this.pathwayLatency.toProto() // TODO: custom proto encoding
     }
   }
 }
 
-class SpanAggKey {
+class HeaderAggKey {
   constructor (header) {
-    this.service = header.service || DEFAULT_SPAN_SERVICE
-    this.edgeTags = '' // TODO
-    this.hash = '' // TODO
-    this.parentHash = 0 // TODO
+    this.hash = header.metrics.pathwayHash
   }
 
   toString () {
-    return [
-      this.service,
-      this.edgeTags,
-      this.hash,
-      this.parentHash
-    ].join(',')
+    return this.hash
   }
 }
 
 class SpanBuckets extends Map {
   forHeader (header) {
-    const aggKey = new SpanAggKey(header)
+    const aggKey = new HeaderAggKey(header)
     const key = aggKey.toString()
 
     if (!this.has(key)) {
-      this.set(key, new SpanAggStats(aggKey))
+      this.set(key, new HeaderAggStats(aggKey))
     }
 
     return this.get(key)
@@ -86,10 +64,7 @@ class TimeBuckets extends Map {
 
 class LatencyStatsProcessor {
   constructor ({
-    stats: {
-      enabled = false,
-      interval = 10
-    },
+    dsmEnabled,
     hostname,
     port,
     url,
@@ -105,13 +80,13 @@ class LatencyStatsProcessor {
     this.bucketSizeNs = 1e10
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
-    this.enabled = enabled // this.config.DD_DATA_STREAMS_ENABLED
+    this.enabled = dsmEnabled
     this.env = env
     this.tags = tags || {}
     this.sequence = 0
 
-    if (enabled) {
-      this.timer = setInterval(this.onInterval.bind(this), interval * 1e4)
+    if (this.enabled) {
+      this.timer = setInterval(this.onInterval.bind(this), 1e4) // TODO: the right interval?
       this.timer.unref()
     }
   }
@@ -163,4 +138,4 @@ class LatencyStatsProcessor {
   }
 }
 
-module.exports = LatencyStatsProcessor
+module.exports = { LatencyStatsProcessor, HeaderAggStats }

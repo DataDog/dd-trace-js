@@ -1,7 +1,7 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { getConnectionHash, getPathwayHash, encodePathwayCtx } = require('./hash')
+const { getPathwayHash, encodePathwayContext } = require('./hash')
 
 class KafkajsProducerPlugin extends ProducerPlugin {
   static get id () { return 'kafkajs' }
@@ -13,22 +13,27 @@ class KafkajsProducerPlugin extends ProducerPlugin {
 
     const active = this.activeSpan
     let parentHash
-    let originTs
+    let originTimestamp
     let pathwayHash
+    let prevTimestamp
+    const currentTimestamp = new Date().now()
     const checkpointString = getCheckpointString(service, env, topic)
     const currentHash = getConnectionHash(checkpointString)
     if (active) {
       const context = active.context()
       const rootSpan = context._trace.started[0]
-      parentHash = rootSpan._spanContext._tags.pathwayHash
-      originTs = rootSpan._spanContext._tags.originTs
+      parentHash = 'pathwayHash' // rootSpan._spanContext._tags.pathwayHash
+      originTimestamp = 'originTimestamp' // rootSpan._spanContext._tags.originTimestamp
+      prevTimestamp = 'prevTimestamp' // rootSpan._spanContext._tags.currentTimestamp
       pathwayHash = getPathwayHash(parentHash, currentHash)
     } else {
       pathwayHash = currentHash
-      originTs = currentHash
+      originTimestamp = currentTimestamp
+      prevTimestamp = currentTimestamp
     }
 
-    const currentTs = Date.now()
+    const edgeLatency = currentTimestamp - prevTimestamp
+    const pathwayLatency = currentTimestamp - originTimestamp
 
     const span = this.startSpan('kafka.produce', {
       service: this.config.service || `${this.tracer._service}-kafka`,
@@ -36,8 +41,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       kind: 'producer',
       meta: {
         'component': 'kafkajs',
-        'kafka.topic': topic,
-        'dd-pathway-ctx': encodePathwayCtx(pathwayHash, originTs, currentTs)
+        'kafka.topic': topic
       },
       metrics: {
         'kafka.batch_size': messages.length
@@ -45,8 +49,8 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     })
 
     for (const message of messages) {
-      message.headers.pathwayHash = pathwayHash
       if (typeof message === 'object') {
+        message.headers['dd-pathway-ctx'] = encodePathwayContext(pathwayHash, originTimestamp, prevTimestamp)
         this.tracer.inject(span, 'text_map', message.headers)
       }
     }

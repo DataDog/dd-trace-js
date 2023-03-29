@@ -1,19 +1,19 @@
 'use strict'
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const { getConnectionHash, getPathwayHash, encodePathwayCtx } = require('./hash')
-const { LatencyStatsProcessor } = require('../../dd-trace/src/latency_stats')
+const { getConnectionHash, getPathwayHash } = require('./hash')
 
 class KafkajsConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'kafkajs' }
   static get operation () { return 'consume' }
 
   start ({ topic, partition, message, groupId }) {
-    const currentTs = Date.getTime()
+    const currentTime = new Date().getTime()
     const childOf = extract(this.tracer, message.headers)
     let parentHash
     let pathwayHash
-    let originTs
+    let originTime
+    let prevTime
     const service = this.tracer._service
     if (this.config.DD_DATA_STREAMS_ENABLED !== 'disabled') {
       const env = this.tracer._env
@@ -21,12 +21,14 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       const currentHash = getConnectionHash(checkpointString)
 
       if (message.headers.pathwayHash) {
-        parentHash = 'PARENT_HASH'
+        parentHash = ''
         pathwayHash = getPathwayHash(parentHash, currentHash)
-        originTs = 'ORIGIN_TS'
+        originTime = ''
+        prevTime = ''
       } else {
         pathwayHash = currentHash
-        originTs = currentTs
+        originTime = currentTime
+        prevTime = currentTime
       }
     }
 
@@ -39,17 +41,19 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       meta: {
         'component': 'kafkajs',
         'kafka.topic': topic,
-        'kafka.message.offset': message.offset,
-        'pathwayhash': pathwayHash,
-        'origintimestamp': originTs,
-        'currenttimestamp': currentTs
+        'kafka.message.offset': message.offset
       },
       metrics: {
-        'kafka.partition': partition // TODO: send dsm values here
+        'kafka.partition': partition, // TODO: send dsm values here
+        'pathwayhash': pathwayHash,
+        'origintimestamp': originTime,
+        'currenttimestamp': currentTime,
+        'edgeLatency': currentTime - prevTime,
+        'pathwayLatency': currentTime - originTime
       }
     }
 
-    const statsProcessor = LatencyStatsProcessor()
+    this.config.latencyStatsProcessor.onFinished(header)
 
     this.startSpan('kafka.consume', header)
   }
