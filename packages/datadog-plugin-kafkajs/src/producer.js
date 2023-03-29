@@ -18,14 +18,13 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     let prevTimestamp
     const currentTimestamp = new Date().now()
     const checkpointString = getCheckpointString(service, env, topic)
-    const currentHash = getConnectionHash(checkpointString)
     if (active) {
       const context = active.context()
       const rootSpan = context._trace.started[0]
       parentHash = 'pathwayHash' // rootSpan._spanContext._tags.pathwayHash
       originTimestamp = 'originTimestamp' // rootSpan._spanContext._tags.originTimestamp
       prevTimestamp = 'prevTimestamp' // rootSpan._spanContext._tags.currentTimestamp
-      pathwayHash = getPathwayHash(parentHash, currentHash)
+      pathwayHash = getPathwayHash(checkpointString, parentHash)
     } else {
       pathwayHash = currentHash
       originTimestamp = currentTimestamp
