@@ -151,6 +151,19 @@ $ yarn lint
 ```
 
 
+### Expermental ESM Support
+
+ESM support is currently in the experimental stages, while CJS has been supported
+since inception. This means that code loaded using `require()` should work fine
+but code loaded using `import` might not always work.
+
+Use the following command to enable experimental ESM support with your application:
+
+```sh
+node --loader dd-trace/loader-hook.mjs entrypoint.js
+```
+
+
 ### Benchmarks
 
 Our microbenchmarks live in `benchmark/sirun`. Each directory in there
