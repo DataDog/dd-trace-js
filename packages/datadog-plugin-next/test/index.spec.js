@@ -53,13 +53,14 @@ describe('Plugin', function () {
         this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
 
         const cwd = __dirname
+        const nodules = `${__dirname}/../../../versions/next@${version}/node_modules`
         const pkg = require(`${__dirname}/../../../versions/next@${version}/package.json`)
 
         delete pkg.workspaces
 
-        writeFileSync(`${__dirname}/package.json`, JSON.stringify(pkg, null, 2))
+        execSync(`cp -R '${nodules}' ./`, { cwd })
 
-        execSync('npm --loglevel=error install', { cwd })
+        writeFileSync(`${__dirname}/package.json`, JSON.stringify(pkg, null, 2))
 
         // building in-process makes tests fail for an unknown reason
         execSync('npx next build', {
