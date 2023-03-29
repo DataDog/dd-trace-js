@@ -11,6 +11,7 @@ describe('IAST TaintTracking Operations', () => {
   const taintedUtils = {
     createTransaction: id => id,
     removeTransaction: id => id,
+    setMaxTransactions: () => {},
     newTaintedString: id => id,
     isTainted: id => id,
     getRanges: id => id,
@@ -98,6 +99,20 @@ describe('IAST TaintTracking Operations', () => {
       const iastContext = null
       taintTrackingOperations.removeTransaction(iastContext)
       expect(taintedUtils.removeTransaction).not.to.be.called
+    })
+  })
+
+  describe('SetMaxTransactions', () => {
+    it('Given a number of concurrent transactions should call setMaxTransactions', () => {
+      const transactions = 3
+
+      taintTrackingOperations.setMaxTransactions(transactions)
+      expect(taintedUtils.setMaxTransactions).to.have.been.calledOnceWithExactly(transactions)
+    })
+
+    it('Given undefined as a number of concurrent transactions should not call setMaxTransactions', () => {
+      taintTrackingOperations.setMaxTransactions()
+      expect(taintedUtils.setMaxTransactions).not.to.have.been.called
     })
   })
 
