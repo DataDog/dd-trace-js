@@ -5,6 +5,12 @@ const proxyquire = require('proxyquire')
 
 describe('IAST TaintTracking', () => {
   let taintTracking
+  const config = {
+    iast: {
+      maxConcurrentRequests: 2
+    }
+  }
+
   const rewriter = {
     enableRewriter: sinon.spy(),
     disableRewriter: sinon.spy()
@@ -12,7 +18,8 @@ describe('IAST TaintTracking', () => {
 
   const taintTrackingOperations = {
     enableTaintOperations: sinon.spy(),
-    disableTaintOperations: sinon.spy()
+    disableTaintOperations: sinon.spy(),
+    setMaxTransactions: sinon.spy()
   }
 
   const taintTrackingPlugin = {
@@ -31,10 +38,12 @@ describe('IAST TaintTracking', () => {
   afterEach(sinon.restore)
 
   it('Should enable rewriter, taint tracking operations and plugin', () => {
-    taintTracking.enableTaintTracking()
+    taintTracking.enableTaintTracking(config.iast)
     expect(rewriter.enableRewriter).to.be.calledOnce
     expect(taintTrackingOperations.enableTaintOperations).to.be.calledOnce
     expect(taintTrackingPlugin.enable).to.be.calledOnce
+    expect(taintTrackingOperations.setMaxTransactions)
+      .to.have.been.calledOnceWithExactly(config.iast.maxConcurrentRequests)
   })
 
   it('Should disable both rewriter, taint tracking operations, plugin', () => {
