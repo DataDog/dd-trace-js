@@ -29,9 +29,9 @@ describe('Plugin', () => {
           })
         })
         describe('producer', () => {
-          it('creates root span', async () => {
+          it('should receive dsm header propagation from fake consumer span', async () => {
             const scope = tracer.scope()
-            const childOf = tracer.startSpan('fake consume', {
+            const childOf = tracer.startSpan('fake consumer span', {
               tags: {
                 name: 'kafka.consume',
                 service: 'test-kafka',

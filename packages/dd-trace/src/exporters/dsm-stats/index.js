@@ -1,6 +1,6 @@
 const { URL, format } = require('url')
 
-const { Writer } = require('./DSMwriter')
+const { DSMWriter } = require('./DSMwriter')
 
 class DSMStatsExporter {
   constructor (config) {
@@ -10,7 +10,7 @@ class DSMStatsExporter {
       hostname: hostname || 'localhost',
       port
     }))
-    this._writer = new Writer({ url: this._url, tags })
+    this._writer = new DSMWriter({ url: this._url, tags })
   }
 
   export (payload) {

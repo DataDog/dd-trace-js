@@ -4,7 +4,7 @@ const { channel } = require('diagnostics_channel')
 const { isFalse } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
-const LatencyStatsProcessor = require('./latency_stats')
+const { LatencyStatsProcessor } = require('./latency_stats')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
@@ -51,6 +51,7 @@ module.exports = class PluginManager {
     this._tracerConfig = null
     this._pluginsByName = {}
     this._configsByName = {}
+    this._latencyProcessor = null
 
     this._loadedSubscriber = ({ name }) => {
       const Plugin = plugins[name]
@@ -149,6 +150,7 @@ module.exports = class PluginManager {
 
     sharedConfig.site = site
     sharedConfig.url = url
+    sharedConfig.latencyStatsProcessor = this._latencyProcessor
 
     return sharedConfig
   }
