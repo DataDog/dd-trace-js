@@ -642,6 +642,7 @@ jobs:
   next:
     strategy:
       matrix:
+        node-version: [14, 16, 18]
         range: ['>=9.5 <11.1', '>=11.1 <13.2', '>=13.2']
     runs-on: ubuntu-latest
     env:
