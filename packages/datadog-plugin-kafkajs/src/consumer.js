@@ -8,10 +8,9 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
   start ({ topic, partition, message }) {
     const childOf = extract(this.tracer, message.headers)
-
-    this.startSpan('kafka.consume', {
+    this.startSpan(this.operationName(), {
       childOf,
-      service: this.config.service || `${this.tracer._service}-kafka`,
+      service: this.config.service || this.serviceName({ service: this.tracer._service }),
       resource: topic,
       kind: 'consumer',
       type: 'worker',

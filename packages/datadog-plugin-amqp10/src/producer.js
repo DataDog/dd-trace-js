@@ -13,8 +13,8 @@ class Amqp10ProducerPlugin extends ProducerPlugin {
     const address = getAddress(link)
     const target = getShortName(link)
 
-    this.startSpan('amqp.send', {
-      service: this.config.service || `${this.tracer._service}-amqp`,
+    this.startSpan(this.operationName(), {
+      service: this.config.service || this.serviceName({ service: this.tracer._service }),
       resource: ['send', target].filter(v => v).join(' '),
       kind: 'producer',
       meta: {
