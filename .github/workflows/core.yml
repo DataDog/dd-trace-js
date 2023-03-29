@@ -12,6 +12,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  sirun-graphql-speed-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/latest
+      - run: curl https://github.com/DataDog/sirun/releases/download/v0.1.11/sirun-v0.1.11-x86_64-unknown-linux-gnu.tar.gz --output sirun.tgz
+      - run: tar -xf sirun.tgz
+      - run: SIRUN_VARIANT=with-depth-and-collapse-off ./sirun benchmark/sirun/plugin-graphql/meta.json
   shimmer:
     runs-on: ubuntu-latest
     steps:
