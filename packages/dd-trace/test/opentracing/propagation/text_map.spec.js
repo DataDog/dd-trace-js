@@ -22,7 +22,7 @@ describe('TextMapPropagator', () => {
     const trace = { started: [], finished: [], tags: {} }
     const spanContext = new SpanContext({
       traceId: id('123', 10),
-      spanId: id('-456', 10),
+      spanId: id('456', 10),
       baggageItems,
       ...params,
       trace: {
@@ -40,7 +40,7 @@ describe('TextMapPropagator', () => {
     propagator = new TextMapPropagator(config)
     textMap = {
       'x-datadog-trace-id': '123',
-      'x-datadog-parent-id': '18446744073709551160', // -456 casted to uint64
+      'x-datadog-parent-id': '456',
       'ot-baggage-foo': 'bar'
     }
     baggageItems = {}
@@ -60,7 +60,7 @@ describe('TextMapPropagator', () => {
       propagator.inject(spanContext, carrier)
 
       expect(carrier).to.have.property('x-datadog-trace-id', '123')
-      expect(carrier).to.have.property('x-datadog-parent-id', '18446744073709551160') // -456 casted to uint64
+      expect(carrier).to.have.property('x-datadog-parent-id', '456')
       expect(carrier).to.have.property('ot-baggage-foo', 'bar')
     })
 
@@ -326,6 +326,17 @@ describe('TextMapPropagator', () => {
       expect(spanContext.toTraceId()).to.equal(carrier['x-datadog-trace-id'])
       expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
       expect(spanContext._baggageItems['foo']).to.equal(carrier['ot-baggage-foo'])
+    })
+
+    it('should convert signed IDs to unsigned', () => {
+      textMap['x-datadog-trace-id'] = '-123'
+      textMap['x-datadog-parent-id'] = '-456'
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext.toTraceId()).to.equal('18446744073709551493') // -123 casted to uint64
+      expect(spanContext.toSpanId()).to.equal('18446744073709551160') // -456 casted to uint64
     })
 
     it('should return null if the carrier does not contain a trace', () => {
