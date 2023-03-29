@@ -63,6 +63,10 @@ function withVersions (plugin, modules, range, cb) {
     range = null
   }
 
+  if (process.env.RANGE) {
+    range = process.env.RANGE
+  }
+
   modules.forEach(moduleName => {
     const testVersions = new Map()
 
