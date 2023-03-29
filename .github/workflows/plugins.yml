@@ -651,8 +651,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v3
-          with:
-            node-version: ${{ matrix.node-version }}
+        with:
+          node-version: ${{ matrix.node-version }}
       - run: yarn install
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
