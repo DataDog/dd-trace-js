@@ -103,7 +103,8 @@ class AgentExporter {
       const operation = retry.operation({
         randomize: true,
         minTimeout: this._backoffTime,
-        retries: this._backoffTries
+        retries: this._backoffTries,
+        unref: true
       })
 
       operation.attempt((attempt) => {

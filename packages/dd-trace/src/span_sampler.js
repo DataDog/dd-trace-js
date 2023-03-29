@@ -2,11 +2,69 @@
 const { globMatch } = require('../src/util')
 const { USER_KEEP, AUTO_KEEP } = require('../../../ext').priority
 const RateLimiter = require('./rate_limiter')
+const Sampler = require('./sampler')
+
+class SpanSamplingRule {
+  constructor ({ service, name, sampleRate = 1.0, maxPerSecond } = {}) {
+    this.service = service
+    this.name = name
+
+    this._sampler = new Sampler(sampleRate)
+    this._limiter = undefined
+
+    if (Number.isFinite(maxPerSecond)) {
+      this._limiter = new RateLimiter(maxPerSecond)
+    }
+  }
+
+  get sampleRate () {
+    return this._sampler.rate()
+  }
+
+  get maxPerSecond () {
+    return this._limiter && this._limiter._rateLimit
+  }
+
+  static from (config) {
+    return new SpanSamplingRule(config)
+  }
+
+  match (service, name) {
+    if (this.service && !globMatch(this.service, service)) {
+      return false
+    }
+
+    if (this.name && !globMatch(this.name, name)) {
+      return false
+    }
+
+    return true
+  }
+
+  sample () {
+    if (!this._sampler.isSampled()) {
+      return false
+    }
+
+    if (this._limiter) {
+      return this._limiter.isAllowed()
+    }
+
+    return true
+  }
+}
 
 class SpanSampler {
-  constructor ({ spanSamplingRules = [] }) {
-    this._rules = spanSamplingRules
-    this._limiters = {}
+  constructor ({ spanSamplingRules = [] } = {}) {
+    this._rules = spanSamplingRules.map(SpanSamplingRule.from)
+  }
+
+  findRule (service, name) {
+    for (const rule of this._rules) {
+      if (rule.match(service, name)) {
+        return rule
+      }
+    }
   }
 
   sample (spanContext) {
@@ -15,63 +73,22 @@ class SpanSampler {
 
     const { started } = spanContext._trace
     for (const span of started) {
-      const service = span.tracer()._service
-      const name = span._name
-      const rule = findRule(this._rules, service, name)
-      if (!rule) continue
+      const context = span.context()
+      const tags = context._tags || {}
+      const name = context._name
+      const service = tags.service ||
+        tags['service.name'] ||
+        span.tracer()._service
 
-      const sampleRate = getSampleRate(rule.sampleRate)
-      const maxPerSecond = getMaxPerSecond(rule.maxPerSecond)
-      const sampled = sample(sampleRate)
-      if (!sampled) continue
-
-      const key = `${service}:${name}`
-      const limiter = getLimiter(this._limiters, key, maxPerSecond)
-      if (limiter.isAllowed()) {
+      const rule = this.findRule(service, name)
+      if (rule && rule.sample()) {
         span.context()._sampling.spanSampling = {
-          sampleRate,
-          maxPerSecond
+          sampleRate: rule.sampleRate,
+          maxPerSecond: rule.maxPerSecond
         }
       }
     }
   }
-}
-
-function findRule (rules, service, name) {
-  for (const rule of rules) {
-    const servicePattern = getService(rule.service)
-    const namePattern = getName(rule.name)
-    if (globMatch(servicePattern, service) && globMatch(namePattern, name)) {
-      return rule
-    }
-  }
-}
-
-function getLimiter (list, key, maxPerSecond) {
-  if (typeof list[key] === 'undefined') {
-    list[key] = new RateLimiter(maxPerSecond)
-  }
-  return list[key]
-}
-
-function sample (sampleRate) {
-  return Math.random() < sampleRate
-}
-
-function getService (service) {
-  return service || '*'
-}
-
-function getName (name) {
-  return name || '*'
-}
-
-function getSampleRate (sampleRate) {
-  return sampleRate || 1.0
-}
-
-function getMaxPerSecond (maxPerSecond) {
-  return maxPerSecond || Infinity
 }
 
 module.exports = SpanSampler

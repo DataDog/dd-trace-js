@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 const { isTrue, isFalse, globMatch } = require('../src/util')
 
 const TRUES = [

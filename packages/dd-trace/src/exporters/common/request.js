@@ -8,14 +8,11 @@ const http = require('http')
 const https = require('https')
 const { parse: urlParse } = require('url')
 const docker = require('./docker')
+const { httpAgent, httpsAgent } = require('./agents')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 
-const keepAlive = true
-const maxSockets = 1
 const maxActiveRequests = 8
-const httpAgent = new http.Agent({ keepAlive, maxSockets })
-const httpsAgent = new https.Agent({ keepAlive, maxSockets })
 const containerId = docker.id()
 
 let activeRequests = 0

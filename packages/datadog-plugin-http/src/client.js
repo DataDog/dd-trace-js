@@ -16,7 +16,7 @@ const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 class HttpClientPlugin extends Plugin {
-  static get name () {
+  static get id () {
     return 'http'
   }
 
@@ -39,7 +39,7 @@ class HttpClientPlugin extends Plugin {
       const span = this.tracer.startSpan('http.request', {
         childOf,
         tags: {
-          [COMPONENT]: this.constructor.name,
+          [COMPONENT]: this.constructor.id,
           'span.kind': 'client',
           'service.name': getServiceName(this.tracer, this.config, options),
           'resource.name': method,

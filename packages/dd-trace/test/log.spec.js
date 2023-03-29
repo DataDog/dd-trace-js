@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 const { expect } = require('chai')
 const { storage } = require('../../datadog-core')
 
@@ -276,6 +278,91 @@ describe('log', () => {
       log.deprecate('test', 'message')
 
       expect(console.error).to.have.been.calledOnce
+    })
+  })
+
+  describe('logWriter', () => {
+    let logWriter
+    beforeEach(() => {
+      logWriter = require('../src/log/writer')
+    })
+
+    afterEach(() => {
+      logWriter.reset()
+    })
+
+    describe('error', () => {
+      it('should call logger error', () => {
+        logWriter.error(error)
+
+        expect(console.error).to.have.been.calledOnceWith(error)
+      })
+
+      it('should call console.error no matter enable flag value', () => {
+        logWriter.toggle(false)
+        logWriter.error(error)
+
+        expect(console.error).to.have.been.calledOnceWith(error)
+      })
+    })
+
+    describe('warn', () => {
+      it('should call logger warn', () => {
+        logWriter.warn('warn')
+
+        expect(console.warn).to.have.been.calledOnceWith('warn')
+      })
+
+      it('should call logger debug if warn is not provided', () => {
+        logWriter.use(logger)
+        logWriter.warn('warn')
+
+        expect(logger.debug).to.have.been.calledOnceWith('warn')
+      })
+
+      it('should call console.warn no matter enable flag value', () => {
+        logWriter.toggle(false)
+        logWriter.warn('warn')
+
+        expect(console.warn).to.have.been.calledOnceWith('warn')
+      })
+    })
+
+    describe('info', () => {
+      it('should call logger info', () => {
+        logWriter.info('info')
+
+        expect(console.info).to.have.been.calledOnceWith('info')
+      })
+
+      it('should call logger debug if info is not provided', () => {
+        logWriter.use(logger)
+        logWriter.info('info')
+
+        expect(logger.debug).to.have.been.calledOnceWith('info')
+      })
+
+      it('should call console.info no matter enable flag value', () => {
+        logWriter.toggle(false)
+        logWriter.info('info')
+
+        expect(console.info).to.have.been.calledOnceWith('info')
+      })
+    })
+
+    describe('debug', () => {
+      it('should call logger debug', () => {
+        logWriter.debug('debug')
+
+        expect(console.debug).to.have.been.calledOnceWith('debug')
+      })
+
+      it('should call console.debug no matter enable flag value', () => {
+        logWriter.toggle(false)
+        logWriter.debug('debug')
+
+        expect(console.debug).to.have.been.calledOnceWith('debug')
+      })
     })
   })
 })

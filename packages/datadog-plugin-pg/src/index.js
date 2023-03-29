@@ -1,9 +1,10 @@
 'use strict'
 
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class PGPlugin extends DatabasePlugin {
-  static get name () { return 'pg' }
+  static get id () { return 'pg' }
   static get operation () { return 'query' }
   static get system () { return 'postgres' }
 
@@ -22,7 +23,7 @@ class PGPlugin extends DatabasePlugin {
         'db.name': params.database,
         'db.user': params.user,
         'out.host': params.host,
-        'out.port': params.port
+        [CLIENT_PORT_KEY]: params.port
       }
     })
 

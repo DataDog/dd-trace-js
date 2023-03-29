@@ -166,7 +166,7 @@ class Config {
 
     const DD_CIVISIBILITY_ITR_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_ITR_ENABLED,
-      false
+      true
     )
 
     const DD_SERVICE = options.service ||
@@ -201,6 +201,10 @@ class Config {
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED,
       !process.env.AWS_LAMBDA_FUNCTION_NAME
+    )
+    const DD_TELEMETRY_DEBUG_ENABLED = coalesce(
+      process.env.DD_TELEMETRY_DEBUG_ENABLED,
+      false
     )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
       options.protocolVersion,
@@ -357,6 +361,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       process.env.DD_IAST_ENABLED,
       false
     )
+    const DD_TELEMETRY_LOG_COLLECTION_ENABLED = coalesce(
+      process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED,
+      DD_IAST_ENABLED
+    )
 
     const defaultIastRequestSampling = 30
     const iastRequestSampling = coalesce(
@@ -379,9 +387,15 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       2
     )
 
+    const DD_IAST_DEDUPLICATION_ENABLED = coalesce(
+      iastOptions && iastOptions.deduplicationEnabled,
+      process.env.DD_IAST_DEDUPLICATION_ENABLED && isTrue(process.env.DD_IAST_DEDUPLICATION_ENABLED),
+      true
+    )
+
     const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
-      false
+      true
     )
 
     const ingestion = options.ingestion || {}
@@ -462,7 +476,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
-    this.telemetryEnabled = DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED)
+    this.telemetry = {
+      enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
+      logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
+      debug: isTrue(DD_TELEMETRY_DEBUG_ENABLED)
+    }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
     this.appsec = {
@@ -483,14 +501,15 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       enabled: isTrue(DD_IAST_ENABLED),
       requestSampling: DD_IAST_REQUEST_SAMPLING,
       maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
-      maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS
+      maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
+      deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED
     }
 
     this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
 
     this.isIntelligentTestRunnerEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
     this.isGitUploadEnabled = this.isCiVisibility &&
-      (this.isIntelligentTestRunnerEnabled || isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
+      (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
 
     this.stats = {
       enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)

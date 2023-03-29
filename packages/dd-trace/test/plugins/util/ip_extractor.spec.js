@@ -1,3 +1,7 @@
+'use strict'
+
+require('../../setup/tap')
+
 const getPort = require('get-port')
 const { extractIp } = require('../../../src/plugins/util/ip_extractor')
 const http = require('http')
@@ -24,13 +28,14 @@ describe('ip extractor', () => {
   const ipHeaderList = [
     'x-forwarded-for',
     'x-real-ip',
-    'client-ip',
+    'true-client-ip',
+    'x-client-ip',
     'x-forwarded',
-    'x-cluster-client-ip',
     'forwarded-for',
-    'forwarded',
-    'via',
-    'true-client-ip'
+    'x-cluster-client-ip',
+    'fastly-client-ip',
+    'cf-connecting-ip',
+    'cf-connecting-ipv6'
   ]
   ipHeaderList.forEach(ipHeader => {
     it(`should detect ip in header '${ipHeader}'`, (done) => {
@@ -108,14 +113,33 @@ describe('ip extractor', () => {
     }).catch(done)
   })
 
-  it('should not detect if multiple header configured', (done) => {
+  it('should not detect ip in custom header with wrong value', (done) => {
+    const clientIpHeader = 'x-custom-ip-header'
+    const expectedIp = 'evil-ip'
+    controller = function (req) {
+      const ip = extractIp({ clientIpHeader }, req)
+      try {
+        expect(ip).to.be.undefined
+        done()
+      } catch (e) {
+        done(e)
+      }
+    }
+    axios.get(`http://localhost:${port}/`, {
+      headers: {
+        [clientIpHeader]: expectedIp
+      }
+    }).catch(done)
+  })
+
+  it('should detect first public ip from multiple header configured', (done) => {
     const ip1 = '1.2.3.4'
     const ip2 = '1.2.3.5'
     const ip3 = '1.2.3.6'
     controller = function (req) {
       const ip = extractIp({}, req)
       try {
-        expect(ip).to.be.undefined
+        expect(ip).to.be.equal(ip1)
         done()
       } catch (e) {
         done(e)
@@ -124,20 +148,20 @@ describe('ip extractor', () => {
     axios.get(`http://localhost:${port}/`, {
       headers: {
         'x-forwarded-for': ip1,
-        'client-ip': ip2,
+        'x-client-ip': ip2,
         'true-client-ip': ip3
       }
     }).catch(done)
   })
 
-  it('should not detect if multiple header configured with ipv6', (done) => {
+  it('should detect first public ip from multiple header configured with ipv6', (done) => {
     const ip1 = '2f0e:8a33:3211:6e69:e1e0:63d1:919e:4477'
     const ip2 = '4498:cf69:6a7b:49b6:8728:62d3:67ce:1fe7'
     const ip3 = 'faa4:bf6b:fc08:5fa6:a58d:bd95:c23a:69a9'
     controller = function (req) {
       const ip = extractIp({}, req)
       try {
-        expect(ip).to.be.undefined
+        expect(ip).to.be.equal(ip1)
         done()
       } catch (e) {
         done(e)
@@ -146,7 +170,7 @@ describe('ip extractor', () => {
     axios.get(`http://localhost:${port}/`, {
       headers: {
         'x-forwarded-for': ip1,
-        'client-ip': ip2,
+        'x-client-ip': ip2,
         'true-client-ip': ip3
       }
     }).catch(done)
@@ -243,5 +267,28 @@ describe('ip extractor', () => {
       }
     }
     axios.get(`http://localhost:${port}/`).catch(done)
+  })
+
+  it('should detect public ip between multiple headers', (done) => {
+    const ip1 = '192.168.10.1'
+    const ip2 = '192.168.10.2'
+    const ip3Public = '1.2.3.4'
+    const ip3 = `192.168.10.2,${ip3Public}`
+    controller = function (req) {
+      const ip = extractIp({}, req)
+      try {
+        expect(ip).to.be.equal(ip3Public)
+        done()
+      } catch (e) {
+        done(e)
+      }
+    }
+    axios.get(`http://localhost:${port}/`, {
+      headers: {
+        'x-forwarded-for': ip1,
+        'x-client-ip': ip2,
+        'true-client-ip': ip3
+      }
+    }).catch(done)
   })
 })

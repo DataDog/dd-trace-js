@@ -5,7 +5,7 @@ const HttpClientPlugin = require('./client')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
 class HttpPlugin extends CompositePlugin {
-  static get name () { return 'http' }
+  static get id () { return 'http' }
   static get plugins () {
     return {
       server: HttpServerPlugin,

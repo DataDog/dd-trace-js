@@ -26,12 +26,29 @@ function wrapHandleApiRequest (handleApiRequest) {
       return promise.then(handled => {
         if (!handled) return handled
 
-        const page = getPageFromPath(pathname, this.dynamicRoutes)
+        return this.hasPage(pathname).then(pageFound => {
+          const page = pageFound ? pathname : getPageFromPath(pathname, this.dynamicRoutes)
 
-        pageLoadChannel.publish({ page })
+          pageLoadChannel.publish({ page })
 
-        return handled
+          return handled
+        })
       })
+    })
+  }
+}
+
+// next 13.2 handleApiRequest uses a different set of parameters
+function wrapHandleApiRequestWithMatch (handleApiRequest) {
+  return function (req, res, query, match) {
+    return instrument(req, res, () => {
+      const page = (typeof match === 'object' && typeof match.definition === 'object')
+        ? match.definition.pathname
+        : undefined
+
+      pageLoadChannel.publish({ page })
+
+      return handleApiRequest.apply(this, arguments)
     })
   }
 }
@@ -127,7 +144,19 @@ function finish (req, res, result, err) {
   return result
 }
 
-addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
+  const Server = nextServer.default
+
+  shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
+  shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
+  shimmer.wrap(Server.prototype, 'renderToResponse', wrapRenderToResponse)
+  shimmer.wrap(Server.prototype, 'renderErrorToResponse', wrapRenderErrorToResponse)
+  shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
+
+  return nextServer
+})
+
+addHook({ name: 'next', versions: ['>=11.1 <13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)

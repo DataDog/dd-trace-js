@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 describe('metrics', () => {
   let metrics
   let config
@@ -51,8 +53,6 @@ describe('metrics', () => {
     it('it should initialize the Dogstatsd client with the correct options', function () {
       metrics.start(config)
 
-      this.timeout(10000)
-
       expect(Client).to.have.been.calledWithMatch({
         metricsProxyUrl: new URL('http://localhost:8126'),
         host: 'localhost',
@@ -67,8 +67,6 @@ describe('metrics', () => {
       config.hostname = '::1'
 
       metrics.start(config)
-
-      this.timeout(10000)
 
       expect(Client).to.have.been.calledWithMatch({
         metricsProxyUrl: new URL('http://[::1]:8126'),
@@ -114,6 +112,8 @@ describe('metrics', () => {
       expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.median')
       expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile')
       expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.count')
+
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.utilization')
 
       expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.max')
       expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.min')

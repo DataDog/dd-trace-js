@@ -3,10 +3,13 @@
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
+const { isTrue } = require('../../dd-trace/src/util')
 
 class BaseAwsSdkPlugin extends Plugin {
+  static get id () { return 'aws' }
+
   get serviceIdentifier () {
-    const id = this.constructor.name.toLowerCase()
+    const id = this.constructor.id.toLowerCase()
     Object.defineProperty(this, 'serviceIdentifier', {
       configurable: true,
       writable: true,
@@ -74,7 +77,9 @@ class BaseAwsSdkPlugin extends Plugin {
   }
 
   isEnabled (request) {
-    return true
+    const serviceId = this.serviceIdentifier.toUpperCase()
+    const envVarValue = process.env[`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`]
+    return envVarValue ? isTrue(envVarValue) : true
   }
 
   addResponseTags (span, response) {

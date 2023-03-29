@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/tap')
+
 const expect = require('chai').expect
 const sinon = require('sinon')
 
@@ -7,8 +9,6 @@ const SpaceProfiler = require('../../src/profiling/profilers/space')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 
 describe('profiler', function () {
-  this.timeout(10000) // TODO: fix slow tests
-
   let Profiler
   let profiler
   let wallProfiler
@@ -196,6 +196,16 @@ describe('profiler', function () {
       await profiler._start({ profilers, exporters })
 
       clock.tick(interval)
+
+      await waitForExport()
+
+      sinon.assert.calledOnce(exporter.export)
+    })
+
+    it('should flush when the profiler is stopped', async () => {
+      await profiler._start({ profilers, exporters })
+
+      profiler.stop()
 
       await waitForExport()
 

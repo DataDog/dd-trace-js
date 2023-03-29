@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/tap')
+
 const { expect } = require('chai')
 const id = require('../../src/id')
 
@@ -79,6 +81,18 @@ describe('SpanContext', () => {
       _traceparent: undefined,
       _tracestate: undefined
     })
+  })
+
+  it('should clone sampling object', () => {
+    const first = new SpanContext({
+      sampling: { priority: 1 }
+    })
+    const second = new SpanContext({
+      sampling: first.sampling
+    })
+    second._sampling.priority = 2
+
+    expect(first._sampling).to.have.property('priority', 1)
   })
 
   describe('toTraceId()', () => {

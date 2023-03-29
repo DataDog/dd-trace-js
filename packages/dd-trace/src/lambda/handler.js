@@ -1,5 +1,6 @@
 'use strict'
 
+const log = require('../log')
 const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
 const { ImpendingTimeout } = require('./runtime/errors')
@@ -22,15 +23,14 @@ let __lambdaTimeout
  * @param {*} context AWS Lambda context object.
  */
 function checkTimeout (context) {
-  let remainingTimeInMillis = context.getRemainingTimeInMillis()
-  const apmFlushDeadline = parseInt(process.env.DD_APM_FLUSH_DEADLINE)
-  if (apmFlushDeadline && apmFlushDeadline <= remainingTimeInMillis) {
-    remainingTimeInMillis = apmFlushDeadline
-  }
+  const remainingTimeInMillis = context.getRemainingTimeInMillis()
+
+  let apmFlushDeadline = parseInt(process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS) || 100
+  apmFlushDeadline = apmFlushDeadline < 0 ? 100 : apmFlushDeadline
 
   __lambdaTimeout = setTimeout(() => {
     timeoutChannel.publish(undefined)
-  }, remainingTimeInMillis - 50)
+  }, remainingTimeInMillis - apmFlushDeadline)
 }
 
 /**
@@ -43,13 +43,20 @@ function checkTimeout (context) {
  */
 function crashFlush () {
   const activeSpan = tracer.scope().active()
-  const error = new ImpendingTimeout('Datadog detected an impending timeout')
-  activeSpan.addTags({
-    [ERROR_MESSAGE]: error.message,
-    [ERROR_TYPE]: error.name
-  })
+  if (activeSpan !== null) {
+    const error = new ImpendingTimeout('Datadog detected an impending timeout')
+    activeSpan.addTags({
+      [ERROR_MESSAGE]: error.message,
+      [ERROR_TYPE]: error.name
+    })
+  } else {
+    log.warn('An impending timeout was reached, but no root span was found. No error will be tagged.')
+  }
+
   tracer._processor.killAll()
-  activeSpan.finish()
+  if (activeSpan !== null) {
+    activeSpan.finish()
+  }
 }
 
 /**

@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../setup/tap')
+
 const AgentInfoExporter = require('../../../src/exporters/common/agent-info-exporter')
 const nock = require('nock')
 

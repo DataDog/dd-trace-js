@@ -128,7 +128,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('moleculer.context.service', 'math')
               expect(spans[0].meta).to.have.property('moleculer.namespace', 'multi')
               expect(spans[0].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
-              expect(spans[0].metrics).to.have.property('out.port', port)
+              expect(spans[0].metrics).to.have.property('network.destination.port', port)
             }).then(done, done)
 
             broker.call('math.add', { a: 5, b: 3 }).catch(done)

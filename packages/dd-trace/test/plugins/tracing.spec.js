@@ -1,3 +1,7 @@
+'use strict'
+
+require('../setup/tap')
+
 const TracingPlugin = require('../../src/plugins/tracing')
 
 describe('TracingPlugin', () => {

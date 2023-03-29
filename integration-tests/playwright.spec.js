@@ -17,14 +17,17 @@ const { TEST_STATUS } = require('../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
 // This is done because from playwright@>=1.22.0 node 12 is not supported
+// TODO: figure out why playwright 1.31.0 fails
 const isOldNode = semver.satisfies(process.version, '<=12')
 const versions = ['1.18.0', isOldNode ? '1.21.0' : 'latest']
 
 versions.forEach((version) => {
   describe(`playwright@${version}`, () => {
     let sandbox, cwd, receiver, childProcess, webAppPort
-    before(async () => {
-      sandbox = await createSandbox([`@playwright/test@${version}`], true)
+    before(async function () {
+      // bump from 30 to 60 seconds because playwright dependencies are heavy
+      this.timeout(60000)
+      sandbox = await createSandbox([`@playwright/test@${version}`, 'typescript'], true)
       cwd = sandbox.folder
       // install necessary browser
       execSync('npx playwright install', { cwd })
@@ -65,9 +68,9 @@ versions.forEach((version) => {
 
             const stepEvents = events.filter(event => event.type === 'span')
 
-            assert.equal(testSessionEvent.content.resource, 'test_session.playwright test')
+            assert.include(testSessionEvent.content.resource, 'test_session.playwright test')
             assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
-            assert.equal(testModuleEvent.content.resource, 'test_module.playwright test')
+            assert.include(testModuleEvent.content.resource, 'test_module.playwright test')
             assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
 
             assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
@@ -101,7 +104,7 @@ versions.forEach((version) => {
           }).catch(done)
 
           childProcess = exec(
-            './node_modules/.bin/playwright test',
+            './node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
@@ -112,6 +115,41 @@ versions.forEach((version) => {
             }
           )
         })
+      })
+    })
+    it('works when tests are compiled to a different location', (done) => {
+      let testOutput = ''
+      receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle').then((payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testEvents = events.filter(event => event.type === 'test')
+        assert.includeMembers(testEvents.map(test => test.content.resource), [
+          'playwright-tests-ts/one-test.js.should work with passing tests',
+          'playwright-tests-ts/one-test.js.should work with skipped tests'
+        ])
+        assert.include(testOutput, '1 passed')
+        assert.include(testOutput, '1 skipped')
+        assert.notInclude(testOutput, 'TypeError')
+        done()
+      }).catch(done)
+
+      childProcess = exec(
+        'node ./node_modules/typescript/bin/tsc' +
+        '&& ./node_modules/.bin/playwright test -c ci-visibility/playwright-tests-ts-out',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            PW_RUNNER_DEBUG: '1'
+          },
+          stdio: 'inherit'
+        }
+      )
+      childProcess.stdout.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', chunk => {
+        testOutput += chunk.toString()
       })
     })
   })

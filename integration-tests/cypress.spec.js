@@ -16,8 +16,9 @@ const webAppServer = require('./ci-visibility/web-app-server')
 const {
   TEST_STATUS,
   TEST_COMMAND,
-  TEST_BUNDLE,
-  TEST_FRAMEWORK_VERSION
+  TEST_MODULE,
+  TEST_FRAMEWORK_VERSION,
+  TEST_TOOLCHAIN
 } = require('../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
@@ -72,14 +73,15 @@ versions.forEach((version) => {
             const { content: testModuleEventContent } = testModuleEvent
 
             assert.exists(testSessionEventContent.test_session_id)
-            assert.exists(testModuleEventContent.meta[TEST_COMMAND])
+            assert.exists(testSessionEventContent.meta[TEST_COMMAND])
+            assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
             assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
             assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
             assert.exists(testModuleEventContent.test_session_id)
             assert.exists(testModuleEventContent.test_module_id)
             assert.exists(testModuleEventContent.meta[TEST_COMMAND])
-            assert.exists(testModuleEventContent.meta[TEST_BUNDLE])
+            assert.exists(testModuleEventContent.meta[TEST_MODULE])
             assert.equal(testModuleEventContent.resource.startsWith('test_module.'), true)
             assert.equal(testModuleEventContent.meta[TEST_STATUS], 'fail')
             assert.equal(
@@ -107,7 +109,7 @@ versions.forEach((version) => {
               }
             }) => {
               assert.exists(meta[TEST_COMMAND])
-              assert.exists(meta[TEST_BUNDLE])
+              assert.exists(meta[TEST_MODULE])
               assert.exists(testSuiteId)
               assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
               assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
@@ -134,7 +136,7 @@ versions.forEach((version) => {
               }
             }) => {
               assert.exists(meta[TEST_COMMAND])
-              assert.exists(meta[TEST_BUNDLE])
+              assert.exists(meta[TEST_MODULE])
               assert.exists(testSuiteId)
               assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
               assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))

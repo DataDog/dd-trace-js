@@ -1,3 +1,5 @@
+'use strict'
+
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { IAST_TRANSACTION_ID } = require('../iast-context')
 const { TaintTracking, TaintTrackingDummy } = require('./taint-tracking-impl')
@@ -85,6 +87,14 @@ function disableTaintOperations () {
   global._ddiast = TaintTrackingDummy
 }
 
+function setMaxTransactions (transactions) {
+  if (!transactions) {
+    return
+  }
+
+  TaintedUtils.setMaxTransactions(transactions)
+}
+
 module.exports = {
   createTransaction,
   removeTransaction,
@@ -94,5 +104,6 @@ module.exports = {
   getRanges,
   enableTaintOperations,
   disableTaintOperations,
+  setMaxTransactions,
   IAST_TRANSACTION_ID
 }
