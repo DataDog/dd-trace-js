@@ -92,6 +92,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
+    expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
+    expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -169,6 +171,8 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = '42'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '.*'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = 'TODO'
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = 'TODO'
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
@@ -227,6 +231,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
+    expect(config).to.have.nested.property('appsec.blockedTemplateHtml', 'TODO')
+    expect(config).to.have.nested.property('appsec.blockedTemplateJson', 'TODO')
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -516,6 +522,8 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = 'TODO'
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = 'TODO'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
 
@@ -618,7 +626,9 @@ describe('Config', () => {
         rateLimit: 42,
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
-        obfuscatorValueRegex: '.*'
+        obfuscatorValueRegex: '.*',
+        blockedTemplateHtml: 'TODO',
+        blockedTemplateJson: 'TODO'
       },
       experimental: {
         appsec: {
@@ -627,7 +637,9 @@ describe('Config', () => {
           rateLimit: 11,
           wafTimeout: 11,
           obfuscatorKeyRegex: '^$',
-          obfuscatorValueRegex: '^$'
+          obfuscatorValueRegex: '^$',
+          blockedTemplateHtml: 'TODO',
+          blockedTemplateJson: 'TODO'
         }
       }
     })
@@ -822,6 +834,8 @@ describe('Config', () => {
         blockedTemplateJson: 'DOES_NOT_EXIST.json'
       }
     })
+
+    expect(log.error).TODO
     expect(config.appsec.blockedTemplateHtml).to.be.undefined
     expect(config.appsec.blockedTemplateJson).to.be.undefined
   })
