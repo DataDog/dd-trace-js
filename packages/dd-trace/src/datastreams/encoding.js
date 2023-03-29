@@ -16,13 +16,13 @@ function encodeVarint (v) {
 // decodes positive and negative numbers, using zig zag encoding to reduce the size of the variable length encoding.
 // uses high and low part to ensure those parts are under the limit for byte operations in javascript (32 bits)
 function decodeVarint (b) {
-  const [low, high] = decodeUvarint64(b)
+  const [low, high, bytes] = decodeUvarint64(b)
   if (low === undefined || high === undefined) {
-    return undefined
+    return [undefined, bytes]
   }
   const positive = (low & 1) === 0
   const abs = (low >>> 1) + high * 0x80000000
-  return positive ? abs : -abs
+  return [positive ? abs : -abs, bytes]
 }
 
 const maxVarLen64 = 9
@@ -50,7 +50,7 @@ function decodeUvarint64 (
   let s = 0
   for (let i = 0; ; i++) {
     if (bytes.length <= i) {
-      return [undefined, undefined]
+      return [undefined, undefined, bytes.slice(bytes.length)]
     }
     const n = bytes[i]
     if (n < 0x80 || i === maxVarLen64 - 1) {
@@ -61,7 +61,7 @@ function decodeUvarint64 (
       if (s > 0) {
         high |= s - 32 > 0 ? n << (s - 32) : n >> (32 - s)
       }
-      return [low, high]
+      return [low, high, bytes]
     }
     if (s < 32) {
       low |= (n & 0x7f) << s
