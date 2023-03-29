@@ -71,7 +71,7 @@ describe('path-traversal-analyzer', () => {
     })
 
     proxyPathAnalyzer._isVulnerable(undefined, iastContext)
-    expect(isTainted).to.have.been.callCount(0)
+    expect(isTainted).not.to.have.been.called
   })
 
   it('if context and value are valid it should call isTainted', () => {
@@ -133,6 +133,27 @@ describe('path-traversal-analyzer', () => {
     proxyPathAnalyzer.analyze(['arg1', 'taintedArg2'])
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch(iastContext, { evidence: { value: 'taintedArg2' } })
+  })
+
+  it('Should not report the vulnerability if it comes from send module', () => {
+    const mockPath = path.join('node_modules', 'send', 'send.js')
+    const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer', {
+      './injection-analyzer': InjectionAnalyzer,
+      '../iast-context': { getIastContext: () => iastContext }
+    })
+
+    proxyPathAnalyzer._getLocation = function () {
+      return { path: mockPath, line: 3 }
+    }
+
+    addVulnerability.reset()
+    TaintTrackingMock.isTainted.reset()
+    getIastContext.returns(iastContext)
+    TaintTrackingMock.isTainted.returns(true)
+    hasQuota.returns(true)
+
+    proxyPathAnalyzer.analyze(['arg1'])
+    expect(addVulnerability).not.have.been.called
   })
 })
 
