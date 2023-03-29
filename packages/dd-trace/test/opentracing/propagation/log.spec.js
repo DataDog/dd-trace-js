@@ -22,7 +22,7 @@ describe('LogPropagator', () => {
     log = {
       dd: {
         trace_id: '123',
-        span_id: '18446744073709551160' // -456 casted to uint64
+        span_id: '456'
       }
     }
   })
@@ -32,14 +32,14 @@ describe('LogPropagator', () => {
       const carrier = {}
       const spanContext = new SpanContext({
         traceId: id('123', 10),
-        spanId: id('-456', 10)
+        spanId: id('456', 10)
       })
 
       propagator.inject(spanContext, carrier)
 
       expect(carrier).to.have.property('dd')
       expect(carrier.dd).to.have.property('trace_id', '123')
-      expect(carrier.dd).to.have.property('span_id', '18446744073709551160') // -456 casted to uint64
+      expect(carrier.dd).to.have.property('span_id', '456')
     })
 
     it('should inject the global context into the carrier', () => {
@@ -64,7 +64,7 @@ describe('LogPropagator', () => {
       const traceIdTag = '8765432187654321'
       const spanContext = new SpanContext({
         traceId,
-        spanId: id('-456', 10)
+        spanId: id('456', 10)
       })
 
       spanContext._trace.tags['_dd.p.tid'] = traceIdTag
@@ -73,7 +73,7 @@ describe('LogPropagator', () => {
 
       expect(carrier).to.have.property('dd')
       expect(carrier.dd).to.have.property('trace_id', '87654321876543211234567812345678')
-      expect(carrier.dd).to.have.property('span_id', '18446744073709551160') // -456 casted to uint64
+      expect(carrier.dd).to.have.property('span_id', '456')
     })
 
     it('should not inject 128-bit trace IDs when disabled', () => {
@@ -82,7 +82,7 @@ describe('LogPropagator', () => {
       const traceIdTag = '8765432187654321'
       const spanContext = new SpanContext({
         traceId,
-        spanId: id('-456', 10)
+        spanId: id('456', 10)
       })
 
       spanContext._trace.tags['_dd.p.tid'] = traceIdTag
@@ -91,7 +91,7 @@ describe('LogPropagator', () => {
 
       expect(carrier).to.have.property('dd')
       expect(carrier.dd).to.have.property('trace_id', '123')
-      expect(carrier.dd).to.have.property('span_id', '18446744073709551160') // -456 casted to uint64
+      expect(carrier.dd).to.have.property('span_id', '456')
     })
   })
 
@@ -102,7 +102,20 @@ describe('LogPropagator', () => {
 
       expect(spanContext).to.deep.equal(new SpanContext({
         traceId: id('123', 10),
-        spanId: id('-456', 10)
+        spanId: id('456', 10)
+      }))
+    })
+
+    it('should convert signed IDs to unsigned', () => {
+      log.dd.trace_id = '-123'
+      log.dd.span_id = '-456'
+
+      const carrier = log
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.deep.equal(new SpanContext({
+        traceId: id('18446744073709551493', 10), // -123 casted to uint64
+        spanId: id('18446744073709551160', 10) // -456 casted to uint64
       }))
     })
 
@@ -122,7 +135,7 @@ describe('LogPropagator', () => {
 
       expect(spanContext).to.deep.equal(new SpanContext({
         traceId: id('1234567812345678', 16),
-        spanId: id('-456', 10),
+        spanId: id('456', 10),
         trace: {
           started: [],
           finished: [],
