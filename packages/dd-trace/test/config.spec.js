@@ -17,6 +17,11 @@ describe('Config', () => {
   let osType
 
   const RULES_JSON_PATH = require.resolve('./fixtures/config/appsec-rules.json')
+  const RULES_JSON = require(RULES_JSON_PATH)
+  const BLOCKED_TEMPLATE_HTML_PATH = require.resolve('./fixtures/config/appsec-blocked-template.html')
+  const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('./fixtures/config/appsec-blocked-template.json')
+  const BLOCKED_TEMPLATE_HTML = '<html>blocked</html>' + EOL
+  const BLOCKED_TEMPLATE_JSON = '{"error": "blocked"}' + EOL
 
   beforeEach(() => {
     pkg = {
@@ -27,7 +32,8 @@ describe('Config', () => {
     log = {
       use: sinon.spy(),
       toggle: sinon.spy(),
-      warn: sinon.spy()
+      warn: sinon.spy(),
+      error: sinon.spy()
     }
 
     env = process.env
@@ -171,8 +177,8 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = '42'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '.*'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
-    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = 'TODO'
-    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = 'TODO'
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_HTML_PATH
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
@@ -226,13 +232,13 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
-    expect(config).to.have.nested.deep.property('appsec.rules', require(RULES_JSON_PATH))
+    expect(config).to.have.nested.deep.property('appsec.rules', RULES_JSON)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
-    expect(config).to.have.nested.property('appsec.blockedTemplateHtml', 'TODO')
-    expect(config).to.have.nested.property('appsec.blockedTemplateJson', 'TODO')
+    expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
+    expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -522,8 +528,8 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
-    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = 'TODO'
-    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = 'TODO'
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_HTML_PATH
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
 
@@ -571,8 +577,8 @@ describe('Config', () => {
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
-        blockedTemplateHtml: require.resolve('./fixtures/config/appsec-blocked-template.html'),
-        blockedTemplateJson: require.resolve('./fixtures/config/appsec-blocked-template.json')
+        blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
+        blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH
       },
       remoteConfig: {
         pollInterval: 42
@@ -603,13 +609,13 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
-    expect(config).to.have.nested.deep.property('appsec.rules', require(RULES_JSON_PATH))
+    expect(config).to.have.nested.deep.property('appsec.rules', RULES_JSON)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
-    expect(config).to.have.nested.property('appsec.blockedTemplateHtml', '<html>blocked</html>' + EOL)
-    expect(config).to.have.nested.property('appsec.blockedTemplateJson', '{"error": "blocked"}' + EOL)
+    expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
+    expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
@@ -627,8 +633,8 @@ describe('Config', () => {
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
-        blockedTemplateHtml: 'TODO',
-        blockedTemplateJson: 'TODO'
+        blockedTemplateHtml: undefined,
+        blockedTemplateJson: undefined
       },
       experimental: {
         appsec: {
@@ -638,15 +644,15 @@ describe('Config', () => {
           wafTimeout: 11,
           obfuscatorKeyRegex: '^$',
           obfuscatorValueRegex: '^$',
-          blockedTemplateHtml: 'TODO',
-          blockedTemplateJson: 'TODO'
+          blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
+          blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH
         }
       }
     })
 
     expect(config).to.have.deep.property('appsec', {
       enabled: true,
-      rules: require(RULES_JSON_PATH),
+      rules: RULES_JSON,
       rateLimit: 42,
       wafTimeout: 42,
       obfuscatorKeyRegex: '.*',
@@ -835,7 +841,7 @@ describe('Config', () => {
       }
     })
 
-    expect(log.error).TODO
+    expect(log.error).to.be.called
     expect(config.appsec.blockedTemplateHtml).to.be.undefined
     expect(config.appsec.blockedTemplateJson).to.be.undefined
   })

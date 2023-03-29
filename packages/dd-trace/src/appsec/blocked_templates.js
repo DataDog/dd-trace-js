@@ -102,14 +102,14 @@ const html = `<!-- Sorry, you've been blocked -->
 </html>
 `
 
-const json = JSON.stringify({
-  errors: [
+const json = `{
+  "errors": [
     {
-      title: 'You\'ve been blocked',
-      detail: 'Sorry, you cannot access this page. Please contact the customer service team. Security provided by Datadog.'
+      "title": "You've been blocked",
+      "detail": "Sorry, you cannot access this page. Please contact the customer service team. Security provided by Datadog."
     }
   ]
-})
+}`
 
 module.exports = {
   html,
