@@ -45,12 +45,8 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
 
   _isExcluded (location) {
     let ret = false
-    if (location) {
-      ret = this.exclusionList.find(elem => {
-        if (location.path.includes(elem)) {
-          return true
-        }
-      })
+    if (location && location.path) {
+      ret = this.exclusionList.some(elem => location.path.includes(elem))
     }
     return ret
   }
