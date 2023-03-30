@@ -1,7 +1,7 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { getPathwayHash, encodePathwayContext } = require('./hash')
+const { getPathwayHash, encodePathwayContext, decodePathwayContext } = require('./hash')
 
 class KafkajsProducerPlugin extends ProducerPlugin {
   static get id () { return 'kafkajs' }
@@ -20,16 +20,14 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     const checkpointString = getCheckpointString(service, env, topic)
     if (active) {
       const context = active.context()
-      const rootSpan = context._trace.started[0]
-      parentHash = 'pathwayHash' // rootSpan._spanContext._tags.pathwayHash
-      originTimestamp = 'originTimestamp' // rootSpan._spanContext._tags.originTimestamp
-      prevTimestamp = 'prevTimestamp' // rootSpan._spanContext._tags.currentTimestamp
-      pathwayHash = getPathwayHash(checkpointString, parentHash)
+      const rootSpan = context._trace.started[0];
+      [parentHash, originTimestamp, prevTimestamp] = decodePathwayContext(rootSpan._spanContext._tags.pathwayHash)
     } else {
-      pathwayHash = currentHash
+      parentHash = Buffer.from('0000000000000000', 'hex')
       originTimestamp = currentTimestamp
       prevTimestamp = currentTimestamp
     }
+    pathwayHash = getPathwayHash(checkpointString, parentHash)
 
     const edgeLatency = currentTimestamp - prevTimestamp
     const pathwayLatency = currentTimestamp - originTimestamp

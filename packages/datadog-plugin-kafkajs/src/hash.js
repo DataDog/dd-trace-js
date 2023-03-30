@@ -7,9 +7,6 @@ function getConnectionHash (checkpointString) {
   return Buffer.from(hash.hex(), 'hex')
 }
 
-// const hash = fnv.hash('unnamed-go-servicetype:kafka', 64)
-// console.log(hash.dec())
-
 function getPathwayHash (checkpointString, parentHash) {
   const currentHash = getConnectionHash(checkpointString)
   const buf = Buffer.concat([ currentHash, parentHash ], 16)
@@ -21,7 +18,7 @@ function encodePathwayContext (pathwayHash, timeSinceOrigin, timeSincePrev) {
 }
 
 function decodePathwayContext (pathwayContext) {
-  const pathwayHash = pathwayContext.subarray(8)
+  const pathwayHash = pathwayContext.subarray(0, 8)
   const encodedTimestamps = pathwayContext.subarray(8, 20)
   const [timeSinceOrigin, encodedTimeSincePrev] = decodeVarint(encodedTimestamps)
   const [timeSincePrev, placeHolder] = decodeVarint(encodedTimeSincePrev)
@@ -29,6 +26,7 @@ function decodePathwayContext (pathwayContext) {
 }
 
 module.exports = {
+  getConnectionHash,
   getPathwayHash,
   encodePathwayContext,
   decodePathwayContext
