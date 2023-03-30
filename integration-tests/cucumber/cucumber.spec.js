@@ -63,7 +63,7 @@ versions.forEach(version => {
           envVars = isAgentless ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
         })
         it('can run and report tests', (done) => {
-          receiver.gatherPayloads(({ url }) => url.endsWith('/api/v2/citestcycle'), 5000).then((payloads) => {
+          receiver.gatherPayloads(({ url }) => url.endsWith('/api/v2/citestcycle'), 3000).then((payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end')

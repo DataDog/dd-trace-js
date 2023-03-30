@@ -28,11 +28,43 @@ jobs:
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
 
+  integration-cypress:
+    strategy:
+      matrix:
+        version: [14, latest]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.version }}
+      - name: Install dependencies for cypress@6.7.0
+        id: install-dependencies
+        run: echo "folder=$(node integration-tests/scripts/sandbox.js cypress@6.7.0)" >> $GITHUB_OUTPUT
+      - run: yarn test:integration:cypress
+        env:
+          TEST_TMP_FOLDER: ${{ steps.install-dependencies.outputs.folder }}
+          CYPRESS_VERSION: "6.7.0"
+      - name: Remove temporary folder
+        run: rm -rf $TEST_TMP_FOLDER
+      # change latest to 11.2.0 for v2.x
+      - name: Install dependencies for cypress@latest
+        id: install-dependencies-latest
+        run: echo "folder=$(node integration-tests/scripts/sandbox.js cypress@latest)" >> $GITHUB_OUTPUT
+      - run: yarn test:integration:cypress
+        env:
+          TEST_TMP_FOLDER: ${{ steps.install-dependencies-latest.outputs.folder }}
+          CYPRESS_VERSION: "latest"
+      - name: Remove temporary folder
+        run: rm -rf $TEST_TMP_FOLDER
+
   integration-ci:
     strategy:
       matrix:
         version: [14, latest]
-        framework: [cucumber, cypress, playwright]
+        framework: [cucumber, playwright]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
