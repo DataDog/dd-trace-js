@@ -22,7 +22,7 @@ describe('TextMapPropagator', () => {
     const trace = { started: [], finished: [], tags: {} }
     const spanContext = new SpanContext({
       traceId: id('123', 10),
-      spanId: id('-456', 10),
+      spanId: id('456', 10),
       baggageItems,
       ...params,
       trace: {
@@ -40,7 +40,7 @@ describe('TextMapPropagator', () => {
     propagator = new TextMapPropagator(config)
     textMap = {
       'x-datadog-trace-id': '123',
-      'x-datadog-parent-id': '18446744073709551160', // -456 casted to uint64
+      'x-datadog-parent-id': '456',
       'ot-baggage-foo': 'bar'
     }
     baggageItems = {}
@@ -60,7 +60,7 @@ describe('TextMapPropagator', () => {
       propagator.inject(spanContext, carrier)
 
       expect(carrier).to.have.property('x-datadog-trace-id', '123')
-      expect(carrier).to.have.property('x-datadog-parent-id', '18446744073709551160') // -456 casted to uint64
+      expect(carrier).to.have.property('x-datadog-parent-id', '456')
       expect(carrier).to.have.property('ot-baggage-foo', 'bar')
     })
 
@@ -211,6 +211,42 @@ describe('TextMapPropagator', () => {
       expect(carrier).to.have.property('x-b3-flags', '1')
     })
 
+    it('should inject the 128-bit trace ID in B3 headers when available as tag', () => {
+      const carrier = {}
+      const spanContext = createContext({
+        traceId: id('0000000000000123'),
+        trace: {
+          tags: {
+            '_dd.p.tid': '0000000000000234'
+          }
+        }
+      })
+
+      config.tracePropagationStyle.inject = ['b3']
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.have.property('x-b3-traceid', '00000000000002340000000000000123')
+    })
+
+    it('should inject the 128-bit trace ID in B3 headers when available as ID', () => {
+      const carrier = {}
+      const spanContext = createContext({
+        traceId: id('00000000000002340000000000000123'),
+        trace: {
+          tags: {
+            '_dd.p.tid': '0000000000000234'
+          }
+        }
+      })
+
+      config.tracePropagationStyle.inject = ['b3']
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.have.property('x-b3-traceid', '00000000000002340000000000000123')
+    })
+
     it('should inject the traceparent header', () => {
       const carrier = {}
       const spanContext = createContext({
@@ -290,6 +326,17 @@ describe('TextMapPropagator', () => {
       expect(spanContext.toTraceId()).to.equal(carrier['x-datadog-trace-id'])
       expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
       expect(spanContext._baggageItems['foo']).to.equal(carrier['ot-baggage-foo'])
+    })
+
+    it('should convert signed IDs to unsigned', () => {
+      textMap['x-datadog-trace-id'] = '-123'
+      textMap['x-datadog-parent-id'] = '-456'
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext.toTraceId()).to.equal('18446744073709551493') // -123 casted to uint64
+      expect(spanContext.toSpanId()).to.equal('18446744073709551160') // -456 casted to uint64
     })
 
     it('should return null if the carrier does not contain a trace', () => {
@@ -593,6 +640,25 @@ describe('TextMapPropagator', () => {
 
         expect(spanContext).to.be.null
       })
+
+      it('should support 128-bit trace IDs', () => {
+        textMap['b3'] = '00000000000002340000000000000123-0000000000000456'
+
+        config.traceId128BitGenerationEnabled = true
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+
+        expect(spanContext).to.deep.equal(createContext({
+          traceId: id('00000000000002340000000000000123', 16),
+          spanId: id('456', 16),
+          trace: {
+            tags: {
+              '_dd.p.tid': '0000000000000234'
+            }
+          }
+        }))
+      })
     })
 
     describe('With traceparent propagation as single header', () => {
@@ -625,6 +691,17 @@ describe('TextMapPropagator', () => {
           '_dd.p.foo_bar_baz_',
           'abc_!@#$%^&*()_+`-='
         )
+      })
+
+      it('should extract a 128-bit trace ID', () => {
+        textMap['traceparent'] = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        config.tracePropagationStyle.extract = ['tracecontext']
+        config.traceId128BitGenerationEnabled = true
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+        expect(spanContext._traceId.toString(16)).to.equal('1111aaaa2222bbbb3333cccc4444dddd')
+        expect(spanContext._trace.tags).to.have.property('_dd.p.tid', '1111aaaa2222bbbb')
       })
 
       it('should propagate the version', () => {

@@ -34,7 +34,9 @@ class DatadogSpanContext {
 
   toTraceparent () {
     const flags = this._sampling.priority >= AUTO_KEEP ? '01' : '00'
-    const traceId = this._traceId.toString(16).padStart(32, '0')
+    const traceId = this._traceId.toBuffer().length <= 8 && this._trace.tags['_dd.p.tid']
+      ? this._trace.tags['_dd.p.tid'] + this._traceId.toString(16).padStart(16, '0')
+      : this._traceId.toString(16).padStart(32, '0')
     const spanId = this._spanId.toString(16).padStart(16, '0')
     const version = (this._traceparent && this._traceparent.version) || '00'
     return `${version}-${traceId}-${spanId}-${flags}`
