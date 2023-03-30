@@ -19,7 +19,7 @@ env:
 # TODO: upstream jobs
 
 jobs:
-  amqp10:
+  amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
     services:
       qpid:
