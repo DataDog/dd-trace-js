@@ -1,30 +1,28 @@
 'use strict'
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const { getConnectionHash, getPathwayHash } = require('./hash')
+const { getPathwayHash, encodePathwayContext, decodePathwayContext } = require('./hash')
 
 class KafkajsConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'kafkajs' }
   static get operation () { return 'consume' }
 
   start ({ topic, partition, message, groupId }) {
-    const currentTime = new Date().getTime()
+    const currentTime = new Date().now()
     const childOf = extract(this.tracer, message.headers)
     let parentHash
     let pathwayHash
     let originTime
     let prevTime
     const service = this.tracer._service
-    if (this.config.DD_DATA_STREAMS_ENABLED !== 'disabled') {
+    if (this.config.dsmEnabled !== 'disabled') {
       const env = this.tracer._env
       const checkpointString = getCheckpointString(service, env, groupId, topic, partition)
-      const currentHash = getConnectionHash(checkpointString)
+      const pathwayHash = getPathwayHash(checkpointString, parentHash)
 
-      if (message.headers.pathwayHash) {
-        parentHash = ''
-        pathwayHash = getPathwayHash(parentHash, currentHash)
-        originTime = ''
-        prevTime = ''
+      const prevPathwayCtx = message.headers['dd-pathway-ctx']
+      if (prevPathwayCtx) {
+        [parentHash, originTimestamp, prevTimestamp] = decodePathwayContext(rootSpan._spanContext._tags.pathwayHash)
       } else {
         pathwayHash = currentHash
         originTime = currentTime
@@ -45,6 +43,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       },
       metrics: {
         'kafka.partition': partition, // TODO: send dsm values here
+        'dd-pathway-ctx': 'TODO',
         'pathwayhash': pathwayHash,
         'origintimestamp': originTime,
         'currenttimestamp': currentTime,

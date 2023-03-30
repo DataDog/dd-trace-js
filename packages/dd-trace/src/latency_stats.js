@@ -13,9 +13,8 @@ class HeaderAggStats {
   }
 
   record (header) {
-    // TODO
-    const edgeLatency = header.metrics.edgeLatency
-    const pathwayLatency = header.metrics.pathwayLatency
+    const edgeLatency = header.metrics.edgelatency
+    const pathwayLatency = header.metrics.pathwaylatency
     this.edgeLatency.accept(edgeLatency)
     this.pathwayLatency.accept(pathwayLatency)
   }
@@ -31,7 +30,7 @@ class HeaderAggStats {
 
 class HeaderAggKey {
   constructor (header) {
-    this.hash = header.metrics.pathwayHash
+    this.hash = header.metrics['dd-pathway-ctx']
   }
 
   toString () {
@@ -105,10 +104,10 @@ class LatencyStatsProcessor {
     })
   }
 
-  onFinished (header) {
+  recordHeader (header) {
     if (!this.enabled) return
 
-    const bucketTime = header.currentTs - (header.currentTs % this.bucketSizeNs) // TODO: change currentTs?
+    const bucketTime = header.currentTimestamp - (header.currentTimestamp % this.bucketSizeNs)
 
     this.buckets.forTime(bucketTime)
       .forHeader(header)
