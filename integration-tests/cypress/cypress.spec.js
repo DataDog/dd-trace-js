@@ -61,7 +61,7 @@ versions.forEach((version) => {
             ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
           const reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
 
-          receiver.gatherPayloads(({ url }) => url === reportUrl, 25000).then((payloads) => {
+          receiver.gatherPayloadsMaxTimeout(({ url }) => url === reportUrl, payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end')
@@ -141,9 +141,7 @@ versions.forEach((version) => {
               assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
               assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
             })
-
-            done()
-          }).catch(done)
+          }, 25000).then(() => done()).catch(done)
 
           const {
             NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -160,7 +158,7 @@ versions.forEach((version) => {
                 ...restEnvVars,
                 CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
               },
-              stdio: 'on'
+              stdio: 'pipe'
             }
           )
         })
