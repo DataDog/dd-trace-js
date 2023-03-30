@@ -8,7 +8,8 @@ const {
   HTTP_REQUEST_PARAMETER,
   HTTP_REQUEST_BODY,
   HTTP_REQUEST_COOKIE_VALUE,
-  HTTP_REQUEST_COOKIE_NAME
+  HTTP_REQUEST_COOKIE_NAME,
+  HTTP_REQUEST_PATH_PARAM
 } = require('./origin-types')
 
 class TaintTrackingPlugin extends Plugin {
@@ -27,14 +28,19 @@ class TaintTrackingPlugin extends Plugin {
       'datadog:cookie:parse:finish',
       ({ cookies }) => this._cookiesTaintTrackingHandler(cookies)
     )
+    this.addSub(
+      'apm:express:middleware:enter',
+      ({ req }) => this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
+    )
   }
 
   _taintTrackingHandler (type, target, property) {
     const iastContext = getIastContext(storage.getStore())
+    if (!target) return
     if (!property) {
       target = taintObject(iastContext, target, type)
     } else {
-      target[property] = taintObject(iastContext, target[property], type)
+      target[property] && (target[property] = taintObject(iastContext, target[property], type))
     }
   }
 
