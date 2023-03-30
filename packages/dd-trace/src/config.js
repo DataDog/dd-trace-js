@@ -16,20 +16,12 @@ const fromEntries = Object.fromEntries || (entries =>
 // eslint-disable-next-line max-len
 const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
 
-function isConfigPropCorrect (propOrEnv, isEnv) {
-  return `Is '${propOrEnv}' ${isEnv ? 'environment variable' : 'configuration property'} correct?`
-}
-
-function isEnvVarCorrect (envVar) {
-  return isConfigPropCorrect(envVar, true)
-}
-
-function maybeFile (filepath, errorMsg) {
+function maybeFile (filepath) {
   if (!filepath) return
   try {
     return fs.readFileSync(filepath, 'utf8')
   } catch (e) {
-    log.error(`dd-trace: Error reading file ${filepath}.${errorMsg ? ' ' + errorMsg : ''}`)
+    log.error(e)
     return undefined
   }
 }
@@ -296,8 +288,8 @@ class Config {
     )
 
     const DD_APPSEC_RULES = coalesce(
-      safeJsonParse(maybeFile(appsec.rules, isConfigPropCorrect('appsec.rules'))),
-      safeJsonParse(maybeFile(process.env.DD_APPSEC_RULES, isEnvVarCorrect('DD_APPSEC_RULES')))
+      safeJsonParse(maybeFile(appsec.rules)),
+      safeJsonParse(maybeFile(process.env.DD_APPSEC_RULES))
     )
     const DD_APPSEC_TRACE_RATE_LIMIT = coalesce(
       parseInt(appsec.rateLimit),
@@ -324,14 +316,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
     )
     const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = coalesce(
-      maybeFile(appsec.blockedTemplateHtml, isConfigPropCorrect('appsec.blockedTemplateHtml')),
-      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
-        isEnvVarCorrect('DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML'))
+      maybeFile(appsec.blockedTemplateHtml),
+      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
     )
     const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = coalesce(
-      maybeFile(appsec.blockedTemplateJson, isConfigPropCorrect('appsec.blockedTemplateJson')),
-      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
-        isEnvVarCorrect('DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON'))
+      maybeFile(appsec.blockedTemplateJson),
+      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
     )
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
@@ -411,8 +401,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       }),
       spanSamplingRules: coalesce(
         options.spanSamplingRules,
-        safeJsonParse(maybeFile(process.env.DD_SPAN_SAMPLING_RULES_FILE,
-          isEnvVarCorrect('DD_SPAN_SAMPLING_RULES_FILE'))),
+        safeJsonParse(maybeFile(process.env.DD_SPAN_SAMPLING_RULES_FILE)),
         safeJsonParse(process.env.DD_SPAN_SAMPLING_RULES),
         []
       ).map(rule => {

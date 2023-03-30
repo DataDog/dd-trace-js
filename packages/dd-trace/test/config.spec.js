@@ -528,8 +528,8 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
-    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_HTML_PATH
-    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = '/lower/priority/templates/blocked.html'
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = '/lower/priority/templates/blocked.json'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
 
@@ -833,6 +833,18 @@ describe('Config', () => {
   })
 
   it('should ignore appsec.blockedTemplateHtml if it does not exist', () => {
+    const errorHtml = new Error('DOES_NOT_EXIST.html not found')
+    const errorJson = new Error('DOES_NOT_EXIST.json not found')
+    fs.readFileSync = (name) => {
+      throw name.includes('html') ? errorHtml : errorJson
+    }
+    const Config = proxyquire('../src/config', {
+      './pkg': pkg,
+      './log': log,
+      fs,
+      os
+    })
+
     const config = new Config({
       appsec: {
         enabled: true,
@@ -841,7 +853,9 @@ describe('Config', () => {
       }
     })
 
-    expect(log.error).to.be.called
+    expect(log.error).to.be.calledTwice
+    expect(log.error.firstCall).to.have.been.calledWithExactly(errorHtml)
+    expect(log.error.secondCall).to.have.been.calledWithExactly(errorJson)
     expect(config.appsec.blockedTemplateHtml).to.be.undefined
     expect(config.appsec.blockedTemplateJson).to.be.undefined
   })
