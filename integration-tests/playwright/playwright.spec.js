@@ -1,7 +1,7 @@
 'use strict'
 
 const { exec, execSync } = require('child_process')
-
+const path = require('path')
 const getPort = require('get-port')
 const { assert } = require('chai')
 const semver = require('semver')
@@ -10,10 +10,10 @@ const {
   createSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
-} = require('./helpers')
-const { FakeCiVisIntake } = require('./ci-visibility-intake')
-const webAppServer = require('./ci-visibility/web-app-server')
-const { TEST_STATUS } = require('../packages/dd-trace/src/plugins/util/test')
+} = require('../helpers')
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const webAppServer = require('../ci-visibility/web-app-server')
+const { TEST_STATUS } = require('../../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
 // This is done because from playwright@>=1.22.0 node 12 is not supported
@@ -28,7 +28,7 @@ versions.forEach((version) => {
       // bump from 30 to 60 seconds because playwright dependencies are heavy
       this.timeout(60000)
       sandbox = await createSandbox([`@playwright/test@${version}`, 'typescript'], true)
-      cwd = sandbox.folder
+      cwd = path.join(sandbox.folder, 'playwright')
       // install necessary browser
       execSync('npx playwright install', { cwd })
       webAppPort = await getPort()
@@ -104,7 +104,7 @@ versions.forEach((version) => {
           }).catch(done)
 
           childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
+            '../node_modules/.bin/playwright test -c playwright.config.js',
             {
               cwd,
               env: {
@@ -133,8 +133,8 @@ versions.forEach((version) => {
       }).catch(done)
 
       childProcess = exec(
-        'node ./node_modules/typescript/bin/tsc' +
-        '&& ./node_modules/.bin/playwright test -c ci-visibility/playwright-tests-ts-out',
+        'node ../node_modules/typescript/bin/tsc' +
+        '&& ../node_modules/.bin/playwright test -c ci-visibility/playwright-tests-ts-out',
         {
           cwd,
           env: {
