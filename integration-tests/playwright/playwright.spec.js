@@ -58,7 +58,7 @@ versions.forEach((version) => {
             ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
           const reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
 
-          receiver.gatherPayloads(({ url }) => url === reportUrl).then((payloads) => {
+          receiver.gatherPayloadsMaxTimeout(({ url }) => url === reportUrl, payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end')
@@ -99,9 +99,7 @@ versions.forEach((version) => {
               assert.equal(stepEvent.content.name, 'playwright.step')
               assert.property(stepEvent.content.meta, 'playwright.step')
             })
-
-            done()
-          }).catch(done)
+          }).then(() => done()).catch(done)
 
           childProcess = exec(
             './node_modules/.bin/playwright test -c playwright.config.js',
@@ -119,7 +117,8 @@ versions.forEach((version) => {
     })
     it('works when tests are compiled to a different location', (done) => {
       let testOutput = ''
-      receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle').then((payloads) => {
+
+      receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
         const events = payloads.flatMap(({ payload }) => payload.events)
         const testEvents = events.filter(event => event.type === 'test')
         assert.includeMembers(testEvents.map(test => test.content.resource), [
@@ -129,8 +128,7 @@ versions.forEach((version) => {
         assert.include(testOutput, '1 passed')
         assert.include(testOutput, '1 skipped')
         assert.notInclude(testOutput, 'TypeError')
-        done()
-      }).catch(done)
+      }).then(() => done()).catch(done)
 
       childProcess = exec(
         'node ./node_modules/typescript/bin/tsc' +
