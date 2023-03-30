@@ -1,40 +1,47 @@
 'use strict'
 
-const { encodeVarint, decodeVarint } = require('../../src/datastreams/encoding')
+const { getConnectionHash, getPathwayHash, encodePathwayContext, decodePathwayContext } = require('../src/hash')
 const { expect } = require('chai')
 
+describe('hashing', () => {
+  describe('getConnectionHash', () => {
+    it('gets connection hash from checkpoint string', () => {
+      const checkpointString = 'unnamed-go-servicetype:kafka'
+      const expectedHash = Buffer.from('c223f2fa96760cba', 'hex')
+      const hash = getConnectionHash(checkpointString)
+      expect(hash.length).to.equal(expectedHash.length)
+      for (let i = 0; i < expectedHash.length; i++) {
+        expect(hash[i]).to.equal(expectedHash[i])
+      }
+    })
+  })
+  describe('getPathwayHash', () => {
+    it('gets pathway hash from connection string and parent hash', () => {
+      const parentHash = Buffer.from('0000000000000000', 'hex')
+      const currentHash = Buffer.from('c223f2fa96760cba', 'hex')
+      const expectedHash = Buffer.from('e073ca23a5577149', 'hex') // TODO
+      const hash = getPathwayHash(parentHash, currentHash)
+      expect(hash.length).to.equal(expectedHash.length)
+      for (let i = 0; i < expectedHash.length; i++) {
+        expect(hash[i]).to.equal(expectedHash[i])
+      }
+    })
+  })
+})
 describe('encoding', () => {
-  describe('encodeVarInt', () => {
-    it('encoding then decoding should be a no op for int32 numbers', () => {
-      const n = 1679672748
-      const expectedEncoded = new Uint8Array([216, 150, 238, 193, 12])
-      const encoded = encodeVarint(n)
-      expect(encoded.length).to.equal(expectedEncoded.length)
-      expect(encoded.every((val, i) => val === expectedEncoded[i])).to.true
-      const [decoded, bytes] = decodeVarint(encoded)
-      expect(decoded).to.equal(n)
-      expect(bytes).to.length(0)
-    })
-    it('encoding then decoding should be a no op for bigger than int32 numbers', () => {
-      const n = 1679711644352
-      const expectedEncoded = new Uint8Array([
-        128, 171, 237, 233, 226, 97
-      ])
-      const encoded = encodeVarint(n)
-      expect(encoded.length).to.equal(expectedEncoded.length)
-      expect(encoded.every((val, i) => val === expectedEncoded[i])).to.true
-      const toDecode = [...encoded, ...encoded]
-      const [decoded, bytes] = decodeVarint(toDecode)
-      expect(decoded).to.equal(n)
-      expect(bytes.every((val, i) => val === expectedEncoded[i])).to.true
-      const [decoded2, bytes2] = decodeVarint(bytes)
-      expect(decoded2).to.equal(n)
-      expect(bytes2).to.length(0)
-    })
-    it('encoding a number bigger than Max safe int fails.', () => {
-      const n = Number.MAX_SAFE_INTEGER + 10
-      const encoded = encodeVarint(n)
-      expect(encoded).to.undefined
-    })
+  it('encodes then decodes pathway context', () => {
+    const pathwayHash = Buffer.from('e073ca23a5577149', 'hex')
+    const timestamp = 1680033770000
+    const expectedEncoded = Buffer.from('e073ca23a5577149a0a8879de561a0a8879de561', 'hex')
+    const encoded = encodePathwayContext(pathwayHash, timestamp, timestamp)
+    expect(encoded.length).to.equal(expectedEncoded.length)
+    for (let i = 0; i < expectedEncoded.length; i++) {
+      expect(encoded[i]).to.equal(expectedEncoded[i])
+    }
+
+    const [ decodedPathwayHash, decodedTimeSinceOrigin, decodedTimeSincePrev ] = decodePathwayContext(encoded)
+    expect(decodedPathwayHash).to.equal(pathwayHash)
+    expect(decodedTimeSinceOrigin).to.equal(timestamp)
+    expect(decodedTimeSincePrev).to.equal(timestamp)
   })
 })
