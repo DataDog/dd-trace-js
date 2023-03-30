@@ -51,7 +51,6 @@ module.exports = class PluginManager {
     this._tracerConfig = null
     this._pluginsByName = {}
     this._configsByName = {}
-    this._latencyProcessor = null
 
     this._loadedSubscriber = ({ name }) => {
       const Plugin = plugins[name]
@@ -73,7 +72,9 @@ module.exports = class PluginManager {
     }
     if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
 
-    this._latencyProcessor = new LatencyStatsProcessor(this._tracerConfig)
+    // TODO: move this somewhere else?
+    if (name === 'kafkajs') this._latencyProcessor = new LatencyStatsProcessor(this._tracerConfig)
+
     const pluginConfig = this._configsByName[name] || {
       enabled: this._tracerConfig.plugins !== false
     }
@@ -129,7 +130,8 @@ module.exports = class PluginManager {
       queryStringObfuscation,
       site,
       url,
-      dbmPropagationMode
+      dbmPropagationMode,
+      dsmEnabled
     } = this._tracerConfig
 
     const sharedConfig = {}
@@ -143,6 +145,7 @@ module.exports = class PluginManager {
     }
 
     sharedConfig.dbmPropagationMode = dbmPropagationMode
+    sharedConfig.dsmEnabled = dsmEnabled
 
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
@@ -150,6 +153,7 @@ module.exports = class PluginManager {
 
     sharedConfig.site = site
     sharedConfig.url = url
+    // TODO: pass this to kafkajs plugin another way
     sharedConfig.latencyStatsProcessor = this._latencyProcessor
 
     return sharedConfig
