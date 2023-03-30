@@ -28,6 +28,21 @@ jobs:
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
 
+  integration-ci:
+    strategy:
+      matrix:
+        version: [14, latest]
+        framework: [cucumber, cypress, playwright]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.version }}
+      - run: yarn test:integration
+
   lint:
     runs-on: ubuntu-latest
     steps:
