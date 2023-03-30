@@ -77,6 +77,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('logLevel', 'debug')
+    expect(config).to.have.property('traceId128BitGenerationEnabled', false)
+    expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.deep.property('serviceMapping', {})
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['tracecontext', 'datadog'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext', 'datadog'])
@@ -173,6 +175,8 @@ describe('Config', () => {
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
     process.env.DD_IAST_DEDUPLICATION_ENABLED = false
+    process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
+    process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
 
     const config = new Config()
 
@@ -191,6 +195,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
+    expect(config).to.have.property('traceId128BitGenerationEnabled', true)
+    expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
     expect(config).to.have.deep.nested.property('sampler', {
@@ -348,7 +354,9 @@ describe('Config', () => {
       appsec: false,
       remoteConfig: {
         pollInterval: 42
-      }
+      },
+      traceId128BitGenerationEnabled: true,
+      traceId128BitLoggingEnabled: true
     })
 
     expect(config).to.have.property('protocolVersion', '0.5')
@@ -374,6 +382,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
     expect(config).to.have.property('logLevel', logLevel)
+    expect(config).to.have.property('traceId128BitGenerationEnabled', true)
+    expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('tags')
     expect(config.tags).to.have.property('foo', 'bar')
     expect(config.tags).to.have.property('runtime-id')
@@ -515,6 +525,8 @@ describe('Config', () => {
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
+    process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
+    process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
 
     const config = new Config({
       protocolVersion: '0.5',
@@ -565,7 +577,9 @@ describe('Config', () => {
       },
       remoteConfig: {
         pollInterval: 42
-      }
+      },
+      traceId128BitGenerationEnabled: false,
+      traceId128BitLoggingEnabled: false
     })
 
     expect(config).to.have.property('protocolVersion', '0.5')
@@ -583,6 +597,8 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'development')
     expect(config).to.have.property('clientIpEnabled', true)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
+    expect(config).to.have.property('traceId128BitGenerationEnabled', false)
+    expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
