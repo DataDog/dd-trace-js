@@ -282,6 +282,18 @@ class Config {
       false
     )
 
+    const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
+      options.traceId128BitGenerationEnabled,
+      process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
+      false
+    )
+
+    const DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = coalesce(
+      options.traceId128BitLoggingEnabled,
+      process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,
+      false
+    )
+
     let appsec = options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
 
     if (typeof appsec === 'boolean') {
@@ -508,6 +520,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.stats = {
       enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
     }
+
+    this.traceId128BitGenerationEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
+    this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
 
     tagger.add(this.tags, {
       service: this.service,
