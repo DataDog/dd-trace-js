@@ -158,7 +158,7 @@ versions.forEach((version) => {
                 ...restEnvVars,
                 CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
               },
-              stdio: 'on'
+              stdio: 'pipe'
             }
           )
         })

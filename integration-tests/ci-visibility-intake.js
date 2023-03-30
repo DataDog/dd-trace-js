@@ -192,6 +192,7 @@ class FakeCiVisIntake extends FakeAgent {
             onPayload(payloads)
             clearTimeout(timeoutId)
             this.off('message', messageHandler)
+            resolve()
           } catch (e) {
             // we'll try again when a new payload arrives
           }
