@@ -41,7 +41,7 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
-      - run: yarn test:integration
+      - run: yarn test:integration:${{ matrix.framework }}
 
   lint:
     runs-on: ubuntu-latest
