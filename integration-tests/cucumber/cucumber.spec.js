@@ -10,8 +10,8 @@ const {
   createSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
-} = require('./helpers')
-const { FakeCiVisIntake } = require('./ci-visibility-intake')
+} = require('../helpers')
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
   TEST_STATUS,
   TEST_COMMAND,
@@ -23,7 +23,7 @@ const {
   TEST_MODULE_ITR_SKIPPING_ENABLED,
   TEST_ITR_TESTS_SKIPPED,
   TEST_CODE_COVERAGE_LINES_TOTAL
-} = require('../packages/dd-trace/src/plugins/util/test')
+} = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=12')
 const versions = ['7.0.0', isOldNode ? '8' : 'latest']

@@ -10,10 +10,10 @@ const {
   createSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
-} = require('./helpers')
-const { FakeCiVisIntake } = require('./ci-visibility-intake')
-const webAppServer = require('./ci-visibility/web-app-server')
-const { TEST_STATUS } = require('../packages/dd-trace/src/plugins/util/test')
+} = require('../helpers')
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const webAppServer = require('../ci-visibility/web-app-server')
+const { TEST_STATUS } = require('../../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
 // This is done because from playwright@>=1.22.0 node 12 is not supported
