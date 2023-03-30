@@ -37,11 +37,13 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
+      - run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   amqplib:
@@ -65,9 +67,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
+      - run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
-      - run: docker-compose logs -f testagent & # Display the log output of the testagent container
-      - run: docker-compose down # Stop and remove the testagent container
 
   aws-sdk:
     runs-on: ubuntu-latest
@@ -92,8 +93,10 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
@@ -106,9 +109,11 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:upstream
+      - run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   bluebird:
@@ -120,9 +125,11 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   bunyan:
@@ -134,11 +141,13 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
+      - run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   cassandra:
@@ -158,9 +167,11 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # couchbase:
