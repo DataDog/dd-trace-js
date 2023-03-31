@@ -1,7 +1,5 @@
 'use strict'
 
-const fs = require('fs')
-const path = require('path')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
 const remoteConfig = require('./remote_config')
@@ -12,7 +10,7 @@ const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { block, loadTemplates, loadTemplatesAsync } = require('./blocking')
+const { block, setTemplates } = require('./blocking')
 
 let isEnabled = false
 let config
@@ -21,21 +19,10 @@ function enable (_config) {
   if (isEnabled) return
 
   try {
-    loadTemplates(_config)
-    const rules = fs.readFileSync(_config.appsec.rules || path.join(__dirname, 'recommended.json'))
-    enableFromRules(_config, JSON.parse(rules))
-  } catch (err) {
-    abortEnable(err)
-  }
-}
+    setTemplates(_config)
 
-async function enableAsync (_config) {
-  if (isEnabled) return
-
-  try {
-    await loadTemplatesAsync(_config)
-    const rules = await fs.promises.readFile(_config.appsec.rules || path.join(__dirname, 'recommended.json'))
-    enableFromRules(_config, JSON.parse(rules))
+    const rules = _config.appsec.rules || require('./recommended.json')
+    enableFromRules(_config, rules)
   } catch (err) {
     abortEnable(err)
   }
@@ -169,7 +156,6 @@ function disable () {
 
 module.exports = {
   enable,
-  enableAsync,
   disable,
   incomingHttpStartTranslator,
   incomingHttpEndTranslator
