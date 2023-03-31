@@ -5,3 +5,5 @@ runs:
     - uses: actions/setup-node@v3
       with:
         node-version: '19'
+      run: |
+          sudo hostnamectl set-hostname testrunner
