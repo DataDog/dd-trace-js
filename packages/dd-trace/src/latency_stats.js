@@ -1,20 +1,23 @@
 const os = require('os')
 const pkg = require('../../../package.json')
+const { decodePathwayContext } = require('../../datadog-plugin-kafkajs/src/hash')
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 
 const { DSMStatsExporter } = require('./exporters/dsm-stats')
 
-class HeaderAggStats {
-  constructor (hash) {
+class AggStats {
+  constructor (hash, parentHash, edgeTags) {
     this.hash = hash
+    this.parentHash = parentHash
+    this.edgeTags = edgeTags
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
   }
 
-  record (header) {
-    const edgeLatency = header.metrics.edgelatency
-    const pathwayLatency = header.metrics.pathwaylatency
+  record (checkpoint) {
+    const edgeLatency = checkpoint.metrics.edgelatency
+    const pathwayLatency = checkpoint.metrics.pathwaylatency
     this.edgeLatency.accept(edgeLatency)
     this.pathwayLatency.accept(pathwayLatency)
   }
@@ -22,29 +25,37 @@ class HeaderAggStats {
   toJSON () {
     return {
       Hash: this.hash,
+      ParentHash: this.parentHash,
+      EdgeTags: this.edgeTags,
       EdgeLatency: this.edgeLatency.toProto(), // TODO: custom proto encoding
       PathwayLatency: this.pathwayLatency.toProto() // TODO: custom proto encoding
     }
   }
 }
 
-class HeaderAggKey {
-  constructor (header) {
-    this.hash = header.metrics['dd-pathway-ctx']
+class AggKey {
+  constructor (checkpoint) {
+    this.hash = decodePathwayContext(checkpoint.metrics['dd-pathway-ctx'])[0]
+    this.parentHash = checkpoint.metrics['parentHash']
+    this.edgeTags = checkpoint.metrics['edgeTags']
   }
 
   toString () {
-    return this.hash
+    return [
+      this.hash,
+      this.parentHash,
+      this.edgeTags
+    ].join(',')
   }
 }
 
 class SpanBuckets extends Map {
-  forHeader (header) {
-    const aggKey = new HeaderAggKey(header)
+  forCheckpoint (checkpoint) {
+    const aggKey = new AggKey(checkpoint)
     const key = aggKey.toString()
-
+    // also include parentHash, edgeTags in ddsketch
     if (!this.has(key)) {
-      this.set(key, new HeaderAggStats(aggKey))
+      this.set(key, new AggStats(aggKey)) // StatsPoint
     }
 
     return this.get(key)
@@ -104,14 +115,14 @@ class LatencyStatsProcessor {
     })
   }
 
-  recordHeader (header) {
+  recordCheckpoint (checkpoint) {
     if (!this.enabled) return
 
-    const bucketTime = header.currentTimestamp - (header.currentTimestamp % this.bucketSizeNs)
+    const bucketTime = checkpoint.currentTimestamp - (checkpoint.currentTimestamp % this.bucketSizeNs)
 
     this.buckets.forTime(bucketTime)
-      .forHeader(header)
-      .record(header)
+      .forHeader(checkpoint)
+      .record(checkpoint)
   }
 
   _serializeBuckets () {
@@ -137,4 +148,4 @@ class LatencyStatsProcessor {
   }
 }
 
-module.exports = { LatencyStatsProcessor, HeaderAggStats }
+module.exports = { LatencyStatsProcessor, AggStats }
