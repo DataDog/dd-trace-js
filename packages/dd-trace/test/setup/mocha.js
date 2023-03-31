@@ -46,17 +46,18 @@ function loadInstFile (file, instrumentations) {
 }
 
 function withNamingSchema (naming, callback) {
-  let env
+  let namingConfig
+  const schema = require('../../src/service-naming')
   Object.entries(naming).forEach(entry => {
     const [versionName, namingSchema] = entry
     describe(`With naming schema ${versionName}`, () => {
       before(() => {
-        env = process.env
-        process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = versionName.toString()
-        const schema = require('../../src/service-naming')
-        schema.reload()
+        namingConfig = schema.config
+        schema.configure({ spanAttributeSchema: versionName.toString() })
       })
-      after(() => { process.env = env })
+      after(() => {
+        schema.configure(namingConfig)
+      })
       callback(namingSchema)
     })
   })
