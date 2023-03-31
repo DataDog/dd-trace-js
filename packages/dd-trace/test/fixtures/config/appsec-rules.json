@@ -1,0 +1,7 @@
+{
+  "version": "2.2",
+  "metadata": {
+    "rules_version": "1.5.2"
+  },
+  "rules": [{"a": 1}]
+}
