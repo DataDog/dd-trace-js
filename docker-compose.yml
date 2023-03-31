@@ -131,7 +131,7 @@ services:
         context: https://github.com/DataDog/dd-apm-test-agent.git#integrate-test-agent-with-js-tracer
     ports:
         - "127.0.0.1:9126:8126"
-        - "35000-50000:35000-47000"
+        - "35000-47000:35000-47000"
     volumes:
         - ./specifications:/specifications
     environment:
