@@ -11,7 +11,9 @@ if (!dc.subscribe) {
 }
 if (!dc.unsubscribe) {
   dc.unsubscribe = (channel, cb) => {
-    dc.channel(channel).unsubscribe(cb)
+    if (dc.channel(channel).hasSubscribers) {
+      dc.channel(channel).unsubscribe(cb)
+    }
   }
 }
 
