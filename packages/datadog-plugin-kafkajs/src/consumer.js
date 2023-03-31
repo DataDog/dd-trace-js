@@ -3,32 +3,19 @@
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getPathwayHash, encodePathwayContext, decodePathwayContext } = require('./hash')
 
+const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
+
 class KafkajsConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'kafkajs' }
   static get operation () { return 'consume' }
 
   start ({ topic, partition, message, groupId }) {
-    const currentTime = new Date().now()
     const childOf = extract(this.tracer, message.headers)
     let parentHash
-    let pathwayHash
-    let originTime
-    let prevTime
+    let pathwayCtx
+    let originTimestamp
+    let prevTimestamp
     const service = this.tracer._service
-    if (this.config.dsmEnabled !== 'disabled') {
-      const env = this.tracer._env
-      const checkpointString = getCheckpointString(service, env, groupId, topic, partition)
-      const pathwayHash = getPathwayHash(checkpointString, parentHash)
-
-      const prevPathwayCtx = message.headers['dd-pathway-ctx']
-      if (prevPathwayCtx) {
-        [parentHash, originTimestamp, prevTimestamp] = decodePathwayContext(rootSpan._spanContext._tags.pathwayHash)
-      } else {
-        pathwayHash = currentHash
-        originTime = currentTime
-        prevTime = currentTime
-      }
-    }
 
     const header = {
       childOf,
@@ -42,17 +29,42 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
         'kafka.message.offset': message.offset
       },
       metrics: {
-        'kafka.partition': partition, // TODO: send dsm values here
-        'dd-pathway-ctx': 'TODO',
-        'pathwayhash': pathwayHash,
-        'origintimestamp': originTime,
-        'currenttimestamp': currentTime,
-        'edgeLatency': currentTime - prevTime,
-        'pathwayLatency': currentTime - originTime
+        'kafka.partition': partition
       }
     }
 
-    this.config.latencyStatsProcessor.onFinished(header)
+    if (this.config.dsmEnabled) {
+      const currentTimestamp = new Date().now() * 1000000 // nanoseconds
+      const env = this.tracer._env
+      const checkpointString = getCheckpointString(service, env, groupId, topic, partition)
+
+      const prevPathwayCtx = message.headers['dd-pathway-ctx']
+      if (prevPathwayCtx) {
+        [parentHash, originTimestamp, prevTimestamp] = decodePathwayContext(message.headers['dd-pathway-ctx'])
+      } else {
+        parentHash = ENTRY_PARENT_HASH
+        originTimestamp = currentTimestamp
+        prevTimestamp = currentTimestamp
+      }
+      const pathwayHash = getPathwayHash(checkpointString, parentHash)
+      const edgeLatency = currentTimestamp - prevTimestamp
+      const pathwayLatency = currentTimestamp - originTimestamp
+      pathwayCtx = encodePathwayContext(pathwayHash, originTimestamp, prevTimestamp)
+
+      header.metrics['parentHash'] = parentHash
+      header.metrics['edgeTags'] = {
+        'service': service,
+        'env': env,
+        'groupId': groupId,
+        'topic': topic,
+        'partition': partition
+      }
+      header.metrics['edgeLatency'] = edgeLatency
+      header.metrics['pathwayLatency'] = pathwayLatency
+      header.metrics['dd-pathway-ctx'] = pathwayCtx
+    }
+
+    this.config.latencyStatsProcessor.recordCheckpoint(header)
 
     this.startSpan('kafka.consume', header)
   }

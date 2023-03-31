@@ -3,6 +3,8 @@
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { getPathwayHash, encodePathwayContext, decodePathwayContext } = require('./hash')
 
+const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
+
 class KafkajsProducerPlugin extends ProducerPlugin {
   static get id () { return 'kafkajs' }
   static get operation () { return 'produce' }
@@ -12,19 +14,20 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     const service = this.tracer._service
 
     let pathwayCtx
-    if (this.config.dsmEnabled !== 'disabled') {
+    if (this.config.dsmEnabled) {
       const active = this.activeSpan
       let parentHash
       let originTimestamp
       let prevTimestamp
-      const currentTimestamp = new Date().now() * 1000 // nanoseconds
+      const currentTimestamp = new Date().now() * 1000000 // nanoseconds
       const checkpointString = getCheckpointString(service, env, topic)
       if (active) {
         const context = active.context()
         const rootSpan = context._trace.started[0];
+        // TODO
         [parentHash, originTimestamp, prevTimestamp] = decodePathwayContext(rootSpan._spanContext._tags.pathwayHash)
       } else {
-        parentHash = Buffer.from('0000000000000000', 'hex')
+        parentHash = ENTRY_PARENT_HASH
         originTimestamp = currentTimestamp
         prevTimestamp = currentTimestamp
       }
@@ -34,16 +37,18 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       const pathwayLatency = currentTimestamp - originTimestamp
       pathwayCtx = encodePathwayContext(pathwayHash, originTimestamp, prevTimestamp)
 
-      const header = {
+      const checkpoint = {
         currentTimestamp: currentTimestamp,
         metrics: {
+          'parentHash': parentHash,
+          'edgeTags': { 'service': service, 'env': env, 'topic': topic },
           'dd-pathway-ctx': pathwayCtx,
-          'edgelatency': edgeLatency,
-          'pathwaylatency': pathwayLatency
+          'edgeLatency': edgeLatency,
+          'pathwayLatency': pathwayLatency
         }
       }
 
-      this.config.latencyStatsProcessor.recordHeader(header)
+      this.config.latencyStatsProcessor.recordCheckpoint(checkpoint)
     }
 
     const span = this.startSpan('kafka.produce', {
@@ -61,7 +66,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
 
     for (const message of messages) {
       if (typeof message === 'object') {
-        if (this.config.dsmEnabled !== 'disabled') message.headers['dd-pathway-ctx'] = pathwayCtx
+        if (this.config.dsmEnabled) message.headers['dd-pathway-ctx'] = pathwayCtx
         this.tracer.inject(span, 'text_map', message.headers)
       }
     }
