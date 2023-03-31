@@ -20,8 +20,8 @@ describe('Config', () => {
   const RULES_JSON = require(RULES_JSON_PATH)
   const BLOCKED_TEMPLATE_HTML_PATH = require.resolve('./fixtures/config/appsec-blocked-template.html')
   const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('./fixtures/config/appsec-blocked-template.json')
-  const BLOCKED_TEMPLATE_HTML = '<html>blocked</html>' + EOL
-  const BLOCKED_TEMPLATE_JSON = '{"error": "blocked"}' + EOL
+  const BLOCKED_TEMPLATE_HTML = fs.readFileSync(BLOCKED_TEMPLATE_HTML_PATH, { encoding: 'utf8' })
+  const BLOCKED_TEMPLATE_JSON = require(BLOCKED_TEMPLATE_JSON_PATH)
 
   beforeEach(() => {
     pkg = {
