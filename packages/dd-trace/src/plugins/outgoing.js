@@ -5,6 +5,8 @@ const TracingPlugin = require('./tracing')
 
 // TODO: Exit span on finish when AsyncResource instances are removed.
 class OutgoingPlugin extends TracingPlugin {
+  static get ioDirection () { return 'outbound' }
+
   constructor (...args) {
     super(...args)
 

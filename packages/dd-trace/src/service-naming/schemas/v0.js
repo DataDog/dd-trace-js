@@ -1,4 +1,6 @@
-module.exports = {
+const { namingResolver } = require('./util')
+
+const schema = {
   messaging: {
     outbound: {
       rhea: {
@@ -14,3 +16,5 @@ module.exports = {
     }
   }
 }
+
+module.exports = namingResolver(schema)
