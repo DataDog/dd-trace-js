@@ -19,9 +19,9 @@ describe('Config', () => {
   const RULES_JSON_PATH = require.resolve('./fixtures/config/appsec-rules.json')
   const RULES_JSON = require(RULES_JSON_PATH)
   const BLOCKED_TEMPLATE_HTML_PATH = require.resolve('./fixtures/config/appsec-blocked-template.html')
-  const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('./fixtures/config/appsec-blocked-template.json')
   const BLOCKED_TEMPLATE_HTML = readFileSync(BLOCKED_TEMPLATE_HTML_PATH, { encoding: 'utf8' })
-  const BLOCKED_TEMPLATE_JSON = require(BLOCKED_TEMPLATE_JSON_PATH)
+  const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('./fixtures/config/appsec-blocked-template.json')
+  const BLOCKED_TEMPLATE_JSON = readFileSync(BLOCKED_TEMPLATE_JSON_PATH, { encoding: 'utf8' })
 
   beforeEach(() => {
     pkg = {
@@ -832,7 +832,7 @@ describe('Config', () => {
     ])
   })
 
-  it('should ignore appsec.blockedTemplateHtml if it does not exist', () => {
+  it('should skip appsec config files if they do not exist', () => {
     const error = new Error('file not found')
     fs.readFileSync = () => { throw error }
 
