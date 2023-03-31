@@ -17,7 +17,7 @@ const loadChannel = channel('dd-trace:instrumentation:load')
 // TODO: make this more efficient
 
 for (const packageName of names) {
-  Hook([packageName], (moduleExports, moduleName, moduleBaseDir) => {
+  Hook([packageName], (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
 
     hooks[packageName]()
@@ -26,7 +26,7 @@ for (const packageName of names) {
       const fullFilename = filename(name, file)
 
       if (moduleName === fullFilename) {
-        const version = getVersion(moduleBaseDir)
+        const version = moduleVersion || getVersion(moduleBaseDir)
 
         if (matchVersion(version, versions)) {
           try {

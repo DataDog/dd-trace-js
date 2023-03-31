@@ -36,6 +36,7 @@ dev,chalk,MIT,Copyright Sindre Sorhus
 dev,checksum,MIT,Copyright Daniel D. Shaw
 dev,cli-table3,MIT,Copyright 2014 James Talmage
 dev,dotenv,BSD-2-Clause,Copyright 2015 Scott Motte
+dev,esbuild,MIT,Copyright (c) 2020 Evan Wallace
 dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
 dev,eslint-config-standard,MIT,Copyright Feross Aboukhadijeh
 dev,eslint-plugin-import,MIT,Copyright 2015 Ben Mosher

@@ -1,0 +1,24 @@
+{
+  "name": "esbuild-dd-trace-demo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "basic example app bundling dd-trace via esbuild",
+  "main": "app.js",
+  "scripts": {
+    "build": "DD_TRACE_DEBUG=true node ./build.js",
+    "built": "DD_TRACE_DEBUG=true node ./out.js",
+    "raw": "DD_TRACE_DEBUG=true node ./app.js",
+    "link": "pushd ../.. && yarn link && popd && yarn link dd-trace",
+    "request": "curl http://localhost:3000 | jq"
+  },
+  "keywords": [
+    "esbuild",
+    "apm"
+  ],
+  "author": "Thomas Hunter II <tlhunter@datadog.com>",
+  "license": "ISC",
+  "dependencies": {
+    "esbuild": "0.16.12",
+    "express": "^4.16.2"
+  }
+}
