@@ -136,5 +136,4 @@ services:
     environment:
         - LOG_LEVEL=INFO
         - TRACE_LANGUAGE=javascript
-        - PROXY_HOST=host.docker.internal
         - DISABLED_CHECKS=trace_tag_validation
