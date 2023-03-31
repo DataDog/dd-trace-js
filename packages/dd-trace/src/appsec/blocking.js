@@ -1,12 +1,10 @@
 'use strict'
 
 const log = require('../log')
-const fs = require('fs')
+const blockedTemplates = require('./blocked_templates')
 
-// TODO: move template loading to a proper spot.
-let templateLoaded = false
-let templateHtml = ''
-let templateJson = ''
+let templateHtml = blockedTemplates.html
+let templateJson = blockedTemplates.json
 
 function block (req, res, rootSpan, abortController) {
   if (res.headersSent) {
@@ -42,29 +40,16 @@ function block (req, res, rootSpan, abortController) {
   }
 }
 
-function loadTemplates (config) {
-  if (!templateLoaded) {
-    templateHtml = fs.readFileSync(config.appsec.blockedTemplateHtml)
-    templateJson = fs.readFileSync(config.appsec.blockedTemplateJson)
-    templateLoaded = true
+function setTemplates (config) {
+  if (config.appsec.blockedTemplateHtml) {
+    templateHtml = config.appsec.blockedTemplateHtml
   }
-}
-
-async function loadTemplatesAsync (config) {
-  if (!templateLoaded) {
-    templateHtml = await fs.promises.readFile(config.appsec.blockedTemplateHtml)
-    templateJson = await fs.promises.readFile(config.appsec.blockedTemplateJson)
-    templateLoaded = true
+  if (config.appsec.blockedTemplateJson) {
+    templateJson = config.appsec.blockedTemplateJson
   }
-}
-
-function resetTemplates () {
-  templateLoaded = false
 }
 
 module.exports = {
   block,
-  loadTemplates,
-  loadTemplatesAsync,
-  resetTemplates
+  setTemplates
 }
