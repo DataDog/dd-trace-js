@@ -1,8 +1,10 @@
+const { namingResolver } = require('./util')
+
 function identityService (ddService) {
   return ddService
 }
 
-module.exports = {
+const schema = {
   messaging: {
     outbound: {
       rhea: {
@@ -18,3 +20,5 @@ module.exports = {
     }
   }
 }
+
+module.exports = namingResolver(schema)
