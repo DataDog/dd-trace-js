@@ -126,9 +126,9 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: williamconti549/dd-apm-test-agent:js-dev
-    # build: 
-    #     context: https://github.com/DataDog/dd-apm-test-agent.git#add-span-tag-validation
+    # image: williamconti549/dd-apm-test-agent:js-dev
+    build: 
+        context: https://github.com/DataDog/dd-apm-test-agent.git#integrate-test-agent-with-js-tracer
     ports:
         - "127.0.0.1:9126:8126"
     volumes:
