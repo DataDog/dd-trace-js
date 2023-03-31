@@ -2,7 +2,6 @@
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { storage } = require('../../datadog-core')
-const Naming = require('../../dd-trace/src/service-naming')
 
 class RheaConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'rhea' }
@@ -19,11 +18,10 @@ class RheaConsumerPlugin extends ConsumerPlugin {
   start ({ msgObj }) {
     const name = getResourceNameFromMessage(msgObj)
     const childOf = extractTextMap(msgObj, this.tracer)
-    const naming = Naming.schema.messaging.inbound.rhea
 
-    this.startSpan(naming.opName(), {
+    this.startSpan(this.operationName(), {
       childOf,
-      service: this.config.service || naming.serviceName(this.tracer._service),
+      service: this.config.service || this.serviceName(this.tracer._service),
       resource: name,
       type: 'worker',
       kind: 'consumer',
