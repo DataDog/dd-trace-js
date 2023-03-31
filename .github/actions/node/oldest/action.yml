@@ -2,8 +2,8 @@ name: Node 14
 runs:
   using: composite
   steps:
+    - name: Set hostname
+      run: sudo hostnamectl set-hostname testrunner
     - uses: actions/setup-node@v3
       with:
         node-version: '14'
-      run: |
-          sudo hostnamectl set-hostname testrunner
