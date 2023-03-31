@@ -3,7 +3,7 @@
 require('./setup/tap')
 
 const { expect } = require('chai')
-const { EOL } = require('os')
+const { readFileSync } = require('fs')
 
 describe('Config', () => {
   let Config
@@ -20,7 +20,7 @@ describe('Config', () => {
   const RULES_JSON = require(RULES_JSON_PATH)
   const BLOCKED_TEMPLATE_HTML_PATH = require.resolve('./fixtures/config/appsec-blocked-template.html')
   const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('./fixtures/config/appsec-blocked-template.json')
-  const BLOCKED_TEMPLATE_HTML = fs.readFileSync(BLOCKED_TEMPLATE_HTML_PATH, { encoding: 'utf8' })
+  const BLOCKED_TEMPLATE_HTML = readFileSync(BLOCKED_TEMPLATE_HTML_PATH, { encoding: 'utf8' })
   const BLOCKED_TEMPLATE_JSON = require(BLOCKED_TEMPLATE_JSON_PATH)
 
   beforeEach(() => {
@@ -523,13 +523,13 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_APPSEC_ENABLED = 'false'
-    process.env.DD_APPSEC_RULES = 'something'
+    process.env.DD_APPSEC_RULES = require.resolve('../src/appsec/recommended.json')
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = 11
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
-    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_JSON // note the inversion between json and html here
-    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_HTML
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_JSON // note the inversion between
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_HTML // json and html here
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
 
@@ -628,7 +628,7 @@ describe('Config', () => {
     const config = new Config({
       appsec: {
         enabled: true,
-        rules: RULES_JSON_PATH,
+        rules: undefined,
         rateLimit: 42,
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
@@ -639,7 +639,7 @@ describe('Config', () => {
       experimental: {
         appsec: {
           enabled: false,
-          rules: 'something',
+          rules: RULES_JSON_PATH,
           rateLimit: 11,
           wafTimeout: 11,
           obfuscatorKeyRegex: '^$',
@@ -652,7 +652,7 @@ describe('Config', () => {
 
     expect(config).to.have.deep.property('appsec', {
       enabled: true,
-      rules: RULES_JSON,
+      rules: undefined,
       rateLimit: 42,
       wafTimeout: 42,
       obfuscatorKeyRegex: '.*',
@@ -833,11 +833,9 @@ describe('Config', () => {
   })
 
   it('should ignore appsec.blockedTemplateHtml if it does not exist', () => {
-    const errorHtml = new Error('DOES_NOT_EXIST.html not found')
-    const errorJson = new Error('DOES_NOT_EXIST.json not found')
-    fs.readFileSync = (name) => {
-      throw name.includes('html') ? errorHtml : errorJson
-    }
+    const error = new Error('file not found')
+    fs.readFileSync = () => { throw error }
+
     const Config = proxyquire('../src/config', {
       './pkg': pkg,
       './log': log,
@@ -848,14 +846,17 @@ describe('Config', () => {
     const config = new Config({
       appsec: {
         enabled: true,
+        rules: 'DOES_NOT_EXIST.json',
         blockedTemplateHtml: 'DOES_NOT_EXIST.html',
         blockedTemplateJson: 'DOES_NOT_EXIST.json'
       }
     })
 
-    expect(log.error).to.be.calledTwice
-    expect(log.error.firstCall).to.have.been.calledWithExactly(errorHtml)
-    expect(log.error.secondCall).to.have.been.calledWithExactly(errorJson)
+    expect(log.error).to.be.calledThrice
+    expect(log.error.firstCall).to.have.been.calledWithExactly(error)
+    expect(log.error.secondCall).to.have.been.calledWithExactly(error)
+    expect(log.error.thirdCall).to.have.been.calledWithExactly(error)
+    expect(config.appsec.rules).to.be.undefined
     expect(config.appsec.blockedTemplateHtml).to.be.undefined
     expect(config.appsec.blockedTemplateJson).to.be.undefined
   })
