@@ -132,9 +132,9 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - uses: codecov/codecov-action@v2
       - if: success() || failure()
         run: docker-compose logs testagent # Display the log output of the testagent container
-      - uses: codecov/codecov-action@v2
 
   bunyan:
     runs-on: ubuntu-latest
