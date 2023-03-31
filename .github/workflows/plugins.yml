@@ -43,7 +43,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   amqplib:
@@ -67,7 +68,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   aws-sdk:
@@ -113,7 +115,8 @@ jobs:
       - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:upstream
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   bluebird:
@@ -129,7 +132,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   bunyan:
@@ -147,7 +151,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   cassandra:
@@ -171,7 +176,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # couchbase:
@@ -208,7 +214,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   cucumber:
@@ -224,7 +231,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # TODO: fix performance issues and test more Node versions
@@ -238,7 +246,8 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   dns:
@@ -258,7 +267,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
       - run: docker-compose down # Stop and remove the testagent container
 
@@ -283,7 +293,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   express:
@@ -299,7 +310,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   fastify:
@@ -315,7 +327,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   generic-pool:
@@ -331,7 +344,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   google-cloud-pubsub:
@@ -353,7 +367,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   graphql:
@@ -371,7 +386,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # The grpc version ranges we support only support up to Node 14.
@@ -385,7 +401,8 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # The hapi version ranges we support only support up to Node 14.
@@ -400,7 +417,8 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   http:
@@ -420,7 +438,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   http2:
@@ -440,7 +459,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # TODO: fix performance issues and test more Node versions
@@ -454,7 +474,8 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   kafkajs:
@@ -484,7 +505,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   knex:
@@ -500,7 +522,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   koa:
@@ -518,7 +541,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   limitd-client:
@@ -544,7 +568,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   memcached:
@@ -566,7 +591,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   microgateway-core:
@@ -582,7 +608,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   mocha:
@@ -598,7 +625,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   moleculer:
@@ -614,7 +642,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   mongodb-core:
@@ -636,7 +665,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   mongoose:
@@ -658,7 +688,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   mysql:
@@ -683,7 +714,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   net:
@@ -703,7 +735,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # TODO: fix performance issues and test more Node versions
@@ -720,7 +753,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   opensearch:
@@ -745,7 +779,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # TODO: Install the Oracle client on the host and test Node >=14.
@@ -769,7 +804,8 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install --ignore-engine
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   paperplane:
@@ -783,7 +819,8 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/14
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # TODO: re-enable upstream tests if it ever stops being flaky
@@ -799,7 +836,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       # - run: yarn test:plugins:upstream
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # The pg version range we support doesn't work beyond Node 14.
@@ -823,7 +861,8 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   promise:
@@ -841,7 +880,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   promise-js:
@@ -857,7 +897,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   q:
@@ -873,7 +914,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   redis:
@@ -895,7 +937,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   restify:
@@ -911,7 +954,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   router:
@@ -927,7 +971,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   sharedb:
@@ -943,7 +988,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   tedious:
@@ -971,7 +1017,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   when:
@@ -987,7 +1034,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   winston:
@@ -1003,4 +1051,5 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
