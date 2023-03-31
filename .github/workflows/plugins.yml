@@ -199,6 +199,7 @@ jobs:
       PLUGINS: connect
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -216,6 +217,7 @@ jobs:
       PLUGINS: cucumber
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -232,6 +234,7 @@ jobs:
       PLUGINS: cypress
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:plugins:ci
@@ -273,6 +276,7 @@ jobs:
       SERVICES: elasticsearch
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -288,6 +292,7 @@ jobs:
       PLUGINS: express
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -303,6 +308,7 @@ jobs:
       PLUGINS: fastify
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -318,6 +324,7 @@ jobs:
       PLUGINS: generic-pool
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -339,6 +346,7 @@ jobs:
       SERVICES: gpubsub
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -354,6 +362,7 @@ jobs:
       PLUGINS: graphql
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -386,6 +395,7 @@ jobs:
       PLUGINS: hapi
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -399,6 +409,7 @@ jobs:
       PLUGINS: http
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -418,6 +429,7 @@ jobs:
       PLUGINS: http2
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -438,6 +450,7 @@ jobs:
       PLUGINS: jest
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:plugins:ci
@@ -464,6 +477,7 @@ jobs:
       SERVICES: kafka
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -479,6 +493,7 @@ jobs:
       PLUGINS: knex
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -494,6 +509,7 @@ jobs:
       PLUGINS: koa
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -521,6 +537,7 @@ jobs:
       SERVICES: limitd
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -542,6 +559,7 @@ jobs:
       SERVICES: memcached
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -557,6 +575,7 @@ jobs:
       PLUGINS: microgateway-core
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -572,6 +591,7 @@ jobs:
       PLUGINS: mocha
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -587,6 +607,7 @@ jobs:
       PLUGINS: moleculer
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -608,6 +629,7 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -629,6 +651,7 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -653,6 +676,7 @@ jobs:
       SERVICES: mysql
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -668,6 +692,7 @@ jobs:
       PLUGINS: net
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -688,6 +713,7 @@ jobs:
       PLUGINS: next
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -712,6 +738,7 @@ jobs:
       SERVICES: opensearch
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -738,6 +765,7 @@ jobs:
       SERVICES: oracledb
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install --ignore-engine
       - run: yarn test:plugins:ci
@@ -750,6 +778,7 @@ jobs:
       PLUGINS: paperplane
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -764,6 +793,7 @@ jobs:
       PLUGINS: pino
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/latest
@@ -788,6 +818,7 @@ jobs:
       SERVICES: postgres
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -801,6 +832,7 @@ jobs:
       PLUGINS: promise
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -818,6 +850,7 @@ jobs:
       PLUGINS: promise-js
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -833,6 +866,7 @@ jobs:
       PLUGINS: q
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -854,6 +888,7 @@ jobs:
       SERVICES: redis
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -869,6 +904,7 @@ jobs:
       PLUGINS: restify
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -884,6 +920,7 @@ jobs:
       PLUGINS: router
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -899,6 +936,7 @@ jobs:
       PLUGINS: sharedb
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -924,6 +962,7 @@ jobs:
       SERVICES: mssql
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -941,6 +980,7 @@ jobs:
       PLUGINS: when
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -956,6 +996,7 @@ jobs:
       PLUGINS: winston
     steps:
       - uses: actions/checkout@v2
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
