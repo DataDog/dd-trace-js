@@ -420,7 +420,6 @@ describe('Plugin', () => {
           client.query('SELECT $1::text as message', ['Hello World!'], (err, result) => {
             if (err) return done(err)
             expect(seenTraceParent).to.be.true
-
             client.end((err) => {
               if (err) return done(err)
             })
