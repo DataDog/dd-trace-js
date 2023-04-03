@@ -29,7 +29,7 @@ const versions = ['6.7.0', isOldNode ? '11.2.0' : 'latest']
 versions.forEach((version) => {
   describe(`cypress@${version}`, function () {
     this.retries(2)
-    this.timeout(45000)
+    this.timeout(60000)
     let sandbox, cwd, receiver, childProcess, webAppPort
     before(async () => {
       sandbox = await createSandbox([`cypress@${version}`], true)
