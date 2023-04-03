@@ -3,6 +3,8 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
+const namingSchema = require('./naming')
+
 describe('Plugin', () => {
   let tracer
   let client
@@ -63,8 +65,8 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
 
-                expect(span).to.have.property('name', 'amqp.send')
-                expect(span).to.have.property('service', 'test-amqp')
+                expect(span).to.have.property('name', namingSchema.send.opName)
+                expect(span).to.have.property('service', namingSchema.send.serviceName)
                 expect(span).to.have.property('resource', 'send amq.topic')
                 expect(span).to.not.have.property('type')
                 expect(span.meta).to.have.property('span.kind', 'producer')
@@ -84,7 +86,6 @@ describe('Plugin', () => {
 
             sender.send({ key: 'value' })
           })
-
           it('should handle errors', done => {
             let error
 
@@ -130,8 +131,8 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', 'amqp.receive')
-                expect(span).to.have.property('service', 'test-amqp')
+                expect(span).to.have.property('name', namingSchema.receive.opName)
+                expect(span).to.have.property('service', namingSchema.receive.serviceName)
                 expect(span).to.have.property('resource', 'receive amq.topic')
                 expect(span).to.have.property('type', 'worker')
                 expect(span.meta).to.have.property('span.kind', 'consumer')
