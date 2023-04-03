@@ -5,6 +5,8 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
+const namingSchema = require('./naming')
+
 const modules = semver.satisfies(process.versions.node, '>=14')
   ? ['@node-redis/client', '@redis/client']
   : ['@node-redis/client']
@@ -39,8 +41,8 @@ describe('Plugin', () => {
         it('should do automatic instrumentation when using callbacks', async () => {
           const promise = agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'redis.command')
-              expect(traces[0][0]).to.have.property('service', 'test-redis')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'GET')
               expect(traces[0][0]).to.have.property('type', 'redis')
               expect(traces[0][0].meta).to.have.property('db.name', '0')
@@ -76,8 +78,8 @@ describe('Plugin', () => {
         it('should work with userland promises', async () => {
           const promise = agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'redis.command')
-              expect(traces[0][0]).to.have.property('service', 'test-redis')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'GET')
               expect(traces[0][0]).to.have.property('type', 'redis')
               expect(traces[0][0].meta).to.have.property('db.name', '0')

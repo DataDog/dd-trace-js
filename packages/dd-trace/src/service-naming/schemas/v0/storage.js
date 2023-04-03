@@ -21,18 +21,12 @@ const redisConfig = {
 
 const storage = {
   client: {
-    ioredis: {
-      opName: () => 'redis.command',
-      serviceName: (service, opts) => getRedisService(opts.config, opts.connectionName)
-    },
+    ioredis: redisConfig,
     memcached: {
       opName: () => 'memcached.command',
       serviceName: (service, config, system) => config.service || fromSystem(service, system)
     },
-    redis: {
-      opName: () => 'redis.command',
-      serviceName: service => `${service}-redis`
-    }
+    redis: redisConfig
   }
 }
 

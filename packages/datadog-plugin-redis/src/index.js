@@ -17,7 +17,6 @@ class RedisPlugin extends CachePlugin {
       resource,
       service: this.serviceName(this.config, this.system, connectionName),
       type: 'redis',
-      kind: 'client',
       meta: {
         'db.type': 'redis',
         'db.name': db || '0',
