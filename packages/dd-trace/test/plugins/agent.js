@@ -117,13 +117,9 @@ module.exports = {
     }, tracerConfig))
     tracer.setUrl(testAgentUrl)
 
-    // get the current headers
+    // update headers to include the agent port to proxy trace to
     const currentHeaders = tracer._tracer._exporter._writer.headers
-
-    // add the new header with the agent port
     currentHeaders['dd-proxy-port'] = port.toString()
-
-    // set the updated headers
     tracer._tracer._exporter._writer.headers = currentHeaders
 
     for (let i = 0, l = pluginName.length; i < l; i++) {
