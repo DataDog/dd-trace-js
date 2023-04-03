@@ -105,6 +105,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   axios:
@@ -326,15 +328,9 @@ jobs:
       PLUGINS: express
     steps:
       - uses: actions/checkout@v2
-      - name: Get IP Address
-        run: |
-          export IP=$(hostname -I | awk '{print $1}')
-          echo "IP address is $IP"
-      - name: Start Test Agent Container with IP of machine
-        env:
-          PROXY_HOST: ${{ steps.get-ip.outputs.ip }}
-        run: |
-          docker-compose up -d -e PROXY_HOST=testrunner testagent
+      - name: Set hostname
+        run: sudo hostnamectl set-hostname testrunner
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -436,6 +432,9 @@ jobs:
       PLUGINS: grpc
     steps:
       - uses: actions/checkout@v2
+      - name: Set hostname
+        run: sudo hostnamectl set-hostname testrunner
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
