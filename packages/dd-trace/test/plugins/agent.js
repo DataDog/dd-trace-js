@@ -86,20 +86,6 @@ module.exports = {
 
     const testAgentUrl = 'http://127.0.0.1:9126'
 
-    console.log(`running on: ${port}`)
-
-    // axios.get(`${testAgentUrl}/test/session/agent_port`, {
-    //   params: {
-    //     agent_port: port
-    //   }
-    // })
-    //   .then(response => {
-    //     log.info(response.data)
-    //   })
-    //   .catch(error => {
-    //     log.error(error)
-    //   })
-
     const server = this.server = http.createServer(agent)
     const emit = server.emit
 
