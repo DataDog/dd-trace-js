@@ -63,7 +63,7 @@ versions.forEach(version => {
           envVars = isAgentless ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
         })
         it('can run and report tests', (done) => {
-          receiver.gatherPayloads(({ url }) => url.endsWith('/api/v2/citestcycle'), 5000).then((payloads) => {
+          receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end')
@@ -151,9 +151,7 @@ versions.forEach(version => {
               assert.equal(stepEvent.content.name, 'cucumber.step')
               assert.property(stepEvent.content.meta, 'cucumber.step')
             })
-
-            done()
-          }).catch(done)
+          }, 5000).then(() => done()).catch(done)
 
           childProcess = exec(
             runTestsCommand,
