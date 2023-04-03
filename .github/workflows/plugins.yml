@@ -34,9 +34,15 @@ jobs:
       SERVICES: qpid
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
-      - run: docker-compose up -d testagent # Start the testagent container in the background
+      - name: Get IP Address
+        run: |
+          export IP=$(hostname -I | awk '{print $1}')
+          echo "IP address is $IP"
+      - name: Start Test Agent Container with IP of machine
+        env:
+        PROXY_HOST: ${{ steps.get-ip.outputs.ip }}
+        run: |
+          docker-compose up -d testagent
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -326,9 +332,15 @@ jobs:
       PLUGINS: express
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
-      - run: docker-compose up -d testagent # Start the testagent container in the background
+      - name: Get IP Address
+        run: |
+          export IP=$(hostname -I | awk '{print $1}')
+          echo "IP address is $IP"
+      - name: Start Test Agent Container with IP of machine
+        env:
+        PROXY_HOST: ${{ steps.get-ip.outputs.ip }}
+        run: |
+          docker-compose up -d testagent
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest

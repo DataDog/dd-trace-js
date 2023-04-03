@@ -131,11 +131,10 @@ services:
         context: https://github.com/DataDog/dd-apm-test-agent.git#integrate-test-agent-with-js-tracer
     ports:
         - "127.0.0.1:9126:8126"
-        - "35000-47000:35000-47000"
     volumes:
         - ./specifications:/specifications
     environment:
         - LOG_LEVEL=INFO
         - TRACE_LANGUAGE=javascript
         - DISABLED_CHECKS=trace_tag_validation
-        - PROXY_HOST=testrunner
+        - PROXY_HOST=host.docker.internal
