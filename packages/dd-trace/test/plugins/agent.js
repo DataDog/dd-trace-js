@@ -88,17 +88,17 @@ module.exports = {
 
     console.log(`running on: ${port}`)
 
-    axios.get(`${testAgentUrl}/test/session/agent_port`, {
-      params: {
-        agent_port: port
-      }
-    })
-      .then(response => {
-        log.info(response.data)
-      })
-      .catch(error => {
-        log.error(error)
-      })
+    // axios.get(`${testAgentUrl}/test/session/agent_port`, {
+    //   params: {
+    //     agent_port: port
+    //   }
+    // })
+    //   .then(response => {
+    //     log.info(response.data)
+    //   })
+    //   .catch(error => {
+    //     log.error(error)
+    //   })
 
     const server = this.server = http.createServer(agent)
     const emit = server.emit
@@ -130,6 +130,15 @@ module.exports = {
       plugins: false
     }, tracerConfig))
     tracer.setUrl(testAgentUrl)
+
+    // get the current headers
+    const currentHeaders = tracer._tracer._exporter._writer.headers
+
+    // add the new header with the agent port
+    currentHeaders['dd-proxy-port'] = port.toString()
+
+    // set the updated headers
+    tracer._tracer._exporter._writer.headers = currentHeaders
 
     for (let i = 0, l = pluginName.length; i < l; i++) {
       tracer.use(pluginName[i], config[i])
