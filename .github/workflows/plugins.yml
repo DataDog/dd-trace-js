@@ -284,9 +284,16 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
-      - run: docker-compose up -d testagent # Start the testagent container in the background
+      - name: Get IP Address
+        run: |
+          export IP=$(hostname -I | awk '{print $1}')
+          echo "IP address is $IP"
+      - name: Start Test Agent Container with IP of machine
+        env:
+          PROXY_HOST: ${{ steps.get-ip.outputs.ip }}
+        run: |
+          echo "PROXY_HOST IP address is $PROXY_HOST"
+          docker-compose up -d testagent
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
