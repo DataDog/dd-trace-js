@@ -14,6 +14,8 @@ const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
 // with their own separated Client.ClientState.
 class RemoteConfigManager extends EventEmitter {
+  static kPreUpdate = Symbol('kPreUpdate')
+
   constructor (config) {
     super()
 
@@ -78,7 +80,7 @@ class RemoteConfigManager extends EventEmitter {
   on (event, listener) {
     super.on(event, listener)
 
-    this.state.client.products = this.eventNames()
+    this.updateProducts()
 
     this.scheduler.start()
 
@@ -88,13 +90,17 @@ class RemoteConfigManager extends EventEmitter {
   off (event, listener) {
     super.off(event, listener)
 
-    this.state.client.products = this.eventNames()
+    this.updateProducts()
 
     if (!this.state.client.products.length) {
       this.scheduler.stop()
     }
 
     return this
+  }
+
+  updateProducts () {
+    this.state.client.products = this.eventNames().filter(e => typeof e === 'string')
   }
 
   poll (cb) {
@@ -172,7 +178,6 @@ class RemoteConfigManager extends EventEmitter {
         //       verify length
         //       verify hash
         //       verify _type
-        // TODO: new Date(meta.signed.expires) ignore the Targets data if it has expired ?
 
         const { product, id } = parseConfigPath(path)
 
@@ -194,6 +199,8 @@ class RemoteConfigManager extends EventEmitter {
     }
 
     if (toUnapply.length || toApply.length || toModify.length) {
+      this.emit(RemoteConfigManager.kPreUpdate, { toUnapply, toApply, toModify })
+
       this.dispatch(toUnapply, 'unapply')
       this.dispatch(toApply, 'apply')
       this.dispatch(toModify, 'modify')
@@ -223,9 +230,11 @@ class RemoteConfigManager extends EventEmitter {
     for (const item of list) {
       try {
         // TODO: do we want to pass old and new config ?
-        this.emit(item.product, action, item.file, item.id)
+        const hadListeners = this.emit(item.product, action, item.file, item.id)
 
-        item.apply_state = 2
+        if (hadListeners) {
+          item.apply_state = 2
+        }
       } catch (err) {
         item.apply_state = 3
         item.apply_error = err.toString()
