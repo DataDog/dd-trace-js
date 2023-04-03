@@ -40,7 +40,7 @@ jobs:
           echo "IP address is $IP"
       - name: Start Test Agent Container with IP of machine
         env:
-        PROXY_HOST: ${{ steps.get-ip.outputs.ip }}
+          PROXY_HOST: ${{ steps.get-ip.outputs.ip }}
         run: |
           docker-compose up -d testagent
       - uses: ./.github/actions/node/setup
@@ -338,7 +338,7 @@ jobs:
           echo "IP address is $IP"
       - name: Start Test Agent Container with IP of machine
         env:
-        PROXY_HOST: ${{ steps.get-ip.outputs.ip }}
+          PROXY_HOST: ${{ steps.get-ip.outputs.ip }}
         run: |
           docker-compose up -d testagent
       - uses: ./.github/actions/node/setup
