@@ -375,6 +375,10 @@ describe('Plugin', () => {
       })
       describe('with DBM propagation enabled with full using tracer configurations', () => {
         const tracer = require('../../dd-trace')
+        let seenTraceParent
+        let seenTraceId
+        let seenSpanId
+        let originalWrite
         before(() => {
           return agent.load('pg')
         })
@@ -394,13 +398,7 @@ describe('Plugin', () => {
             database: 'postgres'
           })
           client.connect(err => done(err))
-        })
-
-        it('query text should contain traceparent', done => {
-          let seenTraceParent
-          let seenTraceId
-          let seenSpanId
-          const originalWrite = net.Socket.prototype.write
+          originalWrite = net.Socket.prototype.write
           net.Socket.prototype.write = function (buffer) {
             let strBuf = buffer.toString()
             if (strBuf.includes('traceparent=\'')) {
@@ -411,7 +409,12 @@ describe('Plugin', () => {
             }
             return originalWrite.apply(this, arguments)
           }
-
+        })
+        after(() => {
+          // Ensure your environment changes are restored, even if the tests failed.
+          net.Socket.prototype.write = originalWrite
+        })
+        it('query text should contain traceparent', done => {
           agent.use(traces => {
             const traceId = traces[0][0].trace_id.toString(16).padStart(32, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
