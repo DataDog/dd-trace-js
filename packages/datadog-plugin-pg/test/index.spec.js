@@ -407,7 +407,6 @@ describe('Plugin', () => {
           }
         })
         afterEach(() => {
-          // Ensure your environment changes are restored, even if the tests failed.
           net.Socket.prototype.write = originalWrite
         })
         it('query text should contain traceparent', done => {
