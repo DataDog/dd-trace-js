@@ -31,6 +31,19 @@ describe('encoding', () => {
       expect(decoded2).to.equal(n)
       expect(bytes2).to.length(0)
     })
+    it('encoding can be used to encode multiple numbers in a row', () => {
+      const n1 = 1680535452135000
+      const n2 = 1680535452178000
+      const encodedN1 = encodeVarint(n1)
+      const encodedN2 = encodeVarint(n2)
+      const encoded = new Uint8Array(encodedN1.length + encodedN2.length)
+      encoded.set(encodedN1)
+      encoded.set(encodedN2, encodedN2.length)
+      const [decodedN1, rest] = decodeVarint(encoded)
+      const [decodedN2] = decodeVarint(rest)
+      expect(decodedN1).to.equal(n1)
+      expect(decodedN2).to.equal(n2)
+    })
     it('encoding a number bigger than Max safe int fails.', () => {
       const n = Number.MAX_SAFE_INTEGER + 10
       const encoded = encodeVarint(n)
