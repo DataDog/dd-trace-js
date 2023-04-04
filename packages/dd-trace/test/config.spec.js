@@ -680,6 +680,32 @@ describe('Config', () => {
     })
   })
 
+  it('should left undefined appsec rules if user rules file could not be loaded', () => {
+    const config = new Config({
+      appsec: {
+        enabled: true,
+        rules: '/not/existing/path/or/bad/format.json',
+        rateLimit: 42,
+        wafTimeout: 42,
+        obfuscatorKeyRegex: '.*',
+        obfuscatorValueRegex: '.*',
+        blockedTemplateHtml: undefined,
+        blockedTemplateJson: undefined
+      }
+    })
+
+    expect(config).to.have.deep.property('appsec', {
+      enabled: true,
+      rules: undefined,
+      rateLimit: 42,
+      wafTimeout: 42,
+      obfuscatorKeyRegex: '.*',
+      obfuscatorValueRegex: '.*',
+      blockedTemplateHtml: undefined,
+      blockedTemplateJson: undefined
+    })
+  })
+
   it('should give priority to the options especially url', () => {
     process.env.DD_TRACE_AGENT_URL = 'http://agent2:6218'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
