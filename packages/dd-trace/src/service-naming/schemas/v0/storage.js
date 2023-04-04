@@ -12,6 +12,13 @@ function fromSystem (service, system) {
   return system ? `${service}-${system}` : undefined
 }
 
+function mysqlServiceName (service, config, dbConfig, system) {
+  if (typeof config.service === 'function') {
+    return config.service(dbConfig)
+  }
+  return config.service ? config.service : fromSystem(service, system)
+}
+
 const redisConfig = {
   opName: () => 'redis.command',
   serviceName: (service, config, system, connectionName) => {
@@ -22,9 +29,21 @@ const redisConfig = {
 const storage = {
   client: {
     ioredis: redisConfig,
+    mariadb: {
+      opName: () => 'mariadb.query',
+      serviceName: mysqlServiceName
+    },
     memcached: {
       opName: () => 'memcached.command',
       serviceName: (service, config, system) => config.service || fromSystem(service, system)
+    },
+    mysql: {
+      opName: () => 'mysql.query',
+      serviceName: mysqlServiceName
+    },
+    mysql2: {
+      opName: () => 'mysql.query',
+      serviceName: mysqlServiceName
     },
     redis: redisConfig
   }
