@@ -2,7 +2,7 @@ name: Release branches check
 
 on:
   pull_request:
-    types: [opened]
+    branches: [master]
 
 jobs:
   check-release-branch-v2:
