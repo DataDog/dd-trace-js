@@ -21,7 +21,7 @@ app.get('/', async (_req, res) => {
   assert.equal(
     tracer.scope().active().context()._tags.component,
     'express',
-    'the sample app bundled by esbuild is not properly instrumented'
+    `the sample app bundled by esbuild is not properly instrumented. using node@${process.version}`
   ) // bad exit
 
   res.json({ narwhal: 'bacons' })
