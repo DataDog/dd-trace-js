@@ -63,7 +63,7 @@ function wrapMethod (method) {
   const api = method.name
 
   return function (request) {
-    if (!requestStartCh.hasSubscribers) return request.apply(this, arguments)
+    if (!requestStartCh.hasSubscribers) return method.apply(this, arguments)
 
     const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
 

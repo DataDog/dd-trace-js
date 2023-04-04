@@ -219,6 +219,20 @@ describe('Plugin', () => {
             return expectedSpanPromise
           })
         })
+
+        describe('when disabled', () => {
+          beforeEach(() => {
+            tracer.use('google-cloud-pubsub', false)
+          })
+
+          afterEach(() => {
+            tracer.use('google-cloud-pubsub', true)
+          })
+
+          it('should work normally', async () => {
+            await pubsub.createTopic(topicName)
+          })
+        })
       })
 
       describe('with configuration', () => {
