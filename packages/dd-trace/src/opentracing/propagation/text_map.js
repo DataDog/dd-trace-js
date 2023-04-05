@@ -495,7 +495,11 @@ class TextMapPropagator {
 
     if (buffer.length !== 16) return
 
-    spanContext._trace.tags['_dd.p.tid'] = traceId.substring(0, 16)
+    const tid = traceId.substring(0, 16)
+
+    if (tid === '0000000000000000') return
+
+    spanContext._trace.tags['_dd.p.tid'] = tid
   }
 
   _validateTagKey (key) {
