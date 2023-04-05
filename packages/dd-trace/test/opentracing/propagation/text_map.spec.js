@@ -659,6 +659,20 @@ describe('TextMapPropagator', () => {
           }
         }))
       })
+
+      it('should skip extracting upper bits for 64-bit trace IDs', () => {
+        textMap['b3'] = '00000000000000000000000000000123-0000000000000456'
+
+        config.traceId128BitGenerationEnabled = true
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+
+        expect(spanContext).to.deep.equal(createContext({
+          traceId: id('00000000000000000000000000000123', 16),
+          spanId: id('456', 16)
+        }))
+      })
     })
 
     describe('With traceparent propagation as single header', () => {
@@ -702,6 +716,18 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
         expect(spanContext._traceId.toString(16)).to.equal('1111aaaa2222bbbb3333cccc4444dddd')
         expect(spanContext._trace.tags).to.have.property('_dd.p.tid', '1111aaaa2222bbbb')
+      })
+
+      it('should skip extracting upper bits for 64-bit trace IDs', () => {
+        textMap['traceparent'] = '00-00000000000000003333cccc4444dddd-5555eeee6666ffff-01'
+        config.tracePropagationStyle.extract = ['tracecontext']
+        config.traceId128BitGenerationEnabled = true
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+
+        expect(spanContext._traceId.toString(16)).to.equal('00000000000000003333cccc4444dddd')
+        expect(spanContext._trace.tags).to.not.have.property('_dd.p.tid')
       })
 
       it('should propagate the version', () => {
