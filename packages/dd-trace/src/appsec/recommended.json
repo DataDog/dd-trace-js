@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.5.2"
+    "rules_version": "1.6.0"
   },
   "rules": [
     {
@@ -2907,7 +2907,8 @@
         }
       ],
       "transformers": [
-        "removeNulls"
+        "removeNulls",
+        "urlDecodeUni"
       ]
     },
     {
@@ -2957,7 +2958,8 @@
         }
       ],
       "transformers": [
-        "removeNulls"
+        "removeNulls",
+        "urlDecodeUni"
       ]
     },
     {
@@ -3007,7 +3009,8 @@
         }
       ],
       "transformers": [
-        "removeNulls"
+        "removeNulls",
+        "urlDecodeUni"
       ]
     },
     {
@@ -3054,7 +3057,8 @@
         }
       ],
       "transformers": [
-        "removeNulls"
+        "removeNulls",
+        "urlDecodeUni"
       ]
     },
     {
@@ -3088,8 +3092,7 @@
               ".parentnode",
               ".innerhtml",
               "window.location",
-              "-moz-binding",
-              "<![cdata["
+              "-moz-binding"
             ]
           },
           "operator": "phrase_match"
@@ -3545,7 +3548,7 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "\\b(?i:eval|settimeout|setinterval|new\\s+Function|alert|prompt)\\s*\\([^\\)]",
+            "regex": "\\b(?i:eval|settimeout|setinterval|new\\s+Function|alert|prompt)[\\s+]*\\([^\\)]",
             "options": {
               "case_sensitive": true,
               "min_length": 5
@@ -5347,14 +5350,12 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "(http|https):\\/\\/(?:.*\\.)?(?:burpcollaborator\\.net|localtest\\.me|mail\\.ebc\\.apple\\.com|bugbounty\\.dod\\.network|.*\\.[nx]ip\\.io|oastify\\.com|oast\\.(?:pro|live|site|online|fun|me)|sslip\\.io|requestbin\\.com|requestbin\\.net|hookbin\\.com|webhook\\.site|canarytokens\\.com|interact\\.sh|ngrok\\.io|bugbounty\\.click|prbly\\.win|qualysperiscope\\.com)"
+            "regex": "(http|https):\\/\\/(?:.*\\.)?(?:burpcollaborator\\.net|localtest\\.me|mail\\.ebc\\.apple\\.com|bugbounty\\.dod\\.network|.*\\.[nx]ip\\.io|oastify\\.com|oast\\.(?:pro|live|site|online|fun|me)|sslip\\.io|requestbin\\.com|requestbin\\.net|hookbin\\.com|webhook\\.site|canarytokens\\.com|interact\\.sh|ngrok\\.io|bugbounty\\.click|prbly\\.win|qualysperiscope\\.com|vii.one|act1on3.ru)"
           },
           "operator": "match_regex"
         }
       ],
-      "transformers": [
-        "lowercase"
-      ]
+      "transformers": []
     },
     {
       "id": "sqr-000-015",
@@ -5429,7 +5430,9 @@
           "operator": "match_regex"
         }
       ],
-      "transformers": []
+      "transformers": [
+        "unicode_normalize"
+      ]
     },
     {
       "id": "ua0-600-0xx",
@@ -5905,7 +5908,7 @@
       "tags": {
         "type": "security_scanner",
         "category": "attack_attempt",
-        "confidence": "1"
+        "confidence": "0"
       },
       "conditions": [
         {
@@ -6615,6 +6618,32 @@
       "on_match": [
         "block"
       ]
+    },
+    {
+      "id": "ua0-600-57x",
+      "name": "AlertLogic",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bAlertLogic-MDR-"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
     },
     {
       "id": "ua0-600-5xx",
