@@ -7,6 +7,7 @@ const getPort = require('get-port')
 const { execSync, spawn } = require('child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { writeFileSync } = require('fs')
+const { satisfies } = require('semver')
 
 describe('Plugin', function () {
   let server
@@ -209,25 +210,28 @@ describe('Plugin', function () {
               .catch(done)
           })
 
+          const pkg = require(`${__dirname}/../../../versions/next@${version}/node_modules/next/package.json`)
+
           const pathTests = [
             ['/hello', '/hello'],
             ['/hello/world', '/hello/[name]'],
-            ['/hello/other', '/hello/other']
+            ['/hello/other', '/hello/other'],
+            ['/error/not_found', '/error/not_found', satisfies(pkg.version, '>=11') ? 404 : 500],
+            ['/error/get_server_side_props', '/error/get_server_side_props', 500]
           ]
-          pathTests.forEach(([url, expectedPath]) => {
+          pathTests.forEach(([url, expectedPath, statusCode]) => {
             it(`should infer the corrrect resource (${expectedPath})`, done => {
               agent
                 .use(traces => {
                   const spans = traces[0]
 
                   expect(spans[0]).to.have.property('resource', `GET ${expectedPath}`)
+                  expect(spans[0].meta).to.have.property('http.status_code', `${statusCode || 200}`)
                 })
                 .then(done)
                 .catch(done)
 
-              axios
-                .get(`http://localhost:${port}${url}`)
-                .catch(done)
+              axios.get(`http://localhost:${port}${url}`)
             })
           })
 
@@ -285,7 +289,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/boom`)
+              .get(`http://localhost:${port}/api/error/boom`)
               .catch((response) => {
                 expect(response.statusCode).to.eql(500)
               })
