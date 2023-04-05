@@ -19,7 +19,7 @@ env:
 # TODO: upstream jobs
 
 jobs:
-  amqp10: # TODO: move rhea to its own job
+  amqp10:
     runs-on: ubuntu-latest
     services:
       qpid:
@@ -30,7 +30,7 @@ jobs:
         ports:
           - 5673:5672
     env:
-      PLUGINS: amqp10|rhea
+      PLUGINS: amqp10|rhea # TODO: move rhea to its own job
       SERVICES: qpid
     steps:
       - uses: actions/checkout@v2
