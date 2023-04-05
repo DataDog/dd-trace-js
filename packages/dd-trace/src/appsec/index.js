@@ -21,8 +21,8 @@ function enable (_config) {
   try {
     setTemplates(_config)
 
-    const rules = _config.appsec.rules || require('./recommended.json')
-    enableFromRules(_config, rules)
+    // TODO: inline this function
+    enableFromRules(_config, _config.appsec.rules)
   } catch (err) {
     abortEnable(err)
   }

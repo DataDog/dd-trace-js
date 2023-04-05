@@ -300,8 +300,8 @@ class Config {
     )
 
     const DD_APPSEC_RULES = coalesce(
-      safeJsonParse(maybeFile(appsec.rules)),
-      safeJsonParse(maybeFile(process.env.DD_APPSEC_RULES))
+      appsec.rules,
+      process.env.DD_APPSEC_RULES
     )
     const DD_APPSEC_TRACE_RATE_LIMIT = coalesce(
       parseInt(appsec.rateLimit),
@@ -479,7 +479,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
     this.appsec = {
       enabled: DD_APPSEC_ENABLED,
-      rules: DD_APPSEC_RULES,
+      rules: DD_APPSEC_RULES ? safeJsonParse(maybeFile(DD_APPSEC_RULES)) : require('./appsec/recommended.json'),
       rateLimit: DD_APPSEC_TRACE_RATE_LIMIT,
       wafTimeout: DD_APPSEC_WAF_TIMEOUT,
       obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
