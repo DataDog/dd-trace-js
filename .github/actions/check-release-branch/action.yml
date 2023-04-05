@@ -22,4 +22,8 @@ runs:
       shell: bash
       run: |
         git checkout ${{ inputs.release-branch }}
-        git cherry-pick ${{ steps.get-commit-to-cherry-pick.outputs.commit-to-cherry-pick}}
+        {
+          git cherry-pick ${{ steps.get-commit-to-cherry-pick.outputs.commit-to-cherry-pick}}
+        } || {
+          git status ; git diff ; exit 1
+        }

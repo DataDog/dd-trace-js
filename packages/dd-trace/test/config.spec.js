@@ -16,6 +16,8 @@ describe('Config', () => {
   let existsSyncReturn
   let osType
 
+  const RECOMMENDED_JSON_PATH = require.resolve('../src/appsec/recommended.json')
+  const RECOMMENDED_JSON = require(RECOMMENDED_JSON_PATH)
   const RULES_JSON_PATH = require.resolve('./fixtures/config/appsec-rules.json')
   const RULES_JSON = require(RULES_JSON_PATH)
   const BLOCKED_TEMPLATE_HTML_PATH = require.resolve('./fixtures/config/appsec-blocked-template.html')
@@ -95,7 +97,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', undefined)
-    expect(config).to.have.nested.property('appsec.rules', undefined)
+    expect(config).to.have.nested.property('appsec.rules', RECOMMENDED_JSON)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
@@ -533,7 +535,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_APPSEC_ENABLED = 'false'
-    process.env.DD_APPSEC_RULES = require.resolve('../src/appsec/recommended.json')
+    process.env.DD_APPSEC_RULES = RECOMMENDED_JSON_PATH
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = 11
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
@@ -663,6 +665,32 @@ describe('Config', () => {
           blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
           blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH
         }
+      }
+    })
+
+    expect(config).to.have.deep.property('appsec', {
+      enabled: true,
+      rules: RECOMMENDED_JSON,
+      rateLimit: 42,
+      wafTimeout: 42,
+      obfuscatorKeyRegex: '.*',
+      obfuscatorValueRegex: '.*',
+      blockedTemplateHtml: undefined,
+      blockedTemplateJson: undefined
+    })
+  })
+
+  it('should left undefined appsec rules if user rules file could not be loaded', () => {
+    const config = new Config({
+      appsec: {
+        enabled: true,
+        rules: '/not/existing/path/or/bad/format.json',
+        rateLimit: 42,
+        wafTimeout: 42,
+        obfuscatorKeyRegex: '.*',
+        obfuscatorValueRegex: '.*',
+        blockedTemplateHtml: undefined,
+        blockedTemplateJson: undefined
       }
     })
 
