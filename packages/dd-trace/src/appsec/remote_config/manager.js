@@ -228,16 +228,18 @@ class RemoteConfigManager extends EventEmitter {
 
   dispatch (list, action) {
     for (const item of list) {
-      try {
-        // TODO: do we want to pass old and new config ?
-        const hadListeners = this.emit(item.product, action, item.file, item.id)
+      if (item.apply_state === 1) { // in case the item was already handled by kPreUpdate
+        try {
+          // TODO: do we want to pass old and new config ?
+          const hadListeners = this.emit(item.product, action, item.file, item.id)
 
-        if (hadListeners) {
-          item.apply_state = 2
+          if (hadListeners) {
+            item.apply_state = 2
+          }
+        } catch (err) {
+          item.apply_state = 3
+          item.apply_error = err.toString()
         }
-      } catch (err) {
-        item.apply_state = 3
-        item.apply_error = err.toString()
       }
 
       if (action === 'unapply') {
