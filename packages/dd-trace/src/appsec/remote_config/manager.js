@@ -6,6 +6,7 @@ const Scheduler = require('./scheduler')
 const tracerVersion = require('../../../../../package.json').version
 const request = require('../../exporters/common/request')
 const log = require('../../log')
+const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 
 const clientId = uuid()
 
@@ -186,7 +187,7 @@ class RemoteConfigManager extends EventEmitter {
           product,
           id,
           version: meta.custom.v,
-          apply_state: 1,
+          apply_state: UNACKNOWLEDGED,
           apply_error: '',
           length: meta.length,
           hashes: meta.hashes,
@@ -228,16 +229,16 @@ class RemoteConfigManager extends EventEmitter {
 
   dispatch (list, action) {
     for (const item of list) {
-      if (item.apply_state === 1) { // in case the item was already handled by kPreUpdate
+      if (item.apply_state === UNACKNOWLEDGED) { // in case the item was already handled by kPreUpdate
         try {
           // TODO: do we want to pass old and new config ?
           const hadListeners = this.emit(item.product, action, item.file, item.id)
 
           if (hadListeners) {
-            item.apply_state = 2
+            item.apply_state = ACKNOWLEDGED
           }
         } catch (err) {
-          item.apply_state = 3
+          item.apply_state = ERROR
           item.apply_error = err.toString()
         }
       }
