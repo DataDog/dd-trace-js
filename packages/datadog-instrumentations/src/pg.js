@@ -27,16 +27,6 @@ function wrapQuery (query) {
       return query.apply(this, arguments)
     }
 
-    const retval = query.apply(this, arguments)
-
-    const queryQueue = this.queryQueue || this._queryQueue
-    const activeQuery = this.activeQuery || this._activeQuery
-    const pgQuery = queryQueue[queryQueue.length - 1] || activeQuery
-
-    if (!pgQuery) {
-      return retval
-    }
-
     const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     const processId = this.processID
