@@ -106,59 +106,59 @@ describe('profiler', () => {
       return checkProfiles(agent, proc, timeout, ['space'], true)
     })
 
-    // it('sends a heap profile on OOM with external process and ends successfully', async () => {
-    //   proc = fork(oomTestFile, {
-    //     cwd,
-    //     execArgv: oomExecArgv,
-    //     env: {
-    //       ...oomEnv,
-    //       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 15000000,
-    //       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 3
-    //     }
-    //   })
-    //   return checkProfiles(agent, proc, timeout, ['space'], false, 2)
-    // })
+    it('sends a heap profile on OOM with external process and ends successfully', async () => {
+      proc = fork(oomTestFile, {
+        cwd,
+        execArgv: oomExecArgv,
+        env: {
+          ...oomEnv,
+          DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 15000000,
+          DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 3
+        }
+      })
+      return checkProfiles(agent, proc, timeout, ['space'], false, 2)
+    })
 
-    // it('sends a heap profile on OOM with async callback', async () => {
-    //   proc = fork(oomTestFile, {
-    //     cwd,
-    //     execArgv: oomExecArgv,
-    //     env: {
-    //       ...oomEnv,
-    //       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
-    //       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
-    //       DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async'
-    //     }
-    //   })
-    //   return checkProfiles(agent, proc, timeout, ['space'], true)
-    // })
+    it('sends a heap profile on OOM with async callback', async () => {
+      proc = fork(oomTestFile, {
+        cwd,
+        execArgv: oomExecArgv,
+        env: {
+          ...oomEnv,
+          DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
+          DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
+          DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async'
+        }
+      })
+      return checkProfiles(agent, proc, timeout, ['space'], true)
+    })
 
-    // it('sends a heap profile on OOM with interrupt callback', async () => {
-    //   proc = fork(oomTestFile, {
-    //     cwd,
-    //     execArgv: oomExecArgv,
-    //     env: {
-    //       ...oomEnv,
-    //       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
-    //       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
-    //       DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'interrupt'
-    //     }
-    //   })
-    //   return checkProfiles(agent, proc, timeout, ['space'], true)
-    // })
+    it('sends a heap profile on OOM with interrupt callback', async () => {
+      proc = fork(oomTestFile, {
+        cwd,
+        execArgv: oomExecArgv,
+        env: {
+          ...oomEnv,
+          DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
+          DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
+          DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'interrupt'
+        }
+      })
+      return checkProfiles(agent, proc, timeout, ['space'], true)
+    })
 
-    // it('sends heap profiles on OOM with multiple strategies', async () => {
-    //   proc = fork(oomTestFile, {
-    //     cwd,
-    //     execArgv: oomExecArgv,
-    //     env: {
-    //       ...oomEnv,
-    //       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
-    //       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
-    //       DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async,interrupt,process'
-    //     }
-    //   })
-    //   return checkProfiles(agent, proc, timeout, ['space'], true, 4)
-    // })
+    it('sends heap profiles on OOM with multiple strategies', async () => {
+      proc = fork(oomTestFile, {
+        cwd,
+        execArgv: oomExecArgv,
+        env: {
+          ...oomEnv,
+          DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
+          DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
+          DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async,interrupt,process'
+        }
+      })
+      return checkProfiles(agent, proc, timeout, ['space'], true, 4)
+    })
   })
 })
