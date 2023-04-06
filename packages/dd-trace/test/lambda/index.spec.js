@@ -97,6 +97,37 @@ describe('lambda', () => {
       })
       await checkTraces
     })
+
+    it('correctly patch handler where context is the third argument', async () => {
+      process.env.DD_LAMBDA_HANDLER = 'handler.swappedArgsHandler'
+
+      await loadAgent()
+
+      const _context = {
+        getRemainingTimeInMillis: () => 150
+      }
+      const _event = {}
+      const _ = {}
+
+      const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
+      const app = require(_handlerPath)
+      datadog = require('./fixtures/datadog-lambda')
+
+      const result = await datadog(app.swappedArgsHandler)(_event, _, _context)
+
+      expect(result).to.not.equal(undefined)
+      const body = JSON.parse(result.body)
+      expect(body.message).to.equal('hello!')
+
+      const checkTraces = agent.use((_traces) => {
+        const traces = _traces[0]
+        expect(traces).lengthOf(1)
+        traces.forEach((trace) => {
+          expect(trace.error).to.equal(0)
+        })
+      })
+      await checkTraces
+    })
   })
 
   describe('timeout spans', () => {
