@@ -60,13 +60,30 @@ function crashFlush () {
 }
 
 /**
+ * Extracts the context from the given Lambda handler arguments.
+ *
+ * @param {*} args any amount of arguments
+ * @returns the context, if extraction was succesful.
+ */
+function extractContext (args) {
+  let context = args.length > 1 ? args[1] : undefined
+  if (context === undefined || context.getRemainingTimeInMillis === undefined) {
+    context = args.length > 2 ? args[2] : undefined
+    if (context === undefined || context.getRemainingTimeInMillis === undefined) {
+      throw Error('Could not extract context')
+    }
+  }
+  return context
+}
+
+/**
  * Patches your AWS Lambda handler function to add some tracing support.
  *
  * @param {*} lambdaHandler a Lambda handler function.
  */
 exports.datadog = function datadog (lambdaHandler) {
   return (...args) => {
-    const context = args[1]
+    const context = extractContext(args)
     const patched = lambdaHandler.apply(this, args)
     checkTimeout(context)
 
