@@ -15,6 +15,11 @@ timeoutChannel.subscribe(_ => {
 })
 
 let __lambdaTimeout
+let __isColdStart = false
+
+function setColdStart () {
+  __isColdStart = true
+}
 
 /**
  * Publishes to the `apm:aws:lambda:timeout` channel when
@@ -50,7 +55,9 @@ function crashFlush () {
       [ERROR_TYPE]: error.name
     })
   } else {
-    log.warn('An impending timeout was reached, but no root span was found. No error will be tagged.')
+    if (__isColdStart) {
+      log.warn('An impending timeout was reached, but no root span was found. No error will be tagged.')
+    }
   }
 
   tracer._processor.killAll()
@@ -83,6 +90,7 @@ function extractContext (args) {
  */
 exports.datadog = function datadog (lambdaHandler) {
   return (...args) => {
+    setColdStart()
     const patched = lambdaHandler.apply(this, args)
 
     try {
@@ -95,7 +103,9 @@ exports.datadog = function datadog (lambdaHandler) {
         patched.then(_ => clearTimeout(__lambdaTimeout))
       }
     } catch (e) {
-      log.warn('Error patching AWS Lambda handler. Timeout spans will not be generated.')
+      if (__isColdStart) {
+        log.warn('Error patching AWS Lambda handler. Timeout spans will not be generated.')
+      }
     }
 
     return patched
