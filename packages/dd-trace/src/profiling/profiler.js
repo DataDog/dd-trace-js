@@ -140,7 +140,7 @@ class Profiler extends EventEmitter {
       }
 
       this._capture(this._timeoutInterval)
-      // await this._submit(encodedProfiles, start, end, snapshotKind)
+      await this._submit(encodedProfiles, start, end, snapshotKind)
       this._logger.debug('Submitted profiles')
     } catch (err) {
       this._logger.error(err)
