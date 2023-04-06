@@ -91,7 +91,7 @@
     "path-to-regexp": "^0.1.2",
     "protobufjs": "^7.1.2",
     "retry": "^0.10.1",
-    "semver": "^5.5.0"
+    "semver": "^7.3.8"
   },
   "devDependencies": {
     "@types/node": ">=14",
