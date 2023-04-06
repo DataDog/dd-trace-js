@@ -68,6 +68,12 @@ class NextPlugin extends Plugin {
       const span = store.span
       const req = this._requests.get(span)
 
+      // Only use error page names if there's not already a name
+      const current = span.context()._tags['next.page']
+      if (current && (page === '/404' || page === '/500' || page === '/_error')) {
+        return
+      }
+
       span.addTags({
         [COMPONENT]: this.constructor.id,
         'resource.name': `${req.method} ${page}`.trim(),
