@@ -125,7 +125,7 @@ function spawnProc (filename, options = {}) {
 async function createSandbox (dependencies = [], isGitRepo = false) {
   /* To execute integration tests without a sandbox uncomment the next line
    * and do `yarn link && yarn link dd-trace` */
-  // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
+  return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, 'dd-trace.tgz')
   const allDependencies = [`file:${out}`].concat(dependencies)
