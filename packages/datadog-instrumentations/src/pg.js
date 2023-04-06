@@ -30,6 +30,9 @@ function wrapQuery (query) {
     const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     const processId = this.processID
+    let pgQuery = {}
+    pgQuery.text = arguments[0]
+
     return asyncResource.runInAsyncScope(() => {
       startCh.publish({
         params: this.connectionParameters,
@@ -38,12 +41,24 @@ function wrapQuery (query) {
         processId
       })
 
+      arguments[0] = pgQuery.text
+
       const finish = asyncResource.bind(function (error) {
         if (error) {
           errorCh.publish(error)
         }
         finishCh.publish()
       })
+
+      const retval = query.apply(this, arguments)
+      const queryQueue = this.queryQueue || this._queryQueue
+      const activeQuery = this.activeQuery || this._activeQuery
+
+      pgQuery = queryQueue[queryQueue.length - 1] || activeQuery
+
+      if (!pgQuery) {
+        return retval
+      }
 
       if (pgQuery.callback) {
         const originalCallback = callbackResource.bind(pgQuery.callback)
