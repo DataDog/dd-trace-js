@@ -30,8 +30,9 @@ function wrapQuery (query) {
     const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     const processId = this.processID
-    let pgQuery = {}
-    pgQuery.text = arguments[0]
+    let pgQuery = {
+      text: arguments[0]
+    }
 
     return asyncResource.runInAsyncScope(() => {
       startCh.publish({
