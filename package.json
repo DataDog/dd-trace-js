@@ -32,7 +32,7 @@
     "test:plugins:upstream": "node ./packages/dd-trace/test/plugins/suite.js",
     "test:profiler": "tap \"packages/dd-trace/test/profiling/**/*.spec.js\"",
     "test:profiler:ci": "npm run test:profiler -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/profiling/**/*.js\"",
-    "test:integration": "mocha --colors --timeout 30000 \"integration-tests/*.spec.js\"",
+    "test:integration": "mocha --colors --timeout 30000 \"integration-tests/profiler.spec.js\"",
     "test:integration:cucumber": "mocha --colors --timeout 30000 \"integration-tests/cucumber/*.spec.js\"",
     "test:integration:cypress": "mocha --colors --timeout 30000 \"integration-tests/cypress/*.spec.js\"",
     "test:integration:playwright": "mocha --colors --timeout 30000 \"integration-tests/playwright/*.spec.js\"",

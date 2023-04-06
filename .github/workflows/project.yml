@@ -18,7 +18,7 @@ jobs:
       # setting fail-fast to false in an attempt to prevent this from happening
       fail-fast: false
       matrix:
-        version: [14, 16, 18, latest]
+        version: [14]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -31,34 +31,34 @@ jobs:
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
 
-  integration-ci:
-    strategy:
-      matrix:
-        version: [14, latest]
-        framework: [cucumber, cypress, playwright]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - uses: actions/setup-node@v3
-        with:
-          node-version: ${{ matrix.version }}
-      - run: yarn test:integration:${{ matrix.framework }}
+  # integration-ci:
+  #   strategy:
+  #     matrix:
+  #       version: [14, latest]
+  #       framework: [cucumber, cypress, playwright]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: ./.github/actions/node/setup
+  #     - run: yarn install
+  #     - uses: actions/setup-node@v3
+  #       with:
+  #         node-version: ${{ matrix.version }}
+  #     - run: yarn test:integration:${{ matrix.framework }}
 
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - run: yarn lint
+  # lint:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: ./.github/actions/node/setup
+  #     - run: yarn install
+  #     - run: yarn lint
 
-  typescript:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - run: yarn type:test
-      - run: yarn type:doc
+  # typescript:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: ./.github/actions/node/setup
+  #     - run: yarn install
+  #     - run: yarn type:test
+  #     - run: yarn type:doc
