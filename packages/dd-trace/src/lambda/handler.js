@@ -50,7 +50,7 @@ function crashFlush () {
       [ERROR_TYPE]: error.name
     })
   } else {
-    log.warn('An impending timeout was reached, but no root span was found. No error will be tagged.')
+    log.debug('An impending timeout was reached, but no root span was found. No error will be tagged.')
   }
 
   tracer._processor.killAll()
@@ -60,20 +60,44 @@ function crashFlush () {
 }
 
 /**
+ * Extracts the context from the given Lambda handler arguments.
+ *
+ * @param {*} args any amount of arguments
+ * @returns the context, if extraction was succesful.
+ */
+function extractContext (args) {
+  let context = args.length > 1 ? args[1] : undefined
+  if (context === undefined || context.getRemainingTimeInMillis === undefined) {
+    context = args.length > 2 ? args[2] : undefined
+    if (context === undefined || context.getRemainingTimeInMillis === undefined) {
+      throw Error('Could not extract context')
+    }
+  }
+  return context
+}
+
+/**
  * Patches your AWS Lambda handler function to add some tracing support.
  *
  * @param {*} lambdaHandler a Lambda handler function.
  */
 exports.datadog = function datadog (lambdaHandler) {
   return (...args) => {
-    const context = args[1]
     const patched = lambdaHandler.apply(this, args)
-    checkTimeout(context)
 
-    if (patched) {
-      // clear the timeout as soon as a result is returned
-      patched.then(_ => clearTimeout(__lambdaTimeout))
+    try {
+      const context = extractContext(args)
+
+      checkTimeout(context)
+
+      if (patched) {
+        // clear the timeout as soon as a result is returned
+        patched.then(_ => clearTimeout(__lambdaTimeout))
+      }
+    } catch (e) {
+      log.debug('Error patching AWS Lambda handler. Timeout spans will not be generated.')
     }
+
     return patched
   }
 }

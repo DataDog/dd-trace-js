@@ -42,8 +42,15 @@ const finishSpansEarlyTimeoutHandler = async (...args) => {
   return response
 }
 
+const swappedArgsHandler = async (event, _, context) => {
+  const response = sampleResponse
+
+  return response
+}
+
 module.exports = {
   finishSpansEarlyTimeoutHandler,
   handler,
+  swappedArgsHandler,
   timeoutHandler
 }
