@@ -19,6 +19,7 @@ let count = 0
 
 function foo (size) {
   count += 1
+  console.log(`count: ${count}`)
   const n = size / 8
   const x = []
   x.length = n

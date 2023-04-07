@@ -23,6 +23,7 @@ async function checkProfiles (agent, proc, timeout,
   await new Promise((resolve, reject) => {
     const timeoutObj = setTimeout(() => {
       console.log(`Proc timeout: exitCode: ${proc.exitCode}, signalCode: ${proc.signalCode}`)
+      console.log(proc)
       try {
         childProcess.execSync(`sudo gdb -q -batch -ex 'thread apply all backtrace' -p ${proc.pid}`, {stdio: 'inherit'})
       } catch (err) {
