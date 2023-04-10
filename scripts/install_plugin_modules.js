@@ -89,6 +89,7 @@ async function assertInstrumentation (instrumentation, external) {
 }
 
 async function assertModules (name, version, external) {
+  await new Promise(r => setTimeout(r, 30_000));
   // const range = process.env.RANGE
   // if (range && !semver.subset(version, range)) return
   addFolder(name)
