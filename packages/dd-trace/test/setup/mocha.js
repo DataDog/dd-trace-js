@@ -72,7 +72,7 @@ function withVersions (plugin, modules, range, cb) {
       .filter(instrumentation => instrumentation.name === moduleName)
       .forEach(instrumentation => {
         instrumentation.versions
-          // .filter(version => !process.env.RANGE || semver.subset(version, process.env.RANGE))
+          .filter(version => !process.env.RANGE || semver.subset(version, process.env.RANGE))
           .forEach(version => {
             const min = semver.coerce(version).version
             const max = require(`../../../../versions/${moduleName}@${version}`).version()
