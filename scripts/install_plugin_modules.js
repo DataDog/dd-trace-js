@@ -89,8 +89,8 @@ async function assertInstrumentation (instrumentation, external) {
 }
 
 async function assertModules (name, version, external) {
-  const range = process.env.RANGE
-  if (range && !semver.subset(version, range)) return
+  // const range = process.env.RANGE
+  // if (range && !semver.subset(version, range)) return
   addFolder(name)
   addFolder(name, version)
   assertFolder(name)
