@@ -89,9 +89,9 @@ async function assertInstrumentation (instrumentation, external) {
 }
 
 async function assertModules (name, version, external) {
-  await new Promise(r => setTimeout(r, 30_000));
-  // const range = process.env.RANGE
-  // if (range && !semver.subset(version, range)) return
+  await new Promise(r => setTimeout(r, 30_000)) // apparently this does not affect benchmarking performance
+  const range = process.env.RANGE
+  if (range && !semver.subset(version, range)) return
   addFolder(name)
   addFolder(name, version)
   assertFolder(name)
