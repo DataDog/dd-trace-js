@@ -1,20 +1,20 @@
-const { namingResolver } = require('./util')
+const SchemaDefinition = require('./definition')
 
 const schema = {
   messaging: {
     outbound: {
       rhea: {
         opName: () => 'amqp.send',
-        serviceName: (ddService) => `${ddService}-amqp-producer`
+        serviceName: (service) => `${service}-amqp-producer`
       }
     },
     inbound: {
       rhea: {
         opName: () => 'amqp.receive',
-        serviceName: (ddService) => ddService
+        serviceName: (service) => service
       }
     }
   }
 }
 
-module.exports = namingResolver(schema)
+module.exports = new SchemaDefinition(schema)
