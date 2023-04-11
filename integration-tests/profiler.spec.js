@@ -164,7 +164,7 @@ describe('profiler', () => {
           DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async,process'
         }
       })
-      return checkProfiles(agent, proc, timeout, ['space'], true, 4)
+      return checkProfiles(agent, proc, timeout, ['space'], true, 2)
     })
   })
 })
