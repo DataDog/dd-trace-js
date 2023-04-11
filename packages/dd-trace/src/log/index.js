@@ -34,7 +34,7 @@ const log = {
   reset () {
     logWriter.reset()
     this._deprecate = memoize((code, message) => {
-      errorChannel.publish(message)
+      errorChannel.channel.publish(message)
       return true
     })
 
@@ -42,29 +42,29 @@ const log = {
   },
 
   debug (message) {
-    if (debugChannel.hasSubscribers) {
-      debugChannel.publish(processMsg(message))
+    if (debugChannel.channel.hasSubscribers) {
+      debugChannel.channel.publish(processMsg(message))
     }
     return this
   },
 
   info (message) {
-    if (infoChannel.hasSubscribers) {
-      infoChannel.publish(processMsg(message))
+    if (infoChannel.channel.hasSubscribers) {
+      infoChannel.channel.publish(processMsg(message))
     }
     return this
   },
 
   warn (message) {
-    if (warnChannel.hasSubscribers) {
-      warnChannel.publish(processMsg(message))
+    if (warnChannel.channel.hasSubscribers) {
+      warnChannel.channel.publish(processMsg(message))
     }
     return this
   },
 
   error (err) {
-    if (errorChannel.hasSubscribers) {
-      errorChannel.publish(processMsg(err))
+    if (errorChannel.channel.hasSubscribers) {
+      errorChannel.channel.publish(processMsg(err))
     }
     return this
   },

@@ -23,17 +23,17 @@ function withNoop (fn) {
 }
 
 function unsubscribeAll () {
-  if (debugChannel.hasSubscribers) {
-    debugChannel.unsubscribe(onDebug)
+  if (debugChannel.channel.hasSubscribers) {
+    debugChannel.channel.unsubscribe(onDebug)
   }
-  if (infoChannel.hasSubscribers) {
-    infoChannel.unsubscribe(onInfo)
+  if (infoChannel.channel.hasSubscribers) {
+    infoChannel.channel.unsubscribe(onInfo)
   }
-  if (warnChannel.hasSubscribers) {
-    warnChannel.unsubscribe(onWarn)
+  if (warnChannel.channel.hasSubscribers) {
+    warnChannel.channel.unsubscribe(onWarn)
   }
-  if (errorChannel.hasSubscribers) {
-    errorChannel.unsubscribe(onError)
+  if (errorChannel.channel.hasSubscribers) {
+    errorChannel.channel.unsubscribe(onError)
   }
 }
 
@@ -42,16 +42,16 @@ function toggleSubscription (enable) {
 
   if (enable) {
     if (debugChannel.logLevel >= logLevel) {
-      debugChannel.subscribe(onDebug)
+      debugChannel.channel.subscribe(onDebug)
     }
     if (infoChannel.logLevel >= logLevel) {
-      infoChannel.subscribe(onInfo)
+      infoChannel.channel.subscribe(onInfo)
     }
     if (warnChannel.logLevel >= logLevel) {
-      warnChannel.subscribe(onWarn)
+      warnChannel.channel.subscribe(onWarn)
     }
     if (errorChannel.logLevel >= logLevel) {
-      errorChannel.subscribe(onError)
+      errorChannel.channel.subscribe(onError)
     }
   }
 }
