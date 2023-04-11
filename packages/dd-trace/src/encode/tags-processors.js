@@ -25,80 +25,59 @@ const MAX_SERVICE_LENGTH = 100
 // MAX_TYPE_LENGTH the maximum length a span type can have
 const MAX_TYPE_LENGTH = 100
 
-const fromEntries = Object.fromEntries || (entries =>
-  entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
-
 function truncateToLength (value, maxLength) {
-  if (!value) {
-    return value
-  }
-  if (value.length > maxLength) {
+  if (value && value.length > maxLength) {
     return `${value.slice(0, maxLength)}...`
   }
   return value
 }
 
+// TODO(bengl) Pretty much everything in this file should happen in
+// `format.js`, so that we're not iterating over all the spans and modifying
+// them yet again.
+
 // normally the agent truncates the resource and parses it in certain scenarios (e.g. SQL Queries)
 function truncateSpan (span, shouldTruncateResourceName = true) {
-  return fromEntries(Object.entries(span).map(([key, value]) => {
-    switch (key) {
-      case 'resource':
-        return ['resource', shouldTruncateResourceName ? truncateToLength(value, MAX_RESOURCE_NAME_LENGTH) : value]
-      case 'meta':
-        return ['meta', fromEntries(Object.entries(value).map(([metaKey, metaValue]) =>
-          [truncateToLength(metaKey, MAX_META_KEY_LENGTH), truncateToLength(metaValue, MAX_META_VALUE_LENGTH)]
-        ))]
-      case 'metrics':
-        return ['metrics', fromEntries(Object.entries(value).map(([metricsKey, metricsValue]) =>
-          [truncateToLength(metricsKey, MAX_METRIC_KEY_LENGTH), truncateToLength(metricsValue, MAX_METRIC_VALUE_LENGTH)]
-        ))]
-      default:
-        return [key, value]
+  if (shouldTruncateResourceName && span.resource && span.resource.length > MAX_RESOURCE_NAME_LENGTH) {
+    span.resource = `${span.resource.slice(0, MAX_RESOURCE_NAME_LENGTH)}...`
+  }
+  for (let metaKey in span.meta) {
+    const val = span.meta[metaKey]
+    if (metaKey.length > MAX_META_KEY_LENGTH) {
+      delete span.meta[metaKey]
+      metaKey = `${metaKey.slice(0, MAX_META_KEY_LENGTH)}...`
     }
-  }))
+    span.meta[metaKey] = truncateToLength(val, MAX_META_VALUE_LENGTH)
+  }
+  for (let metricsKey in span.metrics) {
+    const val = span.metrics[metricsKey]
+    if (metricsKey.length > MAX_METRIC_KEY_LENGTH) {
+      delete span.metrics[metricsKey]
+      metricsKey = `${metricsKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
+    }
+    span.metrics[metricsKey] = truncateToLength(val, MAX_METRIC_VALUE_LENGTH)
+  }
+
+  return span
 }
 
 function normalizeSpan (span) {
-  const normalizedSpan = fromEntries(Object.entries(span).map(([key, value]) => {
-    switch (key) {
-      case 'service':
-        if (!value) {
-          return [key, DEFAULT_SERVICE_NAME]
-        }
-        if (value.length > MAX_SERVICE_LENGTH) {
-          return [key, value.slice(0, MAX_SERVICE_LENGTH)]
-        }
-        break
-      case 'name':
-        if (!value) {
-          return [key, DEFAULT_SPAN_NAME]
-        }
-        if (value.length > MAX_NAME_LENGTH) {
-          return [key, value.slice(0, MAX_NAME_LENGTH)]
-        }
-        break
-      case 'resource':
-        if (!value) {
-          return [key, span.name || DEFAULT_SPAN_NAME]
-        }
-        break
-      case 'type':
-        if (!value) {
-          return [key, value]
-        }
-        if (value.length > MAX_TYPE_LENGTH) {
-          return [key, value.slice(0, MAX_TYPE_LENGTH)]
-        }
-    }
-    return [key, value]
-  }))
-  if (!normalizedSpan.service) {
-    normalizedSpan.service = DEFAULT_SERVICE_NAME
+  span.service = span.service || DEFAULT_SERVICE_NAME
+  if (span.service.length > MAX_SERVICE_LENGTH) {
+    span.service = span.service.slice(0, MAX_SERVICE_LENGTH)
   }
-  if (!normalizedSpan.name) {
-    normalizedSpan.name = DEFAULT_SPAN_NAME
+  span.name = span.name || DEFAULT_SPAN_NAME
+  if (span.name.length > MAX_NAME_LENGTH) {
+    span.name = span.name.slice(0, MAX_NAME_LENGTH)
   }
-  return normalizedSpan
+  if (!span.resource) {
+    span.resource = span.name
+  }
+  if (span.type && span.type.length > MAX_TYPE_LENGTH) {
+    span.type = span.type.slice(0, MAX_TYPE_LENGTH)
+  }
+
+  return span
 }
 
 module.exports = {
