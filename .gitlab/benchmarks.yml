@@ -80,3 +80,4 @@ benchmark-v18:
   extends: .benchmarks
   variables:
     MAJOR_VERSION: 18
+
