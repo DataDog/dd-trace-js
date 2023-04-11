@@ -30,7 +30,7 @@ function enable (_config) {
 
 function enableFromRules (_config, rules) {
   RuleManager.applyRules(rules, _config.appsec)
-  remoteConfig.enableAsmData(_config.appsec)
+  remoteConfig.enableAsmData()
 
   Reporter.setRateLimit(_config.appsec.rateLimit)
 
