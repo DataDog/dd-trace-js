@@ -21,7 +21,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
 
     this.startSpan(this.operationName(), {
       childOf,
-      service: this.config.service || this.serviceName(this.tracer._service),
+      service: this.config.service || this.serviceName(),
       resource: name,
       type: 'worker',
       kind: 'consumer',

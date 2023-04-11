@@ -1,7 +1,7 @@
-const { namingResolver } = require('./util')
+const SchemaDefinition = require('./definition')
 
-function identityService (ddService) {
-  return ddService
+function identityService (service) {
+  return service
 }
 
 const schema = {
@@ -21,4 +21,4 @@ const schema = {
   }
 }
 
-module.exports = namingResolver(schema)
+module.exports = new SchemaDefinition(schema)

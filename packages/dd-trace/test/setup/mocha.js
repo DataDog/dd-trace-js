@@ -53,7 +53,11 @@ function withNamingSchema (naming, callback) {
     describe(`With naming schema ${versionName}`, () => {
       before(() => {
         namingConfig = schema.config
-        schema.configure({ spanAttributeSchema: versionName.toString() })
+        schema.configure(
+          {
+            spanAttributeSchema: versionName.toString(),
+            service: 'test' // Hack - this comes from dd-trace/test/plugins/agent
+          })
       })
       after(() => {
         schema.configure(namingConfig)
