@@ -98,6 +98,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', undefined)
     expect(config).to.have.nested.property('appsec.rules', RECOMMENDED_JSON)
+    expect(config).to.have.nested.property('appsec.customRulesProvided', false)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
@@ -241,6 +242,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.deep.property('appsec.rules', RULES_JSON)
+    expect(config).to.have.nested.property('appsec.customRulesProvided', true)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
@@ -628,6 +630,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.deep.property('appsec.rules', RULES_JSON)
+    expect(config).to.have.nested.property('appsec.customRulesProvided', true)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
@@ -671,6 +674,7 @@ describe('Config', () => {
     expect(config).to.have.deep.property('appsec', {
       enabled: true,
       rules: RECOMMENDED_JSON,
+      customRulesProvided: false,
       rateLimit: 42,
       wafTimeout: 42,
       obfuscatorKeyRegex: '.*',
@@ -697,6 +701,7 @@ describe('Config', () => {
     expect(config).to.have.deep.property('appsec', {
       enabled: true,
       rules: undefined,
+      customRulesProvided: true,
       rateLimit: 42,
       wafTimeout: 42,
       obfuscatorKeyRegex: '.*',
@@ -901,6 +906,7 @@ describe('Config', () => {
     expect(log.error.secondCall).to.have.been.calledWithExactly(error)
     expect(log.error.thirdCall).to.have.been.calledWithExactly(error)
     expect(config.appsec.rules).to.be.undefined
+    expect(config.appsec.customRulesProvided).to.be.true
     expect(config.appsec.blockedTemplateHtml).to.be.undefined
     expect(config.appsec.blockedTemplateJson).to.be.undefined
   })

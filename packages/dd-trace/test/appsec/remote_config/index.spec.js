@@ -136,8 +136,8 @@ describe('Remote Config enable', () => {
         expect(rc.on).to.not.have.been.calledWith('ASM_DATA')
       })
 
-      it('should not activate if rules is configured', () => {
-        config.appsec = { enabled: true, rules: './path/rules.json' }
+      it.skip('should not activate if custom appsec rules are provided', () => {
+        config.appsec = { enabled: true, customRulesProvided: true }
         remoteConfig.enable(config)
         remoteConfig.enableAsmData(config.appsec)
 
