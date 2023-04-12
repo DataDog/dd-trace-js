@@ -3,7 +3,7 @@
 const {
   Channel,
   channel
-} = require('diagnostics_channel')
+} = require('diagnostics_channel') // eslint-disable-line n/no-restricted-require
 
 const [major, minor] = process.versions.node.split('.')
 

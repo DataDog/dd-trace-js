@@ -1,6 +1,7 @@
 'use strict'
 
 // TODO: Figure out why we can't use the internal version.
+// eslint-disable-next-line n/no-restricted-require
 const dc = require('diagnostics_channel')
 
 const CHANNEL_PREFIX = 'dd-trace:bundledModuleLoadStart'
