@@ -3,6 +3,8 @@
 const BaseAwsSdkPlugin = require('../base')
 
 class S3 extends BaseAwsSdkPlugin {
+  static get id () { return 's3' }
+
   generateTags (params, operation, response) {
     const tags = {}
 

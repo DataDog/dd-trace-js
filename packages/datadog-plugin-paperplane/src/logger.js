@@ -3,7 +3,7 @@
 const LogPlugin = require('../../dd-trace/src/plugins/log_plugin')
 
 class PaperplaneLoggerPlugin extends LogPlugin {
-  static get name () {
+  static get id () {
     return 'paperplane'
   }
 }

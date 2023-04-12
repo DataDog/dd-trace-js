@@ -26,7 +26,6 @@ describe('Remote Config enable', () => {
 
     appsec = {
       enable: sinon.spy(),
-      enableAsync: sinon.spy(() => Promise.resolve()),
       disable: sinon.spy()
     }
 
@@ -76,15 +75,13 @@ describe('Remote Config enable', () => {
     it('should enable appsec when listener is called with apply and enabled', () => {
       listener('apply', { asm: { enabled: true } })
 
-      expect(appsec.enable).to.not.have.been.called
-      expect(appsec.enableAsync).to.have.been.calledOnceWithExactly(config)
+      expect(appsec.enable).to.have.been.calledOnceWithExactly(config)
     })
 
     it('should enable appsec when listener is called with modify and enabled', () => {
       listener('modify', { asm: { enabled: true } })
 
-      expect(appsec.enable).to.not.have.been.called
-      expect(appsec.enableAsync).to.have.been.calledOnceWithExactly(config)
+      expect(appsec.enable).to.have.been.calledOnceWithExactly(config)
     })
 
     it('should disable appsec when listener is called with unnaply and enabled', () => {
@@ -96,7 +93,6 @@ describe('Remote Config enable', () => {
     it('should not do anything when listener is called with apply and malformed data', () => {
       listener('apply', {})
 
-      expect(appsec.enableAsync).to.not.have.been.called
       expect(appsec.enable).to.not.have.been.called
       expect(appsec.disable).to.not.have.been.called
     })

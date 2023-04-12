@@ -1,4 +1,7 @@
-<!-- Sorry, you’ve been blocked -->
+/* eslint-disable max-len */
+'use strict'
+
+const html = `<!-- Sorry, you've been blocked -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -97,3 +100,18 @@
 </body>
 
 </html>
+`
+
+const json = `{
+  "errors": [
+    {
+      "title": "You've been blocked",
+      "detail": "Sorry, you cannot access this page. Please contact the customer service team. Security provided by Datadog."
+    }
+  ]
+}`
+
+module.exports = {
+  html,
+  json
+}

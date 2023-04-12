@@ -10,26 +10,27 @@ const {
   createSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
-} = require('./helpers')
-const { FakeCiVisIntake } = require('./ci-visibility-intake')
+} = require('../helpers')
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
   TEST_STATUS,
   TEST_COMMAND,
-  TEST_BUNDLE,
+  TEST_MODULE,
   TEST_TOOLCHAIN,
   TEST_SESSION_CODE_COVERAGE_ENABLED,
   TEST_SESSION_ITR_SKIPPING_ENABLED,
   TEST_MODULE_CODE_COVERAGE_ENABLED,
   TEST_MODULE_ITR_SKIPPING_ENABLED,
-  TEST_ITR_TESTS_SKIPPED
-} = require('../packages/dd-trace/src/plugins/util/test')
+  TEST_ITR_TESTS_SKIPPED,
+  TEST_CODE_COVERAGE_LINES_TOTAL
+} = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=12')
 const versions = ['7.0.0', isOldNode ? '8' : 'latest']
 
 const runTestsCommand = './node_modules/.bin/cucumber-js ci-visibility/features/*.feature'
 const runTestsWithCoverageCommand =
-  './node_modules/nyc/bin/nyc.js node ./node_modules/.bin/cucumber-js ci-visibility/features/*.feature'
+  './node_modules/nyc/bin/nyc.js -r=text-summary node ./node_modules/.bin/cucumber-js ci-visibility/features/*.feature'
 
 versions.forEach(version => {
   describe(`cucumber@${version}`, () => {
@@ -62,7 +63,7 @@ versions.forEach(version => {
           envVars = isAgentless ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
         })
         it('can run and report tests', (done) => {
-          receiver.gatherPayloads(({ url }) => url.endsWith('/api/v2/citestcycle'), 5000).then((payloads) => {
+          receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end')
@@ -84,7 +85,7 @@ versions.forEach(version => {
             assert.exists(testModuleEventContent.test_session_id)
             assert.exists(testModuleEventContent.test_module_id)
             assert.exists(testModuleEventContent.meta[TEST_COMMAND])
-            assert.exists(testModuleEventContent.meta[TEST_BUNDLE])
+            assert.exists(testModuleEventContent.meta[TEST_MODULE])
             assert.equal(testModuleEventContent.resource.startsWith('test_module.'), true)
             assert.equal(testModuleEventContent.meta[TEST_STATUS], 'fail')
             assert.equal(
@@ -110,7 +111,7 @@ versions.forEach(version => {
               }
             }) => {
               assert.exists(meta[TEST_COMMAND])
-              assert.exists(meta[TEST_BUNDLE])
+              assert.exists(meta[TEST_MODULE])
               assert.exists(testSuiteId)
               assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
               assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
@@ -140,7 +141,7 @@ versions.forEach(version => {
               }
             }) => {
               assert.exists(meta[TEST_COMMAND])
-              assert.exists(meta[TEST_BUNDLE])
+              assert.exists(meta[TEST_MODULE])
               assert.exists(testSuiteId)
               assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
               assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
@@ -150,9 +151,7 @@ versions.forEach(version => {
               assert.equal(stepEvent.content.name, 'cucumber.step')
               assert.property(stepEvent.content.meta, 'cucumber.step')
             })
-
-            done()
-          }).catch(done)
+          }, 5000).then(() => done()).catch(done)
 
           childProcess = exec(
             runTestsCommand,
@@ -205,6 +204,7 @@ versions.forEach(version => {
             )
           })
           it('can report code coverage', (done) => {
+            let testOutput
             const itrConfigRequestPromise = receiver.payloadReceived(
               ({ url }) => url.endsWith('/api/v2/libraries/tests/services/setting')
             )
@@ -251,13 +251,15 @@ versions.forEach(version => {
               assert.exists(coveragePayload.content.coverages[0].test_session_id)
               assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
+              const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
+              assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_TOTAL])
+
               const eventTypes = eventsRequest.payload.events.map(event => event.type)
               assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
               const numSuites = eventTypes.reduce(
                 (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
               )
               assert.equal(numSuites, 2)
-              done()
             }).catch(done)
 
             childProcess = exec(
@@ -265,9 +267,20 @@ versions.forEach(version => {
               {
                 cwd,
                 env: envVars,
-                stdio: 'inherit'
+                stdio: 'pipe'
               }
             )
+            childProcess.stdout.on('data', (chunk) => {
+              testOutput += chunk.toString()
+            })
+            childProcess.stderr.on('data', (chunk) => {
+              testOutput += chunk.toString()
+            })
+            childProcess.on('exit', () => {
+              // check that reported coverage is still the same
+              assert.include(testOutput, 'Lines        : 100% ( 18/18 )')
+              done()
+            })
           })
           it('does not report code coverage if disabled by the API', (done) => {
             receiver.setSettings({

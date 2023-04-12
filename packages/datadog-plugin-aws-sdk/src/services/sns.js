@@ -3,6 +3,8 @@ const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 
 class Sns extends BaseAwsSdkPlugin {
+  static get id () { return 'sns' }
+
   generateTags (params, operation, response) {
     if (!params) return {}
 

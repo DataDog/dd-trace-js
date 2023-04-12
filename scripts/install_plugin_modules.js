@@ -1,7 +1,7 @@
 'use strict'
 
 const fs = require('fs')
-const os = require('node:os')
+const os = require('os')
 const path = require('path')
 const crypto = require('crypto')
 const semver = require('semver')
@@ -89,6 +89,8 @@ async function assertInstrumentation (instrumentation, external) {
 }
 
 async function assertModules (name, version, external) {
+  const range = process.env.RANGE
+  if (range && !semver.subset(version, range)) return
   addFolder(name)
   addFolder(name, version)
   assertFolder(name)

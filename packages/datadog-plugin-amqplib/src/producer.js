@@ -6,7 +6,7 @@ const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { getResourceName } = require('./util')
 
 class AmqplibProducerPlugin extends ProducerPlugin {
-  static get name () { return 'amqplib' }
+  static get id () { return 'amqplib' }
   static get operation () { return 'command' }
 
   start ({ channel = {}, method, fields }) {

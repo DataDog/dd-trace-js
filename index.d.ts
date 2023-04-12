@@ -438,7 +438,11 @@ export declare interface TracerOptions {
        * Controls how many code vulnerabilities can be detected in the same request
        * @default 2
        */
-      maxContextOperations?: number
+      maxContextOperations?: number,
+      /**
+       * Whether to enable vulnerability deduplication
+       */
+      deduplicationEnabled?: boolean
     }
   };
 
@@ -867,7 +871,7 @@ declare namespace plugins {
       /**
        * Hook to execute just before the request span finishes.
        */
-      request?: (span?: opentracing.Span, req?: IncomingMessage, res?: ServerResponse) => any;
+      request?: (span?: Span, req?: IncomingMessage, res?: ServerResponse) => any;
     };
 
     /**
@@ -903,7 +907,7 @@ declare namespace plugins {
       /**
        * Hook to execute just before the request span finishes.
        */
-      request?: (span?: opentracing.Span, req?: ClientRequest, res?: IncomingMessage) => any;
+      request?: (span?: Span, req?: ClientRequest, res?: IncomingMessage) => any;
     };
 
     /**
@@ -993,7 +997,7 @@ declare namespace plugins {
       /**
        * Hook to execute just before the aws span finishes.
        */
-      request?: (span?: opentracing.Span, response?: anyObject) => any;
+      request?: (span?: Span, response?: anyObject) => any;
     };
 
     /**
@@ -1062,7 +1066,7 @@ declare namespace plugins {
       /**
        * Hook to execute just before the query span finishes.
        */
-      query?: (span?: opentracing.Span, params?: TransportRequestParams) => any;
+      query?: (span?: Span, params?: TransportRequestParams) => any;
     };
   }
 
@@ -1231,7 +1235,7 @@ declare namespace plugins {
        * Hook to execute just before the request span finishes.
        */
       request?: (
-        span?: opentracing.Span,
+        span?: Span,
         req?: IncomingMessage | ClientRequest,
         res?: ServerResponse | IncomingMessage
       ) => any;
@@ -1424,7 +1428,7 @@ declare namespace plugins {
       /**
        * Hook to execute just before the request span finishes.
        */
-      request?: (span?: opentracing.Span, req?: IncomingMessage, res?: ServerResponse) => any;
+      request?: (span?: Span, req?: IncomingMessage, res?: ServerResponse) => any;
     };
   }
 
@@ -1543,12 +1547,12 @@ declare namespace plugins {
       /**
        * Hook to execute just when the span is created.
        */
-      receive?: (span?: opentracing.Span, request?: any) => any;
+      receive?: (span?: Span, request?: any) => any;
 
       /**
        * Hook to execute just when the span is finished.
        */
-      reply?: (span?: opentracing.Span, request?: any, response?: any) => any;
+      reply?: (span?: Span, request?: any, response?: any) => any;
     };
   }
 

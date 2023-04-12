@@ -3,6 +3,8 @@
 const BaseAwsSdkPlugin = require('../base')
 
 class CloudwatchLogs extends BaseAwsSdkPlugin {
+  static get id () { return 'cloudwatchlogs' }
+
   generateTags (params, operation) {
     const tags = {}
 

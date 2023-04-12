@@ -4,7 +4,7 @@ const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { moleculerTags } = require('./util')
 
 class MoleculerServerPlugin extends ServerPlugin {
-  static get name () { return 'moleculer' }
+  static get id () { return 'moleculer' }
   static get operation () { return 'action' }
 
   start ({ action, ctx, broker }) {

@@ -1,4 +1,4 @@
-const { sendVulnerabilities, setTracer } = require('./vulnerability-reporter')
+const vulnerabilityReporter = require('./vulnerability-reporter')
 const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
 const web = require('../../plugins/util/web')
 const { storage } = require('../../../../datadog-core')
@@ -6,6 +6,7 @@ const overheadController = require('./overhead-controller')
 const dc = require('diagnostics_channel')
 const iastContextFunctions = require('./iast-context')
 const { enableTaintTracking, disableTaintTracking, createTransaction, removeTransaction } = require('./taint-tracking')
+
 const telemetryLogs = require('./telemetry/logs')
 const IAST_ENABLED_TAG_KEY = '_dd.iast.enabled'
 
@@ -16,12 +17,12 @@ const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 
 function enable (config, _tracer) {
   enableAllAnalyzers()
-  enableTaintTracking()
+  enableTaintTracking(config.iast)
   requestStart.subscribe(onIncomingHttpRequestStart)
   requestClose.subscribe(onIncomingHttpRequestEnd)
   overheadController.configure(config.iast)
   overheadController.startGlobalContext()
-  setTracer(_tracer)
+  vulnerabilityReporter.start(config, _tracer)
   telemetryLogs.start()
 }
 
@@ -31,6 +32,7 @@ function disable () {
   overheadController.finishGlobalContext()
   if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
   if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestEnd)
+  vulnerabilityReporter.stop()
   telemetryLogs.stop()
 }
 
@@ -65,7 +67,7 @@ function onIncomingHttpRequestEnd (data) {
     if (iastContext && iastContext.rootSpan) {
       const vulnerabilities = iastContext.vulnerabilities
       const rootSpan = iastContext.rootSpan
-      sendVulnerabilities(vulnerabilities, rootSpan)
+      vulnerabilityReporter.sendVulnerabilities(vulnerabilities, rootSpan)
       removeTransaction(iastContext)
     }
     // TODO web.getContext(data.req) is required when the request is aborted

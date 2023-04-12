@@ -14,6 +14,9 @@ concurrency:
 jobs:
   integration:
     strategy:
+      # when one version fails, say 14, all the other versions are stopped
+      # setting fail-fast to false in an attempt to prevent this from happening
+      fail-fast: false
       matrix:
         version: [14, 16, 18, latest]
     runs-on: ubuntu-latest
@@ -24,7 +27,24 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
+      # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
+      - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
+
+  integration-ci:
+    strategy:
+      matrix:
+        version: [14, latest]
+        framework: [cucumber, cypress, playwright]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.version }}
+      - run: yarn test:integration:${{ matrix.framework }}
 
   lint:
     runs-on: ubuntu-latest

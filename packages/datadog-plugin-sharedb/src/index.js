@@ -3,7 +3,7 @@
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 
 class SharedbPlugin extends ServerPlugin {
-  static get name () { return 'sharedb' }
+  static get id () { return 'sharedb' }
 
   start ({ actionName, request }) {
     const span = this.startSpan('sharedb.request', {

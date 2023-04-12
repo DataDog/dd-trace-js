@@ -2,14 +2,14 @@
 
 const { trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent } = require('./track_event')
 const { checkUserAndSetUser, blockRequest } = require('./user_blocking')
-const { loadTemplates } = require('../blocking')
+const { setTemplates } = require('../blocking')
 const { setUser } = require('./set_user')
 
 class AppsecSdk {
   constructor (tracer, config) {
     this._tracer = tracer
     if (config) {
-      loadTemplates(config)
+      setTemplates(config)
     }
   }
 
