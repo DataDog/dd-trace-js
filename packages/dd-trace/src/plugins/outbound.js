@@ -4,7 +4,7 @@ const { CLIENT_PORT_KEY } = require('../constants')
 const TracingPlugin = require('./tracing')
 
 // TODO: Exit span on finish when AsyncResource instances are removed.
-class OutgoingPlugin extends TracingPlugin {
+class OutboundPlugin extends TracingPlugin {
   static get ioDirection () { return 'outbound' }
 
   constructor (...args) {
@@ -31,4 +31,4 @@ class OutgoingPlugin extends TracingPlugin {
   }
 }
 
-module.exports = OutgoingPlugin
+module.exports = OutboundPlugin
