@@ -134,8 +134,9 @@ services:
     volumes:
         - ./specifications:/specifications
     environment:
-        - LOG_LEVEL=INFO
+        - LOG_LEVEL=DEBUG
         - TRACE_LANGUAGE=javascript
         - DISABLED_CHECKS=trace_tag_validation
         # - PROXY_HOST=host.docker.internal # host.docker.internal should be used for testing locally
-        - PROXY_HOST=testrunner
+        - DD_TRACE_AGENT_URL=http://testrunner:8127
+        - PORT=9126
