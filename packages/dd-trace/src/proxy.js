@@ -85,6 +85,7 @@ function maybeStartServerlessMiniAgent () {
   }
   if (!rustBinaryPath) {
     log.error('Serverless Mini Agent did not start. Please provide a DD_MINI_AGENT_PATH environment variable.')
+    return
   }
 
   try {
