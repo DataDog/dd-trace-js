@@ -54,13 +54,13 @@ function request (data, options, callback) {
   }
 
   if (options.url) {
-    const url = typeof options.url === 'object' ? options.url : fromUrlString(options.url)
+    const url = typeof options.url === 'object' ? urlToOptions(options.url) : fromUrlString(options.url)
     if (url.protocol === 'unix:') {
       options.socketPath = url.pathname
     } else {
       if (!options.path) options.path = url.path
       options.protocol = url.protocol
-      options.hostname = url.hostname
+      options.hostname = url.hostname // for IPv6 this should be '::1' and not '[::1]'
       options.port = url.port
     }
   }
