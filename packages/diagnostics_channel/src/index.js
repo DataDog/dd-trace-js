@@ -25,9 +25,11 @@ if (major === '19' && minor === '9') {
       const subscribe = maybeInactive.subscribe
 
       maybeInactive.subscribe = function () {
-        const active = subscribe.apply(this, arguments)
+        delete maybeInactive.subscribe
 
-        active.subscribe(() => {}) // Keep it active forever.
+        subscribe.apply(this, arguments)
+
+        this.subscribe(() => {}) // Keep it active forever.
       }
     }
 
