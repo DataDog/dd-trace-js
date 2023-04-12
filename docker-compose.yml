@@ -126,17 +126,13 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    # image: williamconti549/dd-apm-test-agent:js-dev
-    build: 
-        context: https://github.com/DataDog/dd-apm-test-agent.git#integrate-test-agent-with-js-tracer
+    image: williamconti549/dd-apm-test-agent:js-dev
     ports:
-        - "127.0.0.1:9126:8126"
-    volumes:
-        - ./specifications:/specifications
+        - "127.0.0.1:9126:9126"
     environment:
         - LOG_LEVEL=DEBUG
         - TRACE_LANGUAGE=javascript
         - DISABLED_CHECKS=trace_tag_validation
-        # - PROXY_HOST=host.docker.internal # host.docker.internal should be used for testing locally
-        - DD_TRACE_AGENT_URL=http://testrunner:8127
+        # - DD_TRACE_AGENT_URL=http://host.docker.internal:9126 # host.docker.internal should be used for testing locally
+        - DD_TRACE_AGENT_URL=http://testrunner:9126
         - PORT=9126
