@@ -1,7 +1,5 @@
 'use strict'
 
-const axios = require('axios').default
-const log = require('../../src/log')
 const http = require('http')
 const bodyParser = require('body-parser')
 const msgpack = require('msgpack-lite')
