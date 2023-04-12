@@ -133,7 +133,7 @@ const httpOptions = {
 const httpServerOptions = {
   ...httpOptions,
   hooks: {
-    request: (span, req, res) => {}
+    request: (span: Span, req, res) => {}
   }
 };
 
@@ -142,7 +142,7 @@ const httpClientOptions = {
   splitByDomain: true,
   propagationBlocklist: ['url', /url/, url => true],
   hooks: {
-    request: (span, req, res) => {}
+    request: (span: Span, req, res) => {}
   }
 };
 
@@ -155,6 +155,13 @@ const http2ClientOptions = {
   splitByDomain: true
 };
 
+const nextOptions = {
+  service: 'test',
+  hooks: {
+    request: (span: Span, params) => { },
+  },
+};
+
 const graphqlOptions = {
   service: 'test',
   depth: 2,
@@ -163,16 +170,16 @@ const graphqlOptions = {
   collapse: false,
   signature: false,
   hooks: {
-    execute: (span, args, res) => {},
-    validate: (span, document, errors) => {},
-    parse: (span, source, document) => {}
+    execute: (span: Span, args, res) => {},
+    validate: (span: Span, document, errors) => {},
+    parse: (span: Span, source, document) => {}
   }
 };
 
 const elasticsearchOptions = {
   service: 'test',
   hooks: {
-    query: (span, params) => {},
+    query: (span: Span, params) => {},
   },
 };
 
@@ -180,7 +187,7 @@ const awsSdkOptions = {
   service: 'test',
   splitByAwsService: false,
   hooks: {
-    request: (span, response) => {},
+    request: (span: Span, response) => {},
   },
   s3: false,
   sqs: {
@@ -198,8 +205,8 @@ const redisOptions = {
 const sharedbOptions = {
   service: 'test',
   hooks: {
-    receive: (span, request) => {},
-    reply: (span, request, reply) => {},
+    receive: (span: Span, request) => {},
+    reply: (span: Span, request, reply) => {},
   },
 };
 
@@ -215,12 +222,13 @@ const moleculerOptions = {
 const openSearchOptions = {
   service: 'test',
   hooks: {
-    query: (span, params) => {},
+    query: (span: Span, params) => {},
   },
 };
 
 tracer.use('amqp10');
 tracer.use('amqplib');
+tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('bunyan');
 tracer.use('couchbase');
@@ -231,6 +239,7 @@ tracer.use('cypress');
 tracer.use('cucumber')
 tracer.use('cucumber', { service: 'cucumber-service' });
 tracer.use('dns');
+tracer.use('elasticsearch');
 tracer.use('elasticsearch', elasticsearchOptions);
 tracer.use('express');
 tracer.use('express', httpServerOptions);
@@ -239,6 +248,7 @@ tracer.use('fastify', httpServerOptions);
 tracer.use('fs');
 tracer.use('generic-pool');
 tracer.use('google-cloud-pubsub');
+tracer.use('graphql');
 tracer.use('graphql', graphqlOptions);
 tracer.use('graphql', { variables: ['foo', 'bar'] });
 tracer.use('grpc');
@@ -273,6 +283,7 @@ tracer.use('koa');
 tracer.use('koa', httpServerOptions);
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('memcached');
+tracer.use('microgateway-core');
 tracer.use('microgateway-core', httpServerOptions);
 tracer.use('mocha');
 tracer.use('mocha', { service: 'mocha-service' });
@@ -285,6 +296,8 @@ tracer.use('mysql2');
 tracer.use('mysql2', { service: () => `my-custom-mysql2` });
 tracer.use('net');
 tracer.use('next');
+tracer.use('next', nextOptions);
+tracer.use('opensearch');
 tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
 tracer.use('oracledb', { service: params => `${params.host}-${params.database}` });
@@ -300,6 +313,7 @@ tracer.use('restify');
 tracer.use('restify', httpServerOptions);
 tracer.use('rhea');
 tracer.use('router');
+tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
 tracer.use('tedious');
 tracer.use('winston');
