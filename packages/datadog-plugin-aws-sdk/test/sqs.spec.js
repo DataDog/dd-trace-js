@@ -86,7 +86,7 @@ describe('Plugin', () => {
           })
         })
 
-        it.only('should run the consumer in the context of its span', (done) => {
+        it('should run the consumer in the context of its span', (done) => {
           sqs.sendMessage({
             MessageBody: 'test body',
             QueueUrl
