@@ -15,8 +15,6 @@ const dc = { channel }
 // Prevent going to 0 subscribers to avoid bug in Node.
 // See https://github.com/nodejs/node/pull/47520
 if (major === '19' && minor === '9') {
-  const channel = dc.channel
-
   dc.channel = function () {
     const maybeInactive = channel.apply(this, arguments)
 
