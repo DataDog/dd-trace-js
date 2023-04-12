@@ -1,6 +1,7 @@
 'use strict'
 
-const dc = require('../../diagnostics_channel')
+// TODO: Figure out why we can't use the internal version.
+const dc = require('diagnostics_channel')
 
 const CHANNEL_PREFIX = 'dd-trace:bundledModuleLoadStart'
 

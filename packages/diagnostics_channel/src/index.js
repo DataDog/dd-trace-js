@@ -2,16 +2,15 @@
 
 const {
   Channel,
-  channel,
-  hasSubscribers
+  channel
 } = require('diagnostics_channel')
 
 const [major, minor] = process.versions.node.split('.')
 
 // Our own DC with a limited subset of functionality stable across Node versions.
 // TODO: Move the rest of the polyfill here.
-// TODO: Switch to using global subscribe/unsubscribe.
-const dc = { channel, hasSubscribers }
+// TODO: Switch to using global subscribe/unsubscribe/hasSubscribers.
+const dc = { channel }
 
 // Prevent going to 0 subscribers to avoid bug in Node.
 // See https://github.com/nodejs/node/pull/47520
