@@ -79,6 +79,18 @@ function disableAsm () {
   }
 }
 
+function disableBlocking () {
+  if (rc) {
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, false)
+  }
+}
+
+function enableBlocking () {
+  if (rc) {
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
+  }
+}
+
 module.exports = {
   enable,
   enableAsmData,
@@ -86,5 +98,7 @@ module.exports = {
   enableAsmDD,
   disableAsmDD,
   enableAsm,
-  disableAsm
+  disableAsm,
+  enableBlocking,
+  disableBlocking
 }

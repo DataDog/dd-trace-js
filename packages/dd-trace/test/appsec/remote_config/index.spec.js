@@ -275,4 +275,28 @@ describe('Remote Config index', () => {
       })
     })
   })
+
+  describe('Blocking capability', () => {
+    it('should enable blocking capability', () => {
+      config.appsec = { enabled: undefined }
+
+      remoteConfig.enable(config)
+      remoteConfig.enableBlocking()
+      expect(rc.updateCapabilities).to.have.been.calledWithExactly(Capabilities.ASM_REQUEST_BLOCKING, true)
+    })
+
+    it('should disable blocking capability', () => {
+      config.appsec = { enabled: undefined }
+
+      remoteConfig.enable(config)
+      remoteConfig.disableBlocking()
+      expect(rc.updateCapabilities.secondCall).to.have.been.calledWithExactly(Capabilities.ASM_REQUEST_BLOCKING, false)
+    })
+
+    it('should not update capability if RC is not enabled', () => {
+      remoteConfig.enableBlocking()
+      remoteConfig.disableBlocking()
+      expect(rc.updateCapabilities).not.to.have.been.called
+    })
+  })
 })

@@ -58,9 +58,11 @@ describe('AppSec Index', () => {
     sinon.stub(remoteConfig, 'enableAsmData')
     sinon.stub(remoteConfig, 'enableAsmDD')
     sinon.stub(remoteConfig, 'enableAsm')
+    sinon.stub(remoteConfig, 'enableBlocking')
     sinon.stub(remoteConfig, 'disableAsmData')
     sinon.stub(remoteConfig, 'disableAsmDD')
     sinon.stub(remoteConfig, 'disableAsm')
+    sinon.stub(remoteConfig, 'disableBlocking')
     sinon.stub(Reporter, 'setRateLimit')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
@@ -88,6 +90,7 @@ describe('AppSec Index', () => {
       expect(remoteConfig.enableAsmData).to.have.been.calledOnce
       expect(remoteConfig.enableAsmDD).to.have.been.calledOnce
       expect(remoteConfig.enableAsm).to.have.been.calledOnce
+      expect(remoteConfig.enableBlocking).to.have.been.calledOnce
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
@@ -109,6 +112,7 @@ describe('AppSec Index', () => {
       expect(remoteConfig.disableAsmData).to.have.been.calledOnce
       expect(remoteConfig.disableAsmDD).to.have.been.calledOnce
       expect(remoteConfig.disableAsm).to.have.been.calledOnce
+      expect(remoteConfig.disableBlocking).to.have.been.calledOnce
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
     })
@@ -141,6 +145,7 @@ describe('AppSec Index', () => {
       expect(remoteConfig.enableAsmData).to.have.been.calledOnce
       expect(remoteConfig.enableAsmDD).to.have.been.calledOnce
       expect(remoteConfig.enableAsm).to.have.been.calledOnce
+      expect(remoteConfig.enableBlocking).to.have.been.calledOnce
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
@@ -162,6 +167,7 @@ describe('AppSec Index', () => {
       expect(remoteConfig.disableAsmData).to.have.been.calledOnce
       expect(remoteConfig.disableAsmDD).to.have.been.calledOnce
       expect(remoteConfig.disableAsm).to.have.been.calledOnce
+      expect(remoteConfig.disableBlocking).to.have.been.calledOnce
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
     })
@@ -198,6 +204,7 @@ describe('AppSec Index', () => {
       expect(remoteConfig.disableAsmData).to.have.been.calledOnce
       expect(remoteConfig.disableAsmDD).to.have.been.calledOnce
       expect(remoteConfig.disableAsm).to.have.been.calledOnce
+      expect(remoteConfig.disableBlocking).to.have.been.calledOnce
       expect(incomingHttpRequestStart.unsubscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.unsubscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)

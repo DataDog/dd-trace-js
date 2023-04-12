@@ -28,6 +28,7 @@ function enable (_config) {
     loadTemplates(_config)
     const rules = fs.readFileSync(_config.appsec.rules || path.join(__dirname, 'recommended.json'))
     enableFromRules(_config, JSON.parse(rules))
+    remoteConfig.enableBlocking()
   } catch (err) {
     abortEnable(err)
   }
@@ -40,6 +41,7 @@ async function enableAsync (_config) {
     await loadTemplatesAsync(_config)
     const rules = await fs.promises.readFile(_config.appsec.rules || path.join(__dirname, 'recommended.json'))
     enableFromRules(_config, JSON.parse(rules))
+    remoteConfig.enableBlocking()
   } catch (err) {
     abortEnable(err)
   }
@@ -178,6 +180,7 @@ function disable () {
   remoteConfig.disableAsmData()
   remoteConfig.disableAsmDD()
   remoteConfig.disableAsm()
+  remoteConfig.disableBlocking()
 
   // Channel#unsubscribe() is undefined for non active channels
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
