@@ -22,8 +22,10 @@ if (major === '19' && minor === '9') {
     const maybeInactive = channel.apply(this, arguments)
 
     if (maybeInactive.subscribe === Channel.prototype.subscribe) {
+      const subscribe = maybeInactive.subscribe
+
       maybeInactive.subscribe = function () {
-        const active = this.subscribe.apply(this, arguments)
+        const active = subscribe.apply(this, arguments)
 
         active.subscribe(() => {}) // Keep it active forever.
       }
