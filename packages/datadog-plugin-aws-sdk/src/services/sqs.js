@@ -58,10 +58,18 @@ class Sqs extends BaseAwsSdkPlugin {
 
     if (!params || (!params.QueueName && !params.QueueUrl)) return tags
 
+        //'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue';
+        const queueName = params.QueueUrl.split("/")[-1]
+        if (params.QueueUrl) {
+          queueName = params.QueueUrl.split("/")[-1]
+        }
+    
+    
+        console.log(queueName); // Output: my-queue
+
     Object.assign(tags, {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
       'queuename': params.QueueName || params.QueueUrl,
-      'aws.sqs.queue_name': params.QueueName || params.QueueUrl
     })
 
     switch (operation) {
