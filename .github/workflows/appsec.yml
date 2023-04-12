@@ -69,6 +69,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
+      - uses: codecov/codecov-action@v2
 
   postgres:
     runs-on: ubuntu-latest
@@ -89,13 +90,13 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@v2
       - uses: ./.github/actions/node/14
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:appsec:plugins:ci
+      - uses: codecov/codecov-action@v2
 
   mysql:
     runs-on: ubuntu-latest
@@ -120,3 +121,4 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:appsec:plugins:ci
+      - uses: codecov/codecov-action@v2
