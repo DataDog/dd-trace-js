@@ -23,10 +23,14 @@ class Tracer extends NoopProxy {
 
     this._initialized = true
 
+    const isGCPFunction = process.env.K_SERVICE !== undefined
+
     try {
       const config = new Config(options) // TODO: support dynamic config
 
-      startMiniAgent()
+      if (isGCPFunction) {
+        startMiniAgent()
+      }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         remoteConfig.enable(config)
@@ -77,32 +81,33 @@ class Tracer extends NoopProxy {
 }
 
 function  startMiniAgent () {
-  console.log("cwd: " + process.cwd());
   try {
-    const { spawn } = require('child_process');
-    const { join } = require('path');
+    log.info("Spawning Serverless Mini Agent")
 
-    const rust_binary_path = join(process.cwd(), 'datadog-serverless-trace-mini-agent');
+    const { spawn } = require('child_process')
+    const { join } = require('path')
 
-    const mini_agent_process = spawn(rust_binary_path);
+    const rust_binary_path = join(process.cwd(), 'datadog-serverless-trace-mini-agent')
+
+    const mini_agent_process = spawn(rust_binary_path)
 
     mini_agent_process.stdout.on('data', (data) => {
-      console.log(`stdout: ${data}`);
-    });
+      log.info(data.toString())
+    })
 
     mini_agent_process.stderr.on('data', (data) => {
-      console.error(`stderr: ${data}`);
-    });
+      log.error(data.toString())
+    })
 
     mini_agent_process.on('close', (code) => {
-      console.log(`child process exited with code ${code}`);
-    });
+      log.info(`Mini Agent exited with code ${code}`)
+    })
 
     mini_agent_process.on('error', (err) => {
-      console.log(`child process errored out: ${err}`);
-    });
+      log.error(`Mini Agent errored out: ${err}`)
+    })
   } catch (e) {
-    console.log("error spawning mini agent process: " + e);
+    log.error("Error spawning mini agent process: " + e)
   }
 }
 
