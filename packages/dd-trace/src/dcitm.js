@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = require('diagnostics_channel')
+const dc = require('../../diagnostics_channel')
 
 const CHANNEL_PREFIX = 'dd-trace:bundledModuleLoadStart'
 
