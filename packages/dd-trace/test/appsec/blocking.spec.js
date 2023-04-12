@@ -3,15 +3,20 @@
 const { AbortController } = require('node-abort-controller')
 
 describe('blocking', () => {
+  const defaultBlockedTemplate = {
+    html: 'block test',
+    json: '{ "block": true }'
+  }
+
   const config = {
     appsec: {
-      blockedTemplateHtml: 'htmlPath',
-      blockedTemplateJson: 'jsonPath'
+      blockedTemplateHtml: 'htmlBodyéé',
+      blockedTemplateJson: 'jsonBody'
     }
   }
 
-  let log, fs
-  let block, loadTemplates, loadTemplatesAsync, resetTemplates
+  let log
+  let block, setTemplates
   let req, res, rootSpan
 
   beforeEach(() => {
@@ -19,22 +24,13 @@ describe('blocking', () => {
       warn: sinon.stub()
     }
 
-    fs = {
-      readFileSync: sinon.stub().callsFake(getBody),
-      promises: {
-        readFile: sinon.stub()
-      }
-    }
-
     const blocking = proxyquire('../src/appsec/blocking', {
       '../log': log,
-      fs
+      './blocked_templates': defaultBlockedTemplate
     })
 
     block = blocking.block
-    loadTemplates = blocking.loadTemplates
-    loadTemplatesAsync = blocking.loadTemplatesAsync
-    resetTemplates = blocking.resetTemplates
+    setTemplates = blocking.setTemplates
 
     req = {
       headers: {}
@@ -52,11 +48,7 @@ describe('blocking', () => {
 
   describe('block', () => {
     beforeEach(() => {
-      loadTemplates(config)
-    })
-
-    afterEach(() => {
-      resetTemplates()
+      setTemplates(config)
     })
 
     it('should log warn and not send blocking response when headers have already been sent', () => {
@@ -115,118 +107,29 @@ describe('blocking', () => {
     })
   })
 
-  describe('loadTemplates', () => {
-    afterEach(() => {
-      resetTemplates()
+  describe('block with default templates', () => {
+    const config = {
+      appsec: {
+        blockedTemplateHtml: undefined,
+        blockedTemplateJson: undefined
+      }
+    }
+
+    it('should block with default html template', () => {
+      req.headers.accept = 'text/html'
+      setTemplates(config)
+
+      block(req, res, rootSpan)
+
+      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
     })
 
-    describe('sync', () => {
-      it('should not read templates more than once if templates are already loaded', () => {
-        loadTemplates(config)
+    it('should block with default json template', () => {
+      setTemplates(config)
 
-        expect(fs.readFileSync).to.have.been.calledTwice
-        expect(fs.readFileSync.firstCall).to.have.been.calledWithExactly('htmlPath')
-        expect(fs.readFileSync.secondCall).to.have.been.calledWithExactly('jsonPath')
+      block(req, res, rootSpan)
 
-        fs.readFileSync.resetHistory()
-
-        loadTemplates(config)
-        loadTemplates(config)
-
-        expect(fs.readFileSync).to.not.have.been.called
-      })
-
-      it('should read templates twice if resetTemplates is called', () => {
-        loadTemplates(config)
-
-        expect(fs.readFileSync).to.have.been.calledTwice
-        expect(fs.readFileSync.firstCall).to.have.been.calledWithExactly('htmlPath')
-        expect(fs.readFileSync.secondCall).to.have.been.calledWithExactly('jsonPath')
-
-        fs.readFileSync.resetHistory()
-        resetTemplates()
-
-        loadTemplates(config)
-
-        expect(fs.readFileSync).to.have.been.calledTwice
-        expect(fs.readFileSync.firstCall).to.have.been.calledWithExactly('htmlPath')
-        expect(fs.readFileSync.secondCall).to.have.been.calledWithExactly('jsonPath')
-      })
-    })
-
-    describe('async', () => {
-      it('should not read templates more than once if templates are already loaded', async () => {
-        await loadTemplatesAsync(config)
-
-        expect(fs.promises.readFile).to.have.been.calledTwice
-        expect(fs.promises.readFile.firstCall).to.have.been.calledWithExactly('htmlPath')
-        expect(fs.promises.readFile.secondCall).to.have.been.calledWithExactly('jsonPath')
-
-        fs.promises.readFile.resetHistory()
-
-        await loadTemplatesAsync(config)
-        await loadTemplatesAsync(config)
-
-        expect(fs.promises.readFile).to.not.have.been.called
-      })
-
-      it('should read templates twice if resetTemplates is called', async () => {
-        await loadTemplatesAsync(config)
-
-        expect(fs.promises.readFile).to.have.been.calledTwice
-        expect(fs.promises.readFile.firstCall).to.have.been.calledWithExactly('htmlPath')
-        expect(fs.promises.readFile.secondCall).to.have.been.calledWithExactly('jsonPath')
-
-        fs.promises.readFile.resetHistory()
-        resetTemplates()
-
-        await loadTemplatesAsync(config)
-
-        expect(fs.promises.readFile).to.have.been.calledTwice
-        expect(fs.promises.readFile.firstCall).to.have.been.calledWithExactly('htmlPath')
-        expect(fs.promises.readFile.secondCall).to.have.been.calledWithExactly('jsonPath')
-      })
-    })
-
-    describe('mixed sync/async', () => {
-      it('should not read templates more than once if templates are already loaded', () => {
-        loadTemplates(config)
-
-        expect(fs.readFileSync).to.have.been.calledTwice
-        expect(fs.readFileSync.firstCall).to.have.been.calledWithExactly('htmlPath')
-        expect(fs.readFileSync.secondCall).to.have.been.calledWithExactly('jsonPath')
-
-        fs.readFileSync.resetHistory()
-
-        loadTemplatesAsync(config)
-        loadTemplatesAsync(config)
-
-        expect(fs.readFileSync).to.not.have.been.called
-        expect(fs.promises.readFile).to.not.have.been.called
-      })
-
-      it('should read templates twice if resetTemplates is called', async () => {
-        loadTemplates(config)
-
-        expect(fs.readFileSync).to.have.been.calledTwice
-        expect(fs.readFileSync.firstCall).to.have.been.calledWithExactly('htmlPath')
-        expect(fs.readFileSync.secondCall).to.have.been.calledWithExactly('jsonPath')
-
-        fs.readFileSync.resetHistory()
-        resetTemplates()
-
-        await loadTemplatesAsync(config)
-
-        expect(fs.readFileSync).to.not.have.been.called
-        expect(fs.promises.readFile).to.have.been.calledTwice
-        expect(fs.promises.readFile.firstCall).to.have.been.calledWithExactly('htmlPath')
-        expect(fs.promises.readFile.secondCall).to.have.been.calledWithExactly('jsonPath')
-      })
+      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
     })
   })
 })
-
-function getBody (path) {
-  if (path === 'htmlPath') return 'htmlBodyéé'
-  if (path === 'jsonPath') return 'jsonBody'
-}

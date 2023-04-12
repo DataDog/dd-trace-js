@@ -33,6 +33,7 @@ class DatadogTracer {
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config)
     this._url = this._exporter._url
     this._enableGetRumData = config.experimental.enableGetRumData
+    this._traceId128BitGenerationEnabled = config.traceId128BitGenerationEnabled
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
       [formats.HTTP_HEADERS]: new HttpPropagator(config),
@@ -58,7 +59,8 @@ class DatadogTracer {
       parent,
       tags,
       startTime: options.startTime,
-      hostname: this._hostname
+      hostname: this._hostname,
+      traceId128BitGenerationEnabled: this._traceId128BitGenerationEnabled
     }, this._debug)
 
     span.addTags(this._tags)

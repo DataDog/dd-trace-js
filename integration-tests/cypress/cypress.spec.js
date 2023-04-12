@@ -10,16 +10,16 @@ const {
   createSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
-} = require('./helpers')
-const { FakeCiVisIntake } = require('./ci-visibility-intake')
-const webAppServer = require('./ci-visibility/web-app-server')
+} = require('../helpers')
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const webAppServer = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
   TEST_COMMAND,
   TEST_MODULE,
   TEST_FRAMEWORK_VERSION,
   TEST_TOOLCHAIN
-} = require('../packages/dd-trace/src/plugins/util/test')
+} = require('../../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
 // This is done because from playwright@>=1.22.0 node 12 is not supported
@@ -29,7 +29,7 @@ const versions = ['6.7.0', isOldNode ? '11.2.0' : 'latest']
 versions.forEach((version) => {
   describe(`cypress@${version}`, function () {
     this.retries(2)
-    this.timeout(45000)
+    this.timeout(60000)
     let sandbox, cwd, receiver, childProcess, webAppPort
     before(async () => {
       sandbox = await createSandbox([`cypress@${version}`], true)
@@ -61,7 +61,7 @@ versions.forEach((version) => {
             ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
           const reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
 
-          receiver.gatherPayloads(({ url }) => url === reportUrl, 25000).then((payloads) => {
+          receiver.gatherPayloadsMaxTimeout(({ url }) => url === reportUrl, payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end')
@@ -141,9 +141,7 @@ versions.forEach((version) => {
               assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
               assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
             })
-
-            done()
-          }).catch(done)
+          }, 25000).then(() => done()).catch(done)
 
           const {
             NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -160,7 +158,7 @@ versions.forEach((version) => {
                 ...restEnvVars,
                 CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
               },
-              stdio: 'on'
+              stdio: 'pipe'
             }
           )
         })
