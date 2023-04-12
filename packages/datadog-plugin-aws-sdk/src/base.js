@@ -37,9 +37,7 @@ class BaseAwsSdkPlugin extends Plugin {
         'span.kind': 'client',
         'service.name': serviceName,
         'aws.operation': operation,
-        'aws.region': awsRegion,
         'region': awsRegion,
-        'aws.service': awsService,
         'aws_service': awsService,
         'component': 'aws-sdk'
       }
