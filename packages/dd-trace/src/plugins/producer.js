@@ -1,8 +1,8 @@
 'use strict'
 
-const OutgoingPlugin = require('./outgoing')
+const OutboundPlugin = require('./outbound')
 
-class ProducerPlugin extends OutgoingPlugin {
+class ProducerPlugin extends OutboundPlugin {
   static get operation () { return 'publish' }
   static get type () { return 'messaging' }
 }
