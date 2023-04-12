@@ -96,3 +96,27 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:appsec:plugins:ci
+
+  mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mariadb:10.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: 'db'
+        ports:
+          - 3306:3306
+    env:
+      PLUGINS: mysql|mysql2|mariadb
+      SERVICES: mysql
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/14
+      - run: yarn test:appsec:ci
+      - uses: ./.github/actions/node/16
+      - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/18
+      - run: yarn test:appsec:plugins:ci
