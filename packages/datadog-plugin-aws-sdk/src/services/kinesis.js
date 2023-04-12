@@ -9,7 +9,7 @@ class Kinesis extends BaseAwsSdkPlugin {
 
     return {
       'resource.name': `${operation} ${params.StreamName}`,
-      'streamname': params.StreamName,
+      'streamname': params.StreamName
     }
   }
 
