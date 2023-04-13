@@ -26,7 +26,7 @@ if (major === '19' && minor === '9') {
 
         subscribe.apply(this, arguments)
 
-        subscribe(() => {}) // Keep it active forever.
+        this.subscribe(() => {}) // Keep it active forever.
       }
 
       channels.add(ch)
