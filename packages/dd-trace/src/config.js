@@ -185,6 +185,12 @@ class Config {
       process.env.DD_TRACE_STARTUP_LOGS,
       false
     )
+
+    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+    const inGCPFunction = process.env.K_SERVICE !== undefined || process.env.FUNCTION_NAME !== undefined
+
+    const inServerlessEnvironment = inAWSLambda || inGCPFunction
+
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED,
       !inServerlessEnvironment
@@ -337,11 +343,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maybeFile(appsec.blockedTemplateJson),
       maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
     )
-
-    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
-    const inGCPFunction = process.env.K_SERVICE !== undefined || process.env.FUNCTION_NAME !== undefined
-
-    const inServerlessEnvironment = inAWSLambda || inGCPFunction
 
     const remoteConfigOptions = options.remoteConfig || {}
     const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
