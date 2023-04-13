@@ -9,8 +9,6 @@ const MAX_META_KEY_LENGTH = 200
 const MAX_META_VALUE_LENGTH = 25000
 // MAX_METRIC_KEY_LENGTH the maximum length of a metric name key
 const MAX_METRIC_KEY_LENGTH = MAX_META_KEY_LENGTH
-// MAX_METRIC_VALUE_LENGTH the maximum length of a metric name value
-const MAX_METRIC_VALUE_LENGTH = MAX_META_VALUE_LENGTH
 
 // From agent normalizer:
 // https://github.com/DataDog/datadog-agent/blob/main/pkg/trace/traceutil/normalize.go
@@ -39,6 +37,7 @@ function truncateSpan (span, shouldTruncateResourceName = true) {
     if (metaKey.length > MAX_META_KEY_LENGTH) {
       delete span.meta[metaKey]
       metaKey = `${metaKey.slice(0, MAX_META_KEY_LENGTH)}...`
+      span.metrics[metaKey] = val
     }
     if (val && val.length > MAX_META_VALUE_LENGTH) {
       span.meta[metaKey] = `${val.slice(0, MAX_META_VALUE_LENGTH)}...`
@@ -49,9 +48,7 @@ function truncateSpan (span, shouldTruncateResourceName = true) {
     if (metricsKey.length > MAX_METRIC_KEY_LENGTH) {
       delete span.metrics[metricsKey]
       metricsKey = `${metricsKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
-    }
-    if (val && val.length > MAX_METRIC_VALUE_LENGTH) {
-      span.metrics[metricsKey] = `${val.slice(0, MAX_METRIC_VALUE_LENGTH)}...`
+      span.metrics[metricsKey] = val
     }
   }
 
@@ -83,7 +80,6 @@ module.exports = {
   MAX_META_KEY_LENGTH,
   MAX_META_VALUE_LENGTH,
   MAX_METRIC_KEY_LENGTH,
-  MAX_METRIC_VALUE_LENGTH,
   MAX_NAME_LENGTH,
   MAX_SERVICE_LENGTH,
   MAX_TYPE_LENGTH,
