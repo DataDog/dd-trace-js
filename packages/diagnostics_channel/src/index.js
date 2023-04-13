@@ -24,9 +24,11 @@ if (major === '19' && minor === '9') {
       ch.subscribe = function () {
         delete ch.subscribe
 
-        subscribe.apply(this, arguments)
+        const result = subscribe.apply(this, arguments)
 
         this.subscribe(() => {}) // Keep it active forever.
+
+        return result
       }
 
       channels.add(ch)
