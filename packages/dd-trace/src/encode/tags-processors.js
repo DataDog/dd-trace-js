@@ -25,14 +25,7 @@ const MAX_SERVICE_LENGTH = 100
 // MAX_TYPE_LENGTH the maximum length a span type can have
 const MAX_TYPE_LENGTH = 100
 
-function truncateToLength (value, maxLength) {
-  if (value && value.length > maxLength) {
-    return `${value.slice(0, maxLength)}...`
-  }
-  return value
-}
-
-// TODO(bengl) Pretty much everything in this file should happen in
+// TODO (bengl) Pretty much everything in this file should happen in
 // `format.js`, so that we're not iterating over all the spans and modifying
 // them yet again.
 
@@ -47,7 +40,9 @@ function truncateSpan (span, shouldTruncateResourceName = true) {
       delete span.meta[metaKey]
       metaKey = `${metaKey.slice(0, MAX_META_KEY_LENGTH)}...`
     }
-    span.meta[metaKey] = truncateToLength(val, MAX_META_VALUE_LENGTH)
+    if (val && val.length > MAX_META_VALUE_LENGTH) {
+      span.meta[metaKey] = `${val.slice(0, MAX_META_VALUE_LENGTH)}...`
+    }
   }
   for (let metricsKey in span.metrics) {
     const val = span.metrics[metricsKey]
@@ -55,7 +50,9 @@ function truncateSpan (span, shouldTruncateResourceName = true) {
       delete span.metrics[metricsKey]
       metricsKey = `${metricsKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
     }
-    span.metrics[metricsKey] = truncateToLength(val, MAX_METRIC_VALUE_LENGTH)
+    if (val && val.length > MAX_METRIC_VALUE_LENGTH) {
+      span.metrics[metricsKey] = `${val.slice(0, MAX_METRIC_VALUE_LENGTH)}...`
+    }
   }
 
   return span
