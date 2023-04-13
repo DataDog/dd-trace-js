@@ -1,11 +1,11 @@
 'use strict'
 
 const {
-  Channel,
   channel
 } = require('diagnostics_channel') // eslint-disable-line n/no-restricted-require
 
 const [major, minor] = process.versions.node.split('.')
+const channels = new WeakSet()
 
 // Our own DC with a limited subset of functionality stable across Node versions.
 // TODO: Move the rest of the polyfill here.
@@ -16,21 +16,23 @@ const dc = { channel }
 // See https://github.com/nodejs/node/pull/47520
 if (major === '19' && minor === '9') {
   dc.channel = function () {
-    const maybeInactive = channel.apply(this, arguments)
+    const ch = channel.apply(this, arguments)
 
-    if (maybeInactive.subscribe === Channel.prototype.subscribe) {
-      const subscribe = maybeInactive.subscribe
+    if (!channels.has(ch)) {
+      const subscribe = ch.subscribe
 
-      maybeInactive.subscribe = function () {
-        delete maybeInactive.subscribe
+      ch.subscribe = function () {
+        delete ch.subscribe
 
         subscribe.apply(this, arguments)
 
-        this.subscribe(() => {}) // Keep it active forever.
+        subscribe(() => {}) // Keep it active forever.
       }
+
+      channels.add(ch)
     }
 
-    return maybeInactive
+    return ch
   }
 }
 
