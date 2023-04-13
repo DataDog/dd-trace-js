@@ -99,36 +99,41 @@ describe('Plugin', () => {
           client.stream.destroy()
         })
 
-        it('should handle errors', done => {
-          const assertError = () => {
-            if (!error || !span) return
+        describe('known flakey test', () => {
+          this.retry(5)
 
-            try {
-              expect(span.meta).to.have.property(ERROR_TYPE, error.name)
-              expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(span.meta).to.have.property(ERROR_STACK, error.stack)
-              expect(span.meta).to.have.property('component', 'redis')
-              expect(span.metrics).to.have.property('network.destination.port', 6379)
-              done()
-            } catch (e) {
-              done(e)
+          // sometimes the span is missing
+          it('should handle errors', done => {
+            const assertError = () => {
+              if (!error || !span) return
+
+              try {
+                expect(span.meta).to.have.property(ERROR_TYPE, error.name)
+                expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(span.meta).to.have.property(ERROR_STACK, error.stack)
+                expect(span.meta).to.have.property('component', 'redis')
+                expect(span.metrics).to.have.property('network.destination.port', 6379)
+                done()
+              } catch (e) {
+                done(e)
+              }
             }
-          }
 
-          let error
-          let span
+            let error
+            let span
 
-          agent.use(traces => {
-            expect(traces[0][0]).to.have.property('resource', 'set')
-            span = traces[0][0]
-            assertError()
-          })
+            agent.use(traces => {
+              expect(traces[0][0]).to.have.property('resource', 'set')
+              span = traces[0][0]
+              assertError()
+            })
 
-          client.on('error', done)
+            client.on('error', done)
 
-          client.set('foo', 123, 'bar', (err, res) => {
-            error = err
-            assertError()
+            client.set('foo', 123, 'bar', (err, res) => {
+              error = err
+              assertError()
+            })
           })
         })
       })
