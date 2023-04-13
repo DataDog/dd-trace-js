@@ -2,7 +2,7 @@
 
 const { storage } = require('../../../../datadog-core')
 
-const dc = require('diagnostics_channel')
+const dc = require('../../../../diagnostics_channel')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const afterCh = dc.channel('dd-trace:storage:after')

@@ -2,7 +2,7 @@
 
 require('./setup/tap')
 
-const { channel } = require('diagnostics_channel')
+const { channel } = require('../../diagnostics_channel')
 const proxyquire = require('proxyquire')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
