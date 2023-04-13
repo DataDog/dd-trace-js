@@ -790,6 +790,22 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
   })
 
+  it('should not set DD_TRACE_TELEMETRY_ENABLED if FUNCTION_NAME (gcp function) is present', () => {
+    process.env.FUNCTION_NAME = 'my-great-lambda-function'
+
+    const config = new Config()
+
+    expect(config.telemetry.enabled).to.be.false
+  })
+
+  it('should not set DD_TRACE_TELEMETRY_ENABLED if K_SERVICE (gcp function) is present', () => {
+    process.env.K_SERVICE = 'my-great-lambda-function'
+
+    const config = new Config()
+
+    expect(config.telemetry.enabled).to.be.false
+  })
+
   it('should set telemetry default values', () => {
     const config = new Config()
 
@@ -845,6 +861,22 @@ describe('Config', () => {
 
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+
+    const config = new Config()
+
+    expect(config.remoteConfig.enabled).to.be.false
+  })
+
+  it('should not set DD_REMOTE_CONFIGURATION_ENABLED if FUNCTION_NAME (gcp function) is present', () => {
+    process.env.FUNCTION_NAME = 'my-great-lambda-function'
+
+    const config = new Config()
+
+    expect(config.remoteConfig.enabled).to.be.false
+  })
+
+  it('should not set DD_REMOTE_CONFIGURATION_ENABLED if K_SERVICE (gcp function) is present', () => {
+    process.env.K_SERVICE = 'my-great-lambda-function'
 
     const config = new Config()
 

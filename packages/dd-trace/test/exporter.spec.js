@@ -44,6 +44,24 @@ describe('exporter', () => {
     stub.restore()
   })
 
+  it('should create an AgentExporter when in GCP Function environment w/ old variable', () => {
+    // old GCP Function env var for deprecated runtimes
+    process.env.FUNCTION_NAME = 'my-func'
+
+    const Exporter = require('../src/exporter')()
+
+    expect(Exporter).to.be.equal(AgentExporter)
+  })
+
+  it('should create an AgentExporter when in GCP Function environment w/ new variable', () => {
+    // new GCP Function env var non-deprecated runtimes
+    process.env.K_SERVICE = 'my-func'
+
+    const Exporter = require('../src/exporter')()
+
+    expect(Exporter).to.be.equal(AgentExporter)
+  })
+
   it('should allow configuring the exporter', () => {
     const Exporter = require('../src/exporter')('log')
 

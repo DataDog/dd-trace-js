@@ -159,6 +159,8 @@ class Config {
       process.env.DD_SERVICE_NAME ||
       this.tags.service ||
       process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      process.env.FUNCTION_NAME ||
+      process.env.K_SERVICE ||
       pkg.name ||
       'node'
     const DD_SERVICE_MAPPING = coalesce(
@@ -185,7 +187,7 @@ class Config {
     )
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED,
-      !process.env.AWS_LAMBDA_FUNCTION_NAME
+      !inServerlessEnvironment
     )
     const DD_TELEMETRY_DEBUG_ENABLED = coalesce(
       process.env.DD_TELEMETRY_DEBUG_ENABLED,
