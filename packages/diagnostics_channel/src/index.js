@@ -1,6 +1,7 @@
 'use strict'
 
 const {
+  Channel,
   channel
 } = require('diagnostics_channel') // eslint-disable-line n/no-restricted-require
 
@@ -20,15 +21,30 @@ if (major === '19' && minor === '9') {
 
     if (!channels.has(ch)) {
       const subscribe = ch.subscribe
+      const unsubscribe = ch.unsubscribe
 
       ch.subscribe = function () {
         delete ch.subscribe
+        delete ch.unsubscribe
 
         const result = subscribe.apply(this, arguments)
 
         this.subscribe(() => {}) // Keep it active forever.
 
         return result
+      }
+
+      if (ch.unsubscribe === Channel.prototype.unsubscribe) {
+        // Needed because another subscriber could have subscribed to something
+        // that we unsubscribe to before the library is loaded.
+        ch.unsubscribe = function () {
+          delete ch.subscribe
+          delete ch.unsubscribe
+
+          this.subscribe(() => {}) // Keep it active forever.
+
+          return unsubscribe.apply(this, arguments)
+        }
       }
 
       channels.add(ch)
