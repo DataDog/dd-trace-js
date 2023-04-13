@@ -77,7 +77,7 @@ class Tracer extends NoopProxy {
 }
 
 function maybeStartServerlessMiniAgent () {
-  const isGCPFunction = process.env.K_SERVICE !== undefined
+  const isGCPFunction = process.env.K_SERVICE !== undefined || process.env.FUNCTION_NAME !== undefined
   const rustBinaryPath = process.env.DD_MINI_AGENT_PATH
 
   if (!isGCPFunction) {
