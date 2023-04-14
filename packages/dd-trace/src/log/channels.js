@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = require('diagnostics_channel')
+const { channel } = require('../../../diagnostics_channel')
 
 const Level = {
   Debug: 'debug',
@@ -11,19 +11,18 @@ const Level = {
 
 const defaultLevel = Level.Debug
 
-class LogChannel extends dc.Channel {
-  constructor (name, logLevel) {
-    super(`datadog:log:${name}`)
-    this.logLevel = logLevel
-  }
-}
-
 // based on: https://github.com/trentm/node-bunyan#levels
 const logChannels = {
-  [Level.Debug]: new LogChannel(Level.Debug, 20),
-  [Level.Info]: new LogChannel(Level.Info, 30),
-  [Level.Warn]: new LogChannel(Level.Warn, 40),
-  [Level.Error]: new LogChannel(Level.Error, 50)
+  [Level.Debug]: createLogChannel(Level.Debug, 20),
+  [Level.Info]: createLogChannel(Level.Info, 30),
+  [Level.Warn]: createLogChannel(Level.Warn, 40),
+  [Level.Error]: createLogChannel(Level.Error, 50)
+}
+
+function createLogChannel (name, logLevel) {
+  const logChannel = channel(`datadog:log:${name}`)
+  logChannel.logLevel = logLevel
+  return logChannel
 }
 
 function getChannelLogLevel (level) {
