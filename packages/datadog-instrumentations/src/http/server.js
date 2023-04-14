@@ -55,7 +55,11 @@ function wrapEmit (emit) {
 
       try {
         if (abortController.signal.aborted) {
-          return res.end()
+          if (!res.headersSent) {
+            // TODO: dicuss if this fallback is really needed
+            res.end()
+          }
+          return this.listenerCount(arguments[0]) > 0
         }
         return emit.apply(this, arguments)
       } catch (err) {
