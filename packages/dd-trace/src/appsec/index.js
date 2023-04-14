@@ -21,34 +21,25 @@ function enable (_config) {
   try {
     setTemplates(_config)
 
-    // TODO: inline this function
-    enableFromRules(_config, _config.appsec.rules)
+    const rules = _config.appsec.rules || require('./recommended.json')
+
+    RuleManager.applyRules(rules, _config.appsec)
+
+    remoteConfig.enableWafUpdate(_config.appsec)
+
+    Reporter.setRateLimit(_config.appsec.rateLimit)
+
+    incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
+    incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
+
+    isEnabled = true
+    config = _config
   } catch (err) {
-    abortEnable(err)
+    log.error('Unable to start AppSec')
+    log.error(err)
+
+    disable()
   }
-}
-
-function enableFromRules (_config, rules) {
-  RuleManager.applyRules(rules, _config.appsec)
-
-  remoteConfig.enableAsmData(_config.appsec)
-  remoteConfig.enableAsmDD(_config.appsec)
-  remoteConfig.enableAsm(_config.appsec)
-
-  Reporter.setRateLimit(_config.appsec.rateLimit)
-
-  incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
-  incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
-
-  isEnabled = true
-  config = _config
-}
-
-function abortEnable (err) {
-  log.error('Unable to start AppSec')
-  log.error(err)
-
-  disable()
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
@@ -126,9 +117,7 @@ function disable () {
 
   RuleManager.clearAllRules()
 
-  remoteConfig.disableAsmData()
-  remoteConfig.disableAsmDD()
-  remoteConfig.disableAsm()
+  remoteConfig.disableWafUpdate()
 
   // Channel#unsubscribe() is undefined for non active channels
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
