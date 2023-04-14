@@ -4,7 +4,7 @@ const path = require('path')
 const parse = require('module-details-from-path')
 const requirePackageJson = require('../require-package-json')
 const { sendData } = require('./send-data')
-const dc = require('diagnostics_channel')
+const dc = require('../../../diagnostics_channel')
 const { fileURLToPath } = require('url')
 
 const savedDependencies = new Set()

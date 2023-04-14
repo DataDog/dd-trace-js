@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = require('diagnostics_channel')
+const dc = require('../../../../../diagnostics_channel')
 const logCollector = require('./log_collector')
 const { sendData } = require('../../../telemetry/send-data')
 const log = require('../../../log')
