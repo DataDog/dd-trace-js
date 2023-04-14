@@ -14,6 +14,10 @@ if (process.env.RUN_IN_PARALLEL) {
   options.maxWorkers = 2
 }
 
+if (process.env.OLD_RUNNER) {
+  options.testRunner = 'jest-jasmine2'
+}
+
 jest.runCLI(
   options,
   options.projects
