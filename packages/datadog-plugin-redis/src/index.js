@@ -9,7 +9,7 @@ class RedisPlugin extends CachePlugin {
   static get system () { return 'redis' }
 
   start ({ db, command, args, connectionOptions = {}, connectionName }) {
-    if (!this.config.filter(command)) return this.skip()
+    if (!this.config.filter(command.toUpperCase())) return this.skip()
 
     this.startSpan('redis.command', {
       service: getService(this.config, connectionName),
@@ -76,11 +76,22 @@ function trim (str, maxlen) {
 }
 
 function normalizeConfig (config) {
+  if (config.allowlist) uppercaseAllEntries(config.allowlist)
+  if (config.whitelist) uppercaseAllEntries(config.whitelist)
+  if (config.blocklist) uppercaseAllEntries(config.blocklist)
+  if (config.blacklist) uppercaseAllEntries(config.blacklist)
+
   const filter = urlFilter.getFilter(config)
 
   return Object.assign({}, config, {
     filter
   })
+}
+
+function uppercaseAllEntries (entries) {
+  for (let i = 0; i < entries.length; i++) {
+    entries[i] = String(entries[i]).toUpperCase()
+  }
 }
 
 module.exports = RedisPlugin
