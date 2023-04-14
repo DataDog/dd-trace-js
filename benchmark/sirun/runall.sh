@@ -49,11 +49,9 @@ run_all_variants () {
 }
 
 for D in *; do
-  if [ "${D}" == "encoding" ]; then
+  if [ -d "${D}" ]; then
     cd "${D}"
-
     run_all_variants $D
-
     cd ..
   fi
 done
