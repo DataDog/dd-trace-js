@@ -277,4 +277,42 @@ describe('request', function () {
         done(err)
       })
   })
+
+  describe('when intercepting http', () => {
+    const sandbox = sinon.createSandbox()
+
+    beforeEach(() => {
+      sandbox.spy(http, 'request')
+    })
+
+    afterEach(() => {
+      sandbox.reset()
+    })
+
+    it('should properly set request host with IPv6', (done) => {
+      nock('http://[1337::cafe]:123', {
+        reqheaders: {
+          'content-type': 'application/octet-stream',
+          'content-length': '13'
+        }
+      })
+        .put('/path')
+        .reply(200, 'OK')
+
+      request(
+        Buffer.from(JSON.stringify({ foo: 'bar' })), {
+          url: new URL('http://[1337::cafe]:123/path'),
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/octet-stream'
+          }
+        },
+        (err, res) => {
+          const options = http.request.getCall(0).args[0]
+          expect(options.hostname).to.equal('1337::cafe') // no brackets
+          expect(res).to.equal('OK')
+          done(err)
+        })
+    })
+  })
 })
