@@ -45,7 +45,7 @@ const testFrameworks = [
   },
   {
     name: 'jest',
-    dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai'],
+    dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai', 'jest-jasmine2'],
     testFile: 'ci-visibility/run-jest.js',
     expectedStdout: 'Test Suites: 2 passed',
     expectedCoverageFiles: [
@@ -144,6 +144,28 @@ testFrameworks.forEach(({
         childProcess.on('message', () => {
           assert.notInclude(testOutput, 'TypeError')
           assert.include(testOutput, expectedStdout)
+          done()
+        })
+      })
+      it('does not crash when jest uses jest-jasmine2', (done) => {
+        childProcess = fork('ci-visibility/run-jest.js', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            OLD_RUNNER: 1,
+            NODE_OPTIONS: '-r dd-trace/ci/init',
+            RUN_IN_PARALLEL: true
+          },
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('message', () => {
+          assert.notInclude(testOutput, 'TypeError')
           done()
         })
       })
