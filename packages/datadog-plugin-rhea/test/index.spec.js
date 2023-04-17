@@ -3,30 +3,7 @@
 const { expect } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { resolveNaming } = require('../../dd-trace/test/plugins/helpers')
-
-const namingSchema = resolveNaming({
-  send: {
-    v0: {
-      opName: 'amqp.send',
-      serviceName: 'test-amqp-producer'
-    },
-    v1: {
-      opName: 'amqp.send',
-      serviceName: 'test'
-    }
-  },
-  receive: {
-    v0: {
-      opName: 'amqp.receive',
-      serviceName: 'test'
-    },
-    v1: {
-      opName: 'amqp.process',
-      serviceName: 'test'
-    }
-  }
-})
+const namingSchema = require('./naming')
 
 describe('Plugin', () => {
   let tracer
