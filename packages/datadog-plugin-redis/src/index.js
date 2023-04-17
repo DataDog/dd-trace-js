@@ -9,13 +9,13 @@ class RedisPlugin extends CachePlugin {
   static get system () { return 'redis' }
 
   start ({ db, command, args, connectionOptions = {}, connectionName }) {
-    const rawCommand = command
+    const resource = command
     const normalizedCommand = command.toUpperCase()
     if (!this.config.filter(normalizedCommand)) return this.skip()
 
     this.startSpan('redis.command', {
       service: getService(this.config, connectionName),
-      resource: rawCommand,
+      resource,
       type: 'redis',
       kind: 'client',
       meta: {
