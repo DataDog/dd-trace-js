@@ -72,16 +72,24 @@ class RouterPlugin extends WebPlugin {
     })
 
     this.addSub(`apm:http:server:request:finish`, ({ req }) => {
-      const context = this._contexts.get(req)
-
-      if (!context) return
-
-      let span
-
-      while ((span = context.middleware.pop())) {
-        span.finish()
-      }
+      this._serverRequestFinish(req)
     })
+
+    this.addSub(`apm:http2:server:request:finish`, ({ req }) => {
+      this._serverRequestFinish(req)
+    })
+  }
+  
+  _serverRequestFinish (req) {
+    const context = this._contexts.get(req)
+
+    if (!context) return
+
+    let span
+
+    while ((span = context.middleware.pop())) {
+      span.finish()
+    }
   }
 
   _getActive (req) {
