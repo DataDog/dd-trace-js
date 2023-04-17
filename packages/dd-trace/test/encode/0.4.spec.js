@@ -121,12 +121,20 @@ describe('encode', () => {
     expect(payload[4]).to.equal(0)
   })
 
-  it('should log adding an encoded trace to the buffer', () => {
+  it('should log adding an encoded trace to the buffer if enabled', () => {
+    process.env.DD_TRACE_ENCODING_DEBUG = 'true'
+    encoder = new AgentEncoder(writer)
     encoder.encode(data)
 
     const message = logger.debug.firstCall.args[0]()
 
     expect(message).to.match(/^Adding encoded trace to buffer:(\s[a-f\d]{2})+$/)
+  })
+
+  it('should not log adding an encoded trace to the buffer by default', () => {
+    encoder.encode(data)
+
+    expect(logger.debug).to.not.have.been.called
   })
 
   it('should work when the buffer is resized', function () {
