@@ -1,5 +1,7 @@
 'use strict'
 
+console.log('MOCHA.js')
+
 require('./core')
 
 const os = require('os')
