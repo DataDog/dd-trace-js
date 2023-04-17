@@ -13,15 +13,7 @@ describe('Plugin', () => {
   let connection
   let connectionIsClosed
 
-  withVersions('tedious', 'tedious', version => {
-    if (
-      semver.intersects(version, '>=16') &&
-      semver.intersects(process.version, '<16')
-    ) {
-      it('tedious@v16 drops support for Node.js v14', () => {})
-      return
-    }
-
+  withVersions('tedious', 'tedious', {'<16': '<=15'}, version => {
     beforeEach(() => {
       tracer = require('../../dd-trace')
     })

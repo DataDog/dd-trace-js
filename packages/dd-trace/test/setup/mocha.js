@@ -63,6 +63,21 @@ function withVersions (plugin, modules, range, cb) {
     range = null
   }
 
+  // if `range` is a string then the semver range it represents is used for running package tests
+  // otherwise `range` can be an object where the key is a node version to test the process against
+  //   and the value is the semver range to test packages against
+  // a `range` of `null` means to test the package from the lowest to the highest available on npm
+  foo: if (range && typeof range === 'object') {
+    const nodeVersions = Object.keys(range)
+    for (let nodeVersion of nodeVersions) {
+      if (semver.intersects(process.version, nodeVersion)) {
+        range = range[nodeVersion]
+        break foo
+      }
+    }
+    range = null
+  }
+
   modules.forEach(moduleName => {
     const testVersions = new Map()
 
