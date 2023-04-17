@@ -1,7 +1,7 @@
 'use strict'
 
 const RetryOperation = require('../operation')
-const tedious = require('../../../../../versions/tedious').get()
+const tedious = require('../../../../../versions/tedious@1.0.0').get()
 
 function waitForMssql () {
   return new Promise((resolve, reject) => {
