@@ -1,5 +1,7 @@
 'use strict'
 
+console.log('tedious index spec')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
