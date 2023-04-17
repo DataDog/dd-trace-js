@@ -63,10 +63,6 @@ class WAFManager {
     return wafContext
   }
 
-  update (rules) {
-    this.ddwaf.update(rules)
-  }
-
   destroy () {
     if (this.ddwaf) {
       this.ddwaf.dispose()

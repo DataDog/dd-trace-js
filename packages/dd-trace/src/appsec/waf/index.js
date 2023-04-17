@@ -8,6 +8,7 @@ const waf = {
   wafManager: null,
   init,
   destroy,
+  update,
   run: noop,
   disposeContext: noop
 }
@@ -29,6 +30,17 @@ function destroy () {
 
   waf.run = noop
   waf.disposeContext = noop
+}
+
+function update (newRules) {
+  if (waf.wafManager) {
+    try {
+      waf.wafManager.ddwaf.update(newRules)
+    } catch (err) {
+      log.error('Could not apply rules from remote config')
+      throw err
+    }
+  }
 }
 
 function run (data, req) {
