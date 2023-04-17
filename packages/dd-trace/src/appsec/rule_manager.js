@@ -1,53 +1,183 @@
 'use strict'
 
 const waf = require('./waf')
-const log = require('../log')
+const { ACKNOWLEDGED, ERROR } = require('./remote_config/apply_states')
 
-const RULES_OVERRIDE_KEY = 'rules_override'
-const EXCLUSIONS_KEY = 'exclusions'
-const RULES_DATA_KEY = 'rules_data'
+let defaultRules
 
-const appliedAsmData = new Map()
-let defaultRules, asmDDRules
-let rulesOverride
-let exclusions
+let appliedRulesData = new Map()
+let appliedRulesetId
+let appliedRulesOverride = new Map()
+let appliedExclusions = new Map()
 
 function applyRules (rules, config) {
-  if (waf.wafManager) return
   defaultRules = rules
+
   waf.init(rules, config)
 }
 
-function updateAsmData (action, asmData, asmDataId) {
-  if (action === 'unapply') {
-    appliedAsmData.delete(asmDataId)
-  } else {
-    appliedAsmData.set(asmDataId, asmData)
+function updateWafFromRC ({ toUnapply, toApply, toModify }) {
+  const batch = new Set()
+
+  const newRulesData = new SpyMap(appliedRulesData)
+  let newRuleset
+  let newRulesetId
+  const newRulesOverride = new SpyMap(appliedRulesOverride)
+  const newExclusions = new SpyMap(appliedExclusions)
+
+  for (const item of toUnapply) {
+    const { product, id } = item
+
+    if (product === 'ASM_DATA') {
+      newRulesData.delete(id)
+
+      batch.add(item)
+    } else if (product === 'ASM_DD') {
+      if (appliedRulesetId === id) {
+        newRuleset = defaultRules
+        newRulesetId = null
+      }
+
+      batch.add(item)
+    } else if (product === 'ASM') {
+      newRulesOverride.delete(id)
+      newExclusions.delete(id)
+
+      batch.add(item)
+    }
   }
 
-  updateAppliedRuleData()
+  for (const item of [...toApply, ...toModify]) {
+    const { product, id, file } = item
+
+    if (product === 'ASM_DATA') {
+      if (file && file.rules_data && file.rules_data.length) {
+        newRulesData.set(id, file.rules_data)
+      }
+
+      batch.add(item)
+    } else if (product === 'ASM_DD') {
+      if (appliedRulesetId && appliedRulesetId !== id) {
+        item.apply_state = ERROR
+        item.apply_error = 'Multiple ruleset received in ASM_DD'
+      } else {
+        if (file && file.rules && file.rules.length) {
+          const { version, metadata, rules } = file
+
+          newRuleset = { version, metadata, rules }
+          newRulesetId = id
+        }
+
+        batch.add(item)
+      }
+    } else if (product === 'ASM') {
+      if (file && file.rules_override && file.rules_override.length) {
+        newRulesOverride.set(id, file.rules_override)
+      }
+
+      if (file && file.exclusions && file.exclusions.length) {
+        newExclusions.set(id, file.exclusions)
+      }
+
+      batch.add(item)
+    }
+  }
+
+  let newApplyState = ACKNOWLEDGED
+  let newApplyError
+
+  if (newRulesData.modified || newRuleset || newRulesOverride.modified || newExclusions.modified) {
+    const payload = newRuleset || {}
+
+    if (newRulesData.modified) {
+      payload.rules_data = mergeRulesData(newRulesData)
+    }
+    if (newRulesOverride.modified) {
+      payload.rules_override = concatArrays(newRulesOverride)
+    }
+    if (newExclusions.modified) {
+      payload.exclusions = concatArrays(newExclusions)
+    }
+
+    try {
+      waf.update(payload)
+
+      if (newRulesData.modified) {
+        appliedRulesData = newRulesData
+      }
+      if (newRuleset) {
+        appliedRulesetId = newRulesetId
+      }
+      if (newRulesOverride.modified) {
+        appliedRulesOverride = newRulesOverride
+      }
+      if (newExclusions.modified) {
+        appliedExclusions = newExclusions
+      }
+    } catch (err) {
+      newApplyState = ERROR
+      newApplyError = err.toString()
+    }
+  }
+
+  for (const config of batch) {
+    config.apply_state = newApplyState
+    if (newApplyError) config.apply_error = newApplyError
+  }
 }
 
-function updateAppliedRuleData () {
-  const mergedRuleData = mergeRuleData(appliedAsmData.values())
-  waf.wafManager && waf.wafManager.update({ [RULES_DATA_KEY]: mergedRuleData })
+// A Map with a new prop `modified`, a bool that indicates if the Map was modified
+class SpyMap extends Map {
+  constructor (iterable) {
+    super(iterable)
+    this.modified = false
+  }
+
+  set (key, value) {
+    this.modified = true
+    return super.set(key, value)
+  }
+
+  delete (key) {
+    const result = super.delete(key)
+    if (result) this.modified = true
+    return result
+  }
+
+  clear () {
+    this.modified = false
+    return super.clear()
+  }
 }
 
-function mergeRuleData (asmDataValues) {
+function concatArrays (files) {
+  return Array.from(files.values()).flat()
+}
+
+/*
+  ASM_DATA Merge strategy
+  The merge should be based on the id and type. For any duplicate items, the longer expiration should be taken.
+
+  As a result, multiple Rule Data may use the same DATA_ID and DATA_TYPE. In this case, all values are considered part of a set and are merged.
+  For instance, a denylist customized by environment may use a global Rule Data for all environments and a Rule Data per environment:
+  When a value is associated with an expiration date, the latest date takes precedA Rule Data may be routed to specific services or environments using Remote Configuration predicates. ence.
+  As an example, if the user moutiASM_DATAx is blocked for 5 minutes on all services and 10 minutes on a specific service, this service must block the user for 10 minutes.
+*/
+
+function mergeRulesData (files) {
   const mergedRulesData = new Map()
-  for (const asmData of asmDataValues) {
-    if (!asmData[RULES_DATA_KEY]) continue
-    for (const rulesData of asmData[RULES_DATA_KEY]) {
-      const key = `${rulesData.id}+${rulesData.type}`
+  for (const [, file] of files) {
+    for (const ruleData of file) {
+      const key = `${ruleData.id}+${ruleData.type}`
       if (mergedRulesData.has(key)) {
         const existingRulesData = mergedRulesData.get(key)
-        rulesData.data.reduce(rulesReducer, existingRulesData.data)
+        ruleData.data.reduce(rulesReducer, existingRulesData.data)
       } else {
-        mergedRulesData.set(key, copyRulesData(rulesData))
+        mergedRulesData.set(key, copyRulesData(ruleData))
       }
     }
   }
-  return [...mergedRulesData.values()]
+  return Array.from(mergedRulesData.values())
 }
 
 function rulesReducer (existingEntries, rulesDataEntry) {
@@ -75,74 +205,17 @@ function copyRulesData (rulesData) {
   return copy
 }
 
-function updateAsmDD (action, asmRules) {
-  // ASM_DD: When a new rules file is received from remote config, the file will replace the embed rules completely.
-  if (action === 'unapply') {
-    asmDDRules = undefined
-  } else {
-    asmDDRules = asmRules
-  }
-  updateAppliedRules()
-}
-
-function updateAppliedRules () {
-  const rules = { ...(asmDDRules || defaultRules) }
-  // TODO: We don't need to pass all the things again
-  if (rulesOverride) {
-    rules[RULES_OVERRIDE_KEY] = rulesOverride
-  }
-  if (exclusions) {
-    rules[EXCLUSIONS_KEY] = exclusions
-  }
-  if (appliedAsmData && appliedAsmData.size > 0) {
-    rules[RULES_DATA_KEY] = mergeRuleData(appliedAsmData.values())
-  }
-  try {
-    waf.wafManager.update(rules)
-  } catch {
-    log.error('AppSec could not load native package. Applied rules have not been updated')
-  }
-}
-
-function updateAsm (action, asm) {
-  if (action === 'apply') {
-    let rulesObject
-    if (asm.hasOwnProperty(RULES_OVERRIDE_KEY)) {
-      rulesOverride = asm[RULES_OVERRIDE_KEY]
-      rulesObject = { [RULES_OVERRIDE_KEY]: rulesOverride }
-      // TODO Should we check if the array is empty?
-      // TODO Should we do some merge beteween different applies?
-    }
-    if (asm.hasOwnProperty(EXCLUSIONS_KEY)) {
-      exclusions = asm[EXCLUSIONS_KEY]
-      rulesObject = { ...rulesObject, exclusions }
-      // TODO Should we check if the array is empty?
-      // TODO Should we do some merge beteween different applies?
-    }
-    if (rulesObject) {
-      applyRulesObject(rulesObject)
-    }
-  }
-}
-
-function applyRulesObject (rulesObject) {
-  if (rulesObject && waf.wafManager) {
-    waf.wafManager.update(rulesObject)
-  }
-}
-
 function clearAllRules () {
   waf.destroy()
-  appliedAsmData.clear()
-  asmDDRules = null
-  rulesOverride = null
-  exclusions = null
+
+  appliedRulesData.clear()
+  appliedRulesetId = null
+  appliedRulesOverride.clear()
+  appliedExclusions.clear()
 }
 
 module.exports = {
   applyRules,
-  updateAsmData,
-  updateAsmDD,
-  updateAsm,
+  updateWafFromRC,
   clearAllRules
 }
