@@ -9,17 +9,19 @@ class RedisPlugin extends CachePlugin {
   static get system () { return 'redis' }
 
   start ({ db, command, args, connectionOptions = {}, connectionName }) {
-    if (!this.config.filter(command.toUpperCase())) return this.skip()
+    const rawCommand = command
+    const normalizedCommand = command.toUpperCase()
+    if (!this.config.filter(normalizedCommand)) return this.skip()
 
     this.startSpan('redis.command', {
       service: getService(this.config, connectionName),
-      resource: command,
+      resource: rawCommand,
       type: 'redis',
       kind: 'client',
       meta: {
         'db.type': 'redis',
         'db.name': db || '0',
-        'redis.raw_command': formatCommand(command, args),
+        'redis.raw_command': formatCommand(normalizedCommand, args),
         'out.host': connectionOptions.host,
         [CLIENT_PORT_KEY]: connectionOptions.port
       }
@@ -42,8 +44,6 @@ function getService (config, connectionName) {
 }
 
 function formatCommand (command, args) {
-  command = command.toUpperCase()
-
   if (!args || command === 'AUTH') return command
 
   for (let i = 0, l = args.length; i < l; i++) {
