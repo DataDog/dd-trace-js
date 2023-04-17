@@ -30,6 +30,7 @@ describe('Plugin', () => {
       let config
 
       beforeEach(() => {
+        console.log('ABOUT TO LOAD TEDIOUS', version, process.version)
         return agent.load('tedious').then(() => {
           tds = require(`../../../versions/tedious@${version}`).get()
         })
