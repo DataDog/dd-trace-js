@@ -1,7 +1,7 @@
 'use strict'
 
 const RetryOperation = require('../operation')
-const tedious = require('../../../../../versions/tedious@1.0.0').get()
+const tedious = require('../../../../../versions/tedious').get() // somewhere the decision is made to install v16 here
 
 function waitForMssql () {
   return new Promise((resolve, reject) => {

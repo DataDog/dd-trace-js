@@ -203,7 +203,7 @@ function assertWorkspace () {
 }
 
 function install () {
-  exec('yarn --ignore-engines', { cwd: folder() })
+  exec('yarn --ignore-engines && yarn list tedious', { cwd: folder() })
 }
 
 function addFolder (name, version) {
