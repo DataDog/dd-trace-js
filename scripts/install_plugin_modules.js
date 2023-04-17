@@ -41,12 +41,17 @@ fs.readdirSync(path.join(__dirname, '../packages/datadog-instrumentations/src'))
 run()
 
 async function run () {
+  console.log('ASSERT FOLDER')
   assertFolder()
+  console.log('ASSERT VERSIONS')
   await assertVersions()
+  console.log('ASSERT WRK')
   assertWorkspace()
   // Some native addon packages rely on libraries that are not supported on ARM64
   excludeList.forEach(pkg => delete workspaces[pkg])
+  console.log('INSTALL')
   install()
+  console.log('INSTALL IS COMPLETE')
 }
 
 async function assertVersions () {
