@@ -12,9 +12,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SLACK_REPORT_ENABLE: ${{ github.event.schedule }} # should be empty for non-nightly jobs
+  SLACK_REPORT_ENABLE: ${{ github.event.schedule }} # value is empty for non-nightly jobs
   SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-  SLACK_MOREINFO: https://github.com/${{ github.repository_owner }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  SLACK_MOREINFO: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 # TODO: upstream jobs
 
