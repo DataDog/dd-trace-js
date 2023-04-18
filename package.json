@@ -114,6 +114,7 @@
     "eslint-plugin-promise": "^3.6.0",
     "eslint-plugin-standard": "^3.0.1",
     "express": "^4.16.2",
+    "fetch-h2": "^3.0.2",
     "get-port": "^3.2.0",
     "glob": "^7.1.6",
     "graphql": "0.13.2",
