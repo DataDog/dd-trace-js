@@ -19,7 +19,7 @@ const web = require('../../dd-trace/src/plugins/util/web')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
-describe('Plugin with http2 server', () => {
+describe('Plugin with http2 (h2c) server', () => {
   let tracer
   let Router
   let appListener
