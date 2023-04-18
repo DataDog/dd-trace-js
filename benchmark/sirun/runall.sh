@@ -32,6 +32,19 @@ export VERSION=`nvm current`
 export ENABLE_AFFINITY=true
 echo "using Node.js ${VERSION}"
 CPU_AFFINITY=24 # reset for each node.js version
+SPLITS=${SPLITS:-1}
+GROUP=${GROUP:-1}
+BENCH_COUNT=0
+
+for D in *; do
+  if [ -d "${D}" ]; then
+    BENCH_COUNT=$(($BENCH_COUNT+1))
+  fi
+done
+
+# over count so that it can be divided by bash as an integer
+BENCH_COUNT=$(($BENCH_COUNT+$BENCH_COUNT%$SPLITS))
+GROUP_SIZE=$(($BENCH_COUNT/$SPLITS))
 
 run_all_variants () {
   local variants="$(node ../get-variants.js)"
@@ -48,11 +61,19 @@ run_all_variants () {
   done
 }
 
+BENCH_INDEX=0
+BENCH_END=$(($GROUP_SIZE*$GROUP))
+BENCH_START=$(($BENCH_END-$GROUP_SIZE))
+
 for D in *; do
   if [ -d "${D}" ]; then
-    cd "${D}"
-    run_all_variants $D
-    cd ..
+    if [[ ${BENCH_INDEX} -ge ${BENCH_START} && ${BENCH_INDEX} -lt ${BENCH_END} ]]; then
+      cd "${D}"
+      run_all_variants $D
+      cd ..
+    fi
+
+    BENCH_INDEX=$(($BENCH_INDEX+1))
   fi
 done
 

@@ -66,17 +66,27 @@ check-big-regressions:
 
     KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
 
-benchmark-v14:
+benchmark:
   extends: .benchmarks
+  parallel:
+    matrix:
+      - MAJOR_VERSION: 14
+        GROUP: 1
+      - MAJOR_VERSION: 14
+        GROUP: 2
+      - MAJOR_VERSION: 14
+        GROUP: 3
+      - MAJOR_VERSION: 16
+        GROUP: 1
+      - MAJOR_VERSION: 16
+        GROUP: 2
+      - MAJOR_VERSION: 16
+        GROUP: 3
+      - MAJOR_VERSION: 18
+        GROUP: 1
+      - MAJOR_VERSION: 18
+        GROUP: 2
+      - MAJOR_VERSION: 18
+        GROUP: 3
   variables:
-    MAJOR_VERSION: 14
-
-benchmark-v16:
-  extends: .benchmarks
-  variables:
-    MAJOR_VERSION: 16
-
-benchmark-v18:
-  extends: .benchmarks
-  variables:
-    MAJOR_VERSION: 18
+    SPLITS: 3
