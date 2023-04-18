@@ -15,7 +15,7 @@ describe('user_blocking', () => {
     const res = { headersSent: false }
     const tracer = {}
 
-    let run, rootSpan, getRootSpan, block, storage, log, userBlocking, getDDWAFContext
+    let run, rootSpan, getRootSpan, block, storage, log, userBlocking, getWAFContext
 
     beforeEach(() => {
       run = sinon.stub().returns([['something'], ['block']])
@@ -38,12 +38,12 @@ describe('user_blocking', () => {
         warn: sinon.stub()
       }
 
-      getDDWAFContext = sinon.stub().returns({ run })
+      getWAFContext = sinon.stub().returns({ run })
 
       userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
         '../waf': {
           wafManager: {
-            getDDWAFContext
+            getWAFContext
           }
         },
         './utils': { getRootSpan },

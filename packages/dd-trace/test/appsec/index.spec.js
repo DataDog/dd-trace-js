@@ -342,7 +342,7 @@ describe('AppSec Index', () => {
       }
       expect(WAFContextWrapper.prototype.run).to.have.been.calledOnceWithExactly(expectedPayload)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req,
-        waf.wafManager.getDDWAFContext(req), expectedPayload)
+        waf.wafManager.getWAFContext(req), expectedPayload)
     })
 
     it('should propagate incoming http end data with express', () => {
@@ -388,7 +388,7 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpStartTranslator({ req, res })
       WAFContextWrapper.prototype.run.resetHistory()
       sinon.stub(Reporter, 'finishRequest')
-      const ddwafContext = waf.wafManager.getDDWAFContext(req)
+      const ddwafContext = waf.wafManager.getWAFContext(req)
       AppSec.incomingHttpEndTranslator({ req, res })
 
       const expectedPayload = {

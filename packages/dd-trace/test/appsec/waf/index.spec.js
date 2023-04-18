@@ -87,7 +87,7 @@ describe('WAF Manager', () => {
         rules: []
       }
       waf.init(newRules, config.appsec)
-      expect(waf.wafManager.acceptedAddresses).to.have.all.keys(
+      expect(waf.wafManager.requiredAddresses).to.have.all.keys(
         addresses.HTTP_INCOMING_HEADERS,
         addresses.HTTP_INCOMING_RESPONSE_HEADERS
       )
