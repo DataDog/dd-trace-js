@@ -15,7 +15,7 @@ class WAFContextWrapper {
     const inputs = {}
     let someInputAdded = false
 
-    // TODO: possible optimizaion: only send params that haven't already been sent to this wafContext
+    // TODO: possible optimizaion: only send params that haven't already been sent with same value to this wafContext
     for (const key of Object.keys(params)) {
       if (this.requiredAddresses.has(key)) {
         inputs[key] = params[key]

@@ -83,7 +83,9 @@ class RemoteConfigManager extends EventEmitter {
 
     this.updateProducts()
 
-    this.scheduler.start()
+    if (this.state.client.products.length) {
+      this.scheduler.start()
+    }
 
     return this
   }
@@ -179,6 +181,7 @@ class RemoteConfigManager extends EventEmitter {
         //       verify length
         //       verify hash
         //       verify _type
+        // TODO: new Date(meta.signed.expires) ignore the Targets data if it has expired ?
 
         const { product, id } = parseConfigPath(path)
 
