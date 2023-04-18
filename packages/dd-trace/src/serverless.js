@@ -22,7 +22,7 @@ function maybeStartServerlessMiniAgent () {
       log.debug(data.toString())
     })
     miniAgentProcess.on('close', (code) => {
-      log.debug(`Mini Agent exited with code ${code}`)
+      log.error(`Mini Agent exited with code ${code}`)
     })
     miniAgentProcess.on('error', (err) => {
       log.error(`Mini Agent errored out: ${err}`)
