@@ -9,9 +9,4 @@ if (Number(process.env.EVERYTHING)) {
   for (const pkg in json.dependencies) {
     require(pkg)
   }
-  for (const devPkg in json.devDependencies) {
-    if (devPkg !== '@types/node') {
-      require(devPkg)
-    }
-  }
 }
