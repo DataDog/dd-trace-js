@@ -1,6 +1,6 @@
 'use strict'
 const log = require('./log')
-const fs = require('fs');
+const fs = require('fs')
 
 function maybeStartServerlessMiniAgent () {
   const isGCPFunction = process.env.K_SERVICE !== undefined || process.env.FUNCTION_NAME !== undefined

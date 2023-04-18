@@ -2,14 +2,14 @@
 
 const { maybeStartServerlessMiniAgent } = require('../src/serverless')
 const childProcess = require('child_process')
-const fs = require('fs');
+const fs = require('fs')
 const log = require('../src/log')
 
 require('./setup/tap')
 
 describe('Serverless', () => {
   const childProcessSpawnSpy = sinon.spy(childProcess, 'spawn')
-  const existsSyncStub = sinon.stub(fs, "existsSync").returns(true)
+  const existsSyncStub = sinon.stub(fs, 'existsSync').returns(true)
   afterEach(() => {
     childProcessSpawnSpy.resetHistory()
   })
@@ -37,7 +37,7 @@ describe('Serverless', () => {
     process.env.K_SERVICE = 'test_function'
     process.env.DD_MINI_AGENT_PATH = 'fake_path'
 
-    const logErrorSpy = sinon.spy(log, "error")
+    const logErrorSpy = sinon.spy(log, 'error')
 
     existsSyncStub.returns(false)
 
@@ -45,7 +45,9 @@ describe('Serverless', () => {
 
     // trying to spawn with an invalid path will return a non-descriptive error, so we want to catch
     // invalid paths and log our own error.
-    expect(logErrorSpy).to.have.been.calledOnceWith("Serverless Mini Agent did not start. DD_MINI_AGENT_PATH points to a non-existent file.")
+    expect(logErrorSpy).to.have.been.calledOnceWith(
+      'Serverless Mini Agent did not start. DD_MINI_AGENT_PATH points to a non-existent file.'
+    )
 
     expect(childProcessSpawnSpy).to.not.have.been.called
     delete process.env.K_SERVICE
