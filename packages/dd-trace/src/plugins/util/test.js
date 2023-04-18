@@ -36,6 +36,7 @@ const TEST_SKIP_REASON = 'test.skip_reason'
 const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
 const TEST_CODE_OWNERS = 'test.codeowners'
 const TEST_SOURCE_FILE = 'test.source.file'
+const TEST_SOURCE_START = 'test.source.start'
 const LIBRARY_VERSION = 'library_version'
 const TEST_COMMAND = 'test.command'
 const TEST_MODULE = 'test.module'
@@ -77,6 +78,7 @@ module.exports = {
   LIBRARY_VERSION,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
+  TEST_SOURCE_START,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -104,7 +106,8 @@ module.exports = {
   getCoveredFilenamesFromCoverage,
   resetCoverage,
   mergeCoverage,
-  fromCoverageMapToCoverage
+  fromCoverageMapToCoverage,
+  getTestLineStart
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -380,4 +383,19 @@ function fromCoverageMapToCoverage (coverageMap) {
     acc[filename] = fileCoverage.data
     return acc
   }, {})
+}
+
+// Get the start line of a test by inspecting a given error's stack trace
+function getTestLineStart (err, testSuitePath) {
+  if (!err.stack) {
+    return null
+  }
+  // From https://github.com/felixge/node-stack-trace/blob/ba06dcdb50d465cd440d84a563836e293b360427/index.js#L40
+  const testFileLine = err.stack.split('\n').find(line => line.includes(testSuitePath))
+  try {
+    const testFileLineMatch = testFileLine.match(/at (?:(.+?)\s+\()?(?:(.+?):(\d+)(?::(\d+))?|([^)]+))\)?/)
+    return parseInt(testFileLineMatch[3], 10) || null
+  } catch (e) {
+    return null
+  }
 }

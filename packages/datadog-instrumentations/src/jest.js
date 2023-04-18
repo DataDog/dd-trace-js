@@ -5,7 +5,8 @@ const log = require('../../dd-trace/src/log')
 const {
   getCoveredFilenamesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
-  JEST_WORKER_COVERAGE_PAYLOAD_CODE
+  JEST_WORKER_COVERAGE_PAYLOAD_CODE,
+  getTestLineStart
 } = require('../../dd-trace/src/plugins/util/test')
 
 const testSessionStartCh = channel('ci:jest:session:start')
@@ -125,7 +126,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             suite: this.testSuite,
             runner: 'jest-circus',
             testParameters,
-            frameworkVersion: jestVersion
+            frameworkVersion: jestVersion,
+            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
           })
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
@@ -152,7 +154,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             name: getJestTestName(event.test),
             suite: this.testSuite,
             runner: 'jest-circus',
-            frameworkVersion: jestVersion
+            frameworkVersion: jestVersion,
+            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
           })
         })
       }
