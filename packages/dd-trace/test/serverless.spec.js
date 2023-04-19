@@ -10,7 +10,16 @@ require('./setup/tap')
 describe('Serverless', () => {
   const childProcessSpawnSpy = sinon.spy(childProcess, 'spawn')
   const existsSyncStub = sinon.stub(fs, 'existsSync').returns(true)
+
+  let env
+
+  beforeEach(() => {
+    env = process.env
+    process.env = {}
+  })
+
   afterEach(() => {
+    process.env = env
     childProcessSpawnSpy.resetHistory()
   })
 
@@ -32,8 +41,6 @@ describe('Serverless', () => {
     maybeStartServerlessMiniAgent()
 
     expect(childProcessSpawnSpy).to.not.have.been.called
-    delete process.env.K_SERVICE
-    delete process.env.FUNCTION_TARGET
   })
 
   it('dont spawn mini agent if mini agent path is invalid', () => {
@@ -54,9 +61,6 @@ describe('Serverless', () => {
     )
 
     expect(childProcessSpawnSpy).to.not.have.been.called
-    delete process.env.K_SERVICE
-    delete process.env.FUNCTION_TARGET
-    delete process.env.DD_MINI_AGENT_PATH
     existsSyncStub.returns(true)
   })
 
@@ -68,9 +72,6 @@ describe('Serverless', () => {
     maybeStartServerlessMiniAgent()
 
     expect(childProcessSpawnSpy).to.have.been.calledOnce
-    delete process.env.FUNCTION_NAME
-    delete process.env.GCP_PROJECT
-    delete process.env.DD_MINI_AGENT_PATH
   })
 
   it('spawn mini agent when K_SERVICE and FUNCTION_TARGET env vars are defined', () => {
@@ -81,8 +82,5 @@ describe('Serverless', () => {
     maybeStartServerlessMiniAgent()
 
     expect(childProcessSpawnSpy).to.have.been.calledOnce
-    delete process.env.K_SERVICE
-    delete process.env.FUNCTION_TARGET
-    delete process.env.DD_MINI_AGENT_PATH
   })
 })
