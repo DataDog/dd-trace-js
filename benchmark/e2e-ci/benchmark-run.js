@@ -126,19 +126,21 @@ async function main () {
   console.log('Workflows in progress:', workflowsInProgress)
   const { total_count: numWorkflows, workflow_runs: workflows } = workflowsInProgress
   if (numWorkflows === 0) {
-    throw new Error('Could not find the triggered job')
+    throw new Error('Could not find the triggered workflow')
   }
   // Pick the first one (most recently triggered one)
   const [{ id: runId } = {}] = workflows
 
-  console.log('Waiting for the workflow to finish.')
-  console.log(`Job URL: https://github.com/DataDog/test-environment/actions/runs/${runId}`)
-  // Poll every 15 seconds until we have a finished status
+  console.log(`Workflow URL: https://github.com/DataDog/test-environment/actions/runs/${runId}`)
+
+  // Wait an initial 1 minute, because we're sure it won't finish earlier
+  await wait(60000)
+
+  // Poll every 5 seconds until we have a finished status
   await new Promise((resolve, reject) => {
     const intervalId = setInterval(async () => {
       const currentWorkflow = await getCurrentWorkflowJobs(runId)
-      const { jobs, total_count: numJobs } = currentWorkflow
-      console.log('Number of jobs: ', numJobs)
+      const { jobs } = currentWorkflow
       const hasAnyJobFailed = jobs.some(({ status, conclusion }) => status === 'completed' && conclusion !== 'success')
       const hasEveryJobPassed = jobs.every(
         ({ status, conclusion }) => status === 'completed' && conclusion === 'success'
@@ -154,7 +156,7 @@ Check https://github.com/DataDog/test-environment/actions/runs/${runId} for more
       } else {
         console.log(`Checking the result of Job ${runId} again`)
       }
-    }, 15000)
+    }, 5000)
   })
 }
 
