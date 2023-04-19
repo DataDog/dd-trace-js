@@ -5,4 +5,3 @@ runs:
     - uses: actions/setup-node@v3
       with:
         cache: yarn
-        node-version: '14'
