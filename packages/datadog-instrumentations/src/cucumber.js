@@ -90,12 +90,11 @@ function wrapRun (pl, isLatestVersion) {
       if (!pickleResultByFile[testSuiteFullPath]) { // first test in suite
         testSuiteStartCh.publish(testSuiteFullPath)
       }
-      let testSourceLine
-      try {
-        testSourceLine = this.gherkinDocument.feature.location.line
-      } catch (e) {
-        // ignore error
-      }
+
+      const testSourceLine = this.gherkinDocument &&
+        this.gherkinDocument.feature &&
+        this.gherkinDocument.feature.location &&
+        this.gherkinDocument.feature.location.line
 
       testStartCh.publish({
         testName: this.pickle.name,
