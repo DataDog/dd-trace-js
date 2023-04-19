@@ -3,7 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
-describe('Plugin', () => {
+describe('Legacy Plugin', () => {
   let redis
   let tracer
   let client
@@ -99,6 +99,10 @@ describe('Plugin', () => {
           client.stream.destroy()
         })
 
+        // TODO: This test is flakey. I've seen it affect 2.6.0, 2.5.3, 3.1.2, 0.12.0
+        // Increasing the test timeout does not help.
+        // Error will be set but span will not.
+        // agent.use is called a dozen times per test in legacy.spec but once per test in client.spec
         it('should handle errors', done => {
           const assertError = () => {
             if (!error || !span) return

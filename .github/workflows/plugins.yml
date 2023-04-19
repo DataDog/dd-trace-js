@@ -12,9 +12,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SLACK_REPORT_ENABLE: ${{ github.event.schedule }} # should be empty for non-nightly jobs
+  SLACK_REPORT_ENABLE: ${{ github.event.schedule }} # value is empty for non-nightly jobs
   SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-  SLACK_MOREINFO: https://github.com/${{ github.repository_owner }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  SLACK_MOREINFO: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 # TODO: upstream jobs
 
@@ -1114,7 +1114,7 @@ jobs:
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/14
+      - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
