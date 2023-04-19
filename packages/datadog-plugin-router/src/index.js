@@ -79,7 +79,7 @@ class RouterPlugin extends WebPlugin {
       this._serverRequestFinish(req)
     })
   }
-  
+
   _serverRequestFinish (req) {
     const context = this._contexts.get(req)
 
