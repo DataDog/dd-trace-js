@@ -59,7 +59,7 @@ class BaseAwsSdkPlugin extends Plugin {
       if (!store) return
       const { span } = store
       if (!span) return
-      span.setTag('aws.region', region)
+      span.setTag('region', region)
     })
 
     this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response }) => {

@@ -97,15 +97,28 @@ describe('Sns', () => {
     })
 
     it('injects trace context to SNS publish', done => {
-      assertPropagation(done)
-
+      assertPropagation(done);
+    
+      let pendingCallbacks = 2; // Counter for the number of callbacks
+      const callbackHandler = (err) => {
+        if (err) {
+          done(err);
+        } else {
+          pendingCallbacks--;
+          if (pendingCallbacks === 0) {
+            done();
+          }
+        }
+      };
+    
       sns.subscribe(subParams, (err, data) => {
-        if (err) return done(err)
-
-        sqs.receiveMessage(receiveParams, e => e && done(e))
-        sns.publish({ TopicArn, Message: 'message 1' }, e => e && done(e))
-      })
-    })
+        if (err) return done(err);
+    
+        sqs.receiveMessage(receiveParams, callbackHandler);
+        sns.publish({ TopicArn, Message: 'message 1' }, callbackHandler);
+      });
+    });
+    
 
     // There is a bug in 3.x (but not 3.0.0) that will be fixed in 3.261
     // https://github.com/aws/aws-sdk-js-v3/issues/2861

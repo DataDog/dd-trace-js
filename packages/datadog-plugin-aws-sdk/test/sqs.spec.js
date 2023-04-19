@@ -105,9 +105,27 @@ describe('Plugin', () => {
 
               expect(span).to.not.equal(beforeSpan)
               expect(span.context()._tags['aws.operation']).to.equal('receiveMessage')
-              expect(span.context()._tags['queuename']).to.equal('receiveMessage')
+              expect(span.context()._tags['queuename']).to.equal('SQS_QUEUE_NAME')
+              expect(span.context()._tags['aws_service']).to.equal('sqs')
+              expect(span.context()._tags['region']).to.equal('us-east-1')
               done()
             })
+          })
+        })
+
+        it('adds queuename, region, aws_service for getQueueUrl request', (done) => {
+          sqs.getQueueUrl({
+            QueueName: 'getQueueUrlQueueName',
+          }, (err) => {
+            if (err) return done(err)
+
+            const span = tracer.scope().active()
+              expect(span).to.not.equal(beforeSpan)
+              expect(span.context()._tags['aws.operation']).to.equal('receiveMessage')
+              expect(span.context()._tags['queuename']).to.equal('getQueueUrlQueueName')
+              expect(span.context()._tags['aws_service']).to.equal('sqs')
+              expect(span.context()._tags['region']).to.equal('us-east-1')
+              done()
           })
         })
 

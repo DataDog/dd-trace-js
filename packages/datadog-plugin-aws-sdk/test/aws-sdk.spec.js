@@ -47,8 +47,8 @@ describe('Plugin', () => {
 
             expect(span.meta).to.include({
               'component': 'aws-sdk',
-              'aws.region': 'us-east-1',
-              'aws.service': 'S3',
+              'region': 'us-east-1',
+              'aws_service': 'S3',
               'aws.operation': 'listBuckets'
             })
           }).then(done, done)
