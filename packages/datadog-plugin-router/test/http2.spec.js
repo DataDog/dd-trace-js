@@ -11,7 +11,6 @@
  * so we create a h2c server using http2.createServer and use fetch-h2 instead
  */
 const fetchH2 = require('fetch-h2').fetch
-const http2 = require('http2')
 const { once } = require('events')
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -21,6 +20,7 @@ const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toStrin
 
 describe('Plugin with http2 (h2c) server', () => {
   let tracer
+  let http2
   let Router
   let appListener
 
@@ -61,12 +61,8 @@ describe('Plugin with http2 (h2c) server', () => {
         })
 
         beforeEach(() => {
-          /**
-           * KLUDGE: Force loading of the http2 server plugin
-           * Router internally uses methods, which internally requires http
-           * so the http2 plugin was not being loaded
-           */
-          require('http2')
+          // Require http2 after agent loads the http2 plugin, so that it's instrumented
+          http2 = require('http2')
           Router = require(`../../../versions/router@${version}`).get()
         })
 
