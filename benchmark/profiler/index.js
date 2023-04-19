@@ -8,7 +8,6 @@ const chalk = require('chalk')
 const getPort = require('get-port')
 const Table = require('cli-table3')
 const URL = require('url').URL
-// const waitOn = require('wait-on')
 const { spawn } = require('child_process')
 
 main()
