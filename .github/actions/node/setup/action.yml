@@ -5,3 +5,5 @@ runs:
     - uses: actions/setup-node@v3
       with:
         cache: yarn
+        enableCrossOsArchive: 'true'
+        node-version: '14'
