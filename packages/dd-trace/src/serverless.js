@@ -1,18 +1,22 @@
 'use strict'
 const log = require('./log')
-const fs = require('fs')
 
 function maybeStartServerlessMiniAgent () {
-  const isGCPFunction = process.env.K_SERVICE !== undefined || process.env.FUNCTION_NAME !== undefined
+  const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
+  const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
+  const inGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
+
   const rustBinaryPath = process.env.DD_MINI_AGENT_PATH
 
-  if (!isGCPFunction) {
+  if (!inGCPFunction) {
     return
   }
   if (!rustBinaryPath) {
     log.error('Serverless Mini Agent did not start. Please provide a DD_MINI_AGENT_PATH environment variable.')
     return
   }
+
+  const fs = require('fs')
 
   // trying to spawn with an invalid path will return a non-descriptive error, so we want to catch
   // invalid paths and log our own error.

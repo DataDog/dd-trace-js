@@ -159,8 +159,8 @@ class Config {
       process.env.DD_SERVICE_NAME ||
       this.tags.service ||
       process.env.AWS_LAMBDA_FUNCTION_NAME ||
-      process.env.FUNCTION_NAME ||
-      process.env.K_SERVICE ||
+      process.env.FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
+      process.env.K_SERVICE || // Google Cloud Function Name set by newer runtimes
       pkg.name ||
       'node'
     const DD_SERVICE_MAPPING = coalesce(
@@ -187,7 +187,14 @@ class Config {
     )
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
-    const inGCPFunction = process.env.K_SERVICE !== undefined || process.env.FUNCTION_NAME !== undefined
+
+    // In Google Cloud Functions, there is no overlap between env vars set by older deprecated runtimes newer
+    // runtimes.
+    // https://cloud.google.com/functions/docs/configuring/env-var#runtime_environment_variables_set_automatically
+    const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
+    const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
+
+    const inGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
 
     const inServerlessEnvironment = inAWSLambda || inGCPFunction
 
