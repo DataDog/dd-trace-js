@@ -115,6 +115,12 @@ describe('Plugin', () => {
                 error = e
               }
             })
+
+            withNamingSchema(
+              () => channel.assertQueue('test', {}, () => {}),
+              () => namingSchema.controlPlane.opName,
+              () => namingSchema.controlPlane.serviceName
+            )
           })
 
           describe('when publishing messages', () => {
@@ -162,6 +168,15 @@ describe('Plugin', () => {
                 error = e
               }
             })
+
+            withNamingSchema(
+              () => {
+                channel.assertExchange('exchange', 'direct', {}, () => {})
+                channel.publish('exchange', 'routingKey', Buffer.from('content'))
+              },
+              () => namingSchema.send.opName,
+              () => namingSchema.send.serviceName
+            )
           })
 
           describe('when consuming messages', () => {
@@ -238,6 +253,18 @@ describe('Plugin', () => {
                 })
               })
             })
+
+            withNamingSchema(
+              () => {
+                channel.assertQueue('', {}, (err, ok) => {
+                  if (err) return
+                  channel.sendToQueue(ok.queue, Buffer.from('content'))
+                  channel.consume(ok.queue, () => {}, {}, (err, ok) => {})
+                })
+              },
+              () => namingSchema.receive.opName,
+              () => namingSchema.receive.serviceName
+            )
           })
         })
 
@@ -262,7 +289,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load('amqplib', { service: 'test' })
+          return agent.load('amqplib', { service: 'test-custom-service' })
         })
 
         after(() => {
@@ -288,7 +315,7 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test')
+              expect(traces[0][0]).to.have.property('service', 'test-custom-service')
               expect(traces[0][0]).to.have.property('resource', 'queue.declare test')
             }, 2)
             .then(done)
@@ -296,6 +323,12 @@ describe('Plugin', () => {
 
           channel.assertQueue('test', {}, () => {})
         })
+
+        withNamingSchema(
+          () => channel.assertQueue('test', {}, () => {}),
+          () => namingSchema.controlPlane.opName,
+          () => 'test-custom-service'
+        )
       })
     })
   })

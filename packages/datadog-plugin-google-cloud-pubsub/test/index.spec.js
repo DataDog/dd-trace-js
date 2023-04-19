@@ -48,6 +48,12 @@ describe('Plugin', () => {
           pubsub = new lib.PubSub({ projectId: project })
         })
         describe('createTopic', () => {
+          withNamingSchema(
+            async () => pubsub.createTopic(topicName),
+            () => namingSchema.controlPlane.opName,
+            () => namingSchema.controlPlane.serviceName
+          )
+
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               name: namingSchema.controlPlane.opName,
@@ -143,6 +149,15 @@ describe('Plugin', () => {
                 expect(tracer.scope().active()).to.equal(firstSpan)
               })
           })
+
+          withNamingSchema(
+            async () => {
+              const [topic] = await pubsub.createTopic(topicName)
+              await publish(topic, { data: Buffer.from('hello') })
+            },
+            () => namingSchema.send.opName,
+            () => namingSchema.send.serviceName
+          )
         })
 
         describe('onmessage', () => {
@@ -231,6 +246,17 @@ describe('Plugin', () => {
             await publish(topic, { data: Buffer.from('hello') })
             return expectedSpanPromise
           })
+
+          withNamingSchema(
+            async () => {
+              const [topic] = await pubsub.createTopic(topicName)
+              const [sub] = await topic.createSubscription('foo')
+              sub.on('message', msg => msg.ack())
+              await publish(topic, { data: Buffer.from('hello') })
+            },
+            () => namingSchema.receive.opName,
+            () => namingSchema.receive.serviceName
+          )
         })
 
         describe('when disabled', () => {

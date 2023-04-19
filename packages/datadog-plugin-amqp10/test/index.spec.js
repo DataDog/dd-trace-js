@@ -124,6 +124,12 @@ describe('Plugin', () => {
               expect(promise).to.have.property('value')
             })
           })
+
+          withNamingSchema(
+            () => sender.send({ key: 'value' }),
+            () => namingSchema.send.opName,
+            () => namingSchema.send.serviceName
+          )
         })
 
         describe('when consuming messages', () => {
@@ -164,12 +170,18 @@ describe('Plugin', () => {
 
             sender.send({ key: 'value' })
           })
+
+          withNamingSchema(
+            () => sender.send({ key: 'value' }),
+            () => namingSchema.receive.opName,
+            () => namingSchema.receive.serviceName
+          )
         })
       })
 
       describe('with configuration', () => {
         beforeEach(() => {
-          agent.reload('amqp10', { service: 'test' })
+          agent.reload('amqp10', { service: 'test-custom-name' })
 
           const amqp = require(`../../../versions/amqp10@${version}`).get()
 
@@ -193,13 +205,19 @@ describe('Plugin', () => {
             .use(traces => {
               const span = traces[0][0]
 
-              expect(span).to.have.property('service', 'test')
+              expect(span).to.have.property('service', 'test-custom-name')
             }, 2)
             .then(done)
             .catch(done)
 
           sender.send({ key: 'value' })
         })
+
+        withNamingSchema(
+          () => sender.send({ key: 'value' }),
+          () => namingSchema.receive.opName,
+          () => 'test-custom-name'
+        )
       })
     })
   })

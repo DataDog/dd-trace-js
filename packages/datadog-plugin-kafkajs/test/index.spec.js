@@ -88,6 +88,12 @@ describe('Plugin', () => {
               return expectedSpanPromise
             }
           })
+
+          withNamingSchema(
+            async () => sendMessages(kafka, testTopic, messages),
+            () => namingSchema.send.opName,
+            () => namingSchema.send.serviceName
+          )
         })
         describe('consumer', () => {
           let consumer
@@ -212,6 +218,15 @@ describe('Plugin', () => {
               .then(() => sendMessages(kafka, testTopic, messages))
               .catch(done)
           })
+
+          withNamingSchema(
+            async () => {
+              await consumer.run({ eachMessage: () => {} })
+              await sendMessages(kafka, testTopic, messages)
+            },
+            () => namingSchema.send.opName,
+            () => namingSchema.send.serviceName
+          )
         })
       })
     })
