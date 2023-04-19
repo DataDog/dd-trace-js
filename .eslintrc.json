@@ -8,7 +8,8 @@
     "plugin:mocha/recommended"
   ],
   "plugins": [
-    "mocha"
+    "mocha",
+    "n"
   ],
   "env": {
     "node": true,
@@ -31,6 +32,7 @@
     "mocha/no-identical-title": 0,
     "mocha/no-global-tests": 0,
     "mocha/no-exports": 0,
-    "mocha/no-skipped-tests": 0
+    "mocha/no-skipped-tests": 0,
+    "n/no-restricted-require": [2, ["diagnostics_channel"]]
   }
 }

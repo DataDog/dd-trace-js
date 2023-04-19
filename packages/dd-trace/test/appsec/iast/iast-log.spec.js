@@ -58,7 +58,7 @@ describe('IAST log', () => {
       error: sinon.stub()
     }
     telemetryLogs = proxyquire('../../../src/appsec/iast/telemetry/logs', {
-      'diagnostics_channel': {
+      '../../../../../diagnostics_channel': {
         channel: (name) => name === 'datadog:telemetry:start' ? telemetryStartChannel : telemetryStopChannel
       }
     })
