@@ -798,9 +798,6 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config.telemetry.enabled).to.be.false
-
-    delete process.env.FUNCTION_NAME
-    delete process.env.GCP_PROJECT
   })
 
   it('should not set DD_TRACE_TELEMETRY_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
@@ -811,9 +808,6 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config.telemetry.enabled).to.be.false
-
-    delete process.env.K_SERVICE
-    delete process.env.FUNCTION_TARGET
   })
 
   it('should set telemetry default values', () => {
@@ -884,8 +878,6 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config.remoteConfig.enabled).to.be.false
-    delete process.env.FUNCTION_NAME
-    delete process.env.GCP_PROJECT
   })
 
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
@@ -895,8 +887,6 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config.remoteConfig.enabled).to.be.false
-    delete process.env.K_SERVICE
-    delete process.env.FUNCTION_TARGET
   })
 
   it('should ignore invalid iast.requestSampling', () => {
