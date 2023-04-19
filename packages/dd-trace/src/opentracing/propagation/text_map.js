@@ -128,9 +128,8 @@ class TextMapPropagator {
   }
 
   _injectB3MultipleHeaders (spanContext, carrier) {
-    const hasB3 = this._hasPropagationStyle('inject', 'b3')
     const hasB3multi = this._hasPropagationStyle('inject', 'b3multi')
-    if (!(hasB3 || hasB3multi)) return
+    if (!hasB3multi) return
 
     carrier[b3TraceKey] = this._getB3TraceId(spanContext)
     carrier[b3SpanKey] = spanContext._spanId.toString(16)
@@ -146,8 +145,9 @@ class TextMapPropagator {
   }
 
   _injectB3SingleHeader (spanContext, carrier) {
+    const hasB3 = this._hasPropagationStyle('inject', 'b3')
     const hasB3SingleHeader = this._hasPropagationStyle('inject', 'b3 single header')
-    if (!hasB3SingleHeader) return null
+    if (!(hasB3 || hasB3SingleHeader)) return null
 
     const traceId = this._getB3TraceId(spanContext)
     const spanId = spanContext._spanId.toString(16)
@@ -216,10 +216,10 @@ class TextMapPropagator {
         case 'tracecontext':
           spanContext = this._extractTraceparentContext(carrier)
           break
-        case 'b3': // TODO: should match "b3 single header" in next major
         case 'b3multi':
           spanContext = this._extractB3MultiContext(carrier)
           break
+        case 'b3':
         case 'b3 single header': // TODO: delete in major after singular "b3"
           spanContext = this._extractB3SingleContext(carrier)
           break
