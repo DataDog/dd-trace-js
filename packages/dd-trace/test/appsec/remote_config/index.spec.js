@@ -146,7 +146,7 @@ describe('Remote Config enable', () => {
       })
 
       it('should enable when using default rules', () => {
-        config.appsec = { enabled: true, customRulesProvided: false }
+        config.appsec = { enabled: true, rules: {}, customRulesProvided: false }
         remoteConfig.enable(config)
         remoteConfig.enableAsmData(config.appsec)
 
