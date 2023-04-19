@@ -116,9 +116,9 @@ const wait = (timeToWaitMs) => {
 
 async function main () {
   // Trigger JS GHA
-  console.log('Triggering CI Visibility Test Environment Workflow')
+  console.log('Triggering CI Visibility test environment workflow.')
   const httpResponseCode = await triggerWorkflow()
-  console.log('GitHub API Response code:', httpResponseCode)
+  console.log('GitHub API response code:', httpResponseCode)
   // Give some time for GH to process the request
   await wait(15000)
   // Get the run ID from the workflow we just triggered
@@ -150,11 +150,11 @@ async function main () {
 Check https://github.com/DataDog/test-environment/actions/runs/${runId} for more details.`))
         clearInterval(intervalId)
       } else if (hasEveryJobPassed) {
-        console.log('Performance overhead test successful')
+        console.log('Performance overhead test successful.')
         resolve()
         clearInterval(intervalId)
       } else {
-        console.log(`Checking the result of Job ${runId} again`)
+        console.log(`Workflow https://github.com/DataDog/test-environment/actions/runs/${runId} is not finished yet.`)
       }
     }, 5000)
   })
