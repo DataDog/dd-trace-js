@@ -2,12 +2,13 @@ name: Node Setup
 runs:
   using: composite
   steps:
-    # https://github.com/actions/cache/issues/752#issuecomment-1222415717)
-    - name: "Use GNU tar instead BSD tar"
-      if: ${{ runner.os == 'Windows' }}
-      shell: cmd
-      run: echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
     - uses: actions/setup-node@v3
+      if: ${{ runner.os != 'Windows' }}
       with:
         cache: yarn
+        node-version: '14'
+    # https://github.com/actions/cache/issues/752)
+    - uses: actions/setup-node@v3
+      if: ${{ runner.os == 'Windows' }}
+      with:
         node-version: '14'
