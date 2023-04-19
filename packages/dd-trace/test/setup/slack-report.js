@@ -5,6 +5,8 @@
  * This should help an on-call engineer quickly diagnose when an incompatibility was introduced.
  */
 
+/* eslint-disable no-console */
+
 const SLACK_WEBHOOK = process.env.SLACK_WEBHOOK
 const SLACK_REPORT_ENABLE = process.env.SLACK_REPORT_ENABLE
 const SLACK_MOREINFO = process.env.SLACK_MOREINFO
@@ -28,14 +30,22 @@ const TIME_THRESHOLDS = [
  */
 module.exports = async (failures) => {
   if (!SLACK_REPORT_ENABLE) {
+    console.log('Slack Reporter is disabled')
     return
   }
+
+  console.log('Slack Reporter is enabled')
 
   if (!SLACK_WEBHOOK) {
     throw new Error('package reporting via slack webhook is enabled but misconfigured')
   }
 
   const packageNames = Object.keys(failures)
+
+  if (!packageNames.length) {
+    console.log('Slack Reporter has nothing to report')
+    return
+  }
 
   const descriptions = []
 
