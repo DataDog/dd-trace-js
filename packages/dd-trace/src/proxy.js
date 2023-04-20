@@ -9,7 +9,6 @@ const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
-const { maybeStartServerlessMiniAgent } = require('./serverless')
 
 class Tracer extends NoopProxy {
   constructor () {
@@ -27,6 +26,7 @@ class Tracer extends NoopProxy {
     try {
       const config = new Config(options) // TODO: support dynamic config
 
+      const { maybeStartServerlessMiniAgent } = require('./serverless')
       maybeStartServerlessMiniAgent()
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {

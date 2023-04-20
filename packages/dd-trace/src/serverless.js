@@ -1,5 +1,4 @@
 'use strict'
-const log = require('./log')
 
 function maybeStartServerlessMiniAgent () {
   const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
@@ -11,6 +10,8 @@ function maybeStartServerlessMiniAgent () {
   if (!inGCPFunction) {
     return
   }
+
+  const log = require('./log')
   if (!rustBinaryPath) {
     log.error('Serverless Mini Agent did not start. Please provide a DD_MINI_AGENT_PATH environment variable.')
     return
