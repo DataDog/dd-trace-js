@@ -116,7 +116,7 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
-      - run: yarn test:appsec:ci
+      - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/18
