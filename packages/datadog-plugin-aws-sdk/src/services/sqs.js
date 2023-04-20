@@ -3,6 +3,7 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')
+const { Console } = require('console')
 
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
@@ -62,13 +63,20 @@ class Sqs extends BaseAwsSdkPlugin {
     // 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue';
     let queueName
     if (params.QueueUrl) {
-      queueName = params.QueueUrl.split('/')[-1]
+      console.log("hey1")
+      console.log("QueueUrl: "+params.QueueUrl)
+      console.log("parts: "+params.QueueUrl.split('/'))
+
+      queueName = params.QueueUrl.split('/')[params.QueueUrl.split('/').length - 1]
+      console.log("queueName: "+queueName)
     }
 
     Object.assign(tags, {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
-      'queuename': params.QueueName || queueName
+      //'queuename': String(queueName) || String(params.QueueName)
     })
+    tags['queuename'] = String(queueName) || String(params.QueueName)
+    console.log("tags: ", tags)
 
     switch (operation) {
       case 'receiveMessage':
