@@ -2,10 +2,10 @@
 
 const proxyquire = require('proxyquire')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
-const taintTrackingOperations = require('../../../../src/appsec/iast/taint-tracking/operations')
 
 describe('IAST Taint tracking plugin', () => {
   let taintTrackingPlugin
+  let taintTrackingOperations
 
   const store = {}
 
@@ -16,8 +16,11 @@ describe('IAST Taint tracking plugin', () => {
   }
 
   beforeEach(() => {
+    taintTrackingOperations = {
+      taintObject: sinon.stub().returnsArg(1)
+    }
     taintTrackingPlugin = proxyquire('../../../../src/appsec/iast/taint-tracking/plugin', {
-      './operations': sinon.spy(taintTrackingOperations),
+      './operations': taintTrackingOperations,
       '../../../../../datadog-core': datadogCore
     })
   })
@@ -25,10 +28,11 @@ describe('IAST Taint tracking plugin', () => {
   afterEach(sinon.restore)
 
   it('Should subscribe to body parser, qs and cookie channel', () => {
-    expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(3)
+    expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(4)
     expect(taintTrackingPlugin._subscriptions[0]._channel.name).to.equals('datadog:body-parser:read:finish')
     expect(taintTrackingPlugin._subscriptions[1]._channel.name).to.equals('datadog:qs:parse:finish')
     expect(taintTrackingPlugin._subscriptions[2]._channel.name).to.equals('datadog:cookie:parse:finish')
+    expect(taintTrackingPlugin._subscriptions[3]._channel.name).to.equals('apm:express:middleware:enter')
   })
 
   it('Should taint full object', () => {
