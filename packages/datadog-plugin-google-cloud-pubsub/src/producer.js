@@ -11,10 +11,8 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
 
     const messages = request.messages || []
     const topic = request.topic
-    const span = this.startSpan(this.operationName(), { // TODO: rename
-      service: this.config.service || this.serviceName({ service: this.tracer._service }),
+    const span = this.startSpan({ // TODO: rename
       resource: `${api} ${topic}`,
-      kind: 'producer',
       meta: {
         'gcloud.project_id': projectId,
         'pubsub.method': api, // TODO: remove

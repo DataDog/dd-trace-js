@@ -11,11 +11,9 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     const topic = subscription.metadata && subscription.metadata.topic
     const childOf = this.tracer.extract('text_map', message.attributes) || null
 
-    this.startSpan(this.operationName(), {
+    this.startSpan({
       childOf,
-      service: this.config.service || this.serviceName({ service: this.tracer._service }),
       resource: topic,
-      kind: 'consumer',
       type: 'worker',
       meta: {
         'gcloud.project_id': subscription.pubsub.projectId,

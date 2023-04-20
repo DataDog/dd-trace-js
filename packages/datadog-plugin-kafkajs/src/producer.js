@@ -7,10 +7,8 @@ class KafkajsProducerPlugin extends ProducerPlugin {
   static get operation () { return 'produce' }
 
   start ({ topic, messages }) {
-    const span = this.startSpan(this.operationName(), {
-      service: this.config.service || this.serviceName({ service: this.tracer._service }),
+    const span = this.startSpan({
       resource: topic,
-      kind: 'producer',
       meta: {
         'component': 'kafkajs',
         'kafka.topic': topic
