@@ -9,7 +9,9 @@ const {
   HTTP_REQUEST_BODY,
   HTTP_REQUEST_COOKIE_VALUE,
   HTTP_REQUEST_COOKIE_NAME,
-  HTTP_REQUEST_PATH_PARAM
+  HTTP_REQUEST_PATH_PARAM,
+  HTTP_REQUEST_HEADER_VALUE,
+  HTTP_REQUEST_HEADER_NAME
 } = require('./origin-types')
 
 class TaintTrackingPlugin extends Plugin {
@@ -47,6 +49,11 @@ class TaintTrackingPlugin extends Plugin {
   _cookiesTaintTrackingHandler (target) {
     const iastContext = getIastContext(storage.getStore())
     target = taintObject(iastContext, target, HTTP_REQUEST_COOKIE_VALUE, true, HTTP_REQUEST_COOKIE_NAME)
+  }
+
+  _headersTaintTrackingHandler (target) {
+    const iastContext = getIastContext(storage.getStore())
+    target = taintObject(iastContext, target, HTTP_REQUEST_HEADER_VALUE, true, HTTP_REQUEST_HEADER_NAME)
   }
 
   enable () {

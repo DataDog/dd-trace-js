@@ -1,12 +1,12 @@
 'use strict'
 
-const shimmer = require("../../datadog-shimmer");
+const shimmer = require('../../datadog-shimmer')
 const { channel, addHook } = require('./helpers/instrument')
 
 const cookieParseCh = channel('datadog:cookie:parse:finish')
 
 function wrapParse (originalParse) {
-  return function() {
+  return function () {
     const cookies = originalParse.apply(this, arguments)
     if (cookieParseCh.hasSubscribers && cookies) {
       cookieParseCh.publish({ cookies })

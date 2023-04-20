@@ -1,44 +1,40 @@
 'use strict'
 
-const axios = require('axios');
-
+const axios = require('axios')
 const Config = require('../../../../../src/config')
-const { storage } = require('../../../../../../datadog-core');
+const { storage } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
-const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context');
+const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
 const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-tracking/operations')
+const {
+  HTTP_REQUEST_COOKIE_NAME,
+  HTTP_REQUEST_COOKIE_VALUE
+} = require('../../../../../src/appsec/iast/taint-tracking/origin-types')
 const { testInRequest } = require('../../utils')
-const { HTTP_REQUEST_COOKIE_VALUE } = require('../../../../../src/appsec/iast/taint-tracking/origin-types')
-
 
 describe('Cookies sourcing with cookies', () => {
   let cookie
   withVersions('cookie', 'cookie', version => {
-
-    function app() {
+    function app () {
       const store = storage.getStore()
       const iastContext = iastContextFunctions.getIastContext(store)
 
       const rawCookies = 'cookie=value'
       const parsedCookies = cookie.parse(rawCookies)
-      Object.keys(parsedCookies).forEach( cookieName => {
+      Object.getOwnPropertySymbols(parsedCookies).forEach(cookieName => {
         const cookieValue = parsedCookies[cookieName]
         const isCookieValueTainted = isTainted(iastContext, cookieValue)
         expect(isCookieValueTainted).to.be.true
         const taintedCookieValueRanges = getRanges(iastContext, cookieValue)
         expect(taintedCookieValueRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_COOKIE_VALUE)
-        // const isCookieNameTainted = isTainted(iastContext, cookieName)
-        // expect(isCookieNameTainted).to.be.true
-        // const taintedCookieNameRanges = getRanges(iastContext, cookieName)
-        // expect(taintedCookieNameRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_COOKIE_NAME)
+        const isCookieNameTainted = isTainted(iastContext, cookieName)
+        expect(isCookieNameTainted).to.be.true
+        const taintedCookieNameRanges = getRanges(iastContext, cookieName)
+        expect(taintedCookieNameRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_COOKIE_NAME)
       })
     }
 
-    function tests(config) {
-      beforeEach(async () => {
-        cookie = require(`../../../../../../../versions/cookie@${version}`).get()
-      })
-
+    function tests (config) {
       beforeEach(() => {
         iast.enable(new Config({
           experimental: {
@@ -48,6 +44,8 @@ describe('Cookies sourcing with cookies', () => {
             }
           }
         }))
+
+        cookie = require(`../../../../../../../versions/cookie@${version}`).get()
       })
 
       afterEach(() => {
@@ -62,6 +60,5 @@ describe('Cookies sourcing with cookies', () => {
     }
 
     testInRequest(app, tests)
-
   })
 })
