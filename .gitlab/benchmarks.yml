@@ -90,4 +90,3 @@ benchmark:
         GROUP: 3
   variables:
     SPLITS: 3
-
