@@ -1,7 +1,7 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { getPathwayHash, encodePathwayContext, decodePathwayContext } = require('./hash')
+const Hash = require('./hash')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
@@ -19,23 +19,24 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       let parentHash
       let originTimestamp
       let prevTimestamp
-      const currentTimestamp = new Date().now() * 1000000 // nanoseconds
+      const currentTimestamp = Date.now()
       const checkpointString = getCheckpointString(service, env, topic)
       if (active) {
         const context = active.context()
         const rootSpan = context._trace.started[0];
-        // TODO
-        [parentHash, originTimestamp, prevTimestamp] = decodePathwayContext(rootSpan._spanContext._tags.pathwayHash)
+        [ parentHash, originTimestamp, prevTimestamp ] =
+        Hash.decodePathwayContext(rootSpan._spanContext._tags.metrics['dd-pathway-ctx'])
       } else {
         parentHash = ENTRY_PARENT_HASH
         originTimestamp = currentTimestamp
         prevTimestamp = currentTimestamp
       }
-      const pathwayHash = getPathwayHash(checkpointString, parentHash)
+
+      const pathwayHash = Hash.getPathwayHash(checkpointString, parentHash)
 
       const edgeLatency = currentTimestamp - prevTimestamp
       const pathwayLatency = currentTimestamp - originTimestamp
-      pathwayCtx = encodePathwayContext(pathwayHash, originTimestamp, prevTimestamp)
+      pathwayCtx = Hash.encodePathwayContext(pathwayHash, originTimestamp, currentTimestamp)
 
       const checkpoint = {
         currentTimestamp: currentTimestamp,

@@ -121,7 +121,7 @@ class LatencyStatsProcessor {
     const bucketTime = checkpoint.currentTimestamp - (checkpoint.currentTimestamp % this.bucketSizeNs)
 
     this.buckets.forTime(bucketTime)
-      .forHeader(checkpoint)
+      .forCheckpoint(checkpoint)
       .record(checkpoint)
   }
 

@@ -21,9 +21,9 @@ function encodePathwayContext (pathwayHash, timeSinceOrigin, timeSincePrev) {
 
 function decodePathwayContext (pathwayContext) {
   const pathwayHash = pathwayContext.subarray(0, 8)
-  const encodedTimestamps = pathwayContext.subarray(8, 20)
+  const encodedTimestamps = pathwayContext.subarray(8)
   const [timeSinceOrigin, encodedTimeSincePrev] = decodeVarint(encodedTimestamps)
-  const [timeSincePrev, placeHolder] = decodeVarint(encodedTimeSincePrev)
+  const [timeSincePrev] = decodeVarint(encodedTimeSincePrev)
   return [ pathwayHash, timeSinceOrigin, timeSincePrev ]
 }
 

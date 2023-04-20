@@ -40,7 +40,10 @@ describe('encoding', () => {
     }
 
     const [ decodedPathwayHash, decodedTimeSinceOrigin, decodedTimeSincePrev ] = decodePathwayContext(encoded)
-    expect(decodedPathwayHash).to.equal(pathwayHash)
+    expect(decodedPathwayHash.length).to.equal(pathwayHash.length)
+    for (let i = 0; i < pathwayHash.length; i++) {
+      expect(decodedPathwayHash[i]).to.equal(pathwayHash[i])
+    }
     expect(decodedTimeSinceOrigin).to.equal(timestamp)
     expect(decodedTimeSincePrev).to.equal(timestamp)
   })
