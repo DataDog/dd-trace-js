@@ -1,7 +1,7 @@
 'use strict'
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const { getPathwayHash, encodePathwayContext, decodePathwayContext } = require('./hash')
+const Hash = require('./hash')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
@@ -34,22 +34,22 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
     }
 
     if (this.config.dsmEnabled) {
-      const currentTimestamp = new Date().now() * 1000000 // nanoseconds
+      const currentTimestamp = Date.now()
       const env = this.tracer._env
       const checkpointString = getCheckpointString(service, env, groupId, topic, partition)
 
       const prevPathwayCtx = message.headers['dd-pathway-ctx']
       if (prevPathwayCtx) {
-        [parentHash, originTimestamp, prevTimestamp] = decodePathwayContext(message.headers['dd-pathway-ctx'])
+        [parentHash, originTimestamp, prevTimestamp] = Hash.decodePathwayContext(prevPathwayCtx)
       } else {
         parentHash = ENTRY_PARENT_HASH
         originTimestamp = currentTimestamp
         prevTimestamp = currentTimestamp
       }
-      const pathwayHash = getPathwayHash(checkpointString, parentHash)
+      const pathwayHash = Hash.getPathwayHash(checkpointString, parentHash)
       const edgeLatency = currentTimestamp - prevTimestamp
       const pathwayLatency = currentTimestamp - originTimestamp
-      pathwayCtx = encodePathwayContext(pathwayHash, originTimestamp, prevTimestamp)
+      pathwayCtx = Hash.encodePathwayContext(pathwayHash, originTimestamp, currentTimestamp)
 
       header.metrics['parentHash'] = parentHash
       header.metrics['edgeTags'] = {
