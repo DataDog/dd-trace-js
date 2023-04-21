@@ -146,7 +146,8 @@ function extractError (trace, error) {
   trace.error = 1
 
   if (isError(error)) {
-    addTag(trace.meta, trace.metrics, ERROR_MESSAGE, error.message)
+    // AggregateError only has a code and no message.
+    addTag(trace.meta, trace.metrics, ERROR_MESSAGE, error.message || error.code)
     addTag(trace.meta, trace.metrics, ERROR_TYPE, error.name)
     addTag(trace.meta, trace.metrics, ERROR_STACK, error.stack)
   }
