@@ -16,15 +16,23 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Set hostname
+        run: sudo hostnamectl set-hostname testrunner
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:lambda:ci
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   ubuntu:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v2      
+      - name: Set hostname
+        run: sudo hostnamectl set-hostname testrunner
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -35,13 +43,20 @@ jobs:
       - run: yarn test:lambda:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:lambda:ci
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v2      
+      - name: Set hostname
+        run: sudo hostnamectl set-hostname testrunner
+      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - run: yarn test:lambda:ci
+      - run: yarn test:lambda:ci      
+      - if: success() || failure()
+        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
