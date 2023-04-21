@@ -705,6 +705,7 @@ describe('TextMapPropagator', () => {
           '_dd.p.foo_bar_baz_',
           'abc_!@#$%^&*()_+`-='
         )
+        expect(spanContext._trace.tags['_dd.p.dm']).to.eql('-4')
       })
 
       it('should extract a 128-bit trace ID', () => {
@@ -741,6 +742,22 @@ describe('TextMapPropagator', () => {
         propagator.inject(spanContext, carrier)
 
         expect(carrier.traceparent).to.match(/^01/)
+        expect(carrier['x-datadog-tags']).to.include('_dd.p.dm=-4')
+        expect(spanContext._trace.tags['_dd.p.dm']).to.eql('-4')
+      })
+
+      it('should fix _dd.p.dm if invalid (non-hyphenated) input is received', () => {
+        textMap['traceparent'] = '01-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        textMap['tracestate'] = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:4'
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const carrier = {}
+        const spanContext = propagator.extract(textMap)
+
+        propagator.inject(spanContext, carrier)
+
+        expect(carrier['x-datadog-tags']).to.include('_dd.p.dm=-4')
+        expect(spanContext._trace.tags['_dd.p.dm']).to.eql('-4')
       })
     })
   })
