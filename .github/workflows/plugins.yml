@@ -514,14 +514,9 @@ jobs:
       PLUGINS: jest
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:plugins:ci
-      - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   kafkajs:
@@ -676,17 +671,12 @@ jobs:
       PLUGINS: mocha
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   moleculer:
@@ -879,14 +869,9 @@ jobs:
       SERVICES: oracledb
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install --ignore-engine
       - run: yarn test:plugins:ci
-      - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   paperplane:

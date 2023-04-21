@@ -41,7 +41,7 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
 
 module.exports = {
   // Load the plugin on the tracer with an optional config and start a mock agent.
-  async load (pluginName, config, tracerConfig = {}) {
+  async load (pluginName, config, tracerConfig = {}, useTestAgent = true) {
     tracer = require('../..')
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -113,12 +113,20 @@ module.exports = {
       flushInterval: 0,
       plugins: false
     }, tracerConfig))
-    tracer.setUrl(testAgentUrl)
 
     // update headers to include the agent port to proxy trace to
-    const currentHeaders = tracer._tracer._exporter._writer.headers
-    currentHeaders['Datadog-Proxy-Port'] = port.toString()
-    tracer._tracer._exporter._writer.headers = currentHeaders
+    if (!(
+      tracerConfig.hasOwnProperty('experimental') &&
+      tracerConfig.experimental.hasOwnProperty('exporter')) &&
+      useTestAgent
+    ) {
+      const currentHeaders = tracer._tracer._exporter._writer.headers
+      currentHeaders['Datadog-Proxy-Port'] = port.toString()
+      tracer._tracer._exporter._writer.headers = currentHeaders
+      tracer.setUrl(testAgentUrl)
+    } else {
+      tracer.setUrl(`http://127.0.0.1:${port}`)
+    }
 
     for (let i = 0, l = pluginName.length; i < l; i++) {
       tracer.use(pluginName[i], config[i])
