@@ -10,13 +10,6 @@ class WAFManager {
   constructor (rules, config) {
     this.config = config
     this.wafTimeout = config.wafTimeout
-    this.reload(rules)
-  }
-
-  reload (rules) {
-    if (this.ddwaf) {
-      this.ddwaf.dispose()
-    }
     this.ddwaf = this._loadDDWAF(rules)
     this._reportMetrics()
   }
