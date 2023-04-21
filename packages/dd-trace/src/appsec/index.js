@@ -21,9 +21,7 @@ function enable (_config) {
   try {
     setTemplates(_config)
 
-    const rules = _config.appsec.rules || require('./recommended.json')
-
-    RuleManager.applyRules(rules, _config.appsec)
+    RuleManager.applyRules(_config.appsec.rules, _config.appsec)
 
     remoteConfig.enableWafUpdate(_config.appsec)
 
