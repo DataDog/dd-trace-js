@@ -30,11 +30,11 @@ class WAFContextWrapper {
 
       const result = this.ddwafContext.run(inputs, this.wafTimeout)
 
-      const durationExt = parseInt(process.hrtime.bigint() - start)
+      const end = process.hrtime.bigint()
 
       Reporter.reportMetrics({
         duration: result.totalRuntime / 1e3,
-        durationExt: durationExt / 1e3,
+        durationExt: parseInt(end - start) / 1e3,
         rulesVersion: this.rulesInfo.version
       })
 
