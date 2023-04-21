@@ -13,6 +13,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
+const NODE_MAJOR = parseInt(process.versions.node.split('.')[0])
 
 describe('Plugin', () => {
   let express
@@ -257,29 +258,32 @@ describe('Plugin', () => {
           })
         })
 
-        it('should support a string URL and an options object, which merges and takes precedence', done => {
-          const app = express()
+        // Merging no longer happens since Node 20
+        if (NODE_MAJOR < 20) {
+          it('should support a string URL and an options object, which merges and takes precedence', done => {
+            const app = express()
 
-          app.get('/user', (req, res) => {
-            res.status(200).send()
-          })
+            app.get('/user', (req, res) => {
+              res.status(200).send()
+            })
 
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+                  expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+                })
+                .then(done)
+                .catch(done)
+
+              appListener = server(app, port, () => {
+                const req = http.request(`${protocol}://localhost:${port}/another-path`, { path: '/user' })
+
+                req.end()
               })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/another-path`, { path: '/user' })
-
-              req.end()
             })
           })
-        })
+        }
 
         it('should support a URL object and an options object, which merges and takes precedence', done => {
           const app = express()
@@ -613,7 +617,7 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message || error.code)
                 expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
                 expect(traces[0][0].meta).to.have.property('component', 'http')
               })
