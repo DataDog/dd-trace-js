@@ -12,7 +12,7 @@ describe('IAST TaintTracking Operations', () => {
     createTransaction: id => id,
     removeTransaction: id => id,
     setMaxTransactions: () => {},
-    newTaintedString: id => id,
+    newTaintedString: (id, value) => value,
     isTainted: id => id,
     getRanges: id => id,
     concat: id => id,
@@ -48,6 +48,111 @@ describe('IAST TaintTracking Operations', () => {
       TaintedUtils = require('@datadog/native-iast-taint-tracking')
     }).to.not.throw(Error)
     expect(TaintedUtils).to.not.be.null
+  })
+
+  describe('taintObject', () => {
+    it('Given a null iastContext and null obj should return the object', () => {
+      const obj = null
+
+      const result = taintTrackingOperations.taintObject(null, obj, null)
+      expect(taintedUtilsMock.newTaintedString).not.to.have.been.called
+      expect(result).to.equal(obj)
+    })
+
+    it('Given a null iastContext should return the object', () => {
+      const obj = {}
+
+      const result = taintTrackingOperations.taintObject(null, obj, null)
+      expect(taintedUtilsMock.newTaintedString).not.to.have.been.called
+      expect(result).to.equal(obj)
+    })
+
+    it('Given an undefined iastContext should return the object', () => {
+      const obj = {}
+
+      const result = taintTrackingOperations.taintObject(undefined, obj, null)
+      expect(taintedUtilsMock.newTaintedString).not.to.have.been.called
+      expect(result).to.equal(obj)
+    })
+
+    it('Given an undefined iastContext and undefined object should return the object', () => {
+      const obj = undefined
+
+      const result = taintTrackingOperations.taintObject(undefined, obj, null)
+      expect(taintedUtilsMock.newTaintedString).not.to.have.been.called
+      expect(result).to.equal(obj)
+    })
+
+    it('Given a valid iastContext and empty object should return the object', () => {
+      const iastContext = {}
+      const transactionId = 'id'
+      taintTrackingOperations.createTransaction(transactionId, iastContext)
+      const obj = {}
+
+      const result = taintTrackingOperations.taintObject(null, obj, null)
+      expect(taintedUtilsMock.newTaintedString).not.to.have.been.called
+      expect(result).to.equal(obj)
+    })
+
+    it('Given a valid iastContext and a string should return the string and call newTaintedString', () => {
+      const iastContext = {}
+      const transactionId = 'id'
+      taintTrackingOperations.createTransaction(transactionId, iastContext)
+      const obj = 'string'
+
+      const result = taintTrackingOperations.taintObject(iastContext, obj, null)
+      expect(taintedUtilsMock.newTaintedString).to.have.been.calledOnceWithExactly(transactionId, obj, null, null)
+      expect(result).to.equal(obj)
+    })
+
+    it('Given a valid iastContext and a complex object should return the obj and call newTaintedString', () => {
+      const iastContext = {}
+      const transactionId = 'id'
+      taintTrackingOperations.createTransaction(transactionId, iastContext)
+      const obj = {
+        value: 'parent',
+        child: {
+          value: 'child'
+        }
+      }
+
+      const result = taintTrackingOperations.taintObject(iastContext, obj, null)
+      expect(taintedUtilsMock.newTaintedString).to.have.been.calledTwice
+      expect(taintedUtilsMock.newTaintedString.firstCall).to.have.been
+        .calledWithExactly(transactionId, 'child', 'child.value', null)
+      expect(taintedUtilsMock.newTaintedString.secondCall).to.have.been
+        .calledWithExactly(transactionId, 'parent', 'value', null)
+      expect(result).to.equal(obj)
+    })
+
+    it('Should handle the exception', () => {
+      const iastContext = {}
+      const transactionId = 'id'
+      const obj = 'string'
+      const taintedUtils = {
+        newTaintedString: id => { throw new Error() },
+        trim: id => id
+      }
+
+      const iastLogStub = {
+        error (data) { return this },
+        errorAndPublish (data) { return this }
+      }
+
+      const logSpy = sinon.spy(iastLogStub)
+      const taintTrackingOperations = proxyquire('../../../../src/appsec/iast/taint-tracking/operations', {
+        '@datadog/native-iast-taint-tracking': taintedUtils,
+        '../../../../../datadog-core': datadogCore,
+        '../iast-log': logSpy,
+        './taint-tracking-impl': taintTrackingImpl
+      })
+
+      taintTrackingOperations.createTransaction(transactionId, iastContext)
+      const result = taintTrackingOperations.taintObject(iastContext, obj, null)
+      expect(logSpy.error).to.have.been.calledOnce
+      expect(logSpy.errorAndPublish).to.have.been.calledOnce
+      expect(result).to.equal(obj)
+    })
   })
 
   describe('createTransaction', () => {
