@@ -101,4 +101,27 @@ describe('IAST Taint tracking plugin', () => {
       originType
     )
   })
+
+  it('Should non fail on null value', () => {
+    const transactionId = 'TRANSACTION_ID'
+    const iastContext = { [taintTrackingOperations.IAST_TRANSACTION_ID]: transactionId }
+    const originType = 'ORIGIN_TYPE'
+    const propertyToBeTainted = 'invalid'
+    const objToBeTainted = {
+      [propertyToBeTainted]: null
+    }
+
+    iastContextFunctions.saveIastContext(
+      store,
+      {},
+      iastContext
+    )
+
+    taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
+    expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+      iastContext,
+      objToBeTainted[propertyToBeTainted],
+      originType
+    )
+  })
 })
