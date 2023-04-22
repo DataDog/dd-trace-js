@@ -13,7 +13,7 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const webAppServer = require('../ci-visibility/web-app-server')
-const { TEST_STATUS } = require('../../packages/dd-trace/src/plugins/util/test')
+const { TEST_STATUS, TEST_SOURCE_START } = require('../../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
 // This is done because from playwright@>=1.22.0 node 12 is not supported
@@ -94,6 +94,10 @@ versions.forEach((version) => {
               'fail',
               'skip'
             ])
+
+            testEvents.forEach(testEvent => {
+              assert.exists(testEvent.content.metrics[TEST_SOURCE_START])
+            })
 
             stepEvents.forEach(stepEvent => {
               assert.equal(stepEvent.content.name, 'playwright.step')
