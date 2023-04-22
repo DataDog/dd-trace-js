@@ -10,7 +10,8 @@ const {
   getTestSuitePath,
   getTestParametersString,
   getTestSuiteCommonTags,
-  addIntelligentTestRunnerSpanTags
+  addIntelligentTestRunnerSpanTags,
+  TEST_SOURCE_START
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
@@ -85,9 +86,9 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:start', (test) => {
+    this.addSub('ci:mocha:test:start', ({ test, testStartLine }) => {
       const store = storage.getStore()
-      const span = this.startTestSpan(test)
+      const span = this.startTestSpan(test, testStartLine)
 
       this.enter(span, store)
     })
@@ -153,7 +154,7 @@ class MochaPlugin extends CiPlugin {
     })
   }
 
-  startTestSpan (test) {
+  startTestSpan (test, testStartLine) {
     const testName = test.fullTitle()
     const { file: testSuiteAbsolutePath, title } = test
 
@@ -161,6 +162,10 @@ class MochaPlugin extends CiPlugin {
     const testParametersString = getTestParametersString(this._testNameToParams, title)
     if (testParametersString) {
       extraTags[TEST_PARAMETERS] = testParametersString
+    }
+
+    if (testStartLine) {
+      extraTags[TEST_SOURCE_START] = testStartLine
     }
 
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)

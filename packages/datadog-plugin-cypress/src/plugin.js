@@ -16,6 +16,7 @@ const {
   TEST_SESSION_ID,
   TEST_COMMAND,
   TEST_MODULE,
+  TEST_SOURCE_START,
   finishAllTraceSpans
 } = require('../../dd-trace/src/plugins/util/test')
 
@@ -204,7 +205,7 @@ module.exports = (on, config) => {
       return activeSpan ? activeSpan.context().toTraceId() : null
     },
     'dd:afterEach': (test) => {
-      const { state, error, isRUMActive } = test
+      const { state, error, isRUMActive, testSourceLine } = test
       if (activeSpan) {
         activeSpan.setTag(TEST_STATUS, CYPRESS_STATUS_TO_TEST_STATUS[state])
         if (error) {
@@ -212,6 +213,9 @@ module.exports = (on, config) => {
         }
         if (isRUMActive) {
           activeSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
+        }
+        if (testSourceLine) {
+          activeSpan.setTag(TEST_SOURCE_START, testSourceLine)
         }
         activeSpan.finish()
       }
