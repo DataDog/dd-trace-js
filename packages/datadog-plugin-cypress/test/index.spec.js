@@ -12,6 +12,7 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_SOURCE_FILE,
+  TEST_SOURCE_START,
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,
   CI_APP_ORIGIN,
@@ -82,6 +83,7 @@ describe('Plugin', function () {
             [COMPONENT]: 'cypress'
           })
           expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
+          expect(testSpan.metrics[TEST_SOURCE_START]).to.exist
         }, { timeoutMs: testTimeout })
         const failingTestPromise = agent.use(traces => {
           const testSpan = traces[0][0]
@@ -112,6 +114,7 @@ describe('Plugin', function () {
           expect(testSpan.meta[ERROR_MESSAGE]).to.contain(
             "expected '<div.hello-world>' to have text 'Bye World', but the text was 'Hello World'"
           )
+          expect(testSpan.metrics[TEST_SOURCE_START]).to.exist
         }, { timeoutMs: testTimeout })
         Promise.all([passingTestPromise, failingTestPromise]).then(() => done()).catch(done)
       })
