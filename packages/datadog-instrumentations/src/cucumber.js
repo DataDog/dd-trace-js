@@ -90,7 +90,17 @@ function wrapRun (pl, isLatestVersion) {
       if (!pickleResultByFile[testSuiteFullPath]) { // first test in suite
         testSuiteStartCh.publish(testSuiteFullPath)
       }
-      testStartCh.publish({ testName: this.pickle.name, fullTestSuite: testSuiteFullPath })
+
+      const testSourceLine = this.gherkinDocument &&
+        this.gherkinDocument.feature &&
+        this.gherkinDocument.feature.location &&
+        this.gherkinDocument.feature.location.line
+
+      testStartCh.publish({
+        testName: this.pickle.name,
+        fullTestSuite: testSuiteFullPath,
+        testSourceLine
+      })
       try {
         const promise = run.apply(this, arguments)
         promise.finally(() => {

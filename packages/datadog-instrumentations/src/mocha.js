@@ -9,7 +9,8 @@ const {
   resetCoverage,
   mergeCoverage,
   getTestSuitePath,
-  fromCoverageMapToCoverage
+  fromCoverageMapToCoverage,
+  getTestLineStart
 } = require('../../dd-trace/src/plugins/util/test')
 
 const testStartCh = channel('ci:mocha:test:start')
@@ -35,6 +36,7 @@ const patched = new WeakSet()
 const testToAr = new WeakMap()
 const originalFns = new WeakMap()
 const testFileToSuiteAr = new Map()
+const testToStartLine = new WeakMap()
 
 // `isWorker` is true if it's a Mocha worker
 let isWorker = false
@@ -207,10 +209,11 @@ function mochaHook (Runner) {
       if (isRetry(test)) {
         return
       }
+      const testStartLine = testToStartLine.get(test)
       const asyncResource = new AsyncResource('bound-anonymous-fn')
       testToAr.set(test.fn, asyncResource)
       asyncResource.runInAsyncScope(() => {
-        testStartCh.publish(test)
+        testStartCh.publish({ test, testStartLine })
       })
     })
 
@@ -382,6 +385,20 @@ addHook({
     return runner
   })
   return Mocha
+})
+
+addHook({
+  name: 'mocha',
+  versions: ['>=5.2.0'],
+  file: 'lib/suite.js'
+}, (Suite) => {
+  shimmer.wrap(Suite.prototype, 'addTest', addTest => function (test) {
+    // In here, the test definition is in the stack, so we search for it.
+    const startLine = getTestLineStart(new Error(), test.file)
+    testToStartLine.set(test, startLine)
+    return addTest.apply(this, arguments)
+  })
+  return Suite
 })
 
 addHook({
