@@ -9,7 +9,8 @@ const {
   addIntelligentTestRunnerSpanTags,
   TEST_PARAMETERS,
   TEST_COMMAND,
-  TEST_FRAMEWORK_VERSION
+  TEST_FRAMEWORK_VERSION,
+  TEST_SOURCE_START
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -190,12 +191,13 @@ class JestPlugin extends CiPlugin {
   }
 
   startTestSpan (test) {
-    const { suite, name, runner, testParameters, frameworkVersion } = test
+    const { suite, name, runner, testParameters, frameworkVersion, testStartLine } = test
 
     const extraTags = {
       [JEST_TEST_RUNNER]: runner,
       [TEST_PARAMETERS]: testParameters,
-      [TEST_FRAMEWORK_VERSION]: frameworkVersion
+      [TEST_FRAMEWORK_VERSION]: frameworkVersion,
+      [TEST_SOURCE_START]: testStartLine
     }
 
     return super.startTestSpan(name, suite, this.testSuiteSpan, extraTags)
