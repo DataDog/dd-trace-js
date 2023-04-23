@@ -4,20 +4,20 @@ const { decodePathwayContext } = require('../../datadog-plugin-kafkajs/src/hash'
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 
-const { DSMStatsExporter } = require('./exporters/dsm-stats')
+const { LatencyStatsExporter } = require('./exporters/latency-stats')
 
 class AggStats {
-  constructor (hash, parentHash, edgeTags) {
-    this.hash = hash
-    this.parentHash = parentHash
-    this.edgeTags = edgeTags
+  constructor (aggKey) {
+    this.hash = aggKey.hash
+    this.parentHash = aggKey.parentHash
+    this.edgeTags = aggKey.edgeTags
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
   }
 
   record (checkpoint) {
-    const edgeLatency = checkpoint.metrics.edgelatency
-    const pathwayLatency = checkpoint.metrics.pathwaylatency
+    const edgeLatency = checkpoint.metrics.edge_latency
+    const pathwayLatency = checkpoint.metrics.pathway_latency
     this.edgeLatency.accept(edgeLatency)
     this.pathwayLatency.accept(pathwayLatency)
   }
@@ -36,15 +36,14 @@ class AggStats {
 class AggKey {
   constructor (checkpoint) {
     this.hash = decodePathwayContext(checkpoint.metrics['dd-pathway-ctx'])[0]
-    this.parentHash = checkpoint.metrics['parentHash']
-    this.edgeTags = checkpoint.metrics['edgeTags']
+    this.parentHash = checkpoint.metrics.parent_hash
+    this.edgeTags = checkpoint.metrics.edge_tags
   }
 
   toString () {
     return [
-      this.hash,
-      this.parentHash,
-      this.edgeTags
+      this.hash.toString(),
+      this.parentHash.toString()
     ].join(',')
   }
 }
@@ -81,7 +80,7 @@ class LatencyStatsProcessor {
     env,
     tags
   } = {}) {
-    this.exporter = new DSMStatsExporter({
+    this.exporter = new LatencyStatsExporter({
       hostname,
       port,
       tags,
@@ -148,4 +147,10 @@ class LatencyStatsProcessor {
   }
 }
 
-module.exports = { LatencyStatsProcessor, AggStats }
+module.exports = {
+  LatencyStatsProcessor,
+  AggKey,
+  AggStats,
+  SpanBuckets,
+  TimeBuckets
+}

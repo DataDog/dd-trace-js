@@ -41,11 +41,11 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       const checkpoint = {
         currentTimestamp: currentTimestamp,
         metrics: {
-          'parentHash': parentHash,
-          'edgeTags': { 'service': service, 'env': env, 'topic': topic },
+          'parent_hash': parentHash,
+          'edge_tags': { 'service': service, 'env': env, 'topic': topic },
           'dd-pathway-ctx': pathwayCtx,
-          'edgeLatency': edgeLatency,
-          'pathwayLatency': pathwayLatency
+          'edge_latency': edgeLatency,
+          'pathway_latency': pathwayLatency
         }
       }
 

@@ -116,7 +116,7 @@
     "int64-buffer": "^0.1.9",
     "jszip": "^3.5.0",
     "mkdirp": "^0.5.1",
-    "mocha": "8",
+    "mocha": "^10.2.0",
     "msgpack-lite": "^0.1.26",
     "multer": "^1.4.5-lts.1",
     "nock": "^11.3.3",
