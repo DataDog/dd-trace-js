@@ -7,7 +7,7 @@ const BaseWriter = require('../common/writer')
 const request = require('../common/request')
 const log = require('../../log')
 
-class DSMWriter extends BaseWriter {
+class Writer extends BaseWriter {
   constructor ({ url }) {
     super(...arguments)
     this._url = url
@@ -50,5 +50,5 @@ function makeRequest (data, url, cb) {
 }
 
 module.exports = {
-  DSMWriter
+  Writer
 }
