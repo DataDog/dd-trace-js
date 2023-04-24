@@ -8,7 +8,6 @@ const fs = require('fs')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
-const { html } = require('../../src/appsec/blocked_templates')
 
 withVersions('body-parser', 'body-parser', version => {
   describe('Suspicious request blocking - body-parser', () => {
@@ -82,12 +81,7 @@ withVersions('body-parser', 'body-parser', version => {
 
     beforeEach(async () => {
       requestBody = sinon.stub()
-      appsec.enable(new Config({
-        appsec: {
-          enabled: true,
-          rules: rulesPath
-        }
-      }))
+      appsec.enable(new Config({ appsec: { enabled: true, rules: rulesPath } }))
     })
 
     afterEach(() => {
@@ -112,13 +106,23 @@ withVersions('body-parser', 'body-parser', version => {
     })
 
     it('should block the request when attack is detected', async () => {
+      const data = {
+        errors: [
+          {
+            title: "You've been blocked",
+            detail: 'Sorry, you cannot access this page. Please contact the customer service team. Security provided' +
+            ' by Datadog.'
+          }
+        ]
+      }
+
       try {
         await axios.post(`http://localhost:${port}/`, { key: 'testattack' })
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
         expect(e.response.status).to.be.equals(403)
-        expect(e.response.data).to.be.deep.equal(html)
+        expect(e.response.data).to.be.deep.equal(data)
         expect(requestBody).not.to.be.called
       }
     })
