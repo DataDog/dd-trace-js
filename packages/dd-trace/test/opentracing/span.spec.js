@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/tap')
+
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
@@ -135,6 +137,7 @@ describe('Span', () => {
       _trace: {
         started: ['span'],
         finished: [],
+        tags: {},
         origin: 'synthetics'
       }
     }
@@ -145,6 +148,17 @@ describe('Span', () => {
     expect(span.context()._parentId).to.deep.equal('456')
     expect(span.context()._baggageItems).to.deep.equal({ foo: 'bar' })
     expect(span.context()._trace).to.equal(parent._trace)
+  })
+
+  it('should generate a 128-bit trace ID when configured', () => {
+    span = new Span(tracer, processor, prioritySampler, {
+      operationName: 'operation',
+      traceId128BitGenerationEnabled: true
+    })
+
+    expect(span.context()._traceId).to.deep.equal('123')
+    expect(span.context()._trace.tags).to.have.property('_dd.p.tid')
+    expect(span.context()._trace.tags['_dd.p.tid']).to.match(/^[a-f0-9]{8}0{8}$/)
   })
 
   describe('tracer', () => {

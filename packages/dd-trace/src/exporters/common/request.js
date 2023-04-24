@@ -8,14 +8,11 @@ const http = require('http')
 const https = require('https')
 const { parse: urlParse } = require('url')
 const docker = require('./docker')
+const { httpAgent, httpsAgent } = require('./agents')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 
-const keepAlive = true
-const maxSockets = 1
 const maxActiveRequests = 8
-const httpAgent = new http.Agent({ keepAlive, maxSockets })
-const httpsAgent = new https.Agent({ keepAlive, maxSockets })
 const containerId = docker.id()
 
 let activeRequests = 0
@@ -57,13 +54,13 @@ function request (data, options, callback) {
   }
 
   if (options.url) {
-    const url = typeof options.url === 'object' ? options.url : fromUrlString(options.url)
+    const url = typeof options.url === 'object' ? urlToOptions(options.url) : fromUrlString(options.url)
     if (url.protocol === 'unix:') {
       options.socketPath = url.pathname
     } else {
       if (!options.path) options.path = url.path
       options.protocol = url.protocol
-      options.hostname = url.hostname
+      options.hostname = url.hostname // for IPv6 this should be '::1' and not '[::1]'
       options.port = url.port
     }
   }

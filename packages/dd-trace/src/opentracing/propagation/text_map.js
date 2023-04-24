@@ -132,7 +132,7 @@ class TextMapPropagator {
     const hasB3multi = this._hasPropagationStyle('inject', 'b3multi')
     if (!(hasB3 || hasB3multi)) return
 
-    carrier[b3TraceKey] = spanContext._traceId.toString(16)
+    carrier[b3TraceKey] = this._getB3TraceId(spanContext)
     carrier[b3SpanKey] = spanContext._spanId.toString(16)
     carrier[b3SampledKey] = spanContext._sampling.priority >= AUTO_KEEP ? '1' : '0'
 
@@ -149,7 +149,7 @@ class TextMapPropagator {
     const hasB3SingleHeader = this._hasPropagationStyle('inject', 'b3 single header')
     if (!hasB3SingleHeader) return null
 
-    const traceId = spanContext._traceId.toString(16)
+    const traceId = this._getB3TraceId(spanContext)
     const spanId = spanContext._spanId.toString(16)
     const sampled = spanContext._sampling.priority >= AUTO_KEEP ? '1' : '0'
 
@@ -277,6 +277,8 @@ class TextMapPropagator {
       spanContext._sampling.priority = priority
     }
 
+    this._extract128BitTraceId(b3[b3TraceKey], spanContext)
+
     return spanContext
   }
 
@@ -321,6 +323,8 @@ class TextMapPropagator {
         tracestate
       })
 
+      this._extract128BitTraceId(traceId, spanContext)
+
       tracestate.forVendor('dd', state => {
         for (const [key, value] of state.entries()) {
           switch (key) {
@@ -339,10 +343,10 @@ class TextMapPropagator {
               spanContext._trace.origin = value
               break
             case 't.dm': {
-              const mechanism = parseInt(value, 10)
+              const mechanism = -Math.abs(parseInt(value, 10))
               if (Number.isInteger(mechanism)) {
                 spanContext._sampling.mechanism = mechanism
-                spanContext._trace.tags['_dd.p.dm'] = mechanism
+                spanContext._trace.tags['_dd.p.dm'] = String(mechanism)
               }
               break
             }
@@ -484,6 +488,20 @@ class TextMapPropagator {
     }
   }
 
+  _extract128BitTraceId (traceId, spanContext) {
+    if (!spanContext) return
+
+    const buffer = spanContext._traceId.toBuffer()
+
+    if (buffer.length !== 16) return
+
+    const tid = traceId.substring(0, 16)
+
+    if (tid === '0000000000000000') return
+
+    spanContext._trace.tags['_dd.p.tid'] = tid
+  }
+
   _validateTagKey (key) {
     return tagKeyExpr.test(key)
   }
@@ -500,6 +518,14 @@ class TextMapPropagator {
     } else if (sampled === '0') {
       return AUTO_REJECT
     }
+  }
+
+  _getB3TraceId (spanContext) {
+    if (spanContext._traceId.toBuffer().length <= 8 && spanContext._trace.tags['_dd.p.tid']) {
+      return spanContext._trace.tags['_dd.p.tid'] + spanContext._traceId.toString(16)
+    }
+
+    return spanContext._traceId.toString(16)
   }
 }
 

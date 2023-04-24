@@ -1,7 +1,10 @@
 'use strict'
 
+require('../setup/tap')
+
 const { expect } = require('chai')
 const os = require('os')
+const path = require('path')
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
 const CpuProfiler = require('../../src/profiling/profilers/cpu')
@@ -11,9 +14,16 @@ const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 
 describe('config', () => {
   let Config
+  let env
 
   beforeEach(() => {
     Config = require('../../src/profiling/config').Config
+    env = process.env
+    process.env = {}
+  })
+
+  afterEach(() => {
+    process.env = env
   })
 
   it('should have the correct defaults', () => {
@@ -133,5 +143,56 @@ describe('config', () => {
     const expectedUrl = new URL('http://[::1]:8126').toString()
 
     expect(exporterUrl).to.equal(expectedUrl)
+  })
+
+  it('should disable OOM heap profiler by default', () => {
+    const config = new Config()
+    expect(config.oomMonitoring).to.deep.equal({
+      enabled: false,
+      heapLimitExtensionSize: 0,
+      maxHeapExtensionCount: 0,
+      exportStrategies: [],
+      exportCommand: undefined
+    })
+  })
+
+  it('should support OOM heap profiler configuration', () => {
+    process.env = {
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: 'false'
+    }
+    const config = new Config({})
+
+    expect(config.oomMonitoring).to.deep.equal({
+      enabled: false,
+      heapLimitExtensionSize: 0,
+      maxHeapExtensionCount: 0,
+      exportStrategies: [],
+      exportCommand: undefined
+    })
+  })
+
+  it('should support OOM heap profiler configuration', () => {
+    process.env = {
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: '1',
+      DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '1000000',
+      DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '2',
+      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process,interrupt,async,interrupt'
+    }
+
+    const config = new Config({})
+
+    expect(config.oomMonitoring).to.deep.equal({
+      enabled: true,
+      heapLimitExtensionSize: 1000000,
+      maxHeapExtensionCount: 2,
+      exportStrategies: ['process', 'interrupt', 'async'],
+      exportCommand: [
+        process.execPath,
+        path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
+        'http://localhost:8126/',
+        `host:${config.host},service:node,snapshot:on_oom`,
+        'space'
+      ]
+    })
   })
 })

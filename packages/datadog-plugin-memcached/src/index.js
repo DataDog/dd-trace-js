@@ -1,9 +1,10 @@
 'use strict'
 
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const CachePlugin = require('../../dd-trace/src/plugins/cache')
 
 class MemcachedPlugin extends CachePlugin {
-  static get name () { return 'memcached' }
+  static get id () { return 'memcached' }
 
   start ({ client, server, query }) {
     const address = getAddress(client, server, query)
@@ -16,7 +17,7 @@ class MemcachedPlugin extends CachePlugin {
       meta: {
         'memcached.command': query.command,
         'out.host': address[0],
-        'out.port': address[1]
+        [CLIENT_PORT_KEY]: address[1]
       }
     })
   }

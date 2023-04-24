@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 const os = require('os')
 const tracerVersion = require('../../../package.json').version
 

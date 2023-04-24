@@ -76,7 +76,7 @@ function getRootDir (playwrightRunner) {
 }
 
 function testBeginHandler (test) {
-  const { title: testName, location: { file: testSuiteAbsolutePath }, _type } = test
+  const { _requireFile: testSuiteAbsolutePath, title: testName, _type, location: { line: testSourceLine } } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
     return
@@ -96,12 +96,12 @@ function testBeginHandler (test) {
   const testAsyncResource = new AsyncResource('bound-anonymous-fn')
   testToAr.set(test, testAsyncResource)
   testAsyncResource.runInAsyncScope(() => {
-    testStartCh.publish({ testName, testSuiteAbsolutePath })
+    testStartCh.publish({ testName, testSuiteAbsolutePath, testSourceLine })
   })
 }
 
 function testEndHandler (test, testStatus, error) {
-  const { location: { file: testSuiteAbsolutePath }, results, _type } = test
+  const { _requireFile: testSuiteAbsolutePath, results, _type } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
     return

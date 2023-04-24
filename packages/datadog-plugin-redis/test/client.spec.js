@@ -135,6 +135,42 @@ describe('Plugin', () => {
           await promise
         })
       })
+
+      describe('with blocklist', () => {
+        before(() => {
+          return agent.load('redis', {
+            blocklist: [
+              'Set', // this should block set and SET commands
+              'FOO'
+            ]
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          redis = require(`../../../versions/${moduleName}@${version}`).get()
+          client = redis.createClient()
+
+          await client.connect()
+        })
+
+        afterEach(async () => {
+          await client.quit()
+        })
+
+        it('should be able to filter commands on a case-insensitive basis', async () => {
+          const promise = agent.use(traces => {
+            expect(traces[0][0]).to.have.property('resource', 'GET')
+          })
+
+          await client.set('turtle', 'like')
+          await client.get('turtle')
+          await promise
+        })
+      })
     })
   })
 })

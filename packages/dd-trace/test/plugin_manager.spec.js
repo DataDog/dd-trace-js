@@ -1,6 +1,8 @@
 'use strict'
 
-const { channel } = require('diagnostics_channel')
+require('./setup/tap')
+
+const { channel } = require('../../diagnostics_channel')
 const proxyquire = require('proxyquire')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
@@ -21,30 +23,30 @@ describe('Plugin Manager', () => {
     class FakePlugin {
       constructor (aTracer) {
         expect(aTracer).to.equal(tracer)
-        instantiated.push(this.constructor.name)
+        instantiated.push(this.constructor.id)
       }
     }
 
     const plugins = {
       one: {},
       two: class Two extends FakePlugin {
-        static get name () {
+        static get id () {
           return 'two'
         }
       },
       three: {},
       four: class Four extends FakePlugin {
-        static get name () {
+        static get id () {
           return 'four'
         }
       },
       five: class Five extends FakePlugin {
-        static get name () {
+        static get id () {
           return 'five'
         }
       },
       six: class Six extends FakePlugin {
-        static get name () {
+        static get id () {
           return 'six'
         }
       },

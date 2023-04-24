@@ -36,12 +36,14 @@ const TEST_SKIP_REASON = 'test.skip_reason'
 const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
 const TEST_CODE_OWNERS = 'test.codeowners'
 const TEST_SOURCE_FILE = 'test.source.file'
+const TEST_SOURCE_START = 'test.source.start'
 const LIBRARY_VERSION = 'library_version'
 const TEST_COMMAND = 'test.command'
-const TEST_BUNDLE = 'test.bundle'
+const TEST_MODULE = 'test.module'
 const TEST_SESSION_ID = 'test_session_id'
 const TEST_MODULE_ID = 'test_module_id'
 const TEST_SUITE_ID = 'test_suite_id'
+const TEST_TOOLCHAIN = 'test.toolchain'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
@@ -54,6 +56,10 @@ const TEST_MODULE_ITR_SKIPPING_ENABLED = 'test_module.itr.tests_skipping.enabled
 const TEST_MODULE_CODE_COVERAGE_ENABLED = 'test_module.code_coverage.enabled'
 
 const TEST_CODE_COVERAGE_LINES_TOTAL = 'test.codecov_lines_total'
+
+// jest worker variables
+const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
+const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
 
 module.exports = {
   TEST_CODE_OWNERS,
@@ -70,6 +76,9 @@ module.exports = {
   TEST_SOURCE_FILE,
   CI_APP_ORIGIN,
   LIBRARY_VERSION,
+  JEST_WORKER_TRACE_PAYLOAD_CODE,
+  JEST_WORKER_COVERAGE_PAYLOAD_CODE,
+  TEST_SOURCE_START,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -82,11 +91,12 @@ module.exports = {
   getTestModuleCommonTags,
   getTestSuiteCommonTags,
   TEST_COMMAND,
+  TEST_TOOLCHAIN,
   TEST_SESSION_ID,
   TEST_MODULE_ID,
   TEST_SUITE_ID,
   TEST_ITR_TESTS_SKIPPED,
-  TEST_BUNDLE,
+  TEST_MODULE,
   TEST_SESSION_ITR_SKIPPING_ENABLED,
   TEST_SESSION_CODE_COVERAGE_ENABLED,
   TEST_MODULE_ITR_SKIPPING_ENABLED,
@@ -96,7 +106,17 @@ module.exports = {
   getCoveredFilenamesFromCoverage,
   resetCoverage,
   mergeCoverage,
-  fromCoverageMapToCoverage
+  fromCoverageMapToCoverage,
+  getTestLineStart
+}
+
+// Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
+function getPkgManager () {
+  try {
+    return process.env.npm_config_user_agent.split(' ')[0].replace('/', '-')
+  } catch (e) {
+    return ''
+  }
 }
 
 function getTestEnvironmentMetadata (testFramework, config) {
@@ -261,28 +281,30 @@ function getTestLevelCommonTags (command, testFrameworkVersion) {
   }
 }
 
-function getTestSessionCommonTags (command, testFrameworkVersion) {
+function getTestSessionCommonTags (command, testFrameworkVersion, testFramework) {
   return {
     [SPAN_TYPE]: 'test_session_end',
     [RESOURCE_NAME]: `test_session.${command}`,
+    [TEST_MODULE]: testFramework,
+    [TEST_TOOLCHAIN]: getPkgManager(),
     ...getTestLevelCommonTags(command, testFrameworkVersion)
   }
 }
 
-function getTestModuleCommonTags (command, testFrameworkVersion) {
+function getTestModuleCommonTags (command, testFrameworkVersion, testFramework) {
   return {
     [SPAN_TYPE]: 'test_module_end',
     [RESOURCE_NAME]: `test_module.${command}`,
-    [TEST_BUNDLE]: command,
+    [TEST_MODULE]: testFramework,
     ...getTestLevelCommonTags(command, testFrameworkVersion)
   }
 }
 
-function getTestSuiteCommonTags (command, testFrameworkVersion, testSuite) {
+function getTestSuiteCommonTags (command, testFrameworkVersion, testSuite, testFramework) {
   return {
     [SPAN_TYPE]: 'test_suite_end',
     [RESOURCE_NAME]: `test_suite.${testSuite}`,
-    [TEST_BUNDLE]: command,
+    [TEST_MODULE]: testFramework,
     [TEST_SUITE]: testSuite,
     ...getTestLevelCommonTags(command, testFrameworkVersion)
   }
@@ -361,4 +383,19 @@ function fromCoverageMapToCoverage (coverageMap) {
     acc[filename] = fileCoverage.data
     return acc
   }, {})
+}
+
+// Get the start line of a test by inspecting a given error's stack trace
+function getTestLineStart (err, testSuitePath) {
+  if (!err.stack) {
+    return null
+  }
+  // From https://github.com/felixge/node-stack-trace/blob/ba06dcdb50d465cd440d84a563836e293b360427/index.js#L40
+  const testFileLine = err.stack.split('\n').find(line => line.includes(testSuitePath))
+  try {
+    const testFileLineMatch = testFileLine.match(/at (?:(.+?)\s+\()?(?:(.+?):(\d+)(?::(\d+))?|([^)]+))\)?/)
+    return parseInt(testFileLineMatch[3], 10) || null
+  } catch (e) {
+    return null
+  }
 }

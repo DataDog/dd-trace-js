@@ -1,8 +1,10 @@
 'use strict'
 
+require('./setup/tap')
+
 const { expect } = require('chai')
 const semver = require('semver')
-const dc = require('diagnostics_channel')
+const dc = require('../../diagnostics_channel')
 
 describe('iitm.js', () => {
   let hookFn

@@ -100,6 +100,9 @@ typings/
 # Ignore all local history of files
 .history
 
+# IntelliJ
+.idea
+
 
 # End of https://www.gitignore.io/api/node,macos,visualstudiocode
 
@@ -117,6 +120,3 @@ acmeair-nodejs
 !packages/*/test/**/node_modules
 packages/datadog-plugin-next/test/package.json
 packages/datadog-plugin-next/test/node_modules
-
-# Mocha JUnit reports to upload to CI Visibility
-test-results/

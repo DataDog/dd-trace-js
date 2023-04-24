@@ -15,9 +15,12 @@ const {
   TEST_MODULE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND,
-  TEST_BUNDLE,
+  TEST_MODULE,
+  TEST_SOURCE_START,
   finishAllTraceSpans
 } = require('../../dd-trace/src/plugins/util/test')
+
+const TEST_FRAMEWORK_NAME = 'cypress'
 
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 
@@ -51,9 +54,9 @@ function getCypressVersion (details) {
 
 function getCypressCommand (details) {
   if (!details) {
-    return 'cypress'
+    return TEST_FRAMEWORK_NAME
   }
-  return `cypress ${details.specPattern || ''}`
+  return `${TEST_FRAMEWORK_NAME} ${details.specPattern || ''}`
 }
 
 function getSessionStatus (summary) {
@@ -78,7 +81,7 @@ function getSuiteStatus (suiteStats) {
 
 module.exports = (on, config) => {
   const tracer = require('../../dd-trace')
-  const testEnvironmentMetadata = getTestEnvironmentMetadata('cypress')
+  const testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
   const codeOwnersEntries = getCodeOwnersFileEntries()
 
@@ -95,21 +98,21 @@ module.exports = (on, config) => {
     command = getCypressCommand(details)
     frameworkVersion = getCypressVersion(details)
 
-    const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion)
-    const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion)
+    const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
+    const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
 
-    testSessionSpan = tracer.startSpan('cypress.test_session', {
+    testSessionSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
       childOf,
       tags: {
-        [COMPONENT]: 'cypress',
+        [COMPONENT]: TEST_FRAMEWORK_NAME,
         ...testEnvironmentMetadata,
         ...testSessionSpanMetadata
       }
     })
-    testModuleSpan = tracer.startSpan('cypress.test_module', {
+    testModuleSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
       childOf: testSessionSpan,
       tags: {
-        [COMPONENT]: 'cypress',
+        [COMPONENT]: TEST_FRAMEWORK_NAME,
         ...testEnvironmentMetadata,
         ...testModuleSpanMetadata
       }
@@ -117,14 +120,16 @@ module.exports = (on, config) => {
   })
 
   on('after:run', (suiteStats) => {
-    const testStatus = getSessionStatus(suiteStats)
-    testModuleSpan.setTag(TEST_STATUS, testStatus)
-    testSessionSpan.setTag(TEST_STATUS, testStatus)
+    if (testSessionSpan && testModuleSpan) {
+      const testStatus = getSessionStatus(suiteStats)
+      testModuleSpan.setTag(TEST_STATUS, testStatus)
+      testSessionSpan.setTag(TEST_STATUS, testStatus)
 
-    testModuleSpan.finish()
-    testSessionSpan.finish()
+      testModuleSpan.finish()
+      testSessionSpan.finish()
 
-    finishAllTraceSpans(testSessionSpan)
+      finishAllTraceSpans(testSessionSpan)
+    }
 
     return new Promise(resolve => {
       tracer._tracer._exporter._writer.flush(() => {
@@ -137,11 +142,11 @@ module.exports = (on, config) => {
       if (testSuiteSpan) {
         return null
       }
-      const testSuiteSpanMetadata = getTestSuiteCommonTags(command, frameworkVersion, suite)
-      testSuiteSpan = tracer.startSpan('cypress.test_suite', {
+      const testSuiteSpanMetadata = getTestSuiteCommonTags(command, frameworkVersion, suite, TEST_FRAMEWORK_NAME)
+      testSuiteSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
         childOf: testModuleSpan,
         tags: {
-          [COMPONENT]: 'cypress',
+          [COMPONENT]: TEST_FRAMEWORK_NAME,
           ...testEnvironmentMetadata,
           ...testSuiteSpanMetadata
         }
@@ -149,25 +154,28 @@ module.exports = (on, config) => {
       return null
     },
     'dd:testSuiteFinish': (suiteStats) => {
-      const status = getSuiteStatus(suiteStats)
-      testSuiteSpan.setTag(TEST_STATUS, status)
-      testSuiteSpan.finish()
-      testSuiteSpan = null
+      if (testSuiteSpan) {
+        const status = getSuiteStatus(suiteStats)
+        testSuiteSpan.setTag(TEST_STATUS, status)
+        testSuiteSpan.finish()
+        testSuiteSpan = null
+      }
       return null
     },
     'dd:beforeEach': (test) => {
       const { testName, testSuite } = test
-      const testSuiteId = testSuiteSpan.context().toSpanId()
-      const testSessionId = testSessionSpan.context().toTraceId()
-      const testModuleId = testModuleSpan.context().toSpanId()
 
       const testSuiteTags = {
-        [TEST_SUITE_ID]: testSuiteId,
-        [TEST_SESSION_ID]: testSessionId,
         [TEST_COMMAND]: command,
-        [TEST_MODULE_ID]: testModuleId,
         [TEST_COMMAND]: command,
-        [TEST_BUNDLE]: command
+        [TEST_MODULE]: TEST_FRAMEWORK_NAME
+      }
+      if (testSuiteSpan) {
+        testSuiteTags[TEST_SUITE_ID] = testSuiteSpan.context().toSpanId()
+      }
+      if (testSessionSpan && testModuleSpan) {
+        testSuiteTags[TEST_SESSION_ID] = testSessionSpan.context().toTraceId()
+        testSuiteTags[TEST_MODULE_ID] = testModuleSpan.context().toSpanId()
       }
 
       const {
@@ -183,10 +191,10 @@ module.exports = (on, config) => {
       }
 
       if (!activeSpan) {
-        activeSpan = tracer.startSpan('cypress.test', {
+        activeSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
           childOf,
           tags: {
-            [COMPONENT]: 'cypress',
+            [COMPONENT]: TEST_FRAMEWORK_NAME,
             [ORIGIN_KEY]: CI_APP_ORIGIN,
             ...testSpanMetadata,
             ...testEnvironmentMetadata,
@@ -194,10 +202,10 @@ module.exports = (on, config) => {
           }
         })
       }
-      return activeSpan ? activeSpan._spanContext._traceId.toString(10) : null
+      return activeSpan ? activeSpan.context().toTraceId() : null
     },
     'dd:afterEach': (test) => {
-      const { state, error, isRUMActive } = test
+      const { state, error, isRUMActive, testSourceLine } = test
       if (activeSpan) {
         activeSpan.setTag(TEST_STATUS, CYPRESS_STATUS_TO_TEST_STATUS[state])
         if (error) {
@@ -205,6 +213,9 @@ module.exports = (on, config) => {
         }
         if (isRUMActive) {
           activeSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
+        }
+        if (testSourceLine) {
+          activeSpan.setTag(TEST_SOURCE_START, testSourceLine)
         }
         activeSpan.finish()
       }

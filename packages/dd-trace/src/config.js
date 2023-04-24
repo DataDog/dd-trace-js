@@ -9,7 +9,6 @@ const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const uuid = require('crypto-randomuuid')
-const path = require('path')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -22,16 +21,7 @@ function maybeFile (filepath) {
   try {
     return fs.readFileSync(filepath, 'utf8')
   } catch (e) {
-    return undefined
-  }
-}
-
-function maybePath (filepath) {
-  if (!filepath) return
-  try {
-    fs.openSync(filepath, 'r')
-    return filepath
-  } catch (e) {
+    log.error(e)
     return undefined
   }
 }
@@ -161,7 +151,7 @@ class Config {
 
     const DD_CIVISIBILITY_ITR_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_ITR_ENABLED,
-      false
+      true
     )
 
     const DD_SERVICE = options.service ||
@@ -196,6 +186,10 @@ class Config {
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED,
       !process.env.AWS_LAMBDA_FUNCTION_NAME
+    )
+    const DD_TELEMETRY_DEBUG_ENABLED = coalesce(
+      process.env.DD_TELEMETRY_DEBUG_ENABLED,
+      false
     )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
       options.protocolVersion,
@@ -278,6 +272,18 @@ class Config {
       false
     )
 
+    const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
+      options.traceId128BitGenerationEnabled,
+      process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
+      false
+    )
+
+    const DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = coalesce(
+      options.traceId128BitLoggingEnabled,
+      process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,
+      false
+    )
+
     let appsec = options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
 
     if (typeof appsec === 'boolean') {
@@ -322,14 +328,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
     )
     const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = coalesce(
-      maybePath(appsec.blockedTemplateHtml),
-      maybePath(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML),
-      path.join(__dirname, 'appsec', 'templates', 'blocked.html')
+      maybeFile(appsec.blockedTemplateHtml),
+      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
     )
     const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = coalesce(
-      maybePath(appsec.blockedTemplateJson),
-      maybePath(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON),
-      path.join(__dirname, 'appsec', 'templates', 'blocked.json')
+      maybeFile(appsec.blockedTemplateJson),
+      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
     )
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
@@ -352,6 +356,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       process.env.DD_IAST_ENABLED,
       false
     )
+    const DD_TELEMETRY_LOG_COLLECTION_ENABLED = coalesce(
+      process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED,
+      DD_IAST_ENABLED
+    )
 
     const defaultIastRequestSampling = 30
     const iastRequestSampling = coalesce(
@@ -372,6 +380,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       parseInt(iastOptions && iastOptions.maxContextOperations),
       parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS),
       2
+    )
+
+    const DD_IAST_DEDUPLICATION_ENABLED = coalesce(
+      iastOptions && iastOptions.deduplicationEnabled,
+      process.env.DD_IAST_DEDUPLICATION_ENABLED && isTrue(process.env.DD_IAST_DEDUPLICATION_ENABLED),
+      true
     )
 
     const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
@@ -456,12 +470,17 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
-    this.telemetryEnabled = DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED)
+    this.telemetry = {
+      enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
+      logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
+      debug: isTrue(DD_TELEMETRY_DEBUG_ENABLED)
+    }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
     this.appsec = {
       enabled: DD_APPSEC_ENABLED,
-      rules: DD_APPSEC_RULES,
+      rules: DD_APPSEC_RULES ? safeJsonParse(maybeFile(DD_APPSEC_RULES)) : require('./appsec/recommended.json'),
+      customRulesProvided: !!DD_APPSEC_RULES,
       rateLimit: DD_APPSEC_TRACE_RATE_LIMIT,
       wafTimeout: DD_APPSEC_WAF_TIMEOUT,
       obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
@@ -477,18 +496,22 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       enabled: isTrue(DD_IAST_ENABLED),
       requestSampling: DD_IAST_REQUEST_SAMPLING,
       maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
-      maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS
+      maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
+      deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED
     }
 
     this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
 
     this.isIntelligentTestRunnerEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
     this.isGitUploadEnabled = this.isCiVisibility &&
-      (this.isIntelligentTestRunnerEnabled || isTrue(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
+      (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
 
     this.stats = {
       enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
     }
+
+    this.traceId128BitGenerationEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
+    this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
 
     tagger.add(this.tags, {
       service: this.service,

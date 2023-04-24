@@ -11,7 +11,7 @@ const Config = require('../../src/config')
 
 withVersions('express', 'express', version => {
   describe('Suspicious request blocking - query', () => {
-    let port, server, requestBody, rulesPath
+    let port, server, requestBody, rulesPath, config
 
     before(() => {
       return agent.load(['express', 'http'], { client: false })
@@ -78,13 +78,14 @@ withVersions('express', 'express', version => {
     })
 
     beforeEach(async () => {
-      requestBody = sinon.stub()
-      appsec.enable(new Config({
+      config = new Config({
         appsec: {
           enabled: true,
           rules: rulesPath
         }
-      }))
+      })
+      requestBody = sinon.stub()
+      appsec.enable(config)
     })
 
     afterEach(() => {
@@ -115,7 +116,7 @@ withVersions('express', 'express', version => {
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
         expect(e.response.status).to.be.equals(403)
-        expect(e.response.data).to.be.deep.equal(require('../../src/appsec/templates/blocked.json'))
+        expect(e.response.data).to.be.deep.equal(config.appsec.blockedTemplateHtml)
         expect(requestBody).not.to.be.called
       }
     })

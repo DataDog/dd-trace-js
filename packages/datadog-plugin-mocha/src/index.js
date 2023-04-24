@@ -10,12 +10,13 @@ const {
   getTestSuitePath,
   getTestParametersString,
   getTestSuiteCommonTags,
-  addIntelligentTestRunnerSpanTags
+  addIntelligentTestRunnerSpanTags,
+  TEST_SOURCE_START
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class MochaPlugin extends CiPlugin {
-  static get name () {
+  static get id () {
     return 'mocha'
   }
 
@@ -35,10 +36,13 @@ class MochaPlugin extends CiPlugin {
       const relativeCoverageFiles = [...coverageFiles, suiteFile]
         .map(filename => getTestSuitePath(filename, this.sourceRoot))
 
-      this.tracer._exporter.exportCoverage({
-        span: testSuiteSpan,
-        coverageFiles: relativeCoverageFiles
-      })
+      const formattedCoverage = {
+        traceId: testSuiteSpan.context()._traceId,
+        spanId: testSuiteSpan.context()._spanId,
+        files: relativeCoverageFiles
+      }
+
+      this.tracer._exporter.exportCoverage(formattedCoverage)
     })
 
     this.addSub('ci:mocha:test-suite:start', (suite) => {
@@ -46,12 +50,13 @@ class MochaPlugin extends CiPlugin {
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
-        getTestSuitePath(suite.file, this.sourceRoot)
+        getTestSuitePath(suite.file, this.sourceRoot),
+        'mocha'
       )
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testModuleSpan,
         tags: {
-          [COMPONENT]: this.constructor.name,
+          [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
         }
@@ -81,9 +86,9 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:start', (test) => {
+    this.addSub('ci:mocha:test:start', ({ test, testStartLine }) => {
       const store = storage.getStore()
-      const span = this.startTestSpan(test)
+      const span = this.startTestSpan(test, testStartLine)
 
       this.enter(span, store)
     })
@@ -128,7 +133,7 @@ class MochaPlugin extends CiPlugin {
       this._testNameToParams[name] = params
     })
 
-    this.addSub('ci:mocha:session:finish', ({ status, isSuitesSkipped }) => {
+    this.addSub('ci:mocha:session:finish', ({ status, isSuitesSkipped, testCodeCoverageLinesTotal }) => {
       if (this.testSessionSpan) {
         const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
         this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -137,7 +142,7 @@ class MochaPlugin extends CiPlugin {
         addIntelligentTestRunnerSpanTags(
           this.testSessionSpan,
           this.testModuleSpan,
-          { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled }
+          { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled, testCodeCoverageLinesTotal }
         )
 
         this.testModuleSpan.finish()
@@ -149,7 +154,7 @@ class MochaPlugin extends CiPlugin {
     })
   }
 
-  startTestSpan (test) {
+  startTestSpan (test, testStartLine) {
     const testName = test.fullTitle()
     const { file: testSuiteAbsolutePath, title } = test
 
@@ -157,6 +162,10 @@ class MochaPlugin extends CiPlugin {
     const testParametersString = getTestParametersString(this._testNameToParams, title)
     if (testParametersString) {
       extraTags[TEST_PARAMETERS] = testParametersString
+    }
+
+    if (testStartLine) {
+      extraTags[TEST_SOURCE_START] = testStartLine
     }
 
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)

@@ -15,46 +15,106 @@ const receiveStartCh = channel(`apm:google-cloud-pubsub:receive:start`)
 const receiveFinishCh = channel('apm:google-cloud-pubsub:receive:finish')
 const receiveErrorCh = channel('apm:google-cloud-pubsub:receive:error')
 
-addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
-  const PubSub = obj.PubSub
-  const Subscription = obj.Subscription
+const publisherMethods = [
+  'createTopic',
+  'updateTopic',
+  'publish',
+  'getTopic',
+  'listTopics',
+  'listTopicSubscriptions',
+  'listTopicSnapshots',
+  'deleteTopic',
+  'detachSubscription'
+]
 
-  shimmer.wrap(PubSub.prototype, 'request', request => function (cfg = { reqOpts: {} }, cb) {
-    if (!requestStartCh.hasSubscribers) {
-      return request.apply(this, arguments)
-    }
+const schemaServiceMethods = [
+  'createSchema',
+  'getSchema',
+  'listSchemas',
+  'listSchemaRevisions',
+  'commitSchema',
+  'rollbackSchema',
+  'deleteSchemaRevision',
+  'deleteSchema',
+  'validateSchema',
+  'validateMessage'
+]
+
+const subscriberMethods = [
+  'createSubscription',
+  'getSubscription',
+  'updateSubscription',
+  'listSubscriptions',
+  'deleteSubscription',
+  'modifyAckDeadline',
+  'acknowledge',
+  'pull',
+  'streamingPull',
+  'modifyPushConfig',
+  'getSnapshot',
+  'listSnapshots',
+  'createSnapshot',
+  'updateSnapshot',
+  'deleteSnapshot',
+  'seek'
+]
+
+function wrapMethod (method) {
+  const api = method.name
+
+  return function (request) {
+    if (!requestStartCh.hasSubscribers) return method.apply(this, arguments)
 
     const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
-    const outerAsyncResource = new AsyncResource('bound-anonymous-fn')
 
     return innerAsyncResource.runInAsyncScope(() => {
-      let messages = []
-      if (cfg.reqOpts && cfg.method === 'publish') {
-        messages = cfg.reqOpts.messages
-      }
+      const projectId = this.auth._cachedProjectId
+      const cb = arguments[arguments.length - 1]
 
-      requestStartCh.publish({ cfg, projectId: this.projectId, messages })
-      cb = outerAsyncResource.bind(cb)
+      requestStartCh.publish({ request, api, projectId })
 
-      const fn = () => {
-        arguments[1] = innerAsyncResource.bind(function (error) {
+      if (typeof cb === 'function') {
+        const outerAsyncResource = new AsyncResource('bound-anonymous-fn')
+
+        arguments[arguments.length - 1] = innerAsyncResource.bind(function (error) {
           if (error) {
             requestErrorCh.publish(error)
           }
-          requestFinishCh.publish(undefined)
-          return cb.apply(this, arguments)
-        })
-        return request.apply(this, arguments)
-      }
 
-      try {
-        return fn.apply(this, arguments)
-      } catch (e) {
-        requestErrorCh.publish(e)
-        throw e
+          requestFinishCh.publish()
+
+          return outerAsyncResource.runInAsyncScope(() => cb.apply(this, arguments))
+        })
+
+        return method.apply(this, arguments)
+      } else {
+        return method.apply(this, arguments)
+          .then(
+            response => {
+              requestFinishCh.publish()
+              return response
+            },
+            error => {
+              requestErrorCh.publish(error)
+              requestFinishCh.publish()
+              throw error
+            }
+          )
       }
     })
-  })
+  }
+}
+
+function massWrap (obj, methods, wrapper) {
+  for (const method of methods) {
+    if (typeof obj[method] === 'function') {
+      shimmer.wrap(obj, method, wrapper)
+    }
+  }
+}
+
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
+  const Subscription = obj.Subscription
 
   shimmer.wrap(Subscription.prototype, 'emit', emit => function (eventName, message) {
     if (eventName !== 'message' || !message) return emit.apply(this, arguments)
@@ -95,6 +155,19 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
     }
     return clear.apply(this, arguments)
   })
+
+  return obj
+})
+
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
+  const { PublisherClient, SchemaServiceClient, SubscriberClient } = obj.v1
+
+  massWrap(PublisherClient.prototype, publisherMethods, wrapMethod)
+  massWrap(SubscriberClient.prototype, subscriberMethods, wrapMethod)
+
+  if (SchemaServiceClient) {
+    massWrap(SchemaServiceClient.prototype, schemaServiceMethods, wrapMethod)
+  }
 
   return obj
 })

@@ -65,10 +65,11 @@ class FakeAgent extends EventEmitter {
     })
   }
 
-  assertMessageReceived (fn, timeout) {
+  assertMessageReceived (fn, timeout, expectedMessageCount = 1) {
     timeout = timeout || 5000
     let resultResolve
     let resultReject
+    let msgCount = 0
     const errors = []
 
     const timeoutObj = setTimeout(() => {
@@ -88,9 +89,12 @@ class FakeAgent extends EventEmitter {
 
     const messageHandler = msg => {
       try {
+        msgCount += 1
         fn(msg)
-        resultResolve()
-        this.removeListener('message', messageHandler)
+        if (msgCount === expectedMessageCount) {
+          resultResolve()
+          this.removeListener('message', messageHandler)
+        }
       } catch (e) {
         errors.push(e)
       }
@@ -119,6 +123,9 @@ function spawnProc (filename, options = {}) {
 }
 
 async function createSandbox (dependencies = [], isGitRepo = false) {
+  /* To execute integration tests without a sandbox uncomment the next line
+   * and do `yarn link && yarn link dd-trace` */
+  // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, 'dd-trace.tgz')
   const allDependencies = [`file:${out}`].concat(dependencies)
@@ -178,7 +185,6 @@ function getCiVisAgentlessConfig (port) {
     DD_APP_KEY: '1',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
-    DD_CIVISIBILITY_ITR_ENABLED: 1,
     NODE_OPTIONS: '-r dd-trace/ci/init'
   }
 }
@@ -187,7 +193,6 @@ function getCiVisEvpProxyConfig (port) {
   return {
     ...process.env,
     DD_TRACE_AGENT_PORT: port,
-    DD_CIVISIBILITY_ITR_ENABLED: 1,
     NODE_OPTIONS: '-r dd-trace/ci/init'
   }
 }

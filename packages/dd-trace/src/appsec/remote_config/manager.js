@@ -6,14 +6,15 @@ const Scheduler = require('./scheduler')
 const tracerVersion = require('../../../../../package.json').version
 const request = require('../../exporters/common/request')
 const log = require('../../log')
+const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 
 const clientId = uuid()
 
 const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
-
-// There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
-// with their own separated Client.ClientState.
+// There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest with their own separated Client.ClientState.
 class RemoteConfigManager extends EventEmitter {
+  static kPreUpdate = Symbol('kPreUpdate')
+
   constructor (config) {
     super()
 
@@ -78,9 +79,11 @@ class RemoteConfigManager extends EventEmitter {
   on (event, listener) {
     super.on(event, listener)
 
-    this.state.client.products = this.eventNames()
+    this.updateProducts()
 
-    this.scheduler.start()
+    if (this.state.client.products.length) {
+      this.scheduler.start()
+    }
 
     return this
   }
@@ -88,13 +91,17 @@ class RemoteConfigManager extends EventEmitter {
   off (event, listener) {
     super.off(event, listener)
 
-    this.state.client.products = this.eventNames()
+    this.updateProducts()
 
     if (!this.state.client.products.length) {
       this.scheduler.stop()
     }
 
     return this
+  }
+
+  updateProducts () {
+    this.state.client.products = this.eventNames().filter(e => typeof e === 'string')
   }
 
   poll (cb) {
@@ -181,7 +188,7 @@ class RemoteConfigManager extends EventEmitter {
           product,
           id,
           version: meta.custom.v,
-          apply_state: 1,
+          apply_state: UNACKNOWLEDGED,
           apply_error: '',
           length: meta.length,
           hashes: meta.hashes,
@@ -194,6 +201,8 @@ class RemoteConfigManager extends EventEmitter {
     }
 
     if (toUnapply.length || toApply.length || toModify.length) {
+      this.emit(RemoteConfigManager.kPreUpdate, { toUnapply, toApply, toModify })
+
       this.dispatch(toUnapply, 'unapply')
       this.dispatch(toApply, 'apply')
       this.dispatch(toModify, 'modify')
@@ -221,14 +230,18 @@ class RemoteConfigManager extends EventEmitter {
 
   dispatch (list, action) {
     for (const item of list) {
-      try {
-        // TODO: do we want to pass old and new config ?
-        this.emit(item.product, action, item.file, item.id)
+      if (item.apply_state === UNACKNOWLEDGED) { // in case the item was already handled by kPreUpdate
+        try {
+          // TODO: do we want to pass old and new config ?
+          const hadListeners = this.emit(item.product, action, item.file, item.id)
 
-        item.apply_state = 2
-      } catch (err) {
-        item.apply_state = 3
-        item.apply_error = err.toString()
+          if (hadListeners) {
+            item.apply_state = ACKNOWLEDGED
+          }
+        } catch (err) {
+          item.apply_state = ERROR
+          item.apply_error = err.toString()
+        }
       }
 
       if (action === 'unapply') {

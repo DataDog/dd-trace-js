@@ -1,14 +1,11 @@
 'use strict'
 
-const dc = require('diagnostics_channel')
-const fs = require('fs')
-const path = require('path')
 const proxyquire = require('proxyquire')
 
+const dc = require('../../../diagnostics_channel')
 const log = require('../../src/log')
 const waf = require('../../src/appsec/waf')
 const RuleManager = require('../../src/appsec/rule_manager')
-const remoteConfig = require('../../src/appsec/remote_config')
 const appsec = require('../../src/appsec')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
@@ -16,51 +13,43 @@ const agent = require('../plugins/agent')
 const Config = require('../../src/config')
 const axios = require('axios')
 const getPort = require('get-port')
+const blockedTemplate = require('../../src/appsec/blocked_templates')
 const web = require('../../src/plugins/util/web')
-const { resetTemplates } = require('../../src/appsec/blocking')
 
 describe('AppSec Index', () => {
   let config
   let AppSec
+  let blocking
+
+  const RULES = { rules: [{ a: 1 }] }
 
   beforeEach(() => {
     config = {
       appsec: {
         enabled: true,
-        rules: './path/rules.json',
+        rules: RULES,
         rateLimit: 42,
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
-        blockedTemplateHtml: path.join(__dirname, '..', '..', 'src', 'appsec', 'templates', 'blocked.html'),
-        blockedTemplateJson: path.join(__dirname, '..', '..', 'src', 'appsec', 'templates', 'blocked.json')
+        blockedTemplateHtml: blockedTemplate.html,
+        blockedTemplateJson: blockedTemplate.json
       }
     }
     sinon.stub(web, 'root')
     sinon.stub(web, 'getContext').returns({})
 
+    blocking = {
+      setTemplates: sinon.stub()
+    }
+
     AppSec = proxyquire('../../src/appsec', {
-      '../plugins/util/web': web
+      '../plugins/util/web': web,
+      './blocking': blocking
     })
 
-    resetTemplates()
-
-    const readFileSyncStub = sinon.stub(fs, 'readFileSync')
-    readFileSyncStub.withArgs('./path/rules.json').returns('{"rules": [{"a": 1}]}')
-    readFileSyncStub.callThrough()
-    const readFilePromiseStub = sinon.stub(fs.promises, 'readFile')
-    readFilePromiseStub.withArgs('./path/rules.json').returns('{"rules": [{"a": 1}]}')
-    readFilePromiseStub.callThrough()
     sinon.stub(waf, 'init').callThrough()
     sinon.stub(RuleManager, 'applyRules')
-    sinon.stub(remoteConfig, 'enableAsmData')
-    sinon.stub(remoteConfig, 'enableAsmDD')
-    sinon.stub(remoteConfig, 'enableAsm')
-    sinon.stub(remoteConfig, 'enableBlocking')
-    sinon.stub(remoteConfig, 'disableAsmData')
-    sinon.stub(remoteConfig, 'disableAsmDD')
-    sinon.stub(remoteConfig, 'disableAsm')
-    sinon.stub(remoteConfig, 'disableBlocking')
     sinon.stub(Reporter, 'setRateLimit')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
@@ -71,24 +60,13 @@ describe('AppSec Index', () => {
     AppSec.disable()
   })
 
-  after(() => {
-    resetTemplates()
-    AppSec.disable()
-  })
-
   describe('enable', () => {
     it('should enable AppSec only once', () => {
       AppSec.enable(config)
       AppSec.enable(config)
 
-      expect(fs.readFileSync).to.have.been.calledWithExactly('./path/rules.json')
-      expect(fs.readFileSync).to.have.been.calledWithExactly(config.appsec.blockedTemplateHtml)
-      expect(fs.readFileSync).to.have.been.calledWithExactly(config.appsec.blockedTemplateJson)
-      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] }, config.appsec)
-      expect(remoteConfig.enableAsmData).to.have.been.calledOnce
-      expect(remoteConfig.enableAsmDD).to.have.been.calledOnce
-      expect(remoteConfig.enableAsm).to.have.been.calledOnce
-      expect(remoteConfig.enableBlocking).to.have.been.calledOnce
+      expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
+      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly(RULES, config.appsec)
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
@@ -107,10 +85,6 @@ describe('AppSec Index', () => {
       expect(log.error).to.have.been.calledTwice
       expect(log.error.firstCall).to.have.been.calledWithExactly('Unable to start AppSec')
       expect(log.error.secondCall).to.have.been.calledWithExactly(err)
-      expect(remoteConfig.disableAsmData).to.have.been.calledOnce
-      expect(remoteConfig.disableAsmDD).to.have.been.calledOnce
-      expect(remoteConfig.disableAsm).to.have.been.calledOnce
-      expect(remoteConfig.disableBlocking).to.have.been.calledOnce
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
     })
@@ -123,61 +97,6 @@ describe('AppSec Index', () => {
       expect(queryParserChannel.hasSubscribers).to.be.false
 
       AppSec.enable(config)
-
-      expect(bodyParserChannel.hasSubscribers).to.be.true
-      expect(queryParserChannel.hasSubscribers).to.be.true
-    })
-  })
-
-  describe('enableAsync', () => {
-    it('should enable AppSec only once', async () => {
-      await AppSec.enableAsync(config)
-      await AppSec.enableAsync(config)
-
-      expect(fs.readFileSync).not.to.have.been.called
-      expect(fs.promises.readFile).to.have.been.calledThrice
-      expect(fs.promises.readFile).to.have.been.calledWithExactly('./path/rules.json')
-      expect(fs.promises.readFile).to.have.been.calledWithExactly(config.appsec.blockedTemplateHtml)
-      expect(fs.promises.readFile).to.have.been.calledWithExactly(config.appsec.blockedTemplateJson)
-      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] }, config.appsec)
-      expect(remoteConfig.enableAsmData).to.have.been.calledOnce
-      expect(remoteConfig.enableAsmDD).to.have.been.calledOnce
-      expect(remoteConfig.enableAsm).to.have.been.calledOnce
-      expect(remoteConfig.enableBlocking).to.have.been.calledOnce
-      expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
-      expect(incomingHttpRequestStart.subscribe)
-        .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
-      expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
-    })
-
-    it('should log when enable fails', async () => {
-      sinon.stub(log, 'error')
-      RuleManager.applyRules.restore()
-
-      const err = new Error('Invalid Rules')
-      sinon.stub(RuleManager, 'applyRules').throws(err)
-
-      await AppSec.enableAsync(config)
-
-      expect(log.error).to.have.been.calledTwice
-      expect(log.error.firstCall).to.have.been.calledWithExactly('Unable to start AppSec')
-      expect(log.error.secondCall).to.have.been.calledWithExactly(err)
-      expect(remoteConfig.disableAsmData).to.have.been.calledOnce
-      expect(remoteConfig.disableAsmDD).to.have.been.calledOnce
-      expect(remoteConfig.disableAsm).to.have.been.calledOnce
-      expect(remoteConfig.disableBlocking).to.have.been.calledOnce
-      expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
-      expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
-    })
-
-    it('should subscribe to blockable channels', async () => {
-      const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
-      const queryParserChannel = dc.channel('datadog:query:read:finish')
-
-      expect(bodyParserChannel.hasSubscribers).to.be.false
-      expect(queryParserChannel.hasSubscribers).to.be.false
-
-      await AppSec.enableAsync(config)
 
       expect(bodyParserChannel.hasSubscribers).to.be.true
       expect(queryParserChannel.hasSubscribers).to.be.true
@@ -199,10 +118,6 @@ describe('AppSec Index', () => {
       AppSec.disable()
 
       expect(RuleManager.clearAllRules).to.have.been.calledOnce
-      expect(remoteConfig.disableAsmData).to.have.been.calledOnce
-      expect(remoteConfig.disableAsmDD).to.have.been.calledOnce
-      expect(remoteConfig.disableAsm).to.have.been.calledOnce
-      expect(remoteConfig.disableBlocking).to.have.been.calledOnce
       expect(incomingHttpRequestStart.unsubscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.unsubscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
@@ -267,14 +182,14 @@ describe('AppSec Index', () => {
         '_dd.runtime_family': 'nodejs',
         'http.client_ip': '127.0.0.1'
       })
-      expect(waf.run).to.have.been.calledOnceWith({
+      expect(waf.run).to.have.been.calledOnceWithExactly({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
         'server.request.method': 'POST',
         'server.request.client_ip': '127.0.0.1',
         'server.request.client_port': 8080,
         'http.client_ip': '127.0.0.1'
-      })
+      }, req)
     })
   })
 
@@ -613,7 +528,15 @@ describe('IP blocking', () => {
       type: 'data_with_expiration'
     }]
   }
+
+  const toModify = [{
+    product: 'ASM_DATA',
+    id: '1',
+    file: ruleData
+  }]
+
   let http, appListener, port
+  let config
   before(() => {
     return getPort().then(newPort => {
       port = newPort
@@ -635,12 +558,14 @@ describe('IP blocking', () => {
   })
 
   beforeEach(() => {
-    appsec.enable(new Config({
+    config = new Config({
       appsec: {
         enabled: true
       }
-    }))
-    RuleManager.updateAsmData('apply', ruleData, 'asm_data')
+    })
+
+    appsec.enable(config)
+    RuleManager.updateWafFromRC({ toUnapply: [], toApply: [], toModify })
   })
 
   afterEach(() => {
@@ -684,11 +609,8 @@ describe('IP blocking', () => {
     })
 
     describe(`block - ip in header ${ipHeader}`, () => {
-      const templatesPath = path.join(__dirname, '..', '..', 'src', 'appsec', 'templates')
-      const htmlDefaultContent = fs.readFileSync(path.join(templatesPath, 'blocked.html'), 'utf8').toString()
-      const jsonDefaultContent = JSON.parse(
-        fs.readFileSync(path.join(templatesPath, 'blocked.json'), 'utf8').toString()
-      )
+      const htmlDefaultContent = blockedTemplate.html
+      const jsonDefaultContent = JSON.parse(blockedTemplate.json)
 
       it('should block the request with JSON content if no headers', async () => {
         await axios.get(`http://localhost:${port}/`, {

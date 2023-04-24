@@ -7,6 +7,7 @@ const getPort = require('get-port')
 const { execSync, spawn } = require('child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { writeFileSync } = require('fs')
+const { satisfies } = require('semver')
 
 describe('Plugin', function () {
   let server
@@ -53,16 +54,17 @@ describe('Plugin', function () {
         this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
 
         const cwd = __dirname
+        const nodules = `${__dirname}/../../../versions/next@${version}/node_modules`
         const pkg = require(`${__dirname}/../../../versions/next@${version}/package.json`)
 
         delete pkg.workspaces
 
+        execSync(`cp -R '${nodules}' ./`, { cwd })
+
         writeFileSync(`${__dirname}/package.json`, JSON.stringify(pkg, null, 2))
 
-        execSync('npm --loglevel=error install', { cwd })
-
         // building in-process makes tests fail for an unknown reason
-        execSync('npx next build', {
+        execSync('yarn exec next build', {
           cwd,
           env: {
             ...process.env,
@@ -76,7 +78,6 @@ describe('Plugin', function () {
         this.timeout(5000)
         const files = [
           'package.json',
-          'package-lock.json',
           'node_modules',
           '.next'
         ]
@@ -108,6 +109,28 @@ describe('Plugin', function () {
             axios
               .get(`http://localhost:${port}/api/hello/world`)
               .catch(done)
+          })
+
+          const pathTests = [
+            ['/api/hello', '/api/hello'],
+            ['/api/hello/world', '/api/hello/[name]'],
+            ['/api/hello/other', '/api/hello/other']
+          ]
+          pathTests.forEach(([url, expectedPath]) => {
+            it(`should infer the corrrect resource path (${expectedPath})`, done => {
+              agent
+                .use(traces => {
+                  const spans = traces[0]
+
+                  expect(spans[0]).to.have.property('resource', `GET ${expectedPath}`)
+                })
+                .then(done)
+                .catch(done)
+
+              axios
+                .get(`http://localhost:${port}${url}`)
+                .catch(done)
+            })
           })
 
           it('should propagate context', done => {
@@ -187,6 +210,31 @@ describe('Plugin', function () {
               .catch(done)
           })
 
+          const pkg = require(`${__dirname}/../../../versions/next@${version}/node_modules/next/package.json`)
+
+          const pathTests = [
+            ['/hello', '/hello'],
+            ['/hello/world', '/hello/[name]'],
+            ['/hello/other', '/hello/other'],
+            ['/error/not_found', '/error/not_found', satisfies(pkg.version, '>=11') ? 404 : 500],
+            ['/error/get_server_side_props', '/error/get_server_side_props', 500]
+          ]
+          pathTests.forEach(([url, expectedPath, statusCode]) => {
+            it(`should infer the corrrect resource (${expectedPath})`, done => {
+              agent
+                .use(traces => {
+                  const spans = traces[0]
+
+                  expect(spans[0]).to.have.property('resource', `GET ${expectedPath}`)
+                  expect(spans[0].meta).to.have.property('http.status_code', `${statusCode || 200}`)
+                })
+                .then(done)
+                .catch(done)
+
+              axios.get(`http://localhost:${port}${url}`)
+            })
+          })
+
           it('should handle pages not found', done => {
             agent
               .use(traces => {
@@ -241,7 +289,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/boom`)
+              .get(`http://localhost:${port}/api/error/boom`)
               .catch((response) => {
                 expect(response.statusCode).to.eql(500)
               })

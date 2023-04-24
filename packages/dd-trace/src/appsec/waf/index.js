@@ -8,6 +8,7 @@ const waf = {
   wafManager: null,
   init,
   destroy,
+  update,
   run: noop,
   disposeContext: noop
 }
@@ -31,6 +32,18 @@ function destroy () {
   waf.disposeContext = noop
 }
 
+function update (newRules) {
+  // TODO: check race conditions between Appsec enable/disable and WAF updates, the whole RC state management in general
+  if (!waf.wafManager) throw new Error('Cannot update disabled WAF')
+
+  try {
+    waf.wafManager.ddwaf.update(newRules)
+  } catch (err) {
+    log.error('Could not apply rules from remote config')
+    throw err
+  }
+}
+
 function run (data, req) {
   if (!req) {
     const store = storage.getStore()
@@ -50,7 +63,7 @@ function run (data, req) {
 function disposeContext (req) {
   const wafContext = waf.wafManager.getWAFContext(req)
 
-  if (wafContext) {
+  if (wafContext && !wafContext.ddwafContext.disposed) {
     wafContext.dispose()
   }
 }

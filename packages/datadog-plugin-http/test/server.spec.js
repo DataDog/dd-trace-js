@@ -1,4 +1,5 @@
 'use strict'
+
 const { AbortController } = require('node-abort-controller') // AbortController is not available in node <15
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -117,7 +118,7 @@ describe('Plugin', () => {
       })
 
       it('should run the request listener in the request scope', done => {
-        const spy = sinon.spy((...args) => {
+        const spy = sinon.spy(() => {
           expect(tracer.scope().active()).to.not.be.null
         })
 
@@ -141,7 +142,6 @@ describe('Plugin', () => {
             expect(tracer.scope().active()).to.equal(null)
             done()
           })
-          res.end()
         }
 
         axios.get(`http://localhost:${port}/user`).catch(done)

@@ -28,6 +28,8 @@ describe('Plugin', () => {
       let project
       let topicName
       let resource
+      let v1
+      let gax
 
       describe('without configuration', () => {
         beforeEach(() => {
@@ -35,11 +37,13 @@ describe('Plugin', () => {
         })
         beforeEach(() => {
           tracer = require('../../dd-trace')
-          const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+          gax = require(`../../../versions/google-gax@3.5.7`).get()
+          const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
           topicName = getTopic()
           resource = `projects/${project}/topics/${topicName}`
-          pubsub = new PubSub({ projectId: project })
+          v1 = lib.v1
+          pubsub = new lib.PubSub({ projectId: project })
         })
         describe('createTopic', () => {
           it('should be instrumented', async () => {
@@ -54,23 +58,41 @@ describe('Plugin', () => {
             return expectedSpanPromise
           })
 
+          it('should be instrumented when using the internal API', async () => {
+            const publisher = new v1.PublisherClient({
+              grpc: gax.grpc,
+              projectId: project,
+              servicePath: 'localhost',
+              port: 8081,
+              sslCreds: gax.grpc.credentials.createInsecure()
+            }, gax)
+
+            const expectedSpanPromise = expectSpanWithDefaults({
+              meta: {
+                'pubsub.method': 'createTopic',
+                'span.kind': 'client',
+                'component': 'google-cloud-pubsub'
+              }
+            })
+            const name = `projects/${project}/topics/${topicName}`
+            const promise = publisher.createTopic({ name })
+            await promise
+
+            return expectedSpanPromise
+          })
+
           it('should be instrumented w/ error', async () => {
-            const error = new Error('bad')
             const expectedSpanPromise = expectSpanWithDefaults({
               error: 1,
               meta: {
                 'pubsub.method': 'createTopic',
-                [ERROR_MESSAGE]: error.message,
-                [ERROR_TYPE]: error.name,
-                [ERROR_STACK]: error.stack,
                 'component': 'google-cloud-pubsub'
               }
             })
-            pubsub.getClient_ = function (config, callback) {
-              callback(error)
-            }
+            const publisher = new v1.PublisherClient({ projectId: project })
+            const name = `projects/${project}/topics/${topicName}`
             try {
-              await pubsub.createTopic(topicName)
+              await publisher.createTopic({ name })
             } catch (e) {
               // this is just to prevent mocha from crashing
             }
@@ -98,30 +120,6 @@ describe('Plugin', () => {
             })
             const [topic] = await pubsub.createTopic(topicName)
             await publish(topic, { data: Buffer.from('hello') })
-            return expectedSpanPromise
-          })
-
-          it('should be instrumented w/ error', async () => {
-            const error = new Error('bad')
-            const expectedSpanPromise = expectSpanWithDefaults({
-              error: 1,
-              meta: {
-                'pubsub.method': 'publish',
-                [ERROR_MESSAGE]: error.message,
-                [ERROR_TYPE]: error.name,
-                [ERROR_STACK]: error.stack,
-                'component': 'google-cloud-pubsub'
-              }
-            })
-            const [topic] = await pubsub.createTopic(topicName)
-            pubsub.getClient_ = function (config, callback) {
-              callback(error)
-            }
-            try {
-              await publish(topic, { data: Buffer.from('hello') })
-            } catch (e) {
-              // this is just to prevent mocha from crashing
-            }
             return expectedSpanPromise
           })
 
@@ -219,6 +217,20 @@ describe('Plugin', () => {
             })
             await publish(topic, { data: Buffer.from('hello') })
             return expectedSpanPromise
+          })
+        })
+
+        describe('when disabled', () => {
+          beforeEach(() => {
+            tracer.use('google-cloud-pubsub', false)
+          })
+
+          afterEach(() => {
+            tracer.use('google-cloud-pubsub', true)
+          })
+
+          it('should work normally', async () => {
+            await pubsub.createTopic(topicName)
           })
         })
       })

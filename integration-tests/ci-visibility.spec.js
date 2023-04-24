@@ -19,7 +19,8 @@ const {
   TEST_SESSION_ITR_SKIPPING_ENABLED,
   TEST_MODULE_CODE_COVERAGE_ENABLED,
   TEST_MODULE_ITR_SKIPPING_ENABLED,
-  TEST_ITR_TESTS_SKIPPED
+  TEST_ITR_TESTS_SKIPPED,
+  TEST_CODE_COVERAGE_LINES_TOTAL
 } = require('../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
@@ -39,11 +40,12 @@ const testFrameworks = [
       'ci-visibility/test/ci-visibility-test.js',
       'ci-visibility/test/ci-visibility-test-2.js'
     ],
-    runTestsWithCoverageCommand: './node_modules/nyc/bin/nyc.js node ./ci-visibility/run-mocha.js'
+    runTestsWithCoverageCommand: './node_modules/nyc/bin/nyc.js -r=text-summary node ./ci-visibility/run-mocha.js',
+    coverageMessage: 'Lines        : 80%'
   },
   {
     name: 'jest',
-    dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai'],
+    dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai', 'jest-jasmine2'],
     testFile: 'ci-visibility/run-jest.js',
     expectedStdout: 'Test Suites: 2 passed',
     expectedCoverageFiles: [
@@ -62,7 +64,8 @@ testFrameworks.forEach(({
   expectedStdout,
   extraStdout,
   expectedCoverageFiles,
-  runTestsWithCoverageCommand
+  runTestsWithCoverageCommand,
+  coverageMessage
 }) => {
   describe(name, () => {
     let receiver
@@ -93,6 +96,36 @@ testFrameworks.forEach(({
       await receiver.stop()
     })
 
+    if (name === 'mocha') {
+      it('does not init CI Visibility when running in parallel mode', (done) => {
+        receiver.assertPayloadReceived(() => {
+          const error = new Error('it should not report tests')
+          done(error)
+        }, ({ url }) => url === '/api/v2/citestcycle')
+
+        childProcess = fork('ci-visibility/run-mocha.js', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            RUN_IN_PARALLEL: true,
+            DD_TRACE_DEBUG: 1,
+            DD_TRACE_LOG_LEVEL: 'warn'
+          },
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('message', () => {
+          assert.include(testOutput, 'Unable to initialize CI Visibility because Mocha is running in parallel mode.')
+          done()
+        })
+      })
+    }
+
     if (name === 'jest') {
       it('does not crash when jest is badly initialized', (done) => {
         childProcess = fork('ci-visibility/run-jest-bad-init.js', {
@@ -112,6 +145,91 @@ testFrameworks.forEach(({
           assert.notInclude(testOutput, 'TypeError')
           assert.include(testOutput, expectedStdout)
           done()
+        })
+      })
+      it('does not crash when jest uses jest-jasmine2', (done) => {
+        childProcess = fork('ci-visibility/run-jest.js', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            OLD_RUNNER: 1,
+            NODE_OPTIONS: '-r dd-trace/ci/init',
+            RUN_IN_PARALLEL: true
+          },
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('message', () => {
+          assert.notInclude(testOutput, 'TypeError')
+          done()
+        })
+      })
+      describe('when jest is using workers to run tests in parallel', () => {
+        it('reports tests when using the agent', (done) => {
+          receiver.setInfoResponse({ endpoints: [] })
+          childProcess = fork('ci-visibility/run-jest.js', {
+            cwd,
+            env: {
+              DD_TRACE_AGENT_PORT: receiver.port,
+              NODE_OPTIONS: '-r dd-trace/ci/init',
+              RUN_IN_PARALLEL: true
+            },
+            stdio: 'pipe'
+          })
+
+          receiver.gatherPayloads(({ url }) => url === '/v0.4/traces', 5000).then(tracesRequests => {
+            const testSpans = tracesRequests.flatMap(trace => trace.payload).flatMap(request => request)
+            assert.equal(testSpans.length, 2)
+            const spanTypes = testSpans.map(span => span.type)
+            assert.includeMembers(spanTypes, ['test'])
+            assert.notInclude(spanTypes, ['test_session_end', 'test_suite_end', 'test_module_end'])
+            receiver.setInfoResponse({ endpoints: ['/evp_proxy/v2'] })
+            done()
+          }).catch(done)
+        })
+        it('reports tests when using agentless', (done) => {
+          childProcess = fork('ci-visibility/run-jest.js', {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              RUN_IN_PARALLEL: true
+            },
+            stdio: 'pipe'
+          })
+
+          receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000).then(eventsRequests => {
+            const eventTypes = eventsRequests.map(({ payload }) => payload)
+              .flatMap(({ events }) => events)
+              .map(event => event.type)
+
+            assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+            done()
+          }).catch(done)
+        })
+        it('reports tests when using evp proxy', (done) => {
+          childProcess = fork('ci-visibility/run-jest.js', {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              RUN_IN_PARALLEL: true
+            },
+            stdio: 'pipe'
+          })
+
+          receiver.gatherPayloads(({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle', 5000)
+            .then(eventsRequests => {
+              const eventTypes = eventsRequests.map(({ payload }) => payload)
+                .flatMap(({ events }) => events)
+                .map(event => event.type)
+
+              assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+              done()
+            }).catch(done)
         })
       })
     }
@@ -268,6 +386,7 @@ testFrameworks.forEach(({
         })
       })
       it('can report code coverage', (done) => {
+        let testOutput
         const itrConfigRequestPromise = receiver.payloadReceived(
           ({ url }) => url === '/api/v2/libraries/tests/services/setting'
         )
@@ -300,13 +419,15 @@ testFrameworks.forEach(({
           assert.exists(coveragePayload.content.coverages[0].test_session_id)
           assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
+          const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
+          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_TOTAL])
+
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
           const numSuites = eventTypes.reduce(
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
           assert.equal(numSuites, 2)
-          done()
         }).catch(done)
 
         childProcess = exec(
@@ -314,9 +435,18 @@ testFrameworks.forEach(({
           {
             cwd,
             env: getCiVisAgentlessConfig(receiver.port),
-            stdio: 'inherit'
+            stdio: 'pipe'
           }
         )
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('exit', () => {
+          if (coverageMessage) {
+            assert.include(testOutput, coverageMessage)
+          }
+          done()
+        })
       })
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
@@ -572,6 +702,7 @@ testFrameworks.forEach(({
         })
       })
       it('can report code coverage', (done) => {
+        let testOutput
         const itrConfigRequestPromise = receiver.payloadReceived(
           ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting'
         )
@@ -606,13 +737,15 @@ testFrameworks.forEach(({
           assert.exists(coveragePayload.content.coverages[0].test_session_id)
           assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
+          const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
+          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_TOTAL])
+
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
           const numSuites = eventTypes.reduce(
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
           assert.equal(numSuites, 2)
-          done()
         }).catch(done)
 
         childProcess = exec(
@@ -620,9 +753,19 @@ testFrameworks.forEach(({
           {
             cwd,
             env: getCiVisEvpProxyConfig(receiver.port),
-            stdio: 'inherit'
+            stdio: 'pipe'
           }
         )
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('exit', () => {
+          // check that reported coverage is still the same
+          if (coverageMessage) {
+            assert.include(testOutput, coverageMessage)
+          }
+          done()
+        })
       })
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({

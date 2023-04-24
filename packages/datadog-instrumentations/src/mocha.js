@@ -2,12 +2,15 @@ const { createCoverageMap } = require('istanbul-lib-coverage')
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
+
 const {
   getCoveredFilenamesFromCoverage,
   resetCoverage,
   mergeCoverage,
   getTestSuitePath,
-  fromCoverageMapToCoverage
+  fromCoverageMapToCoverage,
+  getTestLineStart
 } = require('../../dd-trace/src/plugins/util/test')
 
 const testStartCh = channel('ci:mocha:test:start')
@@ -33,6 +36,10 @@ const patched = new WeakSet()
 const testToAr = new WeakMap()
 const originalFns = new WeakMap()
 const testFileToSuiteAr = new Map()
+const testToStartLine = new WeakMap()
+
+// `isWorker` is true if it's a Mocha worker
+let isWorker = false
 
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
@@ -101,7 +108,7 @@ function mochaHook (Runner) {
   patched.add(Runner)
 
   shimmer.wrap(Runner.prototype, 'run', run => function () {
-    if (!testStartCh.hasSubscribers) {
+    if (!testStartCh.hasSubscribers || isWorker) {
       return run.apply(this, arguments)
     }
 
@@ -120,9 +127,18 @@ function mochaHook (Runner) {
 
       const isSuitesSkipped = !!suitesToSkip.length
 
-      testSessionFinishCh.publish({ status, isSuitesSkipped })
-      // restore the original coverage
-      global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
+      let testCodeCoverageLinesTotal
+      if (global.__coverage__) {
+        try {
+          testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
+        } catch (e) {
+          // ignore errors
+        }
+        // restore the original coverage
+        global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
+      }
+
+      testSessionFinishCh.publish({ status, isSuitesSkipped, testCodeCoverageLinesTotal })
     }))
 
     this.once('start', testRunAsyncResource.bind(function () {
@@ -193,10 +209,11 @@ function mochaHook (Runner) {
       if (isRetry(test)) {
         return
       }
+      const testStartLine = testToStartLine.get(test)
       const asyncResource = new AsyncResource('bound-anonymous-fn')
       testToAr.set(test.fn, asyncResource)
       asyncResource.runInAsyncScope(() => {
-        testStartCh.publish(test)
+        testStartCh.publish({ test, testStartLine })
       })
     })
 
@@ -321,7 +338,15 @@ addHook({
    * If ITR is disabled, `onDone` is called immediately on the subscriber
    */
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
-    if (!itrConfigurationCh.hasSubscribers) {
+    if (this.options.parallel) {
+      log.warn(`Unable to initialize CI Visibility because Mocha is running in parallel mode.`)
+      return run.apply(this, arguments)
+    }
+
+    if (!itrConfigurationCh.hasSubscribers || this.isWorker) {
+      if (this.isWorker) {
+        isWorker = true
+      }
       return run.apply(this, arguments)
     }
     this.options.delay = true
@@ -365,6 +390,20 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
+  file: 'lib/suite.js'
+}, (Suite) => {
+  shimmer.wrap(Suite.prototype, 'addTest', addTest => function (test) {
+    // In here, the test definition is in the stack, so we search for it.
+    const startLine = getTestLineStart(new Error(), test.file)
+    testToStartLine.set(test, startLine)
+    return addTest.apply(this, arguments)
+  })
+  return Suite
+})
+
+addHook({
+  name: 'mocha',
+  versions: ['>=5.2.0'],
   file: 'lib/runner.js'
 }, mochaHook)
 
@@ -379,7 +418,9 @@ addHook({
      * This attaches `run` to the global context, which we'll call after
      * our configuration and skippable suites requests
      */
-    mocha.options.delay = true
+    if (!mocha.options.parallel) {
+      mocha.options.delay = true
+    }
     return runMocha.apply(this, arguments)
   })
   return run

@@ -28,7 +28,7 @@ class SpanAggStats {
   }
 
   record (span) {
-    const durationNs = span._duration * 1e6
+    const durationNs = span.duration
     this.hits++
     this.duration += durationNs
 

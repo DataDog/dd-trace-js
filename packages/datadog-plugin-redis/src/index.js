@@ -1,26 +1,29 @@
 'use strict'
 
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const CachePlugin = require('../../dd-trace/src/plugins/cache')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
 class RedisPlugin extends CachePlugin {
-  static get name () { return 'redis' }
+  static get id () { return 'redis' }
   static get system () { return 'redis' }
 
   start ({ db, command, args, connectionOptions = {}, connectionName }) {
-    if (!this.config.filter(command)) return this.skip()
+    const resource = command
+    const normalizedCommand = command.toUpperCase()
+    if (!this.config.filter(normalizedCommand)) return this.skip()
 
     this.startSpan('redis.command', {
       service: getService(this.config, connectionName),
-      resource: command,
+      resource,
       type: 'redis',
       kind: 'client',
       meta: {
         'db.type': 'redis',
         'db.name': db || '0',
-        'redis.raw_command': formatCommand(command, args),
+        'redis.raw_command': formatCommand(normalizedCommand, args),
         'out.host': connectionOptions.host,
-        'out.port': connectionOptions.port
+        [CLIENT_PORT_KEY]: connectionOptions.port
       }
     })
   }
@@ -41,8 +44,6 @@ function getService (config, connectionName) {
 }
 
 function formatCommand (command, args) {
-  command = command.toUpperCase()
-
   if (!args || command === 'AUTH') return command
 
   for (let i = 0, l = args.length; i < l; i++) {
@@ -75,11 +76,22 @@ function trim (str, maxlen) {
 }
 
 function normalizeConfig (config) {
+  if (config.allowlist) uppercaseAllEntries(config.allowlist)
+  if (config.whitelist) uppercaseAllEntries(config.whitelist)
+  if (config.blocklist) uppercaseAllEntries(config.blocklist)
+  if (config.blacklist) uppercaseAllEntries(config.blacklist)
+
   const filter = urlFilter.getFilter(config)
 
   return Object.assign({}, config, {
     filter
   })
+}
+
+function uppercaseAllEntries (entries) {
+  for (let i = 0; i < entries.length; i++) {
+    entries[i] = String(entries[i]).toUpperCase()
+  }
 }
 
 module.exports = RedisPlugin

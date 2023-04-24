@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 const { hostname } = require('os')
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
@@ -111,7 +113,7 @@ describe('SpanAggStats', () => {
 
     const okDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     const errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
-    okDistribution.accept(basicSpan._duration * 1e6)
+    okDistribution.accept(basicSpan.duration)
 
     expect(aggStats.toJSON()).to.deep.equal({
       Name: aggKey.name,
@@ -123,7 +125,7 @@ describe('SpanAggStats', () => {
       Hits: 1,
       TopLevelHits: 0,
       Errors: 0,
-      Duration: basicSpan._duration * 1e6,
+      Duration: basicSpan.duration,
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto()
     })
@@ -136,7 +138,7 @@ describe('SpanAggStats', () => {
 
     const okDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     const errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
-    okDistribution.accept(topLevelSpan._duration * 1e6)
+    okDistribution.accept(topLevelSpan.duration)
 
     expect(aggStats.toJSON()).to.deep.equal({
       Name: aggKey.name,
@@ -148,7 +150,7 @@ describe('SpanAggStats', () => {
       Hits: 1,
       TopLevelHits: 1,
       Errors: 0,
-      Duration: topLevelSpan._duration * 1e6,
+      Duration: topLevelSpan.duration,
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto()
     })
@@ -161,7 +163,7 @@ describe('SpanAggStats', () => {
 
     const okDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     const errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
-    errorDistribution.accept(errorSpan._duration * 1e6)
+    errorDistribution.accept(errorSpan.duration)
 
     expect(aggStats.toJSON()).to.deep.equal({
       Name: aggKey.name,
@@ -173,7 +175,7 @@ describe('SpanAggStats', () => {
       Hits: 1,
       TopLevelHits: 0,
       Errors: 1,
-      Duration: errorSpan._duration * 1e6,
+      Duration: errorSpan.duration,
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto()
     })
@@ -271,7 +273,7 @@ describe('SpanStatsProcessor', () => {
     okDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     for (let i = 0; i < n; i++) {
-      okDistribution.accept(topLevelSpan._duration * 1e6)
+      okDistribution.accept(topLevelSpan.duration)
     }
 
     expect(spanBucket.toJSON()).to.deep.equal({
@@ -284,7 +286,7 @@ describe('SpanStatsProcessor', () => {
       Hits: n,
       TopLevelHits: n,
       Errors: 0,
-      Duration: (topLevelSpan._duration * 1e6) * n,
+      Duration: (topLevelSpan.duration) * n,
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto()
     })
@@ -310,7 +312,7 @@ describe('SpanStatsProcessor', () => {
           Hits: n,
           TopLevelHits: n,
           Errors: 0,
-          Duration: (topLevelSpan._duration * 1e6) * n,
+          Duration: (topLevelSpan.duration) * n,
           OkSummary: okDistribution.toProto(),
           ErrorSummary: errorDistribution.toProto()
         }]

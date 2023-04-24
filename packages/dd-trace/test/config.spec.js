@@ -1,7 +1,10 @@
 'use strict'
 
+require('./setup/tap')
+
 const { expect } = require('chai')
-const path = require('path')
+const { readFileSync } = require('fs')
+
 describe('Config', () => {
   let Config
   let log
@@ -13,6 +16,15 @@ describe('Config', () => {
   let existsSyncReturn
   let osType
 
+  const RECOMMENDED_JSON_PATH = require.resolve('../src/appsec/recommended.json')
+  const RECOMMENDED_JSON = require(RECOMMENDED_JSON_PATH)
+  const RULES_JSON_PATH = require.resolve('./fixtures/config/appsec-rules.json')
+  const RULES_JSON = require(RULES_JSON_PATH)
+  const BLOCKED_TEMPLATE_HTML_PATH = require.resolve('./fixtures/config/appsec-blocked-template.html')
+  const BLOCKED_TEMPLATE_HTML = readFileSync(BLOCKED_TEMPLATE_HTML_PATH, { encoding: 'utf8' })
+  const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('./fixtures/config/appsec-blocked-template.json')
+  const BLOCKED_TEMPLATE_JSON = readFileSync(BLOCKED_TEMPLATE_JSON_PATH, { encoding: 'utf8' })
+
   beforeEach(() => {
     pkg = {
       name: '',
@@ -22,7 +34,8 @@ describe('Config', () => {
     log = {
       use: sinon.spy(),
       toggle: sinon.spy(),
-      warn: sinon.spy()
+      warn: sinon.spy(),
+      error: sinon.spy()
     }
 
     env = process.env
@@ -75,6 +88,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('logLevel', 'debug')
+    expect(config).to.have.property('traceId128BitGenerationEnabled', false)
+    expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.deep.property('serviceMapping', {})
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['tracecontext', 'datadog'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext', 'datadog'])
@@ -82,11 +97,14 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', undefined)
-    expect(config).to.have.nested.property('appsec.rules', undefined)
+    expect(config).to.have.nested.property('appsec.rules', RECOMMENDED_JSON)
+    expect(config).to.have.nested.property('appsec.customRulesProvided', false)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
+    expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
+    expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -159,17 +177,22 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_APPSEC_ENABLED = 'true'
-    process.env.DD_APPSEC_RULES = './path/rules.json'
+    process.env.DD_APPSEC_RULES = RULES_JSON_PATH
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = '42'
     process.env.DD_APPSEC_WAF_TIMEOUT = '42'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '.*'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_HTML_PATH
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
     process.env.DD_IAST_REQUEST_SAMPLING = '40'
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
+    process.env.DD_IAST_DEDUPLICATION_ENABLED = false
+    process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
+    process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
 
     const config = new Config()
 
@@ -188,6 +211,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
+    expect(config).to.have.property('traceId128BitGenerationEnabled', true)
+    expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
     expect(config).to.have.deep.nested.property('sampler', {
@@ -216,17 +241,21 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
-    expect(config).to.have.nested.property('appsec.rules', './path/rules.json')
+    expect(config).to.have.nested.deep.property('appsec.rules', RULES_JSON)
+    expect(config).to.have.nested.property('appsec.customRulesProvided', true)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
+    expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
+    expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 40)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 3)
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
+    expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -337,13 +366,16 @@ describe('Config', () => {
           enabled: true,
           requestSampling: 50,
           maxConcurrentRequests: 4,
-          maxContextOperations: 5
+          maxContextOperations: 5,
+          deduplicationEnabled: false
         }
       },
       appsec: false,
       remoteConfig: {
         pollInterval: 42
-      }
+      },
+      traceId128BitGenerationEnabled: true,
+      traceId128BitLoggingEnabled: true
     })
 
     expect(config).to.have.property('protocolVersion', '0.5')
@@ -369,6 +401,8 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
     expect(config).to.have.property('logLevel', logLevel)
+    expect(config).to.have.property('traceId128BitGenerationEnabled', true)
+    expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('tags')
     expect(config.tags).to.have.property('foo', 'bar')
     expect(config.tags).to.have.property('runtime-id')
@@ -384,6 +418,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.requestSampling', 50)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 4)
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
+    expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.deep.nested.property('sampler', {
       sampleRate: 0.5,
       rateLimit: 1000,
@@ -502,13 +537,17 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_APPSEC_ENABLED = 'false'
-    process.env.DD_APPSEC_RULES = 'something'
+    process.env.DD_APPSEC_RULES = RECOMMENDED_JSON_PATH
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = 11
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_JSON // note the inversion between
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_HTML // json and html here
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
+    process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
+    process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
 
     const config = new Config({
       protocolVersion: '0.5',
@@ -549,17 +588,19 @@ describe('Config', () => {
       },
       appsec: {
         enabled: true,
-        rules: './path/rules.json',
+        rules: RULES_JSON_PATH,
         rateLimit: 42,
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
-        blockedTemplateHtml: __filename,
-        blockedTemplateJson: __filename
+        blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
+        blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH
       },
       remoteConfig: {
         pollInterval: 42
-      }
+      },
+      traceId128BitGenerationEnabled: false,
+      traceId128BitLoggingEnabled: false
     })
 
     expect(config).to.have.property('protocolVersion', '0.5')
@@ -577,6 +618,8 @@ describe('Config', () => {
     expect(config).to.have.property('env', 'development')
     expect(config).to.have.property('clientIpEnabled', true)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
+    expect(config).to.have.property('traceId128BitGenerationEnabled', false)
+    expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
@@ -586,53 +629,58 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
-    expect(config).to.have.nested.property('appsec.rules', './path/rules.json')
+    expect(config).to.have.nested.deep.property('appsec.rules', RULES_JSON)
+    expect(config).to.have.nested.property('appsec.customRulesProvided', true)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
-    expect(config).to.have.nested.property('appsec.blockedTemplateHtml', __filename)
-    expect(config).to.have.nested.property('appsec.blockedTemplateJson', __filename)
+    expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
+    expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 2)
     expect(config).to.have.nested.property('iast.maxContextOperations', 2)
+    expect(config).to.have.nested.property('iast.deduplicationEnabled', true)
   })
 
   it('should give priority to non-experimental options', () => {
     const config = new Config({
       appsec: {
         enabled: true,
-        rules: './path/rules.json',
+        rules: undefined,
         rateLimit: 42,
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
-        obfuscatorValueRegex: '.*'
+        obfuscatorValueRegex: '.*',
+        blockedTemplateHtml: undefined,
+        blockedTemplateJson: undefined
       },
       experimental: {
         appsec: {
           enabled: false,
-          rules: 'something',
+          rules: RULES_JSON_PATH,
           rateLimit: 11,
           wafTimeout: 11,
           obfuscatorKeyRegex: '^$',
-          obfuscatorValueRegex: '^$'
+          obfuscatorValueRegex: '^$',
+          blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
+          blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH
         }
       }
     })
 
     expect(config).to.have.deep.property('appsec', {
       enabled: true,
-      rules: './path/rules.json',
+      rules: RECOMMENDED_JSON,
+      customRulesProvided: false,
       rateLimit: 42,
       wafTimeout: 42,
       obfuscatorKeyRegex: '.*',
       obfuscatorValueRegex: '.*',
-      blockedTemplateHtml:
-        path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.html'),
-      blockedTemplateJson:
-        path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.json')
+      blockedTemplateHtml: undefined,
+      blockedTemplateJson: undefined
     })
   })
 
@@ -717,7 +765,60 @@ describe('Config', () => {
 
     const config = new Config()
 
-    expect(config.telemetryEnabled).to.be.false
+    expect(config.telemetry.enabled).to.be.false
+  })
+
+  it('should set telemetry default values', () => {
+    const config = new Config()
+
+    expect(config.telemetry).to.not.be.undefined
+    expect(config.telemetry.enabled).to.be.true
+    expect(config.telemetry.logCollection).to.be.false
+    expect(config.telemetry.debug).to.be.false
+  })
+
+  it('should not set DD_TRACE_TELEMETRY_ENABLED', () => {
+    const origTraceTelemetryValue = process.env.DD_TRACE_TELEMETRY_ENABLED
+    process.env.DD_TRACE_TELEMETRY_ENABLED = 'false'
+
+    const config = new Config()
+
+    expect(config.telemetry.enabled).to.be.false
+
+    process.env.DD_TRACE_TELEMETRY_ENABLED = origTraceTelemetryValue
+  })
+
+  it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
+    const origLogCollectionValue = process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED
+    process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = 'false'
+
+    const config = new Config()
+
+    expect(config.telemetry.logCollection).to.be.false
+
+    process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = origLogCollectionValue
+  })
+
+  it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED = true if DD_IAST_ENABLED', () => {
+    const origIastEnabledValue = process.env.DD_IAST_ENABLED
+    process.env.DD_IAST_ENABLED = 'true'
+
+    const config = new Config()
+
+    expect(config.telemetry.logCollection).to.be.true
+
+    process.env.DD_IAST_ENABLED = origIastEnabledValue
+  })
+
+  it('should set DD_TELEMETRY_DEBUG_ENABLED', () => {
+    const origTelemetryDebugValue = process.env.DD_TELEMETRY_DEBUG_ENABLED
+    process.env.DD_TELEMETRY_DEBUG_ENABLED = 'true'
+
+    const config = new Config()
+
+    expect(config.telemetry.debug).to.be.true
+
+    process.env.DD_TELEMETRY_DEBUG_ENABLED = origTelemetryDebugValue
   })
 
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
@@ -753,18 +854,36 @@ describe('Config', () => {
     ])
   })
 
-  it('should ignore appsec.blockedTemplateHtml if it does not exist', () => {
+  it('should skip appsec config files if they do not exist', () => {
+    const error = new Error('file not found')
+    fs.readFileSync = () => { throw error }
+
+    const Config = proxyquire('../src/config', {
+      './pkg': pkg,
+      './log': log,
+      fs,
+      os
+    })
+
     const config = new Config({
       appsec: {
         enabled: true,
-        blockedTemplateHtml: path.join(__dirname, 'DOES_NOT_EXIST.html'),
-        blockedTemplateJson: path.join(__dirname, 'DOES_NOT_EXIST.json')
+        rules: 'DOES_NOT_EXIST.json',
+        blockedTemplateHtml: 'DOES_NOT_EXIST.html',
+        blockedTemplateJson: 'DOES_NOT_EXIST.json'
       }
     })
-    expect(config.appsec.blockedTemplateHtml).to.be
-      .equal(path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.html'))
-    expect(config.appsec.blockedTemplateJson).to.be
-      .equal(path.join(__dirname, '..', 'src', 'appsec', 'templates', 'blocked.json'))
+
+    expect(log.error).to.be.calledThrice
+    expect(log.error.firstCall).to.have.been.calledWithExactly(error)
+    expect(log.error.secondCall).to.have.been.calledWithExactly(error)
+    expect(log.error.thirdCall).to.have.been.calledWithExactly(error)
+
+    expect(config.appsec.enabled).to.be.true
+    expect(config.appsec.rules).to.be.undefined
+    expect(config.appsec.customRulesProvided).to.be.true
+    expect(config.appsec.blockedTemplateHtml).to.be.undefined
+    expect(config.appsec.blockedTemplateJson).to.be.undefined
   })
 
   context('auto configuration w/ unix domain sockets', () => {
@@ -875,18 +994,14 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('isGitUploadEnabled', false)
       })
-      context('DD_CIVISIBILITY_ITR_ENABLED is true', () => {
-        it('should enable intelligent test runner', () => {
-          process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
-          const config = new Config(options)
-          expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
-        })
-        it('should enable git upload, regardless of DD_CIVISIBILITY_GIT_UPLOAD_ENABLED', () => {
-          process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
-          process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'false'
-          const config = new Config(options)
-          expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
-        })
+      it('should activate ITR by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('isIntelligentTestRunnerEnabled', true)
+      })
+      it('should disable ITR if DD_CIVISIBILITY_ITR_ENABLED is set to false', () => {
+        process.env.DD_CIVISIBILITY_ITR_ENABLED = 'false'
+        const config = new Config(options)
+        expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
       })
     })
     context('ci visibility mode is not enabled', () => {

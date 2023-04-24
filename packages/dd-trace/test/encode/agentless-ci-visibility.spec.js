@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/tap')
+
 const { expect } = require('chai')
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
@@ -8,7 +10,6 @@ const {
   MAX_META_KEY_LENGTH,
   MAX_META_VALUE_LENGTH,
   MAX_METRIC_KEY_LENGTH,
-  MAX_METRIC_VALUE_LENGTH,
   MAX_NAME_LENGTH,
   MAX_SERVICE_LENGTH,
   MAX_RESOURCE_NAME_LENGTH,
@@ -178,7 +179,7 @@ describe('agentless-ci-visibility-encode', () => {
     expect(spanEvent.content.name).to.equal(DEFAULT_SPAN_NAME)
   })
 
-  it('should cut too long meta and metrics keys and values', () => {
+  it('should cut too long meta and metrics keys and meta values', () => {
     const tooLongKey = new Array(300).fill('a').join('')
     const tooLongValue = new Array(26000).fill('a').join('')
     const traceToTruncate = [{
@@ -190,7 +191,7 @@ describe('agentless-ci-visibility-encode', () => {
         [tooLongKey]: tooLongValue
       },
       metrics: {
-        [tooLongKey]: tooLongValue
+        [tooLongKey]: 15
       },
       start: 123,
       duration: 456,
@@ -208,7 +209,7 @@ describe('agentless-ci-visibility-encode', () => {
       [`${tooLongKey.slice(0, MAX_META_KEY_LENGTH)}...`]: `${tooLongValue.slice(0, MAX_META_VALUE_LENGTH)}...`
     })
     expect(spanEvent.content.metrics).to.eql({
-      [`${tooLongKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`]: `${tooLongValue.slice(0, MAX_METRIC_VALUE_LENGTH)}...`
+      [`${tooLongKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`]: 15
     })
   })
 

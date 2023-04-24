@@ -5,8 +5,11 @@
  * This should help an on-call engineer quickly diagnose when an incompatibility was introduced.
  */
 
+/* eslint-disable no-console */
+
 const SLACK_WEBHOOK = process.env.SLACK_WEBHOOK
 const SLACK_REPORT_ENABLE = process.env.SLACK_REPORT_ENABLE
+const SLACK_MOREINFO = process.env.SLACK_MOREINFO
 
 const VERSION_EXTRACT = /^v?(\d+)\.(\d+)\.(\d+)$/
 
@@ -27,14 +30,22 @@ const TIME_THRESHOLDS = [
  */
 module.exports = async (failures) => {
   if (!SLACK_REPORT_ENABLE) {
+    console.log('Slack Reporter is disabled')
     return
   }
+
+  console.log('Slack Reporter is enabled')
 
   if (!SLACK_WEBHOOK) {
     throw new Error('package reporting via slack webhook is enabled but misconfigured')
   }
 
   const packageNames = Object.keys(failures)
+
+  if (!packageNames.length) {
+    console.log('Slack Reporter has nothing to report')
+    return
+  }
 
   const descriptions = []
 
@@ -44,7 +55,14 @@ module.exports = async (failures) => {
     descriptions.push(description)
   }
 
-  const message = descriptions.join('\n\n')
+  let message = descriptions.join('\n\n')
+
+  if (SLACK_MOREINFO) {
+    // It's not easy to contextually link to individual job failures.
+    // @see https://github.com/community/community/discussions/8945
+    // Instead we add a single link at the end to the overall run.
+    message += `\n<${SLACK_MOREINFO}|View the failing test(s) here>.`
+  }
 
   reportToSlack(message)
 }

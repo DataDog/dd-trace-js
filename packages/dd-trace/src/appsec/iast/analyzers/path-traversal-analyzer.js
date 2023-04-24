@@ -1,4 +1,6 @@
 'use strict'
+
+const path = require('path')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
 const InjectionAnalyzer = require('./injection-analyzer')
@@ -37,6 +39,16 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
       }
       this.analyze(pathArguments)
     })
+
+    this.exclusionList = [ path.join('node_modules', 'send') + path.sep ]
+  }
+
+  _isExcluded (location) {
+    let ret = false
+    if (location && location.path) {
+      ret = this.exclusionList.some(elem => location.path.includes(elem))
+    }
+    return ret
   }
 
   analyze (value) {

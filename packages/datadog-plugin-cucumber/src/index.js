@@ -6,15 +6,17 @@ const { storage } = require('../../datadog-core')
 const {
   TEST_SKIP_REASON,
   TEST_STATUS,
+  TEST_SOURCE_START,
   finishAllTraceSpans,
   getTestSuitePath,
-  getTestSuiteCommonTags
+  getTestSuiteCommonTags,
+  addIntelligentTestRunnerSpanTags
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 
 class CucumberPlugin extends CiPlugin {
-  static get name () {
+  static get id () {
     return 'cucumber'
   }
 
@@ -23,12 +25,21 @@ class CucumberPlugin extends CiPlugin {
 
     this.sourceRoot = process.cwd()
 
-    this.addSub('ci:cucumber:session:finish', (status) => {
+    this.addSub('ci:cucumber:session:finish', ({ status, isSuitesSkipped, testCodeCoverageLinesTotal }) => {
+      const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
+      addIntelligentTestRunnerSpanTags(
+        this.testSessionSpan,
+        this.testModuleSpan,
+        { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled, testCodeCoverageLinesTotal }
+      )
+
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.finish()
       this.testSessionSpan.finish()
       finishAllTraceSpans(this.testSessionSpan)
+
+      this.itrConfig = null
       this.tracer._exporter.flush()
     })
 
@@ -36,12 +47,13 @@ class CucumberPlugin extends CiPlugin {
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
-        getTestSuitePath(testSuiteFullPath, this.sourceRoot)
+        getTestSuitePath(testSuiteFullPath, this.sourceRoot),
+        'cucumber'
       )
       this.testSuiteSpan = this.tracer.startSpan('cucumber.test_suite', {
         childOf: this.testModuleSpan,
         tags: {
-          [COMPONENT]: this.constructor.name,
+          [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
         }
@@ -53,10 +65,26 @@ class CucumberPlugin extends CiPlugin {
       this.testSuiteSpan.finish()
     })
 
-    this.addSub('ci:cucumber:test:start', ({ testName, fullTestSuite }) => {
+    this.addSub('ci:cucumber:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
+      if (!this.itrConfig || !this.itrConfig.isCodeCoverageEnabled) {
+        return
+      }
+      const relativeCoverageFiles = [...coverageFiles, suiteFile]
+        .map(filename => getTestSuitePath(filename, this.sourceRoot))
+
+      const formattedCoverage = {
+        traceId: this.testSuiteSpan.context()._traceId,
+        spanId: this.testSuiteSpan.context()._spanId,
+        files: relativeCoverageFiles
+      }
+
+      this.tracer._exporter.exportCoverage(formattedCoverage)
+    })
+
+    this.addSub('ci:cucumber:test:start', ({ testName, fullTestSuite, testSourceLine }) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(fullTestSuite, this.sourceRoot)
-      const testSpan = this.startTestSpan(testName, testSuite)
+      const testSpan = this.startTestSpan(testName, testSuite, testSourceLine)
 
       this.enter(testSpan, store)
     })
@@ -67,7 +95,7 @@ class CucumberPlugin extends CiPlugin {
       const span = this.tracer.startSpan('cucumber.step', {
         childOf,
         tags: {
-          [COMPONENT]: this.constructor.name,
+          [COMPONENT]: this.constructor.id,
           'cucumber.step': resource,
           [RESOURCE_NAME]: resource
         }
@@ -103,11 +131,12 @@ class CucumberPlugin extends CiPlugin {
     })
   }
 
-  startTestSpan (testName, testSuite) {
+  startTestSpan (testName, testSuite, testSourceLine) {
     return super.startTestSpan(
       testName,
       testSuite,
-      this.testSuiteSpan
+      this.testSuiteSpan,
+      { [TEST_SOURCE_START]: testSourceLine }
     )
   }
 }

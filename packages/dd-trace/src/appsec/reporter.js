@@ -134,7 +134,7 @@ function finishRequest (req, res) {
 
   if (!rootSpan.context()._tags['appsec.event']) return
 
-  const newTags = filterHeaders(res && res.getHeaders(), RESPONSE_HEADERS_PASSLIST, 'http.response.headers.')
+  const newTags = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_PASSLIST, 'http.response.headers.')
 
   if (req.route && typeof req.route.path === 'string') {
     newTags['http.endpoint'] = req.route.path

@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = require('diagnostics_channel')
+const dc = require('../../../diagnostics_channel')
 const semver = require('semver')
 const instrumentations = require('./instrumentations')
 const { AsyncResource } = require('async_hooks')
@@ -14,6 +14,12 @@ exports.channel = function (name) {
   return ch
 }
 
+/**
+ * @param {string} args.name module name
+ * @param {string[]} args.versions array of semver range strings
+ * @param {string} args.file path to file within package to instrument?
+ * @param Function hook
+ */
 exports.addHook = function addHook ({ name, versions, file }, hook) {
   if (!instrumentations[name]) {
     instrumentations[name] = []

@@ -1,8 +1,6 @@
 'use strict'
 
-const dc = require('diagnostics_channel')
-const fs = require('fs')
-const path = require('path')
+const dc = require('../../../diagnostics_channel')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
 const remoteConfig = require('./remote_config')
@@ -13,7 +11,7 @@ const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { block, loadTemplates, loadTemplatesAsync } = require('./blocking')
+const { block, setTemplates } = require('./blocking')
 
 const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
 const queryParserChannel = dc.channel('datadog:query:read:finish')
@@ -25,51 +23,27 @@ function enable (_config) {
   if (isEnabled) return
 
   try {
-    loadTemplates(_config)
-    const rules = fs.readFileSync(_config.appsec.rules || path.join(__dirname, 'recommended.json'))
-    enableFromRules(_config, JSON.parse(rules))
-    remoteConfig.enableBlocking()
+    setTemplates(_config)
+
+    RuleManager.applyRules(_config.appsec.rules, _config.appsec)
+
+    remoteConfig.enableWafUpdate(_config.appsec)
+
+    Reporter.setRateLimit(_config.appsec.rateLimit)
+
+    incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
+    incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
+    bodyParserChannel.subscribe(onRequestBodyParsed)
+    queryParserChannel.subscribe(onRequestQueryParsed)
+
+    isEnabled = true
+    config = _config
   } catch (err) {
-    abortEnable(err)
+    log.error('Unable to start AppSec')
+    log.error(err)
+
+    disable()
   }
-}
-
-async function enableAsync (_config) {
-  if (isEnabled) return
-
-  try {
-    await loadTemplatesAsync(_config)
-    const rules = await fs.promises.readFile(_config.appsec.rules || path.join(__dirname, 'recommended.json'))
-    enableFromRules(_config, JSON.parse(rules))
-    remoteConfig.enableBlocking()
-  } catch (err) {
-    abortEnable(err)
-  }
-}
-
-function enableFromRules (_config, rules) {
-  RuleManager.applyRules(rules, _config.appsec)
-
-  remoteConfig.enableAsmData(_config.appsec)
-  remoteConfig.enableAsmDD(_config.appsec)
-  remoteConfig.enableAsm(_config.appsec)
-
-  Reporter.setRateLimit(_config.appsec.rateLimit)
-
-  incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
-  incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
-  bodyParserChannel.subscribe(onRequestBodyParsed)
-  queryParserChannel.subscribe(onRequestQueryParsed)
-
-  isEnabled = true
-  config = _config
-}
-
-function abortEnable (err) {
-  log.error('Unable to start AppSec')
-  log.error(err)
-
-  disable()
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
@@ -177,10 +151,7 @@ function disable () {
 
   RuleManager.clearAllRules()
 
-  remoteConfig.disableAsmData()
-  remoteConfig.disableAsmDD()
-  remoteConfig.disableAsm()
-  remoteConfig.disableBlocking()
+  remoteConfig.disableWafUpdate()
 
   // Channel#unsubscribe() is undefined for non active channels
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
@@ -199,7 +170,6 @@ function handleResults (actions, req, res, rootSpan, abortController) {
 
 module.exports = {
   enable,
-  enableAsync,
   disable,
   incomingHttpStartTranslator,
   incomingHttpEndTranslator

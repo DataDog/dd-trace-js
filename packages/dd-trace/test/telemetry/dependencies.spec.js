@@ -1,6 +1,10 @@
+'use strict'
+
+require('../setup/tap')
+
 const proxyquire = require('proxyquire')
 const path = require('path')
-const dc = require('diagnostics_channel')
+const dc = require('../../../diagnostics_channel')
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const originalSetImmediate = global.setImmediate
 describe('dependencies', () => {
@@ -9,7 +13,7 @@ describe('dependencies', () => {
       const subscribe = sinon.stub()
       const dc = { channel () { return { subscribe } } }
       const dependencies = proxyquire('../../src/telemetry/dependencies', {
-        'diagnostics_channel': dc
+        '../../../diagnostics_channel': dc
       })
       dependencies.start()
       expect(subscribe).to.have.been.calledOnce

@@ -4,11 +4,18 @@ const options = {
   projects: [__dirname],
   testPathIgnorePatterns: ['/node_modules/'],
   cache: false,
-  maxWorkers: '50%',
   testRegex: /test\/ci-visibility-test/,
   coverage: true,
-  passWithNoTests: true,
   runInBand: true
+}
+
+if (process.env.RUN_IN_PARALLEL) {
+  delete options.runInBand
+  options.maxWorkers = 2
+}
+
+if (process.env.OLD_RUNNER) {
+  options.testRunner = 'jest-jasmine2'
 }
 
 jest.runCLI(

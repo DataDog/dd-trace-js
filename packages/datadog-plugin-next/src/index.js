@@ -6,7 +6,7 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class NextPlugin extends Plugin {
-  static get name () {
+  static get id () {
     return 'next'
   }
 
@@ -21,7 +21,7 @@ class NextPlugin extends Plugin {
       const span = this.tracer.startSpan('next.request', {
         childOf,
         tags: {
-          [COMPONENT]: this.constructor.name,
+          [COMPONENT]: this.constructor.id,
           'service.name': this.config.service || this.tracer._service,
           'resource.name': req.method,
           'span.type': 'web',
@@ -68,8 +68,14 @@ class NextPlugin extends Plugin {
       const span = store.span
       const req = this._requests.get(span)
 
+      // Only use error page names if there's not already a name
+      const current = span.context()._tags['next.page']
+      if (current && (page === '/404' || page === '/500' || page === '/_error')) {
+        return
+      }
+
       span.addTags({
-        [COMPONENT]: this.constructor.name,
+        [COMPONENT]: this.constructor.id,
         'resource.name': `${req.method} ${page}`.trim(),
         'next.page': page
       })

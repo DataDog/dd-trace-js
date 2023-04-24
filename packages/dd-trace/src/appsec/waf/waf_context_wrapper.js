@@ -15,7 +15,7 @@ class WAFContextWrapper {
     const inputs = {}
     let someInputAdded = false
 
-    // TODO: possible optimizaion: only send params that haven't already been sent to this wafContext
+    // TODO: possible optimizaion: only send params that haven't already been sent with same value to this wafContext
     for (const key of Object.keys(params)) {
       if (this.requiredAddresses.has(key)) {
         inputs[key] = params[key]
@@ -30,11 +30,11 @@ class WAFContextWrapper {
 
       const result = this.ddwafContext.run(inputs, this.wafTimeout)
 
-      const durationExt = parseInt(process.hrtime.bigint() - start)
+      const end = process.hrtime.bigint()
 
       Reporter.reportMetrics({
         duration: result.totalRuntime / 1e3,
-        durationExt: durationExt / 1e3,
+        durationExt: parseInt(end - start) / 1e3,
         rulesVersion: this.rulesInfo.version
       })
 

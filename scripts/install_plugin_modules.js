@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const crypto = require('crypto')
 const semver = require('semver')
@@ -11,6 +12,7 @@ const externals = require('../packages/dd-trace/test/plugins/externals')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
+const excludeList = os.arch() === 'arm64' ? ['couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const versionLists = {}
 const deps = {}
@@ -42,6 +44,8 @@ async function run () {
   assertFolder()
   await assertVersions()
   assertWorkspace()
+  // Some native addon packages rely on libraries that are not supported on ARM64
+  excludeList.forEach(pkg => delete workspaces[pkg])
   install()
 }
 
@@ -85,6 +89,8 @@ async function assertInstrumentation (instrumentation, external) {
 }
 
 async function assertModules (name, version, external) {
+  const range = process.env.RANGE
+  if (range && !semver.subset(version, range)) return
   addFolder(name)
   addFolder(name, version)
   assertFolder(name)
@@ -197,7 +203,7 @@ function install () {
 
 function addFolder (name, version) {
   const basename = [name, version].filter(val => val).join('@')
-  workspaces.add(basename)
+  if (!excludeList.includes(name)) workspaces.add(basename)
 }
 
 function folder (name, version) {

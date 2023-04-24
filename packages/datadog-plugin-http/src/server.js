@@ -7,7 +7,7 @@ const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-t
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class HttpServerPlugin extends Plugin {
-  static get name () {
+  static get id () {
     return 'http'
   }
 
@@ -20,7 +20,7 @@ class HttpServerPlugin extends Plugin {
       const store = storage.getStore()
       const span = web.startSpan(this.tracer, this.config, req, res, 'web.request')
 
-      span.setTag(COMPONENT, this.constructor.name)
+      span.setTag(COMPONENT, this.constructor.id)
 
       this._parentStore = store
       this.enter(span, { ...store, req, res })

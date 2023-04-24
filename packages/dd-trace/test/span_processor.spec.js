@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 describe('SpanProcessor', () => {
   let prioritySampler
   let processor

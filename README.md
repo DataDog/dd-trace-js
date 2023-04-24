@@ -93,6 +93,10 @@ $ docker-compose up -d -V --remove-orphans --force-recreate
 $ yarn services
 ```
 
+> **Note**
+> The `couchbase`, `grpc` and `oracledb` instrumentations rely on native modules
+> that do not compile on ARM64 devices (for example M1/M2 Mac) - their tests
+> cannot be run locally on these devices.
 
 ### Unit Tests
 
@@ -147,6 +151,19 @@ $ yarn lint
 ```
 
 
+### Experimental ESM Support
+
+ESM support is currently in the experimental stages, while CJS has been supported
+since inception. This means that code loaded using `require()` should work fine
+but code loaded using `import` might not always work.
+
+Use the following command to enable experimental ESM support with your application:
+
+```sh
+node --loader dd-trace/loader-hook.mjs entrypoint.js
+```
+
+
 ### Benchmarks
 
 Our microbenchmarks live in `benchmark/sirun`. Each directory in there
@@ -169,6 +186,42 @@ That project does depend on the `dd-trace` package but also adds a lot of Lambda
 If you find any issues specific to Lambda integrations then the issues may get solved quicker if they're added to that repository.
 That said, even if your application runs on Lambda, any core instrumentation issues not related to Lambda itself may be better served by opening an issue in this repository.
 Regardless of where you open the issue, someone at Datadog will try to help.
+
+
+## Bundling
+
+Generally, `dd-trace` works by intercepting `require()` calls that a Node.js application makes when loading modules. This includes modules that are built-in to Node.js, like the `fs` module for accessing the filesystem, as well as modules installed from the npm registry, like the `pg` database module.
+
+Also generally, bundlers work by crawling all of the `require()` calls that an application makes to files on disk, replacing the `require()` calls with custom code, and then concatenating all of the resulting JavaScript into one "bundled" file. When a built-in module is loaded, like `require('fs')`, that call can then remain the same in the resulting bundle.
+
+Fundamentally APM tools like `dd-trace` stop working at this point. Perhaps they continue to intercept the calls for built-in modules but don't intercept calls to third party libraries. This means that by default when you bundle a `dd-trace` app with a bundler it is likely to capture information about disk access (via `fs`) and outbound HTTP requests (via `http`), but will otherwise omit calls to third party libraries (like extracting incoming request route information for the `express` framework or showing which query is run for the `mysql` database client).
+
+To get around this, one can treat all third party modules, or at least third party modules that the APM needs to instrument, as being "external" to the bundler. With this setting the instrumented modules remain on disk and continue to be loaded via `require()` while the non-instrumented modules are bundled. Sadly this results in a build with many extraneous files and starts to defeat the purpose of bundling. 
+
+For these reasons it's necessary to have custom-built bundler plugins. Such plugins are able to instruct the bundler on how to behave, injecting intermediary code and otherwise intercepting the "translated" `require()` calls. The result is that many more packages are then included in the bundled JavaScript file. Some applications can have 100% of modules bundled, however native modules still need to remain external to the bundle.
+
+### Esbuild Support
+
+This library provides experimental esbuild support in the form of an esbuild plugin, and currently requires at least Node.js v16.17 or v18.7. To use the plugin, make sure you have `dd-trace@3+` installed, and then require the `dd-trace/esbuild` module when building your bundle.
+
+Here's an example of how one might use `dd-trace` with esbuild:
+
+```javascript
+const ddPlugin = require('dd-trace/esbuild')
+const esbuild = require('esbuild')
+
+esbuild.build({
+  entryPoints: ['app.js'], 
+  bundle: true,
+  outfile: 'out.js',
+  plugins: [ddPlugin],
+  platform: 'node', // allows built-in modules to be required
+  target: ['node16']
+}).catch((err) => {
+  console.error(err)
+  process.exit(1)
+})
+```
 
 
 ## Security Vulnerabilities
