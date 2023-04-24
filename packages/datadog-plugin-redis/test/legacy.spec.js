@@ -137,6 +137,12 @@ describe('Legacy Plugin', () => {
             assertError()
           })
         })
+
+        withNamingSchema(
+          () => client.get('foo', () => {}),
+          () => namingSchema.outbound.opName,
+          () => namingSchema.outbound.serviceName
+        )
       })
 
       describe('with configuration', () => {
@@ -179,6 +185,12 @@ describe('Legacy Plugin', () => {
 
           client.get('foo', () => {})
         })
+
+        withNamingSchema(
+          () => client.get('foo', () => {}),
+          () => namingSchema.outbound.opName,
+          () => 'custom'
+        )
       })
 
       describe('with legacy configuration', () => {

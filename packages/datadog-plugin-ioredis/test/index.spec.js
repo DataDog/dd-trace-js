@@ -4,6 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
+const Nomenclature = require('../../dd-trace/src/service-naming')
 const namingSchema = require('./naming')
 
 describe('Plugin', () => {
@@ -105,6 +106,12 @@ describe('Plugin', () => {
 
           redis.get('foo').catch(done)
         })
+
+        withNamingSchema(
+          done => redis.get('foo').catch(done),
+          () => namingSchema.outbound.opName,
+          () => namingSchema.outbound.serviceName
+        )
       })
 
       describe('with configuration', () => {
@@ -137,6 +144,15 @@ describe('Plugin', () => {
 
           redis.get('foo').catch(done)
         })
+
+        withNamingSchema(
+          done => redis.get('foo').catch(done),
+          () => namingSchema.outbound.opName,
+          () => {
+            if (Nomenclature.version === 'v0') return 'custom-test'
+            return 'custom'
+          }
+        )
       })
 
       describe('with legacy configuration', () => {

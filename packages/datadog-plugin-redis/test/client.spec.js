@@ -94,6 +94,12 @@ describe('Plugin', () => {
           await client.get('foo')
           await promise
         })
+
+        withNamingSchema(
+          async () => client.get('foo'),
+          () => namingSchema.outbound.opName,
+          () => namingSchema.outbound.serviceName
+        )
       })
 
       describe('with configuration', () => {
@@ -136,6 +142,12 @@ describe('Plugin', () => {
           await client.get('foo')
           await promise
         })
+
+        withNamingSchema(
+          async () => client.get('foo'),
+          () => namingSchema.outbound.opName,
+          () => 'custom'
+        )
       })
 
       describe('with blocklist', () => {
