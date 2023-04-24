@@ -1,6 +1,7 @@
 'use strict'
 
 require('./setup/tap')
+const util = require('util')
 
 const { hostname } = require('os')
 
@@ -195,7 +196,6 @@ describe('LatencyStatsProcessor', () => {
 
   it('should export on interval', () => {
     processor.onInterval()
-
     expect(exporter.export).to.be.calledWith({
       Env: 'test',
       Service: undefined,
@@ -206,7 +206,7 @@ describe('LatencyStatsProcessor', () => {
         Stats: [{
           Hash: checkpoint.Hash,
           ParentHash: checkpoint.ParentHash,
-          EdgeTags: mockCheckpoint.metrics.edgeTags,
+          EdgeTags: mockCheckpoint.metrics.edge_tags,
           EdgeLatency: edgeLatency.toProto(),
           PathwayLatency: pathwayLatency.toProto()
         }]
