@@ -36,4 +36,4 @@ for (const line of lines) {
   results.push(JSON.stringify(obj))
 }
 
-fs.writeFileSync('./results.ndjson', results.join('\n'))
+fs.writeFileSync('./results.ndjson', results.join('\n') + '\n')
