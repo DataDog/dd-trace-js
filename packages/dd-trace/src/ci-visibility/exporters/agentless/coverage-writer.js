@@ -12,10 +12,10 @@ function safeJSONStringify (value) {
 }
 
 class Writer extends BaseWriter {
-  constructor ({ url, evpProxyPrefix = '' }) {
+  constructor ({ url, config, evpProxyPrefix = '' }) {
     super(...arguments)
     this._url = url
-    this._encoder = new CoverageCIVisibilityEncoder(this)
+    this._encoder = new CoverageCIVisibilityEncoder(this, config)
     this._evpProxyPrefix = evpProxyPrefix
   }
 

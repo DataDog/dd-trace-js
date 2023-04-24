@@ -8,10 +8,10 @@ const request = require('../common/request')
 const log = require('../../log')
 
 class Writer extends BaseWriter {
-  constructor ({ url }) {
+  constructor ({ url, config }) {
     super(...arguments)
     this._url = url
-    this._encoder = new SpanStatsEncoder(this)
+    this._encoder = new SpanStatsEncoder(this, config)
   }
 
   _sendPayload (data, _, done) {

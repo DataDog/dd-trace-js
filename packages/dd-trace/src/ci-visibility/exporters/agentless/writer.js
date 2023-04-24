@@ -12,11 +12,12 @@ function safeJSONStringify (value) {
 }
 
 class Writer extends BaseWriter {
-  constructor ({ url, tags, evpProxyPrefix = '' }) {
+  constructor ({ url, tags, config, evpProxyPrefix = '' }) {
     super(...arguments)
     const { 'runtime-id': runtimeId, env, service } = tags
     this._url = url
-    this._encoder = new AgentlessCiVisibilityEncoder(this, { runtimeId, env, service })
+    this._config = config
+    this._encoder = new AgentlessCiVisibilityEncoder(this, config, { runtimeId, env, service })
     this._evpProxyPrefix = evpProxyPrefix
   }
 

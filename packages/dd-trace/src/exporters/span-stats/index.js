@@ -10,7 +10,7 @@ class SpanStatsExporter {
       hostname: hostname || 'localhost',
       port
     }))
-    this._writer = new Writer({ url: this._url, tags })
+    this._writer = new Writer({ url: this._url, tags, config })
   }
 
   export (payload) {

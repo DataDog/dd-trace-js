@@ -6,6 +6,9 @@ const { expect } = require('chai')
 
 const URL = require('url').URL
 
+const Config = require('../../../src/config')
+const config = new Config()
+
 function describeWriter (protocolVersion) {
   let Writer
   let writer
@@ -55,7 +58,7 @@ function describeWriter (protocolVersion) {
       '../../../../../package.json': { version: 'tracerVersion' },
       '../../log': log
     })
-    writer = new Writer({ url, prioritySampler, protocolVersion })
+    writer = new Writer({ url, prioritySampler, protocolVersion, config })
 
     process.nextTick(done)
   })
@@ -130,7 +133,7 @@ function describeWriter (protocolVersion) {
       const headers = {
         'My-Header': 'bar'
       }
-      writer = new Writer({ url, prioritySampler, protocolVersion, headers })
+      writer = new Writer({ url, prioritySampler, protocolVersion, headers, config })
       encoder.count.returns(2)
       encoder.makePayload.returns([Buffer.from('data')])
       writer.flush(() => {
@@ -174,7 +177,7 @@ function describeWriter (protocolVersion) {
     context('with the url as a unix socket', () => {
       beforeEach(() => {
         url = new URL('unix:/path/to/somesocket.sock')
-        writer = new Writer({ url, protocolVersion })
+        writer = new Writer({ url, protocolVersion, config })
       })
 
       it('should make a request to the socket', () => {

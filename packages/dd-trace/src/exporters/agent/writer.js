@@ -10,14 +10,15 @@ const BaseWriter = require('../common/writer')
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 class Writer extends BaseWriter {
-  constructor ({ prioritySampler, lookup, protocolVersion, headers }) {
+  constructor ({ prioritySampler, lookup, protocolVersion, headers, config }) {
     super(...arguments)
     const AgentEncoder = getEncoder(protocolVersion)
 
     this._prioritySampler = prioritySampler
     this._lookup = lookup
     this._protocolVersion = protocolVersion
-    this._encoder = new AgentEncoder(this)
+    this._config = config
+    this._encoder = new AgentEncoder(this, config)
     this._headers = headers
   }
 

@@ -26,8 +26,8 @@ const histogram = new Histogram()
 const metrics = require('../packages/dd-trace/src/metrics')
 const log = require('../packages/dd-trace/src/log')
 
-const encoder04 = new Agent04Encoder({ flush: () => encoder04.makePayload() })
-const encoder05 = new Agent05Encoder({ flush: () => encoder05.makePayload() })
+const encoder04 = new Agent04Encoder({ flush: () => encoder04.makePayload() }, config)
+const encoder05 = new Agent05Encoder({ flush: () => encoder05.makePayload() }, config)
 
 const suite = benchmark('core')
 

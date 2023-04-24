@@ -4,6 +4,7 @@ const {
 
 const { AgentEncoder } = require(`../../../packages/dd-trace/src/encode/${ENCODER_VERSION}`)
 const id = require('../../../packages/dd-trace/src/id')
+const Config = require('../../../packages/dd-trace/src/config')
 
 const writer = {
   flush: () => {}
@@ -40,7 +41,8 @@ for (let parent = null, i = 0; i < 30; i++) {
   parent = span
 }
 
-const encoder = new AgentEncoder(writer)
+const config = new Config()
+const encoder = new AgentEncoder(writer, config)
 
 for (let j = 0; j < 5000; j++) {
   encoder.encode(trace)

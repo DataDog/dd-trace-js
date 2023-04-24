@@ -26,8 +26,8 @@ function formatSpan (span) {
 }
 
 class AgentlessCiVisibilityEncoder extends AgentEncoder {
-  constructor (writer, { runtimeId, service, env }) {
-    super(writer, INTAKE_SOFT_LIMIT)
+  constructor (writer, config, { runtimeId, service, env }) {
+    super(writer, config, INTAKE_SOFT_LIMIT)
     this.runtimeId = runtimeId
     this.service = service
     this.env = env
