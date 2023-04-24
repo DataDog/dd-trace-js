@@ -144,6 +144,12 @@ describe('Plugin', () => {
             })
           })
         })
+
+        withNamingSchema(
+          done => client.execute('SELECT now() FROM local;', err => err && done(err)),
+          () => namingSchema.outbound.opName,
+          () => namingSchema.outbound.serviceName
+        )
       })
 
       describe('with configuration', () => {
@@ -183,6 +189,12 @@ describe('Plugin', () => {
 
           client.execute('SELECT now() FROM local;', err => err && done(err))
         })
+
+        withNamingSchema(
+          done => client.execute('SELECT now() FROM local;', err => err && done(err)),
+          () => namingSchema.outbound.opName,
+          () => 'custom'
+        )
       })
 
       // Promise support added in 3.2.0
