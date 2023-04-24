@@ -5,24 +5,24 @@ function maybeStartServerlessMiniAgent () {
   const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
   const inGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
 
-  const rustBinaryPath = process.env.DD_MINI_AGENT_PATH
-
   if (!inGCPFunction) {
     return
   }
 
-  const log = require('./log')
-  if (!rustBinaryPath) {
-    log.error('Serverless Mini Agent did not start. Please provide a DD_MINI_AGENT_PATH environment variable.')
-    return
+  let rustBinaryPath =
+    '/workspace/node_modules/datadog-serverless-agent-linux-amd64/datadog-serverless-trace-mini-agent'
+
+  if (process.env.DD_MINI_AGENT_PATH !== undefined) {
+    rustBinaryPath = process.env.DD_MINI_AGENT_PATH
   }
 
+  const log = require('./log')
   const fs = require('fs')
 
   // trying to spawn with an invalid path will return a non-descriptive error, so we want to catch
   // invalid paths and log our own error.
   if (!fs.existsSync(rustBinaryPath)) {
-    log.error('Serverless Mini Agent did not start. DD_MINI_AGENT_PATH points to a non-existent file.')
+    log.error('Serverless Mini Agent did not start. Could not find mini agent binary.')
     return
   }
 
