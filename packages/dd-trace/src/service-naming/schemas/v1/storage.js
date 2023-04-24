@@ -16,6 +16,10 @@ const mySQLNaming = {
 
 const storage = {
   client: {
+    'cassandra-driver': {
+      opName: () => 'cassandra.query',
+      serviceName: configWithFallback
+    },
     ioredis: redisNaming,
     mariadb: {
       opName: () => 'mariadb.query',
