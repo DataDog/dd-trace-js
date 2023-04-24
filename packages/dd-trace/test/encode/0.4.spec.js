@@ -122,8 +122,7 @@ describe('encode', () => {
   })
 
   it('should log adding an encoded trace to the buffer if enabled', () => {
-    process.env.DD_TRACE_ENCODING_DEBUG = 'true'
-    encoder = new AgentEncoder(writer)
+    encoder._debugEncoding = true
     encoder.encode(data)
 
     const message = logger.debug.firstCall.args[0]()
