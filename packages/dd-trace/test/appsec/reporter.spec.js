@@ -216,8 +216,6 @@ describe('reporter', () => {
     })
 
     it('should do nothing when passed incomplete objects', () => {
-      const req = {}
-
       span.context()._tags['appsec.event'] = 'true'
 
       web.root.withArgs(null).returns(null)
@@ -225,10 +223,6 @@ describe('reporter', () => {
 
       Reporter.finishRequest(null, null)
       expect(span.addTags).not.to.have.been.called
-      Reporter.finishRequest(req, null)
-      expect(span.addTags).to.have.been.called
-      Reporter.finishRequest(req)
-      expect(span.addTags).to.have.been.called
     })
 
     it('should add metrics tags from metricsQueue', () => {

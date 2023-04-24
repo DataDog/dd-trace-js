@@ -124,12 +124,26 @@ describe('Remote Config index', () => {
       it('should enable when using default rules', () => {
         config.appsec = { enabled: true, rules: {}, customRulesProvided: false }
         remoteConfig.enable(config)
-        remoteConfig.enableAsmData(config.appsec)
+        remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities).to.have.been.calledTwice
-        expect(rc.updateCapabilities.firstCall).to.have.been.calledWithExactly(Capabilities.ASM_IP_BLOCKING, true)
-        expect(rc.updateCapabilities.secondCall).to.have.been.calledWithExactly(Capabilities.ASM_USER_BLOCKING, true)
-        expect(rc.on).to.have.been.calledOnceWith('ASM_DATA')
+        expect(rc.updateCapabilities.callCount).to.be.equal(4)
+        expect(rc.updateCapabilities.getCall(0))
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
+        expect(rc.updateCapabilities.getCall(1))
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
+        expect(rc.updateCapabilities.getCall(2))
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_RULES, true)
+        expect(rc.updateCapabilities.getCall(3))
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
+
+        expect(rc.on.getCall(0))
+          .to.have.been.calledWith('ASM_DATA')
+        expect(rc.on.getCall(1))
+          .to.have.been.calledWith('ASM_DD')
+        expect(rc.on.getCall(2))
+          .to.have.been.calledWith('ASM')
+        expect(rc.on.getCall(3))
+          .to.have.been.calledWith(kPreUpdate)
       })
 
       it('should activate if appsec is manually enabled', () => {
