@@ -26,8 +26,8 @@ class Tracer extends NoopProxy {
     try {
       const config = new Config(options) // TODO: support dynamic config
 
-      // const { maybeStartServerlessMiniAgent } = require('./serverless')
-      // maybeStartServerlessMiniAgent()
+      const { maybeStartServerlessMiniAgent } = require('./serverless')
+      maybeStartServerlessMiniAgent()
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         remoteConfig.enable(config)
