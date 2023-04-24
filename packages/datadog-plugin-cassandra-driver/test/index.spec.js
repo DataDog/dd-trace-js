@@ -3,6 +3,7 @@
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const namingSchema = require('./naming')
 
 describe('Plugin', () => {
   let cassandra
@@ -46,7 +47,8 @@ describe('Plugin', () => {
           const query = 'SELECT now() FROM local;'
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test-cassandra')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', query)
               expect(traces[0][0]).to.have.property('type', 'cassandra')
               expect(traces[0][0].meta).to.have.property('db.type', 'cassandra')
@@ -219,7 +221,8 @@ describe('Plugin', () => {
 
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('service', 'test-cassandra')
+                expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+                expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', query)
                 expect(traces[0][0]).to.have.property('type', 'cassandra')
                 expect(traces[0][0].meta).to.have.property('db.type', 'cassandra')

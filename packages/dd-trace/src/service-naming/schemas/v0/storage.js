@@ -28,6 +28,10 @@ const redisConfig = {
 
 const storage = {
   client: {
+    'cassandra-driver': {
+      opName: () => 'cassandra.query',
+      serviceName: (service, config, system) => config.service || fromSystem(service, system)
+    },
     ioredis: redisConfig,
     mariadb: {
       opName: () => 'mariadb.query',
