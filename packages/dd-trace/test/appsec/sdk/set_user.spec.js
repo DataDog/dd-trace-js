@@ -84,7 +84,7 @@ describe('set_user', () => {
 
     before(async () => {
       port = await getPort()
-      await agent.load('http')
+      await agent.load('http', null, {}, false)
       http = require('http')
     })
 

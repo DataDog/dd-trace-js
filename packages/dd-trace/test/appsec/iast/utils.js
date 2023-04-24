@@ -39,7 +39,7 @@ function testInRequest (app, tests) {
   })
 
   beforeEach(() => {
-    return agent.load('http', undefined, { flushInterval: 1 })
+    return agent.load('http', undefined, { flushInterval: 1 }, false)
       .then(() => {
         http = require('http')
       })
@@ -61,7 +61,7 @@ function testInRequest (app, tests) {
 
 function testOutsideRequestHasVulnerability (fnToTest, vulnerability) {
   beforeEach(async () => {
-    await agent.load()
+    await agent.load(null, null, {}, false)
   })
   afterEach(() => {
     return agent.close({ ritmReset: false })
