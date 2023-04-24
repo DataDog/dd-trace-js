@@ -13,7 +13,7 @@ const clientId = uuid()
 const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest with their own separated Client.ClientState.
 class RemoteConfigManager extends EventEmitter {
-  static kPreUpdate = 'kPreUpdate'
+  static kPreUpdate = Symbol('kPreUpdate')
 
   constructor (config) {
     super()
