@@ -60,7 +60,6 @@ describe('Plugin', () => {
                   'span.kind': 'producer',
                   'amqp.link.target.address': 'amq.topic',
                   'amqp.link.role': 'sender',
-                  'amqp.delivery.state': 'accepted',
                   'out.host': 'localhost',
                   'component': 'rhea'
                 })
@@ -558,9 +557,6 @@ function expectReceiving (agent, deliveryState, topic) {
       'amqp.link.role': 'receiver',
       'component': 'rhea'
     }
-    if (deliveryState) {
-      expectedMeta['amqp.delivery.state'] = deliveryState
-    }
     expect(span.meta).to.include(expectedMeta)
   }))
 }
@@ -582,9 +578,6 @@ function expectSending (agent, deliveryState, topic) {
       'amqp.link.target.address': topic,
       'amqp.link.role': 'sender',
       'component': 'rhea'
-    }
-    if (deliveryState) {
-      expectedMeta['amqp.delivery.state'] = deliveryState
     }
     expect(span.meta).to.include(expectedMeta)
   }))

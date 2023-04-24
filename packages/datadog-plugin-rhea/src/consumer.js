@@ -11,7 +11,6 @@ class RheaConsumerPlugin extends ConsumerPlugin {
 
     this.addTraceSub('dispatch', ({ state }) => {
       const span = storage.getStore().span
-      span.setTag('amqp.delivery.state', state)
     })
   }
 
