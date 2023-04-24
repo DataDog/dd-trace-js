@@ -86,62 +86,6 @@ describe('WAF Manager', () => {
     })
   })
 
-  describe('wafManager.reload', () => {
-    beforeEach(() => {
-      waf.init(rules, config.appsec)
-      Reporter.metricsQueue.set.resetHistory()
-    })
-    it('should create new instance of ddwaf', () => {
-      const previousDdwaf = waf.wafManager.ddwaf
-      expect(previousDdwaf).to.be.instanceof(DDWAF)
-
-      waf.wafManager.reload(rules)
-
-      expect(waf.wafManager.ddwaf).to.be.instanceof(DDWAF)
-      expect(waf.wafManager.ddwaf).not.to.be.equal(previousDdwaf)
-    })
-
-    it('should dispose old ddwaf', () => {
-      DDWAF.prototype.dispose.callsFake(function () {
-        this.disposed = true
-      })
-      const previousDdwaf = waf.wafManager.ddwaf
-
-      waf.wafManager.reload(rules)
-
-      expect(previousDdwaf.disposed).to.be.true
-      expect(waf.wafManager.ddwaf).not.to.be.true
-    })
-
-    it('should set init metrics without error', () => {
-      DDWAF.prototype.constructor.version.returns('1.2.3')
-
-      waf.wafManager.reload(rules)
-
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.waf.version', '1.2.3')
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.loaded', true)
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.error_count', 0)
-      expect(Reporter.metricsQueue.set).not.to.been.calledWith('_dd.appsec.event_rules.errors')
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('manual.keep', 'true')
-    })
-
-    it('should set init metrics with errors', () => {
-      DDWAF.prototype.constructor.version.returns('2.3.4')
-      DDWAF.prototype.rulesInfo = {
-        loaded: false, failed: 2, errors: ['error1', 'error2']
-      }
-
-      waf.wafManager.reload(rules)
-
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.waf.version', '2.3.4')
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.loaded', false)
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.error_count', 2)
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('_dd.appsec.event_rules.errors',
-        '["error1","error2"]')
-      expect(Reporter.metricsQueue.set).to.been.calledWithExactly('manual.keep', 'true')
-    })
-  })
-
   describe('wafManager.createDDWAFContext', () => {
     beforeEach(() => {
       waf.init(rules, config.appsec)
@@ -214,8 +158,6 @@ describe('WAF Manager', () => {
 
     describe('dispose', () => {
       it('should call ddwafContext.dispose', () => {
-        // const wafContextWrapper = waf.wafManager.getWAFContext(req)
-        // wafContextWrapper.dispose()
         waf.disposeContext(req)
         expect(ddwafContext.dispose).to.be.calledOnce
       })

@@ -595,7 +595,6 @@ describe('RemoteConfigManager', () => {
       })
 
       rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply')
-
       expect(rc.appliedConfigs).to.be.empty
     })
   })

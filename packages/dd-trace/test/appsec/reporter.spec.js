@@ -1,7 +1,6 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const addresses = require('../../src/appsec/addresses')
 const { storage } = require('../../../datadog-core')
 
 describe('reporter', () => {

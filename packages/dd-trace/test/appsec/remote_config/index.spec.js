@@ -1,6 +1,7 @@
 'use strict'
 
 const RemoteConfigCapabilities = require('../../../src/appsec/remote_config/capabilities')
+const {kPreUpdate} = require('../../../src/appsec/remote_config/manager')
 
 let config
 let rc
@@ -145,6 +146,15 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_RULES, true)
         expect(rc.updateCapabilities.getCall(3))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
+        expect(rc.on.callCount).to.be.equal(4)
+        expect(rc.on.getCall(0))
+          .to.have.been.calledWith('ASM_DATA')
+        expect(rc.on.getCall(1))
+          .to.have.been.calledWith('ASM_DD')
+        expect(rc.on.getCall(2))
+          .to.have.been.calledWith('ASM')
+        expect(rc.on.getCall(3))
+          .to.have.been.calledWith(kPreUpdate)
       })
 
       it('should activate if appsec enabled is not defined', () => {
@@ -177,7 +187,12 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, false)
         expect(rc.updateCapabilities.secondCall)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_USER_BLOCKING, false)
-        expect(rc.off).to.have.been.called
+
+        expect(rc.off.callCount).to.be.equal(4)
+        expect(rc.off.getCall(0)).to.have.been.calledWith('ASM_DATA')
+        expect(rc.off.getCall(1)).to.have.been.calledWith('ASM_DD')
+        expect(rc.off.getCall(2)).to.have.been.calledWith('ASM')
+        expect(rc.off.getCall(3)).to.have.been.calledWith(kPreUpdate)
       })
     })
   })
