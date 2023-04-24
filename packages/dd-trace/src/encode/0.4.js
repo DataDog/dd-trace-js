@@ -3,6 +3,8 @@
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const Chunk = require('./chunk')
 const log = require('../log')
+const { isTrue } = require('../util')
+const coalesce = require('koalas')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
@@ -13,17 +15,21 @@ float64Array[0] = -1
 
 const bigEndian = uInt8Float64Array[7] === 0
 
+const debugEncoding = isTrue(coalesce(
+  process.env.DD_TRACE_ENCODING_DEBUG,
+  false
+))
+
 function formatSpan (span) {
   return normalizeSpan(truncateSpan(span, false))
 }
 
 class AgentEncoder {
-  constructor (writer, config, limit = SOFT_LIMIT) {
+  constructor (writer, limit = SOFT_LIMIT) {
     this._limit = limit
     this._traceBytes = new Chunk()
     this._stringBytes = new Chunk()
     this._writer = writer
-    this._config = config
     this._reset()
   }
 
@@ -41,7 +47,7 @@ class AgentEncoder {
 
     const end = bytes.length
 
-    if (this._config.debugEncoding) {
+    if (debugEncoding) {
       log.debug(() => {
         const hex = bytes.buffer.subarray(start, end).toString('hex').match(/../g).join(' ')
 

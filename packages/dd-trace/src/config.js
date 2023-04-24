@@ -79,12 +79,6 @@ class Config {
       process.env.DD_TRACE_DEBUG,
       false
     ))
-
-    this.debugEncoding = isTrue(coalesce(
-      process.env.DD_TRACE_ENCODING_DEBUG,
-      false
-    ))
-
     this.logger = options.logger
     this.logLevel = coalesce(
       options.logLevel,

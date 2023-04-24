@@ -6,7 +6,6 @@ const { expect } = require('chai')
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const id = require('../../src/id')
-const Config = require('../../src/config')
 
 function randString (length) {
   return Array.from({ length }, () => {
@@ -19,7 +18,6 @@ describe('encode', () => {
   let writer
   let logger
   let data
-  let config
 
   beforeEach(() => {
     logger = {
@@ -29,8 +27,7 @@ describe('encode', () => {
       '../log': logger
     })
     writer = { flush: sinon.spy() }
-    config = new Config()
-    encoder = new AgentEncoder(writer, config)
+    encoder = new AgentEncoder(writer)
     data = [{
       trace_id: id('1234abcd1234abcd'),
       span_id: id('1234abcd1234abcd'),
@@ -125,7 +122,8 @@ describe('encode', () => {
   })
 
   it('should log adding an encoded trace to the buffer if enabled', () => {
-    config.debugEncoding = true
+    process.env.DD_TRACE_ENCODING_DEBUG = 'true'
+    encoder = new AgentEncoder(writer)
     encoder.encode(data)
 
     const message = logger.debug.firstCall.args[0]()

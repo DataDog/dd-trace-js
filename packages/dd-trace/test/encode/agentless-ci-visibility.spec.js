@@ -6,7 +6,6 @@ const { expect } = require('chai')
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const id = require('../../src/id')
-const Config = require('../../src/config')
 const {
   MAX_META_KEY_LENGTH,
   MAX_META_VALUE_LENGTH,
@@ -26,7 +25,6 @@ describe('agentless-ci-visibility-encode', () => {
   let writer
   let logger
   let trace
-  let config
 
   beforeEach(() => {
     logger = {
@@ -35,9 +33,8 @@ describe('agentless-ci-visibility-encode', () => {
     const { AgentlessCiVisibilityEncoder } = proxyquire('../src/encode/agentless-ci-visibility', {
       '../log': logger
     })
-    config = new Config()
     writer = { flush: sinon.spy() }
-    encoder = new AgentlessCiVisibilityEncoder(writer, config, {})
+    encoder = new AgentlessCiVisibilityEncoder(writer, {})
 
     trace = [{
       trace_id: id('1234abcd1234abcd'),

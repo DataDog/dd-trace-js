@@ -5,7 +5,6 @@ require('../setup/tap')
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const id = require('../../src/id')
-const Config = require('../../src/config')
 
 function randString (length) {
   return Array.from({ length }, () => {
@@ -17,13 +16,11 @@ describe('encode 0.5', () => {
   let encoder
   let writer
   let data
-  let config
 
   beforeEach(() => {
     const { AgentEncoder } = require('../../src/encode/0.5')
     writer = { flush: sinon.spy() }
-    config = new Config()
-    encoder = new AgentEncoder(writer, config)
+    encoder = new AgentEncoder(writer)
     data = [{
       trace_id: id('1234abcd1234abcd'),
       span_id: id('1234abcd1234abcd'),
