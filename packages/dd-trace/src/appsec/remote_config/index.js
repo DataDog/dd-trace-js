@@ -33,7 +33,7 @@ function enable (config) {
 }
 
 function enableWafUpdate (appsecConfig) {
-  if (rc && appsecConfig && appsecConfig.rules === undefined) {
+  if (rc && appsecConfig && !appsecConfig.customRulesProvided) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
     // TODO: we should have a different capability for rule override

@@ -111,13 +111,24 @@ describe('Remote Config index', () => {
         expect(rc.on).to.not.have.been.called
       })
 
-      it('should not activate if rules is configured', () => {
-        config.appsec = { enabled: true, rules: './path/rules.json' }
+      it('should not enable when custom appsec rules are provided', () => {
+        config.appsec = { enabled: true, rules: {}, customRulesProvided: true }
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
         expect(rc.updateCapabilities).to.not.have.been.called
         expect(rc.on).to.not.have.been.called
+      })
+
+      it('should enable when using default rules', () => {
+        config.appsec = { enabled: true, rules: {}, customRulesProvided: false }
+        remoteConfig.enable(config)
+        remoteConfig.enableAsmData(config.appsec)
+
+        expect(rc.updateCapabilities).to.have.been.calledTwice
+        expect(rc.updateCapabilities.firstCall).to.have.been.calledWithExactly(Capabilities.ASM_IP_BLOCKING, true)
+        expect(rc.updateCapabilities.secondCall).to.have.been.calledWithExactly(Capabilities.ASM_USER_BLOCKING, true)
+        expect(rc.on).to.have.been.calledOnceWith('ASM_DATA')
       })
 
       it('should activate if appsec is manually enabled', () => {
