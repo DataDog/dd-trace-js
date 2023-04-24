@@ -34,15 +34,6 @@ describe('Serverless', () => {
     delete process.env.DD_MINI_AGENT_PATH
   })
 
-  it('dont spawn mini agent if no mini agent path', () => {
-    process.env.K_SERVICE = 'test_function'
-    process.env.FUNCTION_TARGET = 'function_target'
-
-    maybeStartServerlessMiniAgent()
-
-    expect(childProcessSpawnSpy).to.not.have.been.called
-  })
-
   it('dont spawn mini agent if mini agent path is invalid', () => {
     process.env.K_SERVICE = 'test_function'
     process.env.FUNCTION_TARGET = 'function_target'
@@ -57,7 +48,7 @@ describe('Serverless', () => {
     // trying to spawn with an invalid path will return a non-descriptive error, so we want to catch
     // invalid paths and log our own error.
     expect(logErrorSpy).to.have.been.calledOnceWith(
-      'Serverless Mini Agent did not start. DD_MINI_AGENT_PATH points to a non-existent file.'
+      'Serverless Mini Agent did not start. Could not find mini agent binary.'
     )
 
     expect(childProcessSpawnSpy).to.not.have.been.called
