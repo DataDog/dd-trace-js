@@ -19,9 +19,7 @@ jobs:
     env:
       ROBOT_CI_GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.ROBOT_CI_GITHUB_PERSONAL_ACCESS_TOKEN }}
     steps:
-      - uses: actions/checkout@v2
-      - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - uses: ./.github/actions/node/latest
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/node/18
       - name: CI Visibility Performance Overhead Test
         run: yarn bench:e2e:ci-visibility

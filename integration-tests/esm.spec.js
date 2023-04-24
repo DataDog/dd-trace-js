@@ -9,7 +9,14 @@ const {
 const path = require('path')
 const { assert } = require('chai')
 
+const NODE_MAJOR = parseInt(process.versions.node.split('.')[0])
+
 const hookFile = 'dd-trace/loader-hook.mjs'
+
+// TODO: add ESM support for Node 20 in import-in-the-middle
+const describe = NODE_MAJOR >= 20
+  ? global.describe.skip
+  : global.describe
 
 describe('esm', () => {
   let agent

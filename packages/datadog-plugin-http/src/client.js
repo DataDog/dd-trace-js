@@ -94,7 +94,7 @@ function errorHandler (err) {
   if (err) {
     span.addTags({
       [ERROR_TYPE]: err.name,
-      [ERROR_MESSAGE]: err.message,
+      [ERROR_MESSAGE]: err.message || err.code,
       [ERROR_STACK]: err.stack
     })
   } else {

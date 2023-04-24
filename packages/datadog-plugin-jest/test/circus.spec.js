@@ -13,6 +13,7 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_SOURCE_FILE,
+  TEST_SOURCE_START,
   TEST_FRAMEWORK_VERSION,
   TEST_STATUS,
   CI_APP_ORIGIN,
@@ -170,6 +171,7 @@ describe('Plugin', function () {
               expect(testSpan.name).to.equal('jest.test')
               expect(testSpan.service).to.equal('test')
               expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
+              expect(testSpan.metrics[TEST_SOURCE_START]).to.exist
               expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
             }, {
               timeoutMs: assertionTimeout,
