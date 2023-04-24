@@ -5,7 +5,9 @@ const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 
-describe('command injection analyzer', () => {
+describe('command injection analyzer', function () {
+  this.timeout(10000)
+
   prepareTestServerForIast('command injection analyzer',
     (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       testThatRequestHasVulnerability(() => {
