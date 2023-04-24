@@ -130,7 +130,7 @@ function prepareTestServerForIast (description, tests) {
     })
 
     before(() => {
-      return agent.load('http', undefined, { flushInterval: 1 })
+      return agent.load('http', undefined, { flushInterval: 1 }, false)
         .then(() => {
           http = require('http')
         })

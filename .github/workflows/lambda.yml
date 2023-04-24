@@ -16,11 +16,10 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install Docker Compose
+      - name: Install docker
         run: |
-          sudo curl -L "https://github.com/docker/compose/releases/download/2.17.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
-          docker-compose --version
+          brew install docker docker-machine docker-compose
+          sudo docker -version
       - name: Set hostname
         run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
@@ -57,7 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2      
       - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
+        run: Start-Process powershell -Verb RunAs -ArgumentList "-Command Set-ComputerName -NewName 'testrunner'"
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
