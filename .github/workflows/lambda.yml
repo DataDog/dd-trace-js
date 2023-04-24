@@ -21,7 +21,7 @@ jobs:
           brew install docker docker-machine docker-compose
           sudo docker --version
       - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
+        run: sudo scutil --set HostName testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
