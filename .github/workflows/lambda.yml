@@ -22,6 +22,7 @@ jobs:
           sudo docker --version
       - name: Set hostname
         run: sudo scutil --set HostName testrunner
+      - run: sudo /Applications/Docker.app/Contents/MacOS/Docker --daemonize # run docker
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
