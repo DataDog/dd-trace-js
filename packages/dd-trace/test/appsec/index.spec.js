@@ -13,7 +13,6 @@ const axios = require('axios')
 const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const recommendedJson = require('../../src/appsec/recommended.json')
-const {cond} = require('lodash')
 
 describe('AppSec Index', () => {
   let config

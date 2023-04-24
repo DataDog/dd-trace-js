@@ -1,7 +1,7 @@
 'use strict'
 
 const RemoteConfigCapabilities = require('../../../src/appsec/remote_config/capabilities')
-const {kPreUpdate} = require('../../../src/appsec/remote_config/manager')
+const { kPreUpdate } = require('../../../src/appsec/remote_config/manager')
 
 let config
 let rc
@@ -136,14 +136,10 @@ describe('Remote Config index', () => {
         expect(rc.updateCapabilities.getCall(3))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
 
-        expect(rc.on.getCall(0))
-          .to.have.been.calledWith('ASM_DATA')
-        expect(rc.on.getCall(1))
-          .to.have.been.calledWith('ASM_DD')
-        expect(rc.on.getCall(2))
-          .to.have.been.calledWith('ASM')
-        expect(rc.on.getCall(3))
-          .to.have.been.calledWith(kPreUpdate)
+        expect(rc.on.getCall(0)).to.have.been.calledWith('ASM_DATA')
+        expect(rc.on.getCall(1)).to.have.been.calledWith('ASM_DD')
+        expect(rc.on.getCall(2)).to.have.been.calledWith('ASM')
+        expect(rc.on.getCall(3)).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
       })
 
       it('should activate if appsec is manually enabled', () => {
@@ -161,14 +157,11 @@ describe('Remote Config index', () => {
         expect(rc.updateCapabilities.getCall(3))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
         expect(rc.on.callCount).to.be.equal(4)
-        expect(rc.on.getCall(0))
-          .to.have.been.calledWith('ASM_DATA')
-        expect(rc.on.getCall(1))
-          .to.have.been.calledWith('ASM_DD')
-        expect(rc.on.getCall(2))
-          .to.have.been.calledWith('ASM')
-        expect(rc.on.getCall(3))
-          .to.have.been.calledWith(kPreUpdate)
+
+        expect(rc.on.getCall(0)).to.have.been.calledWith('ASM_DATA')
+        expect(rc.on.getCall(1)).to.have.been.calledWith('ASM_DD')
+        expect(rc.on.getCall(2)).to.have.been.calledWith('ASM')
+        expect(rc.on.getCall(3)).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
       })
 
       it('should activate if appsec enabled is not defined', () => {
@@ -206,7 +199,7 @@ describe('Remote Config index', () => {
         expect(rc.off.getCall(0)).to.have.been.calledWith('ASM_DATA')
         expect(rc.off.getCall(1)).to.have.been.calledWith('ASM_DD')
         expect(rc.off.getCall(2)).to.have.been.calledWith('ASM')
-        expect(rc.off.getCall(3)).to.have.been.calledWith(kPreUpdate)
+        expect(rc.off.getCall(3)).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
       })
     })
   })
