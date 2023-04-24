@@ -1183,7 +1183,8 @@ declare namespace plugins {
 
     /**
      * Whether to enable signature calculation for the resource name. This can
-     * be disabled if your GraphQL operations always have a name.
+     * be disabled if your GraphQL operations always have a name. Note that when
+     * disabled all queries will need to be named for this to work properly.
      *
      * @default true
      */
