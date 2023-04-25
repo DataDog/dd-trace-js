@@ -1,7 +1,7 @@
 /* eslint-disable max-len */
 'use strict'
 
-const html = `<!-- Sorry, you've been blocked -->
+const html = `<!-- Sorry, you’ve been blocked -->
 <!DOCTYPE html>
 <html lang="en">
 
