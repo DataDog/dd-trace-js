@@ -1,5 +1,5 @@
 
-const { SpanStatsEncoder } = require('../../encode/span-stats') // TODO
+const { SpanStatsEncoder } = require('../../encode/span-stats')
 
 const pkg = require('../../../../../package.json')
 
