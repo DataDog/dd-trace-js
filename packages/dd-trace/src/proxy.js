@@ -27,7 +27,7 @@ class Tracer extends NoopProxy {
       const config = new Config(options) // TODO: support dynamic config
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        remoteConfig.enable(config)
+        //remoteConfig.enable(config)
       }
 
       if (config.profiling.enabled) {
