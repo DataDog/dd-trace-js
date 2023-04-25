@@ -9,12 +9,15 @@ const log = require('../../log')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 
 const clientId = uuid()
+
 const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
 
-// There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest with their
-// own separated Client.ClientState.
+const kPreUpdate = Symbol('kPreUpdate')
+
+// There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
+// with their own separated Client.ClientState.
 class RemoteConfigManager extends EventEmitter {
-  static kPreUpdate = Symbol('kPreUpdate')
+  static get kPreUpdate () { return kPreUpdate }
 
   constructor (config) {
     super()
