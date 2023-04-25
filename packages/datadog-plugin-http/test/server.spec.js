@@ -141,7 +141,6 @@ describe('Plugin', () => {
             expect(tracer.scope().active()).to.equal(null)
             done()
           })
-          res.end()
         }
 
         axios.get(`http://localhost:${port}/user`).catch(done)

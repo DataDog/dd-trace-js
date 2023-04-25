@@ -45,7 +45,7 @@ const testFrameworks = [
   },
   {
     name: 'jest',
-    dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai', 'jest-jasmine2'],
+    dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai', isOldNode ? 'jest-jasmine2@28' : 'jest-jasmine2'],
     testFile: 'ci-visibility/run-jest.js',
     expectedStdout: 'Test Suites: 2 passed',
     expectedCoverageFiles: [

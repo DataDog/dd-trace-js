@@ -6,6 +6,7 @@ const { storage } = require('../../datadog-core')
 const {
   TEST_SKIP_REASON,
   TEST_STATUS,
+  TEST_SOURCE_START,
   finishAllTraceSpans,
   getTestSuitePath,
   getTestSuiteCommonTags,
@@ -80,10 +81,10 @@ class CucumberPlugin extends CiPlugin {
       this.tracer._exporter.exportCoverage(formattedCoverage)
     })
 
-    this.addSub('ci:cucumber:test:start', ({ testName, fullTestSuite }) => {
+    this.addSub('ci:cucumber:test:start', ({ testName, fullTestSuite, testSourceLine }) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(fullTestSuite, this.sourceRoot)
-      const testSpan = this.startTestSpan(testName, testSuite)
+      const testSpan = this.startTestSpan(testName, testSuite, testSourceLine)
 
       this.enter(testSpan, store)
     })
@@ -130,11 +131,12 @@ class CucumberPlugin extends CiPlugin {
     })
   }
 
-  startTestSpan (testName, testSuite) {
+  startTestSpan (testName, testSuite, testSourceLine) {
     return super.startTestSpan(
       testName,
       testSuite,
-      this.testSuiteSpan
+      this.testSuiteSpan,
+      { [TEST_SOURCE_START]: testSourceLine }
     )
   }
 }

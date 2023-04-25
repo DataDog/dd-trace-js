@@ -8,7 +8,6 @@ const chalk = require('chalk')
 const getPort = require('get-port')
 const Table = require('cli-table3')
 const URL = require('url').URL
-const waitOn = require('wait-on')
 const { spawn } = require('child_process')
 
 main()
@@ -94,6 +93,35 @@ function compareCpu (result1, result2) {
   cpuTime.push(asTimeRow(chalk.bold('CPU Time'), asDiff(result1, result2)))
 
   console.log(cpuTime.toString())
+}
+
+function waitOn ({ interval = 250, timeout, resources }) {
+  return Promise.all(resources.map(resource => {
+    return new Promise((resolve, reject) => {
+      let intervalTimer
+      const timeoutTimer = timeout && setTimeout(() => {
+        reject(new Error('Timeout.'))
+        clearTimeout(timeoutTimer)
+        clearTimeout(intervalTimer)
+      }, timeout)
+
+      function waitOnResource () {
+        if (timeout && !timeoutTimer) return
+
+        axios.get(resource)
+          .then(() => {
+            resolve()
+            clearTimeout(timeoutTimer)
+            clearTimeout(intervalTimer)
+          })
+          .catch(() => {
+            intervalTimer = setTimeout(waitOnResource, interval)
+          })
+      }
+
+      waitOnResource()
+    })
+  }))
 }
 
 async function createServer (profilerEnabled, url) {

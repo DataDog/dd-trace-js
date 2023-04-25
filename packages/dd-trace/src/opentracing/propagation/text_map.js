@@ -343,10 +343,10 @@ class TextMapPropagator {
               spanContext._trace.origin = value
               break
             case 't.dm': {
-              const mechanism = parseInt(value, 10)
+              const mechanism = -Math.abs(parseInt(value, 10))
               if (Number.isInteger(mechanism)) {
                 spanContext._sampling.mechanism = mechanism
-                spanContext._trace.tags['_dd.p.dm'] = mechanism
+                spanContext._trace.tags['_dd.p.dm'] = String(mechanism)
               }
               break
             }
