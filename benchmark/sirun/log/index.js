@@ -8,9 +8,9 @@ const {
   WITH_LEVEL = 'debug'
 } = process.env
 
-require('../../..').init({
-  debug: DD_TRACE_DEBUG
-})
+// require('../../..').init({
+//   debug: DD_TRACE_DEBUG
+// })
 
 // log.use({
 //   debug () {},
