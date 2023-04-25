@@ -7,7 +7,7 @@ variables:
   tags: ["runner:apm-k8s-tweaked-metal"]
   image: $BASE_CI_IMAGE
   interruptible: true
-  timeout: 1h
+  timeout: 10m
   script:
     - export REPORTS_DIR="$(pwd)/reports/" && (mkdir "${REPORTS_DIR}" || :)
     - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/".insteadOf "https://github.com/DataDog/"
@@ -66,17 +66,27 @@ check-big-regressions:
 
     KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
 
-benchmark-v14:
+benchmark:
   extends: .benchmarks
+  parallel:
+    matrix:
+      - MAJOR_VERSION: 14
+        GROUP: 1
+      - MAJOR_VERSION: 14
+        GROUP: 2
+      - MAJOR_VERSION: 14
+        GROUP: 3
+      - MAJOR_VERSION: 16
+        GROUP: 1
+      - MAJOR_VERSION: 16
+        GROUP: 2
+      - MAJOR_VERSION: 16
+        GROUP: 3
+      - MAJOR_VERSION: 18
+        GROUP: 1
+      - MAJOR_VERSION: 18
+        GROUP: 2
+      - MAJOR_VERSION: 18
+        GROUP: 3
   variables:
-    MAJOR_VERSION: 14
-
-benchmark-v16:
-  extends: .benchmarks
-  variables:
-    MAJOR_VERSION: 16
-
-benchmark-v18:
-  extends: .benchmarks
-  variables:
-    MAJOR_VERSION: 18
+    SPLITS: 3
