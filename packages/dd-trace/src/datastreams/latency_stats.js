@@ -1,18 +1,20 @@
 const os = require('os')
-const pkg = require('../../../package.json')
-const { decodePathwayContext } = require('../../datadog-plugin-kafkajs/src/hash')
+const pkg = require('../../../../package.json')
+const { decodePathwayContext } = require('../../../datadog-plugin-kafkajs/src/hash')
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 
-const { LatencyStatsExporter } = require('./exporters/latency-stats')
+const { LatencyStatsExporter } = require('../exporters/latency-stats')
+
+const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
 class AggStats {
   constructor (aggKey) {
     this.hash = aggKey.hash
     this.parentHash = aggKey.parentHash
     this.edgeTags = aggKey.edgeTags
-    this.edgeLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
-    this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
+    this.edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
+    this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
   }
 
   record (checkpoint) {
@@ -95,7 +97,7 @@ class LatencyStatsProcessor {
     this.sequence = 0
 
     if (this.enabled) {
-      this.timer = setInterval(this.onInterval.bind(this), 1e4) // TODO: the right interval?
+      this.timer = setInterval(this.onInterval.bind(this), 10000) // TODO: the right interval?
       this.timer.unref()
     }
   }

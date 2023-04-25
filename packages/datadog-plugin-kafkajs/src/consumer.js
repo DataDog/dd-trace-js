@@ -11,10 +11,6 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
   start ({ topic, partition, message, groupId }) {
     const childOf = extract(this.tracer, message.headers)
-    let parentHash
-    let pathwayCtx
-    let originTimestamp
-    let prevTimestamp
     const service = this.tracer._service
 
     const header = {
@@ -37,6 +33,9 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       const currentTimestamp = Date.now()
       const env = this.tracer._env
       const checkpointString = getCheckpointString(service, env, groupId, topic, partition)
+      let parentHash
+      let originTimestamp
+      let prevTimestamp
 
       const prevPathwayCtx = message.headers['dd-pathway-ctx']
       if (prevPathwayCtx) {
@@ -49,16 +48,10 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       const pathwayHash = Hash.getPathwayHash(checkpointString, parentHash)
       const edgeLatency = currentTimestamp - prevTimestamp
       const pathwayLatency = currentTimestamp - originTimestamp
-      pathwayCtx = Hash.encodePathwayContext(pathwayHash, originTimestamp, currentTimestamp)
+      const pathwayCtx = Hash.encodePathwayContext(pathwayHash, originTimestamp, currentTimestamp)
 
       header.metrics['parent_hash'] = parentHash
-      header.metrics['edge_tags'] = {
-        'service': service,
-        'env': env,
-        'groupId': groupId,
-        'topic': topic,
-        'partition': partition
-      }
+      header.metrics['edge_tags'] = { service, env, groupId, topic, partition }
       header.metrics['edge_latency'] = edgeLatency
       header.metrics['pathway_latency'] = pathwayLatency
       header.metrics['dd-pathway-ctx'] = pathwayCtx

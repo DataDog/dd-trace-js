@@ -1,17 +1,17 @@
 'use strict'
 
-require('./setup/tap')
-const util = require('util')
+require('../setup/tap')
 
 const { hostname } = require('os')
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 
-const { decodePathwayContext } = require('../../datadog-plugin-kafkajs/src/hash')
+const { decodePathwayContext } = require('../../../datadog-plugin-kafkajs/src/hash')
 
-const { version } = require('../src/pkg')
-const pkg = require('../../../package.json')
-const DEFAULT_TIMESTAMP = 1
+const HIGH_ACCURACY_DISTRIBUTION = 0.0075
+
+const pkg = require('../../../../package.json')
+const DEFAULT_TIMESTAMP = Number(new Date('2023-04-20T16:20:00.000Z'))
 const DEFAULT_LATENCY = 100
 const DEFAULT_PATHWAY_CTX = Buffer.from('e073ca23a5577149a0a8879de561a0a8879de561', 'hex')
 const DEFAULT_PARENT_HASH = Buffer.from('e858292fd15a41e4', 'hex')
@@ -52,8 +52,8 @@ const {
   SpanBuckets,
   TimeBuckets,
   LatencyStatsProcessor
-} = proxyquire('../src/latency_stats', {
-  './exporters/latency-stats': {
+} = proxyquire('../src/datastreams/latency_stats', {
+  '../exporters/latency-stats': {
     LatencyStatsExporter
   }
 })
@@ -71,8 +71,8 @@ describe('AggStats', () => {
     const aggStats = new AggStats(aggKey)
     aggStats.record(mockCheckpoint)
 
-    const edgeLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
-    const pathwayLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
+    const edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
+    const pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     edgeLatency.accept(DEFAULT_LATENCY)
     pathwayLatency.accept(DEFAULT_LATENCY)
 
@@ -201,7 +201,7 @@ describe('LatencyStatsProcessor', () => {
       Service: undefined,
       PrimaryTag: { tag: 'some tag' },
       Stats: [{
-        Start: 0,
+        Start: 1680000000000,
         Duration: 10000000000,
         Stats: [{
           Hash: checkpoint.Hash,

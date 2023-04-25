@@ -9,7 +9,7 @@ const sinon = require('sinon')
 
 const DEFAULT_PATHWAY_HASH = Buffer.from('e858292fd15a41e4', 'hex')
 const DEFAULT_PATHWAY_CTX = Buffer.from('e073ca23a5577149a0a8879de561a0a8879de561', 'hex')
-const DEFAULT_TIMESTAMP = 1
+const DEFAULT_TIMESTAMP = Number(new Date('2023-04-20T16:20:00.000Z'))
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
@@ -22,7 +22,6 @@ describe('Plugin', () => {
       let kafka
       let tracer
       describe('without configuration', () => {
-        // const messages = [{ key: 'key1', value: 'test2' }]
         beforeEach(async () => {
           tracer = require('../../dd-trace')
           await agent.load('kafkajs')
@@ -304,7 +303,7 @@ describe('Plugin', () => {
 
           it('should propagate context', (done) => {
             const messages = [{ key: 'consumerDSM2', value: 'test2' }]
-            const expectedPathwayCtx = Buffer.from('16f60748b780b322a0a8879de561020000000000', 'hex')
+            const expectedPathwayCtx = Buffer.from('16f60748b780b322a0a8879de56180aeb9f7f361', 'hex')
             const scope = tracer.scope()
             const span = tracer.startSpan('consumer span', {
               tags: {

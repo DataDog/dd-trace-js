@@ -4,7 +4,7 @@ const { channel } = require('../../diagnostics_channel')
 const { isFalse } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
-const { LatencyStatsProcessor } = require('./latency_stats')
+const { LatencyStatsProcessor } = require('./datastreams/latency_stats')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 

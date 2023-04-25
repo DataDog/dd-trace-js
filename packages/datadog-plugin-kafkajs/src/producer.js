@@ -22,8 +22,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       const currentTimestamp = Date.now()
       const checkpointString = getCheckpointString(service, env, topic)
       if (active) {
-        const context = active.context()
-        const rootSpan = context._trace.started[0];
+        const rootSpan = active.context()._trace.started[0];
         [ parentHash, originTimestamp, prevTimestamp ] =
         Hash.decodePathwayContext(rootSpan._spanContext._tags.metrics['dd-pathway-ctx'])
       } else {
@@ -42,7 +41,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
         currentTimestamp: currentTimestamp,
         metrics: {
           'parent_hash': parentHash,
-          'edge_tags': { 'service': service, 'env': env, 'topic': topic },
+          'edge_tags': { service, env, topic },
           'dd-pathway-ctx': pathwayCtx,
           'edge_latency': edgeLatency,
           'pathway_latency': pathwayLatency
@@ -74,7 +73,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
   }
 }
 
-function getCheckpointString (service, env, topic, partition) {
+function getCheckpointString (service, env, topic) {
   return `${service}${env}direction:outtopic:${topic}type:kafka`
 }
 
