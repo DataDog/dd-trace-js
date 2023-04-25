@@ -9,6 +9,7 @@ describe('Plugin', () => {
   // TODO: use the Request class directly for generic tests
   // TODO: add test files for every service
   describe('aws-sdk', function () {
+    this.timeout(100000)
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {

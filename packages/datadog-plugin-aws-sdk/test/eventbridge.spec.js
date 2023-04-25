@@ -5,7 +5,7 @@ const EventBridge = require('../src/services/eventbridge')
 const tracer = require('../../dd-trace')
 const { randomBytes } = require('crypto')
 
-describe('EventBridge', () => {
+describe('EventBridge', function () {
   let span
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let traceId

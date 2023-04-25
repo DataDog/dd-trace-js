@@ -5,22 +5,20 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 
 class TestSpanProcessor {
-  constructor() {
+  constructor () {
     this.unprocessedSpans = []
   }
 
-  process(span) {
+  process (span) {
     // Store the unprocessed span
     this.unprocessedSpans.push(span)
   }
 }
 
-
-
 const s3Params = {
-  Bucket: 'examplebucket', 
+  Bucket: 'examplebucket',
   CreateBucketConfiguration: {
-   LocationConstraint: 'sa-east-1'
+    LocationConstraint: 'sa-east-1'
   }
 }
 let tracer
@@ -43,7 +41,6 @@ describe('S3', function () {
         })
 
         before(done => {
-          
           AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
 
           s3 = new AWS.S3({
@@ -55,7 +52,6 @@ describe('S3', function () {
           const testSpanProcessor = new TestSpanProcessor()
           tracer._tracer._processor = testSpanProcessor
           done()
-
         })
 
         after(done => {
@@ -65,7 +61,7 @@ describe('S3', function () {
 
         after(() => {
           return agent.close({ ritmReset: false })
-        })      
+        })
         it('should run the getObject in the context of its span', async () => {
           // Convert the createBucket function to a Promise-based function
           const createBucketPromise = (params) => {
@@ -76,18 +72,14 @@ describe('S3', function () {
               })
             })
           }
-        
-          try {
-            // Await the createBucket function so test doesn't speed past before we have the chance to assert on the finished spans
-            await createBucketPromise(s3Params)
-            const span = tracer._tracer._processor.unprocessedSpans[0]
-            expect(span.context()._tags['aws.operation']).to.equal('createBucket')
-            expect(span.context()._tags['bucketname']).to.equal('examplebucket')
-            expect(span.context()._tags['aws_service']).to.equal('S3')
-            expect(span.context()._tags['region']).to.equal('sa-east-1')
-          } catch (err) {
-            console.error(err)
-          }
+
+          // Await the createBucket function so test doesn't speed past before we have the chance to assert on the finished spans
+          await createBucketPromise(s3Params)
+          const span = tracer._tracer._processor.unprocessedSpans[0]
+          expect(span.context()._tags['aws.operation']).to.equal('createBucket')
+          expect(span.context()._tags['bucketname']).to.equal('examplebucket')
+          expect(span.context()._tags['aws_service']).to.equal('S3')
+          expect(span.context()._tags['region']).to.equal('sa-east-1')
         })
       })
     })

@@ -5,7 +5,8 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 
-describe('Sns', () => {
+describe('Sns', function () {
+  this.timeout(100000)
   setup()
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {

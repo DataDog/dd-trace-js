@@ -3,7 +3,6 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')
-const { Console } = require('console')
 
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }

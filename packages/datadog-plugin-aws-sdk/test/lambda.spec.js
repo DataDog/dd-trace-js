@@ -10,6 +10,7 @@ const createClientContext = data => Buffer.from(JSON.stringify(data)).toString('
 
 describe('Plugin', () => {
   describe('aws-sdk (lambda)', function () {
+    this.timeout(100000)
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {

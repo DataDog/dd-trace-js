@@ -1,16 +1,15 @@
 /* eslint-disable max-len */
 'use strict'
 
-const Scope = require('../../dd-trace/src/scope')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 
 class TestSpanProcessor {
-  constructor() {
+  constructor () {
     this.unprocessedSpans = []
   }
 
-  process(span) {
+  process (span) {
     // Store the unprocessed span
     this.unprocessedSpans.push(span)
   }
@@ -19,15 +18,15 @@ class TestSpanProcessor {
 const dynamoParams = {
   TableName: 'example-table',
   KeySchema: [
-    { AttributeName: 'id', KeyType: 'HASH' },
+    { AttributeName: 'id', KeyType: 'HASH' }
   ],
   AttributeDefinitions: [
-    { AttributeName: 'id', AttributeType: 'S' },
+    { AttributeName: 'id', AttributeType: 'S' }
   ],
   ProvisionedThroughput: {
     ReadCapacityUnits: 5,
-    WriteCapacityUnits: 5,
-  },
+    WriteCapacityUnits: 5
+  }
 }
 
 let tracer
@@ -40,7 +39,6 @@ describe('DynamoDB', function () {
     withVersions('aws-sdk', ['aws-sdk'], (version, moduleName) => {
       let AWS
       let dynamo
-      const scope = new Scope()
 
       describe('without configuration', () => {
         before(() => {
@@ -54,7 +52,7 @@ describe('DynamoDB', function () {
 
           dynamo = new AWS.DynamoDB({
             endpoint: 'http://127.0.0.1:4566',
-            region: 'us-west-2',
+            region: 'us-west-2'
           })
 
           const testSpanProcessor = new TestSpanProcessor()
@@ -83,24 +81,16 @@ describe('DynamoDB', function () {
             })
           }
 
-          try {
-            // Await the createTable function
-            await createTablePromise(dynamoParams)
-            const span = tracer._tracer._processor.unprocessedSpans[0]
+          // Await the createTable function
+          await createTablePromise(dynamoParams)
+          const span = tracer._tracer._processor.unprocessedSpans[0]
 
-            expect(span.context()._tags['aws.operation']).to.equal('createTable')
-            expect(span.context()._tags['tablename']).to.equal('example-table')
-            expect(span.context()._tags['aws_service']).to.equal('DynamoDB')
-            expect(span.context()._tags['region']).to.equal('us-west-2')
-
-          } catch (err) {
-            // Handle any errors that occur during createTable
-            console.error(err)
-          }
+          expect(span.context()._tags['aws.operation']).to.equal('createTable')
+          expect(span.context()._tags['tablename']).to.equal('example-table')
+          expect(span.context()._tags['aws_service']).to.equal('DynamoDB')
+          expect(span.context()._tags['region']).to.equal('us-west-2')
         })
-
       })
     })
   })
 })
-
