@@ -46,6 +46,24 @@ jobs:
           node-version: ${{ matrix.version }}
       - run: yarn test:integration:${{ matrix.framework }}
 
+  integration-serverless:
+    strategy:
+      matrix:
+        version: [14, latest]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.version }}
+      - name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+      - run: yarn test:integration:serverless
+
   lint:
     runs-on: ubuntu-latest
     steps:
