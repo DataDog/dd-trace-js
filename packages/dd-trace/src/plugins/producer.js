@@ -4,12 +4,13 @@ const OutboundPlugin = require('./outbound')
 
 class ProducerPlugin extends OutboundPlugin {
   static get operation () { return 'publish' }
+  static get kind () { return 'producer' }
   static get type () { return 'messaging' }
 
   startSpan (options) {
     const spanDefaults = {
       service: this.config.service || this.serviceName(),
-      kind: 'producer'
+      kind: this.constructor.kind
     }
     Object.keys(spanDefaults).forEach(
       key => {

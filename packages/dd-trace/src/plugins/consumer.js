@@ -4,12 +4,13 @@ const InboundPlugin = require('./inbound')
 
 class ConsumerPlugin extends InboundPlugin {
   static get operation () { return 'receive' }
+  static get kind () { return 'consumer' }
   static get type () { return 'messaging' }
 
   startSpan (options) {
     const spanDefaults = {
       service: this.config.service || this.serviceName(),
-      kind: 'consumer'
+      kind: this.constructor.kind
     }
     Object.keys(spanDefaults).forEach(
       key => {
