@@ -7,7 +7,7 @@ const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
-const remoteConfig = require('./appsec/remote_config')
+//const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
 
 class Tracer extends NoopProxy {
