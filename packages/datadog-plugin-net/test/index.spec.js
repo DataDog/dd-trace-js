@@ -173,7 +173,7 @@ describe('Plugin', () => {
             'tcp.remote.host': 'localhost',
             'out.host': 'localhost',
             [ERROR_TYPE]: error.name,
-            [ERROR_MESSAGE]: error.message,
+            [ERROR_MESSAGE]: error.message || error.code,
             [ERROR_STACK]: error.stack
           })
           expect(traces[0][0].metrics).to.deep.include({

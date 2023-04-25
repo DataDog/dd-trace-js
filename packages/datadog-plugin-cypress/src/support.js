@@ -29,6 +29,10 @@ afterEach(() => {
       state: currentTest.state,
       error: currentTest.err,
     }
+    try {
+      testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
+    } catch (e) {}
+
     if (win.DD_RUM) {
       testInfo.isRUMActive = true
     }

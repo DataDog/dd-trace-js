@@ -13,6 +13,7 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_SOURCE_FILE,
+  TEST_SOURCE_START,
   TEST_STATUS,
   TEST_PARAMETERS,
   CI_APP_ORIGIN,
@@ -164,6 +165,7 @@ describe('Plugin', () => {
               [ERROR_TYPE]: 'AssertionError',
               [ERROR_MESSAGE]: 'expected true to equal false'
             })
+            expect(testSpan.metrics[TEST_SOURCE_START]).to.exist
             expect(testSpan.meta[ERROR_STACK]).not.to.be.undefined
             expect(testSpan.parent_id.toString()).to.equal('0')
             expect(testSpan.meta[TEST_SUITE].endsWith('mocha-test-fail.js')).to.equal(true)
@@ -231,6 +233,7 @@ describe('Plugin', () => {
                 })
                 expect(testSpan.meta[ERROR_STACK]).not.to.be.undefined
               }
+              expect(testSpan.metrics[TEST_SOURCE_START]).to.exist
               expect(testSpan.parent_id.toString()).to.equal('0')
               expect(testSpan.meta[TEST_SUITE].endsWith(test.fileName)).to.equal(true)
               expect(testSpan.type).to.equal('test')
@@ -264,6 +267,7 @@ describe('Plugin', () => {
               [TEST_SOURCE_FILE]: testSuite,
               [TEST_PARAMETERS]: JSON.stringify({ arguments: [1, 2, 3], metadata: {} })
             })
+            expect(testSpan.metrics[TEST_SOURCE_START]).to.exist
             expect(testSpan.parent_id.toString()).to.equal('0')
             expect(testSpan.meta[TEST_SUITE].endsWith('mocha-test-parameterized.js')).to.equal(true)
             expect(testSpan.type).to.equal('test')
@@ -301,6 +305,7 @@ describe('Plugin', () => {
             [TEST_SUITE]: testSuite,
             [TEST_SOURCE_FILE]: testSuite
           })
+          expect(testSpan.metrics[TEST_SOURCE_START]).to.exist
         }).then(done, done)
 
         const mocha = new Mocha({

@@ -7,7 +7,8 @@ const {
   TEST_STATUS,
   finishAllTraceSpans,
   getTestSuitePath,
-  getTestSuiteCommonTags
+  getTestSuiteCommonTags,
+  TEST_SOURCE_START
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -64,10 +65,10 @@ class PlaywrightPlugin extends CiPlugin {
       span.finish()
     })
 
-    this.addSub('ci:playwright:test:start', ({ testName, testSuiteAbsolutePath }) => {
+    this.addSub('ci:playwright:test:start', ({ testName, testSuiteAbsolutePath, testSourceLine }) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
-      const span = this.startTestSpan(testName, testSuite)
+      const span = this.startTestSpan(testName, testSuite, testSourceLine)
 
       this.enter(span, store)
     })
@@ -104,9 +105,9 @@ class PlaywrightPlugin extends CiPlugin {
     })
   }
 
-  startTestSpan (testName, testSuite) {
+  startTestSpan (testName, testSuite, testSourceLine) {
     const testSuiteSpan = this._testSuites.get(testSuite)
-    return super.startTestSpan(testName, testSuite, testSuiteSpan)
+    return super.startTestSpan(testName, testSuite, testSuiteSpan, { [TEST_SOURCE_START]: testSourceLine })
   }
 }
 
