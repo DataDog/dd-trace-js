@@ -15,6 +15,7 @@ const axios = require('axios')
 const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const web = require('../../src/plugins/util/web')
+const recommendedJson = require('../../src/appsec/recommended.json')
 
 describe('AppSec Index', () => {
   let config
