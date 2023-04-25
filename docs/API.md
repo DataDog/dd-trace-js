@@ -413,7 +413,7 @@ app.get('/shopping_cart/:customer_id', (req, res) => {
 ```
 Related video guide: [![Creating Custom Spans for Method-Level Visibility](https://img.youtube.com/vi/pguPbIDN6hY/hqdefault.jpg)](https://youtu.be/pguPbIDN6hY)
 
-Alternatie ways of customizing spans: [![Adding Custom Tags to Spans](https://img.youtube.com/vi/gA68coge3Ro/hqdefault.jpg)](https://youtu.be/gA68coge3Ro)
+Alternative ways of customizing spans: [![Adding Custom Tags to Spans](https://img.youtube.com/vi/gA68coge3Ro/hqdefault.jpg)](https://youtu.be/gA68coge3Ro)
 
 <h3 id="span-hooks">Span Hooks</h3>
 
