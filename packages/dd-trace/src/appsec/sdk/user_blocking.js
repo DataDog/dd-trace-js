@@ -1,7 +1,7 @@
 'use strict'
 
 const { USER_ID } = require('../addresses')
-//const waf = require('../waf')
+const waf = require('../waf')
 const { getRootSpan } = require('./utils')
 const { block } = require('../blocking')
 const { storage } = require('../../../../datadog-core')
