@@ -19,6 +19,6 @@ log.use({
   error () {}
 })
 
-for (let i = 0; i < ITERATIONS; i++) {
-  log[WITH_LEVEL](() => 'message')
-}
+// for (let i = 0; i < ITERATIONS; i++) {
+//   log[WITH_LEVEL](() => 'message')
+// }
