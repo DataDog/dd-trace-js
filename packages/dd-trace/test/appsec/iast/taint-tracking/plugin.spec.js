@@ -2,10 +2,12 @@
 
 const proxyquire = require('proxyquire')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
+const taintTrackingOperations = require('../../../../src/appsec/iast/taint-tracking/operations')
+const { createTransaction, removeTransaction } = require('../../../../src/appsec/iast/taint-tracking')
 
 describe('IAST Taint tracking plugin', () => {
   let taintTrackingPlugin
-  let taintTrackingOperations
+  let iastContext
 
   const store = {}
 
@@ -16,16 +18,20 @@ describe('IAST Taint tracking plugin', () => {
   }
 
   beforeEach(() => {
-    taintTrackingOperations = {
-      taintObject: sinon.stub().returnsArg(1)
-    }
     taintTrackingPlugin = proxyquire('../../../../src/appsec/iast/taint-tracking/plugin', {
-      './operations': taintTrackingOperations,
+      './operations': sinon.spy(taintTrackingOperations),
       '../../../../../datadog-core': datadogCore
     })
+
+    iastContext = {}
+    const transactionId = 'TRANSACTION_ID'
+    createTransaction(transactionId, iastContext)
   })
 
-  afterEach(sinon.restore)
+  afterEach(() => {
+    removeTransaction(iastContext)
+    sinon.restore()
+  })
 
   it('Should subscribe to body parser, qs and cookie channel', () => {
     expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(4)
@@ -36,8 +42,6 @@ describe('IAST Taint tracking plugin', () => {
   })
 
   it('Should taint full object', () => {
-    const transactionId = 'TRANSACTION_ID'
-    const iastContext = { [taintTrackingOperations.IAST_TRANSACTION_ID]: transactionId }
     const originType = 'ORIGIN_TYPE'
     const objToBeTainted = {
       foo: {
@@ -56,8 +60,6 @@ describe('IAST Taint tracking plugin', () => {
   })
 
   it('Should taint property in object', () => {
-    const transactionId = 'TRANSACTION_ID'
-    const iastContext = { [taintTrackingOperations.IAST_TRANSACTION_ID]: transactionId }
     const originType = 'ORIGIN_TYPE'
     const propertyToBeTainted = 'foo'
     const objToBeTainted = {
@@ -81,8 +83,6 @@ describe('IAST Taint tracking plugin', () => {
   })
 
   it('Should taint property in object with circular refs', () => {
-    const transactionId = 'TRANSACTION_ID'
-    const iastContext = { [taintTrackingOperations.IAST_TRANSACTION_ID]: transactionId }
     const originType = 'ORIGIN_TYPE'
     const propertyToBeTainted = 'foo'
     const objToBeTainted = {
@@ -108,8 +108,6 @@ describe('IAST Taint tracking plugin', () => {
   })
 
   it('Should non fail on null value', () => {
-    const transactionId = 'TRANSACTION_ID'
-    const iastContext = { [taintTrackingOperations.IAST_TRANSACTION_ID]: transactionId }
     const originType = 'ORIGIN_TYPE'
     const propertyToBeTainted = 'invalid'
     const objToBeTainted = {
