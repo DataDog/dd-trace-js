@@ -8,18 +8,16 @@ const {
   WITH_LEVEL = 'debug'
 } = process.env
 
-// require('../../..').init({
-//   debug: DD_TRACE_DEBUG
-// })
+require('../../..').init()
 
-// log.use({
-//   debug () {},
-//   info () {},
-//   warn () {},
-//   error () {}
-// })
+log.use({
+  debug () {},
+  info () {},
+  warn () {},
+  error () {}
+})
 
-// for (let i = 0; i < ITERATIONS; i++) {
-//   log[WITH_LEVEL](() => 'message')
-// }
+for (let i = 0; i < ITERATIONS; i++) {
+  log[WITH_LEVEL](() => 'message')
+}
 
