@@ -11,7 +11,7 @@ describe('RemoteConfigManager', () => {
   let Scheduler
   let request
   let log
-  let RemoteConfigManager
+  let manager
   let config
   let rc
 
@@ -31,7 +31,7 @@ describe('RemoteConfigManager', () => {
       error: sinon.spy()
     }
 
-    RemoteConfigManager = proxyquire('../src/appsec/remote_config/manager', {
+    manager = proxyquire('../src/appsec/remote_config/manager', {
       'crypto-randomuuid': uuid,
       './scheduler': Scheduler,
       '../../../../../package.json': { version: '3.0.0' },
@@ -54,7 +54,7 @@ describe('RemoteConfigManager', () => {
       }
     }
 
-    rc = new RemoteConfigManager(config)
+    rc = new manager.RemoteConfigManager(config)
   })
 
   it('should instantiate RemoteConfigManager', () => {

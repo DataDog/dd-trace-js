@@ -1,6 +1,6 @@
 'use strict'
 
-const RemoteConfigManager = require('./manager')
+const { RemoteConfigManager, kPreUpdate } = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
 const RuleManager = require('../rule_manager')
 
@@ -45,7 +45,7 @@ function enableWafUpdate (appsecConfig) {
     rc.on('ASM_DD', noop)
     rc.on('ASM', noop)
 
-    rc.on(RemoteConfigManager.kPreUpdate, RuleManager.updateWafFromRC)
+    rc.on(kPreUpdate, RuleManager.updateWafFromRC)
   }
 }
 
@@ -61,7 +61,7 @@ function disableWafUpdate () {
     rc.off('ASM_DD', noop)
     rc.off('ASM', noop)
 
-    rc.off(RemoteConfigManager.kPreUpdate, RuleManager.updateWafFromRC)
+    rc.off(kPreUpdate, RuleManager.updateWafFromRC)
   }
 }
 

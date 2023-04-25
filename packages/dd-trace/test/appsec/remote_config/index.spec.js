@@ -1,22 +1,25 @@
 'use strict'
 
+const Config = require('../../../src/config')
 const RemoteConfigCapabilities = require('../../../src/appsec/remote_config/capabilities')
-const { kPreUpdate } = require('../../../src/appsec/remote_config/manager')
+// const { kPreUpdate } = require('../../../src/appsec/remote_config/manager')
 
 let config
 let rc
-let RemoteConfigManager
+let manager
 let RuleManager
 let appsec
 let remoteConfig
 
 describe('Remote Config index', () => {
   beforeEach(() => {
-    config = {
+    const options = {
       appsec: {
         enabled: undefined
       }
     }
+
+    config = new Config(options)
 
     rc = {
       updateCapabilities: sinon.spy(),
@@ -24,7 +27,10 @@ describe('Remote Config index', () => {
       off: sinon.spy()
     }
 
-    RemoteConfigManager = sinon.stub().returns(rc)
+    manager = {
+      RemoteConfigManager: sinon.stub().returns(rc),
+      kPreUpdate: Symbol('kPreUpdate')
+    }
 
     RuleManager = {
       updateWafFromRC: sinon.stub()
@@ -36,7 +42,7 @@ describe('Remote Config index', () => {
     }
 
     remoteConfig = proxyquire('../src/appsec/remote_config', {
-      './manager': RemoteConfigManager,
+      './manager': manager,
       '../rule_manager': RuleManager,
       '..': appsec
     })
@@ -48,7 +54,7 @@ describe('Remote Config index', () => {
 
       remoteConfig.enable(config)
 
-      expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
+      expect(manager.RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
       expect(rc.updateCapabilities).to.have.been.calledOnceWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
       expect(rc.on).to.have.been.calledOnceWith('ASM_FEATURES')
       expect(rc.on.firstCall.args[1]).to.be.a('function')
@@ -59,7 +65,7 @@ describe('Remote Config index', () => {
 
       remoteConfig.enable(config)
 
-      expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
+      expect(manager.RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
       expect(rc.updateCapabilities).to.not.have.been.called
       expect(rc.on).to.not.have.been.called
     })
@@ -141,7 +147,7 @@ describe('Remote Config index', () => {
         expect(rc.on.getCall(0)).to.have.been.calledWith('ASM_DATA')
         expect(rc.on.getCall(1)).to.have.been.calledWith('ASM_DD')
         expect(rc.on.getCall(2)).to.have.been.calledWith('ASM')
-        expect(rc.on.getCall(3)).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
+        expect(rc.on.getCall(3)).to.have.been.calledWithExactly(manager.kPreUpdate, RuleManager.updateWafFromRC)
       })
 
       it('should activate if appsec is manually enabled', () => {
@@ -165,7 +171,7 @@ describe('Remote Config index', () => {
         expect(rc.on.getCall(0)).to.have.been.calledWith('ASM_DATA')
         expect(rc.on.getCall(1)).to.have.been.calledWith('ASM_DD')
         expect(rc.on.getCall(2)).to.have.been.calledWith('ASM')
-        expect(rc.on.getCall(3)).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
+        expect(rc.on.getCall(3)).to.have.been.calledWithExactly(manager.kPreUpdate, RuleManager.updateWafFromRC)
       })
 
       it('should activate if appsec enabled is not defined', () => {
@@ -211,7 +217,7 @@ describe('Remote Config index', () => {
         expect(rc.off.getCall(0)).to.have.been.calledWith('ASM_DATA')
         expect(rc.off.getCall(1)).to.have.been.calledWith('ASM_DD')
         expect(rc.off.getCall(2)).to.have.been.calledWith('ASM')
-        expect(rc.off.getCall(3)).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
+        expect(rc.off.getCall(3)).to.have.been.calledWithExactly(manager.kPreUpdate, RuleManager.updateWafFromRC)
       })
     })
   })
