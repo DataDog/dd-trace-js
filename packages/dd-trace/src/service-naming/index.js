@@ -14,12 +14,12 @@ class SchemaManager {
     return this.config.spanAttributeSchema
   }
 
-  opName (type, kind, plugin, opNameArgs) {
-    return this.schema.getOpName(type, kind, plugin, opNameArgs)
+  opName (type, kind, plugin, ...opNameArgs) {
+    return this.schema.getOpName(type, kind, plugin, ...opNameArgs)
   }
 
-  serviceName (type, kind, plugin, serviceNameArgs) {
-    return this.schema.getServiceName(type, kind, plugin, this.config.service, serviceNameArgs)
+  serviceName (type, kind, plugin, ...serviceNameArgs) {
+    return this.schema.getServiceName(type, kind, plugin, this.config.service, ...serviceNameArgs)
   }
 
   configure (config = {}) {
