@@ -157,7 +157,7 @@ function concatArrays (files) {
 /*
   ASM_DATA Merge strategy:
   The merge should be based on the id and type. For any duplicate items, the longer expiration should be taken.
-  As a result, multiple Rule Data may use the same DATA_ID and DATA_TYPE. In this case, all values are considered part 
+  As a result, multiple Rule Data may use the same DATA_ID and DATA_TYPE. In this case, all values are considered part
   of a set and are merged. For instance, a denylist customized by environment may use a global Rule Data for all
   environments and a Rule Data per environment
 */
