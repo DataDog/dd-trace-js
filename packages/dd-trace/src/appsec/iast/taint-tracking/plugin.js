@@ -41,8 +41,8 @@ class TaintTrackingPlugin extends Plugin {
     if (!target) return
     if (!property) {
       target = taintObject(iastContext, target, type)
-    } else {
-      target[property] && (target[property] = taintObject(iastContext, target[property], type))
+    } else if (target[property]) {
+      target[property] = taintObject(iastContext, target[property], type)
     }
   }
 
@@ -51,9 +51,9 @@ class TaintTrackingPlugin extends Plugin {
     target = taintObject(iastContext, target, HTTP_REQUEST_COOKIE_VALUE, true, HTTP_REQUEST_COOKIE_NAME)
   }
 
-  _headersTaintTrackingHandler (target) {
+  taintHeaders (headers) {
     const iastContext = getIastContext(storage.getStore())
-    target = taintObject(iastContext, target, HTTP_REQUEST_HEADER_VALUE, true, HTTP_REQUEST_HEADER_NAME)
+    headers = taintObject(iastContext, headers, HTTP_REQUEST_HEADER_VALUE, true, HTTP_REQUEST_HEADER_NAME)
   }
 
   enable () {
