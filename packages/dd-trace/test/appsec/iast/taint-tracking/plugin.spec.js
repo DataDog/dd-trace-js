@@ -82,6 +82,26 @@ describe('IAST Taint tracking plugin', () => {
     )
   })
 
+  it('Should not taint non-existing property in object', () => {
+    const originType = 'ORIGIN_TYPE'
+    const propertyToBeTainted = 'foo'
+    const nonExistingProperty = 'non-existing'
+    const objToBeTainted = {
+      [propertyToBeTainted]: {
+        bar: 'taintValue'
+      }
+    }
+
+    iastContextFunctions.saveIastContext(
+      store,
+      {},
+      iastContext
+    )
+
+    taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, nonExistingProperty)
+    expect(taintTrackingOperations.taintObject).to.not.be.called
+  })
+
   it('Should taint property in object with circular refs', () => {
     const originType = 'ORIGIN_TYPE'
     const propertyToBeTainted = 'foo'
@@ -120,10 +140,10 @@ describe('IAST Taint tracking plugin', () => {
       iastContext
     )
 
-    taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
+    taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted)
     expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
       iastContext,
-      objToBeTainted[propertyToBeTainted],
+      objToBeTainted,
       originType
     )
   })
