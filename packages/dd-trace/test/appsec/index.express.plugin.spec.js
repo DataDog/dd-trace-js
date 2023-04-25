@@ -8,6 +8,7 @@ const fs = require('fs')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
+const { json } = require('../../src/appsec/blocked_templates')
 
 withVersions('express', 'express', version => {
   describe('Suspicious request blocking - query', () => {
@@ -104,23 +105,13 @@ withVersions('express', 'express', version => {
     })
 
     it('should block the request when attack is detected', async () => {
-      const data = {
-        errors: [
-          {
-            title: "You've been blocked",
-            detail: 'Sorry, you cannot access this page. Please contact the customer service team. Security provided' +
-            ' by Datadog.'
-          }
-        ]
-      }
-
       try {
         await axios.get(`http://localhost:${port}/?key=testattack`)
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
         expect(e.response.status).to.be.equals(403)
-        expect(e.response.data).to.be.deep.equal(data)
+        expect(e.response.data).to.be.deep.equal(JSON.parse(json))
         expect(requestBody).not.to.be.called
       }
     })
