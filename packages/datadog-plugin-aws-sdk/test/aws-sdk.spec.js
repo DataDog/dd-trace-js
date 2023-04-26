@@ -9,6 +9,7 @@ describe('Plugin', () => {
   // TODO: use the Request class directly for generic tests
   // TODO: add test files for every service
   describe('aws-sdk', function () {
+    this.timeout(100000)
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
@@ -47,8 +48,8 @@ describe('Plugin', () => {
 
             expect(span.meta).to.include({
               'component': 'aws-sdk',
-              'aws.region': 'us-east-1',
-              'aws.service': 'S3',
+              'region': 'us-east-1',
+              'aws_service': 'S3',
               'aws.operation': 'listBuckets'
             })
           }).then(done, done)

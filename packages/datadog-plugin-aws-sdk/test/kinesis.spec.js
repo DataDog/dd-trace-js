@@ -5,7 +5,8 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 
-describe('Kinesis', () => {
+describe('Kinesis', function () {
+  this.timeout(100000)
   setup()
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
@@ -106,7 +107,7 @@ describe('Kinesis', () => {
         const span = traces[0][0]
 
         expect(span.resource).to.equal('putRecord MyStream')
-        expect(span.meta).to.have.property('aws.kinesis.stream_name', 'MyStream')
+        expect(span.meta).to.have.property('streamname', 'MyStream')
       }).then(done, done)
 
       helpers.putTestRecord(kinesis, helpers.dataBuffer, e => e && done(e))

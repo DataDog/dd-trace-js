@@ -5,7 +5,7 @@ const EventBridge = require('../src/services/eventbridge')
 const tracer = require('../../dd-trace')
 const { randomBytes } = require('crypto')
 
-describe('EventBridge', () => {
+describe('EventBridge', function () {
   let span
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let traceId
@@ -49,11 +49,13 @@ describe('EventBridge', () => {
     it('generates tags for an event', () => {
       const eventbridge = new EventBridge(tracer)
       const params = {
-        source: 'my.event'
+        source: 'my.event',
+        Name: 'myRuleName'
       }
       expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({
         'aws.eventbridge.source': 'my.event',
-        'resource.name': 'putEvent my.event'
+        'resource.name': 'putEvent my.event',
+        'rulename': 'myRuleName'
       })
     })
     it('won\'t create tags for a malformed event', () => {
