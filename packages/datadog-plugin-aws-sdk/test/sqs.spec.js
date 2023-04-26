@@ -14,7 +14,7 @@ describe('Plugin', () => {
   describe('aws-sdk (sqs)', function () {
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], '2.3.0',(version, moduleName) => {
+    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
       let AWS
       let sqs
       let QueueUrl
@@ -86,7 +86,7 @@ describe('Plugin', () => {
           })
         })
 
-        it.only('should propagate the tracing context from the producer to the consumer', (done) => {
+        it('should propagate the tracing context from the producer to the consumer', (done) => {
           let parentId
           let traceId
 
