@@ -30,20 +30,14 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
 
     if (product === 'ASM_DATA') {
       newRulesData.delete(id)
-
-      batch.add(item)
     } else if (product === 'ASM_DD') {
       if (appliedRulesetId === id) {
         newRuleset = defaultRules
         newRulesetId = null
       }
-
-      batch.add(item)
     } else if (product === 'ASM') {
       newRulesOverride.delete(id)
       newExclusions.delete(id)
-
-      batch.add(item)
     }
   }
 

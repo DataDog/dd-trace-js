@@ -589,7 +589,7 @@ describe('RemoteConfigManager', () => {
         id: 'asm_data',
         path: 'datadog/42/ASM_FEATURES/confId/config',
         product: 'ASM_FEATURES',
-        apply_state: UNACKNOWLEDGED,
+        apply_state: ACKNOWLEDGED,
         apply_error: '',
         file: { asm: { enabled: true } }
       })
