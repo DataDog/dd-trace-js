@@ -30,6 +30,8 @@ class Tracer extends NoopProxy {
         remoteConfig.enable(config)
       }
 
+      const { testFunc } = require('./test_file')
+
       if (config.profiling.enabled) {
         // do not stop tracer initialization if the profiler fails to be imported
         try {
