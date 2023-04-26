@@ -63,7 +63,7 @@ module.exports = {
       res.status(404).end()
     })
 
-    agent.put('/v0.4/traces', (req, res) => {
+    agent.post('/v0.4/traces', (req, res) => {
       res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
       handlers.forEach(({ handler, spanResourceMatch }) => {
         const trace = req.body
@@ -121,7 +121,7 @@ module.exports = {
       useTestAgent
     ) {
       const currentHeaders = tracer._tracer._exporter._writer.headers
-      currentHeaders['Datadog-Proxy-Port'] = port.toString()
+      currentHeaders['X-Datadog-Proxy-Port'] = port.toString()
       tracer._tracer._exporter._writer.headers = currentHeaders
       tracer.setUrl(testAgentUrl)
     } else {
