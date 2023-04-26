@@ -126,13 +126,12 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: williamconti549/dd-apm-test-agent:js-dev
+    image: williamconti549/dd-apm-test-agent:latest
     ports:
         - "127.0.0.1:9126:9126"
     environment:
         - LOG_LEVEL=DEBUG
         - TRACE_LANGUAGE=javascript
-        - DISABLED_CHECKS=trace_tag_validation
-        # - DD_TRACE_AGENT_URL=http://host.docker.internal:9126 # host.docker.internal should be used for testing locally
-        - DD_TRACE_AGENT_URL=http://testrunner:9126
+        # - DD_TRACE_AGENT_URL=http://host.docker.internal:9126 # testing locally
+        - DD_TRACE_AGENT_URL=http://testrunner:9126 # ci remote testing
         - PORT=9126
