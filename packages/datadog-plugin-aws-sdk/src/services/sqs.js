@@ -64,8 +64,6 @@ class Sqs extends BaseAwsSdkPlugin {
     if (params.QueueUrl) {
       queueName = params.QueueUrl.split('/')[params.QueueUrl.split('/').length - 1]
     }
-    console.log("foo: ",params.QueueName || params.QueueUrl)
-    console.log("bar: ",queueName)
 
     Object.assign(tags, {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
