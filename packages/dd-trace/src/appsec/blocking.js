@@ -19,7 +19,7 @@ function block (req, res, rootSpan, abortController) {
   const accept = req.headers.accept && req.headers.accept.split(',').map((str) => str.split(';', 1)[0].trim())
 
   if (accept && accept.includes('text/html') && !accept.includes('application/json')) {
-    type = 'text/html; charset=utf-8'
+    type = 'application/xhtml+xml'
     body = templateHtml
   } else {
     type = 'application/json; charset=utf-8'
