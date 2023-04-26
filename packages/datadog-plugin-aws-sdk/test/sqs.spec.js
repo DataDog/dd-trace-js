@@ -86,31 +86,6 @@ describe('Plugin', () => {
           })
         })
 
-        it('should propagate the tracing context from the producer to the consumer', (done) => {
-          let parentId
-          let traceId
-
-          agent.use(traces => {
-            const span = traces[0][0]
-
-            expect(span.resource.startsWith('sendMessage')).to.equal(true)
-            console.log("span context: ",span.context())
-            expect(span.context()._tags['queuename']).to.equal('SQS_QUEUE_NAME')
-            expect(span.context()._tags['aws_service']).to.equal('sqs')
-            expect(span.context()._tags['region']).to.equal('us-east-1')
-
-            parentId = span.span_id.toString()
-            traceId = span.trace_id.toString()
-          })
-
-          sqs.sendMessage({
-            MessageBody: 'test body',
-            QueueUrl
-          }, (err) => {
-            if (err) return done(err)
-          })
-        })
-
         it('should run the consumer in the context of its span', (done) => {
           sqs.sendMessage({
             MessageBody: 'test body',
@@ -205,6 +180,11 @@ describe('Plugin', () => {
               resource: `sendMessage ${QueueUrl}`
             })
 
+            expect(span.meta).to.include({
+              'queuename': 'SQS_QUEUE_NAME',
+              'aws.service': 'SQS',
+              'region': 'us-east-1'
+            })
             total++
           }).catch(() => {}, { timeoutMs: 100 })
 
