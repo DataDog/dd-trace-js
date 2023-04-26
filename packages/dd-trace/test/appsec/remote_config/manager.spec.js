@@ -595,9 +595,10 @@ describe('RemoteConfigManager', () => {
       })
 
       rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply')
-      expect(rc.appliedConfigs).to.be.empty
+
       expect(rc.emit).to.have.been
         .calledOnceWithExactly('ASM_FEATURES', 'unapply', { asm: { enabled: true } }, 'asm_data')
+      expect(rc.appliedConfigs).to.be.empty
     })
   })
 })
