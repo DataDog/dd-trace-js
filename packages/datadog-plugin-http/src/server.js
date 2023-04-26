@@ -3,7 +3,7 @@
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const web = require('../../dd-trace/src/plugins/util/web')
-const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-trace/src/appsec/gateway/channels')
+const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-trace/src/appsec/channels')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class HttpServerPlugin extends Plugin {
