@@ -2,7 +2,6 @@
 
 const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
-const RuleManager = require('../rule_manager')
 
 let rc
 
@@ -34,6 +33,8 @@ function enable (config) {
 
 function enableWafUpdate (appsecConfig) {
   if (rc && appsecConfig && !appsecConfig.customRulesProvided) {
+    const RuleManager = require('../rule_manager')
+
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
     // TODO: we should have a different capability for rule override
@@ -50,6 +51,8 @@ function enableWafUpdate (appsecConfig) {
 
 function disableWafUpdate () {
   if (rc) {
+    const RuleManager = require('../rule_manager')
+
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, false)

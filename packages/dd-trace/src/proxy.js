@@ -7,7 +7,7 @@ const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
-//const remoteConfig = require('./appsec/remote_config')
+const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
 
 class Tracer extends NoopProxy {
@@ -27,7 +27,7 @@ class Tracer extends NoopProxy {
       const config = new Config(options) // TODO: support dynamic config
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        //remoteConfig.enable(config)
+        remoteConfig.enable(config)
       }
 
       if (config.profiling.enabled) {

@@ -1,7 +1,7 @@
 'use strict'
 
 const { USER_ID } = require('../addresses')
-//const waf = require('../waf')
+const waf = require('../waf')
 const { getRootSpan } = require('./utils')
 const { block } = require('../blocking')
 const { storage } = require('../../../../datadog-core')
@@ -9,7 +9,7 @@ const { setUserTags } = require('./set_user')
 const log = require('../../log')
 
 function isUserBlocked (user) {
-  const actions = undefined //waf.run({ [USER_ID]: user.id })
+  const actions = waf.run({ [USER_ID]: user.id })
 
   if (!actions) return false
 

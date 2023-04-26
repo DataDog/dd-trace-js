@@ -1,6 +1,5 @@
 'use strict'
 
-const WAFManager = require('./waf_manager')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 
@@ -15,6 +14,8 @@ const waf = {
 
 function init (rules, config) {
   destroy()
+
+  const WAFManager = require('./waf_manager')
 
   waf.wafManager = new WAFManager(rules, config)
 
