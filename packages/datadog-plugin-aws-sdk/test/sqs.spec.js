@@ -105,6 +105,7 @@ describe('Plugin', () => {
 
               expect(span).to.not.equal(beforeSpan)
               expect(span.context()._tags['aws.operation']).to.equal('receiveMessage')
+
               done()
             })
           })
