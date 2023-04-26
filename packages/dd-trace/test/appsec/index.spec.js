@@ -123,7 +123,7 @@ describe('AppSec Index', () => {
   describe('incomingHttpStartTranslator', () => {
     beforeEach(() => {
       AppSec.enable(config)
-      waf.init(require('../../src/appsec/recommended.json'), config.appsec)
+
       sinon.stub(waf, 'run')
     })
 
@@ -199,14 +199,11 @@ describe('AppSec Index', () => {
 
       web.patch(req)
 
-      AppSec.incomingHttpStartTranslator({ req, res })
       sinon.stub(Reporter, 'finishRequest')
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledTwice
-      expect(waf.run.firstCall).to.have.been.calledWithExactly({ 'http.client_ip': '127.0.0.1' }, req)
-      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+      expect(waf.run).to.have.been.calledOnceWithExactly({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
           'user-agent': 'Arachni',
@@ -219,7 +216,7 @@ describe('AppSec Index', () => {
           'content-lenght': 42
         }
       }, req)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWith(req)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
 
     it('should propagate incoming http end data with invalid framework properties', () => {
@@ -251,14 +248,11 @@ describe('AppSec Index', () => {
 
       web.patch(req)
 
-      AppSec.incomingHttpStartTranslator({ req, res })
       sinon.stub(Reporter, 'finishRequest')
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledTwice
-      expect(waf.run.firstCall).to.have.been.calledWithExactly({ 'http.client_ip': '127.0.0.1' }, req)
-      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+      expect(waf.run).to.have.been.calledOnceWithExactly({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
           'user-agent': 'Arachni',
