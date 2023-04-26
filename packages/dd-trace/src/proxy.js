@@ -36,7 +36,6 @@ class Tracer extends NoopProxy {
       // }
 
       const { isInGCPFunction } = require('./gcp_function/serverless')
-      console.log('is in gcp function? ' + isInGCPFunction())
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         remoteConfig.enable(config)
