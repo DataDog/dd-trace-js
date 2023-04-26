@@ -26,16 +26,7 @@ class Tracer extends NoopProxy {
     try {
       const config = new Config(options) // TODO: support dynamic config
 
-      // const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
-      // const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
-      // const inGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
-
-      // if (inGCPFunction) {
-      //   const serverless = require('./serverless')
-      //   serverless.maybeStartServerlessMiniAgent()
-      // }
-
-      // const { isInGCPFunction } = require('./gcp_function/serverless')
+      require('./serverless').maybeStartServerlessMiniAgent()
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         remoteConfig.enable(config)
