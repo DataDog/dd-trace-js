@@ -166,7 +166,6 @@ describe('AppSec Index', () => {
     beforeEach(() => {
       AppSec.enable(config)
 
-      waf.init(require('../../src/appsec/recommended.json'), config.appsec)
       sinon.stub(waf, 'run')
 
       const rootSpan = {
@@ -309,13 +308,10 @@ describe('AppSec Index', () => {
 
       web.patch(req)
 
-      AppSec.incomingHttpStartTranslator({ req, res })
       sinon.stub(Reporter, 'finishRequest')
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledTwice
-      expect(waf.run.firstCall).to.have.been.calledWithExactly({ 'http.client_ip': '127.0.0.1' }, req)
-      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+      expect(waf.run).to.have.been.calledOnceWithExactly({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
           'user-agent': 'Arachni',
@@ -357,7 +353,6 @@ describe('IP blocking', () => {
   }]
 
   let http, appListener, port
-  let config
   before(() => {
     return getPort().then(newPort => {
       port = newPort
@@ -378,13 +373,11 @@ describe('IP blocking', () => {
       .listen(port, 'localhost', () => done())
   })
   beforeEach(() => {
-    config = new Config({
+    appsec.enable(new Config({
       appsec: {
         enabled: true
       }
-    })
-
-    appsec.enable(config)
+    }))
     RuleManager.updateWafFromRC({ toUnapply: [], toApply: [], toModify })
   })
   afterEach(() => {
