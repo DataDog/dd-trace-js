@@ -30,11 +30,9 @@ class Tracer extends NoopProxy {
         remoteConfig.enable(config)
       }
 
-      const { inGCPFunction } = require('./test_file')
+      const { maybeStartServerlessMiniAgent } = require('./serverless')
 
-      if (inGCPFunction()) {
-        console.log("in GCP function")
-      }
+      maybeStartServerlessMiniAgent()
 
       if (config.profiling.enabled) {
         // do not stop tracer initialization if the profiler fails to be imported
