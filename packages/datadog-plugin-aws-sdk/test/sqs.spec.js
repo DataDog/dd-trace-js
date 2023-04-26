@@ -182,7 +182,7 @@ describe('Plugin', () => {
 
             expect(span.meta).to.include({
               'queuename': 'SQS_QUEUE_NAME',
-              'aws.service': 'SQS',
+              'aws_service': 'SQS',
               'region': 'us-east-1'
             })
             total++
