@@ -53,7 +53,7 @@ describe('Plugin', function () {
       agent.setAvailableEndpoints([])
 
       return agent.load(
-        ['jest', 'http'], { service: 'test' }, { experimental: { exporter: 'agent_proxy' } }
+        ['jest', 'http'], { service: 'test' }, { experimental: { exporter: 'agent_proxy' } }, false
       ).then(() => {
         jestCommonOptions.testRunner =
           require(`../../../versions/jest@${version}`).getPath('jest-jasmine2')

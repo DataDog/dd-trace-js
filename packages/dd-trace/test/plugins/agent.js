@@ -82,7 +82,7 @@ module.exports = {
 
     const port = await getPort()
 
-    const testAgentUrl = 'http://127.0.0.1:9126'
+    const testAgentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126';
 
     const server = this.server = http.createServer(agent)
     const emit = server.emit

@@ -44,7 +44,7 @@ function loadAgent (moduleName, version, isAgentlessTest, isEvpProxyTest) {
   if (!isEvpProxyTest) {
     agent.setAvailableEndpoints([])
   }
-  return agent.load(['jest', 'http'], { service: 'test' }, { experimental: { exporter } }).then(() => {
+  return agent.load(['jest', 'http'], { service: 'test' }, { experimental: { exporter } }, false).then(() => {
     global.__libraryName__ = moduleName
     global.__libraryVersion__ = version
 
