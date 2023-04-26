@@ -869,10 +869,10 @@ jobs:
         ports:
             - "127.0.0.1:9126:9126"
         env:
-            - LOG_LEVEL=DEBUG
-            - TRACE_LANGUAGE=javascript
-            - DD_TRACE_AGENT_URL=http://host.docker.internal:9126
-            - PORT=9126
+            LOG_LEVEL: DEBUG
+            TRACE_LANGUAGE: javascript
+            DD_TRACE_AGENT_URL: http://host.docker.internal:9126
+            PORT: 9126
     env:
       PLUGINS: oracledb
       SERVICES: oracledb
