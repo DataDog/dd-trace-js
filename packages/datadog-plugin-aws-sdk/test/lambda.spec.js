@@ -60,7 +60,7 @@ describe('Plugin', () => {
           })
         })
 
-        it.only('should propagate the tracing context with existing ClientContext and `custom` key', (done) => {
+        it('should propagate the tracing context with existing ClientContext and `custom` key', (done) => {
           let receivedContext
 
           agent.use(traces => {
