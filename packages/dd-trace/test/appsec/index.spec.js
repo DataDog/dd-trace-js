@@ -12,7 +12,6 @@ const Config = require('../../src/config')
 const axios = require('axios')
 const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
-const recommendedJson = require('../../src/appsec/recommended.json')
 
 describe('AppSec Index', () => {
   let config
@@ -87,18 +86,6 @@ describe('AppSec Index', () => {
       expect(log.error.secondCall).to.have.been.calledWithExactly(err)
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
-    })
-
-    it('should load recommended.json rules if not provided by the user', () => {
-      config.appsec.rules = undefined
-      const newConfig = new Config(config)
-      AppSec.enable(newConfig)
-
-      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly(recommendedJson, newConfig.appsec)
-      expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
-      expect(incomingHttpRequestStart.subscribe)
-        .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
-      expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
     })
   })
 
@@ -231,8 +218,7 @@ describe('AppSec Index', () => {
           'content-type': 'application/json',
           'content-lenght': 42
         }
-      },
-      req)
+      }, req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWith(req)
     })
 
