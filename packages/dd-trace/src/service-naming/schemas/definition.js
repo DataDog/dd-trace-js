@@ -3,20 +3,20 @@ class SchemaDefinition {
     this.schema = schema
   }
 
-  getSchemaItem (type, ioDirection, plugin) {
+  getSchemaItem (type, subType, plugin) {
     const schema = this.schema
-    if (schema && schema[type] && schema[type][ioDirection] && schema[type][ioDirection][plugin]) {
-      return schema[type][ioDirection][plugin]
+    if (schema && schema[type] && schema[type][subType] && schema[type][subType][plugin]) {
+      return schema[type][subType][plugin]
     }
   }
 
-  getOpName (type, ioDirection, plugin, opNameArgs) {
-    const item = this.getSchemaItem(type, ioDirection, plugin)
+  getOpName (type, subType, plugin, opNameArgs) {
+    const item = this.getSchemaItem(type, subType, plugin)
     return item.opName(opNameArgs)
   }
 
-  getServiceName (type, ioDirection, plugin, service, serviceNameArgs) {
-    const item = this.getSchemaItem(type, ioDirection, plugin)
+  getServiceName (type, subType, plugin, service, serviceNameArgs) {
+    const item = this.getSchemaItem(type, subType, plugin)
     return item.serviceName(service, serviceNameArgs)
   }
 }

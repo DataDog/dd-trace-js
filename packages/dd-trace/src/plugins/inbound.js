@@ -2,8 +2,6 @@
 
 const TracingPlugin = require('./tracing')
 
-class InboundPlugin extends TracingPlugin {
-  static get ioDirection () { return 'inbound' }
-}
+class InboundPlugin extends TracingPlugin {}
 
 module.exports = InboundPlugin

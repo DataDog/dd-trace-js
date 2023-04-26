@@ -14,11 +14,8 @@ class RheaProducerPlugin extends ProducerPlugin {
 
   start ({ targetAddress, host, port }) {
     const name = targetAddress || 'amq.topic'
-
-    this.startSpan(this.operationName(), {
-      service: this.config.service || this.serviceName(),
+    this.startSpan({
       resource: name,
-      kind: 'producer',
       meta: {
         'component': 'rhea',
         'amqp.link.target.address': name,

@@ -1,5 +1,13 @@
 const { schemaDefinitions } = require('./schemas')
 
+const kindMap = {
+  messaging: {
+    client: 'controlPlane',
+    consumer: 'inbound',
+    producer: 'outbound'
+  }
+}
+
 class SchemaManager {
   constructor () {
     this.schemas = schemaDefinitions
@@ -14,12 +22,12 @@ class SchemaManager {
     return this.config.spanAttributeSchema
   }
 
-  opName (type, ioDirection, plugin, opNameArgs) {
-    return this.schema.getOpName(type, ioDirection, plugin, opNameArgs)
+  opName (type, kind, plugin, opNameArgs) {
+    return this.schema.getOpName(type, kindMap[type][kind], plugin, opNameArgs)
   }
 
-  serviceName (type, ioDirection, plugin, serviceNameArgs) {
-    return this.schema.getServiceName(type, ioDirection, plugin, this.config.service, serviceNameArgs)
+  serviceName (type, kind, plugin, serviceNameArgs) {
+    return this.schema.getServiceName(type, kindMap[type][kind], plugin, this.config.service, serviceNameArgs)
   }
 
   configure (config = {}) {
