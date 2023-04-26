@@ -7,7 +7,7 @@ esbuild.build({
   logLevel: 'info',
   entryPoints: ['index-src.js'],
   bundle: true,
-  minify: true,
+  // minify: true,
   platform: 'node',
   outfile: 'index.js',
   plugins: [nodeExternalsPlugin()]

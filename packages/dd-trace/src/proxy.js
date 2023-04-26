@@ -7,8 +7,8 @@ const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
-const remoteConfig = require('./appsec/remote_config')
-const AppsecSdk = require('./appsec/sdk')
+// const remoteConfig = require('./appsec/remote_config')
+// const AppsecSdk = require('./appsec/sdk')
 
 class Tracer extends NoopProxy {
   constructor () {
@@ -27,7 +27,7 @@ class Tracer extends NoopProxy {
       const config = new Config(options) // TODO: support dynamic config
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        remoteConfig.enable(config)
+        // remoteConfig.enable(config)
       }
 
       if (config.profiling.enabled) {
@@ -46,16 +46,16 @@ class Tracer extends NoopProxy {
 
       if (config.tracing) {
         // dirty require for now so zero appsec code is executed unless explicitly enabled
-        if (config.appsec.enabled) {
-          require('./appsec').enable(config)
-        }
+        // if (config.appsec.enabled) {
+        //   require('./appsec').enable(config)
+        // }
 
         this._tracer = new DatadogTracer(config)
-        this.appsec = new AppsecSdk(this._tracer, config)
+        // this.appsec = new AppsecSdk(this._tracer, config)
 
-        if (config.iast.enabled) {
-          require('./appsec/iast').enable(config, this._tracer)
-        }
+        // if (config.iast.enabled) {
+        //   require('./appsec/iast').enable(config, this._tracer)
+        // }
 
         this._pluginManager.configure(config)
         setStartupLogPluginManager(this._pluginManager)

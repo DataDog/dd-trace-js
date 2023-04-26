@@ -1,129 +1,7648 @@
-"use strict";var c=(s,e)=>()=>(e||s((e={exports:{}}).exports,e),e.exports);var F=c((wO,Ba)=>{"use strict";var Er=require("path");function km(s){return s=String(s).toLowerCase(),s==="true"||s==="1"}function Om(s){return s=String(s).toLowerCase(),s==="false"||s==="0"}function Cm(s){return!!(s instanceof Error||s&&s.message&&s.stack)}function Dm(s,e){let t=0,r=0,n=0,o=0;for(;t<s.length||r<e.length;){if(t<s.length){let i=s[t];switch(i){default:if(r<e.length&&e[r]===i){t++,r++;continue}break;case"?":if(r<e.length){t++,r++;continue}break;case"*":n=t,o=r+1,t++;continue}}if(o>0&&o<=e.length){t=n,r=o;continue}return!1}return!0}function Nm(s){let e=s.split(Er.sep),t=e.lastIndexOf("packages");return e.slice(0,t).join(Er.sep)+Er.sep}Ba.exports={isTrue:km,isFalse:Om,isError:Cm,globMatch:Dm,calculateDDBasePath:Nm}});var $a=c((kO,Ha)=>{"use strict";var yr=class{active(){return null}activate(e,t){return typeof t!="function"?t:t()}bind(e,t){return e}};Ha.exports=yr});var ze=c((OO,Fa)=>{"use strict";Fa.exports={USER_REJECT:-1,AUTO_REJECT:0,AUTO_KEEP:1,USER_KEEP:2}});var Ve=c((CO,za)=>{"use strict";var{AUTO_KEEP:Pm}=ze(),Sr=class{constructor(e){e=e||{},this._traceId=e.traceId,this._spanId=e.spanId,this._parentId=e.parentId||null,this._name=e.name,this._isFinished=e.isFinished||!1,this._tags=e.tags||{},this._sampling=Object.assign({},e.sampling),this._baggageItems=e.baggageItems||{},this._traceparent=e.traceparent,this._tracestate=e.tracestate,this._noop=e.noop||null,this._trace=e.trace||{started:[],finished:[],tags:{}}}toTraceId(){return this._traceId.toString(10)}toSpanId(){return this._spanId.toString(10)}toTraceparent(){let e=this._sampling.priority>=Pm?"01":"00",t=this._traceId.toBuffer().length<=8&&this._trace.tags["_dd.p.tid"]?this._trace.tags["_dd.p.tid"]+this._traceId.toString(16).padStart(16,"0"):this._traceId.toString(16).padStart(32,"0"),r=this._spanId.toString(16).padStart(16,"0");return`${this._traceparent&&this._traceparent.version||"00"}-${t}-${r}-${e}`}};za.exports=Sr});var Ya=c((DO,Va)=>{"use strict";var Mm=Ve(),Lm=ze(),Um=Lm.USER_REJECT,Tr=class extends Mm{constructor(e){super(e),this._sampling.priority=Um}};Va.exports=Tr});var Z=c((NO,Xa)=>{"use strict";var{randomFillSync:jm}=require("crypto"),Vt=4294967296,ie=new Uint8Array(8*8192),Gm=new Uint8Array(8),Bm=Array.prototype.map,Hm=s=>`${s<16?"0":""}${s.toString(16)}`,zt=0,Ir=class{constructor(e,t=16){this._isUint64BE=!0,this._buffer=t===16?$m(e):Fm(e,t)}toString(e=16){return e===16?Vm(this._buffer):zm(this._buffer,e)}toBuffer(){return this._buffer}toArray(){return this._buffer.length===8?this._buffer:this._buffer.slice(-8)}toJSON(){return this.toString()}};function $m(s){if(s==="0")return Gm;if(!s)return Ym();let e=Math.ceil(s.length/16)*16,t=e/2,r=new Array(t);s=s.padStart(e,"0");for(let n=0;n<t;n++)r[n]=parseInt(s.substring(n*2,n*2+2),16);return r}function Fm(s,e){let t=new Array(8),r=s.length,n=0,o=0,i=0;s[0]==="-"&&n++;let a=n;for(;n<r;){let p=parseInt(s[n++],e);if(!(p>=0))break;i=i*e+p,o=o*e+Math.floor(i/Vt),i%=Vt}return a&&(o=~o,i?i=Vt-i:o++),Wa(t,o,0),Wa(t,i,4),t}function zm(s,e){let t=Ka(s,s.length-8),r=Ka(s,s.length-4),n="";for(e=e||10;;){let o=t%e*Vt+r;if(t=Math.floor(t/e),r=Math.floor(o/e),n=(o%e).toString(e)+n,!t&&!r)break}return n}function Vm(s){return Bm.call(s,Hm).join("")}function Ym(){zt===0&&jm(ie),zt=(zt+1)%8192;let s=zt*8;return[ie[s]&127,ie[s+1],ie[s+2],ie[s+3],ie[s+4],ie[s+5],ie[s+6],ie[s+7]]}function Ka(s,e){return s[e+0]*16777216+(s[e+1]<<16)+(s[e+2]<<8)+s[e+3]}function Wa(s,e,t){s[3+t]=e&255,e=e>>8,s[2+t]=e&255,e=e>>8,s[1+t]=e&255,e=e>>8,s[0+t]=e&255}Xa.exports=(s,e)=>new Ir(s,e)});var tc=c((PO,ec)=>{"use strict";var{Channel:Km,channel:Qa}=require("diagnostics_channel"),[Wm,Xm]=process.versions.node.split("."),Ja=new WeakSet,Za={channel:Qa};Wm==="19"&&Xm==="9"&&(Za.channel=function(){let s=Qa.apply(this,arguments);if(!Ja.has(s)){let e=s.subscribe,t=s.unsubscribe;s.subscribe=function(){delete s.subscribe,delete s.unsubscribe;let r=e.apply(this,arguments);return this.subscribe(()=>{}),r},s.unsubscribe===Km.prototype.unsubscribe&&(s.unsubscribe=function(){return delete s.subscribe,delete s.unsubscribe,this.subscribe(()=>{}),t.apply(this,arguments)}),Ja.add(s)}return s});ec.exports=Za});var O=c((MO,sc)=>{"use strict";sc.exports=tc()});var Ar=c((LO,ic)=>{"use strict";var{createHook:Jm,executionAsyncResource:Qm}=require("async_hooks"),{channel:nc}=O(),Zm=nc("dd-trace:storage:before"),eb=nc("dd-trace:storage:after"),oc=Symbol;function rc(){oc=new Function("name","return %CreatePrivateSymbol(name)")}try{rc()}catch{try{let e=require("v8");e.setFlagsFromString("--allow-natives-syntax"),rc(),e.setFlagsFromString("--no-allow-natives-syntax")}catch{}}var xr=class{constructor(){this._ddResourceStore=oc("ddResourceStore"),this._enabled=!1,this._hook=Jm(this._createHook())}disable(){this._enabled&&(this._hook.disable(),this._enabled=!1)}getStore(){return this._enabled?this._executionAsyncResource()[this._ddResourceStore]:void 0}enterWith(e){this._enable();let t=this._executionAsyncResource();t[this._ddResourceStore]=e}run(e,t,...r){this._enable();let n=this._executionAsyncResource(),o=n[this._ddResourceStore];n[this._ddResourceStore]=e;try{return t(...r)}finally{n[this._ddResourceStore]=o}}_createHook(){return{init:this._init.bind(this),before(){Zm.publish()},after(){eb.publish()}}}_enable(){this._enabled||(this._enabled=!0,this._hook.enable())}_init(e,t,r,n){let o=this._executionAsyncResource();Object.prototype.hasOwnProperty.call(o,this._ddResourceStore)&&(n[this._ddResourceStore]=o[this._ddResourceStore])}_executionAsyncResource(){return Qm()||{}}};ic.exports=xr});var cc=c((UO,ac)=>{"use strict";var{executionAsyncId:tb}=require("async_hooks"),sb=Ar(),qr=class extends sb{constructor(){super(),this._resources=new Map}disable(){super.disable(),this._resources.clear()}_createHook(){return{...super._createHook(),destroy:this._destroy.bind(this)}}_init(e,t,r,n){super._init.apply(this,arguments),this._resources.set(e,n)}_destroy(e){this._resources.delete(e)}_executionAsyncResource(){let e=tb(),t=this._resources.get(e);return t||this._resources.set(e,t={}),t}};ac.exports=qr});var pc=c((jO,Rr)=>{"use strict";var rb=require("semver"),nb=rb.satisfies(process.versions.node,">=14.5");nb?Rr.exports=Ar():Rr.exports=cc()});var R=c((GO,uc)=>{"use strict";var ob=pc(),ib=new ob;uc.exports={storage:ib}});var _c=c((BO,lc)=>{"use strict";var dc=Ya(),ab=Z(),{storage:cb}=R(),wr=class{constructor(e,t){this._store=cb.getStore(),this._noopTracer=e,this._noopContext=this._createContext(t)}context(){return this._noopContext}tracer(){return this._noopTracer}setOperationName(e){return this}setBaggageItem(e,t){return this}getBaggageItem(e){}setTag(e,t){return this}addTags(e){return this}log(){return this}logEvent(){}finish(e){}_createContext(e){let t=ab();return e?new dc({noop:this,traceId:e._traceId,spanId:t,parentId:e._spanId,baggageItems:Object.assign({},e._baggageItems)}):new dc({noop:this,traceId:t,spanId:t})}};lc.exports=wr});var gc=c((HO,hc)=>{"use strict";var pb=$a(),ub=_c(),kr=class{constructor(e){this._scope=new pb,this._span=new ub(this)}trace(e,t,r){return r(this._span,()=>{})}wrap(e,t,r){return r}scope(){return this._scope}getRumData(){return""}setUrl(){}startSpan(e,t){return this._span}inject(e,t,r){}extract(e,t){return this._span.context()}setUser(){return this}};hc.exports=kr});var mc=c(($O,fc)=>{"use strict";var Or=class{trackUserLoginSuccessEvent(){}trackUserLoginFailureEvent(){}trackCustomEvent(){}isUserBlocked(){}blockRequest(){}setUser(){}};fc.exports=Or});var Dr=c((FO,bc)=>{"use strict";var db=gc(),lb=mc(),_b=new db,hb=new lb,Cr=class{constructor(){this._tracer=_b,this.appsec=hb}init(){return this}use(){return this}trace(e,t,r){if(r||(r=t,t={}),typeof r=="function")return t=t||{},this._tracer.trace(e,t,r)}wrap(e,t,r){return r||(r=t,t={}),typeof r!="function"?r:(t=t||{},this._tracer.wrap(e,t,r))}setUrl(){return this._tracer.setUrl.apply(this._tracer,arguments),this}startSpan(){return this._tracer.startSpan.apply(this._tracer,arguments)}inject(){return this._tracer.inject.apply(this._tracer,arguments)}extract(){return this._tracer.extract.apply(this._tracer,arguments)}scope(){return this._tracer.scope.apply(this._tracer,arguments)}getRumData(){return this._tracer.getRumData.apply(this._tracer,arguments)}setUser(e){return this.appsec.setUser(e),this}};bc.exports=Cr});var Nr=c((zO,Ec)=>{"use strict";var{channel:gb}=O(),N={Debug:"debug",Info:"info",Warn:"warn",Error:"error"},vc=N.Debug,we={[N.Debug]:Yt(N.Debug,20),[N.Info]:Yt(N.Info,30),[N.Warn]:Yt(N.Warn,40),[N.Error]:Yt(N.Error,50)};function Yt(s,e){let t=gb(`datadog:log:${s}`);return t.logLevel=e,t}function fb(s){let e;return s&&typeof s=="string"?e=we[s.toLowerCase().trim()]||we[vc]:e=we[vc],e.logLevel}Ec.exports={Level:N,getChannelLogLevel:fb,debugChannel:we[N.Debug],infoChannel:we[N.Info],warnChannel:we[N.Warn],errorChannel:we[N.Error]}});var Lr=c((VO,kc)=>{"use strict";var{storage:Pr}=R(),{getChannelLogLevel:Mr,debugChannel:Kt,infoChannel:Wt,warnChannel:Xt,errorChannel:Jt}=Nr(),yc={debug:s=>console.debug(s),info:s=>console.info(s),warn:s=>console.warn(s),error:s=>console.error(s)},ke=!1,he=yc,Ye=Mr();function Qt(s){let e=Pr.getStore();Pr.enterWith({noop:!0}),s(),Pr.enterWith(e)}function mb(){Kt.hasSubscribers&&Kt.unsubscribe(Ac),Wt.hasSubscribers&&Wt.unsubscribe(xc),Xt.hasSubscribers&&Xt.unsubscribe(Ic),Jt.hasSubscribers&&Jt.unsubscribe(Tc)}function Sc(s){mb(),s&&(Kt.logLevel>=Ye&&Kt.subscribe(Ac),Wt.logLevel>=Ye&&Wt.subscribe(xc),Xt.logLevel>=Ye&&Xt.subscribe(Ic),Jt.logLevel>=Ye&&Jt.subscribe(Tc))}function bb(s,e){e!==void 0&&(Ye=Mr(e)),ke=s,Sc(ke)}function vb(s){s&&s.debug instanceof Function&&s.error instanceof Function&&(he=s)}function Eb(){he=yc,ke=!1,Ye=Mr(),Sc(!1)}function Tc(s){ke&&qc(s)}function Ic(s){ke&&Rc(s)}function xc(s){ke&&wc(s)}function Ac(s){ke&&Zt(s)}function qc(s){typeof s!="object"||!s?s=String(s):s.stack||(s=String(s.message||s)),typeof s=="string"&&(s=new Error(s)),Qt(()=>he.error(s))}function Rc(s){if(!he.warn)return Zt(s);Qt(()=>he.warn(s))}function wc(s){if(!he.info)return Zt(s);Qt(()=>he.info(s))}function Zt(s){Qt(()=>he.debug(s))}kc.exports={use:vb,toggle:bb,reset:Eb,error:qc,warn:Rc,info:wc,debug:Zt}});var v=c((YO,Pc)=>{"use strict";var{debugChannel:Oc,infoChannel:Cc,warnChannel:Dc,errorChannel:Ur}=Nr(),jr=Lr(),yb=s=>{let e={};return function(r){return e[r]||(e[r]=s.apply(this,arguments)),e[r]}};function es(s){return typeof s=="function"?s():s}var Nc={use(s){return jr.use(s),this},toggle(s,e){return jr.toggle(s,e),this},reset(){return jr.reset(),this._deprecate=yb((s,e)=>(Ur.publish(e),!0)),this},debug(s){return Oc.hasSubscribers&&Oc.publish(es(s)),this},info(s){return Cc.hasSubscribers&&Cc.publish(es(s)),this},warn(s){return Dc.hasSubscribers&&Dc.publish(es(s)),this},error(s){return Ur.hasSubscribers&&Ur.publish(es(s)),this},deprecate(s,e){return this._deprecate(s,e)}};Nc.reset();Pc.exports=Nc});var Gr=c((KO,Lc)=>{"use strict";var Sb=v();function Mc(s,e){if(!(!s||!e)){if(Array.isArray(e))return e.forEach(t=>Mc(s,t));try{if(typeof e=="string"){let t=e.split(",");for(let r of t){let n=r.indexOf(":");if(n===-1)continue;let o=r.slice(0,n),i=r.slice(n+1);s[o.trim()]=i.trim()}}else Object.assign(s,e)}catch(t){Sb.error(t)}}}Lc.exports={add:Mc}});var Br=c((WO,Uc)=>{"use strict";var Tb=require("fs"),Ib="[0-9a-f]{8}[-_][0-9a-f]{4}[-_][0-9a-f]{4}[-_][0-9a-f]{4}[-_][0-9a-f]{12}|[0-9a-f]{8}(?:-[0-9a-f]{4}){4}$",xb="[0-9a-f]{64}",Ab="[0-9a-f]{32}-\\d+",qb=new RegExp(`.*(${Ib}|${xb}|${Ab})(?:\\.scope)?$`,"m"),Rb=wb();function wb(){return((kb()||"").trim().match(qb)||[])[1]}function kb(){try{return Tb.readFileSync("/proc/self/cgroup").toString()}catch{}}Uc.exports={id(){return Rb}}});var Bc=c((XO,Gc)=>{"use strict";var Ob=require("http"),Cb=require("https"),{storage:Db}=R(),Nb=!0,Pb=1;function jc(s){class e extends s{constructor(){super({keepAlive:Nb,maxSockets:Pb})}createConnection(...r){return this._noop(()=>super.createConnection(...r))}keepSocketAlive(...r){return this._noop(()=>super.keepSocketAlive(...r))}reuseSocket(...r){return this._noop(()=>super.reuseSocket(...r))}_noop(r){return Db.run({noop:!0},r)}}return e}var Mb=jc(Ob.Agent),Lb=jc(Cb.Agent);Gc.exports={httpAgent:new Mb,HttpsAgent:new Lb}});var M=c((JO,Fc)=>{"use strict";var{Readable:Ub}=require("stream"),$r=require("http"),jb=require("https"),{parse:Gb}=require("url"),Bb=Br(),{httpAgent:Hb,httpsAgent:$b}=Bc(),{storage:Hr}=R(),Fb=v(),zb=8,Hc=Bb.id(),ts=0;function $c(s){let e=s.agent||$r.globalAgent,t={protocol:s.protocol||e.protocol,hostname:typeof s.hostname=="string"&&s.hostname.startsWith("[")?s.hostname.slice(1,-1):s.hostname||s.host||"localhost",hash:s.hash,search:s.search,pathname:s.pathname,path:`${s.pathname||""}${s.search||""}`,href:s.href};return s.port!==""&&(t.port=Number(s.port)),(s.username||s.password)&&(t.auth=`${s.username}:${s.password}`),t}function Vb(s){return typeof urlToHttpOptions=="function"?$c(new URL(s)):Gb(s)}function Fr(s,e,t){if(e.headers||(e.headers={}),e.url){let d=typeof e.url=="object"?$c(e.url):Vb(e.url);d.protocol==="unix:"?e.socketPath=d.pathname:(e.path||(e.path=d.path),e.protocol=d.protocol,e.hostname=d.hostname,e.port=d.port)}let r=s instanceof Ub,n=e.timeout||2e3,o=e.protocol==="https:",i=o?jb:$r,a=[].concat(s);r||(e.headers["Content-Length"]=Yb(a)),Hc&&(e.headers["Datadog-Container-ID"]=Hc),e.agent=o?$b:Hb;let p=d=>{let l="";d.setTimeout(n),d.on("data",_=>{l+=_}),d.on("end",()=>{if(ts--,d.statusCode>=200&&d.statusCode<=299)t(null,l,d.statusCode);else{let _="";try{_=`Error from ${new URL(e.path,e.url||e.hostname||`http://localhost:${e.port}`).href}: ${d.statusCode} ${$r.STATUS_CODES[d.statusCode]}.`}catch{}l&&(_+=` Response from the endpoint: "${l}"`);let h=new Error(_);h.status=d.statusCode,t(h,null,d.statusCode)}})},u=d=>{if(!Fr.writable)return Fb.debug("Maximum number of active requests reached: payload is discarded."),t(null);ts++;let l=Hr.getStore();Hr.enterWith({noop:!0});let _=i.request(e,p);_.once("error",h=>{ts--,d(h)}),_.setTimeout(n,_.abort),r?s.pipe(_):(a.forEach(h=>_.write(h)),_.end()),Hr.enterWith(l)};u(()=>setTimeout(()=>u(t)))}function Yb(s){return s.length>0?s.reduce((e,t)=>e+t.length,0):0}Object.defineProperty(Fr,"writable",{get(){return ts<zb}});Fc.exports=Fr});var Vc=c((QO,zc)=>{"use strict";var Kb=require("dns").lookup,Wb=M(),Xb=require("dgram"),Jb=require("net").isIP,zr=v(),Qb=1024,Vr=class{constructor(e){e=e||{},e.metricsProxyUrl&&(this._httpOptions={url:e.metricsProxyUrl.toString(),path:"/dogstatsd/v2/proxy"}),this._host=e.host||"localhost",this._family=Jb(this._host),this._port=e.port||8125,this._prefix=e.prefix||"",this._tags=e.tags||[],this._queue=[],this._buffer="",this._offset=0,this._udp4=this._socket("udp4"),this._udp6=this._socket("udp6")}gauge(e,t,r){this._add(e,t,"g",r)}increment(e,t,r){this._add(e,t,"c",r)}flush(){let e=this._enqueue();this._queue.length!==0&&(this._queue=[],this._httpOptions?this._sendHttp(e):this._sendUdp(e))}_sendHttp(e){let t=Buffer.concat(e);Wb(t,this._httpOptions,r=>{r&&(zr.error("HTTP error from agent: "+r.stack),r.status&&(r.status===404&&(this._httpOptions=null),this._sendUdp(e)))})}_sendUdp(e){this._family!==0?this._sendUdpFromQueue(e,this._host,this._family):Kb(this._host,(t,r,n)=>{if(t)return zr.error(t);this._sendUdpFromQueue(e,r,n)})}_sendUdpFromQueue(e,t,r){let n=r===6?this._udp6:this._udp4;e.forEach(o=>{zr.debug(`Sending to DogStatsD: ${o}`),n.send(o,0,o.length,this._port,t)})}_add(e,t,r,n){let o=`${this._prefix+e}:${t}|${r}`;n=n?this._tags.concat(n):this._tags,n.length>0?this._write(`${o}|#${n.join(",")}
-`):this._write(`${o}
-`)}_write(e){let t=Buffer.byteLength(e);this._offset+t>Qb&&this._enqueue(),this._offset+=t,this._buffer+=e}_enqueue(){return this._offset>0&&(this._queue.push(Buffer.from(this._buffer)),this._buffer="",this._offset=0),this._queue}_socket(e){let t=Xb.createSocket(e);return t.on("error",()=>{}),t.unref(),t}};zc.exports=Vr});var Kc=c((ZO,Yc)=>{"use strict";var{DDSketch:Zb}=require("@datadog/sketches-js"),Yr=class{constructor(){this.reset()}get min(){return this._min}get max(){return this._max}get avg(){return this._count===0?0:this._sum/this._count}get sum(){return this._sum}get count(){return this._count}get median(){return this.percentile(50)}get p95(){return this.percentile(95)}percentile(e){return this._histogram.getValueAtQuantile(e/100)||0}record(e){this._count===0?this._min=this._max=e:(this._min=Math.min(this._min,e),this._max=Math.max(this._max,e)),this._count++,this._sum+=e,this._histogram.accept(e)}reset(){this._min=0,this._max=0,this._sum=0,this._count=0,this._histogram=new Zb}};Yc.exports=Yr});var ut=c((eC,ep)=>{"use strict";var{URL:ev,format:tv}=require("url"),Wr=require("v8"),Wc=require("os"),sv=Vc(),rv=v(),nv=Kc(),{performance:Xc}=require("perf_hooks"),Jc=10*1e3,z=null,ct,m,Ke,rs,Oe,pt,ge,Kr;Zc();ep.exports={start(s){let e=[];Object.keys(s.tags).filter(r=>typeof s.tags[r]=="string").filter(r=>r!=="runtime-id"?!0:s.experimental&&s.experimental.runtimeId).forEach(r=>{let n=s.tags[r].replace(/[^a-z0-9_:./-]/ig,"_");e.push(`${r}:${n}`)});try{z=require("@datadog/native-metrics"),z.start()}catch(r){rv.error(r),z=null}let t={host:s.dogstatsd.hostname,port:s.dogstatsd.port,tags:e};s.url?t.metricsProxyUrl=s.url:s.port&&(t.metricsProxyUrl=new ev(tv({protocol:"http:",hostname:s.hostname||"localhost",port:s.port}))),m=new sv(t),Ke=process.hrtime(),z?ct=setInterval(()=>{Qc(),hv(),m.flush()},Jc):(rs=process.cpuUsage(),ct=setInterval(()=>{Qc(),ov(),pv(),m.flush()},Jc)),ct.unref()},stop(){z&&z.stop(),clearInterval(ct),Zc()},track(s){if(z){let e=z.track(s);return{finish:()=>z.finish(e)}}return{finish:()=>{}}},boolean(s,e,t){this.gauge(s,e?1:0,t)},histogram(s,e,t){m&&(ge[s]=ge[s]||new Map,ge[s].has(t)||ge[s].set(t,new nv),ge[s].get(t).record(e))},count(s,e,t,r=!1){if(!m)return;typeof t=="boolean"&&(r=t,t=void 0);let n=r?pt:Oe;n[s]=n[s]||new Map;let o=n[s].get(t)||0;n[s].set(t,o+e)},gauge(s,e,t){m&&(Oe[s]=Oe[s]||new Map,Oe[s].set(t,e))},increment(s,e,t){this.count(s,1,e,t)},decrement(s,e){this.count(s,-1,e)}};function Zc(){ct=null,m=null,Ke=null,rs=null,Oe={},pt={},ge={},z=null}function ov(){if(!process.cpuUsage)return;let s=process.hrtime(Ke),e=process.cpuUsage(rs);Ke=process.hrtime(),rs=process.cpuUsage();let t=s[0]*1e3+s[1]/1e6,r=100*e.user/1e3/t,n=100*e.system/1e3/t,o=r+n;m.gauge("runtime.node.cpu.system",n.toFixed(2)),m.gauge("runtime.node.cpu.user",r.toFixed(2)),m.gauge("runtime.node.cpu.total",o.toFixed(2))}function iv(){let s=process.memoryUsage();m.gauge("runtime.node.mem.heap_total",s.heapTotal),m.gauge("runtime.node.mem.heap_used",s.heapUsed),m.gauge("runtime.node.mem.rss",s.rss),m.gauge("runtime.node.mem.total",Wc.totalmem()),m.gauge("runtime.node.mem.free",Wc.freemem()),s.external&&m.gauge("runtime.node.mem.external",s.external)}function av(){m.gauge("runtime.node.process.uptime",Math.round(process.uptime()))}function cv(){let s=Wr.getHeapStatistics();m.gauge("runtime.node.heap.total_heap_size",s.total_heap_size),m.gauge("runtime.node.heap.total_heap_size_executable",s.total_heap_size_executable),m.gauge("runtime.node.heap.total_physical_size",s.total_physical_size),m.gauge("runtime.node.heap.total_available_size",s.total_available_size),m.gauge("runtime.node.heap.heap_size_limit",s.heap_size_limit),s.malloced_memory&&m.gauge("runtime.node.heap.malloced_memory",s.malloced_memory),s.peak_malloced_memory&&m.gauge("runtime.node.heap.peak_malloced_memory",s.peak_malloced_memory)}function pv(){if(!Wr.getHeapSpaceStatistics)return;let s=Wr.getHeapSpaceStatistics();for(let e=0,t=s.length;e<t;e++){let r=[`space:${s[e].space_name}`];m.gauge("runtime.node.heap.size.by.space",s[e].space_size,r),m.gauge("runtime.node.heap.used_size.by.space",s[e].space_used_size,r),m.gauge("runtime.node.heap.available_size.by.space",s[e].space_available_size,r),m.gauge("runtime.node.heap.physical_size.by.space",s[e].physical_space_size,r)}}function uv(){Object.keys(Oe).forEach(s=>{Oe[s].forEach((e,t)=>{m.gauge(s,e,t&&[t])})})}function dv(){Object.keys(pt).forEach(s=>{pt[s].forEach((e,t)=>{m.increment(s,e,t&&[t])})}),pt={}}function lv(){Object.keys(ge).forEach(s=>{ge[s].forEach((e,t)=>{ss(s,e,t&&[t]),e.reset()})})}var _v="eventLoopUtilization"in Xc?()=>{Kr=Xc.eventLoopUtilization(Kr),m.gauge("runtime.node.event_loop.utilization",Kr.utilization)}:()=>{};function Qc(){iv(),av(),cv(),uv(),dv(),lv(),_v()}function hv(){let s=z.stats(),e=s.heap.spaces,t=process.hrtime(Ke);Ke=process.hrtime();let r=t[0]*1e6+t[1]/1e3,n=100*s.cpu.user/r,o=100*s.cpu.system/r,i=n+o;m.gauge("runtime.node.cpu.system",o.toFixed(2)),m.gauge("runtime.node.cpu.user",n.toFixed(2)),m.gauge("runtime.node.cpu.total",i.toFixed(2)),ss("runtime.node.event_loop.delay",s.eventLoop),Object.keys(s.gc).forEach(a=>{a==="all"?ss("runtime.node.gc.pause",s.gc[a]):ss("runtime.node.gc.pause.by.type",s.gc[a],[`gc_type:${a}`])});for(let a=0,p=e.length;a<p;a++){let u=[`heap_space:${e[a].space_name}`];m.gauge("runtime.node.heap.size.by.space",e[a].space_size,u),m.gauge("runtime.node.heap.used_size.by.space",e[a].space_used_size,u),m.gauge("runtime.node.heap.available_size.by.space",e[a].space_available_size,u),m.gauge("runtime.node.heap.physical_size.by.space",e[a].physical_space_size,u)}}function ss(s,e,t){t=[].concat(t),m.gauge(`${s}.min`,e.min,t),m.gauge(`${s}.max`,e.max,t),m.increment(`${s}.sum`,e.sum,t),m.increment(`${s}.total`,e.sum,t),m.gauge(`${s}.avg`,e.avg,t),m.increment(`${s}.count`,e.count,t),m.gauge(`${s}.median`,e.median,t),m.gauge(`${s}.95percentile`,e.p95,t)}});var up=c((tC,pp)=>{"use strict";var{performance:tp}=require("perf_hooks"),sp=tp.now.bind(tp),rp=Date.now,gv=require("semver"),np=Ve(),op=Z(),fv=Gr(),U=ut(),mv=v(),{storage:bv}=R(),{DD_TRACE_EXPERIMENTAL_STATE_TRACKING:vv,DD_TRACE_EXPERIMENTAL_SPAN_COUNTS:ip}=process.env,ap=cp("unfinished"),Xr=cp("finished"),Jr=class{constructor(e,t,r,n,o){let i=n.operationName,a=n.parent||null,p=Object.assign({},n.tags),u=n.hostname;this._parentTracer=e,this._debug=o,this._processor=t,this._prioritySampler=r,this._store=bv.getStore(),this._duration=void 0,this._name=i,this._spanContext=this._createContext(a,n),this._spanContext._name=i,this._spanContext._tags=p,this._spanContext._hostname=u,this._startTime=n.startTime||this._getTime(),ip&&Xr&&(U.increment("runtime.node.spans.unfinished"),U.increment("runtime.node.spans.unfinished.by.name",`span_name:${i}`),U.increment("runtime.node.spans.open"),U.increment("runtime.node.spans.open.by.name",`span_name:${i}`),ap.register(this,i,this))}toString(){let e=this.context(),t=e._tags["resource.name"],r=t.length>100?`${t.substring(0,97)}...`:t;return`Span${JSON.stringify({traceId:e._traceId,spanId:e._spanId,parentId:e._parentId,service:e._tags["service.name"],name:e._name,resource:r})}`}context(){return this._spanContext}tracer(){return this._parentTracer}setOperationName(e){return this._spanContext._name=e,this}setBaggageItem(e,t){return this._spanContext._baggageItems[e]=t,this}getBaggageItem(e){return this._spanContext._baggageItems[e]}setTag(e,t){return this._addTags({[e]:t}),this}addTags(e){return this._addTags(e),this}log(){return this}logEvent(){}finish(e){this._duration===void 0&&(vv==="true"&&(this._spanContext._tags["service.name"]||mv.error(`Finishing invalid span: ${this}`)),ip&&Xr&&(U.decrement("runtime.node.spans.unfinished"),U.decrement("runtime.node.spans.unfinished.by.name",`span_name:${this._name}`),U.increment("runtime.node.spans.finished"),U.increment("runtime.node.spans.finished.by.name",`span_name:${this._name}`),U.decrement("runtime.node.spans.open"),U.decrement("runtime.node.spans.open.by.name",`span_name:${this._name}`),ap.unregister(this),Xr.register(this,this._name)),e=parseFloat(e)||this._getTime(),this._duration=e-this._startTime,this._spanContext._trace.finished.push(this),this._spanContext._isFinished=!0,this._processor.process(this))}_createContext(e,t){let r;if(e)r=new np({traceId:e._traceId,spanId:op(),parentId:e._spanId,sampling:e._sampling,baggageItems:Object.assign({},e._baggageItems),trace:e._trace,tracestate:e._tracestate}),r._trace.startTime||(r._trace.startTime=rp());else{let n=op(),o=rp();r=new np({traceId:n,spanId:n}),r._trace.startTime=o,t.traceId128BitGenerationEnabled&&(r._trace.tags["_dd.p.tid"]=Math.floor(o/1e3).toString(16).padStart(8,"0").padEnd(16,"0"))}return r._trace.started.push(this),r._trace.ticks=r._trace.ticks||sp(),r}_getTime(){let{startTime:e,ticks:t}=this._spanContext._trace;return e+sp()-t}_addTags(e){fv.add(this._spanContext._tags,e),this._prioritySampler.sample(this,!1)}};function cp(s){if(gv.satisfies(process.version,">=14.6"))return new global.FinalizationRegistry(e=>{U.decrement(`runtime.node.spans.${s}`),U.decrement(`runtime.node.spans.${s}.by.name`,[`span_name:${e}`])})}pp.exports=Jr});var ae=c((sC,dp)=>{"use strict";dp.exports={SAMPLING_PRIORITY_KEY:"_sampling_priority_v1",ANALYTICS_KEY:"_dd1.sr.eausr",ORIGIN_KEY:"_dd.origin",HOSTNAME_KEY:"_dd.hostname",TOP_LEVEL_KEY:"_dd.top_level",SAMPLING_RULE_DECISION:"_dd.rule_psr",SAMPLING_LIMIT_DECISION:"_dd.limit_psr",SAMPLING_AGENT_DECISION:"_dd.agent_psr",SAMPLING_MECHANISM_DEFAULT:0,SAMPLING_MECHANISM_AGENT:1,SAMPLING_MECHANISM_RULE:3,SAMPLING_MECHANISM_MANUAL:4,SAMPLING_MECHANISM_APPSEC:5,SAMPLING_MECHANISM_SPAN:8,SPAN_SAMPLING_MECHANISM:"_dd.span_sampling.mechanism",SPAN_SAMPLING_RULE_RATE:"_dd.span_sampling.rule_rate",SPAN_SAMPLING_MAX_PER_SECOND:"_dd.span_sampling.max_per_second",DATADOG_LAMBDA_EXTENSION_PATH:"/opt/extensions/datadog-agent",DECISION_MAKER_KEY:"_dd.p.dm",PROCESS_ID:"process_id",ERROR_TYPE:"error.type",ERROR_MESSAGE:"error.message",ERROR_STACK:"error.stack",COMPONENT:"component",CLIENT_PORT_KEY:"network.destination.port"}});var V=c((rC,lp)=>{"use strict";var Qr={SERVICE_NAME:"service.name",RESOURCE_NAME:"resource.name",SPAN_TYPE:"span.type",SPAN_KIND:"span.kind",SAMPLING_PRIORITY:"sampling.priority",ANALYTICS:"_dd1.sr.eausr",ERROR:"error",MANUAL_KEEP:"manual.keep",MANUAL_DROP:"manual.drop",MEASURED:"_dd.measured",HTTP_URL:"http.url",HTTP_METHOD:"http.method",HTTP_STATUS_CODE:"http.status_code",HTTP_ROUTE:"http.route",HTTP_REQUEST_HEADERS:"http.request.headers",HTTP_RESPONSE_HEADERS:"http.response.headers",HTTP_USERAGENT:"http.useragent",HTTP_CLIENT_IP:"http.client_ip"};Qr.ANALYTICS_SAMPLE_RATE=Qr.ANALYTICS;lp.exports=Qr});var Sp=c((nC,yp)=>{"use strict";var C=ae(),Ev=V(),yv=Z(),{isError:Sv}=F(),Tv=C.SAMPLING_PRIORITY_KEY,_p=C.SAMPLING_RULE_DECISION,hp=C.SAMPLING_LIMIT_DECISION,gp=C.SAMPLING_AGENT_DECISION,Iv=C.SPAN_SAMPLING_MECHANISM,xv=C.SPAN_SAMPLING_RULE_RATE,Av=C.SPAN_SAMPLING_MAX_PER_SECOND,qv=C.SAMPLING_MECHANISM_SPAN,fp=Ev.MEASURED,Rv=C.ORIGIN_KEY,mp=C.HOSTNAME_KEY,wv=C.TOP_LEVEL_KEY,kv=C.PROCESS_ID,bp=C.ERROR_MESSAGE,vp=C.ERROR_STACK,Ep=C.ERROR_TYPE,Ov={"service.name":"service","span.type":"type","resource.name":"resource"};function Cv(s){let e=Dv(s);return Mv(e,s),Lv(e,s),Pv(e,s),e}function Dv(s){let e=s.context();return{trace_id:e._traceId,span_id:e._spanId,parent_id:e._parentId||yv("0"),name:String(e._name),resource:String(e._name),error:0,meta:{},metrics:{},start:Math.round(s._startTime*1e6),duration:Math.round(s._duration*1e6)}}function Nv(s,e){e&&(S({},s.metrics,Iv,qv),S({},s.metrics,xv,e.sampleRate),S({},s.metrics,Av,e.maxPerSecond))}function Pv(s,e){let t=e.context(),r=t._trace.origin,n=t._tags,o=t._hostname,i=t._sampling.priority;n["span.kind"]&&n["span.kind"]!=="internal"&&S({},s.metrics,fp,1);for(let a in n)switch(a){case"service.name":case"span.type":case"resource.name":S(s,{},Ov[a],n[a]);break;case"http.status_code":S(s.meta,{},a,n[a]&&String(n[a]));break;case mp:case fp:S({},s.metrics,a,n[a]===void 0||n[a]?1:0);break;case"error":t._name!=="fs.operation"&&Uv(s,n[a]);break;case Ep:case bp:case vp:if(t._name!=="fs.operation")s.error=1;else break;default:S(s.meta,s.metrics,a,n[a])}Nv(s,t._sampling.spanSampling),S(s.meta,s.metrics,"language","javascript"),S(s.meta,s.metrics,kv,process.pid),S(s.meta,s.metrics,Tv,i),S(s.meta,s.metrics,Rv,r),S(s.meta,s.metrics,mp,o)}function Mv(s,e){let t=e.context(),r=e===t._trace.started[0],n=t._parentId;!r||n&&n.toString(10)!=="0"||(S({},s.metrics,_p,t._trace[_p]),S({},s.metrics,hp,t._trace[hp]),S({},s.metrics,gp,t._trace[gp]),S({},s.metrics,wv,1))}function Lv(s,e){let t=e.context();if(e===t._trace.started[0])for(let n in t._trace.tags)S(s.meta,s.metrics,n,t._trace.tags[n])}function Uv(s,e){e&&(s.error=1,Sv(e)&&(S(s.meta,s.metrics,bp,e.message||e.code),S(s.meta,s.metrics,Ep,e.name),S(s.meta,s.metrics,vp,e.stack)))}function S(s,e,t,r,n){switch(typeof r){case"string":if(!r)break;s[t]=r;break;case"number":if(isNaN(r))break;e[t]=r;break;case"boolean":e[t]=r?1:0;break;case"undefined":break;case"object":if(r===null)break;if(Gv(r)||Bv(r))e[t]=r.toString();else if(!Array.isArray(r)&&!n)for(let o in r)jv(r,o)&&S(s,e,`${t}.${o}`,r[o],!0);break}}function jv(s,e){return Object.prototype.hasOwnProperty.call(s,e)}function Gv(s){return s.constructor&&s.constructor.name==="Buffer"&&typeof s.readInt8=="function"&&typeof s.toString=="function"}function Bv(s){return s.constructor&&s.constructor.name==="URL"&&typeof s.href=="string"&&typeof s.toString=="function"}yp.exports=Cv});var Zr=c((oC,Tp)=>{"use strict";Tp.exports={TEXT_MAP:"text_map",HTTP_HEADERS:"http_headers",BINARY:"binary",LOG:"log"}});var en=c((iC,Ip)=>{"use strict";Ip.exports={SERVER:"server",CLIENT:"client",PRODUCER:"producer",CONSUMER:"consumer"}});var tn=c((aC,xp)=>{"use strict";xp.exports={HTTP:"http",WEB:"web"}});var sn=c((cC,Ap)=>{"use strict";Ap.exports={LOG:"log",AGENT:"agent",DATADOG:"datadog",AGENT_PROXY:"agent_proxy",JEST_WORKER:"jest_worker"}});var rn=c((pC,qp)=>{"use strict";var Hv=Zr(),$v=en(),Fv=ze(),zv=V(),Vv=tn(),Yv=sn();qp.exports={formats:Hv,kinds:$v,priority:Fv,tags:zv,types:Vv,exporters:Yv}});var ns=c((uC,Rp)=>{"use strict";var Kv=require("limiter"),nn=class{constructor(e){this._rateLimit=parseInt(e),this._limiter=new Kv.RateLimiter(this._rateLimit,"second"),this._tokensRequested=0,this._prevIntervalTokens=0,this._prevTokensRequested=0}isAllowed(){let e=this._limiter.curIntervalStart,t=this._limiter.tokensThisInterval,r=this._isAllowed();return e!==this._limiter.curIntervalStart?(this._prevIntervalTokens=t,this._prevTokensRequested=this._tokensRequested,this._tokensRequested=1):this._tokensRequested++,r}effectiveRate(){if(this._rateLimit<0)return 1;if(this._rateLimit===0)return 0;if(this._tokensRequested===0)return 1;let e=this._prevIntervalTokens+this._limiter.tokensThisInterval,t=this._prevTokensRequested+this._tokensRequested;return e/t}_isAllowed(){return this._rateLimit<0?!0:this._rateLimit===0?!1:this._limiter.tryRemoveTokens(1)}_currentWindowRate(){return this._rateLimit<0?1:this._rateLimit===0?0:this._tokensRequested===0?1:this._limiter.tokensThisInterval/this._tokensRequested}};Rp.exports=nn});var an=c((dC,wp)=>{"use strict";var on=class{constructor(e){this._rate=e}rate(){return this._rate}isSampled(){return this._rate===1||Math.random()<this._rate}};wp.exports=on});var Cp=c((lC,Op)=>{"use strict";var{globMatch:kp}=F(),{USER_KEEP:Wv,AUTO_KEEP:Xv}=rn().priority,Jv=ns(),Qv=an(),dt=class{constructor({service:e,name:t,sampleRate:r=1,maxPerSecond:n}={}){this.service=e,this.name=t,this._sampler=new Qv(r),this._limiter=void 0,Number.isFinite(n)&&(this._limiter=new Jv(n))}get sampleRate(){return this._sampler.rate()}get maxPerSecond(){return this._limiter&&this._limiter._rateLimit}static from(e){return new dt(e)}match(e,t){return!(this.service&&!kp(this.service,e)||this.name&&!kp(this.name,t))}sample(){return this._sampler.isSampled()?this._limiter?this._limiter.isAllowed():!0:!1}},cn=class{constructor({spanSamplingRules:e=[]}={}){this._rules=e.map(dt.from)}findRule(e,t){for(let r of this._rules)if(r.match(e,t))return r}sample(e){let t=e._sampling.priority;if(t===Wv||t===Xv)return;let{started:r}=e._trace;for(let n of r){let o=n.context(),i=o._tags||{},a=o._name,p=i.service||i["service.name"]||n.tracer()._service,u=this.findRule(p,a);u&&u.sample()&&(n.context()._sampling.spanSampling={sampleRate:u.sampleRate,maxPerSecond:u.maxPerSecond})}}};Op.exports=cn});var pn=c((_C,Mp)=>{"use strict";var Dp=require("fs"),lt=require("path");function Np(){return require.main&&require.main.filename?lt.dirname(require.main.filename):process.cwd()}function Zv(){let s=Np(),e=lt.resolve(s),t=lt.parse(e);if(!t)return{};let{root:r}=t,n=Pp("package.json",r,e);try{return JSON.parse(Dp.readFileSync(n,"utf8"))}catch{return{}}}function Pp(s,e,t){for(;;){let r=lt.resolve(t,s);if(Dp.existsSync(r))return r;if(t===e)return;t=lt.dirname(t)}}Mp.exports=Object.assign(Zv(),{findRoot:Np,findUp:Pp})});var ee=c((hC,eE)=>{eE.exports={name:"dd-trace",version:"4.0.0-pre",description:"Datadog APM tracing client for JavaScript",main:"index.js",typings:"index.d.ts",scripts:{preinstall:"node scripts/preinstall.js",bundle:"node scripts/bundle",bench:"node benchmark","bench:profiler":"node benchmark/profiler","bench:e2e":"SERVICES=mongo yarn services && cd benchmark/e2e && node benchmark-run.js --duration=30","bench:e2e:ci-visibility":"node benchmark/e2e-ci/benchmark-run.js","type:doc":"cd docs && yarn && yarn build","type:test":"cd docs && yarn && yarn test",lint:"node scripts/check_licenses.js && eslint . && yarn audit --groups dependencies",services:"node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",test:"SERVICES=* yarn services && mocha --colors --exit --expose-gc 'packages/dd-trace/test/setup/node.js' 'packages/*/test/**/*.spec.js'","test:appsec":'mocha --colors --exit -r "packages/dd-trace/test/setup/mocha.js" --exclude "packages/dd-trace/test/appsec/iast/**/*.plugin.spec.js" "packages/dd-trace/test/appsec/**/*.spec.js"',"test:appsec:ci":'nyc --no-clean --include "packages/dd-trace/src/appsec/**/*.js" --exclude "packages/dd-trace/test/appsec/iast/**/*.plugin.spec.js" -- npm run test:appsec',"test:appsec:plugins":'mocha --colors --exit -r "packages/dd-trace/test/setup/mocha.js" "packages/dd-trace/test/appsec/iast/**/*.@($(echo $PLUGINS)).plugin.spec.js"',"test:appsec:plugins:ci":'yarn services && nyc --no-clean --include "packages/dd-trace/test/appsec/iast/**/*.@($(echo $PLUGINS)).plugin.spec.js" -- npm run test:appsec:plugins',"test:trace:core":'tap packages/dd-trace/test/*.spec.js "packages/dd-trace/test/{ci-visibility,encode,exporters,opentracing,plugins,telemetry}/**/*.spec.js"',"test:trace:core:ci":'npm run test:trace:core -- --coverage --nyc-arg=--include="packages/dd-trace/src/**/*.js"',"test:instrumentations":"mocha --colors -r 'packages/dd-trace/test/setup/mocha.js' 'packages/datadog-instrumentations/test/**/*.spec.js'","test:instrumentations:ci":"nyc --no-clean --include 'packages/datadog-instrumentations/src/**/*.js' -- npm run test:instrumentations","test:core":'tap "packages/datadog-core/test/**/*.spec.js"',"test:core:ci":'npm run test:core -- --coverage --nyc-arg=--include="packages/datadog-core/src/**/*.js"',"test:lambda":'mocha --colors --exit -r "packages/dd-trace/test/setup/mocha.js" "packages/dd-trace/test/lambda/**/*.spec.js"',"test:lambda:ci":'nyc --no-clean --include "packages/dd-trace/src/lambda/**/*.js" -- npm run test:lambda',"test:plugins":'mocha --colors --exit -r "packages/dd-trace/test/setup/mocha.js" "packages/datadog-instrumentations/test/@($(echo $PLUGINS)).spec.js" "packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js"',"test:plugins:ci":'yarn services && nyc --no-clean --include "packages/datadog-instrumentations/src/@($(echo $PLUGINS)).js" --include "packages/datadog-instrumentations/src/@($(echo $PLUGINS))/**/*.js" --include "packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js" -- npm run test:plugins',"test:plugins:upstream":"node ./packages/dd-trace/test/plugins/suite.js","test:profiler":'tap "packages/dd-trace/test/profiling/**/*.spec.js"',"test:profiler:ci":'npm run test:profiler -- --coverage --nyc-arg=--include="packages/dd-trace/src/profiling/**/*.js"',"test:integration":'mocha --colors --timeout 30000 "integration-tests/*.spec.js"',"test:integration:cucumber":'mocha --colors --timeout 30000 "integration-tests/cucumber/*.spec.js"',"test:integration:cypress":'mocha --colors --timeout 30000 "integration-tests/cypress/*.spec.js"',"test:integration:playwright":'mocha --colors --timeout 30000 "integration-tests/playwright/*.spec.js"',"test:shimmer":"mocha --colors 'packages/datadog-shimmer/test/**/*.spec.js'","test:shimmer:ci":"nyc --no-clean --include 'packages/datadog-shimmer/src/**/*.js' -- npm run test:shimmer","leak:core":"node ./scripts/install_plugin_modules && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'","leak:plugins":'yarn services && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape "packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js"'},repository:{type:"git",url:"git+https://github.com/DataDog/dd-trace-js.git"},keywords:["datadog","trace","tracing","profile","profiler","profiling","opentracing","apm"],author:"Datadog Inc. <info@datadoghq.com>",license:"BSD-3-Clause",bugs:{url:"https://github.com/DataDog/dd-trace-js/issues"},homepage:"https://github.com/DataDog/dd-trace-js#readme",engines:{node:">=14"},dependencies:{"@datadog/native-appsec":"2.0.0","@datadog/native-iast-rewriter":"2.0.1","@datadog/native-iast-taint-tracking":"^1.4.0","@datadog/native-metrics":"^1.6.0","@datadog/pprof":"^2.2.0","@datadog/sketches-js":"^2.1.0","crypto-randomuuid":"^1.0.0",diagnostics_channel:"^1.1.0",ignore:"^5.2.0","import-in-the-middle":"^1.3.5","ipaddr.js":"^2.0.1","istanbul-lib-coverage":"3.2.0",koalas:"^1.0.2",limiter:"^1.1.4","lodash.kebabcase":"^4.1.1","lodash.pick":"^4.4.0","lodash.sortby":"^4.7.0","lodash.uniq":"^4.5.0","lru-cache":"^7.14.0",methods:"^1.1.2","module-details-from-path":"^1.0.3","node-abort-controller":"^3.0.1",opentracing:">=0.12.1","path-to-regexp":"^0.1.2",protobufjs:"^7.1.2",retry:"^0.10.1",semver:"^7.3.8"},devDependencies:{"@types/node":">=14",autocannon:"^4.5.2",axios:"^0.21.2",benchmark:"^2.1.4","body-parser":"^1.18.2",chai:"^4.2.0",chalk:"^3.0.0",checksum:"^0.1.1","cli-table3":"^0.5.1",dotenv:"8.2.0",esbuild:"^0.17.18","esbuild-node-externals":"^1.7.0",eslint:"^8.23.0","eslint-config-standard":"^11.0.0-beta.0","eslint-plugin-import":"^2.8.0","eslint-plugin-mocha":"^10.1.0","eslint-plugin-n":"^15.7.0","eslint-plugin-node":"^5.2.1","eslint-plugin-promise":"^3.6.0","eslint-plugin-standard":"^3.0.1",express:"^4.16.2","get-port":"^3.2.0",glob:"^7.1.6",graphql:"0.13.2","int64-buffer":"^0.1.9",jszip:"^3.5.0",mkdirp:"^0.5.1",mocha:"8","msgpack-lite":"^0.1.26",multer:"^1.4.5-lts.1",nock:"^11.3.3",nyc:"^15.1.0","pprof-format":"^2.0.7",proxyquire:"^1.8.0",rimraf:"^3.0.0",sinon:"^11.1.2","sinon-chai":"^3.7.0",tap:"^16.3.4",tape:"^4.9.1"}}});var We=c((gC,jp)=>{var Lp="unnamed_operation",Up="unnamed-service";function tE(s,e=!0){e&&s.resource&&s.resource.length>5e3&&(s.resource=`${s.resource.slice(0,5e3)}...`);for(let t in s.meta){let r=s.meta[t];t.length>200&&(delete s.meta[t],t=`${t.slice(0,200)}...`,s.metrics[t]=r),r&&r.length>25e3&&(s.meta[t]=`${r.slice(0,25e3)}...`)}for(let t in s.metrics){let r=s.metrics[t];t.length>200&&(delete s.metrics[t],t=`${t.slice(0,200)}...`,s.metrics[t]=r)}return s}function sE(s){return s.service=s.service||Up,s.service.length>100&&(s.service=s.service.slice(0,100)),s.name=s.name||Lp,s.name.length>100&&(s.name=s.name.slice(0,100)),s.resource||(s.resource=s.name),s.type&&s.type.length>100&&(s.type=s.type.slice(0,100)),s}jp.exports={truncateSpan:tE,normalizeSpan:sE,MAX_META_KEY_LENGTH:200,MAX_META_VALUE_LENGTH:25e3,MAX_METRIC_KEY_LENGTH:200,MAX_NAME_LENGTH:100,MAX_SERVICE_LENGTH:100,MAX_TYPE_LENGTH:100,MAX_RESOURCE_NAME_LENGTH:5e3,DEFAULT_SPAN_NAME:Lp,DEFAULT_SERVICE_NAME:Up}});var dn=c((fC,Gp)=>{"use strict";var un=class{constructor(e=2097152){this.buffer=Buffer.allocUnsafe(e),this.length=0,this._minSize=e}write(e){let t=Buffer.byteLength(e),r=this.length;return t<32?(this.reserve(t+1),this.length+=1,this.buffer[r]=t|160):t<4294967296&&(this.reserve(t+5),this.length+=5,this.buffer[r]=219,this.buffer[r+1]=t>>24,this.buffer[r+2]=t>>16,this.buffer[r+3]=t>>8,this.buffer[r+4]=t),this.length+=this.buffer.utf8Write(e,this.length,t),this.length-r}copy(e,t,r){e.set(new Uint8Array(this.buffer.buffer,t,r-t))}set(e){this.reserve(e.length),this.buffer.set(e,this.length),this.length+=e.length}reserve(e){this.length+e>this.buffer.length&&this._resize(this._minSize*Math.ceil((this.length+e)/this._minSize))}_resize(e){let t=this.buffer;this.buffer=Buffer.allocUnsafe(e),t.copy(this.buffer,0,0,this.length)}};Gp.exports=un});var Xe=c((mC,$p)=>{"use strict";var{truncateSpan:rE,normalizeSpan:nE}=We(),Bp=dn(),Hp=v(),{isTrue:oE}=F(),iE=require("koalas"),aE=8*1024*1024,hn=new Float64Array(1),ln=new Uint8Array(hn.buffer);hn[0]=-1;var cE=ln[7]===0;function pE(s){return nE(rE(s,!1))}var _n=class{constructor(e,t=aE){this._limit=t,this._traceBytes=new Bp,this._stringBytes=new Bp,this._writer=e,this._reset(),this._debugEncoding=oE(iE(process.env.DD_TRACE_ENCODING_DEBUG,!1))}count(){return this._traceCount}encode(e){let t=this._traceBytes,r=t.length;this._traceCount++,this._encode(t,e);let n=t.length;this._debugEncoding&&Hp.debug(()=>`Adding encoded trace to buffer: ${t.buffer.subarray(r,n).toString("hex").match(/../g).join(" ")}`),(this._traceBytes.length>this._limit||this._stringBytes.length>this._limit)&&(Hp.debug("Buffer went over soft limit, flushing"),this._writer.flush())}makePayload(){let e=this._traceBytes.length+5,t=Buffer.allocUnsafe(e);return this._writeTraces(t),this._reset(),t}reset(){this._reset()}_encode(e,t){this._encodeArrayPrefix(e,t);for(let r of t)r=pE(r),e.reserve(1),r.type?(e.buffer[e.length++]=140,this._encodeString(e,"type"),this._encodeString(e,r.type)):e.buffer[e.length++]=139,this._encodeString(e,"trace_id"),this._encodeId(e,r.trace_id),this._encodeString(e,"span_id"),this._encodeId(e,r.span_id),this._encodeString(e,"parent_id"),this._encodeId(e,r.parent_id),this._encodeString(e,"name"),this._encodeString(e,r.name),this._encodeString(e,"resource"),this._encodeString(e,r.resource),this._encodeString(e,"service"),this._encodeString(e,r.service),this._encodeString(e,"error"),this._encodeInteger(e,r.error),this._encodeString(e,"start"),this._encodeLong(e,r.start),this._encodeString(e,"duration"),this._encodeLong(e,r.duration),this._encodeString(e,"meta"),this._encodeMap(e,r.meta),this._encodeString(e,"metrics"),this._encodeMap(e,r.metrics)}_reset(){this._traceCount=0,this._traceBytes.length=0,this._stringCount=0,this._stringBytes.length=0,this._stringMap={},this._cacheString("")}_encodeArrayPrefix(e,t){let r=t.length,n=e.length;e.reserve(5),e.length+=5,e.buffer[n]=221,e.buffer[n+1]=r>>24,e.buffer[n+2]=r>>16,e.buffer[n+3]=r>>8,e.buffer[n+4]=r}_encodeMapPrefix(e,t){let r=e.length;e.reserve(5),e.length+=5,e.buffer[r]=223,e.buffer[r+1]=t>>24,e.buffer[r+2]=t>>16,e.buffer[r+3]=t>>8,e.buffer[r+4]=t}_encodeByte(e,t){e.reserve(1),e.buffer[e.length++]=t}_encodeId(e,t){let r=e.length;e.reserve(9),e.length+=9,t=t.toArray(),e.buffer[r]=207,e.buffer[r+1]=t[0],e.buffer[r+2]=t[1],e.buffer[r+3]=t[2],e.buffer[r+4]=t[3],e.buffer[r+5]=t[4],e.buffer[r+6]=t[5],e.buffer[r+7]=t[6],e.buffer[r+8]=t[7]}_encodeInteger(e,t){let r=e.length;e.reserve(5),e.length+=5,e.buffer[r]=206,e.buffer[r+1]=t>>24,e.buffer[r+2]=t>>16,e.buffer[r+3]=t>>8,e.buffer[r+4]=t}_encodeLong(e,t){let r=e.length,n=t/Math.pow(2,32)>>0,o=t>>>0;e.reserve(9),e.length+=9,e.buffer[r]=207,e.buffer[r+1]=n>>24,e.buffer[r+2]=n>>16,e.buffer[r+3]=n>>8,e.buffer[r+4]=n,e.buffer[r+5]=o>>24,e.buffer[r+6]=o>>16,e.buffer[r+7]=o>>8,e.buffer[r+8]=o}_encodeMap(e,t){let n=Object.keys(t).filter(o=>typeof t[o]=="string"||typeof t[o]=="number");this._encodeMapPrefix(e,n.length);for(let o of n)this._encodeString(e,o),this._encodeValue(e,t[o])}_encodeValue(e,t){switch(typeof t){case"string":this._encodeString(e,t);break;case"number":this._encodeFloat(e,t);break;default:}}_encodeString(e,t=""){this._cacheString(t);let{start:r,end:n}=this._stringMap[t];this._stringBytes.copy(e,r,n)}_encodeFloat(e,t){hn[0]=t;let r=e.length;if(e.reserve(9),e.length+=9,e.buffer[r]=203,cE)for(let n=0;n<=7;n++)e.buffer[r+n+1]=ln[n];else for(let n=7;n>=0;n--)e.buffer[e.length-n-1]=ln[n]}_cacheString(e){e in this._stringMap||(this._stringCount++,this._stringMap[e]={start:this._stringBytes.length,end:this._stringBytes.length+this._stringBytes.write(e)})}_writeArrayPrefix(e,t,r){return e[t++]=221,e.writeUInt32BE(r,t),t+4}_writeTraces(e,t=0){return t=this._writeArrayPrefix(e,t,this._traceCount),t+=this._traceBytes.buffer.copy(e,t,0,this._traceBytes.length),t}};$p.exports={AgentEncoder:_n}});var zp=c((bC,Fp)=>{"use strict";var{AgentEncoder:uE}=Xe(),{MAX_NAME_LENGTH:dE,MAX_SERVICE_LENGTH:lE,MAX_RESOURCE_NAME_LENGTH:_E,MAX_TYPE_LENGTH:hE,DEFAULT_SPAN_NAME:gE,DEFAULT_SERVICE_NAME:fE}=We();function os(s,e,t=""){return s&&(s.length>e?`${s.slice(0,e)}${t}`:s)}var gn=class extends uE{_encodeBool(e,t){this._encodeByte(e,t?195:194)}makePayload(){let e=this._traceBytes.length,t=Buffer.allocUnsafe(e);return this._traceBytes.copy(t,0,e),this._reset(),t}_encodeMapPrefix(e,t){let r=e.length;e.reserve(1),e.length+=1,e.buffer[r]=128+t}_encodeBuffer(e,t){let r=t.length,n=e.length;e.reserve(5),e.length+=5,e.buffer[n]=198,e.buffer[n+1]=r>>24,e.buffer[n+2]=r>>16,e.buffer[n+3]=r>>8,e.buffer[n+4]=r,t.copy(e.buffer,n+5),e.length+=r}_encodeStat(e,t){this._encodeMapPrefix(e,12),this._encodeString(e,"Service");let r=t.Service||fE;this._encodeString(e,os(r,lE)),this._encodeString(e,"Name");let n=t.Name||gE;this._encodeString(e,os(n,dE)),this._encodeString(e,"Resource"),this._encodeString(e,os(t.Resource,_E,"...")),this._encodeString(e,"HTTPStatusCode"),this._encodeInteger(e,t.HTTPStatusCode),this._encodeString(e,"Type"),this._encodeString(e,os(t.Type,hE)),this._encodeString(e,"Hits"),this._encodeLong(e,t.Hits),this._encodeString(e,"Errors"),this._encodeLong(e,t.Errors),this._encodeString(e,"Duration"),this._encodeLong(e,t.Duration),this._encodeString(e,"OkSummary"),this._encodeBuffer(e,t.OkSummary),this._encodeString(e,"ErrorSummary"),this._encodeBuffer(e,t.ErrorSummary),this._encodeString(e,"Synthetics"),this._encodeBool(e,t.Synthetics),this._encodeString(e,"TopLevelHits"),this._encodeLong(e,t.TopLevelHits)}_encodeBucket(e,t){this._encodeMapPrefix(e,3),this._encodeString(e,"Start"),this._encodeLong(e,t.Start),this._encodeString(e,"Duration"),this._encodeLong(e,t.Duration),this._encodeString(e,"Stats"),this._encodeArrayPrefix(e,t.Stats);for(let r of t.Stats)this._encodeStat(e,r)}_encode(e,t){this._encodeMapPrefix(e,8),this._encodeString(e,"Hostname"),this._encodeString(e,t.Hostname),this._encodeString(e,"Env"),this._encodeString(e,t.Env),this._encodeString(e,"Version"),this._encodeString(e,t.Version),this._encodeString(e,"Stats"),this._encodeArrayPrefix(e,t.Stats);for(let r of t.Stats)this._encodeBucket(e,r);this._encodeString(e,"Lang"),this._encodeString(e,t.Lang),this._encodeString(e,"TracerVersion"),this._encodeString(e,t.TracerVersion),this._encodeString(e,"RuntimeID"),this._encodeString(e,t.RuntimeID),this._encodeString(e,"Sequence"),this._encodeLong(e,t.Sequence)}};Fp.exports={SpanStatsEncoder:gn}});var _t=c((vC,Kp)=>{"use strict";var Vp=M(),Yp=v(),fn=class{constructor({url:e}){this._url=e}flush(e=()=>{}){let t=this._encoder.count();if(!Vp.writable)this._encoder.reset(),e();else if(t>0){let r=this._encoder.makePayload();this._sendPayload(r,t,e)}else e()}append(e){if(!Vp.writable){Yp.debug(()=>`Maximum number of active requests reached. Payload discarded: ${JSON.stringify(e)}`);return}Yp.debug(()=>`Encoding payload: ${JSON.stringify(e)}`),this._encode(e)}_encode(e){this._encoder.encode(e)}setUrl(e){this._url=e}};Kp.exports=fn});var Xp=c((EC,Wp)=>{var{SpanStatsEncoder:mE}=zp(),bE=ee(),vE=_t(),EE=M(),mn=v(),bn=class extends vE{constructor({url:e}){super(...arguments),this._url=e,this._encoder=new mE(this)}_sendPayload(e,t,r){yE(e,this._url,(n,o)=>{if(n){mn.error(n),r();return}mn.debug(`Response from the intake: ${o}`),r()})}};function yE(s,e,t){let r={path:"/v0.6/stats",method:"PUT",headers:{"Datadog-Meta-Lang":"javascript","Datadog-Meta-Tracer-Version":bE.version,"Content-Type":"application/msgpack"}};r.protocol=e.protocol,r.hostname=e.hostname,r.port=e.port,mn.debug(()=>`Request to the intake: ${JSON.stringify(r)}`),EE(s,r,(n,o)=>{t(n,o)})}Wp.exports={Writer:bn}});var Qp=c((yC,Jp)=>{var{URL:SE,format:TE}=require("url"),{Writer:IE}=Xp(),vn=class{constructor(e){let{hostname:t="127.0.0.1",port:r=8126,tags:n,url:o}=e;this._url=o||new SE(TE({protocol:"http:",hostname:t||"localhost",port:r})),this._writer=new IE({url:this._url,tags:n})}export(e){this._writer.append(e),this._writer.flush()}};Jp.exports={SpanStatsExporter:vn}});var su=c((SC,tu)=>{var xE=require("os"),{version:AE}=pn(),qE=ee(),{LogCollapsingLowestDenseDDSketch:Zp}=require("@datadog/sketches-js"),{ORIGIN_KEY:RE,TOP_LEVEL_KEY:eu}=ae(),{MEASURED:wE,HTTP_STATUS_CODE:kE}=V(),{SpanStatsExporter:OE}=Qp(),{DEFAULT_SPAN_NAME:CE,DEFAULT_SERVICE_NAME:DE}=We(),is=class{constructor(e){this.aggKey=e,this.hits=0,this.topLevelHits=0,this.errors=0,this.duration=0,this.okDistribution=new Zp(.00775),this.errorDistribution=new Zp(.00775)}record(e){let t=e.duration;this.hits++,this.duration+=t,e.metrics[eu]&&this.topLevelHits++,e.error?(this.errors++,this.errorDistribution.accept(t)):this.okDistribution.accept(t)}toJSON(){let{name:e,service:t,resource:r,type:n,statusCode:o,synthetics:i}=this.aggKey;return{Name:e,Service:t,Resource:r,Type:n,HTTPStatusCode:o,Synthetics:i,Hits:this.hits,TopLevelHits:this.topLevelHits,Errors:this.errors,Duration:this.duration,OkSummary:this.okDistribution.toProto(),ErrorSummary:this.errorDistribution.toProto()}}},as=class{constructor(e){this.name=e.name||CE,this.service=e.service||DE,this.resource=e.resource||"",this.type=e.type||"",this.statusCode=e.meta[kE]||0,this.synthetics=e.meta[RE]==="synthetics"}toString(){return[this.name,this.service,this.resource,this.type,this.statusCode,this.synthetics].join(",")}},cs=class extends Map{forSpan(e){let t=new as(e),r=t.toString();return this.has(r)||this.set(r,new is(t)),this.get(r)}},ps=class extends Map{forTime(e){return this.has(e)||this.set(e,new cs),this.get(e)}},En=class{constructor({stats:{enabled:e=!1,interval:t=10},hostname:r,port:n,url:o,env:i,tags:a}={}){this.exporter=new OE({hostname:r,port:n,tags:a,url:o}),this.interval=t,this.bucketSizeNs=t*1e9,this.buckets=new ps,this.hostname=xE.hostname(),this.enabled=e,this.env=i,this.tags=a||{},this.sequence=0,e&&(this.timer=setInterval(this.onInterval.bind(this),t*1e3),this.timer.unref())}onInterval(){let e=this._serializeBuckets();e&&this.exporter.export({Hostname:this.hostname,Env:this.env,Version:AE,Stats:e,Lang:"javascript",TracerVersion:qE.version,RuntimeID:this.tags["runtime-id"],Sequence:++this.sequence})}onSpanFinished(e){if(!this.enabled||!e.metrics[eu]&&!e.metrics[wE])return;let t=e.startTime+e.duration,r=t-t%this.bucketSizeNs;this.buckets.forTime(r).forSpan(e).record(e)}_serializeBuckets(){let{bucketSizeNs:e}=this,t=[];for(let[r,n]of this.buckets.entries()){let o=[];for(let i of n.values())o.push(i.toJSON());t.push({Start:r,Duration:e,Stats:o})}return this.buckets.clear(),t}};tu.exports={SpanAggStats:is,SpanAggKey:as,SpanBuckets:cs,TimeBuckets:ps,SpanStatsProcessor:En}});var iu=c((TC,ou)=>{"use strict";var te=v(),NE=Sp(),PE=Cp(),{SpanStatsProcessor:ME}=su(),ru=new WeakSet,nu=new WeakSet,yn=class{constructor(e,t,r){this._exporter=e,this._prioritySampler=t,this._config=r,this._killAll=!1,this._stats=new ME(r),this._spanSampler=new PE(r.sampler)}process(e){let t=e.context(),r=[],n=[],o=t._trace,{flushMinSpans:i}=this._config,{started:a,finished:p}=o;if(o.record!==!1){if(a.length===p.length||p.length>=i){this._prioritySampler.sample(t),this._spanSampler.sample(t);for(let u of a)if(u._duration!==void 0){let d=NE(u);this._stats.onSpanFinished(d),n.push(d)}else r.push(u);n.length!==0&&o.isRecording!==!1&&this._exporter.export(n),this._erase(o,r)}this._killAll&&a.map(u=>{u._finished||u.finish()})}}killAll(){this._killAll=!0}_erase(e,t){if(process.env.DD_TRACE_EXPERIMENTAL_STATE_TRACKING==="true"){let r=new Set,n=new Set,o=new Set,i=new Set;for(let a of e.finished){let p=a.context(),u=p.toSpanId();o.has(a)?te.error(`Span was already finished in the same trace: ${a}`):(o.add(a),i.has(u)?te.error(`Another span with the same ID was already finished in the same trace: ${a}`):i.add(u),p._trace!==e&&te.error(`A span was finished in the wrong trace: ${a}.`),nu.has(a)?te.error(`Span was already finished in a different trace: ${a}`):nu.add(a))}for(let a of e.started){let p=a.context(),u=p.toSpanId();r.has(a)?te.error(`Span was already started in the same trace: ${a}`):(r.add(a),n.has(u)?te.error(`Another span with the same ID was already started in the same trace: ${a}`):n.add(u),p._trace!==e&&te.error(`A span was started in the wrong trace: ${a}.`),ru.has(a)?te.error(`Span was already started in a different trace: ${a}`):ru.add(a)),o.has(a)||te.error(`Span started in one trace but was finished in another trace: ${a}`)}for(let a of e.finished)r.has(a)||te.error(`Span finished in one trace but was started in another trace: ${a}`)}for(let r of e.finished)r.context()._tags={};e.started=t,e.finished=[]}};ou.exports=yn});var ht=c((IC,cu)=>{"use strict";var{info:LE,warn:UE}=Lr(),Sn=require("os"),{inspect:jE}=require("util"),GE=ee().version,x,us,Tn=[],au=!1;function BE(){let s=new Set,e={};for(let t in us._pluginsByName)s.add(t);return e.integrations_loaded=Array.from(s),e}function HE({agentError:s}={}){if(!x||!us||au||(au=!0,!x.startupLogs))return;let e=x.url||`http://${x.hostname||"localhost"}:${x.port}`,t={[jE.custom](){return String(this)},toString(){return JSON.stringify(this)}};t.date=new Date().toISOString(),t.os_name=Sn.type(),t.os_version=Sn.release(),t.architecture=Sn.arch(),t.version=GE,t.lang="nodejs",t.lang_version=process.versions.node,t.env=x.env,t.enabled=x.enabled,t.service=x.service,t.agent_url=e,s&&(t.agent_error=s.message),t.debug=!!x.debug,t.sample_rate=x.sampleRate,t.sampling_rules=Tn,t.tags=x.tags,x.tags&&x.tags.version&&(t.dd_version=x.tags.version),t.log_injection_enabled=!!x.logInjection,t.runtime_metrics_enabled=!!x.runtimeMetrics,t.profiling_enabled=!!(x.profiling||{}).enabled,Object.assign(t,BE()),t.appsec_enabled=!!x.appsec.enabled,LE("DATADOG TRACER CONFIGURATION - "+t),s&&UE("DATADOG TRACER DIAGNOSTIC - Agent Error: "+s.message),x=void 0,us=void 0,Tn=void 0}function $E(s){x=s}function FE(s){us=s}function zE(s){Tn=s}cu.exports={startupLog:HE,setStartupLogConfig:$E,setStartupLogPluginManager:FE,setSamplingRules:zE}});var gu=c((xC,hu)=>{"use strict";var VE=ns(),An=an(),fe=rn(),{setSamplingRules:YE}=ht(),{SAMPLING_MECHANISM_DEFAULT:KE,SAMPLING_MECHANISM_AGENT:WE,SAMPLING_MECHANISM_RULE:XE,SAMPLING_MECHANISM_MANUAL:JE,SAMPLING_RULE_DECISION:QE,SAMPLING_LIMIT_DECISION:ZE,SAMPLING_AGENT_DECISION:ey,DECISION_MAKER_KEY:In}=ae(),ty=fe.tags.SERVICE_NAME,sy=fe.tags.SAMPLING_PRIORITY,pu=fe.tags.MANUAL_KEEP,uu=fe.tags.MANUAL_DROP,ds=fe.priority.USER_REJECT,du=fe.priority.AUTO_REJECT,ft=fe.priority.AUTO_KEEP,gt=fe.priority.USER_KEEP,xn="service:,env:",lu=new An(ft),qn=class{constructor(e,{sampleRate:t,rateLimit:r=100,rules:n=[]}={}){this._env=e,this._rules=this._normalizeRules(n,t),this._limiter=new VE(r),YE(this._rules),this.update({})}isSampled(e){let t=this._getPriorityFromAuto(e);return t===gt||t===ft}sample(e,t=!0){if(!e)return;let r=this._getContext(e),n=r._trace.started[0];if(r._sampling.priority!==void 0||!n)return;let o=this._getPriorityFromTags(r._tags);if(this.validate(o))r._sampling.priority=o,r._sampling.mechanism=JE;else if(t)r._sampling.priority=this._getPriorityFromAuto(n);else return;this._addDecisionMaker(n)}update(e){let t={};for(let r in e){let n=e[r],o=new An(n);t[r]=o}t[xn]=t[xn]||lu,this._samplers=t}validate(e){switch(e){case ds:case gt:case du:case ft:return!0;default:return!1}}_getContext(e){return typeof e.context=="function"?e.context():e}_getPriorityFromAuto(e){let t=this._getContext(e),r=this._findRule(t);return r?this._getPriorityByRule(t,r):this._getPriorityByAgent(t)}_getPriorityFromTags(e){if(_u(e,pu)&&e[pu]!==!1)return gt;if(_u(e,uu)&&e[uu]!==!1)return ds;{let t=parseInt(e[sy],10);if(t===1||t===2)return gt;if(t===0||t===-1)return ds}}_getPriorityByRule(e,t){return e._trace[QE]=t.sampleRate,e._sampling.mechanism=XE,t.sampler.isSampled(e)&&this._isSampledByRateLimit(e)?gt:ds}_isSampledByRateLimit(e){let t=this._limiter.isAllowed();return e._trace[ZE]=this._limiter.effectiveRate(),t}_getPriorityByAgent(e){let t=`service:${e._tags[ty]},env:${this._env}`,r=this._samplers[t]||this._samplers[xn];return e._trace[ey]=r.rate(),r===lu?e._sampling.mechanism=KE:e._sampling.mechanism=WE,r.isSampled(e)?ft:du}_addDecisionMaker(e){let t=e.context(),r=t._trace,n=t._sampling.priority,o=t._sampling.mechanism;n>=ft?r.tags[In]||(r.tags[In]=`-${o}`):delete r.tags[In]}_normalizeRules(e,t){return e=[].concat(e||[]),e.concat({sampleRate:t}).map(r=>({...r,sampleRate:parseFloat(r.sampleRate)})).filter(r=>!isNaN(r.sampleRate)).map(r=>({...r,sampler:new An(r.sampleRate)}))}_findRule(e){for(let t=0,r=this._rules.length;t<r;t++)if(this._matchRule(e,this._rules[t]))return this._rules[t]}_matchRule(e,t){let r=e._name,n=e._tags["service.name"];return!(t.name instanceof RegExp&&!t.name.test(r)||typeof t.name=="string"&&t.name!==r||t.service instanceof RegExp&&!t.service.test(n)||typeof t.service=="string"&&t.service!==n)}};function _u(s,e){return Object.prototype.hasOwnProperty.call(s,e)}hu.exports=qn});var vu=c((AC,bu)=>{"use strict";var ry=/[ \t]*([^=]+)=([ \t]*[^, \t]+)[ \t]*(,|$)/gim,ny=/([^:]+):([^;]+)(;|$)/gim;function fu(s,e,t){if(typeof t!="string"||!t.length)return new s;let r=[];for(let n of t.matchAll(e))r.unshift(n.slice(1,3));return new s(r)}function mu(s,e,t){return Array.from(s.entries()).reverse().map(r=>r.join(e)).join(t)}var mt=class extends Map{constructor(...e){super(...e),this.changed=!1}set(...e){if(!(this.has(e[0])&&this.get(e[0])===e[1]))return this.changed=!0,super.set(...e)}delete(...e){return this.changed=!0,super.delete(...e)}clear(...e){return this.changed=!0,super.clear(...e)}static fromString(e){return fu(mt,ny,e)}toString(){return mu(this,":",";")}},bt=class extends Map{set(e,t){return this.has(e)&&this.delete(e),super.set(e,t)}forVendor(e,t){let r=super.get(e),n=mt.fromString(r),o=t(n);return n.changed&&(n.toString()?this.set(e,n.toString()):this.delete(e)),o}static fromString(e){return fu(bt,ry,e)}toString(){return mu(this,"=",",")}};bu.exports=bt});var Nn=c((qC,Au)=>{"use strict";var Eu=require("lodash.pick"),vt=Z(),Rn=Ve(),me=v(),yu=vu(),{AUTO_KEEP:ls,AUTO_REJECT:oy,USER_KEEP:iy}=ze(),kn="x-datadog-trace-id",On="x-datadog-parent-id",hs="x-datadog-origin",Cn="x-datadog-sampling-priority",_s="x-datadog-tags",Iu="ot-baggage-",be="x-b3-traceid",ay=/^([0-9a-f]{16}){1,2}$/i,Ce="x-b3-spanid",cy=/^[0-9a-f]{16}$/i,xu="x-b3-parentspanid",ce="x-b3-sampled",ve="x-b3-flags",Et="b3",py="x-aws-sqsd-attr-_datadog",uy=/^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)?|[01d])$/i,dy=new RegExp(`^${Iu}(.+)$`),ly=/^_dd\.p\.[\x21-\x2b\x2d-\x7e]+$/,_y=/^[\x20-\x2b\x2d-\x7e]*$/,hy=[kn,On,Cn,hs],gy=[be,Ce,xu,ce,ve,Et],Su=hy.concat(gy),fy=/^([a-f0-9]{2})-([a-f0-9]{32})-([a-f0-9]{16})-([a-f0-9]{2})(-.*)?$/i,Tu="traceparent",my=/[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g,by=/[^\x21-\x2b\x2d-\x3c\x3e-\x7e]/g,vy=/[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g,wn=/^0+$/,Dn=class{constructor(e){this._config=e}inject(e,t){this._injectBaggageItems(e,t),this._injectDatadog(e,t),this._injectB3MultipleHeaders(e,t),this._injectB3SingleHeader(e,t),this._injectTraceparent(e,t),me.debug(()=>`Inject into carrier: ${JSON.stringify(Eu(t,Su))}.`)}extract(e){let t=this._extractSpanContext(e);return t&&(me.debug(()=>`Extract from carrier: ${JSON.stringify(Eu(e,Su))}.`),t)}_injectDatadog(e,t){this._hasPropagationStyle("inject","datadog")&&(t[kn]=e.toTraceId(),t[On]=e.toSpanId(),this._injectOrigin(e,t),this._injectSamplingPriority(e,t),this._injectTags(e,t))}_injectOrigin(e,t){let r=e._trace.origin;r&&(t[hs]=r)}_injectSamplingPriority(e,t){let r=e._sampling.priority;Number.isInteger(r)&&(t[Cn]=r.toString())}_injectBaggageItems(e,t){e._baggageItems&&Object.keys(e._baggageItems).forEach(r=>{t[Iu+r]=String(e._baggageItems[r])})}_injectTags(e,t){let r=e._trace;if(this._config.tagsHeaderMaxLength===0){me.debug("Trace tag propagation is disabled, skipping injection.");return}let n=[];for(let i in r.tags)if(!(!r.tags[i]||!i.startsWith("_dd.p."))){if(!this._validateTagKey(i)||!this._validateTagValue(r.tags[i])){me.error("Trace tags from span are invalid, skipping injection.");return}n.push(`${i}=${r.tags[i]}`)}let o=n.join(",");o.length>this._config.tagsHeaderMaxLength?me.error("Trace tags from span are too large, skipping injection."):o&&(t[_s]=o)}_injectB3MultipleHeaders(e,t){let r=this._hasPropagationStyle("inject","b3"),n=this._hasPropagationStyle("inject","b3multi");(r||n)&&(t[be]=this._getB3TraceId(e),t[Ce]=e._spanId.toString(16),t[ce]=e._sampling.priority>=ls?"1":"0",e._sampling.priority>ls&&(t[ve]="1"),e._parentId&&(t[xu]=e._parentId.toString(16)))}_injectB3SingleHeader(e,t){if(!this._hasPropagationStyle("inject","b3 single header"))return null;let n=this._getB3TraceId(e),o=e._spanId.toString(16),i=e._sampling.priority>=ls?"1":"0";t[Et]=`${n}-${o}-${i}`,e._parentId&&(t[Et]+="-"+e._parentId.toString(16))}_injectTraceparent(e,t){if(!this._hasPropagationStyle("inject","tracecontext"))return;let{_sampling:{priority:r,mechanism:n},_tracestate:o=new yu,_trace:{origin:i,tags:a}}=e;t[Tu]=e.toTraceparent(),o.forVendor("dd",p=>{if(p.set("s",r),n&&p.set("t.dm",n),typeof i=="string"){let u=i.replace(my,"_").replace(/[\x3d]/g,"~");p.set("o",u)}for(let u in a){if(!a[u]||!u.startsWith("_dd.p."))continue;let d="t."+u.slice(6).replace(by,"_"),l=a[u].toString().replace(vy,"_").replace(/[\x3d]/g,"~");p.set(d,l)}}),t.tracestate=o.toString()}_hasPropagationStyle(e,t){return this._config.tracePropagationStyle[e].includes(t)}_extractSpanContext(e){for(let t of this._config.tracePropagationStyle.extract){let r=null;switch(t){case"datadog":r=this._extractDatadogContext(e);break;case"tracecontext":r=this._extractTraceparentContext(e);break;case"b3":case"b3multi":r=this._extractB3MultiContext(e);break;case"b3 single header":r=this._extractB3SingleContext(e);break}if(r!==null)return r}return this._extractSqsdContext(e)}_extractDatadogContext(e){let t=this._extractGenericContext(e,kn,On,10);return t&&(this._extractOrigin(e,t),this._extractBaggageItems(e,t),this._extractSamplingPriority(e,t),this._extractTags(e,t)),t}_extractB3MultiContext(e){let t=this._extractB3MultipleHeaders(e);return t?this._extractB3Context(t):null}_extractB3SingleContext(e){if(!uy.test(e[Et]))return null;let t=this._extractB3SingleHeader(e);return t?this._extractB3Context(t):null}_extractB3Context(e){let t=e[ve]==="1",r=this._getPriority(e[ce],t),n=this._extractGenericContext(e,be,Ce,16);if(r!==void 0){if(!n)return new Rn({traceId:vt(),spanId:null,sampling:{priority:r}});n._sampling.priority=r}return this._extract128BitTraceId(e[be],n),n}_extractSqsdContext(e){let t=e[py];if(!t)return null;let r;try{r=JSON.parse(t)}catch{return null}return this._extractDatadogContext(r)}_extractTraceparentContext(e){let t=e[Tu];if(!t)return null;let r=t.trim().match(fy);if(r.length){let[n,o,i,a,p]=r.slice(1),u={version:n},d=yu.fromString(e.tracestate);if(wn.test(o)||wn.test(i)||n==="ff"||p&&n==="00")return null;let l=new Rn({traceId:vt(o,16),spanId:vt(i,16),sampling:{priority:parseInt(a,10)&1?1:0},traceparent:u,tracestate:d});return this._extract128BitTraceId(o,l),d.forVendor("dd",_=>{for(let[h,f]of _.entries())switch(h){case"s":{let b=parseInt(f,10);if(!Number.isInteger(b))continue;(l._sampling.priority===1&&b>0||l._sampling.priority===0&&b<0)&&(l._sampling.priority=b);break}case"o":l._trace.origin=f;break;case"t.dm":{let b=-Math.abs(parseInt(f,10));Number.isInteger(b)&&(l._sampling.mechanism=b,l._trace.tags["_dd.p.dm"]=String(b));break}default:if(!h.startsWith("t."))continue;l._trace.tags[`_dd.p.${h.slice(2)}`]=f.replace(/[\x7e]/gm,"=")}}),this._extractBaggageItems(e,l),l}return null}_extractGenericContext(e,t,r,n){return e[t]&&e[r]?wn.test(e[t])?null:new Rn({traceId:vt(e[t],n),spanId:vt(e[r],n)}):null}_extractB3MultipleHeaders(e){let t=!0,r={};return ay.test(e[be])&&cy.test(e[Ce])&&(r[be]=e[be],r[Ce]=e[Ce],t=!1),e[ce]&&(r[ce]=e[ce],t=!1),e[ve]&&(r[ve]=e[ve],t=!1),t?null:r}_extractB3SingleHeader(e){let t=e[Et];if(!t)return null;let r=t.split("-");if(r[0]==="d")return{[ce]:"1",[ve]:"1"};if(r.length===1)return{[ce]:r[0]};{let n={[be]:r[0],[Ce]:r[1]};return r[2]&&(n[ce]=r[2]!=="0"?"1":"0",r[2]==="d"&&(n[ve]="1")),n}}_extractOrigin(e,t){let r=e[hs];typeof e[hs]=="string"&&(t._trace.origin=r)}_extractBaggageItems(e,t){Object.keys(e).forEach(r=>{let n=r.match(dy);n&&(t._baggageItems[n[1]]=e[r])})}_extractSamplingPriority(e,t){let r=parseInt(e[Cn],10);Number.isInteger(r)&&(t._sampling.priority=r)}_extractTags(e,t){if(!e[_s])return;let r=t._trace;if(this._config.tagsHeaderMaxLength===0)me.debug("Trace tag propagation is disabled, skipping extraction.");else if(e[_s].length>this._config.tagsHeaderMaxLength)me.error("Trace tags from carrier are too large, skipping extraction.");else{let n=e[_s].split(","),o={};for(let i of n){let[a,...p]=i.split("="),u=p.join("=");if(!this._validateTagKey(a)||!this._validateTagValue(u)){me.error("Trace tags from carrier are invalid, skipping extraction.");return}o[a]=u}Object.assign(r.tags,o)}}_extract128BitTraceId(e,t){if(!t||t._traceId.toBuffer().length!==16)return;let n=e.substring(0,16);n!=="0000000000000000"&&(t._trace.tags["_dd.p.tid"]=n)}_validateTagKey(e){return ly.test(e)}_validateTagValue(e){return _y.test(e)}_getPriority(e,t){if(t)return iy;if(e==="1")return ls;if(e==="0")return oy}_getB3TraceId(e){return e._traceId.toBuffer().length<=8&&e._trace.tags["_dd.p.tid"]?e._trace.tags["_dd.p.tid"]+e._traceId.toString(16):e._traceId.toString(16)}};Au.exports=Dn});var Ru=c((RC,qu)=>{"use strict";var Ey=Nn(),Pn=class extends Ey{};qu.exports=Pn});var ku=c((wC,wu)=>{"use strict";var Mn=class{inject(e,t){}extract(e){return null}};wu.exports=Mn});var Du=c((kC,Cu)=>{"use strict";var gs=Z(),Ou=Ve(),Ln=class{constructor(e){this._config=e}inject(e,t){t&&(t.dd={},e&&(this._config.traceId128BitLoggingEnabled&&e._trace.tags["_dd.p.tid"]?t.dd.trace_id=e._trace.tags["_dd.p.tid"]+e._traceId.toString(16):t.dd.trace_id=e.toTraceId(),t.dd.span_id=e.toSpanId()),this._config.service&&(t.dd.service=this._config.service),this._config.version&&(t.dd.version=this._config.version),this._config.env&&(t.dd.env=this._config.env))}extract(e){if(!e||!e.dd||!e.dd.trace_id||!e.dd.span_id)return null;if(e.dd.trace_id.length===32){let t=e.dd.trace_id.substring(0,16),r=e.dd.trace_id.substring(16,32),n=new Ou({traceId:gs(r,16),spanId:gs(e.dd.span_id,10)});return n._trace.tags["_dd.p.tid"]=t,n}else return new Ou({traceId:gs(e.dd.trace_id,10),spanId:gs(e.dd.span_id,10)})}};Cu.exports=Ln});var Gn=c((OC,Uu)=>{"use strict";var Nu=v(),Mu='{"traces":[[',Lu=`]]}
-`,Un=Mu.length+Lu.length,Pu=64*1024,jn=class{export(e){Nu.debug(()=>`Adding trace to queue: ${JSON.stringify(e)}`);let t=Un,r=[];for(let n of e){let o=JSON.stringify(n);if(o.length+Un>Pu){Nu.debug("Span too large to send to logs, dropping");continue}o.length+t>Pu&&(this._printSpans(r),r=[],t=Un),t+=o.length+1,r.push(o)}r.length>0&&this._printSpans(r)}_printSpans(e){let t=Mu,r=!0;for(let n of e)r?(r=!1,t+=n):t+=","+n;t+=Lu,process.stdout.write(t)}};Uu.exports=jn});var Gu=c((CC,ju)=>{"use strict";var{truncateSpan:yy,normalizeSpan:Sy}=We(),{AgentEncoder:Ty}=Xe(),Iy=146,xy=156;function Ay(s){return Sy(yy(s,!1))}var Bn=class extends Ty{makePayload(){let t=this._stringBytes.length+5,r=this._traceBytes.length+5,n=Buffer.allocUnsafe(1+t+r),o=0;return n[o++]=Iy,o=this._writeStrings(n,o),o=this._writeTraces(n,o),this._reset(),n}_encode(e,t){this._encodeArrayPrefix(e,t);for(let r of t)r=Ay(r),this._encodeByte(e,xy),this._encodeString(e,r.service),this._encodeString(e,r.name),this._encodeString(e,r.resource),this._encodeId(e,r.trace_id),this._encodeId(e,r.span_id),this._encodeId(e,r.parent_id),this._encodeLong(e,r.start||0),this._encodeLong(e,r.duration||0),this._encodeInteger(e,r.error),this._encodeMap(e,r.meta||{}),this._encodeMap(e,r.metrics||{}),this._encodeString(e,r.type)}_encodeString(e,t=""){this._cacheString(t),this._encodeInteger(e,this._stringMap[t])}_cacheString(e){e in this._stringMap||(this._stringMap[e]=this._stringCount++,this._stringBytes.write(e))}_writeStrings(e,t){return t=this._writeArrayPrefix(e,t,this._stringCount),t+=this._stringBytes.buffer.copy(e,t,0,this._stringBytes.length),t}};ju.exports={AgentEncoder:Bn}});var Fn=c((DC,Hu)=>{"use strict";var qy=M(),{startupLog:Bu}=ht(),Ee=ut(),fs=v(),Ry=ee().version,wy=_t(),ye="datadog.tracer.node.exporter.agent",$n=class extends wy{constructor({prioritySampler:e,lookup:t,protocolVersion:r,headers:n}){super(...arguments);let o=ky(r);this._prioritySampler=e,this._lookup=t,this._protocolVersion=r,this._encoder=new o(this),this._headers=n}_sendPayload(e,t,r){Ee.increment(`${ye}.requests`,!0);let{_headers:n,_lookup:o,_protocolVersion:i,_url:a}=this;Oy(i,e,t,a,n,o,!0,(p,u,d)=>{if(d?(Ee.increment(`${ye}.responses`,!0),Ee.increment(`${ye}.responses.by.status`,`status:${d}`,!0)):p&&(Ee.increment(`${ye}.errors`,!0),Ee.increment(`${ye}.errors.by.name`,`name:${p.name}`,!0),p.code&&Ee.increment(`${ye}.errors.by.code`,`code:${p.code}`,!0)),Bu({agentError:p}),p){fs.error(p),r();return}fs.debug(`Response from the agent: ${u}`);try{this._prioritySampler.update(JSON.parse(u).rate_by_service)}catch(l){fs.error(l),Ee.increment(`${ye}.errors`,!0),Ee.increment(`${ye}.errors.by.name`,`name:${l.name}`,!0)}r()})}};function Hn(s,e,t){t&&(s[e]=t)}function ky(s){return s==="0.5"?Gu().AgentEncoder:Xe().AgentEncoder}function Oy(s,e,t,r,n,o,i,a){let p={path:`/v${s}/traces`,method:"PUT",headers:{...n,"Content-Type":"application/msgpack","Datadog-Meta-Tracer-Version":Ry,"X-Datadog-Trace-Count":String(t)},lookup:o,url:r};Hn(p.headers,"Datadog-Meta-Lang","nodejs"),Hn(p.headers,"Datadog-Meta-Lang-Version",process.version),Hn(p.headers,"Datadog-Meta-Lang-Interpreter",process.jsEngine||"v8"),fs.debug(()=>`Request to the agent: ${JSON.stringify(p)}`),qy(e,p,(u,d,l)=>{i&&Bu({agentError:l!==404&&l!==200?u:void 0}),a(u,d,l)})}Hu.exports=$n});var Vn=c((NC,Fu)=>{"use strict";var{URL:$u,format:Cy}=require("url"),Dy=v(),Ny=Fn(),zn=class{constructor(e,t){this._config=e;let{url:r,hostname:n,port:o,lookup:i,protocolVersion:a,stats:p={}}=e;this._url=r||new $u(Cy({protocol:"http:",hostname:n||"localhost",port:o}));let u={};p.enabled&&(u["Datadog-Client-Computed-Stats"]="yes"),this._writer=new Ny({url:this._url,prioritySampler:t,lookup:i,protocolVersion:a,headers:u}),this._timer=void 0,process.once("beforeExit",()=>this._writer.flush())}setUrl(e){try{e=new $u(e),this._url=e,this._writer.setUrl(e)}catch(t){Dy.warn(t.stack)}}export(e){this._writer.append(e);let{flushInterval:t}=this._config;t===0?this._writer.flush():t>0&&!this._timer&&(this._timer=setTimeout(()=>{this._writer.flush(),this._timer=clearTimeout(this._timer)},t).unref())}flush(e=()=>{}){this._writer.flush(e)}};Fu.exports=zn});var Yu=c((PC,Vu)=>{"use strict";var{truncateSpan:Py,normalizeSpan:My}=We(),{AgentEncoder:Ly}=Xe(),{version:Uy}=ee(),Yn=Z(),zu=1,jy=["test_session_end","test_module_end","test_suite_end","test"],Gy=12,By=11,Hy=10,$y=2*1024*1024;function Fy(s){let e=zu;return s.type==="test"&&s.meta&&s.meta.test_session_id&&(e=2),{type:jy.includes(s.type)?s.type:"span",version:e,content:My(Py(s))}}var Kn=class extends Ly{constructor(e,{runtimeId:t,service:r,env:n}){super(e,$y),this.runtimeId=t,this.service=r,this.env=n,this._eventCount=0,this.reset()}_encodeTestSuite(e,t){this._encodeMapPrefix(e,Gy),this._encodeString(e,"type"),this._encodeString(e,t.type),this._encodeString(e,"test_session_id"),this._encodeId(e,t.trace_id),this._encodeString(e,"test_module_id"),this._encodeId(e,t.parent_id),this._encodeString(e,"test_suite_id"),this._encodeId(e,t.span_id),this._encodeString(e,"error"),this._encodeNumber(e,t.error),this._encodeString(e,"name"),this._encodeString(e,t.name),this._encodeString(e,"service"),this._encodeString(e,t.service),this._encodeString(e,"resource"),this._encodeString(e,t.resource),this._encodeString(e,"start"),this._encodeNumber(e,t.start),this._encodeString(e,"duration"),this._encodeNumber(e,t.duration),this._encodeString(e,"meta"),this._encodeMap(e,t.meta),this._encodeString(e,"metrics"),this._encodeMap(e,t.metrics)}_encodeTestModule(e,t){this._encodeMapPrefix(e,By),this._encodeString(e,"type"),this._encodeString(e,t.type),this._encodeString(e,"test_session_id"),this._encodeId(e,t.trace_id),this._encodeString(e,"test_module_id"),this._encodeId(e,t.span_id),this._encodeString(e,"error"),this._encodeNumber(e,t.error),this._encodeString(e,"name"),this._encodeString(e,t.name),this._encodeString(e,"service"),this._encodeString(e,t.service),this._encodeString(e,"resource"),this._encodeString(e,t.resource),this._encodeString(e,"start"),this._encodeNumber(e,t.start),this._encodeString(e,"duration"),this._encodeNumber(e,t.duration),this._encodeString(e,"meta"),this._encodeMap(e,t.meta),this._encodeString(e,"metrics"),this._encodeMap(e,t.metrics)}_encodeTestSession(e,t){this._encodeMapPrefix(e,Hy),this._encodeString(e,"type"),this._encodeString(e,t.type),this._encodeString(e,"test_session_id"),this._encodeId(e,t.trace_id),this._encodeString(e,"error"),this._encodeNumber(e,t.error),this._encodeString(e,"name"),this._encodeString(e,t.name),this._encodeString(e,"service"),this._encodeString(e,t.service),this._encodeString(e,"resource"),this._encodeString(e,t.resource),this._encodeString(e,"start"),this._encodeNumber(e,t.start),this._encodeString(e,"duration"),this._encodeNumber(e,t.duration),this._encodeString(e,"meta"),this._encodeMap(e,t.meta),this._encodeString(e,"metrics"),this._encodeMap(e,t.metrics)}_encodeEventContent(e,t){let r=Object.keys(t).length;t.meta.test_session_id?this._encodeMapPrefix(e,r+3):this._encodeMapPrefix(e,r),t.type&&(this._encodeString(e,"type"),this._encodeString(e,t.type)),this._encodeString(e,"trace_id"),this._encodeId(e,t.trace_id),this._encodeString(e,"span_id"),this._encodeId(e,t.span_id),this._encodeString(e,"parent_id"),this._encodeId(e,t.parent_id),this._encodeString(e,"name"),this._encodeString(e,t.name),this._encodeString(e,"resource"),this._encodeString(e,t.resource),this._encodeString(e,"service"),this._encodeString(e,t.service),this._encodeString(e,"error"),this._encodeNumber(e,t.error),this._encodeString(e,"start"),this._encodeNumber(e,t.start),this._encodeString(e,"duration"),this._encodeNumber(e,t.duration),t.meta.test_session_id&&(this._encodeString(e,"test_session_id"),this._encodeId(e,Yn(t.meta.test_session_id,10)),delete t.meta.test_session_id,this._encodeString(e,"test_module_id"),this._encodeId(e,Yn(t.meta.test_module_id,10)),delete t.meta.test_module_id,this._encodeString(e,"test_suite_id"),this._encodeId(e,Yn(t.meta.test_suite_id,10)),delete t.meta.test_suite_id),this._encodeString(e,"meta"),this._encodeMap(e,t.meta),this._encodeString(e,"metrics"),this._encodeMap(e,t.metrics)}_encodeEvent(e,t){this._encodeMapPrefix(e,Object.keys(t).length),this._encodeString(e,"type"),this._encodeString(e,t.type),this._encodeString(e,"version"),this._encodeNumber(e,t.version),this._encodeString(e,"content"),t.type==="span"||t.type==="test"?this._encodeEventContent(e,t.content):t.type==="test_suite_end"?this._encodeTestSuite(e,t.content):t.type==="test_module_end"?this._encodeTestModule(e,t.content):t.type==="test_session_end"&&this._encodeTestSession(e,t.content)}_encodeNumber(e,t){return Math.floor(t)!==t?this._encodeFloat(e,t):this._encodeLong(e,t)}_encodeLong(e,t){let r=t>=0,n=r?t/Math.pow(2,32)>>0:Math.floor(t/Math.pow(2,32)),o=t>>>0,i=r?207:211,a=e.length;e.reserve(9),e.length+=9,e.buffer[a]=i,e.buffer[a+1]=n>>24,e.buffer[a+2]=n>>16,e.buffer[a+3]=n>>8,e.buffer[a+4]=n,e.buffer[a+5]=o>>24,e.buffer[a+6]=o>>16,e.buffer[a+7]=o>>8,e.buffer[a+8]=o}_encode(e,t){let r=t.map(Fy),n=r.filter(a=>a.type==="test_session_end"||a.type==="test_suite_end"||a.type==="test_module_end"),i=!!n.length?n:r;this._eventCount+=i.length;for(let a of i)this._encodeEvent(e,a)}makePayload(){let e=this._traceBytes,t=this._eventsOffset,r=this._eventCount;e.buffer[t]=221,e.buffer[t+1]=r>>24,e.buffer[t+2]=r>>16,e.buffer[t+3]=r>>8,e.buffer[t+4]=r;let n=e.length,o=Buffer.allocUnsafe(n);return e.buffer.copy(o,0,0,n),this.reset(),o}_encodePayloadStart(e){let t={version:zu,metadata:{"*":{language:"javascript",library_version:Uy}},events:[]};this.env&&(t.metadata["*"].env=this.env),this.runtimeId&&(t.metadata["*"]["runtime-id"]=this.runtimeId),this._encodeMapPrefix(e,Object.keys(t).length),this._encodeString(e,"version"),this._encodeNumber(e,t.version),this._encodeString(e,"metadata"),this._encodeMapPrefix(e,Object.keys(t.metadata).length),this._encodeString(e,"*"),this._encodeMap(e,t.metadata["*"]),this._encodeString(e,"events"),this._eventsOffset=e.length,e.reserve(5),e.length+=5}reset(){this._reset(),this._eventCount=0,this._encodePayloadStart(this._traceBytes)}};Vu.exports={AgentlessCiVisibilityEncoder:Kn}});var Jn=c((MC,Ku)=>{"use strict";var zy=M(),Wn=v(),{AgentlessCiVisibilityEncoder:Vy}=Yu(),Yy=_t();function Ky(s){return JSON.stringify(s,(e,t)=>e!=="dd-api-key"?t:void 0)}var Xn=class extends Yy{constructor({url:e,tags:t,evpProxyPrefix:r=""}){super(...arguments);let{"runtime-id":n,env:o,service:i}=t;this._url=e,this._encoder=new Vy(this,{runtimeId:n,env:o,service:i}),this._evpProxyPrefix=r}_sendPayload(e,t,r){let n={path:"/api/v2/citestcycle",method:"POST",headers:{"dd-api-key":process.env.DATADOG_API_KEY||process.env.DD_API_KEY,"Content-Type":"application/msgpack"},timeout:15e3,url:this._url};this._evpProxyPrefix&&(n.path=`${this._evpProxyPrefix}/api/v2/citestcycle`,delete n.headers["dd-api-key"],n.headers["X-Datadog-EVP-Subdomain"]="citestcycle-intake"),Wn.debug(()=>`Request to the intake: ${Ky(n)}`),zy(e,n,(o,i)=>{if(o){Wn.error(o),r();return}Wn.debug(`Response from the intake: ${i}`),r()})}};Ku.exports=Xn});var ms=c((LC,Wu)=>{"use strict";var{Readable:Wy}=require("stream"),Xy=Z(),Qn=class extends Wy{constructor(){super(),this._boundary=Xy().toString(),this._data=[]}append(e,t,r={}){this._appendBoundary(),r.filename?this._appendFile(e,t,r):this._appendMetadata(e,t,r)}getHeaders(){return{"Content-Type":"multipart/form-data; boundary="+this._boundary}}_appendBoundary(){this._data.push(`--${this._boundary}\r
-`)}_appendMetadata(e,t){this._data.push(`Content-Disposition: form-data; name="${e}"\r
-\r
-${t}\r
-`)}_appendFile(e,t,{filename:r,contentType:n="application/octet-stream"}){this._data.push(`Content-Disposition: form-data; name="${e}"; filename="${r}"\r
-`),this._data.push(`Content-Type: ${n}\r
-\r
-`),this._data.push(t),this._data.push(`\r
-`)}_read(){this.push(this._data.shift()),this._data.length===0&&(this.push(`--${this._boundary}--\r
-`),this.push(null))}};Wu.exports=Qn});var Qu=c((UC,Ju)=>{"use strict";var{AgentEncoder:Jy}=Xe(),Qy=dn(),Xu=ms(),Zy=2,eS=2,Zn=class extends Jy{constructor(){super(...arguments),this._coverageBytes=new Qy,this.form=new Xu,this._coveragesCount=0,this.reset()}count(){return this._coveragesCount}encode(e){this._coveragesCount++,this.encodeCodeCoverage(this._coverageBytes,e)}encodeCodeCoverage(e,t){this._encodeMapPrefix(e,3),this._encodeString(e,"test_session_id"),this._encodeId(e,t.traceId),this._encodeString(e,"test_suite_id"),this._encodeId(e,t.spanId),this._encodeString(e,"files"),this._encodeArrayPrefix(e,t.files);for(let r of t.files)this._encodeMapPrefix(e,1),this._encodeString(e,"filename"),this._encodeString(e,r)}reset(){this._reset(),this._coverageBytes&&(this._coverageBytes.length=0),this._coveragesCount=0,this._encodePayloadStart(this._coverageBytes)}_encodePayloadStart(e){let t={version:Zy,coverages:[]};this._encodeMapPrefix(e,eS),this._encodeString(e,"version"),this._encodeInteger(e,t.version),this._encodeString(e,"coverages"),this._coveragesOffset=e.length,e.reserve(5),e.length+=5}makePayload(){let e=this._coverageBytes,t=this._coveragesOffset,r=this._coveragesCount;e.buffer[t]=221,e.buffer[t+1]=r>>24,e.buffer[t+2]=r>>16,e.buffer[t+3]=r>>8,e.buffer[t+4]=r;let n=e.length,o=Buffer.allocUnsafe(n);e.buffer.copy(o,0,0,e.length),this.form.append("coverage1",o,{filename:"coverage1.msgpack",contentType:"application/msgpack"}),this.form.append("event",JSON.stringify({dummy:!0}),{filename:"event.json",contentType:"application/json"});let i=this.form;return this.form=new Xu,this.reset(),i}};Ju.exports={CoverageCIVisibilityEncoder:Zn}});var so=c((jC,Zu)=>{"use strict";var tS=M(),eo=v(),{CoverageCIVisibilityEncoder:sS}=Qu(),rS=_t();function nS(s){return JSON.stringify(s,(e,t)=>e!=="dd-api-key"?t:void 0)}var to=class extends rS{constructor({url:e,evpProxyPrefix:t=""}){super(...arguments),this._url=e,this._encoder=new sS(this),this._evpProxyPrefix=t}_sendPayload(e,t,r){let n={path:"/api/v2/citestcov",method:"POST",headers:{"dd-api-key":process.env.DATADOG_API_KEY||process.env.DD_API_KEY,...e.getHeaders()},timeout:15e3,url:this._url};this._evpProxyPrefix&&(n.path=`${this._evpProxyPrefix}/api/v2/citestcov`,delete n.headers["dd-api-key"],n.headers["X-Datadog-EVP-Subdomain"]="event-platform-intake"),eo.debug(()=>`Request to the intake: ${nS(n)}`),tS(e,n,(o,i)=>{if(o){eo.error(o),r();return}eo.debug(`Response from the intake: ${i}`),r()})}};Zu.exports=to});var td=c((GC,ed)=>{var oS=require("child_process"),iS=(s,e={})=>{try{return oS.execSync(s,e).toString().replace(/(\r\n|\n|\r)/gm,"")}catch{return""}};ed.exports={sanitizedExec:iS}});var yt=c((BC,sd)=>{var aS="git.commit.sha",cS="git.branch",pS="git.repository_url",uS="git.tag",dS="git.commit.message",lS="git.commit.committer.date",_S="git.commit.committer.email",hS="git.commit.committer.name",gS="git.commit.author.date",fS="git.commit.author.email",mS="git.commit.author.name",bS="ci.pipeline.id",vS="ci.pipeline.name",ES="ci.pipeline.number",yS="ci.pipeline.url",SS="ci.provider.name",TS="ci.workspace_path",IS="ci.job.url",xS="ci.job.name",AS="ci.stage.name",qS="_dd.ci.env_vars";sd.exports={GIT_COMMIT_SHA:aS,GIT_BRANCH:cS,GIT_REPOSITORY_URL:pS,GIT_TAG:uS,GIT_COMMIT_MESSAGE:dS,GIT_COMMIT_COMMITTER_DATE:lS,GIT_COMMIT_COMMITTER_EMAIL:_S,GIT_COMMIT_COMMITTER_NAME:hS,GIT_COMMIT_AUTHOR_DATE:gS,GIT_COMMIT_AUTHOR_EMAIL:fS,GIT_COMMIT_AUTHOR_NAME:mS,CI_PIPELINE_ID:bS,CI_PIPELINE_NAME:vS,CI_PIPELINE_NUMBER:ES,CI_PIPELINE_URL:yS,CI_PROVIDER_NAME:SS,CI_WORKSPACE_PATH:TS,CI_JOB_URL:IS,CI_JOB_NAME:xS,CI_STAGE_NAME:AS,CI_ENV_VARS:qS}});var ro=c((HC,od)=>{var{execSync:St}=require("child_process"),RS=require("os"),rd=require("path"),Tt=v(),{sanitizedExec:Se}=td(),{GIT_COMMIT_SHA:wS,GIT_BRANCH:kS,GIT_REPOSITORY_URL:OS,GIT_TAG:CS,GIT_COMMIT_MESSAGE:DS,GIT_COMMIT_COMMITTER_DATE:NS,GIT_COMMIT_COMMITTER_EMAIL:PS,GIT_COMMIT_COMMITTER_NAME:MS,GIT_COMMIT_AUTHOR_DATE:LS,GIT_COMMIT_AUTHOR_EMAIL:US,GIT_COMMIT_AUTHOR_NAME:jS,CI_WORKSPACE_PATH:GS}=yt(),nd=8*1024*1024;function BS(){return Se("git rev-parse --is-shallow-repository",{stdio:"pipe"})==="true"}function HS(){try{St('git config remote.origin.partialclonefilter "blob:none"',{stdio:"pipe"}),St('git fetch --shallow-since="1 month ago" --update-shallow --refetch',{stdio:"pipe"})}catch(s){Tt.error(s)}}function $S(){return Se("git config --get remote.origin.url",{stdio:"pipe"})}function FS(){try{return St('git log --format=%H -n 1000 --since="1 month ago"',{stdio:"pipe"}).toString().split(`
-`).filter(s=>s)}catch(s){return Tt.error(s),[]}}function zS(s){let e='git rev-list --objects --no-object-names --filter=blob:none --since="1 month ago" HEAD';s.forEach(t=>{e=`${e} ^${t}`});try{return St(e,{stdio:"pipe",maxBuffer:nd}).toString().split(`
-`).filter(t=>t)}catch(t){return Tt.error(t),[]}}function VS(s){let e=RS.tmpdir(),t=String(Math.floor(Math.random()*1e4)),r=rd.join(e,t),n=rd.join(process.cwd(),t);function o(i){return St(`git pack-objects --compression=9 --max-pack-size=3m ${i}`,{input:s.join(`
-`)}).toString().split(`
-`).filter(a=>a).map(a=>`${i}-${a}.pack`)}try{return o(r,s)}catch(i){Tt.error(i);try{return o(n,s)}catch(a){Tt.error(a)}return[]}}function YS(s){let{commitSHA:e,branch:t,repositoryUrl:r,tag:n,commitMessage:o,authorName:i,authorEmail:a,ciWorkspacePath:p}=s,[u,d,l,_,h,f]=Se("git show -s --format=%an,%ae,%aI,%cn,%ce,%cI",{stdio:"pipe"}).split(",");return{[OS]:r||Se("git ls-remote --get-url",{stdio:"pipe"}),[DS]:o||Se("git show -s --format=%s",{stdio:"pipe"}),[LS]:l,[jS]:i||u,[US]:a||d,[NS]:f,[MS]:_,[PS]:h,[kS]:t||Se("git rev-parse --abbrev-ref HEAD",{stdio:"pipe"}),[wS]:e||Se("git rev-parse HEAD",{stdio:"pipe"}),[CS]:n,[GS]:p||Se("git rev-parse --show-toplevel",{stdio:"pipe"})}}od.exports={getGitMetadata:YS,getLatestCommits:FS,getRepositoryUrl:$S,generatePackFilesForCommits:VS,getCommitsToUpload:zS,GIT_REV_LIST_MAX_BUFFER:nd,isShallowRepository:BS,unshallowRepository:HS}});var ud=c(($C,pd)=>{var KS=require("fs"),WS=require("path"),XS=ms(),ad=M(),JS=v(),{getLatestCommits:QS,getRepositoryUrl:ZS,generatePackFilesForCommits:eT,getCommitsToUpload:tT,isShallowRepository:sT,unshallowRepository:rT}=ro(),nT=s=>/^[0-9a-f]{40}$/.test(s),oT=s=>/^[0-9a-f]{64}$/.test(s);function iT(s){return s.map(({id:e,type:t})=>{if(t!=="commit")throw new Error("Invalid commit type response");if(nT(e)||oT(e))return e.replace(/[^0-9a-f]+/g,"");throw new Error("Invalid commit format")})}function cd(s){return{method:"POST",headers:{"dd-api-key":process.env.DATADOG_API_KEY||process.env.DD_API_KEY},timeout:15e3,url:s}}function aT({url:s,isEvpProxy:e,repositoryUrl:t},r){let n=QS(),[o]=n,i=cd(s),a={...i,headers:{...i.headers,"Content-Type":"application/json"},path:"/api/v2/git/repository/search_commits"};e&&(a.path="/evp_proxy/v2/api/v2/git/repository/search_commits",a.headers["X-Datadog-EVP-Subdomain"]="api",delete a.headers["dd-api-key"]);let p=JSON.stringify({meta:{repository_url:t},data:n.map(u=>({id:u,type:"commit"}))});ad(p,a,(u,d)=>{if(u){let _=new Error(`Error fetching commits to exclude: ${u.message}`);return r(_)}let l;try{l=iT(JSON.parse(d).data)}catch(_){return r(new Error(`Can't parse commits to exclude response: ${_.message}`))}r(null,l,o)})}function id({url:s,isEvpProxy:e,packFileToUpload:t,repositoryUrl:r,headCommit:n},o){let i=new XS,a=JSON.stringify({data:{id:n,type:"commit"},meta:{repository_url:r}});i.append("pushedSha",a,{contentType:"application/json"});try{let d=KS.readFileSync(t),[,l]=WS.basename(t).split("-");i.append("packfile",d,{filename:l,contentType:"application/octet-stream"})}catch{o(new Error(`Could not read "${t}"`));return}let p=cd(s),u={...p,path:"/api/v2/git/repository/packfile",headers:{...p.headers,...i.getHeaders()}};e&&(u.path="/evp_proxy/v2/api/v2/git/repository/packfile",u.headers["X-Datadog-EVP-Subdomain"]="api",delete u.headers["dd-api-key"]),ad(i,u,(d,l,_)=>{if(d){let h=new Error(`Could not upload packfiles: status code ${_}: ${d.message}`);return o(h)}o(null)})}function cT(s,e,t){let r=ZS();if(!r)return t(new Error("Repository URL is empty"));sT()&&rT(),aT({url:s,repositoryUrl:r,isEvpProxy:e},(n,o,i)=>{if(n)return t(n);let a=tT(o);if(!a.length)return JS.debug("No commits to upload"),t(null);let p=eT(a);if(!p.length)return t(new Error("Failed to generate packfiles"));let u=0,d=l=>l||u===p.length?t(l):id({packFileToUpload:p[u++],url:s,isEvpProxy:e,repositoryUrl:r,headCommit:i},d);id({packFileToUpload:p[u++],url:s,isEvpProxy:e,repositoryUrl:r,headCommit:i},d)})}pd.exports={sendGitMetadata:cT}});var ld=c((FC,dd)=>{var pT=M(),uT=Z();function dT({url:s,isEvpProxy:e,env:t,service:r,repositoryUrl:n,sha:o,osVersion:i,osPlatform:a,osArchitecture:p,runtimeName:u,runtimeVersion:d,branch:l,custom:_},h){let f={path:"/api/v2/libraries/tests/services/setting",method:"POST",headers:{"Content-Type":"application/json"},url:s};if(e)f.path="/evp_proxy/v2/api/v2/libraries/tests/services/setting",f.headers["X-Datadog-EVP-Subdomain"]="api",f.headers["X-Datadog-NeedsAppKey"]="true";else{let E=process.env.DATADOG_API_KEY||process.env.DD_API_KEY,y=process.env.DATADOG_APP_KEY||process.env.DD_APP_KEY||process.env.DATADOG_APPLICATION_KEY||process.env.DD_APPLICATION_KEY,I="Request to settings endpoint was not done because Datadog";if(!y)return h(new Error(`${I} application key is not defined.`));if(!E)return h(new Error(`${I} API key is not defined.`));f.headers["dd-api-key"]=E,f.headers["dd-application-key"]=y}let b=JSON.stringify({data:{id:uT().toString(10),type:"ci_app_test_service_libraries_settings",attributes:{test_level:"suite",configurations:{"os.platform":a,"os.version":i,"os.architecture":p,"runtime.name":u,"runtime.version":d,custom:_},service:r,env:t,repository_url:n,sha:o,branch:l}}});pT(b,f,(E,y)=>{if(E)h(E);else try{let{data:{attributes:{code_coverage:I,tests_skipping:oe}}}=JSON.parse(y);h(null,{isCodeCoverageEnabled:I,isSuitesSkippingEnabled:oe})}catch(I){h(I)}})}dd.exports={getItrConfiguration:dT}});var hd=c((zC,_d)=>{var lT=M();function _T({url:s,isEvpProxy:e,env:t,service:r,repositoryUrl:n,sha:o,osVersion:i,osPlatform:a,osArchitecture:p,runtimeName:u,runtimeVersion:d,custom:l},_){let h={path:"/api/v2/ci/tests/skippable",method:"POST",headers:{"Content-Type":"application/json"},timeout:2e4,url:s};if(e)h.path="/evp_proxy/v2/api/v2/ci/tests/skippable",h.headers["X-Datadog-EVP-Subdomain"]="api",h.headers["X-Datadog-NeedsAppKey"]="true";else{let b=process.env.DATADOG_API_KEY||process.env.DD_API_KEY,E=process.env.DATADOG_APP_KEY||process.env.DD_APP_KEY||process.env.DATADOG_APPLICATION_KEY||process.env.DD_APPLICATION_KEY,y="Skippable suites were not fetched because Datadog";if(!E)return _(new Error(`${y} application key is not defined.`));if(!b)return _(new Error(`${y} API key is not defined.`));h.headers["dd-api-key"]=b,h.headers["dd-application-key"]=E}let f=JSON.stringify({data:{type:"test_params",attributes:{test_level:"suite",configurations:{"os.platform":a,"os.version":i,"os.architecture":p,"runtime.name":u,"runtime.version":d,custom:l},service:r,env:t,repository_url:n,sha:o}}});lT(f,h,(b,E)=>{if(b)_(b);else{let y=[];try{y=JSON.parse(E).data.filter(({type:I})=>I==="suite").map(({attributes:{suite:I}})=>I),_(null,y)}catch(I){_(I)}}})}_d.exports={getSkippableSuites:_T}});var fd=c((VC,gd)=>{var{URL:hT,format:gT}=require("url"),fT=M();function mT(s,e){fT("",{path:"/info",url:s},(t,r)=>{if(t)return e(t);try{let n=JSON.parse(r);return e(null,n)}catch(n){return e(n)}})}var no=class{constructor(e){this._config=e;let{url:t,hostname:r,port:n}=this._config;this._url=t||new hT(gT({protocol:"http:",hostname:r||"localhost",port:n})),this._traceBuffer=[],this._isInitialized=!1}getAgentInfo(e){mT(this._url,e)}export(e){if(!this._isInitialized){this._traceBuffer.push(e);return}this._export(e)}_export(e,t=this._writer,r="_timer"){t.append(e);let{flushInterval:n}=this._config;n===0?t.flush():n>0&&!this[r]&&(this[r]=setTimeout(()=>{t.flush(),this[r]=clearTimeout(this[r])},n).unref())}getUncodedTraces(){return this._traceBuffer}exportUncodedTraces(){this.getUncodedTraces().forEach(e=>{this.export(e)}),this.resetUncodedTraces()}resetUncodedTraces(){this._traceBuffer=[]}};gd.exports=no});var ao=c((YC,Ed)=>{"use strict";var md=require("url").URL,{sendGitMetadata:bT}=ud(),{getItrConfiguration:vT}=ld(),{getSkippableSuites:ET}=hd(),oo=v(),yT=fd();function bd(s){return s?Object.keys(s).reduce((e,t)=>{if(t.startsWith("test.configuration.")){let[,r]=t.split("test.configuration.");e[r]=s[t]}return e},{}):{}}function ST(s){return s.some(e=>e.type==="test_session_end"||e.type==="test_suite_end"||e.type==="test_module_end")}var vd=6e4,TT=vd,io=class extends yT{constructor(e){super(e),this._timer=void 0,this._coverageTimer=void 0,this._coverageBuffer=[],this._canUseCiVisProtocol=!1;let t=setTimeout(()=>{this._resolveGit(new Error("Timeout while uploading git metadata"))},vd).unref(),r=setTimeout(()=>{this._resolveCanUseCiVisProtocol(!1)},TT).unref();this._gitUploadPromise=new Promise(n=>{this._resolveGit=o=>{clearTimeout(t),n(o)}}),this._canUseCiVisProtocolPromise=new Promise(n=>{this._resolveCanUseCiVisProtocol=o=>{clearTimeout(r),this._canUseCiVisProtocol=o,n(o)}}),process.once("beforeExit",()=>{this._writer&&this._writer.flush(),this._coverageWriter&&this._coverageWriter.flush()})}shouldRequestSkippableSuites(){return!!(this._config.isIntelligentTestRunnerEnabled&&this._canUseCiVisProtocol&&this._itrConfig&&this._itrConfig.isSuitesSkippingEnabled)}shouldRequestItrConfiguration(){return this._config.isIntelligentTestRunnerEnabled}canReportSessionTraces(){return this._canUseCiVisProtocol}canReportCodeCoverage(){return this._canUseCiVisProtocol}getSkippableSuites(e,t){if(!this.shouldRequestSkippableSuites())return t(null,[]);this._gitUploadPromise.then(r=>{if(r)return t(r,[]);let n={url:this._getApiUrl(),site:this._config.site,env:this._config.env,service:this._config.service,isEvpProxy:!!this._isUsingEvpProxy,custom:bd(this._config.tags),...e};ET(n,t)})}getItrConfiguration(e,t){if(this.sendGitMetadata(),!this.shouldRequestItrConfiguration())return t(null,{});this._canUseCiVisProtocolPromise.then(r=>{if(!r)return t(null,{});let n={url:this._getApiUrl(),env:this._config.env,service:this._config.service,isEvpProxy:!!this._isUsingEvpProxy,custom:bd(this._config.tags),...e};vT(n,(o,i)=>{this._itrConfig=i,t(o,i)})})}sendGitMetadata(){this._config.isGitUploadEnabled&&this._canUseCiVisProtocolPromise.then(e=>{e&&bT(this._getApiUrl(),!!this._isUsingEvpProxy,t=>{t?oo.error(`Error uploading git metadata: ${t.message}`):oo.debug("Successfully uploaded git metadata"),this._resolveGit(t)})})}export(e){if(!this._isInitialized){this._traceBuffer.push(e);return}!this.canReportSessionTraces()&&ST(e)||this._export(e)}exportCoverage(e){if(!this._isInitialized){this._coverageBuffer.push(e);return}this.canReportCodeCoverage()&&this._export(e,this._coverageWriter,"_coverageTimer")}flush(e=()=>{}){if(!this._isInitialized)return e();this._writer.flush(()=>{this._coverageWriter?this._coverageWriter.flush(e):e()})}exportUncodedCoverages(){this._coverageBuffer.forEach(e=>{this.exportCoverage(e)}),this._coverageBuffer=[]}_setUrl(e,t=e){try{e=new md(e),t=new md(t),this._url=e,this._coverageUrl=t,this._writer.setUrl(e),this._coverageWriter.setUrl(t)}catch(r){oo.error(r)}}_getApiUrl(){return this._url}};Ed.exports=io});var Sd=c((KC,yd)=>{"use strict";var bs=require("url").URL,IT=Jn(),xT=so(),AT=ao(),qT=v(),co=class extends AT{constructor(e){super(e);let{tags:t,site:r,url:n}=e;this._isInitialized=!0,this._resolveCanUseCiVisProtocol(!0),this._url=n||new bs(`https://citestcycle-intake.${r}`),this._writer=new IT({url:this._url,tags:t}),this._coverageUrl=n||new bs(`https://event-platform-intake.${r}`),this._coverageWriter=new xT({url:this._coverageUrl}),this._apiUrl=n||new bs(`https://api.${r}`)}setUrl(e,t=e,r=e){this._setUrl(e,t);try{r=new bs(r),this._apiUrl=r}catch(n){qT.error(n)}}_getApiUrl(){return this._apiUrl}};yd.exports=co});var Id=c((WC,Td)=>{"use strict";var RT=Fn(),wT=Jn(),kT=so(),OT=ao(),po="/evp_proxy/v2";function CT(s,e){return!s&&e.endpoints.some(t=>t.includes(po))}var uo=class extends OT{constructor(e){super(e);let{tags:t,prioritySampler:r,lookup:n,protocolVersion:o,headers:i}=e;this.getAgentInfo((a,p)=>{this._isInitialized=!0;let u=CT(a,p);u?(this._isUsingEvpProxy=!0,this._writer=new wT({url:this._url,tags:t,evpProxyPrefix:po}),this._coverageWriter=new kT({url:this._url,evpProxyPrefix:po})):(this._writer=new RT({url:this._url,prioritySampler:r,lookup:n,protocolVersion:o,headers:i}),this._coverageBuffer=[]),this._resolveCanUseCiVisProtocol(u),this.exportUncodedTraces(),this.exportUncodedCoverages()})}setUrl(e,t){this._setUrl(e,t)}};Td.exports=uo});var Ad=c((XC,xd)=>{"use strict";var lo=class{constructor(){this.payloads=[]}encode(e){this.payloads.push(e)}count(){return this.payloads.length}reset(){this.payloads=[]}makePayload(){let e=JSON.stringify(this.payloads);return this.reset(),e}};xd.exports={JSONEncoder:lo}});var Rd=c((JC,qd)=>{"use strict";var{JSONEncoder:DT}=Ad(),_o=class{constructor(e){this._encoder=new DT,this._interprocessCode=e}flush(){if(this._encoder.count()>0){let t=this._encoder.makePayload();this._sendPayload(t)}}append(e){this._encoder.encode(e)}_sendPayload(e){process.send&&process.send([this._interprocessCode,e])}};qd.exports=_o});var ho=c((QC,kd)=>{var NT=require("url").URL,{GIT_BRANCH:j,GIT_COMMIT_SHA:Y,GIT_TAG:G,GIT_COMMIT_AUTHOR_EMAIL:vs,GIT_COMMIT_AUTHOR_NAME:Es,GIT_COMMIT_MESSAGE:De,GIT_COMMIT_AUTHOR_DATE:PT,GIT_REPOSITORY_URL:B,CI_PIPELINE_ID:K,CI_PIPELINE_NAME:W,CI_PIPELINE_NUMBER:se,CI_PIPELINE_URL:X,CI_PROVIDER_NAME:H,CI_WORKSPACE_PATH:J,CI_JOB_URL:pe,CI_JOB_NAME:It,CI_STAGE_NAME:wd,CI_ENV_VARS:Ne,GIT_COMMIT_COMMITTER_NAME:MT,GIT_COMMIT_COMMITTER_EMAIL:LT}=yt();function UT(s){if(!s)return{name:"",email:""};let e="",t="",r=s.match(/(?:"?([^"]*)"?\s)?(?:<?(.+@[^>]+)>?)/);return r&&(e=r[1],t=r[2]),{name:e,email:t}}function jT(s){return Object.keys(s).reduce((e,t)=>s[t]?{...e,[t]:s[t]}:e,{})}function ys(s,e,t){s[e]&&(s[e]=t(s[e]))}function Ss(s){return s&&s.replace(/origin\/|refs\/heads\/|tags\//gm,"")}function GT(s){if(s.startsWith("git@"))return s;try{let{protocol:e,hostname:t,pathname:r}=new NT(s);return`${e}//${t}${r}`}catch{return s}}function BT(s){return!s||typeof s!="string"?"":s[0]==="~"&&(s[1]==="/"||s.length===1)?s.replace("~",process.env.HOME):s}kd.exports={normalizeRef:Ss,getCIMetadata(){let{env:s}=process,e={};if(s.JENKINS_URL){let{WORKSPACE:t,BUILD_TAG:r,JOB_NAME:n,BUILD_NUMBER:o,BUILD_URL:i,GIT_BRANCH:a,GIT_COMMIT:p,GIT_URL:u,GIT_URL_1:d,DD_CUSTOM_TRACE_ID:l}=s;e={[K]:r,[se]:o,[X]:i,[H]:"jenkins",[Y]:p,[B]:u||d,[J]:t,[Ne]:JSON.stringify({DD_CUSTOM_TRACE_ID:l})};let h=a&&a.includes("tags/")?G:j,f=Ss(a);e[h]=f;let b="";if(n){let E=n.split("/");E.length>1&&E[1].includes("=")?b=E[0]:b=n.replace(`/${f}`,""),e[W]=b}}if(s.GITLAB_CI){let{CI_PIPELINE_ID:t,CI_PROJECT_PATH:r,CI_PIPELINE_IID:n,CI_PIPELINE_URL:o,CI_PROJECT_DIR:i,CI_COMMIT_REF_NAME:a,CI_COMMIT_TAG:p,CI_COMMIT_SHA:u,CI_REPOSITORY_URL:d,CI_JOB_URL:l,CI_JOB_STAGE:_,CI_JOB_NAME:h,CI_COMMIT_MESSAGE:f,CI_COMMIT_TIMESTAMP:b,CI_COMMIT_AUTHOR:E,CI_PROJECT_URL:y,CI_JOB_ID:I}=s,{name:oe,email:Ae}=UT(E);e={[K]:t,[W]:r,[se]:n,[H]:"gitlab",[Y]:u,[B]:d,[pe]:l,[G]:p,[j]:a,[J]:i,[X]:o&&o.replace("/-/pipelines/","/pipelines/"),[wd]:_,[It]:h,[De]:f,[Es]:oe,[vs]:Ae,[PT]:b,[Ne]:JSON.stringify({CI_PROJECT_URL:y,CI_PIPELINE_ID:t,CI_JOB_ID:I})}}if(s.CIRCLECI){let{CIRCLE_WORKFLOW_ID:t,CIRCLE_PROJECT_REPONAME:r,CIRCLE_BUILD_URL:n,CIRCLE_WORKING_DIRECTORY:o,CIRCLE_BRANCH:i,CIRCLE_TAG:a,CIRCLE_SHA1:p,CIRCLE_REPOSITORY_URL:u,CIRCLE_JOB:d,CIRCLE_BUILD_NUM:l}=s,_=`https://app.circleci.com/pipelines/workflows/${t}`;e={[K]:t,[W]:r,[X]:_,[It]:d,[H]:"circleci",[Y]:p,[B]:u,[pe]:n,[J]:o,[G]:a,[j]:i,[Ne]:JSON.stringify({CIRCLE_WORKFLOW_ID:t,CIRCLE_BUILD_NUM:l})}}if(s.GITHUB_ACTIONS||s.GITHUB_ACTION){let{GITHUB_RUN_ID:t,GITHUB_WORKFLOW:r,GITHUB_RUN_NUMBER:n,GITHUB_WORKSPACE:o,GITHUB_HEAD_REF:i,GITHUB_REF:a,GITHUB_SHA:p,GITHUB_REPOSITORY:u,GITHUB_SERVER_URL:d,GITHUB_RUN_ATTEMPT:l,GITHUB_JOB:_}=s,h=`${d}/${u}.git`,f=`${d}/${u}/actions/runs/${t}`;l&&(f=`${f}/attempts/${l}`);let b=`${d}/${u}/commit/${p}/checks`,E=i||a||"",y=E.includes("tags/")?G:j;e={[K]:t,[W]:r,[se]:n,[X]:f,[H]:"github",[Y]:p,[B]:h,[pe]:b,[It]:_,[J]:o,[y]:E,[Ne]:JSON.stringify({GITHUB_SERVER_URL:d,GITHUB_REPOSITORY:u,GITHUB_RUN_ID:t,GITHUB_RUN_ATTEMPT:l})}}if(s.APPVEYOR){let{APPVEYOR_REPO_NAME:t,APPVEYOR_REPO_PROVIDER:r,APPVEYOR_BUILD_FOLDER:n,APPVEYOR_BUILD_ID:o,APPVEYOR_BUILD_NUMBER:i,APPVEYOR_REPO_COMMIT:a,APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH:p,APPVEYOR_REPO_BRANCH:u,APPVEYOR_REPO_TAG_NAME:d,APPVEYOR_REPO_COMMIT_AUTHOR:l,APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL:_,APPVEYOR_REPO_COMMIT_MESSAGE:h,APPVEYOR_REPO_COMMIT_MESSAGE_EXTENDED:f}=s,b=`https://ci.appveyor.com/project/${t}/builds/${o}`;e={[H]:"appveyor",[X]:b,[K]:o,[W]:t,[se]:i,[pe]:b,[J]:n,[Es]:l,[vs]:_,[De]:h+`
-`+f},r==="github"&&(e={...e,[B]:`https://github.com/${t}.git`,[Y]:a,[G]:d,[j]:p||u})}if(s.TF_BUILD){let{BUILD_SOURCESDIRECTORY:t,BUILD_BUILDID:r,BUILD_DEFINITIONNAME:n,SYSTEM_TEAMFOUNDATIONSERVERURI:o,SYSTEM_TEAMPROJECTID:i,SYSTEM_JOBID:a,SYSTEM_TASKINSTANCEID:p,SYSTEM_PULLREQUEST_SOURCEBRANCH:u,BUILD_SOURCEBRANCH:d,BUILD_SOURCEBRANCHNAME:l,SYSTEM_PULLREQUEST_SOURCECOMMITID:_,SYSTEM_PULLREQUEST_SOURCEREPOSITORYURI:h,BUILD_REPOSITORY_URI:f,BUILD_SOURCEVERSION:b,BUILD_REQUESTEDFORID:E,BUILD_REQUESTEDFOREMAIL:y,BUILD_SOURCEVERSIONMESSAGE:I,SYSTEM_STAGEDISPLAYNAME:oe,SYSTEM_JOBDISPLAYNAME:Ae}=s,qe=u||d||l,Be=(qe||"").includes("tags/")?G:j;if(e={[H]:"azurepipelines",[K]:r,[W]:n,[se]:r,[Y]:_||b,[J]:t,[B]:h||f,[Be]:qe,[Es]:E,[vs]:y,[De]:I,[wd]:oe,[It]:Ae,[Ne]:JSON.stringify({SYSTEM_TEAMPROJECTID:i,BUILD_BUILDID:r,SYSTEM_JOBID:a})},o&&i&&r){let Re=`${o}${i}/_build/results?buildId=${r}`,He=Re,$e=`${Re}&view=logs&j=${a}&t=${p}`;e={...e,[X]:He,[pe]:$e}}}if(s.BITBUCKET_COMMIT){let{BITBUCKET_REPO_FULL_NAME:t,BITBUCKET_BUILD_NUMBER:r,BITBUCKET_BRANCH:n,BITBUCKET_COMMIT:o,BITBUCKET_GIT_SSH_ORIGIN:i,BITBUCKET_TAG:a,BITBUCKET_PIPELINE_UUID:p,BITBUCKET_CLONE_DIR:u}=s,d=`https://bitbucket.org/${t}/addon/pipelines/home#!/results/${r}`;e={[H]:"bitbucket",[Y]:o,[se]:r,[W]:t,[pe]:d,[X]:d,[j]:n,[G]:a,[B]:i,[J]:u,[K]:p&&p.replace(/{|}/gm,"")}}if(s.BITRISE_BUILD_SLUG){let{BITRISE_GIT_COMMIT:t,GIT_CLONE_COMMIT_HASH:r,BITRISEIO_GIT_BRANCH_DEST:n,BITRISE_GIT_BRANCH:o,BITRISE_BUILD_SLUG:i,BITRISE_TRIGGERED_WORKFLOW_ID:a,BITRISE_BUILD_NUMBER:p,BITRISE_BUILD_URL:u,BITRISE_SOURCE_DIR:d,GIT_REPOSITORY_URL:l,BITRISE_GIT_TAG:_,BITRISE_GIT_MESSAGE:h}=s;e={[H]:"bitrise",[K]:i,[W]:a,[se]:p,[X]:u,[Y]:t||r,[B]:l,[J]:d,[G]:_,[j]:n||o,[De]:h}}if(s.BUILDKITE){let{BUILDKITE_BRANCH:t,BUILDKITE_COMMIT:r,BUILDKITE_REPO:n,BUILDKITE_TAG:o,BUILDKITE_BUILD_ID:i,BUILDKITE_PIPELINE_SLUG:a,BUILDKITE_BUILD_NUMBER:p,BUILDKITE_BUILD_URL:u,BUILDKITE_JOB_ID:d,BUILDKITE_BUILD_CHECKOUT_PATH:l,BUILDKITE_BUILD_AUTHOR:_,BUILDKITE_BUILD_AUTHOR_EMAIL:h,BUILDKITE_MESSAGE:f}=s;e={[H]:"buildkite",[K]:i,[W]:a,[se]:p,[X]:u,[pe]:`${u}#${d}`,[Y]:r,[J]:l,[B]:n,[G]:o,[j]:t,[Es]:_,[vs]:h,[De]:f,[Ne]:JSON.stringify({BUILDKITE_BUILD_ID:i,BUILDKITE_JOB_ID:d})}}if(s.TRAVIS){let{TRAVIS_PULL_REQUEST_BRANCH:t,TRAVIS_BRANCH:r,TRAVIS_COMMIT:n,TRAVIS_REPO_SLUG:o,TRAVIS_TAG:i,TRAVIS_JOB_WEB_URL:a,TRAVIS_BUILD_ID:p,TRAVIS_BUILD_NUMBER:u,TRAVIS_BUILD_WEB_URL:d,TRAVIS_BUILD_DIR:l,TRAVIS_COMMIT_MESSAGE:_}=s;e={[H]:"travisci",[pe]:a,[K]:p,[W]:o,[se]:u,[X]:d,[Y]:n,[B]:`https://github.com/${o}.git`,[J]:l,[G]:i,[j]:t||r,[De]:_}}if(s.BUDDY){let{BUDDY_EXECUTION_BRANCH:t,BUDDY_EXECUTION_ID:r,BUDDY_EXECUTION_REVISION:n,BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL:o,BUDDY_EXECUTION_REVISION_COMMITTER_NAME:i,BUDDY_EXECUTION_REVISION_MESSAGE:a,BUDDY_EXECUTION_TAG:p,BUDDY_EXECUTION_URL:u,BUDDY_PIPELINE_ID:d,BUDDY_PIPELINE_NAME:l,BUDDY_SCM_URL:_}=s;e={[H]:"buddy",[K]:`${d}/${r}`,[W]:l,[se]:r,[X]:u,[Y]:n,[B]:_,[j]:t,[G]:p,[De]:a,[MT]:i,[LT]:o}}if(s.TEAMCITY_VERSION){let{BUILD_URL:t,TEAMCITY_BUILDCONF_NAME:r,DATADOG_BUILD_ID:n}=s;e={[H]:"teamcity",[pe]:t,[It]:r,[Ne]:JSON.stringify({DATADOG_BUILD_ID:n})}}return ys(e,J,BT),ys(e,B,GT),ys(e,j,Ss),ys(e,G,Ss),jT(e)}}});var Cd=c((ZC,Od)=>{var{GIT_COMMIT_SHA:HT,GIT_BRANCH:$T,GIT_REPOSITORY_URL:FT,GIT_TAG:zT,GIT_COMMIT_MESSAGE:VT,GIT_COMMIT_COMMITTER_DATE:YT,GIT_COMMIT_COMMITTER_EMAIL:KT,GIT_COMMIT_COMMITTER_NAME:WT,GIT_COMMIT_AUTHOR_DATE:XT,GIT_COMMIT_AUTHOR_EMAIL:JT,GIT_COMMIT_AUTHOR_NAME:QT}=yt(),{normalizeRef:go}=ho();function ZT(s){return Object.keys(s).reduce((e,t)=>s[t]?{...e,[t]:s[t]}:e,{})}function eI(s){try{if(s.startsWith("git@"))return s;let{protocol:e,hostname:t,pathname:r}=new URL(s);return`${e}//${t}${r}`}catch{return s}}function tI(){let{DD_GIT_COMMIT_SHA:s,DD_GIT_BRANCH:e,DD_GIT_REPOSITORY_URL:t,DD_GIT_TAG:r,DD_GIT_COMMIT_MESSAGE:n,DD_GIT_COMMIT_COMMITTER_NAME:o,DD_GIT_COMMIT_COMMITTER_EMAIL:i,DD_GIT_COMMIT_COMMITTER_DATE:a,DD_GIT_COMMIT_AUTHOR_NAME:p,DD_GIT_COMMIT_AUTHOR_EMAIL:u,DD_GIT_COMMIT_AUTHOR_DATE:d}=process.env,l=go(e),_=go(r);return((e||"").includes("origin/tags")||(e||"").includes("refs/heads/tags"))&&(_=go(e)),ZT({[HT]:s,[$T]:l,[FT]:eI(t),[zT]:_,[VT]:n,[WT]:o,[YT]:a,[KT]:i,[QT]:p,[JT]:u,[XT]:d})}Od.exports={getUserProviderGitMetadata:tI}});var jd=c((eD,Ud)=>{var sI=require("os"),Dd="os.platform",Nd="os.version",Pd="os.architecture",Md="runtime.name",Ld="runtime.version";function rI(){return{[Ld]:process.version,[Pd]:process.arch,[Dd]:process.platform,[Md]:"node",[Nd]:sI.release()}}Ud.exports={getRuntimeAndOSMetadata:rI,OS_PLATFORM:Dd,OS_VERSION:Nd,OS_ARCHITECTURE:Pd,RUNTIME_NAME:Md,RUNTIME_VERSION:Ld}});var Qd=c((tD,Jd)=>{var Gd=require("path"),nI=require("fs"),Ts=require("istanbul-lib-coverage"),oI=require("ignore"),{getGitMetadata:iI}=ro(),{getUserProviderGitMetadata:aI}=Cd(),{getCIMetadata:cI}=ho(),{getRuntimeAndOSMetadata:pI}=jd(),{GIT_BRANCH:uI,GIT_COMMIT_SHA:dI,GIT_REPOSITORY_URL:lI,GIT_TAG:_I,GIT_COMMIT_AUTHOR_EMAIL:hI,GIT_COMMIT_AUTHOR_NAME:gI,GIT_COMMIT_MESSAGE:fI,CI_WORKSPACE_PATH:mI}=yt(),bI=Z(),{SPAN_TYPE:Is,RESOURCE_NAME:xs,SAMPLING_PRIORITY:vI}=V(),{SAMPLING_RULE_DECISION:EI}=ae(),{AUTO_KEEP:yI}=ze(),{version:Bd}=ee(),Hd="test.framework",bo="test.framework_version",vo="test.type",$d="test.name",Eo="test.suite",SI="test.status",TI="test.parameters",II="test.skip_reason",xI="test.is_rum_active",AI="test.codeowners",Fd="test.source.file",qI="test.source.start",yo="library_version",zd="test.command",As="test.module",RI="test_session_id",wI="test_module_id",kI="test_suite_id",Vd="test.toolchain",OI="ciapp-test",CI="test.jest.test_runner",fo="_dd.ci.itr.tests_skipped",Yd="test_session.itr.tests_skipping.enabled",Kd="test_session.code_coverage.enabled",Wd="test_module.itr.tests_skipping.enabled",Xd="test_module.code_coverage.enabled",mo="test.codecov_lines_total",DI=60,NI=61;Jd.exports={TEST_CODE_OWNERS:AI,TEST_FRAMEWORK:Hd,TEST_FRAMEWORK_VERSION:bo,JEST_TEST_RUNNER:CI,TEST_TYPE:vo,TEST_NAME:$d,TEST_SUITE:Eo,TEST_STATUS:SI,TEST_PARAMETERS:TI,TEST_SKIP_REASON:II,TEST_IS_RUM_ACTIVE:xI,TEST_SOURCE_FILE:Fd,CI_APP_ORIGIN:OI,LIBRARY_VERSION:yo,JEST_WORKER_TRACE_PAYLOAD_CODE:DI,JEST_WORKER_COVERAGE_PAYLOAD_CODE:NI,TEST_SOURCE_START:qI,getTestEnvironmentMetadata:MI,getTestParametersString:LI,finishAllTraceSpans:UI,getTestParentSpan:jI,getTestSuitePath:BI,getCodeOwnersFileEntries:$I,getCodeOwnersForFilename:FI,getTestCommonTags:GI,getTestSessionCommonTags:zI,getTestModuleCommonTags:VI,getTestSuiteCommonTags:YI,TEST_COMMAND:zd,TEST_TOOLCHAIN:Vd,TEST_SESSION_ID:RI,TEST_MODULE_ID:wI,TEST_SUITE_ID:kI,TEST_ITR_TESTS_SKIPPED:fo,TEST_MODULE:As,TEST_SESSION_ITR_SKIPPING_ENABLED:Yd,TEST_SESSION_CODE_COVERAGE_ENABLED:Kd,TEST_MODULE_ITR_SKIPPING_ENABLED:Wd,TEST_MODULE_CODE_COVERAGE_ENABLED:Xd,TEST_CODE_COVERAGE_LINES_TOTAL:mo,addIntelligentTestRunnerSpanTags:KI,getCoveredFilenamesFromCoverage:WI,resetCoverage:XI,mergeCoverage:JI,fromCoverageMapToCoverage:QI,getTestLineStart:ZI};function PI(){try{return process.env.npm_config_user_agent.split(" ")[0].replace("/","-")}catch{return""}}function MI(s,e){let t=cI(),{[dI]:r,[uI]:n,[lI]:o,[_I]:i,[gI]:a,[hI]:p,[fI]:u,[mI]:d}=t,l=iI({commitSHA:r,branch:n,repositoryUrl:o,tag:i,authorName:a,authorEmail:p,commitMessage:u,ciWorkspacePath:d}),_=aI(),h=pI(),f={[Hd]:s,...l,...t,..._,...h};return e&&e.service&&(f["service.name"]=e.service),f}function LI(s,e){if(!s[e])return"";try{let t=s[e].shift();return JSON.stringify({arguments:t,metadata:{}})}catch{return""}}function UI(s){s.context()._trace.started.forEach(e=>{e!==s&&e.finish()})}function jI(s){return s.extract("text_map",{"x-datadog-trace-id":bI().toString(10),"x-datadog-parent-id":"0000000000000000"})}function GI(s,e,t){return{[Is]:"test",[vo]:"test",[EI]:1,[vI]:yI,[$d]:s,[Eo]:e,[Fd]:e,[xs]:`${e}.${s}`,[bo]:t,[yo]:Bd}}function BI(s,e){return s?(s===e?s:Gd.relative(e,s)).replace(Gd.sep,"/"):e}var HI=["CODEOWNERS",".github/CODEOWNERS","docs/CODEOWNERS",".gitlab/CODEOWNERS"];function $I(s=process.cwd()){let e;if(HI.forEach(n=>{try{e=nI.readFileSync(`${s}/${n}`).toString()}catch{}}),!e)return null;let t=[],r=e.split(`
-`);for(let n of r){let[o]=n.split("#"),i=o.trim();if(i==="")continue;let[a,...p]=i.split(/\s+/);t.push({pattern:a,owners:p})}return t.reverse()}function FI(s,e){if(!e)return null;for(let t of e)try{if(oI().add(t.pattern).ignores(s))return JSON.stringify(t.owners)}catch{return null}return null}function So(s,e){return{[bo]:e,[yo]:Bd,[zd]:s,[vo]:"test"}}function zI(s,e,t){return{[Is]:"test_session_end",[xs]:`test_session.${s}`,[As]:t,[Vd]:PI(),...So(s,e)}}function VI(s,e,t){return{[Is]:"test_module_end",[xs]:`test_module.${s}`,[As]:t,...So(s,e)}}function YI(s,e,t,r){return{[Is]:"test_suite_end",[xs]:`test_suite.${t}`,[As]:r,[Eo]:t,...So(s,e)}}function KI(s,e,{isSuitesSkipped:t,isSuitesSkippingEnabled:r,isCodeCoverageEnabled:n,testCodeCoverageLinesTotal:o}){s.setTag(fo,t?"true":"false"),s.setTag(Yd,r?"true":"false"),s.setTag(Kd,n?"true":"false"),e.setTag(fo,t?"true":"false"),e.setTag(Wd,r?"true":"false"),e.setTag(Xd,n?"true":"false"),o!==void 0&&!t&&(s.setTag(mo,o),e.setTag(mo,o))}function WI(s){let e=Ts.createCoverageMap(s);return e.files().filter(t=>{let n=e.fileCoverageFor(t).getLineCoverage();return Object.entries(n).some(([,i])=>!!i)})}function XI(s){let e=Ts.createCoverageMap(s);return e.files().forEach(t=>{e.fileCoverageFor(t).resetHits()})}function JI(s,e){let t=Ts.createCoverageMap(s);return t.files().forEach(r=>{let n=t.fileCoverageFor(r);e.data[r]||e.addFileCoverage(Ts.createFileCoverage(r)),e.addFileCoverage(n);let o=e.fileCoverageFor(r);Object.entries(o.data.b).forEach(([i,a])=>{o.data.b[i]=[...a]})})}function QI(s){return Object.entries(s.data).reduce((e,[t,r])=>(e[t]=r.data,e),{})}function ZI(s,e){if(!s.stack)return null;let t=s.stack.split(`
-`).find(r=>r.includes(e));try{let r=t.match(/at (?:(.+?)\s+\()?(?:(.+?):(\d+)(?::(\d+))?|([^)]+))\)?/);return parseInt(r[3],10)||null}catch{return null}}});var tl=c((sD,el)=>{"use strict";var Zd=Rd(),{JEST_WORKER_COVERAGE_PAYLOAD_CODE:ex,JEST_WORKER_TRACE_PAYLOAD_CODE:tx}=Qd(),To=class{constructor(){this._writer=new Zd(tx),this._coverageWriter=new Zd(ex)}export(e){this._writer.append(e)}exportCoverage(e){this._coverageWriter.append(e)}flush(){this._writer.flush(),this._coverageWriter.flush()}};el.exports=To});var rl=c((rD,sl)=>{"use strict";var xt=sn(),sx=require("fs"),rx=ae();sl.exports=s=>{let e=process.env.AWS_LAMBDA_FUNCTION_NAME!==void 0,t=e&&sx.existsSync(rx.DATADOG_LAMBDA_EXTENSION_PATH);switch(s){case xt.LOG:return Gn();case xt.AGENT:return Vn();case xt.DATADOG:return Sd();case xt.AGENT_PROXY:return Id();case xt.JEST_WORKER:return tl();default:return e&&!t?Gn():Vn()}}});var al=c((nD,il)=>{"use strict";var nx=require("os"),Io=up(),ox=iu(),ix=gu(),ax=Nn(),cx=Ru(),px=ku(),ux=Du(),qs=Zr(),nl=v(),ol=ut(),dx=rl(),lx=Ve(),_x="child_of",hx="follows_from",xo=class{constructor(e){let t=dx(e.experimental.exporter);this._service=e.service,this._version=e.version,this._env=e.env,this._tags=e.tags,this._logInjection=e.logInjection,this._debug=e.debug,this._prioritySampler=new ix(e.env,e.sampler),this._exporter=new t(e,this._prioritySampler),this._processor=new ox(this._exporter,this._prioritySampler,e),this._url=this._exporter._url,this._enableGetRumData=e.experimental.enableGetRumData,this._traceId128BitGenerationEnabled=e.traceId128BitGenerationEnabled,this._propagators={[qs.TEXT_MAP]:new ax(e),[qs.HTTP_HEADERS]:new cx(e),[qs.BINARY]:new px(e),[qs.LOG]:new ux(e)},e.reportHostname&&(this._hostname=nx.hostname())}startSpan(e,t={}){let r=t.childOf?gx(t.childOf):fx(t.references),n={"service.name":this._service},o=new Io(this,this._processor,this._prioritySampler,{operationName:t.operationName||e,parent:r,tags:n,startTime:t.startTime,hostname:this._hostname,traceId128BitGenerationEnabled:this._traceId128BitGenerationEnabled},this._debug);return o.addTags(this._tags),o.addTags(t.tags),o}inject(e,t,r){e instanceof Io&&(e=e.context());try{this._prioritySampler.sample(e),this._propagators[t].inject(e,r)}catch(n){nl.error(n),ol.increment("datadog.tracer.node.inject.errors",!0)}}extract(e,t){try{return this._propagators[e].extract(t)}catch(r){return nl.error(r),ol.increment("datadog.tracer.node.extract.errors",!0),null}}};function gx(s){return s instanceof Io&&(s=s.context()),s instanceof lx||(s=null),s}function fx(s=[]){let e=null;for(let t=0;t<s.length;t++){let r=s[t],n=r.type();if(n===_x){e=r.referencedContext();break}else n===hx&&(e||(e=r.referencedContext()))}return e}il.exports=xo});var pl=c((oD,cl)=>{"use strict";var{storage:Rs}=R(),mx=new WeakMap,Ao=class{active(){let e=Rs.getStore();return e&&e.span||null}activate(e,t){if(typeof t!="function")return t;let r=Rs.getStore(),n=e?e._store:r;Rs.enterWith({...n,span:e});try{return t()}catch(o){throw e&&typeof e.setTag=="function"&&e.setTag("error",o),o}finally{Rs.enterWith(r)}}bind(e,t){if(typeof e!="function")return e;let r=this,n=this._spanOrActive(t),o=function(){return r.activate(n,()=>e.apply(this,arguments))};return mx.set(o,e),o}_spanOrActive(e){return e!==void 0?e:this.active()}_isPromise(e){return e&&typeof e.then=="function"}};cl.exports=Ao});var dl=c((iD,ul)=>{"use strict";var bx=al(),ws=V(),vx=pl(),{storage:Ex}=R(),{isError:yx}=F(),{setStartupLogConfig:Sx}=ht(),{ERROR_MESSAGE:Tx,ERROR_TYPE:Ix,ERROR_STACK:xx}=ae(),Ax=ws.SPAN_TYPE,qx=ws.RESOURCE_NAME,Rx=ws.SERVICE_NAME,wx=ws.MEASURED,Ro=class extends bx{constructor(e){super(e),this._scope=new vx,Sx(e)}trace(e,t,r){if(t=Object.assign({childOf:this.scope().active()},t),!t.childOf&&t.orphanable===!1)return r(null,()=>{});let n=this.startSpan(e,t);kx(n,t);try{if(r.length>1)return this.scope().activate(n,()=>r(n,i=>{qo(n,i),n.finish()}));let o=this.scope().activate(n,()=>r(n));return o&&typeof o.then=="function"?o.then(i=>(n.finish(),i),i=>{throw qo(n,i),n.finish(),i}):(n.finish(),o)}catch(o){throw qo(n,o),n.finish(),o}}wrap(e,t,r){let n=this;return function(){let o=Ex.getStore();if(o&&o.noop)return r.apply(this,arguments);let i=t;if(typeof i=="function"&&typeof r=="function"&&(i=i.apply(this,arguments)),i&&i.orphanable===!1&&!n.scope().active())return r.apply(this,arguments);let a=arguments.length-1,p=arguments[a];if(typeof p=="function"){let u=n.scope().bind(p);return n.trace(e,i,(d,l)=>(arguments[a]=function(_){return l(_),u.apply(this,arguments)},r.apply(this,arguments)))}else return n.trace(e,i,()=>r.apply(this,arguments))}}setUrl(e){this._exporter.setUrl(e)}scope(){return this._scope}getRumData(){if(!this._enableGetRumData)return"";let t=this.scope().active().context().toTraceId(),r=Date.now();return`<meta name="dd-trace-id" content="${t}" /><meta name="dd-trace-time" content="${r}" />`}};function qo(s,e){yx(e)&&s.addTags({[Ix]:e.name,[Tx]:e.message,[xx]:e.stack})}function kx(s,e){let t={};e.type&&(t[Ax]=e.type),e.service&&(t[Rx]=e.service),e.resource&&(t[qx]=e.resource),t[wx]=e.measured,s.addTags(t)}ul.exports=Ro});var ll=c((aD,Ox)=>{Ox.exports={version:"2.2",metadata:{rules_version:"1.6.0"},rules:[{id:"blk-001-001",name:"Block IP Addresses",tags:{type:"block_ip",category:"security_response"},conditions:[{parameters:{inputs:[{address:"http.client_ip"}],data:"blocked_ips"},operator:"ip_match"}],transformers:[],on_match:["block"]},{id:"blk-001-002",name:"Block User Addresses",tags:{type:"block_user",category:"security_response"},conditions:[{parameters:{inputs:[{address:"usr.id"}],data:"blocked_users"},operator:"exact_match"}],transformers:[],on_match:["block"]},{id:"crs-913-110",name:"Acunetix",tags:{type:"security_scanner",crs_id:"913110",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies"}],list:["acunetix-product","(acunetix web vulnerability scanner","acunetix-scanning-agreement","acunetix-user-agreement","md5(acunetix_wvs_security_test)"]},operator:"phrase_match"}],transformers:["lowercase"]},{id:"crs-913-120",name:"Known security scanner filename/argument",tags:{type:"security_scanner",crs_id:"913120",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"}],list:["/.adsensepostnottherenonobook","/<invalid>hello.html","/actsensepostnottherenonotive","/acunetix-wvs-test-for-some-inexistent-file","/antidisestablishmentarianism","/appscan_fingerprint/mac_address","/arachni-","/cybercop","/nessus_is_probing_you_","/nessustest","/netsparker-","/rfiinc.txt","/thereisnowaythat-you-canbethere","/w3af/remotefileinclude.html","appscan_fingerprint","w00tw00t.at.isc.sans.dfind","w00tw00t.at.blackhats.romanian.anti-sec"]},operator:"phrase_match"}],transformers:["lowercase"]},{id:"crs-920-260",name:"Unicode Full/Half Width Abuse Attack Attempt",tags:{type:"http_protocol_violation",crs_id:"920260",category:"attack_attempt",confidence:"0"},conditions:[{parameters:{inputs:[{address:"server.request.uri.raw"}],regex:"\\%u[fF]{2}[0-9a-fA-F]{2}",options:{case_sensitive:!0,min_length:6}},operator:"match_regex"}],transformers:[]},{id:"crs-921-110",name:"HTTP Request Smuggling Attack",tags:{type:"http_protocol_violation",crs_id:"921110",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"}],regex:"(?:get|post|head|options|connect|put|delete|trace|track|patch|propfind|propatch|mkcol|copy|move|lock|unlock)\\s+[^\\s]+\\s+http/\\d",options:{case_sensitive:!0,min_length:12}},operator:"match_regex"}],transformers:["lowercase"]},{id:"crs-921-160",name:"HTTP Header Injection Attack via payload (CR/LF and header-name detected)",tags:{type:"http_protocol_violation",crs_id:"921160",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.path_params"}],regex:"[\\n\\r]+(?:refresh|(?:set-)?cookie|(?:x-)?(?:forwarded-(?:for|host|server)|via|remote-ip|remote-addr|originating-IP))\\s*:",options:{case_sensitive:!0,min_length:3}},operator:"match_regex"}],transformers:["lowercase"]},{id:"crs-930-100",name:"Obfuscated Path Traversal Attack (/../)",tags:{type:"lfi",crs_id:"930100",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.uri.raw"},{address:"server.request.headers.no_cookies"}],regex:"(?:%(?:c(?:0%(?:[2aq]f|5c|9v)|1%(?:[19p]c|8s|af))|2(?:5(?:c(?:0%25af|1%259c)|2f|5c)|%46|f)|(?:(?:f(?:8%8)?0%8|e)0%80%a|bg%q)f|%3(?:2(?:%(?:%6|4)6|F)|5%%63)|u(?:221[56]|002f|EFC8|F025)|1u|5c)|0x(?:2f|5c)|\\/|\\x5c)(?:%(?:(?:f(?:(?:c%80|8)%8)?0%8|e)0%80%ae|2(?:(?:5(?:c0%25a|2))?e|%45)|u(?:(?:002|ff0)e|2024)|%32(?:%(?:%6|4)5|E)|c0(?:%[256aef]e|\\.))|\\.(?:%0[01])?|0x2e){2,3}(?:%(?:c(?:0%(?:[2aq]f|5c|9v)|1%(?:[19p]c|8s|af))|2(?:5(?:c(?:0%25af|1%259c)|2f|5c)|%46|f)|(?:(?:f(?:8%8)?0%8|e)0%80%a|bg%q)f|%3(?:2(?:%(?:%6|4)6|F)|5%%63)|u(?:221[56]|002f|EFC8|F025)|1u|5c)|0x(?:2f|5c)|\\/|\\x5c)",options:{min_length:4}},operator:"match_regex"}],transformers:["normalizePath"]},{id:"crs-930-110",name:"Simple Path Traversal Attack (/../)",tags:{type:"lfi",crs_id:"930110",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.uri.raw"},{address:"server.request.headers.no_cookies"}],regex:"(?:(?:^|[\\x5c/])\\.{2,3}[\\x5c/]|[\\x5c/]\\.{2,3}(?:[\\x5c/]|$))",options:{case_sensitive:!0,min_length:3}},operator:"match_regex"}],transformers:["removeNulls"]},{id:"crs-930-120",name:"OS File Access Attempt",tags:{type:"lfi",crs_id:"930120",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],list:["/.htaccess","/.htdigest","/.htpasswd","/.addressbook","/.aptitude/config",".aws/config",".aws/credentials","/.bash_config","/.bash_history","/.bash_logout","/.bash_profile","/.bashrc",".cache/notify-osd.log",".config/odesk/odesk team.conf","/.cshrc","/.dockerignore",".drush/","/.eslintignore","/.fbcindex","/.forward","/.git",".git/","/.gitattributes","/.gitconfig",".gnupg/",".hplip/hplip.conf","/.ksh_history","/.lesshst",".lftp/","/.lhistory","/.lldb-history",".local/share/mc/","/.lynx_cookies","/.my.cnf","/.mysql_history","/.nano_history","/.node_repl_history","/.pearrc","/.pgpass","/.php_history","/.pinerc",".pki/","/.proclog","/.procmailrc","/.psql_history","/.python_history","/.rediscli_history","/.rhistory","/.rhosts","/.sh_history","/.sqlite_history",".ssh/authorized_keys",".ssh/config",".ssh/id_dsa",".ssh/id_dsa.pub",".ssh/id_rsa",".ssh/id_rsa.pub",".ssh/identity",".ssh/identity.pub",".ssh/id_ecdsa",".ssh/id_ecdsa.pub",".ssh/known_hosts",".subversion/auth",".subversion/config",".subversion/servers",".tconn/tconn.conf","/.tcshrc",".vidalia/vidalia.conf","/.viminfo","/.vimrc","/.www_acl","/.wwwacl","/.xauthority","/.zhistory","/.zshrc","/.zsh_history","/.nsconfig","data/elasticsearch","data/kafka","etc/ansible","etc/bind","etc/centos-release","etc/centos-release-upstream","etc/clam.d","etc/elasticsearch","etc/freshclam.conf","etc/gshadow","etc/gshadow-","etc/httpd","etc/kafka","etc/kibana","etc/logstash","etc/lvm","etc/mongod.conf","etc/my.cnf","etc/nuxeo.conf","etc/pki","etc/postfix","etc/scw-release","etc/subgid","etc/subgid-","etc/sudoers.d","etc/sysconfig","etc/system-release-cpe","opt/nuxeo","opt/tomcat","tmp/kafka-logs","usr/lib/rpm/rpm.log","var/data/elasticsearch","var/lib/elasticsearch","etc/.java","etc/acpi","etc/alsa","etc/alternatives","etc/apache2","etc/apm","etc/apparmor","etc/apparmor.d","etc/apport","etc/apt","etc/asciidoc","etc/avahi","etc/bash_completion.d","etc/binfmt.d","etc/bluetooth","etc/bonobo-activation","etc/brltty","etc/ca-certificates","etc/calendar","etc/chatscripts","etc/chromium-browser","etc/clamav","etc/cni","etc/console-setup","etc/coraza-waf","etc/cracklib","etc/cron.d","etc/cron.daily","etc/cron.hourly","etc/cron.monthly","etc/cron.weekly","etc/cups","etc/cups.save","etc/cupshelpers","etc/dbus-1","etc/dconf","etc/default","etc/depmod.d","etc/dhcp","etc/dictionaries-common","etc/dkms","etc/dnsmasq.d","etc/dockeretc/dpkg","etc/emacs","etc/environment.d","etc/fail2ban","etc/firebird","etc/firefox","etc/fonts","etc/fwupd","etc/gconf","etc/gdb","etc/gdm3","etc/geoclue","etc/ghostscript","etc/gimp","etc/glvnd","etc/gnome","etc/gnome-vfs-2.0","etc/gnucash","etc/gnustep","etc/groff","etc/grub.d","etc/gss","etc/gtk-2.0","etc/gtk-3.0","etc/hp","etc/ifplugd","etc/imagemagick-6","etc/init","etc/init.d","etc/initramfs-tools","etc/insserv.conf.d","etc/iproute2","etc/iptables","etc/java","etc/java-11-openjdk","etc/java-17-oracle","etc/java-8-openjdk","etc/kernel","etc/ld.so.conf.d","etc/ldap","etc/libblockdev","etc/libibverbs.d","etc/libnl-3","etc/libpaper.d","etc/libreoffice","etc/lighttpd","etc/logcheck","etc/logrotate.d","etc/lynx","etc/mail","etc/mc","etc/menu","etc/menu-methods","etc/modprobe.d","etc/modsecurity","etc/modules-load.d","etc/monit","etc/mono","etc/mplayer","etc/mpv","etc/muttrc.d","etc/mysql","etc/netplan","etc/network","etc/networkd-dispatcher","etc/networkmanager","etc/newt","etc/nghttpx","etc/nikto","etc/odbcdatasources","etc/openal","etc/openmpi","etc/opt","etc/osync","etc/packagekit","etc/pam.d","etc/pcmcia","etc/perl","etc/php","etc/pki","etc/pm","etc/polkit-1","etc/postfix","etc/ppp","etc/profile.d","etc/proftpd","etc/pulse","etc/python","etc/rc0.d","etc/rc1.d","etc/rc2.d","etc/rc3.d","etc/rc4.d","etc/rc5.d","etc/rc6.d","etc/rcs.d","etc/resolvconf","etc/rsyslog.d","etc/samba","etc/sane.d","etc/security","etc/selinux","etc/sensors.d","etc/sgml","etc/signon-ui","etc/skel","etc/snmp","etc/sound","etc/spamassassin","etc/speech-dispatcher","etc/ssh","etc/ssl","etc/sudoers.d","etc/sysctl.d","etc/sysstat","etc/systemd","etc/terminfo","etc/texmf","etc/thermald","etc/thnuclnt","etc/thunderbird","etc/timidity","etc/tmpfiles.d","etc/ubuntu-advantage","etc/udev","etc/udisks2","etc/ufw","etc/update-manager","etc/update-motd.d","etc/update-notifier","etc/upower","etc/urlview","etc/usb_modeswitch.d","etc/vim","etc/vmware","etc/vmware-installer","etc/vmware-vix","etc/vulkan","etc/w3m","etc/wireshark","etc/wpa_supplicant","etc/x11","etc/xdg","etc/xml","etc/redis.conf","etc/redis-sentinel.conf","etc/php.ini","bin/php.ini","etc/httpd/php.ini","usr/lib/php.ini","usr/lib/php/php.ini","usr/local/etc/php.ini","usr/local/lib/php.ini","usr/local/php/lib/php.ini","usr/local/php4/lib/php.ini","usr/local/php5/lib/php.ini","usr/local/apache/conf/php.ini","etc/php4.4/fcgi/php.ini","etc/php4/apache/php.ini","etc/php4/apache2/php.ini","etc/php5/apache/php.ini","etc/php5/apache2/php.ini","etc/php/php.ini","etc/php/php4/php.ini","etc/php/apache/php.ini","etc/php/apache2/php.ini","web/conf/php.ini","usr/local/zend/etc/php.ini","opt/xampp/etc/php.ini","var/local/www/conf/php.ini","etc/php/cgi/php.ini","etc/php4/cgi/php.ini","etc/php5/cgi/php.ini","home2/bin/stable/apache/php.ini","home/bin/stable/apache/php.ini","etc/httpd/conf.d/php.conf","php5/php.ini","php4/php.ini","php/php.ini","windows/php.ini","winnt/php.ini","apache/php/php.ini","xampp/apache/bin/php.ini","netserver/bin/stable/apache/php.ini","volumes/macintosh_hd1/usr/local/php/lib/php.ini","etc/mono/1.0/machine.config","etc/mono/2.0/machine.config","etc/mono/2.0/web.config","etc/mono/config","usr/local/cpanel/logs/stats_log","usr/local/cpanel/logs/access_log","usr/local/cpanel/logs/error_log","usr/local/cpanel/logs/license_log","usr/local/cpanel/logs/login_log","var/cpanel/cpanel.config","usr/local/psa/admin/logs/httpsd_access_log","usr/local/psa/admin/logs/panel.log","usr/local/psa/admin/conf/php.ini","etc/sw-cp-server/applications.d/plesk.conf","usr/local/psa/admin/conf/site_isolation_settings.ini","usr/local/sb/config","etc/sw-cp-server/applications.d/00-sso-cpserver.conf","etc/sso/sso_config.ini","etc/mysql/conf.d/old_passwords.cnf","var/mysql.log","var/mysql-bin.index","var/data/mysql-bin.index","program files/mysql/mysql server 5.0/data/{host}.err","program files/mysql/mysql server 5.0/data/mysql.log","program files/mysql/mysql server 5.0/data/mysql.err","program files/mysql/mysql server 5.0/data/mysql-bin.log","program files/mysql/mysql server 5.0/data/mysql-bin.index","program files/mysql/data/{host}.err","program files/mysql/data/mysql.log","program files/mysql/data/mysql.err","program files/mysql/data/mysql-bin.log","program files/mysql/data/mysql-bin.index","mysql/data/{host}.err","mysql/data/mysql.log","mysql/data/mysql.err","mysql/data/mysql-bin.log","mysql/data/mysql-bin.index","usr/local/mysql/data/mysql.log","usr/local/mysql/data/mysql.err","usr/local/mysql/data/mysql-bin.log","usr/local/mysql/data/mysql-slow.log","usr/local/mysql/data/mysqlderror.log","usr/local/mysql/data/{host}.err","usr/local/mysql/data/mysql-bin.index","var/lib/mysql/my.cnf","etc/mysql/my.cnf","etc/my.cnf","program files/mysql/mysql server 5.0/my.ini","program files/mysql/mysql server 5.0/my.cnf","program files/mysql/my.ini","program files/mysql/my.cnf","mysql/my.ini","mysql/my.cnf","mysql/bin/my.ini","var/postgresql/log/postgresql.log","usr/internet/pgsql/data/postmaster.log","usr/local/pgsql/data/postgresql.log","usr/local/pgsql/data/pg_log","postgresql/log/pgadmin.log","var/lib/pgsql/data/postgresql.conf","var/postgresql/db/postgresql.conf","var/nm2/postgresql.conf","usr/local/pgsql/data/postgresql.conf","usr/local/pgsql/data/pg_hba.conf","usr/internet/pgsql/data/pg_hba.conf","usr/local/pgsql/data/passwd","usr/local/pgsql/bin/pg_passwd","etc/postgresql/postgresql.conf","etc/postgresql/pg_hba.conf","home/postgres/data/postgresql.conf","home/postgres/data/pg_version","home/postgres/data/pg_ident.conf","home/postgres/data/pg_hba.conf","program files/postgresql/8.3/data/pg_hba.conf","program files/postgresql/8.3/data/pg_ident.conf","program files/postgresql/8.3/data/postgresql.conf","program files/postgresql/8.4/data/pg_hba.conf","program files/postgresql/8.4/data/pg_ident.conf","program files/postgresql/8.4/data/postgresql.conf","program files/postgresql/9.0/data/pg_hba.conf","program files/postgresql/9.0/data/pg_ident.conf","program files/postgresql/9.0/data/postgresql.conf","program files/postgresql/9.1/data/pg_hba.conf","program files/postgresql/9.1/data/pg_ident.conf","program files/postgresql/9.1/data/postgresql.conf","wamp/logs/access.log","wamp/logs/apache_error.log","wamp/logs/genquery.log","wamp/logs/mysql.log","wamp/logs/slowquery.log","wamp/bin/apache/apache2.2.22/logs/access.log","wamp/bin/apache/apache2.2.22/logs/error.log","wamp/bin/apache/apache2.2.21/logs/access.log","wamp/bin/apache/apache2.2.21/logs/error.log","wamp/bin/mysql/mysql5.5.24/data/mysql-bin.index","wamp/bin/mysql/mysql5.5.16/data/mysql-bin.index","wamp/bin/apache/apache2.2.21/conf/httpd.conf","wamp/bin/apache/apache2.2.22/conf/httpd.conf","wamp/bin/apache/apache2.2.21/wampserver.conf","wamp/bin/apache/apache2.2.22/wampserver.conf","wamp/bin/apache/apache2.2.22/conf/wampserver.conf","wamp/bin/mysql/mysql5.5.24/my.ini","wamp/bin/mysql/mysql5.5.24/wampserver.conf","wamp/bin/mysql/mysql5.5.16/my.ini","wamp/bin/mysql/mysql5.5.16/wampserver.conf","wamp/bin/php/php5.3.8/php.ini","wamp/bin/php/php5.4.3/php.ini","xampp/apache/logs/access.log","xampp/apache/logs/error.log","xampp/mysql/data/mysql-bin.index","xampp/mysql/data/mysql.err","xampp/mysql/data/{host}.err","xampp/sendmail/sendmail.log","xampp/apache/conf/httpd.conf","xampp/filezillaftp/filezilla server.xml","xampp/mercurymail/mercury.ini","xampp/php/php.ini","xampp/phpmyadmin/config.inc.php","xampp/sendmail/sendmail.ini","xampp/webalizer/webalizer.conf","opt/lampp/etc/httpd.conf","xampp/htdocs/aca.txt","xampp/htdocs/admin.php","xampp/htdocs/leer.txt","usr/local/apache/logs/audit_log","usr/local/apache2/logs/audit_log","logs/security_debug_log","logs/security_log","usr/local/apache/conf/modsec.conf","usr/local/apache2/conf/modsec.conf","winnt/system32/logfiles/msftpsvc","winnt/system32/logfiles/msftpsvc1","winnt/system32/logfiles/msftpsvc2","windows/system32/logfiles/msftpsvc","windows/system32/logfiles/msftpsvc1","windows/system32/logfiles/msftpsvc2","etc/logrotate.d/proftpd","www/logs/proftpd.system.log","etc/pam.d/proftpd","etc/proftp.conf","etc/protpd/proftpd.conf","etc/vhcs2/proftpd/proftpd.conf","etc/proftpd/modules.conf","etc/vsftpd.chroot_list","etc/logrotate.d/vsftpd.log","etc/vsftpd/vsftpd.conf","etc/vsftpd.conf","etc/chrootusers","var/adm/log/xferlog","etc/wu-ftpd/ftpaccess","etc/wu-ftpd/ftphosts","etc/wu-ftpd/ftpusers","logs/pure-ftpd.log","usr/sbin/pure-config.pl","usr/etc/pure-ftpd.conf","etc/pure-ftpd/pure-ftpd.conf","usr/local/etc/pure-ftpd.conf","usr/local/etc/pureftpd.pdb","usr/local/pureftpd/etc/pureftpd.pdb","usr/local/pureftpd/sbin/pure-config.pl","usr/local/pureftpd/etc/pure-ftpd.conf","etc/pure-ftpd.conf","etc/pure-ftpd/pure-ftpd.pdb","etc/pureftpd.pdb","etc/pureftpd.passwd","etc/pure-ftpd/pureftpd.pdb","usr/ports/ftp/pure-ftpd/pure-ftpd.conf","usr/ports/ftp/pure-ftpd/pureftpd.pdb","usr/ports/ftp/pure-ftpd/pureftpd.passwd","usr/ports/net/pure-ftpd/pure-ftpd.conf","usr/ports/net/pure-ftpd/pureftpd.pdb","usr/ports/net/pure-ftpd/pureftpd.passwd","usr/pkgsrc/net/pureftpd/pure-ftpd.conf","usr/pkgsrc/net/pureftpd/pureftpd.pdb","usr/pkgsrc/net/pureftpd/pureftpd.passwd","usr/ports/contrib/pure-ftpd/pure-ftpd.conf","usr/ports/contrib/pure-ftpd/pureftpd.pdb","usr/ports/contrib/pure-ftpd/pureftpd.passwd","usr/sbin/mudlogd","etc/muddleftpd/mudlog","etc/muddleftpd.com","etc/muddleftpd/mudlogd.conf","etc/muddleftpd/muddleftpd.conf","usr/sbin/mudpasswd","etc/muddleftpd/muddleftpd.passwd","etc/muddleftpd/passwd","etc/logrotate.d/ftp","etc/ftpchroot","etc/ftphosts","etc/ftpusers","winnt/system32/logfiles/smtpsvc","winnt/system32/logfiles/smtpsvc1","winnt/system32/logfiles/smtpsvc2","winnt/system32/logfiles/smtpsvc3","winnt/system32/logfiles/smtpsvc4","winnt/system32/logfiles/smtpsvc5","windows/system32/logfiles/smtpsvc","windows/system32/logfiles/smtpsvc1","windows/system32/logfiles/smtpsvc2","windows/system32/logfiles/smtpsvc3","windows/system32/logfiles/smtpsvc4","windows/system32/logfiles/smtpsvc5","etc/osxhttpd/osxhttpd.conf","system/library/webobjects/adaptors/apache2.2/apache.conf","etc/apache2/sites-available/default","etc/apache2/sites-available/default-ssl","etc/apache2/sites-enabled/000-default","etc/apache2/sites-enabled/default","etc/apache2/apache2.conf","etc/apache2/ports.conf","usr/local/etc/apache/httpd.conf","usr/pkg/etc/httpd/httpd.conf","usr/pkg/etc/httpd/httpd-default.conf","usr/pkg/etc/httpd/httpd-vhosts.conf","etc/httpd/mod_php.conf","etc/httpd/extra/httpd-ssl.conf","etc/rc.d/rc.httpd","usr/local/apache/conf/httpd.conf.default","usr/local/apache/conf/access.conf","usr/local/apache22/conf/httpd.conf","usr/local/apache22/httpd.conf","usr/local/etc/apache22/conf/httpd.conf","usr/local/apps/apache22/conf/httpd.conf","etc/apache22/conf/httpd.conf","etc/apache22/httpd.conf","opt/apache22/conf/httpd.conf","usr/local/etc/apache2/vhosts.conf","usr/local/apache/conf/vhosts.conf","usr/local/apache2/conf/vhosts.conf","usr/local/apache/conf/vhosts-custom.conf","usr/local/apache2/conf/vhosts-custom.conf","etc/apache/default-server.conf","etc/apache2/default-server.conf","usr/local/apache2/conf/extra/httpd-ssl.conf","usr/local/apache2/conf/ssl.conf","etc/httpd/conf.d","usr/local/etc/apache22/httpd.conf","usr/local/etc/apache2/httpd.conf","etc/apache2/httpd2.conf","etc/apache2/ssl-global.conf","etc/apache2/vhosts.d/00_default_vhost.conf","apache/conf/httpd.conf","etc/apache/httpd.conf","etc/httpd/conf","http/httpd.conf","usr/local/apache1.3/conf/httpd.conf","usr/local/etc/httpd/conf","var/apache/conf/httpd.conf","var/www/conf","www/apache/conf/httpd.conf","www/conf/httpd.conf","etc/init.d","etc/apache/access.conf","etc/rc.conf","www/logs/freebsddiary-error.log","www/logs/freebsddiary-access_log","library/webserver/documents/index.html","library/webserver/documents/index.htm","library/webserver/documents/default.html","library/webserver/documents/default.htm","library/webserver/documents/index.php","library/webserver/documents/default.php","usr/local/etc/webmin/miniserv.conf","etc/webmin/miniserv.conf","usr/local/etc/webmin/miniserv.users","etc/webmin/miniserv.users","winnt/system32/logfiles/w3svc/inetsvn1.log","winnt/system32/logfiles/w3svc1/inetsvn1.log","winnt/system32/logfiles/w3svc2/inetsvn1.log","winnt/system32/logfiles/w3svc3/inetsvn1.log","windows/system32/logfiles/w3svc/inetsvn1.log","windows/system32/logfiles/w3svc1/inetsvn1.log","windows/system32/logfiles/w3svc2/inetsvn1.log","windows/system32/logfiles/w3svc3/inetsvn1.log","apache/logs/error.log","apache/logs/access.log","apache2/logs/error.log","apache2/logs/access.log","logs/error.log","logs/access.log","etc/httpd/logs/access_log","etc/httpd/logs/access.log","etc/httpd/logs/error_log","etc/httpd/logs/error.log","usr/local/apache/logs/access_log","usr/local/apache/logs/access.log","usr/local/apache/logs/error_log","usr/local/apache/logs/error.log","usr/local/apache2/logs/access_log","usr/local/apache2/logs/access.log","usr/local/apache2/logs/error_log","usr/local/apache2/logs/error.log","var/www/logs/access_log","var/www/logs/access.log","var/www/logs/error_log","var/www/logs/error.log","opt/lampp/logs/access_log","opt/lampp/logs/error_log","opt/xampp/logs/access_log","opt/xampp/logs/error_log","opt/lampp/logs/access.log","opt/lampp/logs/error.log","opt/xampp/logs/access.log","opt/xampp/logs/error.log","program files/apache group/apache/logs/access.log","program files/apache group/apache/logs/error.log","program files/apache software foundation/apache2.2/logs/error.log","program files/apache software foundation/apache2.2/logs/access.log","opt/apache/apache.conf","opt/apache/conf/apache.conf","opt/apache2/apache.conf","opt/apache2/conf/apache.conf","opt/httpd/apache.conf","opt/httpd/conf/apache.conf","etc/httpd/apache.conf","etc/apache2/apache.conf","etc/httpd/conf/apache.conf","usr/local/apache/apache.conf","usr/local/apache/conf/apache.conf","usr/local/apache2/apache.conf","usr/local/apache2/conf/apache.conf","usr/local/php/apache.conf.php","usr/local/php4/apache.conf.php","usr/local/php5/apache.conf.php","usr/local/php/apache.conf","usr/local/php4/apache.conf","usr/local/php5/apache.conf","private/etc/httpd/apache.conf","opt/apache/apache2.conf","opt/apache/conf/apache2.conf","opt/apache2/apache2.conf","opt/apache2/conf/apache2.conf","opt/httpd/apache2.conf","opt/httpd/conf/apache2.conf","etc/httpd/apache2.conf","etc/httpd/conf/apache2.conf","usr/local/apache/apache2.conf","usr/local/apache/conf/apache2.conf","usr/local/apache2/apache2.conf","usr/local/apache2/conf/apache2.conf","usr/local/php/apache2.conf.php","usr/local/php4/apache2.conf.php","usr/local/php5/apache2.conf.php","usr/local/php/apache2.conf","usr/local/php4/apache2.conf","usr/local/php5/apache2.conf","private/etc/httpd/apache2.conf","usr/local/apache/conf/httpd.conf","usr/local/apache2/conf/httpd.conf","etc/httpd/conf/httpd.conf","etc/apache/apache.conf","etc/apache/conf/httpd.conf","etc/apache2/httpd.conf","usr/apache2/conf/httpd.conf","usr/apache/conf/httpd.conf","usr/local/etc/apache/conf/httpd.conf","usr/local/apache/httpd.conf","usr/local/apache2/httpd.conf","usr/local/httpd/conf/httpd.conf","usr/local/etc/apache2/conf/httpd.conf","usr/local/etc/httpd/conf/httpd.conf","usr/local/apps/apache2/conf/httpd.conf","usr/local/apps/apache/conf/httpd.conf","usr/local/php/httpd.conf.php","usr/local/php4/httpd.conf.php","usr/local/php5/httpd.conf.php","usr/local/php/httpd.conf","usr/local/php4/httpd.conf","usr/local/php5/httpd.conf","etc/apache2/conf/httpd.conf","etc/http/conf/httpd.conf","etc/httpd/httpd.conf","etc/http/httpd.conf","etc/httpd.conf","opt/apache/conf/httpd.conf","opt/apache2/conf/httpd.conf","var/www/conf/httpd.conf","private/etc/httpd/httpd.conf","private/etc/httpd/httpd.conf.default","etc/apache2/vhosts.d/default_vhost.include","etc/apache2/conf.d/charset","etc/apache2/conf.d/security","etc/apache2/envvars","etc/apache2/mods-available/autoindex.conf","etc/apache2/mods-available/deflate.conf","etc/apache2/mods-available/dir.conf","etc/apache2/mods-available/mem_cache.conf","etc/apache2/mods-available/mime.conf","etc/apache2/mods-available/proxy.conf","etc/apache2/mods-available/setenvif.conf","etc/apache2/mods-available/ssl.conf","etc/apache2/mods-enabled/alias.conf","etc/apache2/mods-enabled/deflate.conf","etc/apache2/mods-enabled/dir.conf","etc/apache2/mods-enabled/mime.conf","etc/apache2/mods-enabled/negotiation.conf","etc/apache2/mods-enabled/php5.conf","etc/apache2/mods-enabled/status.conf","program files/apache group/apache/conf/httpd.conf","program files/apache group/apache2/conf/httpd.conf","program files/xampp/apache/conf/apache.conf","program files/xampp/apache/conf/apache2.conf","program files/xampp/apache/conf/httpd.conf","program files/apache group/apache/apache.conf","program files/apache group/apache/conf/apache.conf","program files/apache group/apache2/conf/apache.conf","program files/apache group/apache/apache2.conf","program files/apache group/apache/conf/apache2.conf","program files/apache group/apache2/conf/apache2.conf","program files/apache software foundation/apache2.2/conf/httpd.conf","volumes/macintosh_hd1/opt/httpd/conf/httpd.conf","volumes/macintosh_hd1/opt/apache/conf/httpd.conf","volumes/macintosh_hd1/opt/apache2/conf/httpd.conf","volumes/macintosh_hd1/usr/local/php/httpd.conf.php","volumes/macintosh_hd1/usr/local/php4/httpd.conf.php","volumes/macintosh_hd1/usr/local/php5/httpd.conf.php","volumes/webbackup/opt/apache2/conf/httpd.conf","volumes/webbackup/private/etc/httpd/httpd.conf","volumes/webbackup/private/etc/httpd/httpd.conf.default","usr/local/etc/apache/vhosts.conf","usr/local/jakarta/tomcat/conf/jakarta.conf","usr/local/jakarta/tomcat/conf/server.xml","usr/local/jakarta/tomcat/conf/context.xml","usr/local/jakarta/tomcat/conf/workers.properties","usr/local/jakarta/tomcat/conf/logging.properties","usr/local/jakarta/dist/tomcat/conf/jakarta.conf","usr/local/jakarta/dist/tomcat/conf/server.xml","usr/local/jakarta/dist/tomcat/conf/context.xml","usr/local/jakarta/dist/tomcat/conf/workers.properties","usr/local/jakarta/dist/tomcat/conf/logging.properties","usr/share/tomcat6/conf/server.xml","usr/share/tomcat6/conf/context.xml","usr/share/tomcat6/conf/workers.properties","usr/share/tomcat6/conf/logging.properties","var/cpanel/tomcat.options","usr/local/jakarta/tomcat/logs/catalina.out","usr/local/jakarta/tomcat/logs/catalina.err","opt/tomcat/logs/catalina.out","opt/tomcat/logs/catalina.err","usr/share/logs/catalina.out","usr/share/logs/catalina.err","usr/share/tomcat/logs/catalina.out","usr/share/tomcat/logs/catalina.err","usr/share/tomcat6/logs/catalina.out","usr/share/tomcat6/logs/catalina.err","usr/local/apache/logs/mod_jk.log","usr/local/jakarta/tomcat/logs/mod_jk.log","usr/local/jakarta/dist/tomcat/logs/mod_jk.log","opt/[jboss]/server/default/conf/jboss-minimal.xml","opt/[jboss]/server/default/conf/jboss-service.xml","opt/[jboss]/server/default/conf/jndi.properties","opt/[jboss]/server/default/conf/log4j.xml","opt/[jboss]/server/default/conf/login-config.xml","opt/[jboss]/server/default/conf/standardjaws.xml","opt/[jboss]/server/default/conf/standardjboss.xml","opt/[jboss]/server/default/conf/server.log.properties","opt/[jboss]/server/default/deploy/jboss-logging.xml","usr/local/[jboss]/server/default/conf/jboss-minimal.xml","usr/local/[jboss]/server/default/conf/jboss-service.xml","usr/local/[jboss]/server/default/conf/jndi.properties","usr/local/[jboss]/server/default/conf/log4j.xml","usr/local/[jboss]/server/default/conf/login-config.xml","usr/local/[jboss]/server/default/conf/standardjaws.xml","usr/local/[jboss]/server/default/conf/standardjboss.xml","usr/local/[jboss]/server/default/conf/server.log.properties","usr/local/[jboss]/server/default/deploy/jboss-logging.xml","private/tmp/[jboss]/server/default/conf/jboss-minimal.xml","private/tmp/[jboss]/server/default/conf/jboss-service.xml","private/tmp/[jboss]/server/default/conf/jndi.properties","private/tmp/[jboss]/server/default/conf/log4j.xml","private/tmp/[jboss]/server/default/conf/login-config.xml","private/tmp/[jboss]/server/default/conf/standardjaws.xml","private/tmp/[jboss]/server/default/conf/standardjboss.xml","private/tmp/[jboss]/server/default/conf/server.log.properties","private/tmp/[jboss]/server/default/deploy/jboss-logging.xml","tmp/[jboss]/server/default/conf/jboss-minimal.xml","tmp/[jboss]/server/default/conf/jboss-service.xml","tmp/[jboss]/server/default/conf/jndi.properties","tmp/[jboss]/server/default/conf/log4j.xml","tmp/[jboss]/server/default/conf/login-config.xml","tmp/[jboss]/server/default/conf/standardjaws.xml","tmp/[jboss]/server/default/conf/standardjboss.xml","tmp/[jboss]/server/default/conf/server.log.properties","tmp/[jboss]/server/default/deploy/jboss-logging.xml","program files/[jboss]/server/default/conf/jboss-minimal.xml","program files/[jboss]/server/default/conf/jboss-service.xml","program files/[jboss]/server/default/conf/jndi.properties","program files/[jboss]/server/default/conf/log4j.xml","program files/[jboss]/server/default/conf/login-config.xml","program files/[jboss]/server/default/conf/standardjaws.xml","program files/[jboss]/server/default/conf/standardjboss.xml","program files/[jboss]/server/default/conf/server.log.properties","program files/[jboss]/server/default/deploy/jboss-logging.xml","[jboss]/server/default/conf/jboss-minimal.xml","[jboss]/server/default/conf/jboss-service.xml","[jboss]/server/default/conf/jndi.properties","[jboss]/server/default/conf/log4j.xml","[jboss]/server/default/conf/login-config.xml","[jboss]/server/default/conf/standardjaws.xml","[jboss]/server/default/conf/standardjboss.xml","[jboss]/server/default/conf/server.log.properties","[jboss]/server/default/deploy/jboss-logging.xml","opt/[jboss]/server/default/log/server.log","opt/[jboss]/server/default/log/boot.log","usr/local/[jboss]/server/default/log/server.log","usr/local/[jboss]/server/default/log/boot.log","private/tmp/[jboss]/server/default/log/server.log","private/tmp/[jboss]/server/default/log/boot.log","tmp/[jboss]/server/default/log/server.log","tmp/[jboss]/server/default/log/boot.log","program files/[jboss]/server/default/log/server.log","program files/[jboss]/server/default/log/boot.log","[jboss]/server/default/log/server.log","[jboss]/server/default/log/boot.log","var/lighttpd.log","var/logs/access.log","usr/local/apache2/logs/lighttpd.error.log","usr/local/apache2/logs/lighttpd.log","usr/local/apache/logs/lighttpd.error.log","usr/local/apache/logs/lighttpd.log","usr/local/lighttpd/log/lighttpd.error.log","usr/local/lighttpd/log/access.log","usr/home/user/var/log/lighttpd.error.log","usr/home/user/var/log/apache.log","home/user/lighttpd/lighttpd.conf","usr/home/user/lighttpd/lighttpd.conf","etc/lighttpd/lighthttpd.conf","usr/local/etc/lighttpd.conf","usr/local/lighttpd/conf/lighttpd.conf","usr/local/etc/lighttpd.conf.new","var/www/.lighttpdpassword","logs/access_log","logs/error_log","etc/nginx/nginx.conf","usr/local/etc/nginx/nginx.conf","usr/local/nginx/conf/nginx.conf","usr/local/zeus/web/global.cfg","usr/local/zeus/web/log/errors","opt/lsws/conf/httpd_conf.xml","usr/local/lsws/conf/httpd_conf.xml","opt/lsws/logs/error.log","opt/lsws/logs/access.log","usr/local/lsws/logs/error.log","usr/local/logs/access.log","usr/local/samba/lib/log.user","usr/local/logs/samba.log","etc/samba/netlogon","etc/smbpasswd","etc/smb.conf","etc/samba/dhcp.conf","etc/samba/smb.conf","etc/samba/samba.conf","etc/samba/smb.conf.user","etc/samba/smbpasswd","etc/samba/smbusers","etc/samba/private/smbpasswd","usr/local/etc/smb.conf","usr/local/samba/lib/smb.conf.user","etc/dhcp3/dhclient.conf","etc/dhcp3/dhcpd.conf","etc/dhcp/dhclient.conf","program files/vidalia bundle/polipo/polipo.conf","etc/tor/tor-tsocks.conf","etc/stunnel/stunnel.conf","etc/tsocks.conf","etc/tinyproxy/tinyproxy.conf","etc/miredo-server.conf","etc/miredo.conf","etc/miredo/miredo-server.conf","etc/miredo/miredo.conf","etc/wicd/dhclient.conf.template.default","etc/wicd/manager-settings.conf","etc/wicd/wired-settings.conf","etc/wicd/wireless-settings.conf","etc/ipfw.rules","etc/ipfw.conf","etc/firewall.rules","winnt/system32/logfiles/firewall/pfirewall.log","winnt/system32/logfiles/firewall/pfirewall.log.old","windows/system32/logfiles/firewall/pfirewall.log","windows/system32/logfiles/firewall/pfirewall.log.old","etc/clamav/clamd.conf","etc/clamav/freshclam.conf","etc/x11/xorg.conf","etc/x11/xorg.conf-vesa","etc/x11/xorg.conf-vmware","etc/x11/xorg.conf.beforevmwaretoolsinstall","etc/x11/xorg.conf.orig","etc/bluetooth/input.conf","etc/bluetooth/main.conf","etc/bluetooth/network.conf","etc/bluetooth/rfcomm.conf","etc/bash_completion.d/debconf","root/.bash_logout","root/.bash_history","root/.bash_config","root/.bashrc","etc/bash.bashrc","var/adm/syslog","var/adm/sulog","var/adm/utmp","var/adm/utmpx","var/adm/wtmp","var/adm/wtmpx","var/adm/lastlog/username","usr/spool/lp/log","var/adm/lp/lpd-errs","usr/lib/cron/log","var/adm/loginlog","var/adm/pacct","var/adm/dtmp","var/adm/acct/sum/loginlog","var/adm/x0msgs","var/adm/crash/vmcore","var/adm/crash/unix","etc/newsyslog.conf","var/adm/qacct","var/adm/ras/errlog","var/adm/ras/bootlog","var/adm/cron/log","etc/utmp","etc/security/lastlog","etc/security/failedlogin","usr/spool/mqueue/syslog","var/adm/messages","var/adm/aculogs","var/adm/aculog","var/adm/vold.log","var/adm/log/asppp.log","var/lp/logs/lpsched","var/lp/logs/lpnet","var/lp/logs/requests","var/cron/log","var/saf/_log","var/saf/port/log","tmp/access.log","etc/sensors.conf","etc/sensors3.conf","etc/host.conf","etc/pam.conf","etc/resolv.conf","etc/apt/apt.conf","etc/inetd.conf","etc/syslog.conf","etc/sysctl.conf","etc/sysctl.d/10-console-messages.conf","etc/sysctl.d/10-network-security.conf","etc/sysctl.d/10-process-security.conf","etc/sysctl.d/wine.sysctl.conf","etc/security/access.conf","etc/security/group.conf","etc/security/limits.conf","etc/security/namespace.conf","etc/security/pam_env.conf","etc/security/sepermit.conf","etc/security/time.conf","etc/ssh/sshd_config","etc/adduser.conf","etc/deluser.conf","etc/avahi/avahi-daemon.conf","etc/ca-certificates.conf","etc/ca-certificates.conf.dpkg-old","etc/casper.conf","etc/chkrootkit.conf","etc/debconf.conf","etc/dns2tcpd.conf","etc/e2fsck.conf","etc/esound/esd.conf","etc/etter.conf","etc/fuse.conf","etc/foremost.conf","etc/hdparm.conf","etc/kernel-img.conf","etc/kernel-pkg.conf","etc/ld.so.conf","etc/ltrace.conf","etc/mail/sendmail.conf","etc/manpath.config","etc/kbd/config","etc/ldap/ldap.conf","etc/logrotate.conf","etc/mtools.conf","etc/smi.conf","etc/updatedb.conf","etc/pulse/client.conf","usr/share/adduser/adduser.conf","etc/hostname","etc/networks","etc/timezone","etc/modules","etc/passwd","etc/shadow","etc/fstab","etc/motd","etc/hosts","etc/group","etc/alias","etc/crontab","etc/crypttab","etc/exports","etc/mtab","etc/hosts.allow","etc/hosts.deny","etc/os-release","etc/password.master","etc/profile","etc/default/grub","etc/resolvconf/update-libc.d/sendmail","etc/inittab","etc/issue","etc/issue.net","etc/login.defs","etc/sudoers","etc/sysconfig/network-scripts/ifcfg-eth0","etc/redhat-release","etc/scw-release","etc/system-release-cpe","etc/debian_version","etc/fedora-release","etc/mandrake-release","etc/slackware-release","etc/suse-release","etc/security/group","etc/security/passwd","etc/security/user","etc/security/environ","etc/security/limits","etc/security/opasswd","boot/grub/grub.cfg","boot/grub/menu.lst","root/.ksh_history","root/.xauthority","usr/lib/security/mkuser.default","var/lib/squirrelmail/prefs/squirrelmail.log","etc/squirrelmail/apache.conf","etc/squirrelmail/config_local.php","etc/squirrelmail/default_pref","etc/squirrelmail/index.php","etc/squirrelmail/config_default.php","etc/squirrelmail/config.php","etc/squirrelmail/filters_setup.php","etc/squirrelmail/sqspell_config.php","etc/squirrelmail/config/config.php","etc/httpd/conf.d/squirrelmail.conf","usr/share/squirrelmail/config/config.php","private/etc/squirrelmail/config/config.php","srv/www/htdos/squirrelmail/config/config.php","var/www/squirrelmail/config/config.php","var/www/html/squirrelmail/config/config.php","var/www/html/squirrelmail-1.2.9/config/config.php","usr/share/squirrelmail/plugins/squirrel_logger/setup.php","usr/local/squirrelmail/www/readme","windows/system32/drivers/etc/hosts","windows/system32/drivers/etc/lmhosts.sam","windows/system32/drivers/etc/networks","windows/system32/drivers/etc/protocol","windows/system32/drivers/etc/services","/boot.ini","windows/debug/netsetup.log","windows/comsetup.log","windows/repair/setup.log","windows/setupact.log","windows/setupapi.log","windows/setuperr.log","windows/updspapi.log","windows/wmsetup.log","windows/windowsupdate.log","windows/odbc.ini","usr/local/psa/admin/htdocs/domains/databases/phpmyadmin/libraries/config.default.php","etc/apache2/conf.d/phpmyadmin.conf","etc/phpmyadmin/config.inc.php","etc/openldap/ldap.conf","etc/cups/acroread.conf","etc/cups/cupsd.conf","etc/cups/cupsd.conf.default","etc/cups/pdftops.conf","etc/cups/printers.conf","windows/system32/macromed/flash/flashinstall.log","windows/system32/macromed/flash/install.log","etc/cvs-cron.conf","etc/cvs-pserver.conf","etc/subversion/config","etc/modprobe.d/vmware-tools.conf","etc/updatedb.conf.beforevmwaretoolsinstall","etc/vmware-tools/config","etc/vmware-tools/tpvmlp.conf","etc/vmware-tools/vmware-tools-libraries.conf","var/log","var/log/sw-cp-server/error_log","var/log/sso/sso.log","var/log/dpkg.log","var/log/btmp","var/log/utmp","var/log/wtmp","var/log/mysql/mysql-bin.log","var/log/mysql/mysql-bin.index","var/log/mysql/data/mysql-bin.index","var/log/mysql.log","var/log/mysql.err","var/log/mysqlderror.log","var/log/mysql/mysql.log","var/log/mysql/mysql-slow.log","var/log/mysql-bin.index","var/log/data/mysql-bin.index","var/log/postgresql/postgresql.log","var/log/postgres/pg_backup.log","var/log/postgres/postgres.log","var/log/postgresql.log","var/log/pgsql/pgsql.log","var/log/postgresql/postgresql-8.1-main.log","var/log/postgresql/postgresql-8.3-main.log","var/log/postgresql/postgresql-8.4-main.log","var/log/postgresql/postgresql-9.0-main.log","var/log/postgresql/postgresql-9.1-main.log","var/log/pgsql8.log","var/log/postgresql/postgres.log","var/log/pgsql_log","var/log/postgresql/main.log","var/log/cron","var/log/postgres.log","var/log/proftpd","var/log/proftpd/xferlog.legacy","var/log/proftpd.access_log","var/log/proftpd.xferlog","var/log/vsftpd.log","var/log/xferlog","var/log/pure-ftpd/pure-ftpd.log","var/log/pureftpd.log","var/log/muddleftpd","var/log/muddleftpd.conf","var/log/ftp-proxy/ftp-proxy.log","var/log/ftp-proxy","var/log/ftplog","var/log/exim_mainlog","var/log/exim/mainlog","var/log/maillog","var/log/exim_paniclog","var/log/exim/paniclog","var/log/exim/rejectlog","var/log/exim_rejectlog","var/log/webmin/miniserv.log","var/log/httpd/access_log","var/log/httpd/error_log","var/log/httpd/access.log","var/log/httpd/error.log","var/log/apache/access_log","var/log/apache/access.log","var/log/apache/error_log","var/log/apache/error.log","var/log/apache2/access_log","var/log/apache2/access.log","var/log/apache2/error_log","var/log/apache2/error.log","var/log/access_log","var/log/access.log","var/log/error_log","var/log/error.log","var/log/tomcat6/catalina.out","var/log/lighttpd.error.log","var/log/lighttpd.access.log","var/logs/access.log","var/log/lighttpd/","var/log/lighttpd/error.log","var/log/lighttpd/access.www.log","var/log/lighttpd/error.www.log","var/log/lighttpd/access.log","var/log/lighttpd/{domain}/access.log","var/log/lighttpd/{domain}/error.log","var/log/nginx/access_log","var/log/nginx/error_log","var/log/nginx/access.log","var/log/nginx/error.log","var/log/nginx.access_log","var/log/nginx.error_log","var/log/samba/log.smbd","var/log/samba/log.nmbd","var/log/samba.log","var/log/samba.log1","var/log/samba.log2","var/log/log.smb","var/log/ipfw.log","var/log/ipfw","var/log/ipfw/ipfw.log","var/log/ipfw.today","var/log/poplog","var/log/authlog","var/log/news.all","var/log/news/news.all","var/log/news/news.crit","var/log/news/news.err","var/log/news/news.notice","var/log/news/suck.err","var/log/news/suck.notice","var/log/messages","var/log/messages.1","var/log/user.log","var/log/user.log.1","var/log/auth.log","var/log/pm-powersave.log","var/log/xorg.0.log","var/log/daemon.log","var/log/daemon.log.1","var/log/kern.log","var/log/kern.log.1","var/log/mail.err","var/log/mail.info","var/log/mail.warn","var/log/ufw.log","var/log/boot.log","var/log/syslog","var/log/syslog.1","var/log/squirrelmail.log","var/log/apache2/squirrelmail.log","var/log/apache2/squirrelmail.err.log","var/log/mail.log","var/log/vmware/hostd.log","var/log/vmware/hostd-1.log","/wp-config.php","/wp-config.bak","/wp-config.old","/wp-config.temp","/wp-config.tmp","/wp-config.txt","/config.yml","/config_dev.yml","/config_prod.yml","/config_test.yml","/parameters.yml","/routing.yml","/security.yml","/services.yml","sites/default/default.settings.php","sites/default/settings.php","sites/default/settings.local.php","app/etc/local.xml","/sftp-config.json","/web.config","includes/config.php","includes/configure.php","/config.inc.php","/localsettings.php","inc/config.php","typo3conf/localconf.php","config/app.php","config/custom.php","config/database.php","/configuration.php","/config.php","var/mail/www-data","etc/network/","etc/init/","inetpub/wwwroot/global.asa","system32/inetsrv/config/applicationhost.config","system32/inetsrv/config/administration.config","system32/inetsrv/config/redirection.config","system32/config/default","system32/config/sam","system32/config/system","system32/config/software","winnt/repair/sam._","/package.json","/package-lock.json","/gruntfile.js","/npm-debug.log","/ormconfig.json","/tsconfig.json","/webpack.config.js","/yarn.lock","proc/0","proc/1","proc/2","proc/3","proc/4","proc/5","proc/6","proc/7","proc/8","proc/9","proc/acpi","proc/asound","proc/bootconfig","proc/buddyinfo","proc/bus","proc/cgroups","proc/cmdline","proc/config.gz","proc/consoles","proc/cpuinfo","proc/crypto","proc/devices","proc/diskstats","proc/dma","proc/docker","proc/driver","proc/dynamic_debug","proc/execdomains","proc/fb","proc/filesystems","proc/fs","proc/interrupts","proc/iomem","proc/ioports","proc/ipmi","proc/irq","proc/kallsyms","proc/kcore","proc/keys","proc/keys","proc/key-users","proc/kmsg","proc/kpagecgroup","proc/kpagecount","proc/kpageflags","proc/latency_stats","proc/loadavg","proc/locks","proc/mdstat","proc/meminfo","proc/misc","proc/modules","proc/mounts","proc/mpt","proc/mtd","proc/mtrr","proc/net","proc/net/tcp","proc/net/udp","proc/pagetypeinfo","proc/partitions","proc/pressure","proc/sched_debug","proc/schedstat","proc/scsi","proc/self","proc/self/cmdline","proc/self/environ","proc/self/fd/0","proc/self/fd/1","proc/self/fd/10","proc/self/fd/11","proc/self/fd/12","proc/self/fd/13","proc/self/fd/14","proc/self/fd/15","proc/self/fd/2","proc/self/fd/3","proc/self/fd/4","proc/self/fd/5","proc/self/fd/6","proc/self/fd/7","proc/self/fd/8","proc/self/fd/9","proc/self/mounts","proc/self/stat","proc/self/status","proc/slabinfo","proc/softirqs","proc/stat","proc/swaps","proc/sys","proc/sysrq-trigger","proc/sysvipc","proc/thread-self","proc/timer_list","proc/timer_stats","proc/tty","proc/uptime","proc/version","proc/version_signature","proc/vmallocinfo","proc/vmstat","proc/zoneinfo","sys/block","sys/bus","sys/class","sys/dev","sys/devices","sys/firmware","sys/fs","sys/hypervisor","sys/kernel","sys/module","sys/power"]},operator:"phrase_match"}],transformers:["lowercase","normalizePath"]},{id:"crs-931-110",name:"RFI: Common RFI Vulnerable Parameter Name used w/ URL Payload",tags:{type:"rfi",crs_id:"931110",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"}],regex:"(?:\\binclude\\s*\\([^)]*|mosConfig_absolute_path|_CONF\\[path\\]|_SERVER\\[DOCUMENT_ROOT\\]|GALLERY_BASEDIR|path\\[docroot\\]|appserv_root|config\\[root_dir\\])=(?:file|ftps?|https?)://",options:{min_length:15}},operator:"match_regex"}],transformers:[]},{id:"crs-931-120",name:"RFI: URL Payload Used w/Trailing Question Mark Character (?)",tags:{type:"rfi",crs_id:"931120",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"}],regex:"^(?i:file|ftps?)://.*?\\?+$",options:{case_sensitive:!0,min_length:4}},operator:"match_regex"}],transformers:[]},{id:"crs-932-160",name:"Remote Command Execution: Unix Shell Code Found",tags:{type:"command_injection",crs_id:"932160",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],list:["${cdpath}","${dirstack}","${home}","${hostname}","${ifs}","${oldpwd}","${ostype}","${path}","${pwd}","$cdpath","$dirstack","$home","$hostname","$ifs","$oldpwd","$ostype","$path","$pwd","dev/fd/","dev/null","dev/stderr","dev/stdin","dev/stdout","dev/tcp/","dev/udp/","dev/zero","etc/master.passwd","etc/pwd.db","etc/shells","etc/spwd.db","proc/self/","bin/7z","bin/7za","bin/7zr","bin/ab","bin/agetty","bin/ansible-playbook","bin/apt","bin/apt-get","bin/ar","bin/aria2c","bin/arj","bin/arp","bin/as","bin/ascii-xfr","bin/ascii85","bin/ash","bin/aspell","bin/at","bin/atobm","bin/awk","bin/base32","bin/base64","bin/basenc","bin/bash","bin/bpftrace","bin/bridge","bin/bundler","bin/bunzip2","bin/busctl","bin/busybox","bin/byebug","bin/bzcat","bin/bzcmp","bin/bzdiff","bin/bzegrep","bin/bzexe","bin/bzfgrep","bin/bzgrep","bin/bzip2","bin/bzip2recover","bin/bzless","bin/bzmore","bin/bzz","bin/c89","bin/c99","bin/cancel","bin/capsh","bin/cat","bin/cc","bin/certbot","bin/check_by_ssh","bin/check_cups","bin/check_log","bin/check_memory","bin/check_raid","bin/check_ssl_cert","bin/check_statusfile","bin/chmod","bin/choom","bin/chown","bin/chroot","bin/clang","bin/clang++","bin/cmp","bin/cobc","bin/column","bin/comm","bin/composer","bin/core_perl/zipdetails","bin/cowsay","bin/cowthink","bin/cp","bin/cpan","bin/cpio","bin/cpulimit","bin/crash","bin/crontab","bin/csh","bin/csplit","bin/csvtool","bin/cupsfilter","bin/curl","bin/cut","bin/dash","bin/date","bin/dd","bin/dev/fd/","bin/dev/null","bin/dev/stderr","bin/dev/stdin","bin/dev/stdout","bin/dev/tcp/","bin/dev/udp/","bin/dev/zero","bin/dialog","bin/diff","bin/dig","bin/dmesg","bin/dmidecode","bin/dmsetup","bin/dnf","bin/docker","bin/dosbox","bin/dpkg","bin/du","bin/dvips","bin/easy_install","bin/eb","bin/echo","bin/ed","bin/efax","bin/emacs","bin/env","bin/eqn","bin/es","bin/esh","bin/etc/group","bin/etc/master.passwd","bin/etc/passwd","bin/etc/pwd.db","bin/etc/shadow","bin/etc/shells","bin/etc/spwd.db","bin/ex","bin/exiftool","bin/expand","bin/expect","bin/expr","bin/facter","bin/fetch","bin/file","bin/find","bin/finger","bin/fish","bin/flock","bin/fmt","bin/fold","bin/fping","bin/ftp","bin/gawk","bin/gcc","bin/gcore","bin/gdb","bin/gem","bin/genie","bin/genisoimage","bin/ghc","bin/ghci","bin/gimp","bin/ginsh","bin/git","bin/grc","bin/grep","bin/gtester","bin/gunzip","bin/gzexe","bin/gzip","bin/hd","bin/head","bin/hexdump","bin/highlight","bin/hping3","bin/iconv","bin/id","bin/iftop","bin/install","bin/ionice","bin/ip","bin/irb","bin/ispell","bin/jjs","bin/join","bin/journalctl","bin/jq","bin/jrunscript","bin/knife","bin/ksh","bin/ksshell","bin/latex","bin/ld","bin/ldconfig","bin/less","bin/lftp","bin/ln","bin/loginctl","bin/logsave","bin/look","bin/lp","bin/ls","bin/ltrace","bin/lua","bin/lualatex","bin/luatex","bin/lwp-download","bin/lwp-request","bin/lz","bin/lz4","bin/lz4c","bin/lz4cat","bin/lzcat","bin/lzcmp","bin/lzdiff","bin/lzegrep","bin/lzfgrep","bin/lzgrep","bin/lzless","bin/lzma","bin/lzmadec","bin/lzmainfo","bin/lzmore","bin/mail","bin/make","bin/man","bin/mawk","bin/mkfifo","bin/mknod","bin/more","bin/mosquitto","bin/mount","bin/msgattrib","bin/msgcat","bin/msgconv","bin/msgfilter","bin/msgmerge","bin/msguniq","bin/mtr","bin/mv","bin/mysql","bin/nano","bin/nasm","bin/nawk","bin/nc","bin/ncat","bin/neofetch","bin/nice","bin/nl","bin/nm","bin/nmap","bin/node","bin/nohup","bin/npm","bin/nroff","bin/nsenter","bin/octave","bin/od","bin/openssl","bin/openvpn","bin/openvt","bin/opkg","bin/paste","bin/pax","bin/pdb","bin/pdflatex","bin/pdftex","bin/pdksh","bin/perf","bin/perl","bin/pg","bin/php","bin/php-cgi","bin/php5","bin/php7","bin/pic","bin/pico","bin/pidstat","bin/pigz","bin/pip","bin/pkexec","bin/pkg","bin/pr","bin/printf","bin/proc/self/","bin/pry","bin/ps","bin/psed","bin/psftp","bin/psql","bin/ptx","bin/puppet","bin/pxz","bin/python","bin/python2","bin/python3","bin/rake","bin/rbash","bin/rc","bin/readelf","bin/red","bin/redcarpet","bin/restic","bin/rev","bin/rlogin","bin/rlwrap","bin/rpm","bin/rpmquery","bin/rsync","bin/ruby","bin/run-mailcap","bin/run-parts","bin/rview","bin/rvim","bin/sash","bin/sbin/capsh","bin/sbin/logsave","bin/sbin/service","bin/sbin/start-stop-daemon","bin/scp","bin/screen","bin/script","bin/sed","bin/service","bin/setarch","bin/sftp","bin/sg","bin/sh","bin/shuf","bin/sleep","bin/slsh","bin/smbclient","bin/snap","bin/socat","bin/soelim","bin/sort","bin/split","bin/sqlite3","bin/ss","bin/ssh","bin/ssh-keygen","bin/ssh-keyscan","bin/sshpass","bin/start-stop-daemon","bin/stdbuf","bin/strace","bin/strings","bin/su","bin/sysctl","bin/systemctl","bin/systemd-resolve","bin/tac","bin/tail","bin/tar","bin/task","bin/taskset","bin/tbl","bin/tclsh","bin/tcpdump","bin/tcsh","bin/tee","bin/telnet","bin/tex","bin/tftp","bin/tic","bin/time","bin/timedatectl","bin/timeout","bin/tmux","bin/top","bin/troff","bin/tshark","bin/ul","bin/uname","bin/uncompress","bin/unexpand","bin/uniq","bin/unlz4","bin/unlzma","bin/unpigz","bin/unrar","bin/unshare","bin/unxz","bin/unzip","bin/unzstd","bin/update-alternatives","bin/uudecode","bin/uuencode","bin/valgrind","bin/vi","bin/view","bin/vigr","bin/vim","bin/vimdiff","bin/vipw","bin/virsh","bin/volatility","bin/wall","bin/watch","bin/wc","bin/wget","bin/whiptail","bin/who","bin/whoami","bin/whois","bin/wireshark","bin/wish","bin/xargs","bin/xelatex","bin/xetex","bin/xmodmap","bin/xmore","bin/xpad","bin/xxd","bin/xz","bin/xzcat","bin/xzcmp","bin/xzdec","bin/xzdiff","bin/xzegrep","bin/xzfgrep","bin/xzgrep","bin/xzless","bin/xzmore","bin/yarn","bin/yelp","bin/yes","bin/yum","bin/zathura","bin/zip","bin/zipcloak","bin/zipcmp","bin/zipdetails","bin/zipgrep","bin/zipinfo","bin/zipmerge","bin/zipnote","bin/zipsplit","bin/ziptool","bin/zsh","bin/zsoelim","bin/zstd","bin/zstdcat","bin/zstdgrep","bin/zstdless","bin/zstdmt","bin/zypper"]},operator:"phrase_match"}],transformers:["lowercase"]},{id:"crs-932-171",name:"Remote Command Execution: Shellshock (CVE-2014-6271)",tags:{type:"command_injection",crs_id:"932171",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],regex:"^\\(\\s*\\)\\s+{",options:{case_sensitive:!0,min_length:4}},operator:"match_regex"}],transformers:[]},{id:"crs-932-180",name:"Restricted File Upload Attempt",tags:{type:"command_injection",crs_id:"932180",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["x-filename"]},{address:"server.request.headers.no_cookies",key_path:["x_filename"]},{address:"server.request.headers.no_cookies",key_path:["x-file-name"]}],list:[".htaccess",".htdigest",".htpasswd","wp-config.php","config.yml","config_dev.yml","config_prod.yml","config_test.yml","parameters.yml","routing.yml","security.yml","services.yml","default.settings.php","settings.php","settings.local.php","local.xml",".env"]},operator:"phrase_match"}],transformers:["lowercase"]},{id:"crs-933-111",name:"PHP Injection Attack: PHP Script File Upload Found",tags:{type:"unrestricted_file_upload",crs_id:"933111",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["x-filename"]},{address:"server.request.headers.no_cookies",key_path:["x_filename"]},{address:"server.request.headers.no_cookies",key_path:["x.filename"]},{address:"server.request.headers.no_cookies",key_path:["x-file-name"]}],regex:".*\\.(?:php\\d*|phtml)\\..*$",options:{case_sensitive:!0,min_length:5}},operator:"match_regex"}],transformers:["lowercase"]},{id:"crs-933-130",name:"PHP Injection Attack: Global Variables Found",tags:{type:"php_code_injection",crs_id:"933130",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],list:["$globals","$_cookie","$_env","$_files","$_get","$_post","$_request","$_server","$_session","$argc","$argv","$http_\\u200bresponse_\\u200bheader","$php_\\u200berrormsg","$http_cookie_vars","$http_env_vars","$http_get_vars","$http_post_files","$http_post_vars","$http_raw_post_data","$http_request_vars","$http_server_vars"]},operator:"phrase_match"}],transformers:["lowercase"]},{id:"crs-933-131",name:"PHP Injection Attack: HTTP Headers Values Found",tags:{type:"php_code_injection",crs_id:"933131",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"(?:HTTP_(?:ACCEPT(?:_(?:ENCODING|LANGUAGE|CHARSET))?|(?:X_FORWARDED_FO|REFERE)R|(?:USER_AGEN|HOS)T|CONNECTION|KEEP_ALIVE)|PATH_(?:TRANSLATED|INFO)|ORIG_PATH_INFO|QUERY_STRING|REQUEST_URI|AUTH_TYPE)",options:{case_sensitive:!0,min_length:9}},operator:"match_regex"}],transformers:[]},{id:"crs-933-140",name:"PHP Injection Attack: I/O Stream Found",tags:{type:"php_code_injection",crs_id:"933140",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"php://(?:std(?:in|out|err)|(?:in|out)put|fd|memory|temp|filter)",options:{min_length:8}},operator:"match_regex"}],transformers:[]},{id:"crs-933-150",name:"PHP Injection Attack: High-Risk PHP Function Name Found",tags:{type:"php_code_injection",crs_id:"933150",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],list:["__halt_compiler","apache_child_terminate","base64_decode","bzdecompress","call_user_func","call_user_func_array","call_user_method","call_user_method_array","convert_uudecode","file_get_contents","file_put_contents","fsockopen","get_class_methods","get_class_vars","get_defined_constants","get_defined_functions","get_defined_vars","gzdecode","gzinflate","gzuncompress","include_once","invokeargs","pcntl_exec","pcntl_fork","pfsockopen","posix_getcwd","posix_getpwuid","posix_getuid","posix_uname","reflectionfunction","require_once","shell_exec","str_rot13","sys_get_temp_dir","wp_remote_fopen","wp_remote_get","wp_remote_head","wp_remote_post","wp_remote_request","wp_safe_remote_get","wp_safe_remote_head","wp_safe_remote_post","wp_safe_remote_request","zlib_decode"]},operator:"phrase_match"}],transformers:["lowercase"]},{id:"crs-933-160",name:"PHP Injection Attack: High-Risk PHP Function Call Found",tags:{type:"php_code_injection",crs_id:"933160",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:`\\b(?:s(?:e(?:t(?:_(?:e(?:xception|rror)_handler|magic_quotes_runtime|include_path)|defaultstub)|ssion_s(?:et_save_handler|tart))|qlite_(?:(?:(?:unbuffered|single|array)_)?query|create_(?:aggregate|function)|p?open|exec)|tr(?:eam_(?:context_create|socket_client)|ipc?slashes|rev)|implexml_load_(?:string|file)|ocket_c(?:onnect|reate)|h(?:ow_sourc|a1_fil)e|pl_autoload_register|ystem)|p(?:r(?:eg_(?:replace(?:_callback(?:_array)?)?|match(?:_all)?|split)|oc_(?:(?:terminat|clos|nic)e|get_status|open)|int_r)|o(?:six_(?:get(?:(?:e[gu]|g)id|login|pwnam)|mk(?:fifo|nod)|ttyname|kill)|pen)|hp(?:_(?:strip_whitespac|unam)e|version|info)|g_(?:(?:execut|prepar)e|connect|query)|a(?:rse_(?:ini_file|str)|ssthru)|utenv)|r(?:unkit_(?:function_(?:re(?:defin|nam)e|copy|add)|method_(?:re(?:defin|nam)e|copy|add)|constant_(?:redefine|add))|e(?:(?:gister_(?:shutdown|tick)|name)_function|ad(?:(?:gz)?file|_exif_data|dir))|awurl(?:de|en)code)|i(?:mage(?:createfrom(?:(?:jpe|pn)g|x[bp]m|wbmp|gif)|(?:jpe|pn)g|g(?:d2?|if)|2?wbmp|xbm)|s_(?:(?:(?:execut|write?|read)ab|fi)le|dir)|ni_(?:get(?:_all)?|set)|terator_apply|ptcembed)|g(?:et(?:_(?:c(?:urrent_use|fg_va)r|meta_tags)|my(?:[gpu]id|inode)|(?:lastmo|cw)d|imagesize|env)|z(?:(?:(?:defla|wri)t|encod|fil)e|compress|open|read)|lob)|a(?:rray_(?:u(?:intersect(?:_u?assoc)?|diff(?:_u?assoc)?)|intersect_u(?:assoc|key)|diff_u(?:assoc|key)|filter|reduce|map)|ssert(?:_options)?|lert|tob)|h(?:tml(?:specialchars(?:_decode)?|_entity_decode|entities)|(?:ash(?:_(?:update|hmac))?|ighlight)_file|e(?:ader_register_callback|x2bin))|f(?:i(?:le(?:(?:[acm]tim|inod)e|(?:_exist|perm)s|group)?|nfo_open)|tp_(?:nb_(?:ge|pu)|connec|ge|pu)t|(?:unction_exis|pu)ts|write|open)|o(?:b_(?:get_(?:c(?:ontents|lean)|flush)|end_(?:clean|flush)|clean|flush|start)|dbc_(?:result(?:_all)?|exec(?:ute)?|connect)|pendir)|m(?:b_(?:ereg(?:_(?:replace(?:_callback)?|match)|i(?:_replace)?)?|parse_str)|(?:ove_uploaded|d5)_file|ethod_exists|ysql_query|kdir)|e(?:x(?:if_(?:t(?:humbnail|agname)|imagetype|read_data)|ec)|scapeshell(?:arg|cmd)|rror_reporting|val)|c(?:url_(?:file_create|exec|init)|onvert_uuencode|reate_function|hr)|u(?:n(?:serialize|pack)|rl(?:de|en)code|[ak]?sort)|b(?:(?:son_(?:de|en)|ase64_en)code|zopen|toa)|(?:json_(?:de|en)cod|debug_backtrac|tmpfil)e|var_dump)(?:\\s|/\\*.*\\*/|//.*|#.*|\\"|')*\\((?:(?:\\s|/\\*.*\\*/|//.*|#.*)*(?:\\$\\w+|[A-Z\\d]\\w*|\\w+\\(.*\\)|\\\\?"(?:[^"]|\\\\"|""|"\\+")*\\\\?"|\\\\?'(?:[^']|''|'\\+')*\\\\?')(?:\\s|/\\*.*\\*/|//.*|#.*)*(?:(?:::|\\.|->)(?:\\s|/\\*.*\\*/|//.*|#.*)*\\w+(?:\\(.*\\))?)?,)*(?:(?:\\s|/\\*.*\\*/|//.*|#.*)*(?:\\$\\w+|[A-Z\\d]\\w*|\\w+\\(.*\\)|\\\\?"(?:[^"]|\\\\"|""|"\\+")*\\\\?"|\\\\?'(?:[^']|''|'\\+')*\\\\?')(?:\\s|/\\*.*\\*/|//.*|#.*)*(?:(?:::|\\.|->)(?:\\s|/\\*.*\\*/|//.*|#.*)*\\w+(?:\\(.*\\))?)?)?\\)`,options:{case_sensitive:!0,min_length:5}},operator:"match_regex"}],transformers:[]},{id:"crs-933-170",name:"PHP Injection Attack: Serialized Object Injection",tags:{type:"php_code_injection",crs_id:"933170",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies"},{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:'[oOcC]:\\d+:\\".+?\\":\\d+:{[\\W\\w]*}',options:{case_sensitive:!0,min_length:12}},operator:"match_regex"}],transformers:[]},{id:"crs-933-200",name:"PHP Injection Attack: Wrapper scheme detected",tags:{type:"php_code_injection",crs_id:"933200",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"(?:(?:bzip|ssh)2|z(?:lib|ip)|(?:ph|r)ar|expect|glob|ogg)://",options:{case_sensitive:!0,min_length:6}},operator:"match_regex"}],transformers:["removeNulls"]},{id:"crs-934-100",name:"Node.js Injection Attack 1/2",tags:{type:"js_code_injection",crs_id:"934100",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"\\b(?:(?:l(?:(?:utimes|chmod)(?:Sync)?|(?:stat|ink)Sync)|w(?:rite(?:(?:File|v)(?:Sync)?|Sync)|atchFile)|u(?:n(?:watchFile|linkSync)|times(?:Sync)?)|s(?:(?:ymlink|tat)Sync|pawn(?:File|Sync))|ex(?:ec(?:File(?:Sync)?|Sync)|istsSync)|a(?:ppendFile|ccess)(?:Sync)?|(?:Caveat|Inode)s|open(?:dir)?Sync|new\\s+Function|Availability|\\beval)\\s*\\(|m(?:ain(?:Module\\s*(?:\\W*\\s*(?:constructor|require)|\\[)|\\s*(?:\\W*\\s*(?:constructor|require)|\\[))|kd(?:temp(?:Sync)?|irSync)\\s*\\(|odule\\.exports\\s*=)|c(?:(?:(?:h(?:mod|own)|lose)Sync|reate(?:Write|Read)Stream|p(?:Sync)?)\\s*\\(|o(?:nstructor\\s*(?:\\W*\\s*_load|\\[)|pyFile(?:Sync)?\\s*\\())|f(?:(?:(?:s(?:(?:yncS)?|tatS)|datas(?:yncS)?)ync|ch(?:mod|own)(?:Sync)?)\\s*\\(|u(?:nction\\s*\\(\\s*\\)\\s*{|times(?:Sync)?\\s*\\())|r(?:e(?:(?:ad(?:(?:File|link|dir)?Sync|v(?:Sync)?)|nameSync)\\s*\\(|quire\\s*(?:\\W*\\s*main|\\[))|m(?:Sync)?\\s*\\()|process\\s*(?:\\W*\\s*(?:mainModule|binding)|\\[)|t(?:his\\.constructor|runcateSync\\s*\\()|_(?:\\$\\$ND_FUNC\\$\\$_|_js_function)|global\\s*(?:\\W*\\s*process|\\[)|String\\s*\\.\\s*fromCharCode|binding\\s*\\[)",options:{case_sensitive:!0,min_length:3}},operator:"match_regex"}],transformers:[]},{id:"crs-934-101",name:"Node.js Injection Attack 2/2",tags:{type:"js_code_injection",crs_id:"934101",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"\\b(?:w(?:atch|rite)|(?:spaw|ope)n|exists|close|fork|read)\\s*\\(",options:{case_sensitive:!0,min_length:5}},operator:"match_regex"}],transformers:[]},{id:"crs-941-110",name:"XSS Filter - Category 1: Script Tag Vector",tags:{type:"xss",crs_id:"941110",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]},{address:"server.request.headers.no_cookies",key_path:["referer"]},{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"<script[^>]*>[\\s\\S]*?",options:{min_length:8}},operator:"match_regex"}],transformers:["removeNulls","urlDecodeUni"]},{id:"crs-941-120",name:"XSS Filter - Category 2: Event Handler Vector",tags:{type:"xss",crs_id:"941120",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]},{address:"server.request.headers.no_cookies",key_path:["referer"]},{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"[\\s\\\"'`;\\/0-9=\\x0B\\x09\\x0C\\x3B\\x2C\\x28\\x3B]on(?:d(?:r(?:ag(?:en(?:ter|d)|leave|start|over)?|op)|urationchange|blclick)|s(?:e(?:ek(?:ing|ed)|arch|lect)|u(?:spend|bmit)|talled|croll|how)|m(?:ouse(?:(?:lea|mo)ve|o(?:ver|ut)|enter|down|up)|essage)|p(?:a(?:ge(?:hide|show)|(?:st|us)e)|lay(?:ing)?|rogress)|c(?:anplay(?:through)?|o(?:ntextmenu|py)|hange|lick|ut)|a(?:nimation(?:iteration|start|end)|(?:fterprin|bor)t)|t(?:o(?:uch(?:cancel|start|move|end)|ggle)|imeupdate)|f(?:ullscreen(?:change|error)|ocus(?:out|in)?)|(?:(?:volume|hash)chang|o(?:ff|n)lin)e|b(?:efore(?:unload|print)|lur)|load(?:ed(?:meta)?data|start)?|r(?:es(?:ize|et)|atechange)|key(?:press|down|up)|w(?:aiting|heel)|in(?:valid|put)|e(?:nded|rror)|unload)[\\s\\x0B\\x09\\x0C\\x3B\\x2C\\x28\\x3B]*?=[^=]",options:{min_length:8}},operator:"match_regex"}],transformers:["removeNulls","urlDecodeUni"]},{id:"crs-941-140",name:"XSS Filter - Category 4: Javascript URI Vector",tags:{type:"xss",crs_id:"941140",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]},{address:"server.request.headers.no_cookies",key_path:["referer"]},{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"[a-z]+=(?:[^:=]+:.+;)*?[^:=]+:url\\(javascript",options:{min_length:18}},operator:"match_regex"}],transformers:["removeNulls","urlDecodeUni"]},{id:"crs-941-170",name:"NoScript XSS InjectionChecker: Attribute Injection",tags:{type:"xss",crs_id:"941170",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]},{address:"server.request.headers.no_cookies",key_path:["referer"]},{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"}],regex:`(?:\\W|^)(?:javascript:(?:[\\s\\S]+[=\\x5c\\(\\[\\.<]|[\\s\\S]*?(?:\\bname\\b|\\x5c[ux]\\d)))|@\\W*?i\\W*?m\\W*?p\\W*?o\\W*?r\\W*?t\\W*?(?:/\\*[\\s\\S]*?)?(?:[\\"']|\\W*?u\\W*?r\\W*?l[\\s\\S]*?\\()|[^-]*?-\\W*?m\\W*?o\\W*?z\\W*?-\\W*?b\\W*?i\\W*?n\\W*?d\\W*?i\\W*?n\\W*?g[^:]*?:\\W*?u\\W*?r\\W*?l[\\s\\S]*?\\(`,options:{min_length:6}},operator:"match_regex"}],transformers:["removeNulls","urlDecodeUni"]},{id:"crs-941-180",name:"Node-Validator Deny List Keywords",tags:{type:"xss",crs_id:"941180",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],list:["document.cookie","document.write",".parentnode",".innerhtml","window.location","-moz-binding"]},operator:"phrase_match"}],transformers:["removeNulls","lowercase"]},{id:"crs-941-200",name:"IE XSS Filters - Attack Detected via vmlframe tag",tags:{type:"xss",crs_id:"941200",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"(?i:<.*[:]?vmlframe.*?[\\s/+]*?src[\\s/+]*=)",options:{case_sensitive:!0,min_length:13}},operator:"match_regex"}],transformers:["removeNulls"]},{id:"crs-941-210",name:"IE XSS Filters - Obfuscated Attack Detected via javascript injection",tags:{type:"xss",crs_id:"941210",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"(?i:(?:j|&#x?0*(?:74|4A|106|6A);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:a|&#x?0*(?:65|41|97|61);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:v|&#x?0*(?:86|56|118|76);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:a|&#x?0*(?:65|41|97|61);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:s|&#x?0*(?:83|53|115|73);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:c|&#x?0*(?:67|43|99|63);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:r|&#x?0*(?:82|52|114|72);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:i|&#x?0*(?:73|49|105|69);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:p|&#x?0*(?:80|50|112|70);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:t|&#x?0*(?:84|54|116|74);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?::|&(?:#x?0*(?:58|3A);?|colon;)).)",options:{case_sensitive:!0,min_length:12}},operator:"match_regex"}],transformers:["removeNulls"]},{id:"crs-941-220",name:"IE XSS Filters - Obfuscated Attack Detected via vbscript injection",tags:{type:"xss",crs_id:"941220",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"(?i:(?:v|&#x?0*(?:86|56|118|76);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:b|&#x?0*(?:66|42|98|62);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:s|&#x?0*(?:83|53|115|73);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:c|&#x?0*(?:67|43|99|63);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:r|&#x?0*(?:82|52|114|72);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:i|&#x?0*(?:73|49|105|69);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:p|&#x?0*(?:80|50|112|70);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:t|&#x?0*(?:84|54|116|74);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?::|&(?:#x?0*(?:58|3A);?|colon;)).)",options:{case_sensitive:!0,min_length:10}},operator:"match_regex"}],transformers:["removeNulls"]},{id:"crs-941-230",name:"IE XSS Filters - Attack Detected via embed tag",tags:{type:"xss",crs_id:"941230",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"<EMBED[\\s/+].*?(?:src|type).*?=",options:{min_length:11}},operator:"match_regex"}],transformers:["removeNulls"]},{id:"crs-941-240",name:"IE XSS Filters - Attack Detected via import tag",tags:{type:"xss",crs_id:"941240",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"<[?]?import[\\s/+\\S]*?implementation[\\s/+]*?=",options:{case_sensitive:!0,min_length:22}},operator:"match_regex"}],transformers:["lowercase","removeNulls"]},{id:"crs-941-270",name:"IE XSS Filters - Attack Detected via link tag",tags:{type:"xss",crs_id:"941270",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"<LINK[\\s/+].*?href[\\s/+]*=",options:{min_length:11}},operator:"match_regex"}],transformers:["removeNulls"]},{id:"crs-941-280",name:"IE XSS Filters - Attack Detected via base tag",tags:{type:"xss",crs_id:"941280",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"<BASE[\\s/+].*?href[\\s/+]*=",options:{min_length:11}},operator:"match_regex"}],transformers:["removeNulls"]},{id:"crs-941-290",name:"IE XSS Filters - Attack Detected via applet tag",tags:{type:"xss",crs_id:"941290",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"<APPLET[\\s/+>]",options:{min_length:8}},operator:"match_regex"}],transformers:["removeNulls"]},{id:"crs-941-300",name:"IE XSS Filters - Attack Detected via object tag",tags:{type:"xss",crs_id:"941300",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"<OBJECT[\\s/+].*?(?:type|codetype|classid|code|data)[\\s/+]*=",options:{min_length:13}},operator:"match_regex"}],transformers:["removeNulls"]},{id:"crs-941-350",name:"UTF-7 Encoding IE XSS - Attack Detected",tags:{type:"xss",crs_id:"941350",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"\\+ADw-.*(?:\\+AD4-|>)|<.*\\+AD4-",options:{case_sensitive:!0,min_length:6}},operator:"match_regex"}],transformers:[]},{id:"crs-941-360",name:"JSFuck / Hieroglyphy obfuscation detected",tags:{type:"xss",crs_id:"941360",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"![!+ ]\\[\\]",options:{case_sensitive:!0,min_length:4}},operator:"match_regex"}],transformers:[]},{id:"crs-941-390",name:"Javascript method detected",tags:{type:"xss",crs_id:"941390",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"\\b(?i:eval|settimeout|setinterval|new\\s+Function|alert|prompt)[\\s+]*\\([^\\)]",options:{case_sensitive:!0,min_length:5}},operator:"match_regex"}],transformers:[]},{id:"crs-942-100",name:"SQL Injection Attack Detected via libinjection",tags:{type:"sql_injection",crs_id:"942100",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}]},operator:"is_sqli"}],transformers:["removeNulls"]},{id:"crs-942-160",name:"Detects blind sqli tests using sleep() or benchmark()",tags:{type:"sql_injection",crs_id:"942160",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"(?i:sleep\\(\\s*?\\d*?\\s*?\\)|benchmark\\(.*?\\,.*?\\))",options:{case_sensitive:!0,min_length:7}},operator:"match_regex"}],transformers:[]},{id:"crs-942-240",name:"Detects MySQL charset switch and MSSQL DoS attempts",tags:{type:"sql_injection",crs_id:"942240",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"(?:[\\\"'`](?:;*?\\s*?waitfor\\s+(?:delay|time)\\s+[\\\"'`]|;.*?:\\s*?goto)|alter\\s*?\\w+.*?cha(?:racte)?r\\s+set\\s+\\w+)",options:{min_length:7}},operator:"match_regex"}],transformers:[]},{id:"crs-942-250",name:"Detects MATCH AGAINST, MERGE and EXECUTE IMMEDIATE injections",tags:{type:"sql_injection",crs_id:"942250",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"(?i:merge.*?using\\s*?\\(|execute\\s*?immediate\\s*?[\\\"'`]|match\\s*?[\\w(?:),+-]+\\s*?against\\s*?\\()",options:{case_sensitive:!0,min_length:11}},operator:"match_regex"}],transformers:[]},{id:"crs-942-270",name:"Basic SQL injection",tags:{type:"sql_injection",crs_id:"942270",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"union.*?select.*?from",options:{min_length:15}},operator:"match_regex"}],transformers:[]},{id:"crs-942-280",name:"SQL Injection with delay functions",tags:{type:"sql_injection",crs_id:"942280",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"(?:;\\s*?shutdown\\s*?(?:[#;{]|\\/\\*|--)|waitfor\\s*?delay\\s?[\\\"'`]+\\s?\\d|select\\s*?pg_sleep)",options:{min_length:10}},operator:"match_regex"}],transformers:[]},{id:"crs-942-290",name:"Finds basic MongoDB SQL injection attempts",tags:{type:"nosql_injection",crs_id:"942290",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"(?i:(?:\\[?\\$(?:(?:s(?:lic|iz)|wher)e|e(?:lemMatch|xists|q)|n(?:o[rt]|in?|e)|l(?:ike|te?)|t(?:ext|ype)|a(?:ll|nd)|jsonSchema|between|regex|x?or|div|mod)\\]?)\\b)",options:{case_sensitive:!0,min_length:3}},operator:"match_regex"}],transformers:["keys_only"]},{id:"crs-942-360",name:"Detects concatenated basic SQL injection and SQLLFI attempts",tags:{type:"sql_injection",crs_id:"942360",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"(?:^[\\W\\d]+\\s*?(?:alter\\s*(?:a(?:(?:pplication\\s*rol|ggregat)e|s(?:ymmetric\\s*ke|sembl)y|u(?:thorization|dit)|vailability\\s*group)|c(?:r(?:yptographic\\s*provider|edential)|o(?:l(?:latio|um)|nversio)n|ertificate|luster)|s(?:e(?:rv(?:ice|er)|curity|quence|ssion|arch)|y(?:mmetric\\s*key|nonym)|togroup|chema)|m(?:a(?:s(?:ter\\s*key|k)|terialized)|e(?:ssage\\s*type|thod)|odule)|l(?:o(?:g(?:file\\s*group|in)|ckdown)|a(?:ngua|r)ge|ibrary)|t(?:(?:abl(?:espac)?|yp)e|r(?:igger|usted)|hreshold|ext)|p(?:a(?:rtition|ckage)|ro(?:cedur|fil)e|ermission)|d(?:i(?:mension|skgroup)|atabase|efault|omain)|r(?:o(?:l(?:lback|e)|ute)|e(?:sourc|mot)e)|f(?:u(?:lltext|nction)|lashback|oreign)|e(?:xte(?:nsion|rnal)|(?:ndpoi|ve)nt)|in(?:dex(?:type)?|memory|stance)|b(?:roker\\s*priority|ufferpool)|x(?:ml\\s*schema|srobject)|w(?:ork(?:load)?|rapper)|hi(?:erarchy|stogram)|o(?:perator|utline)|(?:nicknam|queu)e|us(?:age|er)|group|java|view)|union\\s*(?:(?:distin|sele)ct|all))\\b|\\b(?:(?:(?:trunc|cre|upd)at|renam)e|(?:inser|selec)t|de(?:lete|sc)|alter|load)\\s+(?:group_concat|load_file|char)\\b\\s*\\(?|[\\s(]load_file\\s*?\\(|[\\\"'`]\\s+regexp\\W)",options:{min_length:5}},operator:"match_regex"}],transformers:[]},{id:"crs-942-500",name:"MySQL in-line comment detected",tags:{type:"sql_injection",crs_id:"942500",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"(?i:/\\*[!+](?:[\\w\\s=_\\-(?:)]+)?\\*/)",options:{case_sensitive:!0,min_length:5}},operator:"match_regex"}],transformers:[]},{id:"crs-943-100",name:"Possible Session Fixation Attack: Setting Cookie Values in HTML",tags:{type:"http_protocol_violation",crs_id:"943100",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"}],regex:"(?i:\\.cookie\\b.*?;\\W*?(?:expires|domain)\\W*?=|\\bhttp-equiv\\W+set-cookie\\b)",options:{case_sensitive:!0,min_length:15}},operator:"match_regex"}],transformers:[]},{id:"crs-944-100",name:"Remote Command Execution: Suspicious Java class detected",tags:{type:"java_code_injection",crs_id:"944100",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],regex:"java\\.lang\\.(?:runtime|processbuilder)",options:{case_sensitive:!0,min_length:17}},operator:"match_regex"}],transformers:["lowercase"]},{id:"crs-944-110",name:"Remote Command Execution: Java process spawn (CVE-2017-9805)",tags:{type:"java_code_injection",crs_id:"944110",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],regex:"(?:runtime|processbuilder)",options:{case_sensitive:!0,min_length:7}},operator:"match_regex"},{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],regex:"(?:unmarshaller|base64data|java\\.)",options:{case_sensitive:!0,min_length:5}},operator:"match_regex"}],transformers:["lowercase"]},{id:"crs-944-130",name:"Suspicious Java class detected",tags:{type:"java_code_injection",crs_id:"944130",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],list:["com.opensymphony.xwork2","com.sun.org.apache","java.io.bufferedinputstream","java.io.bufferedreader","java.io.bytearrayinputstream","java.io.bytearrayoutputstream","java.io.chararrayreader","java.io.datainputstream","java.io.file","java.io.fileoutputstream","java.io.filepermission","java.io.filewriter","java.io.filterinputstream","java.io.filteroutputstream","java.io.filterreader","java.io.inputstream","java.io.inputstreamreader","java.io.linenumberreader","java.io.objectoutputstream","java.io.outputstream","java.io.pipedoutputstream","java.io.pipedreader","java.io.printstream","java.io.pushbackinputstream","java.io.reader","java.io.stringreader","java.lang.class","java.lang.integer","java.lang.number","java.lang.object","java.lang.process","java.lang.reflect","java.lang.string","java.lang.stringbuilder","java.lang.system","javax.script.scriptenginemanager","org.apache.commons","org.apache.struts","org.apache.struts2","org.omg.corba","java.beans.xmldecode"]},operator:"phrase_match"}],transformers:["lowercase"]},{id:"crs-944-260",name:"Remote Command Execution: Malicious class-loading payload",tags:{type:"java_code_injection",crs_id:"944260",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],regex:"(?:class\\.module\\.classLoader\\.resources\\.context\\.parent\\.pipeline|springframework\\.context\\.support\\.FileSystemXmlApplicationContext)",options:{case_sensitive:!0,min_length:58}},operator:"match_regex"}],transformers:[]},{id:"dog-000-001",name:"Look for Cassandra injections",tags:{type:"nosql_injection",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"}],regex:"\\ballow\\s+filtering\\b"},operator:"match_regex"}],transformers:["removeComments"]},{id:"dog-000-002",name:"OGNL - Look for formatting injection patterns",tags:{type:"java_code_injection",category:"attack_attempt"},conditions:[{operator:"match_regex",parameters:{inputs:[{address:"server.request.uri.raw"},{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"[#%$]{(?:[^}]+[^\\w\\s}\\-_][^}]+|\\d+-\\d+)}",options:{case_sensitive:!0}}}],transformers:[]},{id:"dog-000-003",name:"OGNL - Detect OGNL exploitation primitives",tags:{type:"java_code_injection",category:"attack_attempt",confidence:"1"},conditions:[{operator:"match_regex",parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],regex:"[@#]ognl",options:{case_sensitive:!0}}}],transformers:[]},{id:"dog-000-004",name:"Spring4Shell - Attempts to exploit the Spring4shell vulnerability",tags:{type:"exploit_detection",category:"attack_attempt",confidence:"1"},conditions:[{operator:"match_regex",parameters:{inputs:[{address:"server.request.body"}],regex:"^class\\.module\\.classLoader\\.",options:{case_sensitive:!1}}}],transformers:["keys_only"]},{id:"dog-000-005",name:"Node.js: Prototype pollution through __proto__",tags:{type:"js_code_injection",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"}],regex:"^__proto__$"},operator:"match_regex"}],transformers:["keys_only"]},{id:"dog-000-006",name:"Node.js: Prototype pollution through constructor.prototype",tags:{type:"js_code_injection",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"}],regex:"^constructor$"},operator:"match_regex"},{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"}],regex:"^prototype$"},operator:"match_regex"}],transformers:["keys_only"]},{id:"dog-000-007",name:"Server side template injection: Velocity & Freemarker",tags:{type:"java_code_injection",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],regex:"#(?:set|foreach|macro|parse|if)\\(.*\\)|<#assign.*>"},operator:"match_regex"}],transformers:[]},{id:"dog-931-001",name:"RFI: URL Payload to well known RFI target",tags:{type:"rfi",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"}],regex:"^(?i:file|ftps?|https?).*/rfiinc\\.txt\\?+$",options:{case_sensitive:!0,min_length:17}},operator:"match_regex"}],transformers:[]},{id:"dog-934-001",name:"XXE - XML file loads external entity",tags:{type:"xxe",category:"attack_attempt",confidence:"0"},conditions:[{parameters:{inputs:[{address:"server.request.body"},{address:"grpc.server.request.message"}],regex:"(?:<\\?xml[^>]*>.*)<!ENTITY[^>]+SYSTEM\\s+[^>]+>",options:{case_sensitive:!1,min_length:24}},operator:"match_regex"}],transformers:[]},{id:"dog-942-001",name:"Blind XSS callback domains",tags:{type:"xss",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],regex:"https?:\\/\\/(?:.*\\.)?(?:bxss\\.in|xss\\.ht|js\\.rip)",options:{case_sensitive:!1}},operator:"match_regex"}],transformers:[]},{id:"nfd-000-001",name:"Detect common directory discovery scans",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{operator:"match_regex",parameters:{inputs:[{address:"server.response.status"}],regex:"^404$",options:{case_sensitive:!0}}},{operator:"phrase_match",parameters:{inputs:[{address:"server.request.uri.raw"}],list:["/wordpress/","/etc/","/login.php","/install.php","/administrator","/admin.php","/wp-config","/phpmyadmin","/fckeditor","/mysql","/manager/html",".htaccess","/config.php","/configuration","/cgi-bin/php","/search.php","/tinymce","/tiny_mce","/settings.php","../../..","/install/","/download.php","/webdav","/forum.php","/user.php","/style.php","/jmx-console","/modules.php","/include.php","/default.asp","/help.php","/database.yml","/database.yml.pgsql","/database.yml.sqlite3","/database.yml.sqlite","/database.yml.mysql",".%2e/","/view.php","/header.php","/search.asp","%5c%5c","/server/php/","/invoker/jmxinvokerservlet","/phpmyadmin/index.php","/data/admin/allowurl.txt","/verify.php","/misc/ajax.js","/.idea","/module.php","/backup.rar","/backup.tar","/backup.zip","/backup.7z","/backup.gz","/backup.tgz","/backup.tar.gz","waitfor%20delay","/calendar.php","/news.php","/dompdf.php","))))))))))))))))","/web.config","tree.php","/cgi-bin-sdb/printenv","/comments.php","/detail.asp","/license.txt","/admin.asp","/auth.php","/list.php","/content.php","/mod.php","/mini.php","/install.pgsql","/install.mysql","/install.sqlite","/install.sqlite3","/install.txt","/install.md","/doku.php","/main.asp","/myadmin","/force-download.php","/iisprotect/admin","/.gitignore","/print.php","/common.php","/mainfile.php","/functions.php","/scripts/setup.php","/faq.php","/op/op.login.php","/home.php","/includes/hnmain.inc.php3","/preview.php","/dump.rar","/dump.tar","/dump.zip","/dump.7z","/dump.gz","/dump.tgz","/dump.tar.gz","/thumbnail.php","/sendcard.php","/global.asax","/directory.php","/footer.php","/error.asp","/forum.asp","/save.php","/htmlsax3.php","/adm/krgourl.php","/includes/converter.inc.php","/nucleus/libs/pluginadmin.php","/base_qry_common.php","/fileadmin","/bitrix/admin/","/adm.php","/util/barcode.php","/action.php","/rss.asp","/downloads.php","/page.php","/snarf_ajax.php","/fck/editor","/sendmail.php","/detail.php","/iframe.php","/swfupload.swf","/jenkins/login","/phpmyadmin/main.php","/phpmyadmin/scripts/setup.php","/user/index.php","/checkout.php","/process.php","/ks_inc/ajax.js","/export.php","/register.php","/cart.php","/console.php","/friend.php","/readmsg.php","/install.asp","/dagent/downloadreport.asp","/system/index.php","/core/changelog.txt","/js/util.js","/interna.php","/gallery.php","/links.php","/data/admin/ver.txt","/language/zh-cn.xml","/productdetails.asp","/admin/template/article_more/config.htm","/components/com_moofaq/includes/file_includer.php","/licence.txt","/rss.xsl","/vtigerservice.php","/mysql/main.php","/passwiki.php","/scr/soustab.php","/global.php","/email.php","/user.asp","/msd","/products.php","/cultbooking.php","/cron.php","/static/js/admincp.js","/comment.php","/maintainers","/modules/plain/adminpart/addplain.php","/wp-content/plugins/ungallery/source_vuln.php","/upgrade.txt","/category.php","/index_logged.php","/members.asp","/script/html.js","/images/ad.js","/awstats/awstats.pl","/includes/esqueletos/skel_null.php","/modules/profile/user.php","/window_top.php","/openbrowser.php","/thread.php","tinfoil_xss","/includes/include.php","/urheber.php","/header.inc.php","/mysqldumper","/display.php","/website.php","/stats.php","/assets/plugins/mp3_id/mp3_id.php","/siteminderagent/forms/smpwservices.fcc"]}}],transformers:["lowercase"]},{id:"nfd-000-002",name:"Detect failed attempt to fetch readme files",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{operator:"match_regex",parameters:{inputs:[{address:"server.response.status"}],regex:"^404$",options:{case_sensitive:!0}}},{operator:"match_regex",parameters:{inputs:[{address:"server.request.uri.raw"}],regex:"readme\\.[\\.a-z0-9]+$",options:{case_sensitive:!1}}}],transformers:[]},{id:"nfd-000-003",name:"Detect failed attempt to fetch Java EE resource files",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{operator:"match_regex",parameters:{inputs:[{address:"server.response.status"}],regex:"^404$",options:{case_sensitive:!0}}},{operator:"match_regex",parameters:{inputs:[{address:"server.request.uri.raw"}],regex:"^(?:.*web\\-inf)(?:.*web\\.xml).*$",options:{case_sensitive:!1}}}],transformers:[]},{id:"nfd-000-004",name:"Detect failed attempt to fetch code files",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{operator:"match_regex",parameters:{inputs:[{address:"server.response.status"}],regex:"^404$",options:{case_sensitive:!0}}},{operator:"match_regex",parameters:{inputs:[{address:"server.request.uri.raw"}],regex:"\\.(java|pyc?|rb|class)\\b",options:{case_sensitive:!1}}}],transformers:[]},{id:"nfd-000-005",name:"Detect failed attempt to fetch source code archives",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{operator:"match_regex",parameters:{inputs:[{address:"server.response.status"}],regex:"^404$",options:{case_sensitive:!0}}},{operator:"match_regex",parameters:{inputs:[{address:"server.request.uri.raw"}],regex:"\\.(sql|log|ndb|gz|zip|tar\\.gz|tar|regVV|reg|conf|bz2|ini|db|war|bat|inc|btr|server|ds|conf|config|admin|master|sln|bak)\\b(?:[^.]|$)",options:{case_sensitive:!1}}}],transformers:[]},{id:"nfd-000-006",name:"Detect failed attempt to fetch sensitive files",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{operator:"match_regex",parameters:{inputs:[{address:"server.response.status"}],regex:"^404$",options:{case_sensitive:!0}}},{operator:"match_regex",parameters:{inputs:[{address:"server.request.uri.raw"}],regex:"\\.(cgi|bat|dll|exe|key|cert|crt|pem|der|pkcs|pkcs|pkcs[0-9]*|nsf|jsa|war|java|class|vb|vba|so|git|svn|hg|cvs)([^a-zA-Z0-9_]|$)",options:{case_sensitive:!1}}}],transformers:[]},{id:"nfd-000-007",name:"Detect failed attempt to fetch archives",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{operator:"match_regex",parameters:{inputs:[{address:"server.response.status"}],regex:"^404$",options:{case_sensitive:!0}}},{operator:"match_regex",parameters:{inputs:[{address:"server.request.uri.raw"}],regex:"/[\\d\\-_]*\\.(rar|tar|zip|7z|gz|tgz|tar.gz)",options:{case_sensitive:!1}}}],transformers:[]},{id:"nfd-000-008",name:"Detect failed attempt to trigger incorrect application behavior",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{operator:"match_regex",parameters:{inputs:[{address:"server.response.status"}],regex:"^404$",options:{case_sensitive:!0}}},{operator:"match_regex",parameters:{inputs:[{address:"server.request.uri.raw"}],regex:"(/(administrator/components/com.*\\.php|response\\.write\\(.+\\))|select\\(.+\\)from|\\(.*sleep\\(.+\\)|(%[a-zA-Z0-9]{2}[a-zA-Z]{0,1})+\\))",options:{case_sensitive:!1}}}],transformers:[]},{id:"nfd-000-009",name:"Detect failed attempt to leak the structure of the application",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{operator:"match_regex",parameters:{inputs:[{address:"server.response.status"}],regex:"^404$",options:{case_sensitive:!0}}},{operator:"match_regex",parameters:{inputs:[{address:"server.request.uri.raw"}],regex:"/(login\\.rol|LICENSE|[\\w-]+\\.(plx|pwd))$",options:{case_sensitive:!1}}}],transformers:[]},{id:"sqr-000-001",name:"SSRF: Try to access the credential manager of the main cloud services",tags:{type:"ssrf",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"(?i)^\\W*((http|ftp)s?://)?\\W*((::f{4}:)?(169|(0x)?0*a9|0+251)\\.?(254|(0x)?0*fe|0+376)[0-9a-fx\\.:]+|metadata\\.google\\.internal|metadata\\.goog)\\W*/",options:{min_length:4}},operator:"match_regex"}],transformers:["removeNulls"]},{id:"sqr-000-002",name:"Server-side Javascript injection: Try to detect obvious JS injection",tags:{type:"js_code_injection",category:"attack_attempt"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:`require\\(['"][\\w\\.]+['"]\\)|process\\.\\w+\\([\\w\\.]*\\)|\\.toString\\(\\)`,options:{min_length:4}},operator:"match_regex"}],transformers:["removeNulls"]},{id:"sqr-000-008",name:"Windows: Detect attempts to exfiltrate .ini files",tags:{type:"command_injection",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],regex:"(?i)[&|]\\s*type\\s+%\\w+%\\\\+\\w+\\.ini\\s*[&|]"},operator:"match_regex"}],transformers:[]},{id:"sqr-000-009",name:"Linux: Detect attempts to exfiltrate passwd files",tags:{type:"command_injection",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],regex:"(?i)[&|]\\s*cat\\s+\\/etc\\/[\\w\\.\\/]*passwd\\s*[&|]"},operator:"match_regex"}],transformers:[]},{id:"sqr-000-010",name:"Windows: Detect attempts to timeout a shell",tags:{type:"command_injection",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],regex:"(?i)[&|]\\s*timeout\\s+/t\\s+\\d+\\s*[&|]"},operator:"match_regex"}],transformers:[]},{id:"sqr-000-011",name:"SSRF: Try to access internal OMI service (CVE-2021-38647)",tags:{type:"ssrf",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"http(s?):\\/\\/([A-Za-z0-9\\.\\-\\_]+|\\[[A-Fa-f0-9\\:]+\\]|):5986\\/wsman",options:{min_length:4}},operator:"match_regex"}],transformers:[]},{id:"sqr-000-012",name:"SSRF: Detect SSRF attempt on internal service",tags:{type:"ssrf",category:"attack_attempt",confidence:"0"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"^(jar:)?(http|https):\\/\\/([0-9oq]{1,5}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|[0-9]{1,10})(:[0-9]{1,5})?(\\/[^:@]*)?$"},operator:"match_regex"}],transformers:["lowercase"]},{id:"sqr-000-013",name:"SSRF: Detect SSRF attempts using IPv6 or octal/hexdecimal obfuscation",tags:{type:"ssrf",category:"attack_attempt",confidence:"0"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"grpc.server.request.message"}],regex:"^(jar:)?(http|https):\\/\\/((\\[)?[:0-9a-f\\.x]{2,}(\\])?)(:[0-9]{1,5})?(\\/[^:@]*)?$"},operator:"match_regex"}],transformers:["lowercase"]},{id:"sqr-000-014",name:"SSRF: Detect SSRF domain redirection bypass",tags:{type:"ssrf",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],regex:"(http|https):\\/\\/(?:.*\\.)?(?:burpcollaborator\\.net|localtest\\.me|mail\\.ebc\\.apple\\.com|bugbounty\\.dod\\.network|.*\\.[nx]ip\\.io|oastify\\.com|oast\\.(?:pro|live|site|online|fun|me)|sslip\\.io|requestbin\\.com|requestbin\\.net|hookbin\\.com|webhook\\.site|canarytokens\\.com|interact\\.sh|ngrok\\.io|bugbounty\\.click|prbly\\.win|qualysperiscope\\.com|vii.one|act1on3.ru)"},operator:"match_regex"}],transformers:[]},{id:"sqr-000-015",name:"SSRF: Detect SSRF attempt using non HTTP protocol",tags:{type:"ssrf",category:"attack_attempt",confidence:"0"},conditions:[{parameters:{inputs:[{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],regex:"^(jar:)?((file|netdoc):\\/\\/[\\\\\\/]+|(dict|gopher|ldap|sftp|tftp):\\/\\/.*:[0-9]{1,5})"},operator:"match_regex"}],transformers:["lowercase"]},{id:"sqr-000-017",name:"Log4shell: Attempt to exploit log4j CVE-2021-44228",tags:{type:"exploit_detection",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.uri.raw"},{address:"server.request.query"},{address:"server.request.body"},{address:"server.request.path_params"},{address:"server.request.headers.no_cookies"},{address:"grpc.server.request.message"}],regex:"\\${[^j]*j[^n]*n[^d]*d[^i]*i[^:]*:[^}]*}"},operator:"match_regex"}],transformers:["unicode_normalize"]},{id:"ua0-600-0xx",name:"Joomla exploitation tool",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"JDatabaseDriverMysqli"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-10x",name:"Nessus",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)^Nessus(/|([ :]+SOAP))"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-12x",name:"Arachni",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"^Arachni\\/v"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-13x",name:"Jorgee",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bJorgee\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-14x",name:"Probely",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bProbely\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-15x",name:"Metis",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bmetis\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-16x",name:"SQL power injector",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"sql power injector"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-18x",name:"N-Stealth",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bn-stealth\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-19x",name:"Brutus",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bbrutus\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-1xx",name:"Shellshock exploitation tool",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"\\(\\) \\{ :; *\\}"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-20x",name:"Netsparker",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)(<script>netsparker\\(0x0|ns:netsparker.*=vuln)"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-22x",name:"JAASCois",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bjaascois\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-23x",name:"PMAFind",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bpmafind\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-25x",name:"Webtrends",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"webtrends security analyzer"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-26x",name:"Nsauditor",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bnsauditor\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-27x",name:"Paros",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)Mozilla/.* Paros/"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-28x",name:"DirBuster",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bdirbuster\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-29x",name:"Pangolin",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bpangolin\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-2xx",name:"Qualys",tags:{type:"security_scanner",category:"attack_attempt",confidence:"0"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bqualys\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-30x",name:"SQLNinja",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bsqlninja\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-31x",name:"Nikto",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"\\(Nikto/[\\d\\.]+\\)"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-32x",name:"WebInspect",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bwebinspect\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-33x",name:"BlackWidow",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bblack\\s?widow\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-34x",name:"Grendel-Scan",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bgrendel-scan\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-35x",name:"Havij",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bhavij\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-36x",name:"w3af",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bw3af\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-37x",name:"Nmap",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"nmap (nse|scripting engine)"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-39x",name:"Nessus Scripted",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)^'?[a-z0-9]+\\.nasl'?$"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-3xx",name:"Evil Scanner",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bevilScanner\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-40x",name:"WebFuck",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bWebFuck\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-42x",name:"OpenVAS",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)OpenVAS\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-43x",name:"Spider-Pig",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"Powered by Spider-Pig by tinfoilsecurity\\.com"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-44x",name:"Zgrab",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"Mozilla/\\d+.\\d+ zgrab"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-45x",name:"Zmeu",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bZmEu\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-46x",name:"Crowdstrike",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bcrowdstrike\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-47x",name:"GoogleSecurityScanner",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bGoogleSecurityScanner\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-48x",name:"Commix",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"^commix\\/"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-49x",name:"Gobuster",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"^gobuster\\/"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-4xx",name:"CGIchk",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bcgichk\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-51x",name:"FFUF",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)^Fuzz Faster U Fool\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-52x",name:"Nuclei",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)^Nuclei\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-53x",name:"Tsunami",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bTsunamiSecurityScanner\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-54x",name:"Nimbostratus",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bnimbostratus-bot\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-55x",name:"Datadog test scanner: user-agent",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]},{address:"grpc.server.request.metadata",key_path:["dd-canary"]}],regex:"^dd-test-scanner-log$"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-56x",name:"Datadog test scanner - blocking version: user-agent",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]},{address:"grpc.server.request.metadata",key_path:["dd-canary"]}],regex:"^dd-test-scanner-log-block$"},operator:"match_regex"}],transformers:[],on_match:["block"]},{id:"ua0-600-57x",name:"AlertLogic",tags:{type:"security_scanner",category:"attack_attempt",confidence:"0"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"\\bAlertLogic-MDR-"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-5xx",name:"Blind SQL Injection Brute Forcer",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)\\bbsqlbf\\b"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-6xx",name:"Suspicious user agent",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"mozilla/4\\.0 \\(compatible(; msie 6\\.0; win32)?\\)"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-7xx",name:"SQLmap",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"^sqlmap/"},operator:"match_regex"}],transformers:[]},{id:"ua0-600-9xx",name:"Skipfish",tags:{type:"security_scanner",category:"attack_attempt",confidence:"1"},conditions:[{parameters:{inputs:[{address:"server.request.headers.no_cookies",key_path:["user-agent"]}],regex:"(?i)mozilla/5\\.0 sf/"},operator:"match_regex"}],transformers:[]}]}});var bl=c((cD,ml)=>{"use strict";var fl=require("fs"),Cx=require("os"),ko=require("url").URL,qt=v(),_l=pn(),g=require("koalas"),At=Gr(),{isTrue:T,isFalse:wo}=F(),Dx=require("crypto-randomuuid"),Nx=Object.fromEntries||(s=>s.reduce((e,[t,r])=>Object.assign(e,{[t]:r}),{})),Px='(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}';function Je(s){if(s)try{return fl.readFileSync(s,"utf8")}catch(e){qt.error(e);return}}function ks(s){try{return JSON.parse(s)}catch{return}}function hl(s,e){if(!s)return;let t={};for(let[r,n]of Object.entries(s))t[r in e?e[r]:r]=n;return t}function gl(s,e,t){if(typeof e=="object"&&!Array.isArray(e)&&(e=e[s]),Array.isArray(e))return e.map(o=>o.toLowerCase());typeof e<"u"&&qt.warn("Unexpected input for config.tracePropagationStyle");let r=`DD_TRACE_PROPAGATION_STYLE_${s.toUpperCase()}`,n=g(process.env[r],process.env.DD_TRACE_PROPAGATION_STYLE);return typeof n<"u"?n.split(",").filter(o=>o!=="").map(o=>o.trim().toLowerCase()):t}var Oo=class{constructor(e){e=e||{},this.debug=T(g(process.env.DD_TRACE_DEBUG,!1)),this.logger=e.logger,this.logLevel=g(e.logLevel,process.env.DD_TRACE_LOG_LEVEL,"debug"),qt.use(this.logger),qt.toggle(this.debug,this.logLevel,this),this.tags={},At.add(this.tags,process.env.DD_TAGS),At.add(this.tags,process.env.DD_TRACE_TAGS),At.add(this.tags,process.env.DD_TRACE_GLOBAL_TAGS),At.add(this.tags,e.tags);let t=g(process.env.DD_TRACING_ENABLED,!0),r=g(e.profiling,process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,process.env.DD_PROFILING_ENABLED,!1),n=g(process.env.DD_PROFILING_EXPORTERS,"agent"),o=process.env.DD_PROFILING_SOURCE_MAP,i=g(e.logInjection,process.env.DD_LOGS_INJECTION,!1),a=g(e.runtimeMetrics,process.env.DD_RUNTIME_METRICS_ENABLED,!1),p=g(e.dbmPropagationMode,process.env.DD_DBM_PROPAGATION_MODE,"disabled"),u=g(e.hostname,process.env.DD_AGENT_HOST,process.env.DD_TRACE_AGENT_HOSTNAME,"127.0.0.1"),d=g(e.port,process.env.DD_TRACE_AGENT_PORT,"8126"),l=g(e.url,process.env.DD_TRACE_AGENT_URL,process.env.DD_TRACE_URL,null),_=g(e.isCiVisibility,!1),h=process.env.DD_CIVISIBILITY_AGENTLESS_URL,f=g(process.env.DD_CIVISIBILITY_ITR_ENABLED,!0),b=e.service||process.env.DD_SERVICE||process.env.DD_SERVICE_NAME||this.tags.service||process.env.AWS_LAMBDA_FUNCTION_NAME||_l.name||"node",E=g(e.serviceMapping,process.env.DD_SERVICE_MAPPING?Nx(process.env.DD_SERVICE_MAPPING.split(",").map(at=>at.trim().split(":"))):{}),y=g(e.env,process.env.DD_ENV,this.tags.env),I=g(e.version,process.env.DD_VERSION,this.tags.version,_l.version),oe=g(e.startupLogs,process.env.DD_TRACE_STARTUP_LOGS,!1),Ae=g(process.env.DD_TRACE_TELEMETRY_ENABLED,!process.env.AWS_LAMBDA_FUNCTION_NAME),qe=g(process.env.DD_TELEMETRY_DEBUG_ENABLED,!1),Be=g(e.protocolVersion,process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,"0.4"),Re=g(parseInt(e.flushMinSpans),parseInt(process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS),1e3),He=g(process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,Px),$e=g(e.clientIpEnabled,process.env.DD_TRACE_CLIENT_IP_ENABLED&&T(process.env.DD_TRACE_CLIENT_IP_ENABLED),!1),pr=g(e.clientIpHeader,process.env.DD_TRACE_CLIENT_IP_HEADER,null),ur=g(e.experimental&&e.experimental.b3,process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,!1),Fe=["tracecontext","datadog"];T(ur)&&(Fe.push("b3"),Fe.push("b3 single header")),process.env.DD_TRACE_PROPAGATION_STYLE&&(process.env.DD_TRACE_PROPAGATION_STYLE_INJECT||process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT)&&qt.warn("Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables");let dr=gl("inject",e.tracePropagationStyle,Fe),lr=gl("extract",e.tracePropagationStyle,Fe),_r=g(e.experimental&&e.experimental.runtimeId,process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,!1),$t=g(e.experimental&&e.experimental.exporter,process.env.DD_TRACE_EXPERIMENTAL_EXPORTER),Ft=g(e.experimental&&e.experimental.enableGetRumData,process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,!1),hr=g(process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,"512"),gr=g(e.stats,process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,!1),fr=g(e.traceId128BitGenerationEnabled,process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,!1),mr=g(e.traceId128BitLoggingEnabled,process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,!1),k=e.appsec!=null?e.appsec:e.experimental&&e.experimental.appsec;typeof k=="boolean"?k={enabled:k}:k==null&&(k={});let _m=g(k.enabled,process.env.DD_APPSEC_ENABLED&&T(process.env.DD_APPSEC_ENABLED)),br=g(k.rules,process.env.DD_APPSEC_RULES),hm=g(parseInt(k.rateLimit),parseInt(process.env.DD_APPSEC_TRACE_RATE_LIMIT),100),gm=g(parseInt(k.wafTimeout),parseInt(process.env.DD_APPSEC_WAF_TIMEOUT),5e3),fm=g(k.obfuscatorKeyRegex,process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,"(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?)key)|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization"),mm=g(k.obfuscatorValueRegex,process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,'(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}'),bm=g(Je(k.blockedTemplateHtml),Je(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)),vm=g(Je(k.blockedTemplateJson),Je(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)),Pa=process.env.AWS_LAMBDA_FUNCTION_NAME!==void 0,Em=e.remoteConfig||{},ym=g(process.env.DD_REMOTE_CONFIGURATION_ENABLED&&T(process.env.DD_REMOTE_CONFIGURATION_ENABLED),!Pa),Sm=g(parseInt(Em.pollInterval),parseInt(process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS),5),$=e.experimental&&e.experimental.iast,Ma=g($&&($===!0||$.enabled===!0),process.env.DD_IAST_ENABLED,!1),Tm=g(process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED,Ma),La=30,vr=g(parseInt($&&$.requestSampling),parseInt(process.env.DD_IAST_REQUEST_SAMPLING),La),Im=vr<0||vr>100?La:vr,xm=g(parseInt($&&$.maxConcurrentRequests),parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS),2),Am=g(parseInt($&&$.maxContextOperations),parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS),2),qm=g($&&$.deduplicationEnabled,process.env.DD_IAST_DEDUPLICATION_ENABLED&&T(process.env.DD_IAST_DEDUPLICATION_ENABLED),!0),Rm=g(process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,!0),Ua=e.ingestion||{},ja=g(e.dogstatsd,{}),Ga={sampleRate:g(e.sampleRate,process.env.DD_TRACE_SAMPLE_RATE,Ua.sampleRate),rateLimit:g(e.rateLimit,process.env.DD_TRACE_RATE_LIMIT,Ua.rateLimit),rules:g(e.samplingRules,ks(process.env.DD_TRACE_SAMPLING_RULES),[]).map(at=>hl(at,{sample_rate:"sampleRate"})),spanSamplingRules:g(e.spanSamplingRules,ks(Je(process.env.DD_SPAN_SAMPLING_RULES_FILE)),ks(process.env.DD_SPAN_SAMPLING_RULES),[]).map(at=>hl(at,{sample_rate:"sampleRate",max_per_second:"maxPerSecond"}))},wm=Pa?0:2e3;this.tracing=!wo(t),this.dbmPropagationMode=p,this.logInjection=T(i),this.env=y,this.url=h?new ko(h):Mx(l,e),this.site=g(e.site,process.env.DD_SITE,"datadoghq.com"),this.hostname=u||this.url&&this.url.hostname,this.port=String(d||this.url&&this.url.port),this.flushInterval=g(parseInt(e.flushInterval,10),wm),this.flushMinSpans=Re,this.sampleRate=g(Math.min(Math.max(Ga.sampleRate,0),1),1),this.queryStringObfuscation=He,this.clientIpEnabled=$e,this.clientIpHeader=pr,this.plugins=!!g(e.plugins,!0),this.service=b,this.serviceMapping=E,this.version=I,this.dogstatsd={hostname:g(ja.hostname,process.env.DD_DOGSTATSD_HOSTNAME,this.hostname),port:String(g(ja.port,process.env.DD_DOGSTATSD_PORT,8125))},this.runtimeMetrics=T(a),this.tracePropagationStyle={inject:dr,extract:lr},this.experimental={runtimeId:T(_r),exporter:$t,enableGetRumData:T(Ft)},this.sampler=Ga,this.reportHostname=T(g(e.reportHostname,process.env.DD_TRACE_REPORT_HOSTNAME,!1)),this.scope=process.env.DD_TRACE_SCOPE,this.profiling={enabled:T(r),sourceMap:!wo(o),exporters:n},this.lookup=e.lookup,this.startupLogs=T(oe),this.telemetry={enabled:$t!=="datadog"&&T(Ae),logCollection:T(Tm),debug:T(qe)},this.protocolVersion=Be,this.tagsHeaderMaxLength=parseInt(hr),this.appsec={enabled:_m,rules:br?ks(Je(br)):ll(),customRulesProvided:!!br,rateLimit:hm,wafTimeout:gm,obfuscatorKeyRegex:fm,obfuscatorValueRegex:mm,blockedTemplateHtml:bm,blockedTemplateJson:vm},this.remoteConfig={enabled:ym,pollInterval:Sm},this.iast={enabled:T(Ma),requestSampling:Im,maxConcurrentRequests:xm,maxContextOperations:Am,deduplicationEnabled:qm},this.isCiVisibility=T(_),this.isIntelligentTestRunnerEnabled=this.isCiVisibility&&T(f),this.isGitUploadEnabled=this.isCiVisibility&&this.isIntelligentTestRunnerEnabled&&!wo(Rm),this.stats={enabled:T(gr)},this.traceId128BitGenerationEnabled=T(fr),this.traceId128BitLoggingEnabled=T(mr),At.add(this.tags,{service:this.service,env:this.env,version:this.version,"runtime-id":Dx()})}};function Mx(s,e){if(s)return new ko(s);if(Cx.type()!=="Windows_NT"&&!e.hostname&&!e.port&&!process.env.DD_AGENT_HOST&&!process.env.DD_TRACE_AGENT_HOSTNAME&&!process.env.DD_TRACE_AGENT_PORT&&fl.existsSync("/var/run/datadog/apm.socket"))return new ko("unix:///var/run/datadog/apm.socket")}ml.exports=Oo});var Do=c((pD,El)=>{"use strict";var Co=require("path"),vl=require("fs");function Lx(s,e){if(Co.isAbsolute(s)){let t=Co.join(s,"package.json");return JSON.parse(vl.readFileSync(t,"utf8"))}for(let t of e.paths){let r=Co.join(t,s,"package.json");try{return JSON.parse(vl.readFileSync(r,"utf8"))}catch{continue}}throw new Error(`could not find ${s}/package.json`)}El.exports=Lx});var Os=c((uD,yl)=>{var Ux=M(),jx=0;function Gx(s,e,t,r,n={}){let{hostname:o,port:i,url:a}=s,{logger:p,tags:u,serviceMapping:d,...l}=n,_={url:a,hostname:o,port:i,method:"POST",path:"/telemetry/proxy/api/v2/apmtelemetry",headers:{"content-type":"application/json","dd-telemetry-api-version":"v1","dd-telemetry-request-type":r}},h=JSON.stringify({api_version:"v1",request_type:r,tracer_time:Math.floor(Date.now()/1e3),runtime_id:s.tags["runtime-id"],seq_id:++jx,payload:l,application:e,host:t});Ux(h,_,()=>{})}yl.exports={sendData:Gx}});var xl=c((dD,jo)=>{"use strict";var Bx=require("path"),Hx=require("module-details-from-path"),$x=Do(),{sendData:Fx}=Os(),zx=O(),{fileURLToPath:Vx}=require("url"),Qe=new Set,No=new Set,Yx="file://",Po=zx.channel("dd-trace:moduleLoadStart"),Cs,Mo,Lo,Uo;function Tl(s,e,t){Cs||(Cs=setImmediate(()=>{if(Cs=null,Qe.size>0){let r=Array.from(Qe.values()).splice(0,1e3).map(n=>{Qe.delete(n);let[o,i]=n.split(" ");return{name:o,version:i}});Fx(s,e,t,"app-dependencies-loaded",{dependencies:r}),Qe.size>0&&Tl(s,e,t)}}),Cs.unref())}function Il(s){if(s){let e=s.filename;if(e&&e.startsWith(Yx))try{e=Vx(e)}catch{}let t=e&&Hx(e),r=s.request||t&&t.name;if(e&&r&&Wx(e,r)&&!No.has(r)&&(No.add(r),t)){let{name:n,basedir:o}=t;if(o)try{let{version:i}=$x(o,jo);Qe.add(`${n} ${i}`),Tl(Mo,Lo,Uo)}catch{}}}}function Kx(s,e,t){Mo=s,Lo=e,Uo=t,Po.subscribe(Il)}function Wx(s,e){let t=Sl(s,e,"/");return t&&process.platform==="win32"?Sl(s,e,Bx.sep):t}function Sl(s,e,t){return e.indexOf(`..${t}`)!==0&&e.indexOf(`.${t}`)!==0&&e.indexOf(t)!==0&&e.indexOf(`:${t}`)!==1}function Xx(){Mo=null,Lo=null,Uo=null,No.clear(),Qe.clear(),Po.hasSubscribers&&Po.unsubscribe(Il)}jo.exports={start:Kx,stop:Xx}});var Dl=c((lD,Cl)=>{"use strict";var Jx=ee().version,ql=O(),ue=require("os"),Qx=xl(),{sendData:Ds}=Os(),Rl=process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL?Number(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL)*1e3:6e4,Zx=ql.channel("datadog:telemetry:start"),eA=ql.channel("datadog:telemetry:stop"),D,Go,Pe,Me,Bo,Al=new Set;function wl(){let s=[];for(let e in Go._pluginsByName)Al.has(e)||(s.push({name:e,enabled:Go._pluginsByName[e]._enabled,auto_enabled:!0}),Al.add(e));return s}function kl(s,e=[],t=[],r=null){if(r=r||new WeakSet,!r.has(s)){r.add(s);for(let[n,o]of Object.entries(s))typeof o=="object"&&o!==null?kl(o,e,[...t,n],r):e.push({name:[...t,n].join("."),value:o});return e}}function tA(){return{integrations:wl(),dependencies:[],configuration:kl(D),additional_payload:[]}}function Ho(){process.removeListener("beforeExit",Ho),Ds(D,Pe,Me,"app-closing")}function sA(){return{service_name:D.service,env:D.env,service_version:D.version,tracer_version:Jx,language_name:"nodejs",language_version:process.versions.node}}function rA(){let s=ue.type();return s==="Linux"||s==="Darwin"?{hostname:ue.hostname(),os:s,architecture:ue.arch(),kernel_version:ue.version(),kernel_release:ue.release(),kernel_name:s}:s==="Windows_NT"?{hostname:ue.hostname(),os:s,architecture:ue.arch(),os_version:ue.version()}:{hostname:ue.hostname(),os:s}}function Ol(){return{config:D,application:Pe,host:Me,heartbeatInterval:Rl}}function nA(s,e){s.telemetry.enabled&&(D=s,Go=e,Pe=sA(),Me=rA(),Qx.start(D,Pe,Me),Ds(D,Pe,Me,"app-started",tA()),Bo=setInterval(()=>{Ds(D,Pe,Me,"app-heartbeat")},Rl),Bo.unref(),process.on("beforeExit",Ho),Zx.publish(Ol()))}function oA(){D&&(clearInterval(Bo),process.removeListener("beforeExit",Ho),eA.publish(Ol()),D=void 0)}function iA(){if(!D||!D.telemetry.enabled)return;let s=wl();s.length!==0&&Ds(D,Pe,Me,"app-integrations-change",{integrations:s})}Cl.exports={start:nA,stop:oA,updateIntegrations:iA}});var Pl=c((_D,Nl)=>{"use strict";Nl.exports={}});var Ml=c((hD,Rt)=>{"use strict";var aA=require("semver"),cA=v(),{addHook:pA}=require("import-in-the-middle"),uA=O();if(aA.satisfies(process.versions.node,">=14.13.1")){let s=uA.channel("dd-trace:moduleLoadStart");pA((e,t)=>{s.hasSubscribers&&s.publish({filename:e,module:t})}),Rt.exports=require("import-in-the-middle")}else cA.warn("ESM is not fully supported by this version of Node.js, so dd-trace will not intercept ESM loading."),Rt.exports=()=>({unhook:()=>{}}),Rt.exports.addHook=()=>{},Rt.exports.removeHook=()=>{}});var Bl=c((gD,Gl)=>{"use strict";var Ns=require("path"),Ze=require("module"),dA=require("module-details-from-path"),jl=O(),$o=Ze.prototype.require;Gl.exports=et;var le=Object.create(null),de=Object.create(null),Ps=Object.create(null),Fo=null,Ll=jl.channel("dd-trace:moduleLoadStart"),Ul=jl.channel("dd-trace:moduleLoadEnd");function et(s,e,t){if(!(this instanceof et))return new et(s,e,t);if(typeof s=="function"?(t=s,s=null,e={}):typeof e=="function"&&(t=e,e={}),s=s||[],e=e||{},this.modules=s,this.options=e,this.onrequire=t,Array.isArray(s))for(let r of s){let n=le[r];n?n.push(t):le[r]=[t]}Fo||(Fo=Ze.prototype.require=function(r){let n=Ze._resolveFilename(r,this),o=n.indexOf(Ns.sep)===-1,i,a,p;if(de[n])return require.cache[n]&&require.cache[n].exports!==de[n].original?require.cache[n].exports:de[n].exports;if(Ps[n])return $o.apply(this,arguments);Ps[n]=!0;let d={filename:n,request:r};Ll.hasSubscribers&&Ll.publish(d);let l=$o.apply(this,arguments);if(d.module=l,Ul.hasSubscribers&&Ul.publish(d),delete Ps[n],o){if(p=le[n],!p)return l;i=n}else{let _=process.env.AWS_LAMBDA_FUNCTION_NAME!==void 0,h=process.env.DD_LAMBDA_HANDLER!==void 0,b=n.split(Ns.sep).lastIndexOf("node_modules")!==-1,E=_&&h&&!b?{name:n}:dA(n);if(!E||(i=E.name,a=E.basedir,p=le[i],!p))return l;let y=Ze._resolveLookupPaths(i,this,!0);if(!y)return l;Ze._findPath(i,[a,...y])!==n&&(i=i+Ns.sep+Ns.relative(a,n))}de[n]={exports:l},de[n].original=l;for(let _ of p)de[n].exports=_(de[n].exports,i,a);return de[n].exports})}et.reset=function(){Ze.prototype.require=$o,Fo=null,Ps=Object.create(null),de=Object.create(null),le=Object.create(null)};et.prototype.unhook=function(){for(let s of this.modules){let e=(le[s]||[]).filter(t=>t!==this.onrequire);e.length>0?le[s]=e:delete le[s]}Object.keys(le).length===0&&et.reset()}});var Fl=c((fD,$l)=>{"use strict";var _e=require("diagnostics_channel"),Hl="dd-trace:bundledModuleLoadStart";_e.subscribe||(_e.subscribe=(s,e)=>{_e.channel(s).subscribe(e)});_e.unsubscribe||(_e.unsubscribe=(s,e)=>{_e.channel(s).hasSubscribers&&_e.channel(s).unsubscribe(e)});$l.exports=zo;function zo(s,e,t){if(!(this instanceof zo))return new zo(s,e,t);function r(n){n.module=t(n.module,n.path,void 0,n.version)}for(let n of s)_e.subscribe(`${Hl}:${n}`,r);this.unhook=function(){for(let o of s)_e.unsubscribe(`${Hl}:${o}`,r)}}});var Vo=c((mD,zl)=>{"use strict";var lA=require("path"),_A=Ml(),hA=Bl(),gA=Fl();function Ms(s,e){if(!(this instanceof Ms))return new Ms(s,e);this._patched=Object.create(null);let t=(r,n,o,i)=>{let a=[o,n].filter(u=>u),p=lA.join(...a);return this._patched[p]?r:(this._patched[p]=!0,e(r,n,o,i))};this._ritmHook=hA(s,{},t),this._iitmHook=_A(s,{},(r,n,o)=>r&&r.default?(r.default=t(r.default,n,o),r):t(r,n,o)),this._dcitmHook=gA(s,{},t)}Ms.prototype.unhook=function(){this._ritmHook.unhook(),this._iitmHook.unhook(),this._dcitmHook.unhook(),this._patched=Object.create(null)};zl.exports=Ms});var Yl=c((bD,Vl)=>{"use strict";Vl.exports={}});var Ls=c((vD,Kl)=>{"use strict";var Yo=Symbol.for("_ddtrace_instrumentations");global[Yo]=global[Yo]||{};Kl.exports=global[Yo]});var Wo=c((ED,Ko)=>{"use strict";var{channel:fA}=O(),mA=require("path"),Wl=require("semver"),bA=Vo(),vA=Do(),EA=v(),Xl=Yl(),yA=Ls(),SA=Object.keys(Xl),Jl=new RegExp(`\\${mA.sep}`,"g"),TA=fA("dd-trace:instrumentation:load");for(let s of SA)bA([s],(e,t,r,n)=>{t=t.replace(Jl,"/"),Xl[s]();for(let{name:o,file:i,versions:a,hook:p}of yA[s]){let u=Ql(o,i);if(t===u){let d=n||xA(r);if(IA(d,a))try{TA.publish({name:o,version:d,file:i}),e=p(e,d)}catch(l){EA.error(l)}}}return e});function IA(s,e){return!s||e&&e.some(t=>Wl.satisfies(Wl.coerce(s),t))}function xA(s){if(s)return vA(s,Ko).version}function Ql(s,e){return[s,e].filter(t=>t).join("/")}Ko.exports={filename:Ql,pathSepExpr:Jl}});var Zl=c(()=>{"use strict";Wo()});var Jo=c(tt=>{"use strict";var AA=O(),qA=require("semver"),Xo=Ls(),{AsyncResource:e_}=require("async_hooks"),t_={};tt.channel=function(s){let e=t_[s];if(e)return e;let t=AA.channel(s);return t_[s]=t,t};tt.addHook=function({name:e,versions:t,file:r},n){Xo[e]||(Xo[e]=[]),Xo[e].push({name:e,versions:t,file:r,hook:n})};qA.satisfies(process.versions.node,">=17.8.0")?tt.AsyncResource=e_:tt.AsyncResource=class extends e_{static bind(s,e,t){return e=e||s.name,new tt.AsyncResource(e||"bound-anonymous-fn").bind(s,t)}bind(s,e){let t;if(e===void 0){let r=this;t=function(...n){return n.unshift(s,this),Reflect.apply(r.runInAsyncScope,r,n)}}else t=this.runInAsyncScope.bind(this,s,e);return Object.defineProperties(t,{length:{configurable:!0,enumerable:!1,value:s.length,writable:!1},asyncResource:{configurable:!0,enumerable:!0,value:this,writable:!0}}),t}}});var r_=c((xD,s_)=>{"use strict";var Qo=class extends Error{constructor(e){super(e),Object.setPrototypeOf(this,new.target.prototype)}},Us=class extends Qo{};Us.prototype.name="Impending Timeout";s_.exports={ImpendingTimeout:Us}});var p_=c(c_=>{"use strict";var o_=v(),{channel:RA}=Jo(),{ERROR_MESSAGE:wA,ERROR_TYPE:kA}=ae(),{ImpendingTimeout:OA}=r_(),CA=global._ddtrace,n_=CA._tracer,i_=RA("apm:aws:lambda:timeout");i_.subscribe(s=>{NA()});var a_;function DA(s){let e=s.getRemainingTimeInMillis(),t=parseInt(process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS)||100;t=t<0?100:t,a_=setTimeout(()=>{i_.publish(void 0)},e-t)}function NA(){let s=n_.scope().active();if(s!==null){let e=new OA("Datadog detected an impending timeout");s.addTags({[wA]:e.message,[kA]:e.name})}else o_.debug("An impending timeout was reached, but no root span was found. No error will be tagged.");n_._processor.killAll(),s!==null&&s.finish()}function PA(s){let e=s.length>1?s[1]:void 0;if((e===void 0||e.getRemainingTimeInMillis===void 0)&&(e=s.length>2?s[2]:void 0,e===void 0||e.getRemainingTimeInMillis===void 0))throw Error("Could not extract context");return e}c_.datadog=function(e){return(...t)=>{let r=e.apply(this,t);try{let n=PA(t);DA(n),r&&r.then(o=>clearTimeout(a_))}catch{o_.debug("Error patching AWS Lambda handler. Timeout spans will not be generated.")}return r}}});var g_=c((qD,h_)=>{"use strict";var js=new WeakMap;function u_(s,e){Object.setPrototypeOf(e,s);let t=Object.getOwnPropertyDescriptors(s),r=Reflect.ownKeys(t);for(let n of r)try{Object.defineProperty(e,n,t[n])}catch{}}function MA(s,e){__(e),BA(s);let t=function(){return e.apply(this,arguments)};return js.set(t,()=>{e=s}),u_(s,t),t}function LA(s,e,t){GA(s,e),__(t);let r=s[e],n=t(r),o=Object.getOwnPropertyDescriptor(s,e),i={configurable:!0,...o};if(u_(r,n),o){if(js.set(n,()=>Object.defineProperty(s,e,o)),o.get||o.set?i.get=()=>n:i.value=n,o.configurable===!1)return Object.create(s,{[e]:i})}else js.set(n,()=>delete s[e]),i.value=n,i.writable=!0;return Object.defineProperty(s,e,i),s}function d_(s,e,t){return typeof e=="function"?MA(s,e):LA(s,e,t)}function l_(s,e){if(!s)return s;let t=js.get(e?s[e]:s);return t&&t(),s}function UA(s,e,t){s=Gs(s),e=Gs(e);for(let r of s)for(let n of e)d_(r,n,t)}function jA(s,e){s=Gs(s),e=Gs(e);for(let t of s)for(let r of e)l_(t,r)}function Gs(s){return Array.isArray(s)?s:[s]}function GA(s,e){if(!s)throw new Error("No target object provided.");if(typeof s!="object"&&typeof s!="function")throw new Error("Invalid target.");if(!s[e])throw new Error(`No original method ${e}.`);if(typeof s[e]!="function")throw new Error(`Original method ${e} is not a function.`)}function __(s){if(!s)throw new Error("No function provided.");if(typeof s!="function")throw new Error("Target is not a function.")}function BA(s){if(Function.prototype.toString.call(s).startsWith("class"))throw new Error("Target is a native class constructor and cannot be wrapped.")}h_.exports={wrap:d_,massWrap:UA,unwrap:l_,massUnwrap:jA}});var Zo=c((RD,f_)=>{"use strict";f_.exports=g_()});var ei=c(()=>{"use strict";var HA=require("path"),{_extractModuleNameAndHandlerPath:$A,_extractModuleRootAndHandler:FA,_getLambdaFilePath:zA}=ti(),{datadog:v_}=p_(),{addHook:m_}=Jo(),E_=Zo(),VA=s=>(E_.wrap(s,"datadog",YA),s);function YA(s){return e=>s(v_(e))}var KA=s=>e=>(E_.wrap(e,s,WA),e);function WA(s){return v_(s)}var XA=process.env.LAMBDA_TASK_ROOT,b_=process.env.DD_LAMBDA_HANDLER;if(b_!==void 0){let[s,e]=FA(b_),[t,r]=$A(e),n=HA.resolve(XA,s,t),o=zA(n);m_({name:o},KA(r))}else m_({name:"datadog-lambda-js"},VA)});var ti=c((OD,R_)=>{"use strict";var si=require("fs"),I_=require("path"),y_=v(),S_=Vo(),T_=Ls(),{filename:JA,pathSepExpr:QA}=Wo();function x_(s){let e=I_.basename(s);return[s.substring(0,s.indexOf(e)),e]}function A_(s){let e=/^([^.]*)\.(.*)$/,t=s.match(e);if(!(!t||t.length!==3))return[t[1],t[2]]}function q_(s){let e=s;return si.existsSync(s+".js")?e+=".js":si.existsSync(s+".mjs")?e+=".mjs":si.existsSync(s+".cjs")&&(e+=".cjs"),e}var ZA=()=>{let s=process.env.LAMBDA_TASK_ROOT,e=process.env.DD_LAMBDA_HANDLER;if(e!==void 0){let[t,r]=x_(e),[n]=A_(r),o=I_.resolve(s,t,n),i=q_(o);S_([i],a=>{ei();for(let{hook:p}of T_[i])try{a=p(a)}catch(u){y_.error(u)}return a})}else{let t="datadog-lambda-js";S_([t],(r,n,o)=>{n=n.replace(QA,"/"),ei();for(let{name:i,file:a,hook:p}of T_[t]){let u=JA(i,a);if(n===u)try{r=p(r)}catch(d){y_.error(d)}}return r})}};R_.exports={_extractModuleRootAndHandler:x_,_extractModuleNameAndHandlerPath:A_,_getLambdaFilePath:q_,registerLambdaHook:ZA}});var w_=c(()=>{"use strict";var{registerLambdaHook:eq}=ti();eq()});var D_=c((PD,C_)=>{"use strict";var{channel:tq}=O(),{isFalse:sq}=F(),O_=Pl(),rq=v(),ri=tq("dd-trace:instrumentation:load");Zl();process.env.AWS_LAMBDA_FUNCTION_NAME!==void 0&&w_();var{DD_TRACE_DISABLED_PLUGINS:k_}=process.env,nq=new Set(k_&&k_.split(",").map(s=>s.trim())),wt={};ri.subscribe(({name:s})=>{let e=O_[s];if(!(!e||typeof e!="function")&&!wt[e.id]){let t=`DD_TRACE_${e.id.toUpperCase()}_ENABLED`,r=process.env[t.replace(/[^a-z0-9_]/ig,"_")];sq(r)||nq.has(e.id)?(rq.debug(`Plugin "${e.id}" was disabled via configuration option.`),wt[e.id]=null):wt[e.id]=e}});C_.exports=class{constructor(e){this._tracer=e,this._tracerConfig=null,this._pluginsByName={},this._configsByName={},this._loadedSubscriber=({name:t})=>{let r=O_[t];!r||typeof r!="function"||this.loadPlugin(r.id)},ri.subscribe(this._loadedSubscriber)}loadPlugin(e){let t=wt[e];if(!t||(this._pluginsByName[e]||(this._pluginsByName[e]=new t(this._tracer)),!this._tracerConfig))return;let r=this._configsByName[e]||{enabled:this._tracerConfig.plugins!==!1};this._pluginsByName[e].configure({...this._getSharedConfig(e),...r})}configurePlugin(e,t){let r=this._isEnabled(t);this._configsByName[e]={...t,enabled:r},this.loadPlugin(e)}configure(e={}){this._tracerConfig=e;for(let t in wt)this.loadPlugin(t)}destroy(){for(let e in this._pluginsByName)this._pluginsByName[e].configure({enabled:!1});ri.unsubscribe(this._loadedSubscriber)}_isEnabled(e){return typeof e=="boolean"?e:e?e.enabled!==!1:!0}_getSharedConfig(e){let{logInjection:t,serviceMapping:r,queryStringObfuscation:n,site:o,url:i,dbmPropagationMode:a}=this._tracerConfig,p={};return t!==void 0&&(p.logInjection=t),n!==void 0&&(p.queryStringObfuscation=n),p.dbmPropagationMode=a,r&&r[e]&&(p.service=r[e]),p.site=o,p.url=i,p}}});var P_=c((MD,N_)=>{"use strict";var ni=class{constructor(e,t){this._timer=null,this._callback=e,this._interval=t}start(){this._timer||this.runAfterDelay(0)}runAfterDelay(e=this._interval){this._timer=setTimeout(this._callback,e,()=>this.runAfterDelay()),this._timer.unref&&this._timer.unref()}stop(){clearTimeout(this._timer),this._timer=null}};N_.exports=ni});var j_=c((LD,U_)=>{"use strict";var oq=require("crypto-randomuuid"),{EventEmitter:iq}=require("events"),aq=P_(),cq=ee().version,pq=M(),M_=v(),uq=oq(),dq=Buffer.alloc(1).toString("base64"),oi=class extends iq{constructor(e){super();let t=e.remoteConfig.pollInterval*1e3;this.scheduler=new aq(r=>this.poll(r),t),this.requestOptions={url:e.url,hostname:e.hostname,port:e.port,method:"POST",path:"/v0.7/config"},this.state={client:{state:{root_version:1,targets_version:0,config_states:[],has_error:!1,error:"",backend_client_state:""},id:uq,products:[],is_tracer:!0,client_tracer:{runtime_id:e.tags["runtime-id"],language:"node",tracer_version:cq,service:e.service,env:e.env,app_version:e.version},capabilities:dq},cached_target_files:[]},this.appliedConfigs=new Map}updateCapabilities(e,t){let r=Buffer.from(this.state.client.capabilities,"base64").toString("hex"),n=BigInt(`0x${r}`);t?n|=e:n&=~e;let o=n.toString(16);o.length%2&&(o=`0${o}`),this.state.client.capabilities=Buffer.from(o,"hex").toString("base64")}on(e,t){return super.on(e,t),this.state.client.products=this.eventNames(),this.scheduler.start(),this}off(e,t){return super.off(e,t),this.state.client.products=this.eventNames(),this.state.client.products.length||this.scheduler.stop(),this}poll(e){pq(JSON.stringify(this.state),this.requestOptions,(t,r,n)=>{if(n===404)return e();if(t)return M_.error(t),e();if(this.state.client.state.has_error&&(this.state.client.state.has_error=!1,this.state.client.state.error=""),r&&r!=="{}")try{this.parseConfig(JSON.parse(r))}catch(o){M_.error(`Could not parse remote config response: ${o}`),this.state.client.state.has_error=!0,this.state.client.state.error=o.toString()}e()})}parseConfig({client_configs:e=[],targets:t,target_files:r=[]}){let n=[],o=[],i=[];for(let a of this.appliedConfigs.values())e.includes(a.path)||n.push(a);if(t=L_(t),t){for(let a of e){let p=t.signed.targets[a];if(!p)throw new Error(`Unable to find target for path ${a}`);let u=this.appliedConfigs.get(a),d={};if(u){if(u.hashes.sha256===p.hashes.sha256)continue;i.push(d)}else o.push(d);let l=r.find(f=>f.path===a);if(!l)throw new Error(`Unable to find file for path ${a}`);let{product:_,id:h}=_q(a);Object.assign(d,{path:a,product:_,id:h,version:p.custom.v,apply_state:1,apply_error:"",length:p.length,hashes:p.hashes,file:L_(l.raw)})}this.state.client.state.targets_version=t.signed.version,this.state.client.state.backend_client_state=t.signed.custom.opaque_backend_state}if(n.length||o.length||i.length){this.dispatch(n,"unapply"),this.dispatch(o,"apply"),this.dispatch(i,"modify"),this.state.client.state.config_states=[],this.state.cached_target_files=[];for(let a of this.appliedConfigs.values())this.state.client.state.config_states.push({id:a.id,version:a.version,product:a.product,apply_state:a.apply_state,apply_error:a.apply_error}),this.state.cached_target_files.push({path:a.path,length:a.length,hashes:Object.entries(a.hashes).map(p=>({algorithm:p[0],hash:p[1]}))})}}dispatch(e,t){for(let r of e){try{this.emit(r.product,t,r.file,r.id),r.apply_state=2}catch(n){r.apply_state=3,r.apply_error=n.toString()}t==="unapply"?this.appliedConfigs.delete(r.path):this.appliedConfigs.set(r.path,r)}}};function L_(s){return s?JSON.parse(Buffer.from(s,"base64").toString()):null}var lq=/^(?:datadog\/\d+|employee)\/([^/]+)\/([^/]+)\/[^/]+$/;function _q(s){let e=lq.exec(s);if(!e||!e[1]||!e[2])throw new Error(`Unable to parse path ${s}`);return{product:e[1],id:e[2]}}U_.exports=oi});var B_=c((UD,G_)=>{"use strict";G_.exports={ASM_ACTIVATION:1n<<1n,ASM_IP_BLOCKING:1n<<2n,ASM_DD_RULES:1n<<3n,ASM_USER_BLOCKING:1n<<7n}});var kt=c((jD,H_)=>{"use strict";H_.exports={HTTP_INCOMING_BODY:"server.request.body",HTTP_INCOMING_QUERY:"server.request.query",HTTP_INCOMING_HEADERS:"server.request.headers.no_cookies",HTTP_INCOMING_URL:"server.request.uri.raw",HTTP_INCOMING_METHOD:"server.request.method",HTTP_INCOMING_ENDPOINT:"server.request.framework_endpoint",HTTP_INCOMING_PARAMS:"server.request.path_params",HTTP_INCOMING_COOKIES:"server.request.cookies",HTTP_INCOMING_RESPONSE_CODE:"server.response.status",HTTP_INCOMING_RESPONSE_HEADERS:"server.response.headers.no_cookies",HTTP_INCOMING_REMOTE_IP:"server.request.client_ip",HTTP_INCOMING_REMOTE_PORT:"server.request.client_port",HTTP_CLIENT_IP:"http.client_ip",USER_ID:"usr.id"}});var ii=c((GD,$_)=>{"use strict";var{AsyncLocalStorage:hq}=require("async_hooks");$_.exports=new hq});var z_=c((BD,F_)=>{"use strict";var gq=ii(),fq=v(),ai=!1;function mq(s,e){let t=[];if(ai||!s.size)return t;ai=!0;let r=gq.getStore(),n=new Set;for(let o of s){if(n.has(o.callback))continue;n.add(o.callback);let i;try{i=o.callback.method(e,r)}catch(a){fq.warn(`Error running subscription ${a}`)}t.push(i)}return ai=!1,t}F_.exports={runSubscriptions:mq}});var Y_=c((HD,V_)=>{"use strict";var bq=z_(),vq=1024,ci=class{constructor(){this.addressToSubscriptions=new Map,this.addresses=new Set,this.subscriptions=new Set}clear(){this.addressToSubscriptions=new Map,this.addresses=new Set,this.subscriptions=new Set}addSubscription(e){if(!(!e.addresses.length||this.subscriptions.has(e))){for(let t=0;t<e.addresses.length;++t){let r=e.addresses[t];this.addresses.add(r);let n=this.addressToSubscriptions.get(r);n===void 0?this.addressToSubscriptions.set(r,[e]):n.push(e)}this.subscriptions.add(e)}}matchSubscriptions(e,t){let r=new Set,n=new Set,o=new Set;return e.forEach(i=>{let a=this.addressToSubscriptions.get(i);if(a!==void 0)for(let p=0;p<a.length;++p){let u=a[p];if(o.has(u)===!0)continue;if(o.add(u),u.addresses.every(t.has,t)===!0){for(let l=0;l<u.addresses.length;++l)r.add(u.addresses[l]);n.add(u)}}}),{addresses:r,subscriptions:n}}dispatch(e,t,r){let n=this.matchSubscriptions(e,t),o={};return n.addresses.forEach(i=>{o[i]=r.resolve(i)}),bq.runSubscriptions(n.subscriptions,o)}},Ot=class{static setManager(e){this.manager=e}constructor(){this.store=new Map,this.allAddresses=new Set,this.newAddresses=new Set}clear(){this.store=new Map,this.allAddresses=new Set,this.newAddresses=new Set}setValue(e,t){return this.allAddresses.size>=vq?this:typeof t!="object"&&this.store.get(e)===t?this:(this.store.set(e,t),this.allAddresses.add(e),this.newAddresses.add(e),this)}dispatch(){if(this.newAddresses.size===0)return[];let e=Ot.manager.dispatch(this.newAddresses,this.allAddresses,this);return this.newAddresses.clear(),e}resolve(e){return this.store.get(e)}};V_.exports={SubscriptionManager:ci,Context:Ot}});var Ct=c(($D,Q_)=>{"use strict";var{SubscriptionManager:Eq,Context:K_}=Y_(),W_=ii(),pi=new Eq;K_.setManager(pi);function yq(){let s=new Map;return s.set("context",new K_),W_.enterWith(s),s}function X_(){let s=W_.getStore();return s&&s.get("context")}function J_(s){return pi.addresses.has(s)}function Sq(s,e=X_()){if(!e)return;let t=Object.keys(s);for(let r=0;r<t.length;++r){let n=t[r];J_(n)&&e.setValue(n,s[n])}return e.dispatch()}Q_.exports={manager:pi,startContext:yq,getContext:X_,needsAddress:J_,propagate:Sq}});var th=c((FD,eh)=>{"use strict";var{MEASURED:Z_}=V();eh.exports={sample(s,e,t){typeof e=="object"?this.sample(s,e[s.context()._name],t):e!==void 0?s.setTag(Z_,!!e):t&&s.setTag(Z_,!0)}}});var rh=c((zD,sh)=>{"use strict";var Tq=v(),Iq={getFilter(s){if(typeof s.filter=="function")return s.filter;s.hasOwnProperty("filter")&&Tq.error("Expected `filter` to be a function. Overriding filter property to default.");let e=s.allowlist||s.whitelist||/.*/,t=s.blocklist||s.blacklist||[];return n=>{let o=r(e,n),i=r(t,n);return o&&!i};function r(n,o){return typeof n=="function"?n(o):n instanceof RegExp?n.test(o):n instanceof Array?n.some(i=>r(i,o)):n===o}}};sh.exports=Iq});var nh=c((YD,ui)=>{"use strict";var xq=require("semver");if(xq.satisfies(process.version,">=14.18.0")){let s=require("net");ui.exports=s.BlockList}else{let s=require("ipaddr.js");ui.exports=class{constructor(){this.v4Ranges=[],this.v6Ranges=[]}addSubnet(t,r,n){this[n==="ipv4"?"v4Ranges":"v6Ranges"].push(s.parseCIDR(`${t}/${r}`))}check(t,r){try{let n=s.parse(t);if(r=n.kind(),r==="ipv6"){for(let o of this.v6Ranges)if(n.match(o))return!0;n.isIPv4MappedAddress()&&(n=n.toIPv4Address(),r=n.kind())}if(r==="ipv4"){for(let o of this.v4Ranges)if(n.match(o))return!0}return!1}catch{return!1}}}}});var di=c((KD,ph)=>{"use strict";var Aq=nh(),ah=require("net"),oh=["x-forwarded-for","x-real-ip","true-client-ip","x-client-ip","x-forwarded","forwarded-for","x-cluster-client-ip","fastly-client-ip","cf-connecting-ip","cf-connecting-ipv6"],qq=["127.0.0.0/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16","169.254.0.0/16","::1/128","fec0::/10","fe80::/10","fc00::/7","fd00::/8"],ch=new Aq;for(let s of qq){let[e,t]=s.split("/");ch.addSubnet(e,parseInt(t),ah.isIPv6(e)?"ipv6":"ipv4")}function Rq(s,e){let t=e.headers;if(s.clientIpHeader){if(!t)return;let n=ih(t[s.clientIpHeader]);return n.public||n.private}let r;if(t)for(let n=0;n<oh.length;n++){let o=ih(t[oh[n]]);if(o.public)return o.public;!r&&o.private&&(r=o.private)}return r||e.socket&&e.socket.remoteAddress}function ih(s){let e={};if(!s)return e;let t=s.split(",");for(let r=0;r<t.length;r++){let n=t[r].trim(),o=ah.isIP(n);if(o){if(!ch.check(n,o===6?"ipv6":"ipv4")){e.public=n;break}e.private||(e.private=n)}}return e}ph.exports={extractIp:Rq}});var Bs=c((WD,fh)=>{"use strict";var wq=require("lodash.uniq"),uh=th(),kq="http_headers",st=v(),P=V(),Oq=tn(),Cq=en(),Dq=rh(),{extractIp:Nq}=di(),{ERROR_MESSAGE:dh,ERROR_TYPE:Pq,ERROR_STACK:Mq}=ae(),Lq=Oq.WEB,Uq=Cq.SERVER,hh=P.RESOURCE_NAME,jq=P.SERVICE_NAME,Gq=P.SPAN_TYPE,Bq=P.SPAN_KIND,Hq=P.ERROR,$q=P.HTTP_METHOD,Fq=P.HTTP_URL,zq=P.HTTP_STATUS_CODE,gh=P.HTTP_ROUTE,Vq=P.HTTP_REQUEST_HEADERS,Yq=P.HTTP_RESPONSE_HEADERS,Kq=P.HTTP_USERAGENT,lh=P.HTTP_CLIENT_IP,Wq=P.MANUAL_DROP,Xq=":authority",Jq=":scheme",Qq=":path",A=new WeakMap,li=new WeakMap,re={normalizeConfig(s){let e=c0(s),t=p0(s),r=u0(s),n=Dq.getFilter(s),o=d0(s),i=l0(s);return{...s,headers:e,validateStatus:t,hooks:r,filter:n,middleware:o,queryStringObfuscation:i}},setFramework(s,e,t){let n=this.patch(s).span;n&&(n.context()._name=`${e}.request`,n.context()._tags.component=e,re.setConfig(s,t))},setConfig(s,e){let t=A.get(s),r=t.span;t.config=e,e.filter(s.url)||(r.setTag(Wq,!0),r.context()._trace.isRecording=!1),e.service&&r.setTag(jq,e.service),uh.sample(r,e.measured,!0)},startSpan(s,e,t,r,n){let o=this.patch(t),i;return o.span?(o.span.context()._name=n,i=o.span):i=re.startChildSpan(s,n,t.headers),o.tracer=s,o.span=i,o.res=r,this.setConfig(t,e),i},wrap(s){let e=A.get(s);e.instrumented||(this.wrapEnd(e),e.instrumented=!0)},instrument(s,e,t,r,n,o){let i=this.startSpan(s,e,t,r,n);return this.wrap(t),o&&s.scope().activate(i,()=>o(i))},reactivate(s,e){return t0(s,e)},enterRoute(s,e){typeof e=="string"&&A.get(s).paths.push(e)},setRoute(s,e){let t=A.get(s);t&&(t.paths=[e])},exitRoute(s){A.get(s).paths.pop()},wrapMiddleware(s,e,t,r){if(!this.active(s))return r();let n=A.get(s),o=n.tracer,i=this.active(s),a=n.config;if(a.middleware===!1)return this.bindAndWrapMiddlewareErrors(r,s,o,i);let p=o.startSpan(t,{childOf:i});return uh.sample(p,a.measured),p.addTags({[hh]:e._name||e.name||"<anonymous>"}),n.middleware.push(p),o.scope().activate(p,r)},bindAndWrapMiddlewareErrors(s,e,t,r){try{return t.scope().bind(s,r).apply(this,arguments)}catch(n){throw re.addError(e,n),n}},finish(s,e){if(!this.active(s))return;let r=A.get(s).middleware.pop();r&&(e&&r.addTags({[Pq]:e.name,[dh]:e.message,[Mq]:e.stack}),r.finish())},beforeEnd(s,e){A.get(s).beforeEnd.push(e)},patch(s){let e=A.get(s);return e||(e=s.stream&&A.get(s.stream),e?(A.set(s,e),e):(e={req:s,span:null,paths:[],middleware:[],beforeEnd:[],config:{}},A.set(s,e),e))},root(s){let e=A.get(s);return e?e.span:null},active(s){let e=A.get(s);return e?e.middleware.length===0?e.span||null:e.middleware.slice(-1)[0]:null},startChildSpan(s,e,t){let r=s.extract(kq,t);return s.startSpan(e,{childOf:r})},addStatusError(s,e){let t=A.get(s),r=t.span,n=t.error;!(r.context()._tags.error||r.context()._tags[dh])&&!t.config.validateStatus(e)&&r.setTag(Hq,n||!0)},addError(s,e){if(e instanceof Error){let t=A.get(s);t&&(t.error=e)}},finishMiddleware(s){if(s.finished)return;let e;for(;e=s.middleware.pop();)e.finish()},finishSpan(s){let{req:e,res:t}=s;s.finished&&!e.stream||(s0(s),r0(s),s.config.hooks.request(s.span,e,t),n0(s),s.span.finish(),s.finished=!0)},finishAll(s){for(let e of s.beforeEnd)e();re.finishMiddleware(s),re.finishSpan(s)},obfuscateQs(s,e){let{queryStringObfuscation:t}=s;if(t===!1)return e;let r=e.indexOf("?");if(r===-1)return e;let n=e.slice(0,r);if(t===!0)return n;let o=e.slice(r+1);return o=o.replace(t,"<redacted>"),`${n}?${o}`},wrapWriteHead(s){let{req:e,res:t}=s,r=t.writeHead;return function(n,o,i){return i=typeof o=="string"?i:o,i=Object.assign(t.getHeaders(),i),e.method.toLowerCase()==="options"&&e0(e,i)&&Zq(e,t,i),r.apply(this,arguments)}},getContext(s){return A.get(s)},wrapRes(s,e,t,r){return function(){return re.finishAll(s),r.apply(t,arguments)}},wrapEnd(s){let e=s.tracer.scope(),t=s.req,r=s.res,n=r.end;r.writeHead=re.wrapWriteHead(s),li.set(r,this.wrapRes(s,t,r,n)),Object.defineProperty(r,"end",{configurable:!0,get(){return li.get(this)},set(o){li.set(this,e.bind(o,s.span))}})}};function Zq(s,e,t){let r=_h(t["access-control-allow-headers"]),n=_h(s.headers["access-control-request-headers"]),o=["x-datadog-origin","x-datadog-parent-id","x-datadog-sampled","x-datadog-sampling-priority","x-datadog-trace-id","x-datadog-tags"];for(let i of o)~n.indexOf(i)&&r.push(i);r.length>0&&e.setHeader("access-control-allow-headers",wq(r).join(","))}function e0(s,e){let t=s.headers.origin,r=e["access-control-allow-origin"];return t&&(r==="*"||r===t)}function _h(s){return typeof s=="string"?s.split(/\s*,\s*/):[]}function t0(s,e){let t=A.get(s);return t?t.tracer.scope().activate(t.span,e):e()}function s0(s){let{req:e,span:t,config:r}=s,n=i0(e);if(t.addTags({[Fq]:re.obfuscateQs(r,n),[$q]:e.method,[Bq]:Uq,[Gq]:Lq,[Kq]:e.headers["user-agent"]}),r.clientIpEnabled&&!t.context()._tags.hasOwnProperty(lh)){let o=Nq(r,e);o&&t.setTag(lh,o)}o0(s)}function r0(s){let{req:e,res:t,paths:r,span:n}=s;r.length>0&&n.setTag(gh,r.join("")),n.addTags({[zq]:t.statusCode}),re.addStatusError(e,t.statusCode)}function n0(s){let{req:e,span:t}=s,r=t.context()._tags;if(r["resource.name"])return;let n=[e.method,r[gh]].filter(o=>o).join(" ");t.setTag(hh,n)}function o0(s){let{req:e,res:t,config:r,span:n}=s;r.headers.forEach(o=>{let i=e.headers[o],a=t.getHeader(o);i&&n.setTag(`${Vq}.${o}`,i),a&&n.setTag(`${Yq}.${o}`,a)})}function i0(s){let e=s.headers;return s.stream?`${e[Jq]}://${e[Xq]}${e[Qq]}`:`${a0(s)}://${s.headers.host}${s.originalUrl||s.url}`}function a0(s){return s.socket&&s.socket.encrypted||s.connection&&s.connection.encrypted?"https":"http"}function c0(s){if(Array.isArray(s.headers))try{return s.headers.map(e=>e.toLowerCase())}catch(e){st.error(e)}else s.hasOwnProperty("headers")&&st.error("Expected `headers` to be an array of strings.");return[]}function p0(s){return typeof s.validateStatus=="function"?s.validateStatus:(s.hasOwnProperty("validateStatus")&&st.error("Expected `validateStatus` to be a function."),e=>e<500)}function u0(s){let e=()=>{};return{request:s.hooks&&s.hooks.request||e}}function d0(s){return s&&typeof s.middleware=="boolean"?s.middleware:(s&&s.hasOwnProperty("middleware")&&st.error("Expected `middleware` to be a boolean."),!0)}function l0(s){let e=s.queryStringObfuscation;if(typeof e=="boolean")return e;if(typeof e=="string"){if(e==="")return!1;if(e===".*")return!0;try{return new RegExp(e,"gi")}catch(t){st.error(t)}}return s.hasOwnProperty("queryStringObfuscation")&&st.error("Expected `queryStringObfuscation` to be a regex string or boolean."),!0}fh.exports=re});var gi=c((XD,Sh)=>{"use strict";var $s=kt(),mh=ns(),_i=Bs(),bh=new mh(100),_0=["accept","accept-encoding","accept-language","content-encoding","content-language","content-length","content-type","forwarded","forwarded-for","host","true-client-ip","user-agent","via","x-client-ip","x-cluster-client-ip","x-forwarded","x-forwarded-for","x-real-ip"],h0=["content-encoding","content-language","content-length","content-type"],Hs=new Map;function vh(s){if(!s)return{};let e=s.resolve($s.HTTP_INCOMING_HEADERS);return{remote_ip:s.resolve($s.HTTP_INCOMING_REMOTE_IP),headers:hi(e,_0,"http.request.headers.")}}function Eh(s){if(!s)return{};let e=s.resolve($s.HTTP_INCOMING_RESPONSE_HEADERS);return{endpoint:s.resolve($s.HTTP_INCOMING_ENDPOINT),headers:hi(e,h0,"http.response.headers.")}}function hi(s,e,t){let r={};if(!s)return r;for(let n=0;n<e.length;++n){let o=e[n];s[o]&&(r[`${t}${yh(o)}`]=s[o]+"")}return r}function yh(s){return s.trim().slice(0,200).replace(/[^a-zA-Z0-9_\-:/]/g,"_").toLowerCase()}function g0(s,e){let t=e&&e.get("req"),r=_i.root(t);if(!r)return!1;s.duration&&r.setTag("_dd.appsec.waf.duration",s.duration),s.durationExt&&r.setTag("_dd.appsec.waf.duration_ext",s.durationExt),s.rulesVersion&&r.setTag("_dd.appsec.event_rules.version",s.rulesVersion)}function f0(s,e){let t=e&&e.get("req"),r=_i.root(t);if(!r)return!1;let n=r.context()._tags,o={"appsec.event":"true"};bh.isAllowed()&&(o["manual.keep"]="true"),n["_dd.origin"]||(o["_dd.origin"]="appsec");let i=n["_dd.appsec.json"];i?o["_dd.appsec.json"]=i.slice(0,-2)+","+s.slice(1,-1)+i.slice(-2):o["_dd.appsec.json"]='{"triggers":'+s+"}";let a=e.get("context");if(a){let p=vh(a);Object.assign(o,p.headers);let u=p.headers["http.request.headers.user-agent"];u&&(o["http.useragent"]=u),o["network.client.ip"]=p.remote_ip}r.addTags(o)}function m0(s,e){let t=_i.root(s);if(!t||(Hs.size&&(t.addTags(Object.fromEntries(Hs)),Hs.clear()),!e||!t.context()._tags["appsec.event"]))return!1;let r=Eh(e),n=r.headers;r.endpoint&&(n["http.endpoint"]=r.endpoint),t.addTags(n)}function b0(s){bh=new mh(s)}Sh.exports={metricsQueue:Hs,resolveHTTPRequest:vh,resolveHTTPResponse:Eh,filterHeaders:hi,formatHeaderName:yh,reportMetrics:g0,reportAttack:f0,finishRequest:m0,setRateLimit:b0}});var Ih=c((JD,Th)=>{"use strict";var fi=v(),Fs=kt(),v0=Ct(),Le=gi(),E0=new Set(Object.values(Fs)),Dt=class{static loadDDWAF(e,t){try{let{DDWAF:r}=require("@datadog/native-appsec");return new r(e,t)}catch(r){throw fi.error("AppSec could not load native package. In-app WAF features will not be available."),r}}constructor(e,t){let{wafTimeout:r,obfuscatorKeyRegex:n,obfuscatorValueRegex:o}=t;this.ddwaf=Dt.loadDDWAF(e,{obfuscatorKeyRegex:n,obfuscatorValueRegex:o}),this.wafTimeout=r,Le.metricsQueue.set("_dd.appsec.waf.version",this.ddwaf.constructor.version());let{loaded:i,failed:a,errors:p}=this.ddwaf.rulesInfo;Le.metricsQueue.set("_dd.appsec.event_rules.loaded",i),Le.metricsQueue.set("_dd.appsec.event_rules.error_count",a),a&&Le.metricsQueue.set("_dd.appsec.event_rules.errors",JSON.stringify(p)),Le.metricsQueue.set("manual.keep","true"),this.wafContextCache=new WeakMap;let u=this,l={method:(h,f)=>u.action(h,f)},_=new Set;for(let h of e.rules)for(let f of h.conditions)for(let b of f.parameters.inputs){let E=b.address.split(":",2)[0];!E0.has(E)||_.has(E)||(_.add(E),v0.manager.addSubscription({addresses:[E],callback:l}))}}action(e,t){let r;if(t){let n=t.get("context");n&&(this.wafContextCache.has(n)?r=this.wafContextCache.get(n):(r=this.ddwaf.createContext(),this.wafContextCache.set(n,r)))}(!r||r.disposed)&&(r=this.ddwaf.createContext()),e[Fs.HTTP_INCOMING_RESPONSE_CODE]&&(e[Fs.HTTP_INCOMING_RESPONSE_CODE]=e[Fs.HTTP_INCOMING_RESPONSE_CODE]+"");try{let n=process.hrtime.bigint(),o=r.run(e,this.wafTimeout);return o.durationExt=parseInt(process.hrtime.bigint()-n),this.applyResult(o,t)}catch(n){fi.error("Error while running the AppSec WAF"),fi.error(n)}finally{r.dispose()}}applyResult(e,t){return Le.reportMetrics({duration:e.totalRuntime/1e3,durationExt:e.durationExt/1e3,rulesVersion:this.ddwaf.rulesInfo.version},t),e.data&&e.data!=="[]"&&Le.reportAttack(e.data,t),e.actions}updateRuleData(e){this.ddwaf.updateRuleData(e)}clear(){this.ddwaf.dispose(),this.wafContextCache=new WeakMap}};Th.exports=Dt});var Ah=c((QD,xh)=>{"use strict";xh.exports={get DDWAF(){return Ih()}}});var mi=c((ZD,qh)=>{"use strict";var y0=Ah(),S0=Ct(),Nt=new Map,zs=new Map;function T0(s,e){if(Nt.has(s))return;let t=new y0.DDWAF(s,e);Nt.set(s,t)}function I0(s,e,t){s==="unapply"?zs.delete(t):zs.set(t,e);let r=x0(zs.values());for(let n of Nt.values())n.updateRuleData(r)}function x0(s){let e=new Map;for(let t of s)if(t.rules_data)for(let r of t.rules_data){let n=`${r.id}+${r.type}`;if(e.has(n)){let o=e.get(n);r.data.reduce(A0,o.data)}else e.set(n,q0(r))}return[...e.values()]}function A0(s,e){let t=s.find(r=>r.value===e.value);return t&&!("expiration"in t)||(t&&"expiration"in e&&e.expiration>t.expiration?t.expiration=e.expiration:t&&!("expiration"in e)?delete t.expiration:t||s.push({...e})),s}function q0(s){let e={...s};if(e.data){let t=[];e.data.forEach(r=>{t.push({...r})}),e.data=t}return e}function R0(){S0.manager.clear();for(let[s,e]of Nt)e.clear(),Nt.delete(s);zs.clear()}qh.exports={applyRules:T0,clearAllRules:R0,updateAsmData:I0}});var kh=c((eN,wh)=>{"use strict";var Rh=O();wh.exports={incomingHttpRequestStart:Rh.channel("dd-trace:incomingHttpRequestStart"),incomingHttpRequestEnd:Rh.channel("dd-trace:incomingHttpRequestEnd")}});var Ch=c((tN,Oh)=>{"use strict";var w0=`<!-- Sorry, you've been blocked -->
-<!DOCTYPE html>
-<html lang="en">
+"use strict";
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __commonJS = (cb, mod) => function __require() {
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>You've been blocked</title>
-    <style>
-        a,
-        body,
-        div,
-        html,
-        span {
-            margin: 0;
-            padding: 0;
-            border: 0;
-            font-size: 100%;
-            font: inherit;
-            vertical-align: baseline
-        }
-
-        body {
-            background: -webkit-radial-gradient(26% 19%, circle, #fff, #f4f7f9);
-            background: radial-gradient(circle at 26% 19%, #fff, #f4f7f9);
-            display: -webkit-box;
-            display: -ms-flexbox;
-            display: flex;
-            -webkit-box-pack: center;
-            -ms-flex-pack: center;
-            justify-content: center;
-            -webkit-box-align: center;
-            -ms-flex-align: center;
-            align-items: center;
-            -ms-flex-line-pack: center;
-            align-content: center;
-            width: 100%;
-            min-height: 100vh;
-            line-height: 1;
-            flex-direction: column
-        }
-
-        p {
-            display: block
-        }
-
-
-        main {
-            text-align: center;
-            flex: 1;
-            display: -webkit-box;
-            display: -ms-flexbox;
-            display: flex;
-            -webkit-box-pack: center;
-            -ms-flex-pack: center;
-            justify-content: center;
-            -webkit-box-align: center;
-            -ms-flex-align: center;
-            align-items: center;
-            -ms-flex-line-pack: center;
-            align-content: center;
-            flex-direction: column
-        }
-
-        p {
-            font-size: 18px;
-            line-height: normal;
-            color: #646464;
-            font-family: sans-serif;
-            font-weight: 400
-        }
-
-        a {
-            color: #4842b7
-        }
-
-        footer {
-            width: 100%;
-            text-align: center
-        }
-
-        footer p {
-            font-size: 16px
-        }
-    </style>
-</head>
-
-<body>
-    <main>
-        <p>Sorry, you cannot access this page. Please contact the customer service team.</p>
-    </main>
-    <footer>
-        <p>Security provided by <a
-                href="https://www.datadoghq.com/product/security-platform/application-security-monitoring/"
-                target="_blank">Datadog</a></p>
-    </footer>
-</body>
-
-</html>
-`,k0=`{
-  "errors": [
-    {
-      "title": "You've been blocked",
-      "detail": "Sorry, you cannot access this page. Please contact the customer service team. Security provided by Datadog."
+// packages/dd-trace/src/util.js
+var require_util = __commonJS({
+  "packages/dd-trace/src/util.js"(exports2, module2) {
+    "use strict";
+    var path = require("path");
+    function isTrue(str) {
+      str = String(str).toLowerCase();
+      return str === "true" || str === "1";
     }
-  ]
-}`;Oh.exports={html:w0,json:k0}});var Vs=c((sN,Mh)=>{"use strict";var O0=v(),Dh=Ch(),Nh=Dh.html,Ph=Dh.json;function C0(s,e,t,r){if(e.headersSent){O0.warn("Cannot send blocking response when headers have already been sent");return}let n,o,i=s.headers.accept&&s.headers.accept.split(",").map(a=>a.split(";",1)[0].trim());i&&i.includes("text/html")&&!i.includes("application/json")?(n="text/html",o=Nh):(n="application/json",o=Ph),t.addTags({"appsec.blocked":"true"}),e.statusCode=403,e.setHeader("Content-Type",n),e.setHeader("Content-Length",Buffer.byteLength(o)),e.end(o),r&&r.abort()}function D0(s){s.appsec.blockedTemplateHtml&&(Nh=s.appsec.blockedTemplateHtml),s.appsec.blockedTemplateJson&&(Ph=s.appsec.blockedTemplateJson)}Mh.exports={block:C0,setTemplates:D0}});var Ys=c((rN,jh)=>{"use strict";var Lh=v(),Ei=mi(),yi=Ai(),{incomingHttpRequestStart:bi,incomingHttpRequestEnd:vi}=kh(),Te=Ct(),q=kt(),Uh=gi(),N0=Bs(),{extractIp:P0}=di(),{HTTP_CLIENT_IP:M0}=V(),{block:L0,setTemplates:U0}=Vs(),Si=!1,Ti;function j0(s){if(!Si)try{U0(s),G0(s,s.appsec.rules)}catch(e){B0(e)}}function G0(s,e){Ei.applyRules(e,s.appsec),yi.enableAsmData(s.appsec),Uh.setRateLimit(s.appsec.rateLimit),bi.subscribe(Ii),vi.subscribe(xi),Te.manager.addresses.add(q.HTTP_INCOMING_HEADERS),Te.manager.addresses.add(q.HTTP_INCOMING_ENDPOINT),Te.manager.addresses.add(q.HTTP_INCOMING_RESPONSE_HEADERS),Te.manager.addresses.add(q.HTTP_INCOMING_REMOTE_IP),Si=!0,Ti=s}function B0(s){Lh.error("Unable to start AppSec"),Lh.error(s),Ei.clearAllRules(),yi.disableAsmData()}function Ii({req:s,res:e,abortController:t}){let r=N0.root(s);if(!r)return;let n=P0(Ti,s);r.addTags({"_dd.appsec.enabled":1,"_dd.runtime_family":"nodejs",[M0]:n});let o=Te.startContext();o.set("req",s),o.set("res",e);let i=o.get("context");if(n){let a=Te.propagate({[q.HTTP_CLIENT_IP]:n},i);if(!a||!t)return;for(let p of a)if(p&&p.includes("block")){L0(s,e,r,t);break}}}function xi(s){let e=Te.getContext();if(!e)return;let t=Object.assign({},s.req.headers);delete t.cookie;let r=Object.assign({},s.res.getHeaders());delete r["set-cookie"];let n={[q.HTTP_INCOMING_URL]:s.req.url,[q.HTTP_INCOMING_HEADERS]:t,[q.HTTP_INCOMING_METHOD]:s.req.method,[q.HTTP_INCOMING_REMOTE_IP]:s.req.socket.remoteAddress,[q.HTTP_INCOMING_REMOTE_PORT]:s.req.socket.remotePort,[q.HTTP_INCOMING_RESPONSE_CODE]:s.res.statusCode,[q.HTTP_INCOMING_RESPONSE_HEADERS]:r};if(s.req.body!==void 0&&s.req.body!==null&&(n[q.HTTP_INCOMING_BODY]=s.req.body),s.req.query&&typeof s.req.query=="object"&&(n[q.HTTP_INCOMING_QUERY]=s.req.query),s.req.route&&typeof s.req.route.path=="string"&&(n[q.HTTP_INCOMING_ENDPOINT]=s.req.route.path),s.req.params&&typeof s.req.params=="object"&&(n[q.HTTP_INCOMING_PARAMS]=s.req.params),s.req.cookies&&typeof s.req.cookies=="object"){n[q.HTTP_INCOMING_COOKIES]={};for(let o of Object.keys(s.req.cookies))n[q.HTTP_INCOMING_COOKIES][o]=[s.req.cookies[o]]}Te.propagate(n,e),Uh.finishRequest(s.req,e)}function H0(){Si=!1,Ti=null,Ei.clearAllRules(),yi.disableAsmData(),bi.hasSubscribers&&bi.unsubscribe(Ii),vi.hasSubscribers&&vi.unsubscribe(xi)}jh.exports={enable:j0,disable:H0,incomingHttpStartTranslator:Ii,incomingHttpEndTranslator:xi}});var Ai=c((nN,Bh)=>{"use strict";var $0=j_(),Pt=B_(),F0=mi(),Q;function z0(s){Q=new $0(s),s.appsec.enabled===void 0&&(Q.updateCapabilities(Pt.ASM_ACTIVATION,!0),Q.on("ASM_FEATURES",(e,t)=>{if(t&&t.asm&&typeof t.asm.enabled=="boolean"){let r;e==="apply"||e==="modify"?r=t.asm.enabled:r=s.appsec.enabled,r?Ys().enable(s):Ys().disable()}}))}function V0(s){Q&&s&&!s.customRulesProvided&&(Q.updateCapabilities(Pt.ASM_IP_BLOCKING,!0),Q.updateCapabilities(Pt.ASM_USER_BLOCKING,!0),Q.on("ASM_DATA",Gh))}function Y0(){Q&&(Q.updateCapabilities(Pt.ASM_IP_BLOCKING,!1),Q.updateCapabilities(Pt.ASM_USER_BLOCKING,!1),Q.off("ASM_DATA",Gh))}function Gh(s,e,t){F0.updateAsmData(s,e,t)}Bh.exports={enable:z0,enableAsmData:V0,disableAsmData:Y0}});var Ks=c((oN,Hh)=>{"use strict";function K0(s){let e=s.scope().active();return e&&e.context()._trace.started[0]}Hh.exports={getRootSpan:K0}});var Ws=c((iN,zh)=>{"use strict";var{getRootSpan:W0}=Ks(),$h=v();function Fh(s,e){for(let t of Object.keys(s))e.setTag(`usr.${t}`,""+s[t])}function X0(s,e){if(!e||!e.id){$h.warn("Invalid user provided to setUser");return}let t=W0(s);if(!t){$h.warn("Root span not available in setUser");return}Fh(e,t)}zh.exports={setUserTags:Fh,setUser:X0}});var Kh=c((aN,Yh)=>{"use strict";var Mt=v(),{getRootSpan:Vh}=Ks(),{MANUAL_KEEP:J0}=V(),{setUserTags:Q0}=Ws();function Z0(s,e,t){if(!e||!e.id){Mt.warn("Invalid user provided to trackUserLoginSuccessEvent");return}let r=Vh(s);if(!r){Mt.warn("Root span not available in trackUserLoginSuccessEvent");return}Q0(e,r),qi(s,"users.login.success",t,"trackUserLoginSuccessEvent",r)}function eR(s,e,t,r){if(!e||typeof e!="string"){Mt.warn("Invalid userId provided to trackUserLoginFailureEvent");return}let n={"usr.id":e,"usr.exists":t?"true":"false",...r};qi(s,"users.login.failure",n,"trackUserLoginFailureEvent")}function tR(s,e,t){if(!e||typeof e!="string"){Mt.warn("Invalid eventName provided to trackCustomEvent");return}qi(s,e,t,"trackCustomEvent")}function qi(s,e,t,r,n=Vh(s)){if(!n){Mt.warn(`Root span not available in ${r}`);return}let o={[`appsec.events.${e}.track`]:"true",[J0]:"true"};if(t)for(let i of Object.keys(t))o[`appsec.events.${e}.${i}`]=""+t[i];n.addTags(o)}Yh.exports={trackUserLoginSuccessEvent:Z0,trackUserLoginFailureEvent:eR,trackCustomEvent:tR}});var Jh=c((cN,Xh)=>{"use strict";var{USER_ID:sR}=kt(),rR=Ct(),{getRootSpan:Wh}=Ks(),{block:nR}=Vs(),{storage:oR}=R(),{setUserTags:iR}=Ws(),Xs=v();function aR(s){let e=rR.propagate({[sR]:s.id});if(!e)return!1;for(let t of e)if(t&&t.includes("block"))return!0;return!1}function cR(s,e){if(!e||!e.id)return Xs.warn("Invalid user provided to isUserBlocked"),!1;let t=Wh(s);return t?t.context()._tags["usr.id"]||iR(e,t):Xs.warn("Root span not available in isUserBlocked"),aR(e)}function pR(s,e,t){if(!e||!t){let n=oR.getStore();n&&(e=e||n.req,t=t||n.res)}if(!e||!t)return Xs.warn("Requests or response object not available in blockRequest"),!1;let r=Wh(s);return r?(nR(e,t,r),!0):(Xs.warn("Root span not available in blockRequest"),!1)}Xh.exports={checkUserAndSetUser:cR,blockRequest:pR}});var Zh=c((pN,Qh)=>{"use strict";var{trackUserLoginSuccessEvent:uR,trackUserLoginFailureEvent:dR,trackCustomEvent:lR}=Kh(),{checkUserAndSetUser:_R,blockRequest:hR}=Jh(),{setTemplates:gR}=Vs(),{setUser:fR}=Ws(),Ri=class{constructor(e,t){this._tracer=e,t&&gR(t)}trackUserLoginSuccessEvent(e,t){return uR(this._tracer,e,t)}trackUserLoginFailureEvent(e,t,r){return dR(this._tracer,e,t,r)}trackCustomEvent(e,t){return lR(this._tracer,e,t)}isUserBlocked(e){return _R(this._tracer,e)}blockRequest(e,t){return hR(this._tracer,e,t)}setUser(e){return fR(this._tracer,e)}};Qh.exports=Ri});var Oi=c((uN,rg)=>{"use strict";var mR=require("retry"),{request:bR}=require("http"),vR=Br(),ER=ms(),{storage:wi}=R(),eg=ee().version,tg=vR.id();function yR(s,e,t){let r=wi.getStore();wi.enterWith({noop:!0});let n=bR(s,o=>{if(o.statusCode>=400){let i=new Error(`HTTP Error ${o.statusCode}`);i.status=o.statusCode,t(i)}else t(null,o)});n.on("error",t),e&&e.pipe(n),wi.enterWith(r)}function SR(s,e){let t=[];s.on("error",e),s.on("data",r=>t.push(r)),s.on("end",()=>{e(null,Buffer.concat(t))})}function sg(s){let e=0;for(;e<2||s>1e3;)e++,s/=2;return[e,Math.floor(s)]}var ki=class{constructor({url:e,logger:t,uploadTimeout:r}={}){this._url=e,this._logger=t;let[n,o]=sg(r);this._backoffTime=o,this._backoffTries=n}export({profiles:e,start:t,end:r,tags:n}){let o=Object.keys(e),i=[["recording-start",t.toISOString()],["recording-end",r.toISOString()],["language","javascript"],["runtime","nodejs"],["runtime_version",process.version],["profiler_version",eg],["format","pprof"],["tags[]","language:javascript"],["tags[]","runtime:nodejs"],["tags[]",`runtime_version:${process.version}`],["tags[]",`profiler_version:${eg}`],["tags[]","format:pprof"],...Object.entries(n).map(([a,p])=>["tags[]",`${a}:${p}`])];this._logger.debug(()=>`Building agent export report: ${`
-`+i.map(([p,u])=>`  ${p}: ${u}`).join(`
-`)}`);for(let a=0;a<o.length;a++){let p=o[a],u=e[p];this._logger.debug(()=>{let d=u.toString("hex").match(/../g).join(" ");return`Adding ${p} profile to agent export: `+d}),i.push([`types[${a}]`,p]),i.push([`data[${a}]`,u,{filename:`${p}.pb.gz`,contentType:"application/octet-stream",knownLength:u.length}])}return new Promise((a,p)=>{let u=mR.operation({randomize:!0,minTimeout:this._backoffTime,retries:this._backoffTries,unref:!0});u.attempt(d=>{let l=new ER;for(let[h,f,b]of i)l.append(h,f,b);let _={method:"POST",path:"/profiling/v1/input",headers:l.getHeaders(),timeout:this._backoffTime*Math.pow(2,d)};tg&&(_.headers["Datadog-Container-ID"]=tg),this._url.protocol==="unix:"?_.socketPath=this._url.pathname:(_.protocol=this._url.protocol,_.hostname=this._url.hostname,_.port=this._url.port),this._logger.debug(()=>`Submitting profiler agent report attempt #${d} to: ${JSON.stringify(_)}`),yR(_,l,(h,f)=>{if(u.retry(h)){this._logger.error(`Error from the agent: ${h.message}`);return}else if(h){p(new Error("Profiler agent export back-off period expired"));return}SR(f,(b,E)=>{b?this._logger.error(`Error reading agent response: ${b.message}`):this._logger.debug(()=>`Agent export response: ${(E.toString("hex").match(/../g)||[]).join(" ")}`)}),a()})})})}};rg.exports={AgentExporter:ki,computeRetries:sg}});var Di=c((dN,ng)=>{"use strict";var TR=require("fs"),{promisify:IR}=require("util"),xR=IR(TR.writeFile);function AR(s){let e=t=>String(t).padStart(2,"0");return`${s.getUTCFullYear()}${e(s.getUTCMonth()+1)}${e(s.getUTCDate())}T${e(s.getUTCHours())}${e(s.getUTCMinutes())}${e(s.getUTCSeconds())}Z`}var Ci=class{constructor({pprofPrefix:e}={}){this._pprofPrefix=e||""}export({profiles:e,end:t}){let r=Object.keys(e),n=AR(t),o=r.map(i=>xR(`${this._pprofPrefix}${i}_${n}.pprof`,e[i]));return Promise.all(o)}};ng.exports={FileExporter:Ci}});var Mi=c((lN,og)=>{"use strict";var Ni={error:3,warn:4,info:6,debug:7},Pi=class{constructor(e={}){this._level=Ni[e.level]||Ni.error}debug(e){this._log("debug",e)}info(e){this._log("info",e)}warn(e){this._log("warn",e)}error(e){this._log("error",e)}_log(e,t){Ni[e]>this._level||console[e](t)}};og.exports={ConsoleLogger:Pi}});var Ui=c((_N,pg)=>{"use strict";var{storage:qR}=R(),cg=O(),ig=cg.channel("dd-trace:storage:before"),ag=cg.channel("dd-trace:storage:after");function RR(){let s=qR.getStore();if(s)return s.span}function wR(s){let e=s.context();if(e)return e._trace.started}function kR(s){return s.context()._tags}function OR(s){return s["span.type"]==="web"}function CR(s){return s["resource.name"]||[s["http.method"],s["http.route"]].filter(e=>e).join(" ")}var Li=class{constructor(e={}){this.type="cpu",this._frequency=e.frequency||99,this._mapper=void 0,this._pprof=void 0,this._started=!1,this._cpuProfiler=void 0,this._endpointCollection=e.endpointCollection,this._enter=this._enter.bind(this),this._exit=this._exit.bind(this)}_enter(){if(!this._cpuProfiler)return;let e=RR();if(!e)return;let t=e.context();if(!t)return;let r=wR(e);if(!r||!r.length)return;let n=r[0].context();if(!n)return;let o={"local root span id":n.toSpanId(),"span id":t.toSpanId()};if(this._endpointCollection){let i=r.map(kR).filter(OR)[0];i&&(o["trace endpoint"]=CR(i))}this._cpuProfiler.labels=o}_exit(){this._cpuProfiler&&(this._cpuProfiler.labels={})}start({mapper:e}={}){this._started||(this._started=!0,this._mapper=e,this._pprof||(this._pprof=require("@datadog/pprof"),this._cpuProfiler=new this._pprof.CpuProfiler),this._cpuProfiler.start(this._frequency),this._enter(),ig.subscribe(this._enter),ag.subscribe(this._exit))}profile(){if(this._started)return this._cpuProfiler.profile()}encode(e){return this._pprof.encode(e)}stop(){this._started&&(this._started=!1,this._cpuProfiler.stop(),ig.unsubscribe(this._enter),ag.unsubscribe(this._exit))}};pg.exports=Li});var Gi=c((hN,ug)=>{"use strict";var ji=class{constructor(e={}){this.type="wall",this._samplingInterval=e.samplingInterval||1e6/99,this._mapper=void 0,this._pprof=void 0}start({mapper:e}={}){this._mapper=e,this._pprof=require("@datadog/pprof"),process._startProfilerIdleNotifier||(process._startProfilerIdleNotifier=()=>{}),process._stopProfilerIdleNotifier||(process._stopProfilerIdleNotifier=()=>{}),this._record()}profile(){if(this._stop)return this._stop(!0)}encode(e){return this._pprof.encode(e)}stop(){this._stop&&(this._stop(),this._stop=void 0)}_record(){this._stop=this._pprof.time.start(this._samplingInterval,null,this._mapper,!1)}};ug.exports=ji});var Js=c((gN,dg)=>{"use strict";var DR=Object.freeze({PERIODIC:"periodic",ON_SHUTDOWN:"on_shutdown",ON_OUT_OF_MEMORY:"on_oom"}),NR=Object.freeze({PROCESS:"process",ASYNC_CALLBACK:"async",INTERRUPT_CALLBACK:"interrupt",LOGS:"logs"});dg.exports={snapshotKinds:DR,oomExportStrategies:NR}});var Hi=c((fN,lg)=>{"use strict";var{oomExportStrategies:Qs}=Js();function PR(s,e){let t=s.includes(Qs.INTERRUPT_CALLBACK)?e.Interrupt:0,r=s.includes(Qs.ASYNC_CALLBACK)?e.Async:0;return t|r}var Bi=class{constructor(e={}){this.type="space",this._samplingInterval=e.samplingInterval||512*1024,this._stackDepth=e.stackDepth||64,this._pprof=void 0,this._oomMonitoring=e.oomMonitoring||{}}start({mapper:e,nearOOMCallback:t}={}){if(this._mapper=e,this._pprof=require("@datadog/pprof"),this._pprof.heap.start(this._samplingInterval,this._stackDepth),this._oomMonitoring.enabled){let r=this._oomMonitoring.exportStrategies;this._pprof.heap.monitorOutOfMemory(this._oomMonitoring.heapLimitExtensionSize,this._oomMonitoring.maxHeapExtensionCount,r.includes(Qs.LOGS),r.includes(Qs.PROCESS)?this._oomMonitoring.exportCommand:[],n=>t(this.type,this._pprof.encodeSync(n)),PR(r,this._pprof.heap.CallbackMode))}}profile(){return this._pprof.heap.profile(void 0,this._mapper)}encode(e){return this._pprof.encode(e)}stop(){this._pprof.heap.stop()}};lg.exports=Bi});var hg=c((mN,_g)=>{"use strict";var $i={parse(s){if(!s)return{};switch(typeof s){case"object":return Array.isArray(s)?s.reduce((e,t)=>{let r=t.split(":"),n=r.shift().trim(),o=r.join(":").trim();return!n||!o?e:Object.assign(e,{[n]:o})},{}):$i.parse(Object.keys(s).filter(e=>s[e]!==void 0&&s[e]!==null).map(e=>`${e}:${s[e]}`));case"string":return $i.parse(s.split(","));default:return{}}}};_g.exports={tagger:$i}});var Eg=c((bN,vg)=>{"use strict";var w=require("koalas"),MR=require("os"),LR=require("path"),{URL:UR,format:jR,pathToFileURL:GR}=require("url"),{AgentExporter:Vi}=Oi(),{FileExporter:fg}=Di(),{ConsoleLogger:BR}=Mi(),HR=Ui(),mg=Gi(),bg=Hi(),{oomExportStrategies:$R,snapshotKinds:FR}=Js(),{tagger:Fi}=hg(),{isTrue:gg}=F(),zi=class{constructor(e={}){let{DD_PROFILING_ENABLED:t,DD_PROFILING_PROFILERS:r,DD_PROFILING_ENDPOINT_COLLECTION_ENABLED:n,DD_ENV:o,DD_TAGS:i,DD_SERVICE:a,DD_VERSION:p,DD_TRACE_AGENT_URL:u,DD_AGENT_HOST:d,DD_TRACE_AGENT_PORT:l,DD_PROFILING_UPLOAD_TIMEOUT:_,DD_PROFILING_SOURCE_MAP:h,DD_PROFILING_UPLOAD_PERIOD:f,DD_PROFILING_PPROF_PREFIX:b,DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED:E,DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE:y,DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT:I,DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES:oe}=process.env,Ae=gg(w(e.enabled,t,!0)),qe=w(e.env,o),Be=e.service||a||"node",Re=MR.hostname(),He=w(e.version,p),$e=process.env.AWS_LAMBDA_FUNCTION_NAME,pr=w(e.interval,Number(f)*1e3,65*1e3),ur=w(e.uploadTimeout,Number(_),60*1e3),Fe=w(e.sourceMap,h,!0),dr=w(e.endpointCollection,n,!1),lr=w(e.pprofPrefix,b);this.enabled=Ae,this.service=Be,this.env=qe,this.host=Re,this.functionname=$e,this.version=He,this.tags=Object.assign(Fi.parse(i),Fi.parse(e.tags),Fi.parse({env:qe,host:Re,service:Be,version:He,functionname:$e})),this.logger=JR(e.logger),this.flushInterval=pr,this.uploadTimeout=ur,this.sourceMap=Fe,this.endpointCollection=dr,this.pprofPrefix=lr;let _r=w(e.hostname,d)||"localhost",$t=w(e.port,l)||8126;this.url=new UR(w(e.url,u,jR({protocol:"http:",hostname:_r,port:$t}))),this.exporters=KR(e.exporters||[new Vi(this)],this);let Ft=gg(w(e.oomMonitoring,E,!1)),hr=w(e.oomHeapLimitExtensionSize,Number(y),0),gr=w(e.oomMaxHeapExtensionCount,Number(I),0),fr=VR(w(e.oomExportStrategies,oe),this),mr=Ft?QR(this):void 0;this.oomMonitoring={enabled:Ft,heapLimitExtensionSize:hr,maxHeapExtensionCount:gr,exportStrategies:fr,exportCommand:mr};let k=w(e.profilers,r,[new mg(this),new bg(this)]);this.profilers=XR(k,this)}};vg.exports={Config:zi};function zR(s,e){let t=Object.values($R).find(r=>r===s);return t===void 0&&e.logger.error(`Unknown oom export strategy "${s}"`),t}function VR(s,e){if(!s)return[];typeof s=="string"&&(s=s.split(","));for(let t=0;t<s.length;t++){let r=s[t];typeof r=="string"&&(s[t]=zR(r,e))}return[...new Set(s)]}function YR(s,e){switch(s){case"agent":return new Vi(e);case"file":return new fg(e)}}function KR(s,e){typeof s=="string"&&(s=s.split(","));for(let t=0;t<s.length;t++){let r=s[t];typeof r=="string"&&(s[t]=YR(r,e))}return s}function WR(s,e){switch(s){case"cpu":case"wall":return new mg(e);case"space":return new bg(e);case"cpu-experimental":return new HR(e);default:e.logger.error(`Unknown profiler "${s}"`)}}function XR(s,e){typeof s=="string"&&(s=s.split(","));for(let t=0;t<s.length;t++){let r=s[t];typeof r=="string"&&(s[t]=WR(r,e))}return s.filter(t=>t)}function JR(s){return typeof s!="object"||typeof s.debug!="function"||typeof s.info!="function"||typeof s.warn!="function"||typeof s.error!="function"?new BR:s}function QR(s){let e=[...Object.entries(s.tags),["snapshot",FR.ON_OUT_OF_MEMORY]].map(([r,n])=>`${r}:${n}`).join(","),t=[];for(let r of s.exporters)r instanceof Vi?t.push(s.url.toString()):r instanceof fg&&t.push(GR(s.pprofPrefix).toString());return[process.execPath,LR.join(__dirname,"exporter_cli.js"),t.join(","),e,"space"]}});var Sg=c((vN,yg)=>{"use strict";var{EventEmitter:ZR}=require("events"),{Config:ew}=Eg(),{snapshotKinds:Yi}=Js();function tw(s){if(!s)return;let{SourceMapper:e}=require("@datadog/pprof");return e.create([process.cwd()])}var Zs=class extends ZR{constructor(){super(),this._enabled=!1,this._logger=void 0,this._config=void 0,this._timer=void 0,this._lastStart=void 0,this._timeoutInterval=void 0}start(e){return this._start(e).catch(()=>{}),this}async _start(e){if(this._enabled)return;let t=this._config=new ew(e);if(!t.enabled)return;this._logger=t.logger,this._enabled=!0,this._setInterval();let r;try{r=await tw(t.sourceMap)}catch(n){this._logger.error(n)}try{for(let n of t.profilers)n.start({mapper:r,nearOOMCallback:this._nearOOMExport.bind(this)}),this._logger.debug(`Started ${n.type} profiler`);this._capture(this._timeoutInterval)}catch(n){this._logger.error(n),this._stop()}}_nearOOMExport(e,t){let r=this._lastStart,n=new Date;this._submit({[e]:t},r,n,Yi.ON_OUT_OF_MEMORY)}_setInterval(){this._timeoutInterval=this._config.flushInterval}async stop(){this._enabled&&(this._collect(Yi.ON_SHUTDOWN),this._stop())}_stop(){if(this._enabled){this._enabled=!1;for(let e of this._config.profilers)e.stop(),this._logger.debug(`Stopped ${e.type} profiler`);return clearTimeout(this._timer),this._timer=void 0,this}}_capture(e){this._enabled&&(this._lastStart=new Date,!this._timer||e!==this._timeoutInterval?(this._timer=setTimeout(()=>this._collect(Yi.PERIODIC),e),this._timer.unref()):this._timer.refresh())}async _collect(e){if(!this._enabled)return;let t=this._lastStart,r=new Date,n=[],o={};try{for(let i of this._config.profilers){let a=i.profile();a&&n.push({profiler:i,profile:a})}for(let{profiler:i,profile:a}of n)o[i.type]=await i.encode(a),this._logger.debug(()=>{let p=JSON.stringify(a,(u,d)=>typeof d=="bigint"?d.toString():d);return`Collected ${i.type} profile: `+p});this._capture(this._timeoutInterval),await this._submit(o,t,r,e),this._logger.debug("Submitted profiles")}catch(i){this._logger.error(i),this._stop()}}_submit(e,t,r,n){if(!Object.keys(e).length)return Promise.reject(new Error("No profiles to submit"));let{tags:o}=this._config,i=[];o.snapshot=n;for(let a of this._config.exporters){let p=a.export({profiles:e,start:t,end:r,tags:o}).catch(u=>this._logger.error(u));i.push(p)}return Promise.all(i)}},Ki=class extends Zs{constructor(){super(),this._profiledIntervals=0,this._interval=1,this._flushAfterIntervals=void 0}_setInterval(){this._timeoutInterval=this._interval*1e3,this._flushAfterIntervals=this._config.flushInterval/1e3}async _collect(e){this._profiledIntervals>=this._flushAfterIntervals?(this._profiledIntervals=0,await super._collect(e)):(this._profiledIntervals+=1,this._capture(this._timeoutInterval))}};yg.exports={Profiler:Zs,ServerlessProfiler:Ki}});var Ig=c((EN,Tg)=>{"use strict";var{Profiler:sw,ServerlessProfiler:rw}=Sg(),nw=Ui(),ow=Gi(),iw=Hi(),{AgentExporter:aw}=Oi(),{FileExporter:cw}=Di(),{ConsoleLogger:pw}=Mi(),uw=process.env.AWS_LAMBDA_FUNCTION_NAME?new rw:new sw;Tg.exports={profiler:uw,AgentExporter:aw,FileExporter:cw,CpuProfiler:nw,WallProfiler:ow,SpaceProfiler:iw,ConsoleLogger:pw}});var Ag=c((yN,xg)=>{"use strict";var er=v(),{profiler:Wi}=Ig();process.once("beforeExit",()=>{Wi.stop()});xg.exports={start:s=>{let{service:e,version:t,env:r,url:n,hostname:o,port:i,tags:a}=s,{enabled:p,sourceMap:u,exporters:d}=s.profiling,l={debug:_=>er.debug(_),info:_=>er.info(_),warn:_=>er.warn(_),error:_=>er.error(_)};Wi.start({enabled:p,service:e,version:t,env:r,logger:l,sourceMap:u,exporters:d,url:n,hostname:o,port:i,tags:a})},stop:()=>{Wi.stop()}}});var ea=c((SN,kg)=>{var{MANUAL_KEEP:dw}=V(),lw=require("lru-cache"),Xi="vulnerabilities",qg="_dd.iast.json",_w=1e3,Ji=new lw({max:_w}),hw=60*60*1e3,Qi,Lt,Zi=!0;function gw(s,e,t,r){return s&&e?{type:s,evidence:e,location:{spanId:t||0,...r},hash:fw(s,r)}:null}function fw(s,e){let t;e?t=`${s}:${e.path}:${e.line}`:t=s;let r=0,n=0,o=t.length;for(let i=0;i<o;i++)r=(r<<5)-r+t.charCodeAt(n++);return r}function mw(s,e){e&&e.evidence&&e.type&&e.location&&(s&&s.rootSpan?(s[Xi]=s[Xi]||[],s[Xi].push(e)):Rg([e]))}function bw(s){return s&&s.type&&s.evidence&&s.evidence.value&&s.location&&s.location.spanId}function vw(s,e){if(!s.ranges)return{value:s.value};let t=[],r=0;return s.ranges.forEach((n,o)=>{r<n.start&&t.push({value:s.value.substring(r,n.start)}),t.push({value:s.value.substring(n.start,n.end),source:e[o]}),r=n.end}),r<s.value.length&&t.push({value:s.value.substring(r)}),{valueParts:t}}function Ew(s){return s.evidence.ranges?s.evidence.ranges.map(e=>({origin:e.iinfo.type,name:e.iinfo.parameterName,value:e.iinfo.parameterValue})):[]}function yw(s,e){let t={type:s.type,hash:s.hash,evidence:vw(s.evidence,e),location:{spanId:s.location.spanId}};return s.location.path&&(t.location.path=s.location.path),s.location.line&&(t.location.line=s.location.line),t}function Rg(s,e){if(s&&s.length){let t=e;if(!t&&Qi&&(t=Qi.startSpan("vulnerability",{type:"vulnerability"}),s.forEach(r=>{r.location.spanId=t.context().toSpanId()})),t&&t.addTags){let r={sources:[],vulnerabilities:[]};if(Iw(s).forEach(n=>{if(bw(n)){let o=[];Ew(n).forEach(a=>{let p=r.sources.findIndex(u=>u.origin===a.origin&&u.name===a.name&&u.value===a.value);p===-1&&(p=r.sources.length,r.sources.push(a)),o.push(p)}),r.vulnerabilities.push(yw(n,o))}}),r.vulnerabilities.length>0){let n={};n[qg]=JSON.stringify(r),n[dw]="true",t.addTags(n),e||t.finish()}}}return qg}function wg(){Ji.clear()}function Sw(){Lt=setInterval(wg,hw),Lt.unref()}function Tw(){Lt&&(clearInterval(Lt),Lt=null)}function Iw(s){return Zi?s.filter(t=>{let r=`${t.type}${t.hash}`;return Ji.get(r)?!1:(Ji.set(r,!0),!0)}):s}function xw(s,e){Zi=s.iast.deduplicationEnabled,Zi&&Sw(),Qi=e}function Aw(){Tw()}kg.exports={createVulnerability:gw,addVulnerability:mw,sendVulnerabilities:Rg,clearCache:wg,start:xw,stop:Aw}});var sa=c((IN,Og)=>{"use strict";var qw=O(),{storage:Ut}=R(),ta=class{constructor(e,t){this._channel=qw.channel(e),this._handler=(r,n)=>{let o=Ut.getStore();(!o||!o.noop)&&t(r,n)}}enable(){this._channel.subscribe(this._handler)}disable(){this._channel.unsubscribe(this._handler)}};Og.exports=class{constructor(e){this._subscriptions=[],this._enabled=!1,this._tracer=e}get tracer(){return this._tracer._tracer}enter(e,t){t=t||Ut.getStore(),Ut.enterWith({...t,span:e})}skip(){Ut.enterWith({noop:!0})}addSub(e,t){this._subscriptions.push(new ta(e,t))}addError(e){let t=Ut.getStore();!t||!t.span||t.span._spanContext._tags.error||t.span.setTag("error",e||1)}configure(e){typeof e=="boolean"&&(e={enabled:e}),this.config=e,e.enabled&&!this._enabled?(this._enabled=!0,this._subscriptions.forEach(t=>t.enable())):!e.enabled&&this._enabled&&(this._enabled=!1,this._subscriptions.forEach(t=>t.disable()))}}});var Mg=c((xN,Pg)=>{"use strict";var Cg=v(),rt=new Map,Dg=1e4,tr=0;function ra(s){let e=0,t=s.length;for(let r=0;r<t;r++)e=(e*31|0)+s.charCodeAt(r)|0;return e}function Rw(s){if(!s)return 0;let e=31,t=s.level?ra(s.level):0;return t=(e*t|0)+(s.message?ra(s.message):0)|0,t=(e*t|0)+(s.stack_trace?ra(s.stack_trace):0)|0,t}function ww(s,e,t){return{message:s,level:e,tags:t}}function kw(s){return s&&s.level&&s.message}var Ng={add(s){try{if(!kw(s)){Cg.info("IAST log collector discarding invalid log");return}if(rt.size>=Dg){tr++;return}let e=Rw(s);if(!rt.has(e))return rt.set(e,s),!0}catch(e){Cg.error(`Unable to add log to logCollector: ${e.message}`)}return!1},drain(){if(rt.size===0)return;let s=[];return s.push(...rt.values()),tr>0&&s.push(ww(`Omitted ${tr} entries due to overflowing`,"ERROR")),this.reset(),s},reset(s){rt.clear(),tr=0,s&&(Dg=s)}};Ng.reset();Pg.exports=Ng});var ua=c((AN,$g)=>{"use strict";var Lg=O(),Ug=Mg(),{sendData:Ow}=Os(),sr=v(),na=Lg.channel("datadog:telemetry:start"),oa=Lg.channel("datadog:telemetry:stop"),nt,aa,ca,ia;function Cw(s){s&&jg(s.level)&&Ug.add(s)}function Dw(){try{let s=Ug.drain();s&&Ow(nt,aa,ca,"logs",s)}catch(s){sr.error(s)}}function jg(s){return pa(nt)&&(s!=="DEBUG"||nt.telemetry.debug)}function pa(s){return s&&s.telemetry&&s.telemetry.logCollection}function Gg(s){return!s||!pa(s.config)?(sr.info("IAST telemetry logs start received but log collection is not enabled or configuration is incorrect"),!1):(sr.info("IAST telemetry logs starting"),nt=s.config,aa=s.application,ca=s.host,s.heartbeatInterval&&(ia=setInterval(Dw,s.heartbeatInterval),ia.unref()),!0)}function Bg(){Hg()}function Nw(){na.subscribe(Gg),oa.subscribe(Bg)}function Hg(){pa(nt)&&(sr.info("IAST telemetry logs stopping"),nt=null,aa=null,ca=null,na.hasSubscribers&&na.unsubscribe(Gg),oa.hasSubscribers&&oa.unsubscribe(Bg),clearInterval(ia))}$g.exports={start:Nw,stop:Hg,publish:Cw,isLevelEnabled:jg}});var Gt=c((qN,Vg)=>{"use strict";var jt=v(),Fg=ua(),{calculateDDBasePath:Pw}=F(),da=Pw(__dirname),zg=`
-`,Mw=/^\s*at\s/gm;function Lw(s,e){if(!e)return s;let t=e.split(zg),r=t.findIndex(o=>o.match(Mw)),n=r>-1&&t[r].includes(da);return t=t.filter((o,i)=>n&&i<r||o.includes(da)).map(o=>o.replace(da,"")),s.stack_trace=t.join(zg),n||(s.message="omitted"),s}function Uw(s,e){try{s=typeof s=="function"?s():s;let t;typeof s!="object"||!s?t=String(s):t=String(s.message||s);let r={message:t,level:e};return s.stack&&(r=Lw(r,s.stack),r.stack_trace==="")?void 0:r}catch(t){jt.error(t)}}var jw={debug(s){return jt.debug(s),this},info(s){return jt.info(s),this},warn(s){return jt.warn(s),this},error(s){return jt.error(s),this},publish(s,e){if(Fg.isLevelEnabled(e)){let t=Uw(s,e);Fg.publish(t)}return this},debugAndPublish(s){return this.debug(s),this.publish(s,"DEBUG")},infoAndPublish(s){return this.info(s),this.publish(s,"DEBUG")},warnAndPublish(s){return this.warn(s),this.publish(s,"WARN")},errorAndPublish(s){return this.error(s),this.publish(s,"ERROR")}};Vg.exports=jw});var Zg=c((RN,Qg)=>{"use strict";var la=require("path"),Gw=require("process"),{calculateDDBasePath:Yg}=F(),Xg={getFirstNonDDPathAndLine:$w,getFirstNonDDPathAndLineFromCallsites:Jg,calculateDDBasePath:Yg,ddBasePath:Yg(__dirname)},Kg=[la.join(la.sep,"node_modules","diagnostics_channel")],Wg=["node:diagnostics_channel","diagnostics_channel","node:child_process","child_process","node:async_hooks","async_hooks"];function Bw(){let s=Error.prepareStackTrace,e=Error.stackTraceLimit,t;return Error.stackTraceLimit=100,Error.prepareStackTrace=function(n,o){t=o},new Error().stack,Error.prepareStackTrace=s,Error.stackTraceLimit=e,t}function Jg(s){if(s)for(let e=0;e<s.length;e++){let t=s[e],r=t.getFileName();if(!Hw(t)&&r.indexOf(Xg.ddBasePath)===-1)return{path:la.relative(Gw.cwd(),r),line:t.getLineNumber()}}return null}function Hw(s){if(s.isNative())return!0;let e=s.getFileName();if(!e)return!0;for(let t=0;t<Kg.length;t++)if(e.indexOf(Kg[t])>-1)return!0;for(let t=0;t<Wg.length;t++)if(e.indexOf(Wg[t])===0)return!0;return!1}function $w(){return Jg(Bw())}Qg.exports=Xg});var Ue=c((wN,ef)=>{var ne=Symbol("_dd.iast.context"),Fw=Symbol("_dd.iast.transactionId");function zw(s,e){let t=s&&s[ne];return t||(t=e&&e[ne]),t}function Vw(s,e,t){if(s&&e)return s[ne]=t,e[ne]=t,s[ne]}function Yw(s,e,t){return s&&(t||(t=s[ne]),s[ne]=null),e&&(t||(t=e[ne]),e[ne]=null),t?(Object.keys(t).forEach(r=>delete t[r]),!0):!1}ef.exports={getIastContext:zw,saveIastContext:Vw,cleanIastContext:Yw,IAST_CONTEXT_KEY:ne,IAST_TRANSACTION_ID:Fw}});var ga=c((kN,rf)=>{"use strict";var nr="oce",rr="REPORT_VULNERABILITY",tf={},je,Ie={},Bt=0,_a={REPORT_VULNERABILITY:{hasQuota:s=>{let e=s&&s.tokens&&s.tokens[rr]>0;return e&&s.tokens[rr]--,e},name:rr,initialTokenBucketSize(){return typeof Ie.maxContextOperations=="number"?Ie.maxContextOperations:2},initContext:function(s){s.tokens[rr]=this.initialTokenBucketSize()}}};function sf(){let s={tokens:{}};for(let e in _a)_a[e].initContext(s);return s}function Kw(s){return s&&s[nr]?s[nr]:tf}function ha(){Object.assign(tf,sf())}function Ww(s){if(Bt>0){let e=Ie&&typeof Ie.requestSampling=="number"?Ie.requestSampling:30;if(s.context().toSpanId().slice(-2)<=e)return Bt--,!0}return!1}function Xw(){Bt<Ie.maxConcurrentRequests&&Bt++}function Jw(s,e){let t=Kw(e);return s.hasQuota(t)}function Qw(s){s&&(s[nr]=sf())}function Zw(s){Ie=s,Bt=Ie.maxConcurrentRequests}function ek(){je||(ha(),je=setInterval(()=>{ha()},6e4),je.unref&&je.unref())}function tk(){je&&(clearInterval(je),je=null)}rf.exports={OVERHEAD_CONTROLLER_CONTEXT_KEY:nr,OPERATIONS:_a,startGlobalContext:ek,finishGlobalContext:tk,_resetGlobalContext:ha,initializeRequestContext:Qw,hasQuota:Jw,acquireRequest:Ww,releaseRequest:Xw,configure:Zw}});var or=c((ON,cf)=>{"use strict";var sk=sa(),{storage:nf}=R(),rk=Gt(),{getFirstNonDDPathAndLine:nk}=Zg(),{createVulnerability:ok,addVulnerability:ik}=ea(),{getIastContext:of}=Ue(),af=ga(),fa=class extends sk{constructor(e){super(),this._type=e}_wrapHandler(e){return(t,r)=>{try{e(t,r)}catch(n){rk.errorAndPublish(n)}}}addSub(e,t){super.addSub(e,this._wrapHandler(t))}_isVulnerable(e,t){return!1}_isExcluded(e){return!1}_report(e,t){let r=this._getEvidence(e,t),n=this._getLocation();if(!this._isExcluded(n)){let o=t&&t.rootSpan&&t.rootSpan.context().toSpanId(),i=ok(this._type,r,o,n);ik(t,i)}}_reportIfVulnerable(e,t){return this._isVulnerable(e,t)&&this._checkOCE(t)?(this._report(e,t),!0):!1}_getEvidence(e){return{value:e}}_getLocation(){return nk()}analyze(e){let t=nf.getStore(),r=of(t);t&&!r||this._reportIfVulnerable(e,r)}analyzeAll(...e){let t=nf.getStore(),r=of(t);if(!(t&&!r))for(let n=0;n<e.length;n++){let o=e[n];if(this._isVulnerable(o,r)){this._checkOCE(r)&&this._report(o,r);break}}}_checkOCE(e){return af.hasQuota(af.OPERATIONS.REPORT_VULNERABILITY,e)}};cf.exports=fa});var uf=c((CN,pf)=>{"use strict";var ak=or(),ck=new Set(["des","des-cbc","des-cfb","des-cfb1","des-cfb8","des-ecb","des-ede","des-ede-cbc","des-ede-cfb","des-ede-ecb","des-ede-ofb","des-ede3","des-ede3-cbc","des-ede3-cfb","des-ede3-cfb1","des-ede3-cfb8","des-ede3-ecb","des-ede3-ofb","des-ofb","des3","des3-wrap","rc2","rc2-128","rc2-40","rc2-40-cbc","rc2-64","rc2-64-cbc","rc2-cbc","rc2-cfb","rc2-ecb","rc2-ofb","blowfish","rc4","rc4-40","rc4-hmac-md5"].map(s=>s.toLowerCase())),ma=class extends ak{constructor(){super("WEAK_CIPHER"),this.addSub("datadog:crypto:cipher:start",({algorithm:e})=>this.analyze(e))}_isVulnerable(e){return e&&typeof e=="string"?ck.has(e.toLowerCase()):!1}};pf.exports=new ma});var lf=c((DN,df)=>{"use strict";var pk=or(),uk=new Set(["md4","md4WithRSAEncryption","RSA-MD4","RSA-MD5","md5","md5-sha1","ssl3-md5","md5WithRSAEncryption","RSA-SHA1","RSA-SHA1-2","sha1","md5-sha1","sha1WithRSAEncryption","ssl3-sha1"].map(s=>s.toLowerCase())),ba=class extends pk{constructor(){super("WEAK_HASH"),this.addSub("datadog:crypto:hashing:start",({algorithm:e})=>this.analyze(e))}_isVulnerable(e){return typeof e=="string"?uk.has(e.toLowerCase()):!1}};df.exports=new ba});var Ef=c((NN,vf)=>{"use strict";var va=require("@datadog/native-iast-taint-tracking"),{storage:dk}=R(),_f=Ue(),gf=Gt();function xe(s){return s}var ff={plusOperator:xe,trim:xe,trimEnd:xe,concat:xe,substring:xe,substr:xe,slice:xe,replace:xe};function mf(){let s=dk.getStore(),e=_f.getIastContext(s);return e&&e[_f.IAST_TRANSACTION_ID]}function lk(s,e){return function(r,n,o,...i){try{if(e(r,n,o))return r;let a=mf();if(a)return s(a,r,o,...i)}catch(a){gf.error(`Error invoking CSI ${o}`).errorAndPublish(a)}return r}}function ot(){return Array.prototype.some.call(arguments,s=>typeof s!="string")}function _k(s,e){return e.some(t=>s===t)}function bf(s,...e){let t;if(!e||e.length===0)t=(r,n,o)=>ot(r,o);else if(e.length===1){let r=e[0];t=(n,o,i)=>ot(n,i)||o!==r}else t=(r,n,o)=>ot(r,o)||!_k(n,e);return lk(s,t)}function hk(s,e){let t={};return s.forEach(r=>{e.indexOf(r)===-1&&(t[r]=bf((n,o,i,...a)=>va[r](n,o,i,...a),String.prototype[r]))}),t}var hf={plusOperator:function(s,e,t){try{if(ot(s)||ot(e)&&ot(t))return s;let r=mf();if(r)return va.concat(r,s,e,t)}catch(r){gf.error("Error invoking CSI plusOperator").errorAndPublish(r)}return s},trim:bf((s,e,t)=>va.trim(s,e,t),String.prototype.trim,String.prototype.trimStart)},gk={...hk(Object.keys(ff),Object.keys(hf)),...hf};vf.exports={TaintTracking:gk,TaintTrackingDummy:ff}});var ir=c((PN,yf)=>{"use strict";var Ge=require("@datadog/native-iast-taint-tracking"),{IAST_TRANSACTION_ID:L}=Ue(),fk=Gt(),{TaintTracking:mk,TaintTrackingDummy:bk}=Ef();function vk(s,e){s&&e&&(e[L]=Ge.createTransaction(s))}function Ek(s){if(s&&s[L]){let e=s[L];Ge.removeTransaction(e),delete s[L]}}function yk(s,e,t,r){let n=e;if(s&&s[L]){let o=s[L];n=Ge.newTaintedString(o,e,t,r)}else n=e;return n}function Sk(s,e,t){let r=e;if(s&&s[L]){let n=s[L],o=[{parent:null,property:null,value:e}],i=new WeakSet;for(;o.length>0;){let{parent:a,property:p,value:u}=o.pop();if(u!==null)try{if(typeof u=="string"){let d=Ge.newTaintedString(n,u,p,t);a?a[p]=d:r=d}else if(typeof u=="object"&&!i.has(u)){i.add(u);let d=Object.keys(u);for(let l=0;l<d.length;l++){let _=d[l];o.push({parent:u,property:p?`${p}.${_}`:_,value:u[_]})}}}catch(d){fk.error(`Error visiting property : ${p}`).errorAndPublish(d)}}}return r}function Tk(s,e){let t=!1;if(s&&s[L]){let r=s[L];t=Ge.isTainted(r,e)}else t=!1;return t}function Ik(s,e){let t=[];if(s&&s[L]){let r=s[L];t=Ge.getRanges(r,e)}else t=[];return t}function xk(){global._ddiast=mk}function Ak(){global._ddiast=bk}function qk(s){s&&Ge.setMaxTransactions(s)}yf.exports={createTransaction:vk,removeTransaction:Ek,newTaintedString:yk,taintObject:Sk,isTainted:Tk,getRanges:Ik,enableTaintOperations:xk,disableTaintOperations:Ak,setMaxTransactions:qk,IAST_TRANSACTION_ID:L}});var Ht=c((MN,Sf)=>{"use strict";var Rk=or(),{isTainted:wk,getRanges:kk}=ir(),Ea=class extends Rk{_isVulnerable(e,t){return e?wk(t,e):!1}_getEvidence(e,t){let r=kk(t,e);return{value:e,ranges:r}}};Sf.exports=Ea});var If=c((LN,Tf)=>{"use strict";var Ok=Ht(),ya=class extends Ok{constructor(){super("SQL_INJECTION"),this.addSub("apm:mysql:query:start",({sql:e})=>this.analyze(e)),this.addSub("apm:mysql2:query:start",({sql:e})=>this.analyze(e)),this.addSub("apm:pg:query:start",({query:e})=>this.analyze(e.text))}};Tf.exports=new ya});var qf=c((UN,Af)=>{"use strict";var xf=require("path"),{getIastContext:Ck}=Ue(),{storage:Dk}=R(),Nk=Ht(),Sa=class extends Nk{constructor(){super("PATH_TRAVERSAL"),this.addSub("apm:fs:operation:start",e=>{let t=[];e.dest&&t.push(e.dest),e.existingPath&&t.push(e.existingPath),e.file&&t.push(e.file),e.newPath&&t.push(e.newPath),e.oldPath&&t.push(e.oldPath),e.path&&t.push(e.path),e.prefix&&t.push(e.prefix),e.src&&t.push(e.src),e.target&&t.push(e.target),this.analyze(t)}),this.exclusionList=[xf.join("node_modules","send")+xf.sep]}_isExcluded(e){let t=!1;return e&&e.path&&(t=this.exclusionList.some(r=>e.path.includes(r))),t}analyze(e){let t=Ck(Dk.getStore());if(t&&e&&e.constructor===Array){for(let r of e)if(this._isVulnerable(r,t)){this._report(r,t);break}}}};Af.exports=new Sa});var wf=c((jN,Rf)=>{"use strict";var Pk=Ht(),Ta=class extends Pk{constructor(){super("COMMAND_INJECTION"),this.addSub("datadog:child_process:execution:start",({command:e})=>this.analyze(e))}};Rf.exports=new Ta});var Of=c((GN,kf)=>{"use strict";var Mk=Ht(),Ia=class extends Mk{constructor(){super("LDAP_INJECTION"),this.addSub("datadog:ldapjs:client:search",({base:e,filter:t})=>this.analyzeAll(e,t))}};kf.exports=new Ia});var Df=c((BN,Cf)=>{"use strict";Cf.exports={WEAK_CIPHER_ANALYZER:uf(),WEAK_HASH_ANALYZER:lf(),SQL_INJECTION_ANALYZER:If(),PATH_TRAVERSAL_ANALYZER:qf(),COMMAND_INJECTION_ANALYZER:wf(),LDAP_ANALYZER:Of()}});var Pf=c((HN,Nf)=>{"use strict";var ar=Df();function Lk(){for(let s in ar)ar[s].configure(!0)}function Uk(){for(let s in ar)ar[s].configure(!1)}Nf.exports={enableAllAnalyzers:Lk,disableAllAnalyzers:Uk}});var Lf=c(($N,Mf)=>{"use strict";var jk="node_modules",Gk=function(s){return s&&s.indexOf(jk)===-1},Bk=function(s){return s&&s.indexOf("dd-trace-js")===-1&&s.indexOf("dd-trace")===-1};Mf.exports={isPrivateModule:Gk,isNotLibraryFile:Bk}});var jf=c((FN,Uf)=>{"use strict";var Hk=[{src:"plusOperator",operator:!0},{src:"trim"},{src:"trimStart",dst:"trim"},{src:"trimEnd"},{src:"concat"},{src:"substring"},{src:"substr"},{src:"slice"},{src:"replace"}];Uf.exports={csiMethods:Hk}});var Ff=c((zN,$f)=>{"use strict";var Gf=require("module"),Bf=Zo(),Hf=Gt(),{isPrivateModule:$k,isNotLibraryFile:Fk}=Lf(),{csiMethods:zk}=jf(),cr,xa;function Vk(){if(!cr)try{let s=require("@datadog/native-iast-rewriter"),e=s.Rewriter;xa=s.getPrepareStackTrace,cr=new e({csiMethods:zk})}catch(s){Hf.error("Unable to initialize TaintTracking Rewriter").errorAndPublish(s)}return cr}var Aa=Error.prepareStackTrace;function Yk(){let s=xa(Aa);return{get(){return s},set(e){s=xa(e),Aa=e}}}function Kk(s){return function(e,t){try{if($k(t)&&Fk(t)){let r=cr.rewrite(e,t);if(r&&r.content)return s.apply(this,[r.content,t])}}catch(r){Hf.error(`Error rewriting ${t}`).errorAndPublish(r)}return s.apply(this,[e,t])}}function Wk(){Vk()&&(Object.defineProperty(global.Error,"prepareStackTrace",Yk()),Bf.wrap(Gf.prototype,"_compile",e=>Kk(e)))}function Xk(){Bf.unwrap(Gf.prototype,"_compile"),Error.prepareStackTrace=Aa}$f.exports={enableRewriter:Wk,disableRewriter:Xk}});var Vf=c((VN,zf)=>{"use strict";zf.exports={HTTP_REQUEST_BODY:"http.request.body",HTTP_REQUEST_PARAMETER:"http.request.parameter"}});var Wf=c((YN,Kf)=>{"use strict";var Jk=sa(),{getIastContext:Qk}=Ue(),{storage:Zk}=R(),{HTTP_REQUEST_PARAMETER:eO,HTTP_REQUEST_BODY:tO}=Vf(),{taintObject:Yf}=ir(),qa=class extends Jk{constructor(){super(),this._type="taint-tracking",this.addSub("datadog:body-parser:read:finish",({request:e})=>this._taintTrackingHandler(tO,e,"body")),this.addSub("datadog:qs:parse:finish",({qs:e})=>this._taintTrackingHandler(eO,e))}_taintTrackingHandler(e,t,r){let n=Qk(Zk.getStore());r?t[r]=Yf(n,t[r],e):t=Yf(n,t,e)}enable(){this.configure(!0)}disable(){this.configure(!1)}};Kf.exports=new qa});var Zf=c((KN,Qf)=>{"use strict";var{enableRewriter:sO,disableRewriter:rO}=Ff(),{createTransaction:nO,removeTransaction:oO,setMaxTransactions:Xf,enableTaintOperations:iO,disableTaintOperations:aO}=ir(),Jf=Wf();Qf.exports={enableTaintTracking(s){sO(),iO(),Jf.enable(),Xf(s.maxConcurrentRequests)},disableTaintTracking(){rO(),aO(),Jf.disable()},setMaxTransactions:Xf,createTransaction:nO,removeTransaction:oO}});var om=c((WN,nm)=>{var Oa=ea(),{enableAllAnalyzers:cO,disableAllAnalyzers:pO}=Pf(),em=Bs(),{storage:tm}=R(),it=ga(),sm=O(),Ra=Ue(),{enableTaintTracking:uO,disableTaintTracking:dO,createTransaction:lO,removeTransaction:_O}=Zf(),rm=ua(),hO="_dd.iast.enabled",wa=sm.channel("dd-trace:incomingHttpRequestStart"),ka=sm.channel("dd-trace:incomingHttpRequestEnd");function gO(s,e){cO(),uO(s.iast),wa.subscribe(Ca),ka.subscribe(Da),it.configure(s.iast),it.startGlobalContext(),Oa.start(s,e),rm.start()}function fO(){pO(),dO(),it.finishGlobalContext(),wa.hasSubscribers&&wa.unsubscribe(Ca),ka.hasSubscribers&&ka.unsubscribe(Da),Oa.stop(),rm.stop()}function Ca(s){if(s&&s.req){let e=tm.getStore();if(e){let t=em.getContext(s.req);if(t){let r=t.span,n=it.acquireRequest(r);if(n){let o=Ra.saveIastContext(e,t,{rootSpan:r,req:s.req});lO(r.context().toSpanId(),o),it.initializeRequestContext(o)}r.addTags&&r.addTags({[hO]:n?"1":"0"})}}}}function Da(s){if(s&&s.req){let e=tm.getStore(),t=em.getContext(s.req),r=Ra.getIastContext(e,t);if(r&&r.rootSpan){let n=r.vulnerabilities,o=r.rootSpan;Oa.sendVulnerabilities(n,o),_O(r)}Ra.cleanIastContext(e,t,r)&&it.releaseRequest()}}nm.exports={enable:gO,disable:fO,onIncomingHttpRequestEnd:Da,onIncomingHttpRequestStart:Ca}});var cm=c((XN,am)=>{"use strict";var mO=Dr(),bO=dl(),vO=bl(),EO=ut(),im=v(),{setStartupLogPluginManager:yO}=ht(),SO=Dl(),TO=D_(),IO=Ai(),xO=Zh(),Na=class extends mO{constructor(){super(),this._initialized=!1,this._pluginManager=new TO(this)}init(e){if(this._initialized)return this;this._initialized=!0;try{let t=new vO(e);if(t.remoteConfig.enabled&&!t.isCiVisibility&&IO.enable(t),t.profiling.enabled)try{Ag().start(t)}catch(r){im.error(r)}t.runtimeMetrics&&EO.start(t),t.tracing&&(t.appsec.enabled&&Ys().enable(t),this._tracer=new bO(t),this.appsec=new xO(this._tracer,t),t.iast.enabled&&om().enable(t,this._tracer),this._pluginManager.configure(t),yO(this._pluginManager),SO.start(t,this._pluginManager))}catch(t){im.error(t)}return this}use(){return this._pluginManager.configurePlugin(...arguments),this}};am.exports=Na});var um=c((JN,pm)=>{"use strict";var{isFalse:AO}=F(),qO=typeof jest<"u";pm.exports=AO(process.env.DD_TRACE_ENABLED)||qO?Dr():cm()});var lm=c((QN,dm)=>{"use strict";if(!global._ddtrace){let s=um();Object.defineProperty(global,"_ddtrace",{value:new s,enumerable:!1,configurable:!0,writable:!0}),global._ddtrace.default=global._ddtrace,global._ddtrace.tracer=global._ddtrace}dm.exports=global._ddtrace});module.exports=lm();
+    function isFalse(str) {
+      str = String(str).toLowerCase();
+      return str === "false" || str === "0";
+    }
+    function isError(value) {
+      if (value instanceof Error) {
+        return true;
+      }
+      if (value && value.message && value.stack) {
+        return true;
+      }
+      return false;
+    }
+    function globMatch(pattern, subject) {
+      let px = 0;
+      let sx = 0;
+      let nextPx = 0;
+      let nextSx = 0;
+      while (px < pattern.length || sx < subject.length) {
+        if (px < pattern.length) {
+          const c = pattern[px];
+          switch (c) {
+            default:
+              if (sx < subject.length && subject[sx] === c) {
+                px++;
+                sx++;
+                continue;
+              }
+              break;
+            case "?":
+              if (sx < subject.length) {
+                px++;
+                sx++;
+                continue;
+              }
+              break;
+            case "*":
+              nextPx = px;
+              nextSx = sx + 1;
+              px++;
+              continue;
+          }
+        }
+        if (nextSx > 0 && nextSx <= subject.length) {
+          px = nextPx;
+          sx = nextSx;
+          continue;
+        }
+        return false;
+      }
+      return true;
+    }
+    function calculateDDBasePath(dirname) {
+      const dirSteps = dirname.split(path.sep);
+      const packagesIndex = dirSteps.lastIndexOf("packages");
+      return dirSteps.slice(0, packagesIndex).join(path.sep) + path.sep;
+    }
+    module2.exports = {
+      isTrue,
+      isFalse,
+      isError,
+      globMatch,
+      calculateDDBasePath
+    };
+  }
+});
+
+// packages/dd-trace/src/noop/scope.js
+var require_scope = __commonJS({
+  "packages/dd-trace/src/noop/scope.js"(exports2, module2) {
+    "use strict";
+    var Scope = class {
+      active() {
+        return null;
+      }
+      activate(span, callback) {
+        if (typeof callback !== "function")
+          return callback;
+        return callback();
+      }
+      bind(fn, span) {
+        return fn;
+      }
+    };
+    module2.exports = Scope;
+  }
+});
+
+// ext/priority.js
+var require_priority = __commonJS({
+  "ext/priority.js"(exports2, module2) {
+    "use strict";
+    module2.exports = {
+      USER_REJECT: -1,
+      AUTO_REJECT: 0,
+      AUTO_KEEP: 1,
+      USER_KEEP: 2
+    };
+  }
+});
+
+// packages/dd-trace/src/opentracing/span_context.js
+var require_span_context = __commonJS({
+  "packages/dd-trace/src/opentracing/span_context.js"(exports2, module2) {
+    "use strict";
+    var { AUTO_KEEP } = require_priority();
+    var DatadogSpanContext = class {
+      constructor(props) {
+        props = props || {};
+        this._traceId = props.traceId;
+        this._spanId = props.spanId;
+        this._parentId = props.parentId || null;
+        this._name = props.name;
+        this._isFinished = props.isFinished || false;
+        this._tags = props.tags || {};
+        this._sampling = Object.assign({}, props.sampling);
+        this._baggageItems = props.baggageItems || {};
+        this._traceparent = props.traceparent;
+        this._tracestate = props.tracestate;
+        this._noop = props.noop || null;
+        this._trace = props.trace || {
+          started: [],
+          finished: [],
+          tags: {}
+        };
+      }
+      toTraceId() {
+        return this._traceId.toString(10);
+      }
+      toSpanId() {
+        return this._spanId.toString(10);
+      }
+      toTraceparent() {
+        const flags = this._sampling.priority >= AUTO_KEEP ? "01" : "00";
+        const traceId = this._traceId.toBuffer().length <= 8 && this._trace.tags["_dd.p.tid"] ? this._trace.tags["_dd.p.tid"] + this._traceId.toString(16).padStart(16, "0") : this._traceId.toString(16).padStart(32, "0");
+        const spanId = this._spanId.toString(16).padStart(16, "0");
+        const version = this._traceparent && this._traceparent.version || "00";
+        return `${version}-${traceId}-${spanId}-${flags}`;
+      }
+    };
+    module2.exports = DatadogSpanContext;
+  }
+});
+
+// packages/dd-trace/src/noop/span_context.js
+var require_span_context2 = __commonJS({
+  "packages/dd-trace/src/noop/span_context.js"(exports2, module2) {
+    "use strict";
+    var DatadogSpanContext = require_span_context();
+    var priority = require_priority();
+    var USER_REJECT = priority.USER_REJECT;
+    var NoopSpanContext = class extends DatadogSpanContext {
+      constructor(props) {
+        super(props);
+        this._sampling.priority = USER_REJECT;
+      }
+    };
+    module2.exports = NoopSpanContext;
+  }
+});
+
+// packages/dd-trace/src/id.js
+var require_id = __commonJS({
+  "packages/dd-trace/src/id.js"(exports2, module2) {
+    "use strict";
+    var { randomFillSync } = require("crypto");
+    var UINT_MAX = 4294967296;
+    var data = new Uint8Array(8 * 8192);
+    var zeroId = new Uint8Array(8);
+    var map = Array.prototype.map;
+    var pad = (byte) => `${byte < 16 ? "0" : ""}${byte.toString(16)}`;
+    var batch = 0;
+    var Identifier = class {
+      constructor(value, radix = 16) {
+        this._isUint64BE = true;
+        this._buffer = radix === 16 ? createBuffer(value) : fromString(value, radix);
+      }
+      toString(radix = 16) {
+        return radix === 16 ? toHexString(this._buffer) : toNumberString(this._buffer, radix);
+      }
+      toBuffer() {
+        return this._buffer;
+      }
+      // msgpack-lite compatibility
+      toArray() {
+        if (this._buffer.length === 8) {
+          return this._buffer;
+        }
+        return this._buffer.slice(-8);
+      }
+      toJSON() {
+        return this.toString();
+      }
+    };
+    function createBuffer(value) {
+      if (value === "0")
+        return zeroId;
+      if (!value)
+        return pseudoRandom();
+      const size = Math.ceil(value.length / 16) * 16;
+      const bytes = size / 2;
+      const buffer = new Array(bytes);
+      value = value.padStart(size, "0");
+      for (let i = 0; i < bytes; i++) {
+        buffer[i] = parseInt(value.substring(i * 2, i * 2 + 2), 16);
+      }
+      return buffer;
+    }
+    function fromString(str, raddix) {
+      const buffer = new Array(8);
+      const len = str.length;
+      let pos = 0;
+      let high = 0;
+      let low = 0;
+      if (str[0] === "-")
+        pos++;
+      const sign = pos;
+      while (pos < len) {
+        const chr = parseInt(str[pos++], raddix);
+        if (!(chr >= 0))
+          break;
+        low = low * raddix + chr;
+        high = high * raddix + Math.floor(low / UINT_MAX);
+        low %= UINT_MAX;
+      }
+      if (sign) {
+        high = ~high;
+        if (low) {
+          low = UINT_MAX - low;
+        } else {
+          high++;
+        }
+      }
+      writeUInt32BE(buffer, high, 0);
+      writeUInt32BE(buffer, low, 4);
+      return buffer;
+    }
+    function toNumberString(buffer, radix) {
+      let high = readInt32(buffer, buffer.length - 8);
+      let low = readInt32(buffer, buffer.length - 4);
+      let str = "";
+      radix = radix || 10;
+      while (1) {
+        const mod = high % radix * UINT_MAX + low;
+        high = Math.floor(high / radix);
+        low = Math.floor(mod / radix);
+        str = (mod % radix).toString(radix) + str;
+        if (!high && !low)
+          break;
+      }
+      return str;
+    }
+    function toHexString(buffer) {
+      return map.call(buffer, pad).join("");
+    }
+    function pseudoRandom() {
+      if (batch === 0) {
+        randomFillSync(data);
+      }
+      batch = (batch + 1) % 8192;
+      const offset = batch * 8;
+      return [
+        data[offset] & 127,
+        // only positive int64,
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
+        data[offset + 4],
+        data[offset + 5],
+        data[offset + 6],
+        data[offset + 7]
+      ];
+    }
+    function readInt32(buffer, offset) {
+      return buffer[offset + 0] * 16777216 + (buffer[offset + 1] << 16) + (buffer[offset + 2] << 8) + buffer[offset + 3];
+    }
+    function writeUInt32BE(buffer, value, offset) {
+      buffer[3 + offset] = value & 255;
+      value = value >> 8;
+      buffer[2 + offset] = value & 255;
+      value = value >> 8;
+      buffer[1 + offset] = value & 255;
+      value = value >> 8;
+      buffer[0 + offset] = value & 255;
+    }
+    module2.exports = (value, radix) => new Identifier(value, radix);
+  }
+});
+
+// packages/diagnostics_channel/src/index.js
+var require_src = __commonJS({
+  "packages/diagnostics_channel/src/index.js"(exports2, module2) {
+    "use strict";
+    var {
+      Channel,
+      channel
+    } = require("diagnostics_channel");
+    var [major, minor] = process.versions.node.split(".");
+    var channels = /* @__PURE__ */ new WeakSet();
+    var dc = { channel };
+    if (major === "19" && minor === "9") {
+      dc.channel = function() {
+        const ch = channel.apply(this, arguments);
+        if (!channels.has(ch)) {
+          const subscribe = ch.subscribe;
+          const unsubscribe = ch.unsubscribe;
+          ch.subscribe = function() {
+            delete ch.subscribe;
+            delete ch.unsubscribe;
+            const result = subscribe.apply(this, arguments);
+            this.subscribe(() => {
+            });
+            return result;
+          };
+          if (ch.unsubscribe === Channel.prototype.unsubscribe) {
+            ch.unsubscribe = function() {
+              delete ch.subscribe;
+              delete ch.unsubscribe;
+              this.subscribe(() => {
+              });
+              return unsubscribe.apply(this, arguments);
+            };
+          }
+          channels.add(ch);
+        }
+        return ch;
+      };
+    }
+    module2.exports = dc;
+  }
+});
+
+// packages/diagnostics_channel/index.js
+var require_diagnostics_channel = __commonJS({
+  "packages/diagnostics_channel/index.js"(exports2, module2) {
+    "use strict";
+    module2.exports = require_src();
+  }
+});
+
+// packages/datadog-core/src/storage/async_resource.js
+var require_async_resource = __commonJS({
+  "packages/datadog-core/src/storage/async_resource.js"(exports2, module2) {
+    "use strict";
+    var { createHook, executionAsyncResource } = require("async_hooks");
+    var { channel } = require_diagnostics_channel();
+    var beforeCh = channel("dd-trace:storage:before");
+    var afterCh = channel("dd-trace:storage:after");
+    var PrivateSymbol = Symbol;
+    function makePrivateSymbol() {
+      PrivateSymbol = new Function("name", "return %CreatePrivateSymbol(name)");
+    }
+    try {
+      makePrivateSymbol();
+    } catch (e) {
+      try {
+        const v8 = require("v8");
+        v8.setFlagsFromString("--allow-natives-syntax");
+        makePrivateSymbol();
+        v8.setFlagsFromString("--no-allow-natives-syntax");
+      } catch (e2) {
+      }
+    }
+    var AsyncResourceStorage = class {
+      constructor() {
+        this._ddResourceStore = PrivateSymbol("ddResourceStore");
+        this._enabled = false;
+        this._hook = createHook(this._createHook());
+      }
+      disable() {
+        if (!this._enabled)
+          return;
+        this._hook.disable();
+        this._enabled = false;
+      }
+      getStore() {
+        if (!this._enabled)
+          return;
+        const resource = this._executionAsyncResource();
+        return resource[this._ddResourceStore];
+      }
+      enterWith(store) {
+        this._enable();
+        const resource = this._executionAsyncResource();
+        resource[this._ddResourceStore] = store;
+      }
+      run(store, callback, ...args) {
+        this._enable();
+        const resource = this._executionAsyncResource();
+        const oldStore = resource[this._ddResourceStore];
+        resource[this._ddResourceStore] = store;
+        try {
+          return callback(...args);
+        } finally {
+          resource[this._ddResourceStore] = oldStore;
+        }
+      }
+      _createHook() {
+        return {
+          init: this._init.bind(this),
+          before() {
+            beforeCh.publish();
+          },
+          after() {
+            afterCh.publish();
+          }
+        };
+      }
+      _enable() {
+        if (this._enabled)
+          return;
+        this._enabled = true;
+        this._hook.enable();
+      }
+      _init(asyncId, type, triggerAsyncId, resource) {
+        const currentResource = this._executionAsyncResource();
+        if (Object.prototype.hasOwnProperty.call(currentResource, this._ddResourceStore)) {
+          resource[this._ddResourceStore] = currentResource[this._ddResourceStore];
+        }
+      }
+      _executionAsyncResource() {
+        return executionAsyncResource() || {};
+      }
+    };
+    module2.exports = AsyncResourceStorage;
+  }
+});
+
+// packages/datadog-core/src/storage/async_hooks.js
+var require_async_hooks = __commonJS({
+  "packages/datadog-core/src/storage/async_hooks.js"(exports2, module2) {
+    "use strict";
+    var { executionAsyncId } = require("async_hooks");
+    var AsyncResourceStorage = require_async_resource();
+    var AsyncHooksStorage = class extends AsyncResourceStorage {
+      constructor() {
+        super();
+        this._resources = /* @__PURE__ */ new Map();
+      }
+      disable() {
+        super.disable();
+        this._resources.clear();
+      }
+      _createHook() {
+        return {
+          ...super._createHook(),
+          destroy: this._destroy.bind(this)
+        };
+      }
+      _init(asyncId, type, triggerAsyncId, resource) {
+        super._init.apply(this, arguments);
+        this._resources.set(asyncId, resource);
+      }
+      _destroy(asyncId) {
+        this._resources.delete(asyncId);
+      }
+      _executionAsyncResource() {
+        const asyncId = executionAsyncId();
+        let resource = this._resources.get(asyncId);
+        if (!resource) {
+          this._resources.set(asyncId, resource = {});
+        }
+        return resource;
+      }
+    };
+    module2.exports = AsyncHooksStorage;
+  }
+});
+
+// packages/datadog-core/src/storage/index.js
+var require_storage = __commonJS({
+  "packages/datadog-core/src/storage/index.js"(exports2, module2) {
+    "use strict";
+    var semver = require("semver");
+    var hasJavaScriptAsyncHooks = semver.satisfies(process.versions.node, ">=14.5");
+    if (hasJavaScriptAsyncHooks) {
+      module2.exports = require_async_resource();
+    } else {
+      module2.exports = require_async_hooks();
+    }
+  }
+});
+
+// packages/datadog-core/index.js
+var require_datadog_core = __commonJS({
+  "packages/datadog-core/index.js"(exports2, module2) {
+    "use strict";
+    var LocalStorage = require_storage();
+    var storage = new LocalStorage();
+    module2.exports = { storage };
+  }
+});
+
+// packages/dd-trace/src/noop/span.js
+var require_span = __commonJS({
+  "packages/dd-trace/src/noop/span.js"(exports2, module2) {
+    "use strict";
+    var NoopSpanContext = require_span_context2();
+    var id = require_id();
+    var { storage } = require_datadog_core();
+    var NoopSpan = class {
+      constructor(tracer, parent) {
+        this._store = storage.getStore();
+        this._noopTracer = tracer;
+        this._noopContext = this._createContext(parent);
+      }
+      context() {
+        return this._noopContext;
+      }
+      tracer() {
+        return this._noopTracer;
+      }
+      setOperationName(name) {
+        return this;
+      }
+      setBaggageItem(key, value) {
+        return this;
+      }
+      getBaggageItem(key) {
+      }
+      setTag(key, value) {
+        return this;
+      }
+      addTags(keyValueMap) {
+        return this;
+      }
+      log() {
+        return this;
+      }
+      logEvent() {
+      }
+      finish(finishTime) {
+      }
+      _createContext(parent) {
+        const spanId = id();
+        if (parent) {
+          return new NoopSpanContext({
+            noop: this,
+            traceId: parent._traceId,
+            spanId,
+            parentId: parent._spanId,
+            baggageItems: Object.assign({}, parent._baggageItems)
+          });
+        } else {
+          return new NoopSpanContext({
+            noop: this,
+            traceId: spanId,
+            spanId
+          });
+        }
+      }
+    };
+    module2.exports = NoopSpan;
+  }
+});
+
+// packages/dd-trace/src/noop/tracer.js
+var require_tracer = __commonJS({
+  "packages/dd-trace/src/noop/tracer.js"(exports2, module2) {
+    "use strict";
+    var Scope = require_scope();
+    var Span = require_span();
+    var NoopTracer = class {
+      constructor(config) {
+        this._scope = new Scope();
+        this._span = new Span(this);
+      }
+      trace(name, options, fn) {
+        return fn(this._span, () => {
+        });
+      }
+      wrap(name, options, fn) {
+        return fn;
+      }
+      scope() {
+        return this._scope;
+      }
+      getRumData() {
+        return "";
+      }
+      setUrl() {
+      }
+      startSpan(name, options) {
+        return this._span;
+      }
+      inject(spanContext, format, carrier) {
+      }
+      extract(format, carrier) {
+        return this._span.context();
+      }
+      setUser() {
+        return this;
+      }
+    };
+    module2.exports = NoopTracer;
+  }
+});
+
+// packages/dd-trace/src/appsec/sdk/noop.js
+var require_noop = __commonJS({
+  "packages/dd-trace/src/appsec/sdk/noop.js"(exports2, module2) {
+    "use strict";
+    var NoopAppsecSdk = class {
+      trackUserLoginSuccessEvent() {
+      }
+      trackUserLoginFailureEvent() {
+      }
+      trackCustomEvent() {
+      }
+      isUserBlocked() {
+      }
+      blockRequest() {
+      }
+      setUser() {
+      }
+    };
+    module2.exports = NoopAppsecSdk;
+  }
+});
+
+// packages/dd-trace/src/noop/proxy.js
+var require_proxy = __commonJS({
+  "packages/dd-trace/src/noop/proxy.js"(exports2, module2) {
+    "use strict";
+    var NoopTracer = require_tracer();
+    var NoopAppsecSdk = require_noop();
+    var noop = new NoopTracer();
+    var noopAppsec = new NoopAppsecSdk();
+    var Tracer = class {
+      constructor() {
+        this._tracer = noop;
+        this.appsec = noopAppsec;
+      }
+      init() {
+        return this;
+      }
+      use() {
+        return this;
+      }
+      trace(name, options, fn) {
+        if (!fn) {
+          fn = options;
+          options = {};
+        }
+        if (typeof fn !== "function")
+          return;
+        options = options || {};
+        return this._tracer.trace(name, options, fn);
+      }
+      wrap(name, options, fn) {
+        if (!fn) {
+          fn = options;
+          options = {};
+        }
+        if (typeof fn !== "function")
+          return fn;
+        options = options || {};
+        return this._tracer.wrap(name, options, fn);
+      }
+      setUrl() {
+        this._tracer.setUrl.apply(this._tracer, arguments);
+        return this;
+      }
+      startSpan() {
+        return this._tracer.startSpan.apply(this._tracer, arguments);
+      }
+      inject() {
+        return this._tracer.inject.apply(this._tracer, arguments);
+      }
+      extract() {
+        return this._tracer.extract.apply(this._tracer, arguments);
+      }
+      scope() {
+        return this._tracer.scope.apply(this._tracer, arguments);
+      }
+      getRumData() {
+        return this._tracer.getRumData.apply(this._tracer, arguments);
+      }
+      setUser(user) {
+        this.appsec.setUser(user);
+        return this;
+      }
+    };
+    module2.exports = Tracer;
+  }
+});
+
+// packages/dd-trace/src/log/channels.js
+var require_channels = __commonJS({
+  "packages/dd-trace/src/log/channels.js"(exports2, module2) {
+    "use strict";
+    var { channel } = require_diagnostics_channel();
+    var Level = {
+      Debug: "debug",
+      Info: "info",
+      Warn: "warn",
+      Error: "error"
+    };
+    var defaultLevel = Level.Debug;
+    var logChannels = {
+      [Level.Debug]: createLogChannel(Level.Debug, 20),
+      [Level.Info]: createLogChannel(Level.Info, 30),
+      [Level.Warn]: createLogChannel(Level.Warn, 40),
+      [Level.Error]: createLogChannel(Level.Error, 50)
+    };
+    function createLogChannel(name, logLevel) {
+      const logChannel = channel(`datadog:log:${name}`);
+      logChannel.logLevel = logLevel;
+      return logChannel;
+    }
+    function getChannelLogLevel(level) {
+      let logChannel;
+      if (level && typeof level === "string") {
+        logChannel = logChannels[level.toLowerCase().trim()] || logChannels[defaultLevel];
+      } else {
+        logChannel = logChannels[defaultLevel];
+      }
+      return logChannel.logLevel;
+    }
+    module2.exports = {
+      Level,
+      getChannelLogLevel,
+      debugChannel: logChannels[Level.Debug],
+      infoChannel: logChannels[Level.Info],
+      warnChannel: logChannels[Level.Warn],
+      errorChannel: logChannels[Level.Error]
+    };
+  }
+});
+
+// packages/dd-trace/src/log/writer.js
+var require_writer = __commonJS({
+  "packages/dd-trace/src/log/writer.js"(exports2, module2) {
+    "use strict";
+    var { storage } = require_datadog_core();
+    var { getChannelLogLevel, debugChannel, infoChannel, warnChannel, errorChannel } = require_channels();
+    var defaultLogger = {
+      debug: (msg) => console.debug(msg),
+      /* eslint-disable-line no-console */
+      info: (msg) => console.info(msg),
+      /* eslint-disable-line no-console */
+      warn: (msg) => console.warn(msg),
+      /* eslint-disable-line no-console */
+      error: (msg) => console.error(msg)
+      /* eslint-disable-line no-console */
+    };
+    var enabled = false;
+    var logger = defaultLogger;
+    var logLevel = getChannelLogLevel();
+    function withNoop(fn) {
+      const store = storage.getStore();
+      storage.enterWith({ noop: true });
+      fn();
+      storage.enterWith(store);
+    }
+    function unsubscribeAll() {
+      if (debugChannel.hasSubscribers) {
+        debugChannel.unsubscribe(onDebug);
+      }
+      if (infoChannel.hasSubscribers) {
+        infoChannel.unsubscribe(onInfo);
+      }
+      if (warnChannel.hasSubscribers) {
+        warnChannel.unsubscribe(onWarn);
+      }
+      if (errorChannel.hasSubscribers) {
+        errorChannel.unsubscribe(onError);
+      }
+    }
+    function toggleSubscription(enable) {
+      unsubscribeAll();
+      if (enable) {
+        if (debugChannel.logLevel >= logLevel) {
+          debugChannel.subscribe(onDebug);
+        }
+        if (infoChannel.logLevel >= logLevel) {
+          infoChannel.subscribe(onInfo);
+        }
+        if (warnChannel.logLevel >= logLevel) {
+          warnChannel.subscribe(onWarn);
+        }
+        if (errorChannel.logLevel >= logLevel) {
+          errorChannel.subscribe(onError);
+        }
+      }
+    }
+    function toggle(enable, level) {
+      if (level !== void 0) {
+        logLevel = getChannelLogLevel(level);
+      }
+      enabled = enable;
+      toggleSubscription(enabled);
+    }
+    function use(newLogger) {
+      if (newLogger && newLogger.debug instanceof Function && newLogger.error instanceof Function) {
+        logger = newLogger;
+      }
+    }
+    function reset() {
+      logger = defaultLogger;
+      enabled = false;
+      logLevel = getChannelLogLevel();
+      toggleSubscription(false);
+    }
+    function onError(err) {
+      if (enabled)
+        error(err);
+    }
+    function onWarn(message) {
+      if (enabled)
+        warn(message);
+    }
+    function onInfo(message) {
+      if (enabled)
+        info(message);
+    }
+    function onDebug(message) {
+      if (enabled)
+        debug(message);
+    }
+    function error(err) {
+      if (typeof err !== "object" || !err) {
+        err = String(err);
+      } else if (!err.stack) {
+        err = String(err.message || err);
+      }
+      if (typeof err === "string") {
+        err = new Error(err);
+      }
+      withNoop(() => logger.error(err));
+    }
+    function warn(message) {
+      if (!logger.warn)
+        return debug(message);
+      withNoop(() => logger.warn(message));
+    }
+    function info(message) {
+      if (!logger.info)
+        return debug(message);
+      withNoop(() => logger.info(message));
+    }
+    function debug(message) {
+      withNoop(() => logger.debug(message));
+    }
+    module2.exports = { use, toggle, reset, error, warn, info, debug };
+  }
+});
+
+// packages/dd-trace/src/log/index.js
+var require_log = __commonJS({
+  "packages/dd-trace/src/log/index.js"(exports2, module2) {
+    "use strict";
+    var { debugChannel, infoChannel, warnChannel, errorChannel } = require_channels();
+    var logWriter = require_writer();
+    var memoize = (func) => {
+      const cache = {};
+      const memoized = function(key) {
+        if (!cache[key]) {
+          cache[key] = func.apply(this, arguments);
+        }
+        return cache[key];
+      };
+      return memoized;
+    };
+    function processMsg(msg) {
+      return typeof msg === "function" ? msg() : msg;
+    }
+    var log = {
+      use(logger) {
+        logWriter.use(logger);
+        return this;
+      },
+      toggle(enabled, logLevel) {
+        logWriter.toggle(enabled, logLevel);
+        return this;
+      },
+      reset() {
+        logWriter.reset();
+        this._deprecate = memoize((code, message) => {
+          errorChannel.publish(message);
+          return true;
+        });
+        return this;
+      },
+      debug(message) {
+        if (debugChannel.hasSubscribers) {
+          debugChannel.publish(processMsg(message));
+        }
+        return this;
+      },
+      info(message) {
+        if (infoChannel.hasSubscribers) {
+          infoChannel.publish(processMsg(message));
+        }
+        return this;
+      },
+      warn(message) {
+        if (warnChannel.hasSubscribers) {
+          warnChannel.publish(processMsg(message));
+        }
+        return this;
+      },
+      error(err) {
+        if (errorChannel.hasSubscribers) {
+          errorChannel.publish(processMsg(err));
+        }
+        return this;
+      },
+      deprecate(code, message) {
+        return this._deprecate(code, message);
+      }
+    };
+    log.reset();
+    module2.exports = log;
+  }
+});
+
+// packages/dd-trace/src/tagger.js
+var require_tagger = __commonJS({
+  "packages/dd-trace/src/tagger.js"(exports2, module2) {
+    "use strict";
+    var log = require_log();
+    function add(carrier, keyValuePairs) {
+      if (!carrier || !keyValuePairs)
+        return;
+      if (Array.isArray(keyValuePairs)) {
+        return keyValuePairs.forEach((tags) => add(carrier, tags));
+      }
+      try {
+        if (typeof keyValuePairs === "string") {
+          const segments = keyValuePairs.split(",");
+          for (const segment of segments) {
+            const separatorIndex = segment.indexOf(":");
+            if (separatorIndex === -1)
+              continue;
+            const key = segment.slice(0, separatorIndex);
+            const value = segment.slice(separatorIndex + 1);
+            carrier[key.trim()] = value.trim();
+          }
+        } else {
+          Object.assign(carrier, keyValuePairs);
+        }
+      } catch (e) {
+        log.error(e);
+      }
+    }
+    module2.exports = { add };
+  }
+});
+
+// packages/dd-trace/src/exporters/common/docker.js
+var require_docker = __commonJS({
+  "packages/dd-trace/src/exporters/common/docker.js"(exports2, module2) {
+    "use strict";
+    var fs = require("fs");
+    var uuidSource = "[0-9a-f]{8}[-_][0-9a-f]{4}[-_][0-9a-f]{4}[-_][0-9a-f]{4}[-_][0-9a-f]{12}|[0-9a-f]{8}(?:-[0-9a-f]{4}){4}$";
+    var containerSource = "[0-9a-f]{64}";
+    var taskSource = "[0-9a-f]{32}-\\d+";
+    var entityReg = new RegExp(`.*(${uuidSource}|${containerSource}|${taskSource})(?:\\.scope)?$`, "m");
+    var entityId = getEntityId();
+    function getEntityId() {
+      const cgroup = readControlGroup() || "";
+      const match = cgroup.trim().match(entityReg) || [];
+      return match[1];
+    }
+    function readControlGroup() {
+      try {
+        return fs.readFileSync("/proc/self/cgroup").toString();
+      } catch (err) {
+      }
+    }
+    module2.exports = {
+      // can be the container ID but not always depending on the orchestrator
+      id() {
+        return entityId;
+      }
+    };
+  }
+});
+
+// packages/dd-trace/src/exporters/common/agents.js
+var require_agents = __commonJS({
+  "packages/dd-trace/src/exporters/common/agents.js"(exports2, module2) {
+    "use strict";
+    var http = require("http");
+    var https = require("https");
+    var { storage } = require_datadog_core();
+    var keepAlive = true;
+    var maxSockets = 1;
+    function createAgentClass(BaseAgent) {
+      class CustomAgent extends BaseAgent {
+        constructor() {
+          super({ keepAlive, maxSockets });
+        }
+        createConnection(...args) {
+          return this._noop(() => super.createConnection(...args));
+        }
+        keepSocketAlive(...args) {
+          return this._noop(() => super.keepSocketAlive(...args));
+        }
+        reuseSocket(...args) {
+          return this._noop(() => super.reuseSocket(...args));
+        }
+        _noop(callback) {
+          return storage.run({ noop: true }, callback);
+        }
+      }
+      return CustomAgent;
+    }
+    var HttpAgent = createAgentClass(http.Agent);
+    var HttpsAgent = createAgentClass(https.Agent);
+    module2.exports = {
+      httpAgent: new HttpAgent(),
+      HttpsAgent: new HttpsAgent()
+    };
+  }
+});
+
+// packages/dd-trace/src/exporters/common/request.js
+var require_request = __commonJS({
+  "packages/dd-trace/src/exporters/common/request.js"(exports2, module2) {
+    "use strict";
+    var { Readable } = require("stream");
+    var http = require("http");
+    var https = require("https");
+    var { parse: urlParse } = require("url");
+    var docker = require_docker();
+    var { httpAgent, httpsAgent } = require_agents();
+    var { storage } = require_datadog_core();
+    var log = require_log();
+    var maxActiveRequests = 8;
+    var containerId = docker.id();
+    var activeRequests = 0;
+    function urlToOptions(url) {
+      const agent = url.agent || http.globalAgent;
+      const options = {
+        protocol: url.protocol || agent.protocol,
+        hostname: typeof url.hostname === "string" && url.hostname.startsWith("[") ? url.hostname.slice(1, -1) : url.hostname || url.host || "localhost",
+        hash: url.hash,
+        search: url.search,
+        pathname: url.pathname,
+        path: `${url.pathname || ""}${url.search || ""}`,
+        href: url.href
+      };
+      if (url.port !== "") {
+        options.port = Number(url.port);
+      }
+      if (url.username || url.password) {
+        options.auth = `${url.username}:${url.password}`;
+      }
+      return options;
+    }
+    function fromUrlString(url) {
+      return typeof urlToHttpOptions === "function" ? urlToOptions(new URL(url)) : urlParse(url);
+    }
+    function request(data, options, callback) {
+      if (!options.headers) {
+        options.headers = {};
+      }
+      if (options.url) {
+        const url = typeof options.url === "object" ? urlToOptions(options.url) : fromUrlString(options.url);
+        if (url.protocol === "unix:") {
+          options.socketPath = url.pathname;
+        } else {
+          if (!options.path)
+            options.path = url.path;
+          options.protocol = url.protocol;
+          options.hostname = url.hostname;
+          options.port = url.port;
+        }
+      }
+      const isReadable = data instanceof Readable;
+      const timeout = options.timeout || 2e3;
+      const isSecure = options.protocol === "https:";
+      const client = isSecure ? https : http;
+      const dataArray = [].concat(data);
+      if (!isReadable) {
+        options.headers["Content-Length"] = byteLength(dataArray);
+      }
+      if (containerId) {
+        options.headers["Datadog-Container-ID"] = containerId;
+      }
+      options.agent = isSecure ? httpsAgent : httpAgent;
+      const onResponse = (res) => {
+        let responseData = "";
+        res.setTimeout(timeout);
+        res.on("data", (chunk) => {
+          responseData += chunk;
+        });
+        res.on("end", () => {
+          activeRequests--;
+          if (res.statusCode >= 200 && res.statusCode <= 299) {
+            callback(null, responseData, res.statusCode);
+          } else {
+            let errorMessage = "";
+            try {
+              const fullUrl = new URL(
+                options.path,
+                options.url || options.hostname || `http://localhost:${options.port}`
+              ).href;
+              errorMessage = `Error from ${fullUrl}: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}.`;
+            } catch (e) {
+            }
+            if (responseData) {
+              errorMessage += ` Response from the endpoint: "${responseData}"`;
+            }
+            const error = new Error(errorMessage);
+            error.status = res.statusCode;
+            callback(error, null, res.statusCode);
+          }
+        });
+      };
+      const makeRequest = (onError) => {
+        if (!request.writable) {
+          log.debug("Maximum number of active requests reached: payload is discarded.");
+          return callback(null);
+        }
+        activeRequests++;
+        const store = storage.getStore();
+        storage.enterWith({ noop: true });
+        const req = client.request(options, onResponse);
+        req.once("error", (err) => {
+          activeRequests--;
+          onError(err);
+        });
+        req.setTimeout(timeout, req.abort);
+        if (isReadable) {
+          data.pipe(req);
+        } else {
+          dataArray.forEach((buffer) => req.write(buffer));
+          req.end();
+        }
+        storage.enterWith(store);
+      };
+      makeRequest(() => setTimeout(() => makeRequest(callback)));
+    }
+    function byteLength(data) {
+      return data.length > 0 ? data.reduce((prev, next) => prev + next.length, 0) : 0;
+    }
+    Object.defineProperty(request, "writable", {
+      get() {
+        return activeRequests < maxActiveRequests;
+      }
+    });
+    module2.exports = request;
+  }
+});
+
+// packages/dd-trace/src/dogstatsd.js
+var require_dogstatsd = __commonJS({
+  "packages/dd-trace/src/dogstatsd.js"(exports2, module2) {
+    "use strict";
+    var lookup = require("dns").lookup;
+    var request = require_request();
+    var dgram = require("dgram");
+    var isIP = require("net").isIP;
+    var log = require_log();
+    var MAX_BUFFER_SIZE = 1024;
+    var Client = class {
+      constructor(options) {
+        options = options || {};
+        if (options.metricsProxyUrl) {
+          this._httpOptions = {
+            url: options.metricsProxyUrl.toString(),
+            path: "/dogstatsd/v2/proxy"
+          };
+        }
+        this._host = options.host || "localhost";
+        this._family = isIP(this._host);
+        this._port = options.port || 8125;
+        this._prefix = options.prefix || "";
+        this._tags = options.tags || [];
+        this._queue = [];
+        this._buffer = "";
+        this._offset = 0;
+        this._udp4 = this._socket("udp4");
+        this._udp6 = this._socket("udp6");
+      }
+      gauge(stat, value, tags) {
+        this._add(stat, value, "g", tags);
+      }
+      increment(stat, value, tags) {
+        this._add(stat, value, "c", tags);
+      }
+      flush() {
+        const queue = this._enqueue();
+        if (this._queue.length === 0)
+          return;
+        this._queue = [];
+        if (this._httpOptions) {
+          this._sendHttp(queue);
+        } else {
+          this._sendUdp(queue);
+        }
+      }
+      _sendHttp(queue) {
+        const buffer = Buffer.concat(queue);
+        request(buffer, this._httpOptions, (err) => {
+          if (err) {
+            log.error("HTTP error from agent: " + err.stack);
+            if (err.status) {
+              if (err.status === 404) {
+                this._httpOptions = null;
+              }
+              this._sendUdp(queue);
+            }
+          }
+        });
+      }
+      _sendUdp(queue) {
+        if (this._family !== 0) {
+          this._sendUdpFromQueue(queue, this._host, this._family);
+        } else {
+          lookup(this._host, (err, address, family) => {
+            if (err)
+              return log.error(err);
+            this._sendUdpFromQueue(queue, address, family);
+          });
+        }
+      }
+      _sendUdpFromQueue(queue, address, family) {
+        const socket = family === 6 ? this._udp6 : this._udp4;
+        queue.forEach((buffer) => {
+          log.debug(`Sending to DogStatsD: ${buffer}`);
+          socket.send(buffer, 0, buffer.length, this._port, address);
+        });
+      }
+      _add(stat, value, type, tags) {
+        const message = `${this._prefix + stat}:${value}|${type}`;
+        tags = tags ? this._tags.concat(tags) : this._tags;
+        if (tags.length > 0) {
+          this._write(`${message}|#${tags.join(",")}
+`);
+        } else {
+          this._write(`${message}
+`);
+        }
+      }
+      _write(message) {
+        const offset = Buffer.byteLength(message);
+        if (this._offset + offset > MAX_BUFFER_SIZE) {
+          this._enqueue();
+        }
+        this._offset += offset;
+        this._buffer += message;
+      }
+      _enqueue() {
+        if (this._offset > 0) {
+          this._queue.push(Buffer.from(this._buffer));
+          this._buffer = "";
+          this._offset = 0;
+        }
+        return this._queue;
+      }
+      _socket(type) {
+        const socket = dgram.createSocket(type);
+        socket.on("error", () => {
+        });
+        socket.unref();
+        return socket;
+      }
+    };
+    module2.exports = Client;
+  }
+});
+
+// packages/dd-trace/src/histogram.js
+var require_histogram = __commonJS({
+  "packages/dd-trace/src/histogram.js"(exports2, module2) {
+    "use strict";
+    var { DDSketch } = require("@datadog/sketches-js");
+    var Histogram = class {
+      constructor() {
+        this.reset();
+      }
+      get min() {
+        return this._min;
+      }
+      get max() {
+        return this._max;
+      }
+      get avg() {
+        return this._count === 0 ? 0 : this._sum / this._count;
+      }
+      get sum() {
+        return this._sum;
+      }
+      get count() {
+        return this._count;
+      }
+      get median() {
+        return this.percentile(50);
+      }
+      get p95() {
+        return this.percentile(95);
+      }
+      percentile(percentile) {
+        return this._histogram.getValueAtQuantile(percentile / 100) || 0;
+      }
+      record(value) {
+        if (this._count === 0) {
+          this._min = this._max = value;
+        } else {
+          this._min = Math.min(this._min, value);
+          this._max = Math.max(this._max, value);
+        }
+        this._count++;
+        this._sum += value;
+        this._histogram.accept(value);
+      }
+      reset() {
+        this._min = 0;
+        this._max = 0;
+        this._sum = 0;
+        this._count = 0;
+        this._histogram = new DDSketch();
+      }
+    };
+    module2.exports = Histogram;
+  }
+});
+
+// packages/dd-trace/src/metrics.js
+var require_metrics = __commonJS({
+  "packages/dd-trace/src/metrics.js"(exports2, module2) {
+    "use strict";
+    var { URL: URL2, format } = require("url");
+    var v8 = require("v8");
+    var os = require("os");
+    var Client = require_dogstatsd();
+    var log = require_log();
+    var Histogram = require_histogram();
+    var { performance } = require("perf_hooks");
+    var INTERVAL = 10 * 1e3;
+    var nativeMetrics = null;
+    var interval;
+    var client;
+    var time;
+    var cpuUsage;
+    var gauges;
+    var counters;
+    var histograms;
+    var elu;
+    reset();
+    module2.exports = {
+      start(config) {
+        const tags = [];
+        Object.keys(config.tags).filter((key) => typeof config.tags[key] === "string").filter((key) => {
+          if (key !== "runtime-id")
+            return true;
+          return config.experimental && config.experimental.runtimeId;
+        }).forEach((key) => {
+          const value = config.tags[key].replace(/[^a-z0-9_:./-]/ig, "_");
+          tags.push(`${key}:${value}`);
+        });
+        try {
+          nativeMetrics = require("@datadog/native-metrics");
+          nativeMetrics.start();
+        } catch (e) {
+          log.error(e);
+          nativeMetrics = null;
+        }
+        const clientConfig = {
+          host: config.dogstatsd.hostname,
+          port: config.dogstatsd.port,
+          tags
+        };
+        if (config.url) {
+          clientConfig.metricsProxyUrl = config.url;
+        } else if (config.port) {
+          clientConfig.metricsProxyUrl = new URL2(format({
+            protocol: "http:",
+            hostname: config.hostname || "localhost",
+            port: config.port
+          }));
+        }
+        client = new Client(clientConfig);
+        time = process.hrtime();
+        if (nativeMetrics) {
+          interval = setInterval(() => {
+            captureCommonMetrics();
+            captureNativeMetrics();
+            client.flush();
+          }, INTERVAL);
+        } else {
+          cpuUsage = process.cpuUsage();
+          interval = setInterval(() => {
+            captureCommonMetrics();
+            captureCpuUsage();
+            captureHeapSpace();
+            client.flush();
+          }, INTERVAL);
+        }
+        interval.unref();
+      },
+      stop() {
+        if (nativeMetrics) {
+          nativeMetrics.stop();
+        }
+        clearInterval(interval);
+        reset();
+      },
+      track(span) {
+        if (nativeMetrics) {
+          const handle = nativeMetrics.track(span);
+          return {
+            finish: () => nativeMetrics.finish(handle)
+          };
+        }
+        return { finish: () => {
+        } };
+      },
+      boolean(name, value, tag) {
+        this.gauge(name, value ? 1 : 0, tag);
+      },
+      histogram(name, value, tag) {
+        if (!client)
+          return;
+        histograms[name] = histograms[name] || /* @__PURE__ */ new Map();
+        if (!histograms[name].has(tag)) {
+          histograms[name].set(tag, new Histogram());
+        }
+        histograms[name].get(tag).record(value);
+      },
+      count(name, count, tag, monotonic = false) {
+        if (!client)
+          return;
+        if (typeof tag === "boolean") {
+          monotonic = tag;
+          tag = void 0;
+        }
+        const map = monotonic ? counters : gauges;
+        map[name] = map[name] || /* @__PURE__ */ new Map();
+        const value = map[name].get(tag) || 0;
+        map[name].set(tag, value + count);
+      },
+      gauge(name, value, tag) {
+        if (!client)
+          return;
+        gauges[name] = gauges[name] || /* @__PURE__ */ new Map();
+        gauges[name].set(tag, value);
+      },
+      increment(name, tag, monotonic) {
+        this.count(name, 1, tag, monotonic);
+      },
+      decrement(name, tag) {
+        this.count(name, -1, tag);
+      }
+    };
+    function reset() {
+      interval = null;
+      client = null;
+      time = null;
+      cpuUsage = null;
+      gauges = {};
+      counters = {};
+      histograms = {};
+      nativeMetrics = null;
+    }
+    function captureCpuUsage() {
+      if (!process.cpuUsage)
+        return;
+      const elapsedTime = process.hrtime(time);
+      const elapsedUsage = process.cpuUsage(cpuUsage);
+      time = process.hrtime();
+      cpuUsage = process.cpuUsage();
+      const elapsedMs = elapsedTime[0] * 1e3 + elapsedTime[1] / 1e6;
+      const userPercent = 100 * elapsedUsage.user / 1e3 / elapsedMs;
+      const systemPercent = 100 * elapsedUsage.system / 1e3 / elapsedMs;
+      const totalPercent = userPercent + systemPercent;
+      client.gauge("runtime.node.cpu.system", systemPercent.toFixed(2));
+      client.gauge("runtime.node.cpu.user", userPercent.toFixed(2));
+      client.gauge("runtime.node.cpu.total", totalPercent.toFixed(2));
+    }
+    function captureMemoryUsage() {
+      const stats = process.memoryUsage();
+      client.gauge("runtime.node.mem.heap_total", stats.heapTotal);
+      client.gauge("runtime.node.mem.heap_used", stats.heapUsed);
+      client.gauge("runtime.node.mem.rss", stats.rss);
+      client.gauge("runtime.node.mem.total", os.totalmem());
+      client.gauge("runtime.node.mem.free", os.freemem());
+      stats.external && client.gauge("runtime.node.mem.external", stats.external);
+    }
+    function captureProcess() {
+      client.gauge("runtime.node.process.uptime", Math.round(process.uptime()));
+    }
+    function captureHeapStats() {
+      const stats = v8.getHeapStatistics();
+      client.gauge("runtime.node.heap.total_heap_size", stats.total_heap_size);
+      client.gauge("runtime.node.heap.total_heap_size_executable", stats.total_heap_size_executable);
+      client.gauge("runtime.node.heap.total_physical_size", stats.total_physical_size);
+      client.gauge("runtime.node.heap.total_available_size", stats.total_available_size);
+      client.gauge("runtime.node.heap.heap_size_limit", stats.heap_size_limit);
+      stats.malloced_memory && client.gauge("runtime.node.heap.malloced_memory", stats.malloced_memory);
+      stats.peak_malloced_memory && client.gauge("runtime.node.heap.peak_malloced_memory", stats.peak_malloced_memory);
+    }
+    function captureHeapSpace() {
+      if (!v8.getHeapSpaceStatistics)
+        return;
+      const stats = v8.getHeapSpaceStatistics();
+      for (let i = 0, l = stats.length; i < l; i++) {
+        const tags = [`space:${stats[i].space_name}`];
+        client.gauge("runtime.node.heap.size.by.space", stats[i].space_size, tags);
+        client.gauge("runtime.node.heap.used_size.by.space", stats[i].space_used_size, tags);
+        client.gauge("runtime.node.heap.available_size.by.space", stats[i].space_available_size, tags);
+        client.gauge("runtime.node.heap.physical_size.by.space", stats[i].physical_space_size, tags);
+      }
+    }
+    function captureGauges() {
+      Object.keys(gauges).forEach((name) => {
+        gauges[name].forEach((value, tag) => {
+          client.gauge(name, value, tag && [tag]);
+        });
+      });
+    }
+    function captureCounters() {
+      Object.keys(counters).forEach((name) => {
+        counters[name].forEach((value, tag) => {
+          client.increment(name, value, tag && [tag]);
+        });
+      });
+      counters = {};
+    }
+    function captureHistograms() {
+      Object.keys(histograms).forEach((name) => {
+        histograms[name].forEach((stats, tag) => {
+          histogram(name, stats, tag && [tag]);
+          stats.reset();
+        });
+      });
+    }
+    var captureELU = "eventLoopUtilization" in performance ? () => {
+      elu = performance.eventLoopUtilization(elu);
+      client.gauge("runtime.node.event_loop.utilization", elu.utilization);
+    } : () => {
+    };
+    function captureCommonMetrics() {
+      captureMemoryUsage();
+      captureProcess();
+      captureHeapStats();
+      captureGauges();
+      captureCounters();
+      captureHistograms();
+      captureELU();
+    }
+    function captureNativeMetrics() {
+      const stats = nativeMetrics.stats();
+      const spaces = stats.heap.spaces;
+      const elapsedTime = process.hrtime(time);
+      time = process.hrtime();
+      const elapsedUs = elapsedTime[0] * 1e6 + elapsedTime[1] / 1e3;
+      const userPercent = 100 * stats.cpu.user / elapsedUs;
+      const systemPercent = 100 * stats.cpu.system / elapsedUs;
+      const totalPercent = userPercent + systemPercent;
+      client.gauge("runtime.node.cpu.system", systemPercent.toFixed(2));
+      client.gauge("runtime.node.cpu.user", userPercent.toFixed(2));
+      client.gauge("runtime.node.cpu.total", totalPercent.toFixed(2));
+      histogram("runtime.node.event_loop.delay", stats.eventLoop);
+      Object.keys(stats.gc).forEach((type) => {
+        if (type === "all") {
+          histogram("runtime.node.gc.pause", stats.gc[type]);
+        } else {
+          histogram("runtime.node.gc.pause.by.type", stats.gc[type], [`gc_type:${type}`]);
+        }
+      });
+      for (let i = 0, l = spaces.length; i < l; i++) {
+        const tags = [`heap_space:${spaces[i].space_name}`];
+        client.gauge("runtime.node.heap.size.by.space", spaces[i].space_size, tags);
+        client.gauge("runtime.node.heap.used_size.by.space", spaces[i].space_used_size, tags);
+        client.gauge("runtime.node.heap.available_size.by.space", spaces[i].space_available_size, tags);
+        client.gauge("runtime.node.heap.physical_size.by.space", spaces[i].physical_space_size, tags);
+      }
+    }
+    function histogram(name, stats, tags) {
+      tags = [].concat(tags);
+      client.gauge(`${name}.min`, stats.min, tags);
+      client.gauge(`${name}.max`, stats.max, tags);
+      client.increment(`${name}.sum`, stats.sum, tags);
+      client.increment(`${name}.total`, stats.sum, tags);
+      client.gauge(`${name}.avg`, stats.avg, tags);
+      client.increment(`${name}.count`, stats.count, tags);
+      client.gauge(`${name}.median`, stats.median, tags);
+      client.gauge(`${name}.95percentile`, stats.p95, tags);
+    }
+  }
+});
+
+// packages/dd-trace/src/opentracing/span.js
+var require_span2 = __commonJS({
+  "packages/dd-trace/src/opentracing/span.js"(exports2, module2) {
+    "use strict";
+    var { performance } = require("perf_hooks");
+    var now = performance.now.bind(performance);
+    var dateNow = Date.now;
+    var semver = require("semver");
+    var SpanContext = require_span_context();
+    var id = require_id();
+    var tagger = require_tagger();
+    var metrics = require_metrics();
+    var log = require_log();
+    var { storage } = require_datadog_core();
+    var {
+      DD_TRACE_EXPERIMENTAL_STATE_TRACKING,
+      DD_TRACE_EXPERIMENTAL_SPAN_COUNTS
+    } = process.env;
+    var unfinishedRegistry = createRegistry("unfinished");
+    var finishedRegistry = createRegistry("finished");
+    var DatadogSpan = class {
+      constructor(tracer, processor, prioritySampler, fields, debug) {
+        const operationName = fields.operationName;
+        const parent = fields.parent || null;
+        const tags = Object.assign({}, fields.tags);
+        const hostname = fields.hostname;
+        this._parentTracer = tracer;
+        this._debug = debug;
+        this._processor = processor;
+        this._prioritySampler = prioritySampler;
+        this._store = storage.getStore();
+        this._duration = void 0;
+        this._name = operationName;
+        this._spanContext = this._createContext(parent, fields);
+        this._spanContext._name = operationName;
+        this._spanContext._tags = tags;
+        this._spanContext._hostname = hostname;
+        this._startTime = fields.startTime || this._getTime();
+        if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
+          metrics.increment("runtime.node.spans.unfinished");
+          metrics.increment("runtime.node.spans.unfinished.by.name", `span_name:${operationName}`);
+          metrics.increment("runtime.node.spans.open");
+          metrics.increment("runtime.node.spans.open.by.name", `span_name:${operationName}`);
+          unfinishedRegistry.register(this, operationName, this);
+        }
+      }
+      toString() {
+        const spanContext = this.context();
+        const resourceName = spanContext._tags["resource.name"];
+        const resource = resourceName.length > 100 ? `${resourceName.substring(0, 97)}...` : resourceName;
+        const json = JSON.stringify({
+          traceId: spanContext._traceId,
+          spanId: spanContext._spanId,
+          parentId: spanContext._parentId,
+          service: spanContext._tags["service.name"],
+          name: spanContext._name,
+          resource
+        });
+        return `Span${json}`;
+      }
+      context() {
+        return this._spanContext;
+      }
+      tracer() {
+        return this._parentTracer;
+      }
+      setOperationName(name) {
+        this._spanContext._name = name;
+        return this;
+      }
+      setBaggageItem(key, value) {
+        this._spanContext._baggageItems[key] = value;
+        return this;
+      }
+      getBaggageItem(key) {
+        return this._spanContext._baggageItems[key];
+      }
+      setTag(key, value) {
+        this._addTags({ [key]: value });
+        return this;
+      }
+      addTags(keyValueMap) {
+        this._addTags(keyValueMap);
+        return this;
+      }
+      log() {
+        return this;
+      }
+      logEvent() {
+      }
+      finish(finishTime) {
+        if (this._duration !== void 0) {
+          return;
+        }
+        if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === "true") {
+          if (!this._spanContext._tags["service.name"]) {
+            log.error(`Finishing invalid span: ${this}`);
+          }
+        }
+        if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
+          metrics.decrement("runtime.node.spans.unfinished");
+          metrics.decrement("runtime.node.spans.unfinished.by.name", `span_name:${this._name}`);
+          metrics.increment("runtime.node.spans.finished");
+          metrics.increment("runtime.node.spans.finished.by.name", `span_name:${this._name}`);
+          metrics.decrement("runtime.node.spans.open");
+          metrics.decrement("runtime.node.spans.open.by.name", `span_name:${this._name}`);
+          unfinishedRegistry.unregister(this);
+          finishedRegistry.register(this, this._name);
+        }
+        finishTime = parseFloat(finishTime) || this._getTime();
+        this._duration = finishTime - this._startTime;
+        this._spanContext._trace.finished.push(this);
+        this._spanContext._isFinished = true;
+        this._processor.process(this);
+      }
+      _createContext(parent, fields) {
+        let spanContext;
+        if (parent) {
+          spanContext = new SpanContext({
+            traceId: parent._traceId,
+            spanId: id(),
+            parentId: parent._spanId,
+            sampling: parent._sampling,
+            baggageItems: Object.assign({}, parent._baggageItems),
+            trace: parent._trace,
+            tracestate: parent._tracestate
+          });
+          if (!spanContext._trace.startTime) {
+            spanContext._trace.startTime = dateNow();
+          }
+        } else {
+          const spanId = id();
+          const startTime = dateNow();
+          spanContext = new SpanContext({
+            traceId: spanId,
+            spanId
+          });
+          spanContext._trace.startTime = startTime;
+          if (fields.traceId128BitGenerationEnabled) {
+            spanContext._trace.tags["_dd.p.tid"] = Math.floor(startTime / 1e3).toString(16).padStart(8, "0").padEnd(16, "0");
+          }
+        }
+        spanContext._trace.started.push(this);
+        spanContext._trace.ticks = spanContext._trace.ticks || now();
+        return spanContext;
+      }
+      _getTime() {
+        const { startTime, ticks } = this._spanContext._trace;
+        return startTime + now() - ticks;
+      }
+      _addTags(keyValuePairs) {
+        tagger.add(this._spanContext._tags, keyValuePairs);
+        this._prioritySampler.sample(this, false);
+      }
+    };
+    function createRegistry(type) {
+      if (!semver.satisfies(process.version, ">=14.6"))
+        return;
+      return new global.FinalizationRegistry((name) => {
+        metrics.decrement(`runtime.node.spans.${type}`);
+        metrics.decrement(`runtime.node.spans.${type}.by.name`, [`span_name:${name}`]);
+      });
+    }
+    module2.exports = DatadogSpan;
+  }
+});
+
+// packages/dd-trace/src/constants.js
+var require_constants = __commonJS({
+  "packages/dd-trace/src/constants.js"(exports2, module2) {
+    "use strict";
+    module2.exports = {
+      SAMPLING_PRIORITY_KEY: "_sampling_priority_v1",
+      ANALYTICS_KEY: "_dd1.sr.eausr",
+      ORIGIN_KEY: "_dd.origin",
+      HOSTNAME_KEY: "_dd.hostname",
+      TOP_LEVEL_KEY: "_dd.top_level",
+      SAMPLING_RULE_DECISION: "_dd.rule_psr",
+      SAMPLING_LIMIT_DECISION: "_dd.limit_psr",
+      SAMPLING_AGENT_DECISION: "_dd.agent_psr",
+      SAMPLING_MECHANISM_DEFAULT: 0,
+      SAMPLING_MECHANISM_AGENT: 1,
+      SAMPLING_MECHANISM_RULE: 3,
+      SAMPLING_MECHANISM_MANUAL: 4,
+      SAMPLING_MECHANISM_APPSEC: 5,
+      SAMPLING_MECHANISM_SPAN: 8,
+      SPAN_SAMPLING_MECHANISM: "_dd.span_sampling.mechanism",
+      SPAN_SAMPLING_RULE_RATE: "_dd.span_sampling.rule_rate",
+      SPAN_SAMPLING_MAX_PER_SECOND: "_dd.span_sampling.max_per_second",
+      DATADOG_LAMBDA_EXTENSION_PATH: "/opt/extensions/datadog-agent",
+      DECISION_MAKER_KEY: "_dd.p.dm",
+      PROCESS_ID: "process_id",
+      ERROR_TYPE: "error.type",
+      ERROR_MESSAGE: "error.message",
+      ERROR_STACK: "error.stack",
+      COMPONENT: "component",
+      CLIENT_PORT_KEY: "network.destination.port"
+    };
+  }
+});
+
+// ext/tags.js
+var require_tags = __commonJS({
+  "ext/tags.js"(exports2, module2) {
+    "use strict";
+    var tags = {
+      // Common
+      SERVICE_NAME: "service.name",
+      RESOURCE_NAME: "resource.name",
+      SPAN_TYPE: "span.type",
+      SPAN_KIND: "span.kind",
+      SAMPLING_PRIORITY: "sampling.priority",
+      ANALYTICS: "_dd1.sr.eausr",
+      ERROR: "error",
+      MANUAL_KEEP: "manual.keep",
+      MANUAL_DROP: "manual.drop",
+      MEASURED: "_dd.measured",
+      // HTTP
+      HTTP_URL: "http.url",
+      HTTP_METHOD: "http.method",
+      HTTP_STATUS_CODE: "http.status_code",
+      HTTP_ROUTE: "http.route",
+      HTTP_REQUEST_HEADERS: "http.request.headers",
+      HTTP_RESPONSE_HEADERS: "http.response.headers",
+      HTTP_USERAGENT: "http.useragent",
+      HTTP_CLIENT_IP: "http.client_ip"
+    };
+    tags.ANALYTICS_SAMPLE_RATE = tags.ANALYTICS;
+    module2.exports = tags;
+  }
+});
+
+// packages/dd-trace/src/format.js
+var require_format = __commonJS({
+  "packages/dd-trace/src/format.js"(exports2, module2) {
+    "use strict";
+    var constants = require_constants();
+    var tags = require_tags();
+    var id = require_id();
+    var { isError } = require_util();
+    var SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY;
+    var SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION;
+    var SAMPLING_LIMIT_DECISION = constants.SAMPLING_LIMIT_DECISION;
+    var SAMPLING_AGENT_DECISION = constants.SAMPLING_AGENT_DECISION;
+    var SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM;
+    var SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE;
+    var SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND;
+    var SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN;
+    var MEASURED = tags.MEASURED;
+    var ORIGIN_KEY = constants.ORIGIN_KEY;
+    var HOSTNAME_KEY = constants.HOSTNAME_KEY;
+    var TOP_LEVEL_KEY = constants.TOP_LEVEL_KEY;
+    var PROCESS_ID = constants.PROCESS_ID;
+    var ERROR_MESSAGE = constants.ERROR_MESSAGE;
+    var ERROR_STACK = constants.ERROR_STACK;
+    var ERROR_TYPE = constants.ERROR_TYPE;
+    var map = {
+      "service.name": "service",
+      "span.type": "type",
+      "resource.name": "resource"
+    };
+    function format(span) {
+      const formatted = formatSpan(span);
+      extractRootTags(formatted, span);
+      extractChunkTags(formatted, span);
+      extractTags(formatted, span);
+      return formatted;
+    }
+    function formatSpan(span) {
+      const spanContext = span.context();
+      return {
+        trace_id: spanContext._traceId,
+        span_id: spanContext._spanId,
+        parent_id: spanContext._parentId || id("0"),
+        name: String(spanContext._name),
+        resource: String(spanContext._name),
+        error: 0,
+        meta: {},
+        metrics: {},
+        start: Math.round(span._startTime * 1e6),
+        duration: Math.round(span._duration * 1e6)
+      };
+    }
+    function setSingleSpanIngestionTags(span, options) {
+      if (!options)
+        return;
+      addTag({}, span.metrics, SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN);
+      addTag({}, span.metrics, SPAN_SAMPLING_RULE_RATE, options.sampleRate);
+      addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond);
+    }
+    function extractTags(trace, span) {
+      const context = span.context();
+      const origin = context._trace.origin;
+      const tags2 = context._tags;
+      const hostname = context._hostname;
+      const priority = context._sampling.priority;
+      if (tags2["span.kind"] && tags2["span.kind"] !== "internal") {
+        addTag({}, trace.metrics, MEASURED, 1);
+      }
+      for (const tag in tags2) {
+        switch (tag) {
+          case "service.name":
+          case "span.type":
+          case "resource.name":
+            addTag(trace, {}, map[tag], tags2[tag]);
+            break;
+          case "http.status_code":
+            addTag(trace.meta, {}, tag, tags2[tag] && String(tags2[tag]));
+            break;
+          case HOSTNAME_KEY:
+          case MEASURED:
+            addTag({}, trace.metrics, tag, tags2[tag] === void 0 || tags2[tag] ? 1 : 0);
+            break;
+          case "error":
+            if (context._name !== "fs.operation") {
+              extractError(trace, tags2[tag]);
+            }
+            break;
+          case ERROR_TYPE:
+          case ERROR_MESSAGE:
+          case ERROR_STACK:
+            if (context._name !== "fs.operation") {
+              trace.error = 1;
+            } else {
+              break;
+            }
+          default:
+            addTag(trace.meta, trace.metrics, tag, tags2[tag]);
+        }
+      }
+      setSingleSpanIngestionTags(trace, context._sampling.spanSampling);
+      addTag(trace.meta, trace.metrics, "language", "javascript");
+      addTag(trace.meta, trace.metrics, PROCESS_ID, process.pid);
+      addTag(trace.meta, trace.metrics, SAMPLING_PRIORITY_KEY, priority);
+      addTag(trace.meta, trace.metrics, ORIGIN_KEY, origin);
+      addTag(trace.meta, trace.metrics, HOSTNAME_KEY, hostname);
+    }
+    function extractRootTags(trace, span) {
+      const context = span.context();
+      const isLocalRoot = span === context._trace.started[0];
+      const parentId = context._parentId;
+      if (!isLocalRoot || parentId && parentId.toString(10) !== "0")
+        return;
+      addTag({}, trace.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION]);
+      addTag({}, trace.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION]);
+      addTag({}, trace.metrics, SAMPLING_AGENT_DECISION, context._trace[SAMPLING_AGENT_DECISION]);
+      addTag({}, trace.metrics, TOP_LEVEL_KEY, 1);
+    }
+    function extractChunkTags(trace, span) {
+      const context = span.context();
+      const isLocalRoot = span === context._trace.started[0];
+      if (!isLocalRoot)
+        return;
+      for (const key in context._trace.tags) {
+        addTag(trace.meta, trace.metrics, key, context._trace.tags[key]);
+      }
+    }
+    function extractError(trace, error) {
+      if (!error)
+        return;
+      trace.error = 1;
+      if (isError(error)) {
+        addTag(trace.meta, trace.metrics, ERROR_MESSAGE, error.message || error.code);
+        addTag(trace.meta, trace.metrics, ERROR_TYPE, error.name);
+        addTag(trace.meta, trace.metrics, ERROR_STACK, error.stack);
+      }
+    }
+    function addTag(meta, metrics, key, value, nested) {
+      switch (typeof value) {
+        case "string":
+          if (!value)
+            break;
+          meta[key] = value;
+          break;
+        case "number":
+          if (isNaN(value))
+            break;
+          metrics[key] = value;
+          break;
+        case "boolean":
+          metrics[key] = value ? 1 : 0;
+          break;
+        case "undefined":
+          break;
+        case "object":
+          if (value === null)
+            break;
+          if (isNodeBuffer(value) || isUrl(value)) {
+            metrics[key] = value.toString();
+          } else if (!Array.isArray(value) && !nested) {
+            for (const prop in value) {
+              if (!hasOwn(value, prop))
+                continue;
+              addTag(meta, metrics, `${key}.${prop}`, value[prop], true);
+            }
+          }
+          break;
+      }
+    }
+    function hasOwn(object, prop) {
+      return Object.prototype.hasOwnProperty.call(object, prop);
+    }
+    function isNodeBuffer(obj) {
+      return obj.constructor && obj.constructor.name === "Buffer" && typeof obj.readInt8 === "function" && typeof obj.toString === "function";
+    }
+    function isUrl(obj) {
+      return obj.constructor && obj.constructor.name === "URL" && typeof obj.href === "string" && typeof obj.toString === "function";
+    }
+    module2.exports = format;
+  }
+});
+
+// ext/formats.js
+var require_formats = __commonJS({
+  "ext/formats.js"(exports2, module2) {
+    "use strict";
+    module2.exports = {
+      TEXT_MAP: "text_map",
+      HTTP_HEADERS: "http_headers",
+      BINARY: "binary",
+      LOG: "log"
+    };
+  }
+});
+
+// ext/kinds.js
+var require_kinds = __commonJS({
+  "ext/kinds.js"(exports2, module2) {
+    "use strict";
+    module2.exports = {
+      SERVER: "server",
+      CLIENT: "client",
+      PRODUCER: "producer",
+      CONSUMER: "consumer"
+    };
+  }
+});
+
+// ext/types.js
+var require_types = __commonJS({
+  "ext/types.js"(exports2, module2) {
+    "use strict";
+    module2.exports = {
+      HTTP: "http",
+      WEB: "web"
+    };
+  }
+});
+
+// ext/exporters.js
+var require_exporters = __commonJS({
+  "ext/exporters.js"(exports2, module2) {
+    "use strict";
+    module2.exports = {
+      LOG: "log",
+      AGENT: "agent",
+      DATADOG: "datadog",
+      AGENT_PROXY: "agent_proxy",
+      JEST_WORKER: "jest_worker"
+    };
+  }
+});
+
+// ext/index.js
+var require_ext = __commonJS({
+  "ext/index.js"(exports2, module2) {
+    "use strict";
+    var formats = require_formats();
+    var kinds = require_kinds();
+    var priority = require_priority();
+    var tags = require_tags();
+    var types = require_types();
+    var exporters = require_exporters();
+    module2.exports = {
+      formats,
+      kinds,
+      priority,
+      tags,
+      types,
+      exporters
+    };
+  }
+});
+
+// packages/dd-trace/src/rate_limiter.js
+var require_rate_limiter = __commonJS({
+  "packages/dd-trace/src/rate_limiter.js"(exports2, module2) {
+    "use strict";
+    var limiter = require("limiter");
+    var RateLimiter = class {
+      constructor(rateLimit) {
+        this._rateLimit = parseInt(rateLimit);
+        this._limiter = new limiter.RateLimiter(this._rateLimit, "second");
+        this._tokensRequested = 0;
+        this._prevIntervalTokens = 0;
+        this._prevTokensRequested = 0;
+      }
+      isAllowed() {
+        const curIntervalStart = this._limiter.curIntervalStart;
+        const curIntervalTokens = this._limiter.tokensThisInterval;
+        const allowed = this._isAllowed();
+        if (curIntervalStart !== this._limiter.curIntervalStart) {
+          this._prevIntervalTokens = curIntervalTokens;
+          this._prevTokensRequested = this._tokensRequested;
+          this._tokensRequested = 1;
+        } else {
+          this._tokensRequested++;
+        }
+        return allowed;
+      }
+      effectiveRate() {
+        if (this._rateLimit < 0)
+          return 1;
+        if (this._rateLimit === 0)
+          return 0;
+        if (this._tokensRequested === 0)
+          return 1;
+        const allowed = this._prevIntervalTokens + this._limiter.tokensThisInterval;
+        const requested = this._prevTokensRequested + this._tokensRequested;
+        return allowed / requested;
+      }
+      _isAllowed() {
+        if (this._rateLimit < 0)
+          return true;
+        if (this._rateLimit === 0)
+          return false;
+        return this._limiter.tryRemoveTokens(1);
+      }
+      _currentWindowRate() {
+        if (this._rateLimit < 0)
+          return 1;
+        if (this._rateLimit === 0)
+          return 0;
+        if (this._tokensRequested === 0)
+          return 1;
+        return this._limiter.tokensThisInterval / this._tokensRequested;
+      }
+    };
+    module2.exports = RateLimiter;
+  }
+});
+
+// packages/dd-trace/src/sampler.js
+var require_sampler = __commonJS({
+  "packages/dd-trace/src/sampler.js"(exports2, module2) {
+    "use strict";
+    var Sampler = class {
+      constructor(rate) {
+        this._rate = rate;
+      }
+      rate() {
+        return this._rate;
+      }
+      isSampled() {
+        return this._rate === 1 || Math.random() < this._rate;
+      }
+    };
+    module2.exports = Sampler;
+  }
+});
+
+// packages/dd-trace/src/span_sampler.js
+var require_span_sampler = __commonJS({
+  "packages/dd-trace/src/span_sampler.js"(exports2, module2) {
+    "use strict";
+    var { globMatch } = require_util();
+    var { USER_KEEP, AUTO_KEEP } = require_ext().priority;
+    var RateLimiter = require_rate_limiter();
+    var Sampler = require_sampler();
+    var SpanSamplingRule = class {
+      constructor({ service, name, sampleRate = 1, maxPerSecond } = {}) {
+        this.service = service;
+        this.name = name;
+        this._sampler = new Sampler(sampleRate);
+        this._limiter = void 0;
+        if (Number.isFinite(maxPerSecond)) {
+          this._limiter = new RateLimiter(maxPerSecond);
+        }
+      }
+      get sampleRate() {
+        return this._sampler.rate();
+      }
+      get maxPerSecond() {
+        return this._limiter && this._limiter._rateLimit;
+      }
+      static from(config) {
+        return new SpanSamplingRule(config);
+      }
+      match(service, name) {
+        if (this.service && !globMatch(this.service, service)) {
+          return false;
+        }
+        if (this.name && !globMatch(this.name, name)) {
+          return false;
+        }
+        return true;
+      }
+      sample() {
+        if (!this._sampler.isSampled()) {
+          return false;
+        }
+        if (this._limiter) {
+          return this._limiter.isAllowed();
+        }
+        return true;
+      }
+    };
+    var SpanSampler = class {
+      constructor({ spanSamplingRules = [] } = {}) {
+        this._rules = spanSamplingRules.map(SpanSamplingRule.from);
+      }
+      findRule(service, name) {
+        for (const rule of this._rules) {
+          if (rule.match(service, name)) {
+            return rule;
+          }
+        }
+      }
+      sample(spanContext) {
+        const decision = spanContext._sampling.priority;
+        if (decision === USER_KEEP || decision === AUTO_KEEP)
+          return;
+        const { started } = spanContext._trace;
+        for (const span of started) {
+          const context = span.context();
+          const tags = context._tags || {};
+          const name = context._name;
+          const service = tags.service || tags["service.name"] || span.tracer()._service;
+          const rule = this.findRule(service, name);
+          if (rule && rule.sample()) {
+            span.context()._sampling.spanSampling = {
+              sampleRate: rule.sampleRate,
+              maxPerSecond: rule.maxPerSecond
+            };
+          }
+        }
+      }
+    };
+    module2.exports = SpanSampler;
+  }
+});
+
+// packages/dd-trace/src/pkg.js
+var require_pkg = __commonJS({
+  "packages/dd-trace/src/pkg.js"(exports2, module2) {
+    "use strict";
+    var fs = require("fs");
+    var path = require("path");
+    function findRoot() {
+      return require.main && require.main.filename ? path.dirname(require.main.filename) : process.cwd();
+    }
+    function findPkg() {
+      const cwd = findRoot();
+      const directory = path.resolve(cwd);
+      const res = path.parse(directory);
+      if (!res)
+        return {};
+      const { root } = res;
+      const filePath = findUp("package.json", root, directory);
+      try {
+        return JSON.parse(fs.readFileSync(filePath, "utf8"));
+      } catch (e) {
+        return {};
+      }
+    }
+    function findUp(name, root, directory) {
+      while (true) {
+        const current = path.resolve(directory, name);
+        if (fs.existsSync(current))
+          return current;
+        if (directory === root)
+          return;
+        directory = path.dirname(directory);
+      }
+    }
+    module2.exports = Object.assign(findPkg(), { findRoot, findUp });
+  }
+});
+
+// package.json
+var require_package = __commonJS({
+  "package.json"(exports2, module2) {
+    module2.exports = {
+      name: "dd-trace",
+      version: "4.0.0-pre",
+      description: "Datadog APM tracing client for JavaScript",
+      main: "index.js",
+      typings: "index.d.ts",
+      scripts: {
+        preinstall: "node scripts/preinstall.js",
+        bundle: "node scripts/bundle",
+        bench: "node benchmark",
+        "bench:profiler": "node benchmark/profiler",
+        "bench:e2e": "SERVICES=mongo yarn services && cd benchmark/e2e && node benchmark-run.js --duration=30",
+        "bench:e2e:ci-visibility": "node benchmark/e2e-ci/benchmark-run.js",
+        "type:doc": "cd docs && yarn && yarn build",
+        "type:test": "cd docs && yarn && yarn test",
+        lint: "node scripts/check_licenses.js && eslint . && yarn audit --groups dependencies",
+        services: "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
+        test: "SERVICES=* yarn services && mocha --colors --exit --expose-gc 'packages/dd-trace/test/setup/node.js' 'packages/*/test/**/*.spec.js'",
+        "test:appsec": 'mocha --colors --exit -r "packages/dd-trace/test/setup/mocha.js" --exclude "packages/dd-trace/test/appsec/iast/**/*.plugin.spec.js" "packages/dd-trace/test/appsec/**/*.spec.js"',
+        "test:appsec:ci": 'nyc --no-clean --include "packages/dd-trace/src/appsec/**/*.js" --exclude "packages/dd-trace/test/appsec/iast/**/*.plugin.spec.js" -- npm run test:appsec',
+        "test:appsec:plugins": 'mocha --colors --exit -r "packages/dd-trace/test/setup/mocha.js" "packages/dd-trace/test/appsec/iast/**/*.@($(echo $PLUGINS)).plugin.spec.js"',
+        "test:appsec:plugins:ci": 'yarn services && nyc --no-clean --include "packages/dd-trace/test/appsec/iast/**/*.@($(echo $PLUGINS)).plugin.spec.js" -- npm run test:appsec:plugins',
+        "test:trace:core": 'tap packages/dd-trace/test/*.spec.js "packages/dd-trace/test/{ci-visibility,encode,exporters,opentracing,plugins,telemetry}/**/*.spec.js"',
+        "test:trace:core:ci": 'npm run test:trace:core -- --coverage --nyc-arg=--include="packages/dd-trace/src/**/*.js"',
+        "test:instrumentations": "mocha --colors -r 'packages/dd-trace/test/setup/mocha.js' 'packages/datadog-instrumentations/test/**/*.spec.js'",
+        "test:instrumentations:ci": "nyc --no-clean --include 'packages/datadog-instrumentations/src/**/*.js' -- npm run test:instrumentations",
+        "test:core": 'tap "packages/datadog-core/test/**/*.spec.js"',
+        "test:core:ci": 'npm run test:core -- --coverage --nyc-arg=--include="packages/datadog-core/src/**/*.js"',
+        "test:lambda": 'mocha --colors --exit -r "packages/dd-trace/test/setup/mocha.js" "packages/dd-trace/test/lambda/**/*.spec.js"',
+        "test:lambda:ci": 'nyc --no-clean --include "packages/dd-trace/src/lambda/**/*.js" -- npm run test:lambda',
+        "test:plugins": 'mocha --colors --exit -r "packages/dd-trace/test/setup/mocha.js" "packages/datadog-instrumentations/test/@($(echo $PLUGINS)).spec.js" "packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js"',
+        "test:plugins:ci": 'yarn services && nyc --no-clean --include "packages/datadog-instrumentations/src/@($(echo $PLUGINS)).js" --include "packages/datadog-instrumentations/src/@($(echo $PLUGINS))/**/*.js" --include "packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js" -- npm run test:plugins',
+        "test:plugins:upstream": "node ./packages/dd-trace/test/plugins/suite.js",
+        "test:profiler": 'tap "packages/dd-trace/test/profiling/**/*.spec.js"',
+        "test:profiler:ci": 'npm run test:profiler -- --coverage --nyc-arg=--include="packages/dd-trace/src/profiling/**/*.js"',
+        "test:integration": 'mocha --colors --timeout 30000 "integration-tests/*.spec.js"',
+        "test:integration:cucumber": 'mocha --colors --timeout 30000 "integration-tests/cucumber/*.spec.js"',
+        "test:integration:cypress": 'mocha --colors --timeout 30000 "integration-tests/cypress/*.spec.js"',
+        "test:integration:playwright": 'mocha --colors --timeout 30000 "integration-tests/playwright/*.spec.js"',
+        "test:shimmer": "mocha --colors 'packages/datadog-shimmer/test/**/*.spec.js'",
+        "test:shimmer:ci": "nyc --no-clean --include 'packages/datadog-shimmer/src/**/*.js' -- npm run test:shimmer",
+        "leak:core": "node ./scripts/install_plugin_modules && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'",
+        "leak:plugins": 'yarn services && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape "packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js"'
+      },
+      repository: {
+        type: "git",
+        url: "git+https://github.com/DataDog/dd-trace-js.git"
+      },
+      keywords: [
+        "datadog",
+        "trace",
+        "tracing",
+        "profile",
+        "profiler",
+        "profiling",
+        "opentracing",
+        "apm"
+      ],
+      author: "Datadog Inc. <info@datadoghq.com>",
+      license: "BSD-3-Clause",
+      bugs: {
+        url: "https://github.com/DataDog/dd-trace-js/issues"
+      },
+      homepage: "https://github.com/DataDog/dd-trace-js#readme",
+      engines: {
+        node: ">=14"
+      },
+      dependencies: {
+        "@datadog/native-appsec": "2.0.0",
+        "@datadog/native-iast-rewriter": "2.0.1",
+        "@datadog/native-iast-taint-tracking": "^1.4.0",
+        "@datadog/native-metrics": "^1.6.0",
+        "@datadog/pprof": "^2.2.0",
+        "@datadog/sketches-js": "^2.1.0",
+        "crypto-randomuuid": "^1.0.0",
+        diagnostics_channel: "^1.1.0",
+        ignore: "^5.2.0",
+        "import-in-the-middle": "^1.3.5",
+        "ipaddr.js": "^2.0.1",
+        "istanbul-lib-coverage": "3.2.0",
+        koalas: "^1.0.2",
+        limiter: "^1.1.4",
+        "lodash.kebabcase": "^4.1.1",
+        "lodash.pick": "^4.4.0",
+        "lodash.sortby": "^4.7.0",
+        "lodash.uniq": "^4.5.0",
+        "lru-cache": "^7.14.0",
+        methods: "^1.1.2",
+        "module-details-from-path": "^1.0.3",
+        "node-abort-controller": "^3.0.1",
+        opentracing: ">=0.12.1",
+        "path-to-regexp": "^0.1.2",
+        protobufjs: "^7.1.2",
+        retry: "^0.10.1",
+        semver: "^7.3.8"
+      },
+      devDependencies: {
+        "@types/node": ">=14",
+        autocannon: "^4.5.2",
+        axios: "^0.21.2",
+        benchmark: "^2.1.4",
+        "body-parser": "^1.18.2",
+        chai: "^4.2.0",
+        chalk: "^3.0.0",
+        checksum: "^0.1.1",
+        "cli-table3": "^0.5.1",
+        dotenv: "8.2.0",
+        esbuild: "^0.17.18",
+        "esbuild-node-externals": "^1.7.0",
+        eslint: "^8.23.0",
+        "eslint-config-standard": "^11.0.0-beta.0",
+        "eslint-plugin-import": "^2.8.0",
+        "eslint-plugin-mocha": "^10.1.0",
+        "eslint-plugin-n": "^15.7.0",
+        "eslint-plugin-node": "^5.2.1",
+        "eslint-plugin-promise": "^3.6.0",
+        "eslint-plugin-standard": "^3.0.1",
+        express: "^4.16.2",
+        "get-port": "^3.2.0",
+        glob: "^7.1.6",
+        graphql: "0.13.2",
+        "int64-buffer": "^0.1.9",
+        jszip: "^3.5.0",
+        mkdirp: "^0.5.1",
+        mocha: "8",
+        "msgpack-lite": "^0.1.26",
+        multer: "^1.4.5-lts.1",
+        nock: "^11.3.3",
+        nyc: "^15.1.0",
+        "pprof-format": "^2.0.7",
+        proxyquire: "^1.8.0",
+        rimraf: "^3.0.0",
+        sinon: "^11.1.2",
+        "sinon-chai": "^3.7.0",
+        tap: "^16.3.4",
+        tape: "^4.9.1"
+      }
+    };
+  }
+});
+
+// packages/dd-trace/src/encode/tags-processors.js
+var require_tags_processors = __commonJS({
+  "packages/dd-trace/src/encode/tags-processors.js"(exports2, module2) {
+    var MAX_RESOURCE_NAME_LENGTH = 5e3;
+    var MAX_META_KEY_LENGTH = 200;
+    var MAX_META_VALUE_LENGTH = 25e3;
+    var MAX_METRIC_KEY_LENGTH = MAX_META_KEY_LENGTH;
+    var DEFAULT_SPAN_NAME = "unnamed_operation";
+    var DEFAULT_SERVICE_NAME = "unnamed-service";
+    var MAX_NAME_LENGTH = 100;
+    var MAX_SERVICE_LENGTH = 100;
+    var MAX_TYPE_LENGTH = 100;
+    function truncateSpan(span, shouldTruncateResourceName = true) {
+      if (shouldTruncateResourceName && span.resource && span.resource.length > MAX_RESOURCE_NAME_LENGTH) {
+        span.resource = `${span.resource.slice(0, MAX_RESOURCE_NAME_LENGTH)}...`;
+      }
+      for (let metaKey in span.meta) {
+        const val = span.meta[metaKey];
+        if (metaKey.length > MAX_META_KEY_LENGTH) {
+          delete span.meta[metaKey];
+          metaKey = `${metaKey.slice(0, MAX_META_KEY_LENGTH)}...`;
+          span.metrics[metaKey] = val;
+        }
+        if (val && val.length > MAX_META_VALUE_LENGTH) {
+          span.meta[metaKey] = `${val.slice(0, MAX_META_VALUE_LENGTH)}...`;
+        }
+      }
+      for (let metricsKey in span.metrics) {
+        const val = span.metrics[metricsKey];
+        if (metricsKey.length > MAX_METRIC_KEY_LENGTH) {
+          delete span.metrics[metricsKey];
+          metricsKey = `${metricsKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`;
+          span.metrics[metricsKey] = val;
+        }
+      }
+      return span;
+    }
+    function normalizeSpan(span) {
+      span.service = span.service || DEFAULT_SERVICE_NAME;
+      if (span.service.length > MAX_SERVICE_LENGTH) {
+        span.service = span.service.slice(0, MAX_SERVICE_LENGTH);
+      }
+      span.name = span.name || DEFAULT_SPAN_NAME;
+      if (span.name.length > MAX_NAME_LENGTH) {
+        span.name = span.name.slice(0, MAX_NAME_LENGTH);
+      }
+      if (!span.resource) {
+        span.resource = span.name;
+      }
+      if (span.type && span.type.length > MAX_TYPE_LENGTH) {
+        span.type = span.type.slice(0, MAX_TYPE_LENGTH);
+      }
+      return span;
+    }
+    module2.exports = {
+      truncateSpan,
+      normalizeSpan,
+      MAX_META_KEY_LENGTH,
+      MAX_META_VALUE_LENGTH,
+      MAX_METRIC_KEY_LENGTH,
+      MAX_NAME_LENGTH,
+      MAX_SERVICE_LENGTH,
+      MAX_TYPE_LENGTH,
+      MAX_RESOURCE_NAME_LENGTH,
+      DEFAULT_SPAN_NAME,
+      DEFAULT_SERVICE_NAME
+    };
+  }
+});
+
+// packages/dd-trace/src/encode/chunk.js
+var require_chunk = __commonJS({
+  "packages/dd-trace/src/encode/chunk.js"(exports2, module2) {
+    "use strict";
+    var DEFAULT_MIN_SIZE = 2 * 1024 * 1024;
+    var Chunk = class {
+      constructor(minSize = DEFAULT_MIN_SIZE) {
+        this.buffer = Buffer.allocUnsafe(minSize);
+        this.length = 0;
+        this._minSize = minSize;
+      }
+      write(value) {
+        const length = Buffer.byteLength(value);
+        const offset = this.length;
+        if (length < 32) {
+          this.reserve(length + 1);
+          this.length += 1;
+          this.buffer[offset] = length | 160;
+        } else if (length < 4294967296) {
+          this.reserve(length + 5);
+          this.length += 5;
+          this.buffer[offset] = 219;
+          this.buffer[offset + 1] = length >> 24;
+          this.buffer[offset + 2] = length >> 16;
+          this.buffer[offset + 3] = length >> 8;
+          this.buffer[offset + 4] = length;
+        }
+        this.length += this.buffer.utf8Write(value, this.length, length);
+        return this.length - offset;
+      }
+      copy(target, sourceStart, sourceEnd) {
+        target.set(new Uint8Array(this.buffer.buffer, sourceStart, sourceEnd - sourceStart));
+      }
+      set(array) {
+        this.reserve(array.length);
+        this.buffer.set(array, this.length);
+        this.length += array.length;
+      }
+      reserve(size) {
+        if (this.length + size > this.buffer.length) {
+          this._resize(this._minSize * Math.ceil((this.length + size) / this._minSize));
+        }
+      }
+      _resize(size) {
+        const oldBuffer = this.buffer;
+        this.buffer = Buffer.allocUnsafe(size);
+        oldBuffer.copy(this.buffer, 0, 0, this.length);
+      }
+    };
+    module2.exports = Chunk;
+  }
+});
+
+// packages/dd-trace/src/encode/0.4.js
+var require__ = __commonJS({
+  "packages/dd-trace/src/encode/0.4.js"(exports2, module2) {
+    "use strict";
+    var { truncateSpan, normalizeSpan } = require_tags_processors();
+    var Chunk = require_chunk();
+    var log = require_log();
+    var { isTrue } = require_util();
+    var coalesce = require("koalas");
+    var SOFT_LIMIT = 8 * 1024 * 1024;
+    var float64Array = new Float64Array(1);
+    var uInt8Float64Array = new Uint8Array(float64Array.buffer);
+    float64Array[0] = -1;
+    var bigEndian = uInt8Float64Array[7] === 0;
+    function formatSpan(span) {
+      return normalizeSpan(truncateSpan(span, false));
+    }
+    var AgentEncoder = class {
+      constructor(writer, limit = SOFT_LIMIT) {
+        this._limit = limit;
+        this._traceBytes = new Chunk();
+        this._stringBytes = new Chunk();
+        this._writer = writer;
+        this._reset();
+        this._debugEncoding = isTrue(coalesce(
+          process.env.DD_TRACE_ENCODING_DEBUG,
+          false
+        ));
+      }
+      count() {
+        return this._traceCount;
+      }
+      encode(trace) {
+        const bytes = this._traceBytes;
+        const start = bytes.length;
+        this._traceCount++;
+        this._encode(bytes, trace);
+        const end = bytes.length;
+        if (this._debugEncoding) {
+          log.debug(() => {
+            const hex = bytes.buffer.subarray(start, end).toString("hex").match(/../g).join(" ");
+            return `Adding encoded trace to buffer: ${hex}`;
+          });
+        }
+        if (this._traceBytes.length > this._limit || this._stringBytes.length > this._limit) {
+          log.debug("Buffer went over soft limit, flushing");
+          this._writer.flush();
+        }
+      }
+      makePayload() {
+        const traceSize = this._traceBytes.length + 5;
+        const buffer = Buffer.allocUnsafe(traceSize);
+        this._writeTraces(buffer);
+        this._reset();
+        return buffer;
+      }
+      reset() {
+        this._reset();
+      }
+      _encode(bytes, trace) {
+        this._encodeArrayPrefix(bytes, trace);
+        for (let span of trace) {
+          span = formatSpan(span);
+          bytes.reserve(1);
+          if (span.type) {
+            bytes.buffer[bytes.length++] = 140;
+            this._encodeString(bytes, "type");
+            this._encodeString(bytes, span.type);
+          } else {
+            bytes.buffer[bytes.length++] = 139;
+          }
+          this._encodeString(bytes, "trace_id");
+          this._encodeId(bytes, span.trace_id);
+          this._encodeString(bytes, "span_id");
+          this._encodeId(bytes, span.span_id);
+          this._encodeString(bytes, "parent_id");
+          this._encodeId(bytes, span.parent_id);
+          this._encodeString(bytes, "name");
+          this._encodeString(bytes, span.name);
+          this._encodeString(bytes, "resource");
+          this._encodeString(bytes, span.resource);
+          this._encodeString(bytes, "service");
+          this._encodeString(bytes, span.service);
+          this._encodeString(bytes, "error");
+          this._encodeInteger(bytes, span.error);
+          this._encodeString(bytes, "start");
+          this._encodeLong(bytes, span.start);
+          this._encodeString(bytes, "duration");
+          this._encodeLong(bytes, span.duration);
+          this._encodeString(bytes, "meta");
+          this._encodeMap(bytes, span.meta);
+          this._encodeString(bytes, "metrics");
+          this._encodeMap(bytes, span.metrics);
+        }
+      }
+      _reset() {
+        this._traceCount = 0;
+        this._traceBytes.length = 0;
+        this._stringCount = 0;
+        this._stringBytes.length = 0;
+        this._stringMap = {};
+        this._cacheString("");
+      }
+      _encodeArrayPrefix(bytes, value) {
+        const length = value.length;
+        const offset = bytes.length;
+        bytes.reserve(5);
+        bytes.length += 5;
+        bytes.buffer[offset] = 221;
+        bytes.buffer[offset + 1] = length >> 24;
+        bytes.buffer[offset + 2] = length >> 16;
+        bytes.buffer[offset + 3] = length >> 8;
+        bytes.buffer[offset + 4] = length;
+      }
+      _encodeMapPrefix(bytes, keysLength) {
+        const offset = bytes.length;
+        bytes.reserve(5);
+        bytes.length += 5;
+        bytes.buffer[offset] = 223;
+        bytes.buffer[offset + 1] = keysLength >> 24;
+        bytes.buffer[offset + 2] = keysLength >> 16;
+        bytes.buffer[offset + 3] = keysLength >> 8;
+        bytes.buffer[offset + 4] = keysLength;
+      }
+      _encodeByte(bytes, value) {
+        bytes.reserve(1);
+        bytes.buffer[bytes.length++] = value;
+      }
+      _encodeId(bytes, id) {
+        const offset = bytes.length;
+        bytes.reserve(9);
+        bytes.length += 9;
+        id = id.toArray();
+        bytes.buffer[offset] = 207;
+        bytes.buffer[offset + 1] = id[0];
+        bytes.buffer[offset + 2] = id[1];
+        bytes.buffer[offset + 3] = id[2];
+        bytes.buffer[offset + 4] = id[3];
+        bytes.buffer[offset + 5] = id[4];
+        bytes.buffer[offset + 6] = id[5];
+        bytes.buffer[offset + 7] = id[6];
+        bytes.buffer[offset + 8] = id[7];
+      }
+      _encodeInteger(bytes, value) {
+        const offset = bytes.length;
+        bytes.reserve(5);
+        bytes.length += 5;
+        bytes.buffer[offset] = 206;
+        bytes.buffer[offset + 1] = value >> 24;
+        bytes.buffer[offset + 2] = value >> 16;
+        bytes.buffer[offset + 3] = value >> 8;
+        bytes.buffer[offset + 4] = value;
+      }
+      _encodeLong(bytes, value) {
+        const offset = bytes.length;
+        const hi = value / Math.pow(2, 32) >> 0;
+        const lo = value >>> 0;
+        bytes.reserve(9);
+        bytes.length += 9;
+        bytes.buffer[offset] = 207;
+        bytes.buffer[offset + 1] = hi >> 24;
+        bytes.buffer[offset + 2] = hi >> 16;
+        bytes.buffer[offset + 3] = hi >> 8;
+        bytes.buffer[offset + 4] = hi;
+        bytes.buffer[offset + 5] = lo >> 24;
+        bytes.buffer[offset + 6] = lo >> 16;
+        bytes.buffer[offset + 7] = lo >> 8;
+        bytes.buffer[offset + 8] = lo;
+      }
+      _encodeMap(bytes, value) {
+        const keys = Object.keys(value);
+        const validKeys = keys.filter((key) => typeof value[key] === "string" || typeof value[key] === "number");
+        this._encodeMapPrefix(bytes, validKeys.length);
+        for (const key of validKeys) {
+          this._encodeString(bytes, key);
+          this._encodeValue(bytes, value[key]);
+        }
+      }
+      _encodeValue(bytes, value) {
+        switch (typeof value) {
+          case "string":
+            this._encodeString(bytes, value);
+            break;
+          case "number":
+            this._encodeFloat(bytes, value);
+            break;
+          default:
+        }
+      }
+      _encodeString(bytes, value = "") {
+        this._cacheString(value);
+        const { start, end } = this._stringMap[value];
+        this._stringBytes.copy(bytes, start, end);
+      }
+      _encodeFloat(bytes, value) {
+        float64Array[0] = value;
+        const offset = bytes.length;
+        bytes.reserve(9);
+        bytes.length += 9;
+        bytes.buffer[offset] = 203;
+        if (bigEndian) {
+          for (let i = 0; i <= 7; i++) {
+            bytes.buffer[offset + i + 1] = uInt8Float64Array[i];
+          }
+        } else {
+          for (let i = 7; i >= 0; i--) {
+            bytes.buffer[bytes.length - i - 1] = uInt8Float64Array[i];
+          }
+        }
+      }
+      _cacheString(value) {
+        if (!(value in this._stringMap)) {
+          this._stringCount++;
+          this._stringMap[value] = {
+            start: this._stringBytes.length,
+            end: this._stringBytes.length + this._stringBytes.write(value)
+          };
+        }
+      }
+      _writeArrayPrefix(buffer, offset, count) {
+        buffer[offset++] = 221;
+        buffer.writeUInt32BE(count, offset);
+        return offset + 4;
+      }
+      _writeTraces(buffer, offset = 0) {
+        offset = this._writeArrayPrefix(buffer, offset, this._traceCount);
+        offset += this._traceBytes.buffer.copy(buffer, offset, 0, this._traceBytes.length);
+        return offset;
+      }
+    };
+    module2.exports = { AgentEncoder };
+  }
+});
+
+// packages/dd-trace/src/encode/span-stats.js
+var require_span_stats = __commonJS({
+  "packages/dd-trace/src/encode/span-stats.js"(exports2, module2) {
+    "use strict";
+    var { AgentEncoder } = require__();
+    var {
+      MAX_NAME_LENGTH,
+      MAX_SERVICE_LENGTH,
+      MAX_RESOURCE_NAME_LENGTH,
+      MAX_TYPE_LENGTH,
+      DEFAULT_SPAN_NAME,
+      DEFAULT_SERVICE_NAME
+    } = require_tags_processors();
+    function truncate(value, maxLength, suffix = "") {
+      if (!value) {
+        return value;
+      }
+      if (value.length > maxLength) {
+        return `${value.slice(0, maxLength)}${suffix}`;
+      }
+      return value;
+    }
+    var SpanStatsEncoder = class extends AgentEncoder {
+      _encodeBool(bytes, value) {
+        this._encodeByte(bytes, value ? 195 : 194);
+      }
+      makePayload() {
+        const traceSize = this._traceBytes.length;
+        const buffer = Buffer.allocUnsafe(traceSize);
+        this._traceBytes.copy(buffer, 0, traceSize);
+        this._reset();
+        return buffer;
+      }
+      _encodeMapPrefix(bytes, length) {
+        const offset = bytes.length;
+        bytes.reserve(1);
+        bytes.length += 1;
+        bytes.buffer[offset] = 128 + length;
+      }
+      _encodeBuffer(bytes, buffer) {
+        const length = buffer.length;
+        const offset = bytes.length;
+        bytes.reserve(5);
+        bytes.length += 5;
+        bytes.buffer[offset] = 198;
+        bytes.buffer[offset + 1] = length >> 24;
+        bytes.buffer[offset + 2] = length >> 16;
+        bytes.buffer[offset + 3] = length >> 8;
+        bytes.buffer[offset + 4] = length;
+        buffer.copy(bytes.buffer, offset + 5);
+        bytes.length += length;
+      }
+      _encodeStat(bytes, stat) {
+        this._encodeMapPrefix(bytes, 12);
+        this._encodeString(bytes, "Service");
+        const service = stat.Service || DEFAULT_SERVICE_NAME;
+        this._encodeString(bytes, truncate(service, MAX_SERVICE_LENGTH));
+        this._encodeString(bytes, "Name");
+        const name = stat.Name || DEFAULT_SPAN_NAME;
+        this._encodeString(bytes, truncate(name, MAX_NAME_LENGTH));
+        this._encodeString(bytes, "Resource");
+        this._encodeString(bytes, truncate(stat.Resource, MAX_RESOURCE_NAME_LENGTH, "..."));
+        this._encodeString(bytes, "HTTPStatusCode");
+        this._encodeInteger(bytes, stat.HTTPStatusCode);
+        this._encodeString(bytes, "Type");
+        this._encodeString(bytes, truncate(stat.Type, MAX_TYPE_LENGTH));
+        this._encodeString(bytes, "Hits");
+        this._encodeLong(bytes, stat.Hits);
+        this._encodeString(bytes, "Errors");
+        this._encodeLong(bytes, stat.Errors);
+        this._encodeString(bytes, "Duration");
+        this._encodeLong(bytes, stat.Duration);
+        this._encodeString(bytes, "OkSummary");
+        this._encodeBuffer(bytes, stat.OkSummary);
+        this._encodeString(bytes, "ErrorSummary");
+        this._encodeBuffer(bytes, stat.ErrorSummary);
+        this._encodeString(bytes, "Synthetics");
+        this._encodeBool(bytes, stat.Synthetics);
+        this._encodeString(bytes, "TopLevelHits");
+        this._encodeLong(bytes, stat.TopLevelHits);
+      }
+      _encodeBucket(bytes, bucket) {
+        this._encodeMapPrefix(bytes, 3);
+        this._encodeString(bytes, "Start");
+        this._encodeLong(bytes, bucket.Start);
+        this._encodeString(bytes, "Duration");
+        this._encodeLong(bytes, bucket.Duration);
+        this._encodeString(bytes, "Stats");
+        this._encodeArrayPrefix(bytes, bucket.Stats);
+        for (const stat of bucket.Stats) {
+          this._encodeStat(bytes, stat);
+        }
+      }
+      _encode(bytes, stats) {
+        this._encodeMapPrefix(bytes, 8);
+        this._encodeString(bytes, "Hostname");
+        this._encodeString(bytes, stats.Hostname);
+        this._encodeString(bytes, "Env");
+        this._encodeString(bytes, stats.Env);
+        this._encodeString(bytes, "Version");
+        this._encodeString(bytes, stats.Version);
+        this._encodeString(bytes, "Stats");
+        this._encodeArrayPrefix(bytes, stats.Stats);
+        for (const bucket of stats.Stats) {
+          this._encodeBucket(bytes, bucket);
+        }
+        this._encodeString(bytes, "Lang");
+        this._encodeString(bytes, stats.Lang);
+        this._encodeString(bytes, "TracerVersion");
+        this._encodeString(bytes, stats.TracerVersion);
+        this._encodeString(bytes, "RuntimeID");
+        this._encodeString(bytes, stats.RuntimeID);
+        this._encodeString(bytes, "Sequence");
+        this._encodeLong(bytes, stats.Sequence);
+      }
+    };
+    module2.exports = {
+      SpanStatsEncoder
+    };
+  }
+});
+
+// packages/dd-trace/src/exporters/common/writer.js
+var require_writer2 = __commonJS({
+  "packages/dd-trace/src/exporters/common/writer.js"(exports2, module2) {
+    "use strict";
+    var request = require_request();
+    var log = require_log();
+    var Writer = class {
+      constructor({ url }) {
+        this._url = url;
+      }
+      flush(done = () => {
+      }) {
+        const count = this._encoder.count();
+        if (!request.writable) {
+          this._encoder.reset();
+          done();
+        } else if (count > 0) {
+          const payload = this._encoder.makePayload();
+          this._sendPayload(payload, count, done);
+        } else {
+          done();
+        }
+      }
+      append(payload) {
+        if (!request.writable) {
+          log.debug(() => `Maximum number of active requests reached. Payload discarded: ${JSON.stringify(payload)}`);
+          return;
+        }
+        log.debug(() => `Encoding payload: ${JSON.stringify(payload)}`);
+        this._encode(payload);
+      }
+      _encode(payload) {
+        this._encoder.encode(payload);
+      }
+      setUrl(url) {
+        this._url = url;
+      }
+    };
+    module2.exports = Writer;
+  }
+});
+
+// packages/dd-trace/src/exporters/span-stats/writer.js
+var require_writer3 = __commonJS({
+  "packages/dd-trace/src/exporters/span-stats/writer.js"(exports2, module2) {
+    var { SpanStatsEncoder } = require_span_stats();
+    var pkg = require_package();
+    var BaseWriter = require_writer2();
+    var request = require_request();
+    var log = require_log();
+    var Writer = class extends BaseWriter {
+      constructor({ url }) {
+        super(...arguments);
+        this._url = url;
+        this._encoder = new SpanStatsEncoder(this);
+      }
+      _sendPayload(data, _, done) {
+        makeRequest(data, this._url, (err, res) => {
+          if (err) {
+            log.error(err);
+            done();
+            return;
+          }
+          log.debug(`Response from the intake: ${res}`);
+          done();
+        });
+      }
+    };
+    function makeRequest(data, url, cb) {
+      const options = {
+        path: "/v0.6/stats",
+        method: "PUT",
+        headers: {
+          "Datadog-Meta-Lang": "javascript",
+          "Datadog-Meta-Tracer-Version": pkg.version,
+          "Content-Type": "application/msgpack"
+        }
+      };
+      options.protocol = url.protocol;
+      options.hostname = url.hostname;
+      options.port = url.port;
+      log.debug(() => `Request to the intake: ${JSON.stringify(options)}`);
+      request(data, options, (err, res) => {
+        cb(err, res);
+      });
+    }
+    module2.exports = {
+      Writer
+    };
+  }
+});
+
+// packages/dd-trace/src/exporters/span-stats/index.js
+var require_span_stats2 = __commonJS({
+  "packages/dd-trace/src/exporters/span-stats/index.js"(exports2, module2) {
+    var { URL: URL2, format } = require("url");
+    var { Writer } = require_writer3();
+    var SpanStatsExporter = class {
+      constructor(config) {
+        const { hostname = "127.0.0.1", port = 8126, tags, url } = config;
+        this._url = url || new URL2(format({
+          protocol: "http:",
+          hostname: hostname || "localhost",
+          port
+        }));
+        this._writer = new Writer({ url: this._url, tags });
+      }
+      export(payload) {
+        this._writer.append(payload);
+        this._writer.flush();
+      }
+    };
+    module2.exports = {
+      SpanStatsExporter
+    };
+  }
+});
+
+// packages/dd-trace/src/span_stats.js
+var require_span_stats3 = __commonJS({
+  "packages/dd-trace/src/span_stats.js"(exports2, module2) {
+    var os = require("os");
+    var { version } = require_pkg();
+    var pkg = require_package();
+    var { LogCollapsingLowestDenseDDSketch } = require("@datadog/sketches-js");
+    var { ORIGIN_KEY, TOP_LEVEL_KEY } = require_constants();
+    var {
+      MEASURED,
+      HTTP_STATUS_CODE
+    } = require_tags();
+    var { SpanStatsExporter } = require_span_stats2();
+    var {
+      DEFAULT_SPAN_NAME,
+      DEFAULT_SERVICE_NAME
+    } = require_tags_processors();
+    var SpanAggStats = class {
+      constructor(aggKey) {
+        this.aggKey = aggKey;
+        this.hits = 0;
+        this.topLevelHits = 0;
+        this.errors = 0;
+        this.duration = 0;
+        this.okDistribution = new LogCollapsingLowestDenseDDSketch(775e-5);
+        this.errorDistribution = new LogCollapsingLowestDenseDDSketch(775e-5);
+      }
+      record(span) {
+        const durationNs = span.duration;
+        this.hits++;
+        this.duration += durationNs;
+        if (span.metrics[TOP_LEVEL_KEY]) {
+          this.topLevelHits++;
+        }
+        if (span.error) {
+          this.errors++;
+          this.errorDistribution.accept(durationNs);
+        } else {
+          this.okDistribution.accept(durationNs);
+        }
+      }
+      toJSON() {
+        const {
+          name,
+          service,
+          resource,
+          type,
+          statusCode,
+          synthetics
+        } = this.aggKey;
+        return {
+          Name: name,
+          Service: service,
+          Resource: resource,
+          Type: type,
+          HTTPStatusCode: statusCode,
+          Synthetics: synthetics,
+          Hits: this.hits,
+          TopLevelHits: this.topLevelHits,
+          Errors: this.errors,
+          Duration: this.duration,
+          OkSummary: this.okDistribution.toProto(),
+          // TODO: custom proto encoding
+          ErrorSummary: this.errorDistribution.toProto()
+          // TODO: custom proto encoding
+        };
+      }
+    };
+    var SpanAggKey = class {
+      constructor(span) {
+        this.name = span.name || DEFAULT_SPAN_NAME;
+        this.service = span.service || DEFAULT_SERVICE_NAME;
+        this.resource = span.resource || "";
+        this.type = span.type || "";
+        this.statusCode = span.meta[HTTP_STATUS_CODE] || 0;
+        this.synthetics = span.meta[ORIGIN_KEY] === "synthetics";
+      }
+      toString() {
+        return [
+          this.name,
+          this.service,
+          this.resource,
+          this.type,
+          this.statusCode,
+          this.synthetics
+        ].join(",");
+      }
+    };
+    var SpanBuckets = class extends Map {
+      forSpan(span) {
+        const aggKey = new SpanAggKey(span);
+        const key = aggKey.toString();
+        if (!this.has(key)) {
+          this.set(key, new SpanAggStats(aggKey));
+        }
+        return this.get(key);
+      }
+    };
+    var TimeBuckets = class extends Map {
+      forTime(time) {
+        if (!this.has(time)) {
+          this.set(time, new SpanBuckets());
+        }
+        return this.get(time);
+      }
+    };
+    var SpanStatsProcessor = class {
+      constructor({
+        stats: {
+          enabled = false,
+          interval = 10
+        },
+        hostname,
+        port,
+        url,
+        env,
+        tags
+      } = {}) {
+        this.exporter = new SpanStatsExporter({
+          hostname,
+          port,
+          tags,
+          url
+        });
+        this.interval = interval;
+        this.bucketSizeNs = interval * 1e9;
+        this.buckets = new TimeBuckets();
+        this.hostname = os.hostname();
+        this.enabled = enabled;
+        this.env = env;
+        this.tags = tags || {};
+        this.sequence = 0;
+        if (enabled) {
+          this.timer = setInterval(this.onInterval.bind(this), interval * 1e3);
+          this.timer.unref();
+        }
+      }
+      onInterval() {
+        const serialized = this._serializeBuckets();
+        if (!serialized)
+          return;
+        this.exporter.export({
+          Hostname: this.hostname,
+          Env: this.env,
+          Version: version,
+          Stats: serialized,
+          Lang: "javascript",
+          TracerVersion: pkg.version,
+          RuntimeID: this.tags["runtime-id"],
+          Sequence: ++this.sequence
+        });
+      }
+      onSpanFinished(span) {
+        if (!this.enabled)
+          return;
+        if (!span.metrics[TOP_LEVEL_KEY] && !span.metrics[MEASURED])
+          return;
+        const spanEndNs = span.startTime + span.duration;
+        const bucketTime = spanEndNs - spanEndNs % this.bucketSizeNs;
+        this.buckets.forTime(bucketTime).forSpan(span).record(span);
+      }
+      _serializeBuckets() {
+        const { bucketSizeNs } = this;
+        const serializedBuckets = [];
+        for (const [timeNs, bucket] of this.buckets.entries()) {
+          const bucketAggStats = [];
+          for (const stats of bucket.values()) {
+            bucketAggStats.push(stats.toJSON());
+          }
+          serializedBuckets.push({
+            Start: timeNs,
+            Duration: bucketSizeNs,
+            Stats: bucketAggStats
+          });
+        }
+        this.buckets.clear();
+        return serializedBuckets;
+      }
+    };
+    module2.exports = {
+      SpanAggStats,
+      SpanAggKey,
+      SpanBuckets,
+      TimeBuckets,
+      SpanStatsProcessor
+    };
+  }
+});
+
+// packages/dd-trace/src/span_processor.js
+var require_span_processor = __commonJS({
+  "packages/dd-trace/src/span_processor.js"(exports2, module2) {
+    "use strict";
+    var log = require_log();
+    var format = require_format();
+    var SpanSampler = require_span_sampler();
+    var { SpanStatsProcessor } = require_span_stats3();
+    var startedSpans = /* @__PURE__ */ new WeakSet();
+    var finishedSpans = /* @__PURE__ */ new WeakSet();
+    var SpanProcessor = class {
+      constructor(exporter, prioritySampler, config) {
+        this._exporter = exporter;
+        this._prioritySampler = prioritySampler;
+        this._config = config;
+        this._killAll = false;
+        this._stats = new SpanStatsProcessor(config);
+        this._spanSampler = new SpanSampler(config.sampler);
+      }
+      process(span) {
+        const spanContext = span.context();
+        const active = [];
+        const formatted = [];
+        const trace = spanContext._trace;
+        const { flushMinSpans } = this._config;
+        const { started, finished } = trace;
+        if (trace.record === false)
+          return;
+        if (started.length === finished.length || finished.length >= flushMinSpans) {
+          this._prioritySampler.sample(spanContext);
+          this._spanSampler.sample(spanContext);
+          for (const span2 of started) {
+            if (span2._duration !== void 0) {
+              const formattedSpan = format(span2);
+              this._stats.onSpanFinished(formattedSpan);
+              formatted.push(formattedSpan);
+            } else {
+              active.push(span2);
+            }
+          }
+          if (formatted.length !== 0 && trace.isRecording !== false) {
+            this._exporter.export(formatted);
+          }
+          this._erase(trace, active);
+        }
+        if (this._killAll) {
+          started.map((startedSpan) => {
+            if (!startedSpan._finished) {
+              startedSpan.finish();
+            }
+          });
+        }
+      }
+      killAll() {
+        this._killAll = true;
+      }
+      _erase(trace, active) {
+        if (process.env.DD_TRACE_EXPERIMENTAL_STATE_TRACKING === "true") {
+          const started = /* @__PURE__ */ new Set();
+          const startedIds = /* @__PURE__ */ new Set();
+          const finished = /* @__PURE__ */ new Set();
+          const finishedIds = /* @__PURE__ */ new Set();
+          for (const span of trace.finished) {
+            const context = span.context();
+            const id = context.toSpanId();
+            if (finished.has(span)) {
+              log.error(`Span was already finished in the same trace: ${span}`);
+            } else {
+              finished.add(span);
+              if (finishedIds.has(id)) {
+                log.error(`Another span with the same ID was already finished in the same trace: ${span}`);
+              } else {
+                finishedIds.add(id);
+              }
+              if (context._trace !== trace) {
+                log.error(`A span was finished in the wrong trace: ${span}.`);
+              }
+              if (finishedSpans.has(span)) {
+                log.error(`Span was already finished in a different trace: ${span}`);
+              } else {
+                finishedSpans.add(span);
+              }
+            }
+          }
+          for (const span of trace.started) {
+            const context = span.context();
+            const id = context.toSpanId();
+            if (started.has(span)) {
+              log.error(`Span was already started in the same trace: ${span}`);
+            } else {
+              started.add(span);
+              if (startedIds.has(id)) {
+                log.error(`Another span with the same ID was already started in the same trace: ${span}`);
+              } else {
+                startedIds.add(id);
+              }
+              if (context._trace !== trace) {
+                log.error(`A span was started in the wrong trace: ${span}.`);
+              }
+              if (startedSpans.has(span)) {
+                log.error(`Span was already started in a different trace: ${span}`);
+              } else {
+                startedSpans.add(span);
+              }
+            }
+            if (!finished.has(span)) {
+              log.error(`Span started in one trace but was finished in another trace: ${span}`);
+            }
+          }
+          for (const span of trace.finished) {
+            if (!started.has(span)) {
+              log.error(`Span finished in one trace but was started in another trace: ${span}`);
+            }
+          }
+        }
+        for (const span of trace.finished) {
+          span.context()._tags = {};
+        }
+        trace.started = active;
+        trace.finished = [];
+      }
+    };
+    module2.exports = SpanProcessor;
+  }
+});
+
+// packages/dd-trace/src/startup-log.js
+var require_startup_log = __commonJS({
+  "packages/dd-trace/src/startup-log.js"(exports2, module2) {
+    "use strict";
+    var { info, warn } = require_writer();
+    var os = require("os");
+    var { inspect } = require("util");
+    var tracerVersion = require_package().version;
+    var config;
+    var pluginManager;
+    var samplingRules = [];
+    var alreadyRan = false;
+    function getIntegrationsAndAnalytics() {
+      const integrations = /* @__PURE__ */ new Set();
+      const extras = {};
+      for (const pluginName in pluginManager._pluginsByName) {
+        integrations.add(pluginName);
+      }
+      extras.integrations_loaded = Array.from(integrations);
+      return extras;
+    }
+    function startupLog({ agentError } = {}) {
+      if (!config || !pluginManager) {
+        return;
+      }
+      if (alreadyRan) {
+        return;
+      }
+      alreadyRan = true;
+      if (!config.startupLogs) {
+        return;
+      }
+      const url = config.url || `http://${config.hostname || "localhost"}:${config.port}`;
+      const out = {
+        [inspect.custom]() {
+          return String(this);
+        },
+        toString() {
+          return JSON.stringify(this);
+        }
+      };
+      out.date = (/* @__PURE__ */ new Date()).toISOString();
+      out.os_name = os.type();
+      out.os_version = os.release();
+      out.architecture = os.arch();
+      out.version = tracerVersion;
+      out.lang = "nodejs";
+      out.lang_version = process.versions.node;
+      out.env = config.env;
+      out.enabled = config.enabled;
+      out.service = config.service;
+      out.agent_url = url;
+      if (agentError) {
+        out.agent_error = agentError.message;
+      }
+      out.debug = !!config.debug;
+      out.sample_rate = config.sampleRate;
+      out.sampling_rules = samplingRules;
+      out.tags = config.tags;
+      if (config.tags && config.tags.version) {
+        out.dd_version = config.tags.version;
+      }
+      out.log_injection_enabled = !!config.logInjection;
+      out.runtime_metrics_enabled = !!config.runtimeMetrics;
+      out.profiling_enabled = !!(config.profiling || {}).enabled;
+      Object.assign(out, getIntegrationsAndAnalytics());
+      out.appsec_enabled = !!config.appsec.enabled;
+      info("DATADOG TRACER CONFIGURATION - " + out);
+      if (agentError) {
+        warn("DATADOG TRACER DIAGNOSTIC - Agent Error: " + agentError.message);
+      }
+      config = void 0;
+      pluginManager = void 0;
+      samplingRules = void 0;
+    }
+    function setStartupLogConfig(aConfig) {
+      config = aConfig;
+    }
+    function setStartupLogPluginManager(thePluginManager) {
+      pluginManager = thePluginManager;
+    }
+    function setSamplingRules(theRules) {
+      samplingRules = theRules;
+    }
+    module2.exports = {
+      startupLog,
+      setStartupLogConfig,
+      setStartupLogPluginManager,
+      setSamplingRules
+    };
+  }
+});
+
+// packages/dd-trace/src/priority_sampler.js
+var require_priority_sampler = __commonJS({
+  "packages/dd-trace/src/priority_sampler.js"(exports2, module2) {
+    "use strict";
+    var RateLimiter = require_rate_limiter();
+    var Sampler = require_sampler();
+    var ext = require_ext();
+    var { setSamplingRules } = require_startup_log();
+    var {
+      SAMPLING_MECHANISM_DEFAULT,
+      SAMPLING_MECHANISM_AGENT,
+      SAMPLING_MECHANISM_RULE,
+      SAMPLING_MECHANISM_MANUAL,
+      SAMPLING_RULE_DECISION,
+      SAMPLING_LIMIT_DECISION,
+      SAMPLING_AGENT_DECISION,
+      DECISION_MAKER_KEY
+    } = require_constants();
+    var SERVICE_NAME = ext.tags.SERVICE_NAME;
+    var SAMPLING_PRIORITY = ext.tags.SAMPLING_PRIORITY;
+    var MANUAL_KEEP = ext.tags.MANUAL_KEEP;
+    var MANUAL_DROP = ext.tags.MANUAL_DROP;
+    var USER_REJECT = ext.priority.USER_REJECT;
+    var AUTO_REJECT = ext.priority.AUTO_REJECT;
+    var AUTO_KEEP = ext.priority.AUTO_KEEP;
+    var USER_KEEP = ext.priority.USER_KEEP;
+    var DEFAULT_KEY = "service:,env:";
+    var defaultSampler = new Sampler(AUTO_KEEP);
+    var PrioritySampler = class {
+      constructor(env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
+        this._env = env;
+        this._rules = this._normalizeRules(rules, sampleRate);
+        this._limiter = new RateLimiter(rateLimit);
+        setSamplingRules(this._rules);
+        this.update({});
+      }
+      isSampled(span) {
+        const priority = this._getPriorityFromAuto(span);
+        return priority === USER_KEEP || priority === AUTO_KEEP;
+      }
+      sample(span, auto = true) {
+        if (!span)
+          return;
+        const context = this._getContext(span);
+        const root = context._trace.started[0];
+        if (context._sampling.priority !== void 0)
+          return;
+        if (!root)
+          return;
+        const tag = this._getPriorityFromTags(context._tags);
+        if (this.validate(tag)) {
+          context._sampling.priority = tag;
+          context._sampling.mechanism = SAMPLING_MECHANISM_MANUAL;
+        } else if (auto) {
+          context._sampling.priority = this._getPriorityFromAuto(root);
+        } else {
+          return;
+        }
+        this._addDecisionMaker(root);
+      }
+      update(rates) {
+        const samplers = {};
+        for (const key in rates) {
+          const rate = rates[key];
+          const sampler = new Sampler(rate);
+          samplers[key] = sampler;
+        }
+        samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler;
+        this._samplers = samplers;
+      }
+      validate(samplingPriority) {
+        switch (samplingPriority) {
+          case USER_REJECT:
+          case USER_KEEP:
+          case AUTO_REJECT:
+          case AUTO_KEEP:
+            return true;
+          default:
+            return false;
+        }
+      }
+      _getContext(span) {
+        return typeof span.context === "function" ? span.context() : span;
+      }
+      _getPriorityFromAuto(span) {
+        const context = this._getContext(span);
+        const rule = this._findRule(context);
+        return rule ? this._getPriorityByRule(context, rule) : this._getPriorityByAgent(context);
+      }
+      _getPriorityFromTags(tags) {
+        if (hasOwn(tags, MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
+          return USER_KEEP;
+        } else if (hasOwn(tags, MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
+          return USER_REJECT;
+        } else {
+          const priority = parseInt(tags[SAMPLING_PRIORITY], 10);
+          if (priority === 1 || priority === 2) {
+            return USER_KEEP;
+          } else if (priority === 0 || priority === -1) {
+            return USER_REJECT;
+          }
+        }
+      }
+      _getPriorityByRule(context, rule) {
+        context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate;
+        context._sampling.mechanism = SAMPLING_MECHANISM_RULE;
+        return rule.sampler.isSampled(context) && this._isSampledByRateLimit(context) ? USER_KEEP : USER_REJECT;
+      }
+      _isSampledByRateLimit(context) {
+        const allowed = this._limiter.isAllowed();
+        context._trace[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate();
+        return allowed;
+      }
+      _getPriorityByAgent(context) {
+        const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`;
+        const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY];
+        context._trace[SAMPLING_AGENT_DECISION] = sampler.rate();
+        if (sampler === defaultSampler) {
+          context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT;
+        } else {
+          context._sampling.mechanism = SAMPLING_MECHANISM_AGENT;
+        }
+        return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT;
+      }
+      _addDecisionMaker(span) {
+        const context = span.context();
+        const trace = context._trace;
+        const priority = context._sampling.priority;
+        const mechanism = context._sampling.mechanism;
+        if (priority >= AUTO_KEEP) {
+          if (!trace.tags[DECISION_MAKER_KEY]) {
+            trace.tags[DECISION_MAKER_KEY] = `-${mechanism}`;
+          }
+        } else {
+          delete trace.tags[DECISION_MAKER_KEY];
+        }
+      }
+      _normalizeRules(rules, sampleRate) {
+        rules = [].concat(rules || []);
+        return rules.concat({ sampleRate }).map((rule) => ({ ...rule, sampleRate: parseFloat(rule.sampleRate) })).filter((rule) => !isNaN(rule.sampleRate)).map((rule) => ({ ...rule, sampler: new Sampler(rule.sampleRate) }));
+      }
+      _findRule(context) {
+        for (let i = 0, l = this._rules.length; i < l; i++) {
+          if (this._matchRule(context, this._rules[i]))
+            return this._rules[i];
+        }
+      }
+      _matchRule(context, rule) {
+        const name = context._name;
+        const service = context._tags["service.name"];
+        if (rule.name instanceof RegExp && !rule.name.test(name))
+          return false;
+        if (typeof rule.name === "string" && rule.name !== name)
+          return false;
+        if (rule.service instanceof RegExp && !rule.service.test(service))
+          return false;
+        if (typeof rule.service === "string" && rule.service !== service)
+          return false;
+        return true;
+      }
+    };
+    function hasOwn(object, prop) {
+      return Object.prototype.hasOwnProperty.call(object, prop);
+    }
+    module2.exports = PrioritySampler;
+  }
+});
+
+// packages/dd-trace/src/opentracing/propagation/tracestate.js
+var require_tracestate = __commonJS({
+  "packages/dd-trace/src/opentracing/propagation/tracestate.js"(exports2, module2) {
+    "use strict";
+    var traceStateRegex = /[ \t]*([^=]+)=([ \t]*[^, \t]+)[ \t]*(,|$)/gim;
+    var traceStateDataRegex = /([^:]+):([^;]+)(;|$)/gim;
+    function fromString(Type, regex, value) {
+      if (typeof value !== "string" || !value.length) {
+        return new Type();
+      }
+      const values = [];
+      for (const row of value.matchAll(regex)) {
+        values.unshift(row.slice(1, 3));
+      }
+      return new Type(values);
+    }
+    function toString(map, pairSeparator, fieldSeparator) {
+      return Array.from(map.entries()).reverse().map((pair) => pair.join(pairSeparator)).join(fieldSeparator);
+    }
+    var TraceStateData = class extends Map {
+      constructor(...args) {
+        super(...args);
+        this.changed = false;
+      }
+      set(...args) {
+        if (this.has(args[0]) && this.get(args[0]) === args[1]) {
+          return;
+        }
+        this.changed = true;
+        return super.set(...args);
+      }
+      delete(...args) {
+        this.changed = true;
+        return super.delete(...args);
+      }
+      clear(...args) {
+        this.changed = true;
+        return super.clear(...args);
+      }
+      static fromString(value) {
+        return fromString(TraceStateData, traceStateDataRegex, value);
+      }
+      toString() {
+        return toString(this, ":", ";");
+      }
+    };
+    var TraceState = class extends Map {
+      // Delete entries on update to ensure they're moved to the end of the list
+      set(key, value) {
+        if (this.has(key)) {
+          this.delete(key);
+        }
+        return super.set(key, value);
+      }
+      forVendor(vendor, handle) {
+        const data = super.get(vendor);
+        const state = TraceStateData.fromString(data);
+        const result = handle(state);
+        if (state.changed) {
+          const value = state.toString();
+          if (value) {
+            this.set(vendor, state.toString());
+          } else {
+            this.delete(vendor);
+          }
+        }
+        return result;
+      }
+      static fromString(value) {
+        return fromString(TraceState, traceStateRegex, value);
+      }
+      toString() {
+        return toString(this, "=", ",");
+      }
+    };
+    module2.exports = TraceState;
+  }
+});
+
+// packages/dd-trace/src/opentracing/propagation/text_map.js
+var require_text_map = __commonJS({
+  "packages/dd-trace/src/opentracing/propagation/text_map.js"(exports2, module2) {
+    "use strict";
+    var pick = require("lodash.pick");
+    var id = require_id();
+    var DatadogSpanContext = require_span_context();
+    var log = require_log();
+    var TraceState = require_tracestate();
+    var { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require_priority();
+    var traceKey = "x-datadog-trace-id";
+    var spanKey = "x-datadog-parent-id";
+    var originKey = "x-datadog-origin";
+    var samplingKey = "x-datadog-sampling-priority";
+    var tagsKey = "x-datadog-tags";
+    var baggagePrefix = "ot-baggage-";
+    var b3TraceKey = "x-b3-traceid";
+    var b3TraceExpr = /^([0-9a-f]{16}){1,2}$/i;
+    var b3SpanKey = "x-b3-spanid";
+    var b3SpanExpr = /^[0-9a-f]{16}$/i;
+    var b3ParentKey = "x-b3-parentspanid";
+    var b3SampledKey = "x-b3-sampled";
+    var b3FlagsKey = "x-b3-flags";
+    var b3HeaderKey = "b3";
+    var sqsdHeaderHey = "x-aws-sqsd-attr-_datadog";
+    var b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)?|[01d])$/i;
+    var baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`);
+    var tagKeyExpr = /^_dd\.p\.[\x21-\x2b\x2d-\x7e]+$/;
+    var tagValueExpr = /^[\x20-\x2b\x2d-\x7e]*$/;
+    var ddKeys = [traceKey, spanKey, samplingKey, originKey];
+    var b3Keys = [b3TraceKey, b3SpanKey, b3ParentKey, b3SampledKey, b3FlagsKey, b3HeaderKey];
+    var logKeys = ddKeys.concat(b3Keys);
+    var traceparentExpr = /^([a-f0-9]{2})-([a-f0-9]{32})-([a-f0-9]{16})-([a-f0-9]{2})(-.*)?$/i;
+    var traceparentKey = "traceparent";
+    var tracestateOriginFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g;
+    var tracestateTagKeyFilter = /[^\x21-\x2b\x2d-\x3c\x3e-\x7e]/g;
+    var tracestateTagValueFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g;
+    var invalidSegment = /^0+$/;
+    var TextMapPropagator = class {
+      constructor(config) {
+        this._config = config;
+      }
+      inject(spanContext, carrier) {
+        this._injectBaggageItems(spanContext, carrier);
+        this._injectDatadog(spanContext, carrier);
+        this._injectB3MultipleHeaders(spanContext, carrier);
+        this._injectB3SingleHeader(spanContext, carrier);
+        this._injectTraceparent(spanContext, carrier);
+        log.debug(() => `Inject into carrier: ${JSON.stringify(pick(carrier, logKeys))}.`);
+      }
+      extract(carrier) {
+        const spanContext = this._extractSpanContext(carrier);
+        if (!spanContext)
+          return spanContext;
+        log.debug(() => `Extract from carrier: ${JSON.stringify(pick(carrier, logKeys))}.`);
+        return spanContext;
+      }
+      _injectDatadog(spanContext, carrier) {
+        if (!this._hasPropagationStyle("inject", "datadog"))
+          return;
+        carrier[traceKey] = spanContext.toTraceId();
+        carrier[spanKey] = spanContext.toSpanId();
+        this._injectOrigin(spanContext, carrier);
+        this._injectSamplingPriority(spanContext, carrier);
+        this._injectTags(spanContext, carrier);
+      }
+      _injectOrigin(spanContext, carrier) {
+        const origin = spanContext._trace.origin;
+        if (origin) {
+          carrier[originKey] = origin;
+        }
+      }
+      _injectSamplingPriority(spanContext, carrier) {
+        const priority = spanContext._sampling.priority;
+        if (Number.isInteger(priority)) {
+          carrier[samplingKey] = priority.toString();
+        }
+      }
+      _injectBaggageItems(spanContext, carrier) {
+        spanContext._baggageItems && Object.keys(spanContext._baggageItems).forEach((key) => {
+          carrier[baggagePrefix + key] = String(spanContext._baggageItems[key]);
+        });
+      }
+      _injectTags(spanContext, carrier) {
+        const trace = spanContext._trace;
+        if (this._config.tagsHeaderMaxLength === 0) {
+          log.debug("Trace tag propagation is disabled, skipping injection.");
+          return;
+        }
+        const tags = [];
+        for (const key in trace.tags) {
+          if (!trace.tags[key] || !key.startsWith("_dd.p."))
+            continue;
+          if (!this._validateTagKey(key) || !this._validateTagValue(trace.tags[key])) {
+            log.error("Trace tags from span are invalid, skipping injection.");
+            return;
+          }
+          tags.push(`${key}=${trace.tags[key]}`);
+        }
+        const header = tags.join(",");
+        if (header.length > this._config.tagsHeaderMaxLength) {
+          log.error("Trace tags from span are too large, skipping injection.");
+        } else if (header) {
+          carrier[tagsKey] = header;
+        }
+      }
+      _injectB3MultipleHeaders(spanContext, carrier) {
+        const hasB3 = this._hasPropagationStyle("inject", "b3");
+        const hasB3multi = this._hasPropagationStyle("inject", "b3multi");
+        if (!(hasB3 || hasB3multi))
+          return;
+        carrier[b3TraceKey] = this._getB3TraceId(spanContext);
+        carrier[b3SpanKey] = spanContext._spanId.toString(16);
+        carrier[b3SampledKey] = spanContext._sampling.priority >= AUTO_KEEP ? "1" : "0";
+        if (spanContext._sampling.priority > AUTO_KEEP) {
+          carrier[b3FlagsKey] = "1";
+        }
+        if (spanContext._parentId) {
+          carrier[b3ParentKey] = spanContext._parentId.toString(16);
+        }
+      }
+      _injectB3SingleHeader(spanContext, carrier) {
+        const hasB3SingleHeader = this._hasPropagationStyle("inject", "b3 single header");
+        if (!hasB3SingleHeader)
+          return null;
+        const traceId = this._getB3TraceId(spanContext);
+        const spanId = spanContext._spanId.toString(16);
+        const sampled = spanContext._sampling.priority >= AUTO_KEEP ? "1" : "0";
+        carrier[b3HeaderKey] = `${traceId}-${spanId}-${sampled}`;
+        if (spanContext._parentId) {
+          carrier[b3HeaderKey] += "-" + spanContext._parentId.toString(16);
+        }
+      }
+      _injectTraceparent(spanContext, carrier) {
+        if (!this._hasPropagationStyle("inject", "tracecontext"))
+          return;
+        const {
+          _sampling: { priority, mechanism },
+          _tracestate: ts = new TraceState(),
+          _trace: { origin, tags }
+        } = spanContext;
+        carrier[traceparentKey] = spanContext.toTraceparent();
+        ts.forVendor("dd", (state) => {
+          state.set("s", priority);
+          if (mechanism) {
+            state.set("t.dm", mechanism);
+          }
+          if (typeof origin === "string") {
+            const originValue = origin.replace(tracestateOriginFilter, "_").replace(/[\x3d]/g, "~");
+            state.set("o", originValue);
+          }
+          for (const key in tags) {
+            if (!tags[key] || !key.startsWith("_dd.p."))
+              continue;
+            const tagKey = "t." + key.slice(6).replace(tracestateTagKeyFilter, "_");
+            const tagValue = tags[key].toString().replace(tracestateTagValueFilter, "_").replace(/[\x3d]/g, "~");
+            state.set(tagKey, tagValue);
+          }
+        });
+        carrier.tracestate = ts.toString();
+      }
+      _hasPropagationStyle(mode, name) {
+        return this._config.tracePropagationStyle[mode].includes(name);
+      }
+      _extractSpanContext(carrier) {
+        for (const extractor of this._config.tracePropagationStyle.extract) {
+          let spanContext = null;
+          switch (extractor) {
+            case "datadog":
+              spanContext = this._extractDatadogContext(carrier);
+              break;
+            case "tracecontext":
+              spanContext = this._extractTraceparentContext(carrier);
+              break;
+            case "b3":
+            case "b3multi":
+              spanContext = this._extractB3MultiContext(carrier);
+              break;
+            case "b3 single header":
+              spanContext = this._extractB3SingleContext(carrier);
+              break;
+          }
+          if (spanContext !== null) {
+            return spanContext;
+          }
+        }
+        return this._extractSqsdContext(carrier);
+      }
+      _extractDatadogContext(carrier) {
+        const spanContext = this._extractGenericContext(carrier, traceKey, spanKey, 10);
+        if (spanContext) {
+          this._extractOrigin(carrier, spanContext);
+          this._extractBaggageItems(carrier, spanContext);
+          this._extractSamplingPriority(carrier, spanContext);
+          this._extractTags(carrier, spanContext);
+        }
+        return spanContext;
+      }
+      _extractB3MultiContext(carrier) {
+        const b3 = this._extractB3MultipleHeaders(carrier);
+        if (!b3)
+          return null;
+        return this._extractB3Context(b3);
+      }
+      _extractB3SingleContext(carrier) {
+        if (!b3HeaderExpr.test(carrier[b3HeaderKey]))
+          return null;
+        const b3 = this._extractB3SingleHeader(carrier);
+        if (!b3)
+          return null;
+        return this._extractB3Context(b3);
+      }
+      _extractB3Context(b3) {
+        const debug = b3[b3FlagsKey] === "1";
+        const priority = this._getPriority(b3[b3SampledKey], debug);
+        const spanContext = this._extractGenericContext(b3, b3TraceKey, b3SpanKey, 16);
+        if (priority !== void 0) {
+          if (!spanContext) {
+            return new DatadogSpanContext({
+              traceId: id(),
+              spanId: null,
+              sampling: { priority }
+            });
+          }
+          spanContext._sampling.priority = priority;
+        }
+        this._extract128BitTraceId(b3[b3TraceKey], spanContext);
+        return spanContext;
+      }
+      _extractSqsdContext(carrier) {
+        const headerValue = carrier[sqsdHeaderHey];
+        if (!headerValue) {
+          return null;
+        }
+        let parsed;
+        try {
+          parsed = JSON.parse(headerValue);
+        } catch (e) {
+          return null;
+        }
+        return this._extractDatadogContext(parsed);
+      }
+      _extractTraceparentContext(carrier) {
+        const headerValue = carrier[traceparentKey];
+        if (!headerValue) {
+          return null;
+        }
+        const matches = headerValue.trim().match(traceparentExpr);
+        if (matches.length) {
+          const [version, traceId, spanId, flags, tail] = matches.slice(1);
+          const traceparent = { version };
+          const tracestate = TraceState.fromString(carrier.tracestate);
+          if (invalidSegment.test(traceId))
+            return null;
+          if (invalidSegment.test(spanId))
+            return null;
+          if (version === "ff")
+            return null;
+          if (tail && version === "00")
+            return null;
+          const spanContext = new DatadogSpanContext({
+            traceId: id(traceId, 16),
+            spanId: id(spanId, 16),
+            sampling: { priority: parseInt(flags, 10) & 1 ? 1 : 0 },
+            traceparent,
+            tracestate
+          });
+          this._extract128BitTraceId(traceId, spanContext);
+          tracestate.forVendor("dd", (state) => {
+            for (const [key, value] of state.entries()) {
+              switch (key) {
+                case "s": {
+                  const priority = parseInt(value, 10);
+                  if (!Number.isInteger(priority))
+                    continue;
+                  if (spanContext._sampling.priority === 1 && priority > 0 || spanContext._sampling.priority === 0 && priority < 0) {
+                    spanContext._sampling.priority = priority;
+                  }
+                  break;
+                }
+                case "o":
+                  spanContext._trace.origin = value;
+                  break;
+                case "t.dm": {
+                  const mechanism = -Math.abs(parseInt(value, 10));
+                  if (Number.isInteger(mechanism)) {
+                    spanContext._sampling.mechanism = mechanism;
+                    spanContext._trace.tags["_dd.p.dm"] = String(mechanism);
+                  }
+                  break;
+                }
+                default:
+                  if (!key.startsWith("t."))
+                    continue;
+                  spanContext._trace.tags[`_dd.p.${key.slice(2)}`] = value.replace(/[\x7e]/gm, "=");
+              }
+            }
+          });
+          this._extractBaggageItems(carrier, spanContext);
+          return spanContext;
+        }
+        return null;
+      }
+      _extractGenericContext(carrier, traceKey2, spanKey2, radix) {
+        if (carrier[traceKey2] && carrier[spanKey2]) {
+          if (invalidSegment.test(carrier[traceKey2]))
+            return null;
+          return new DatadogSpanContext({
+            traceId: id(carrier[traceKey2], radix),
+            spanId: id(carrier[spanKey2], radix)
+          });
+        }
+        return null;
+      }
+      _extractB3MultipleHeaders(carrier) {
+        let empty = true;
+        const b3 = {};
+        if (b3TraceExpr.test(carrier[b3TraceKey]) && b3SpanExpr.test(carrier[b3SpanKey])) {
+          b3[b3TraceKey] = carrier[b3TraceKey];
+          b3[b3SpanKey] = carrier[b3SpanKey];
+          empty = false;
+        }
+        if (carrier[b3SampledKey]) {
+          b3[b3SampledKey] = carrier[b3SampledKey];
+          empty = false;
+        }
+        if (carrier[b3FlagsKey]) {
+          b3[b3FlagsKey] = carrier[b3FlagsKey];
+          empty = false;
+        }
+        return empty ? null : b3;
+      }
+      _extractB3SingleHeader(carrier) {
+        const header = carrier[b3HeaderKey];
+        if (!header)
+          return null;
+        const parts = header.split("-");
+        if (parts[0] === "d") {
+          return {
+            [b3SampledKey]: "1",
+            [b3FlagsKey]: "1"
+          };
+        } else if (parts.length === 1) {
+          return {
+            [b3SampledKey]: parts[0]
+          };
+        } else {
+          const b3 = {
+            [b3TraceKey]: parts[0],
+            [b3SpanKey]: parts[1]
+          };
+          if (parts[2]) {
+            b3[b3SampledKey] = parts[2] !== "0" ? "1" : "0";
+            if (parts[2] === "d") {
+              b3[b3FlagsKey] = "1";
+            }
+          }
+          return b3;
+        }
+      }
+      _extractOrigin(carrier, spanContext) {
+        const origin = carrier[originKey];
+        if (typeof carrier[originKey] === "string") {
+          spanContext._trace.origin = origin;
+        }
+      }
+      _extractBaggageItems(carrier, spanContext) {
+        Object.keys(carrier).forEach((key) => {
+          const match = key.match(baggageExpr);
+          if (match) {
+            spanContext._baggageItems[match[1]] = carrier[key];
+          }
+        });
+      }
+      _extractSamplingPriority(carrier, spanContext) {
+        const priority = parseInt(carrier[samplingKey], 10);
+        if (Number.isInteger(priority)) {
+          spanContext._sampling.priority = priority;
+        }
+      }
+      _extractTags(carrier, spanContext) {
+        if (!carrier[tagsKey])
+          return;
+        const trace = spanContext._trace;
+        if (this._config.tagsHeaderMaxLength === 0) {
+          log.debug("Trace tag propagation is disabled, skipping extraction.");
+        } else if (carrier[tagsKey].length > this._config.tagsHeaderMaxLength) {
+          log.error("Trace tags from carrier are too large, skipping extraction.");
+        } else {
+          const pairs = carrier[tagsKey].split(",");
+          const tags = {};
+          for (const pair of pairs) {
+            const [key, ...rest] = pair.split("=");
+            const value = rest.join("=");
+            if (!this._validateTagKey(key) || !this._validateTagValue(value)) {
+              log.error("Trace tags from carrier are invalid, skipping extraction.");
+              return;
+            }
+            tags[key] = value;
+          }
+          Object.assign(trace.tags, tags);
+        }
+      }
+      _extract128BitTraceId(traceId, spanContext) {
+        if (!spanContext)
+          return;
+        const buffer = spanContext._traceId.toBuffer();
+        if (buffer.length !== 16)
+          return;
+        const tid = traceId.substring(0, 16);
+        if (tid === "0000000000000000")
+          return;
+        spanContext._trace.tags["_dd.p.tid"] = tid;
+      }
+      _validateTagKey(key) {
+        return tagKeyExpr.test(key);
+      }
+      _validateTagValue(value) {
+        return tagValueExpr.test(value);
+      }
+      _getPriority(sampled, debug) {
+        if (debug) {
+          return USER_KEEP;
+        } else if (sampled === "1") {
+          return AUTO_KEEP;
+        } else if (sampled === "0") {
+          return AUTO_REJECT;
+        }
+      }
+      _getB3TraceId(spanContext) {
+        if (spanContext._traceId.toBuffer().length <= 8 && spanContext._trace.tags["_dd.p.tid"]) {
+          return spanContext._trace.tags["_dd.p.tid"] + spanContext._traceId.toString(16);
+        }
+        return spanContext._traceId.toString(16);
+      }
+    };
+    module2.exports = TextMapPropagator;
+  }
+});
+
+// packages/dd-trace/src/opentracing/propagation/http.js
+var require_http = __commonJS({
+  "packages/dd-trace/src/opentracing/propagation/http.js"(exports2, module2) {
+    "use strict";
+    var TextMapPropagator = require_text_map();
+    var HttpPropagator = class extends TextMapPropagator {
+    };
+    module2.exports = HttpPropagator;
+  }
+});
+
+// packages/dd-trace/src/opentracing/propagation/binary.js
+var require_binary = __commonJS({
+  "packages/dd-trace/src/opentracing/propagation/binary.js"(exports2, module2) {
+    "use strict";
+    var BinaryPropagator = class {
+      inject(spanContext, carrier) {
+      }
+      extract(carrier) {
+        return null;
+      }
+    };
+    module2.exports = BinaryPropagator;
+  }
+});
+
+// packages/dd-trace/src/opentracing/propagation/log.js
+var require_log2 = __commonJS({
+  "packages/dd-trace/src/opentracing/propagation/log.js"(exports2, module2) {
+    "use strict";
+    var id = require_id();
+    var DatadogSpanContext = require_span_context();
+    var LogPropagator = class {
+      constructor(config) {
+        this._config = config;
+      }
+      inject(spanContext, carrier) {
+        if (!carrier)
+          return;
+        carrier.dd = {};
+        if (spanContext) {
+          if (this._config.traceId128BitLoggingEnabled && spanContext._trace.tags["_dd.p.tid"]) {
+            carrier.dd.trace_id = spanContext._trace.tags["_dd.p.tid"] + spanContext._traceId.toString(16);
+          } else {
+            carrier.dd.trace_id = spanContext.toTraceId();
+          }
+          carrier.dd.span_id = spanContext.toSpanId();
+        }
+        if (this._config.service)
+          carrier.dd.service = this._config.service;
+        if (this._config.version)
+          carrier.dd.version = this._config.version;
+        if (this._config.env)
+          carrier.dd.env = this._config.env;
+      }
+      extract(carrier) {
+        if (!carrier || !carrier.dd || !carrier.dd.trace_id || !carrier.dd.span_id) {
+          return null;
+        }
+        if (carrier.dd.trace_id.length === 32) {
+          const hi = carrier.dd.trace_id.substring(0, 16);
+          const lo = carrier.dd.trace_id.substring(16, 32);
+          const spanContext = new DatadogSpanContext({
+            traceId: id(lo, 16),
+            spanId: id(carrier.dd.span_id, 10)
+          });
+          spanContext._trace.tags["_dd.p.tid"] = hi;
+          return spanContext;
+        } else {
+          return new DatadogSpanContext({
+            traceId: id(carrier.dd.trace_id, 10),
+            spanId: id(carrier.dd.span_id, 10)
+          });
+        }
+      }
+    };
+    module2.exports = LogPropagator;
+  }
+});
+
+// packages/dd-trace/src/exporters/log/index.js
+var require_log3 = __commonJS({
+  "packages/dd-trace/src/exporters/log/index.js"(exports2, module2) {
+    "use strict";
+    var log = require_log();
+    var TRACE_PREFIX = '{"traces":[[';
+    var TRACE_SUFFIX = "]]}\n";
+    var TRACE_FORMAT_OVERHEAD = TRACE_PREFIX.length + TRACE_SUFFIX.length;
+    var MAX_SIZE = 64 * 1024;
+    var LogExporter = class {
+      export(spans) {
+        log.debug(() => `Adding trace to queue: ${JSON.stringify(spans)}`);
+        let size = TRACE_FORMAT_OVERHEAD;
+        let queue = [];
+        for (const span of spans) {
+          const spanStr = JSON.stringify(span);
+          if (spanStr.length + TRACE_FORMAT_OVERHEAD > MAX_SIZE) {
+            log.debug("Span too large to send to logs, dropping");
+            continue;
+          }
+          if (spanStr.length + size > MAX_SIZE) {
+            this._printSpans(queue);
+            queue = [];
+            size = TRACE_FORMAT_OVERHEAD;
+          }
+          size += spanStr.length + 1;
+          queue.push(spanStr);
+        }
+        if (queue.length > 0) {
+          this._printSpans(queue);
+        }
+      }
+      _printSpans(queue) {
+        let logLine = TRACE_PREFIX;
+        let firstTrace = true;
+        for (const spanStr of queue) {
+          if (firstTrace) {
+            firstTrace = false;
+            logLine += spanStr;
+          } else {
+            logLine += "," + spanStr;
+          }
+        }
+        logLine += TRACE_SUFFIX;
+        process.stdout.write(logLine);
+      }
+    };
+    module2.exports = LogExporter;
+  }
+});
+
+// packages/dd-trace/src/encode/0.5.js
+var require__2 = __commonJS({
+  "packages/dd-trace/src/encode/0.5.js"(exports2, module2) {
+    "use strict";
+    var { truncateSpan, normalizeSpan } = require_tags_processors();
+    var { AgentEncoder: BaseEncoder } = require__();
+    var ARRAY_OF_TWO = 146;
+    var ARRAY_OF_TWELVE = 156;
+    function formatSpan(span) {
+      return normalizeSpan(truncateSpan(span, false));
+    }
+    var AgentEncoder = class extends BaseEncoder {
+      makePayload() {
+        const prefixSize = 1;
+        const stringSize = this._stringBytes.length + 5;
+        const traceSize = this._traceBytes.length + 5;
+        const buffer = Buffer.allocUnsafe(prefixSize + stringSize + traceSize);
+        let offset = 0;
+        buffer[offset++] = ARRAY_OF_TWO;
+        offset = this._writeStrings(buffer, offset);
+        offset = this._writeTraces(buffer, offset);
+        this._reset();
+        return buffer;
+      }
+      _encode(bytes, trace) {
+        this._encodeArrayPrefix(bytes, trace);
+        for (let span of trace) {
+          span = formatSpan(span);
+          this._encodeByte(bytes, ARRAY_OF_TWELVE);
+          this._encodeString(bytes, span.service);
+          this._encodeString(bytes, span.name);
+          this._encodeString(bytes, span.resource);
+          this._encodeId(bytes, span.trace_id);
+          this._encodeId(bytes, span.span_id);
+          this._encodeId(bytes, span.parent_id);
+          this._encodeLong(bytes, span.start || 0);
+          this._encodeLong(bytes, span.duration || 0);
+          this._encodeInteger(bytes, span.error);
+          this._encodeMap(bytes, span.meta || {});
+          this._encodeMap(bytes, span.metrics || {});
+          this._encodeString(bytes, span.type);
+        }
+      }
+      _encodeString(bytes, value = "") {
+        this._cacheString(value);
+        this._encodeInteger(bytes, this._stringMap[value]);
+      }
+      _cacheString(value) {
+        if (!(value in this._stringMap)) {
+          this._stringMap[value] = this._stringCount++;
+          this._stringBytes.write(value);
+        }
+      }
+      _writeStrings(buffer, offset) {
+        offset = this._writeArrayPrefix(buffer, offset, this._stringCount);
+        offset += this._stringBytes.buffer.copy(buffer, offset, 0, this._stringBytes.length);
+        return offset;
+      }
+    };
+    module2.exports = { AgentEncoder };
+  }
+});
+
+// packages/dd-trace/src/exporters/agent/writer.js
+var require_writer4 = __commonJS({
+  "packages/dd-trace/src/exporters/agent/writer.js"(exports2, module2) {
+    "use strict";
+    var request = require_request();
+    var { startupLog } = require_startup_log();
+    var metrics = require_metrics();
+    var log = require_log();
+    var tracerVersion = require_package().version;
+    var BaseWriter = require_writer2();
+    var METRIC_PREFIX = "datadog.tracer.node.exporter.agent";
+    var Writer = class extends BaseWriter {
+      constructor({ prioritySampler, lookup, protocolVersion, headers }) {
+        super(...arguments);
+        const AgentEncoder = getEncoder(protocolVersion);
+        this._prioritySampler = prioritySampler;
+        this._lookup = lookup;
+        this._protocolVersion = protocolVersion;
+        this._encoder = new AgentEncoder(this);
+        this._headers = headers;
+      }
+      _sendPayload(data, count, done) {
+        metrics.increment(`${METRIC_PREFIX}.requests`, true);
+        const { _headers, _lookup, _protocolVersion, _url } = this;
+        makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, true, (err, res, status) => {
+          if (status) {
+            metrics.increment(`${METRIC_PREFIX}.responses`, true);
+            metrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true);
+          } else if (err) {
+            metrics.increment(`${METRIC_PREFIX}.errors`, true);
+            metrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true);
+            if (err.code) {
+              metrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true);
+            }
+          }
+          startupLog({ agentError: err });
+          if (err) {
+            log.error(err);
+            done();
+            return;
+          }
+          log.debug(`Response from the agent: ${res}`);
+          try {
+            this._prioritySampler.update(JSON.parse(res).rate_by_service);
+          } catch (e) {
+            log.error(e);
+            metrics.increment(`${METRIC_PREFIX}.errors`, true);
+            metrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true);
+          }
+          done();
+        });
+      }
+    };
+    function setHeader(headers, key, value) {
+      if (value) {
+        headers[key] = value;
+      }
+    }
+    function getEncoder(protocolVersion) {
+      if (protocolVersion === "0.5") {
+        return require__2().AgentEncoder;
+      } else {
+        return require__().AgentEncoder;
+      }
+    }
+    function makeRequest(version, data, count, url, headers, lookup, needsStartupLog, cb) {
+      const options = {
+        path: `/v${version}/traces`,
+        method: "PUT",
+        headers: {
+          ...headers,
+          "Content-Type": "application/msgpack",
+          "Datadog-Meta-Tracer-Version": tracerVersion,
+          "X-Datadog-Trace-Count": String(count)
+        },
+        lookup,
+        url
+      };
+      setHeader(options.headers, "Datadog-Meta-Lang", "nodejs");
+      setHeader(options.headers, "Datadog-Meta-Lang-Version", process.version);
+      setHeader(options.headers, "Datadog-Meta-Lang-Interpreter", process.jsEngine || "v8");
+      log.debug(() => `Request to the agent: ${JSON.stringify(options)}`);
+      request(data, options, (err, res, status) => {
+        if (needsStartupLog) {
+          startupLog({
+            agentError: status !== 404 && status !== 200 ? err : void 0
+          });
+        }
+        cb(err, res, status);
+      });
+    }
+    module2.exports = Writer;
+  }
+});
+
+// packages/dd-trace/src/exporters/agent/index.js
+var require_agent = __commonJS({
+  "packages/dd-trace/src/exporters/agent/index.js"(exports2, module2) {
+    "use strict";
+    var { URL: URL2, format } = require("url");
+    var log = require_log();
+    var Writer = require_writer4();
+    var AgentExporter = class {
+      constructor(config, prioritySampler) {
+        this._config = config;
+        const { url, hostname, port, lookup, protocolVersion, stats = {} } = config;
+        this._url = url || new URL2(format({
+          protocol: "http:",
+          hostname: hostname || "localhost",
+          port
+        }));
+        const headers = {};
+        if (stats.enabled) {
+          headers["Datadog-Client-Computed-Stats"] = "yes";
+        }
+        this._writer = new Writer({
+          url: this._url,
+          prioritySampler,
+          lookup,
+          protocolVersion,
+          headers
+        });
+        this._timer = void 0;
+        process.once("beforeExit", () => this._writer.flush());
+      }
+      setUrl(url) {
+        try {
+          url = new URL2(url);
+          this._url = url;
+          this._writer.setUrl(url);
+        } catch (e) {
+          log.warn(e.stack);
+        }
+      }
+      export(spans) {
+        this._writer.append(spans);
+        const { flushInterval } = this._config;
+        if (flushInterval === 0) {
+          this._writer.flush();
+        } else if (flushInterval > 0 && !this._timer) {
+          this._timer = setTimeout(() => {
+            this._writer.flush();
+            this._timer = clearTimeout(this._timer);
+          }, flushInterval).unref();
+        }
+      }
+      flush(done = () => {
+      }) {
+        this._writer.flush(done);
+      }
+    };
+    module2.exports = AgentExporter;
+  }
+});
+
+// packages/dd-trace/src/exporter.js
+var require_exporter = __commonJS({
+  "packages/dd-trace/src/exporter.js"(exports2, module2) {
+    "use strict";
+    var exporters = require_exporters();
+    var fs = require("fs");
+    var constants = require_constants();
+    module2.exports = (name) => {
+      const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== void 0;
+      const usingLambdaExtension = inAWSLambda && fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH);
+      switch (name) {
+        case exporters.LOG:
+          return require_log3();
+        case exporters.AGENT:
+          return require_agent();
+        default:
+          return inAWSLambda && !usingLambdaExtension ? require_log3() : require_agent();
+      }
+    };
+  }
+});
+
+// packages/dd-trace/src/opentracing/tracer.js
+var require_tracer2 = __commonJS({
+  "packages/dd-trace/src/opentracing/tracer.js"(exports2, module2) {
+    "use strict";
+    var os = require("os");
+    var Span = require_span2();
+    var SpanProcessor = require_span_processor();
+    var PrioritySampler = require_priority_sampler();
+    var TextMapPropagator = require_text_map();
+    var HttpPropagator = require_http();
+    var BinaryPropagator = require_binary();
+    var LogPropagator = require_log2();
+    var formats = require_formats();
+    var log = require_log();
+    var metrics = require_metrics();
+    var getExporter = require_exporter();
+    var SpanContext = require_span_context();
+    var REFERENCE_CHILD_OF = "child_of";
+    var REFERENCE_FOLLOWS_FROM = "follows_from";
+    var DatadogTracer = class {
+      constructor(config) {
+        const Exporter = getExporter(config.experimental.exporter);
+        this._service = config.service;
+        this._version = config.version;
+        this._env = config.env;
+        this._tags = config.tags;
+        this._logInjection = config.logInjection;
+        this._debug = config.debug;
+        this._prioritySampler = new PrioritySampler(config.env, config.sampler);
+        this._exporter = new Exporter(config, this._prioritySampler);
+        this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config);
+        this._url = this._exporter._url;
+        this._enableGetRumData = config.experimental.enableGetRumData;
+        this._traceId128BitGenerationEnabled = config.traceId128BitGenerationEnabled;
+        this._propagators = {
+          [formats.TEXT_MAP]: new TextMapPropagator(config),
+          [formats.HTTP_HEADERS]: new HttpPropagator(config),
+          [formats.BINARY]: new BinaryPropagator(config),
+          [formats.LOG]: new LogPropagator(config)
+        };
+        if (config.reportHostname) {
+          this._hostname = os.hostname();
+        }
+      }
+      startSpan(name, options = {}) {
+        const parent = options.childOf ? getContext(options.childOf) : getParent(options.references);
+        const tags = {
+          "service.name": this._service
+        };
+        const span = new Span(this, this._processor, this._prioritySampler, {
+          operationName: options.operationName || name,
+          parent,
+          tags,
+          startTime: options.startTime,
+          hostname: this._hostname,
+          traceId128BitGenerationEnabled: this._traceId128BitGenerationEnabled
+        }, this._debug);
+        span.addTags(this._tags);
+        span.addTags(options.tags);
+        return span;
+      }
+      inject(spanContext, format, carrier) {
+        if (spanContext instanceof Span) {
+          spanContext = spanContext.context();
+        }
+        try {
+          this._prioritySampler.sample(spanContext);
+          this._propagators[format].inject(spanContext, carrier);
+        } catch (e) {
+          log.error(e);
+          metrics.increment("datadog.tracer.node.inject.errors", true);
+        }
+      }
+      extract(format, carrier) {
+        try {
+          return this._propagators[format].extract(carrier);
+        } catch (e) {
+          log.error(e);
+          metrics.increment("datadog.tracer.node.extract.errors", true);
+          return null;
+        }
+      }
+    };
+    function getContext(spanContext) {
+      if (spanContext instanceof Span) {
+        spanContext = spanContext.context();
+      }
+      if (!(spanContext instanceof SpanContext)) {
+        spanContext = null;
+      }
+      return spanContext;
+    }
+    function getParent(references = []) {
+      let parent = null;
+      for (let i = 0; i < references.length; i++) {
+        const ref = references[i];
+        const type = ref.type();
+        if (type === REFERENCE_CHILD_OF) {
+          parent = ref.referencedContext();
+          break;
+        } else if (type === REFERENCE_FOLLOWS_FROM) {
+          if (!parent) {
+            parent = ref.referencedContext();
+          }
+        }
+      }
+      return parent;
+    }
+    module2.exports = DatadogTracer;
+  }
+});
+
+// packages/dd-trace/src/scope.js
+var require_scope2 = __commonJS({
+  "packages/dd-trace/src/scope.js"(exports2, module2) {
+    "use strict";
+    var { storage } = require_datadog_core();
+    var originals = /* @__PURE__ */ new WeakMap();
+    var Scope = class {
+      active() {
+        const store = storage.getStore();
+        return store && store.span || null;
+      }
+      activate(span, callback) {
+        if (typeof callback !== "function")
+          return callback;
+        const oldStore = storage.getStore();
+        const newStore = span ? span._store : oldStore;
+        storage.enterWith({ ...newStore, span });
+        try {
+          return callback();
+        } catch (e) {
+          if (span && typeof span.setTag === "function") {
+            span.setTag("error", e);
+          }
+          throw e;
+        } finally {
+          storage.enterWith(oldStore);
+        }
+      }
+      bind(fn, span) {
+        if (typeof fn !== "function")
+          return fn;
+        const scope = this;
+        const spanOrActive = this._spanOrActive(span);
+        const bound = function() {
+          return scope.activate(spanOrActive, () => {
+            return fn.apply(this, arguments);
+          });
+        };
+        originals.set(bound, fn);
+        return bound;
+      }
+      _spanOrActive(span) {
+        return span !== void 0 ? span : this.active();
+      }
+      _isPromise(promise) {
+        return promise && typeof promise.then === "function";
+      }
+    };
+    module2.exports = Scope;
+  }
+});
+
+// packages/dd-trace/src/tracer.js
+var require_tracer3 = __commonJS({
+  "packages/dd-trace/src/tracer.js"(exports2, module2) {
+    "use strict";
+    var Tracer = require_tracer2();
+    var tags = require_tags();
+    var Scope = require_scope2();
+    var { storage } = require_datadog_core();
+    var { isError } = require_util();
+    var { setStartupLogConfig } = require_startup_log();
+    var { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require_constants();
+    var SPAN_TYPE = tags.SPAN_TYPE;
+    var RESOURCE_NAME = tags.RESOURCE_NAME;
+    var SERVICE_NAME = tags.SERVICE_NAME;
+    var MEASURED = tags.MEASURED;
+    var DatadogTracer = class extends Tracer {
+      constructor(config) {
+        super(config);
+        this._scope = new Scope();
+        setStartupLogConfig(config);
+      }
+      trace(name, options, fn) {
+        options = Object.assign({
+          childOf: this.scope().active()
+        }, options);
+        if (!options.childOf && options.orphanable === false) {
+          return fn(null, () => {
+          });
+        }
+        const span = this.startSpan(name, options);
+        addTags(span, options);
+        try {
+          if (fn.length > 1) {
+            return this.scope().activate(span, () => fn(span, (err) => {
+              addError(span, err);
+              span.finish();
+            }));
+          }
+          const result = this.scope().activate(span, () => fn(span));
+          if (result && typeof result.then === "function") {
+            return result.then(
+              (value) => {
+                span.finish();
+                return value;
+              },
+              (err) => {
+                addError(span, err);
+                span.finish();
+                throw err;
+              }
+            );
+          } else {
+            span.finish();
+          }
+          return result;
+        } catch (e) {
+          addError(span, e);
+          span.finish();
+          throw e;
+        }
+      }
+      wrap(name, options, fn) {
+        const tracer = this;
+        return function() {
+          const store = storage.getStore();
+          if (store && store.noop)
+            return fn.apply(this, arguments);
+          let optionsObj = options;
+          if (typeof optionsObj === "function" && typeof fn === "function") {
+            optionsObj = optionsObj.apply(this, arguments);
+          }
+          if (optionsObj && optionsObj.orphanable === false && !tracer.scope().active()) {
+            return fn.apply(this, arguments);
+          }
+          const lastArgId = arguments.length - 1;
+          const cb = arguments[lastArgId];
+          if (typeof cb === "function") {
+            const scopeBoundCb = tracer.scope().bind(cb);
+            return tracer.trace(name, optionsObj, (span, done) => {
+              arguments[lastArgId] = function(err) {
+                done(err);
+                return scopeBoundCb.apply(this, arguments);
+              };
+              return fn.apply(this, arguments);
+            });
+          } else {
+            return tracer.trace(name, optionsObj, () => fn.apply(this, arguments));
+          }
+        };
+      }
+      setUrl(url) {
+        this._exporter.setUrl(url);
+      }
+      scope() {
+        return this._scope;
+      }
+      getRumData() {
+        if (!this._enableGetRumData) {
+          return "";
+        }
+        const span = this.scope().active().context();
+        const traceId = span.toTraceId();
+        const traceTime = Date.now();
+        return `<meta name="dd-trace-id" content="${traceId}" /><meta name="dd-trace-time" content="${traceTime}" />`;
+      }
+    };
+    function addError(span, error) {
+      if (isError(error)) {
+        span.addTags({
+          [ERROR_TYPE]: error.name,
+          [ERROR_MESSAGE]: error.message,
+          [ERROR_STACK]: error.stack
+        });
+      }
+    }
+    function addTags(span, options) {
+      const tags2 = {};
+      if (options.type)
+        tags2[SPAN_TYPE] = options.type;
+      if (options.service)
+        tags2[SERVICE_NAME] = options.service;
+      if (options.resource)
+        tags2[RESOURCE_NAME] = options.resource;
+      tags2[MEASURED] = options.measured;
+      span.addTags(tags2);
+    }
+    module2.exports = DatadogTracer;
+  }
+});
+
+// packages/dd-trace/src/config.js
+var require_config = __commonJS({
+  "packages/dd-trace/src/config.js"(exports2, module2) {
+    "use strict";
+    var fs = require("fs");
+    var os = require("os");
+    var URL2 = require("url").URL;
+    var log = require_log();
+    var pkg = require_pkg();
+    var coalesce = require("koalas");
+    var tagger = require_tagger();
+    var { isTrue, isFalse } = require_util();
+    var uuid = require("crypto-randomuuid");
+    var fromEntries = Object.fromEntries || ((entries) => entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}));
+    var qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}';
+    function maybeFile(filepath) {
+      if (!filepath)
+        return;
+      try {
+        return fs.readFileSync(filepath, "utf8");
+      } catch (e) {
+        log.error(e);
+        return void 0;
+      }
+    }
+    function safeJsonParse(input) {
+      try {
+        return JSON.parse(input);
+      } catch (err) {
+        return void 0;
+      }
+    }
+    function remapify(input, mappings) {
+      if (!input)
+        return;
+      const output = {};
+      for (const [key, value] of Object.entries(input)) {
+        output[key in mappings ? mappings[key] : key] = value;
+      }
+      return output;
+    }
+    function propagationStyle(key, option, defaultValue) {
+      if (typeof option === "object" && !Array.isArray(option)) {
+        option = option[key];
+      }
+      if (Array.isArray(option))
+        return option.map((v) => v.toLowerCase());
+      if (typeof option !== "undefined") {
+        log.warn("Unexpected input for config.tracePropagationStyle");
+      }
+      const envKey = `DD_TRACE_PROPAGATION_STYLE_${key.toUpperCase()}`;
+      const envVar = coalesce(process.env[envKey], process.env.DD_TRACE_PROPAGATION_STYLE);
+      if (typeof envVar !== "undefined") {
+        return envVar.split(",").filter((v) => v !== "").map((v) => v.trim().toLowerCase());
+      }
+      return defaultValue;
+    }
+    var Config = class {
+      constructor(options) {
+        options = options || {};
+        this.debug = isTrue(coalesce(
+          process.env.DD_TRACE_DEBUG,
+          false
+        ));
+        this.logger = options.logger;
+        this.logLevel = coalesce(
+          options.logLevel,
+          process.env.DD_TRACE_LOG_LEVEL,
+          "debug"
+        );
+        log.use(this.logger);
+        log.toggle(this.debug, this.logLevel, this);
+        this.tags = {};
+        tagger.add(this.tags, process.env.DD_TAGS);
+        tagger.add(this.tags, process.env.DD_TRACE_TAGS);
+        tagger.add(this.tags, process.env.DD_TRACE_GLOBAL_TAGS);
+        tagger.add(this.tags, options.tags);
+        const DD_TRACING_ENABLED = coalesce(
+          process.env.DD_TRACING_ENABLED,
+          true
+        );
+        const DD_PROFILING_ENABLED = coalesce(
+          options.profiling,
+          // TODO: remove when enabled by default
+          process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,
+          process.env.DD_PROFILING_ENABLED,
+          false
+        );
+        const DD_PROFILING_EXPORTERS = coalesce(
+          process.env.DD_PROFILING_EXPORTERS,
+          "agent"
+        );
+        const DD_PROFILING_SOURCE_MAP = process.env.DD_PROFILING_SOURCE_MAP;
+        const DD_LOGS_INJECTION = coalesce(
+          options.logInjection,
+          process.env.DD_LOGS_INJECTION,
+          false
+        );
+        const DD_RUNTIME_METRICS_ENABLED = coalesce(
+          options.runtimeMetrics,
+          // TODO: remove when enabled by default
+          process.env.DD_RUNTIME_METRICS_ENABLED,
+          false
+        );
+        const DD_DBM_PROPAGATION_MODE = coalesce(
+          options.dbmPropagationMode,
+          process.env.DD_DBM_PROPAGATION_MODE,
+          "disabled"
+        );
+        const DD_AGENT_HOST = coalesce(
+          options.hostname,
+          process.env.DD_AGENT_HOST,
+          process.env.DD_TRACE_AGENT_HOSTNAME,
+          "127.0.0.1"
+        );
+        const DD_TRACE_AGENT_PORT = coalesce(
+          options.port,
+          process.env.DD_TRACE_AGENT_PORT,
+          "8126"
+        );
+        const DD_TRACE_AGENT_URL = coalesce(
+          options.url,
+          process.env.DD_TRACE_AGENT_URL,
+          process.env.DD_TRACE_URL,
+          null
+        );
+        const DD_IS_CIVISIBILITY = coalesce(
+          options.isCiVisibility,
+          false
+        );
+        const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL;
+        const DD_CIVISIBILITY_ITR_ENABLED = coalesce(
+          process.env.DD_CIVISIBILITY_ITR_ENABLED,
+          true
+        );
+        const DD_SERVICE = options.service || process.env.DD_SERVICE || process.env.DD_SERVICE_NAME || this.tags.service || process.env.AWS_LAMBDA_FUNCTION_NAME || pkg.name || "node";
+        const DD_SERVICE_MAPPING = coalesce(
+          options.serviceMapping,
+          process.env.DD_SERVICE_MAPPING ? fromEntries(
+            process.env.DD_SERVICE_MAPPING.split(",").map((x) => x.trim().split(":"))
+          ) : {}
+        );
+        const DD_ENV = coalesce(
+          options.env,
+          process.env.DD_ENV,
+          this.tags.env
+        );
+        const DD_VERSION = coalesce(
+          options.version,
+          process.env.DD_VERSION,
+          this.tags.version,
+          pkg.version
+        );
+        const DD_TRACE_STARTUP_LOGS = coalesce(
+          options.startupLogs,
+          process.env.DD_TRACE_STARTUP_LOGS,
+          false
+        );
+        const DD_TRACE_TELEMETRY_ENABLED = coalesce(
+          process.env.DD_TRACE_TELEMETRY_ENABLED,
+          !process.env.AWS_LAMBDA_FUNCTION_NAME
+        );
+        const DD_TELEMETRY_DEBUG_ENABLED = coalesce(
+          process.env.DD_TELEMETRY_DEBUG_ENABLED,
+          false
+        );
+        const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
+          options.protocolVersion,
+          process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
+          "0.4"
+        );
+        const DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = coalesce(
+          parseInt(options.flushMinSpans),
+          parseInt(process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS),
+          1e3
+        );
+        const DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = coalesce(
+          process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
+          qsRegex
+        );
+        const DD_TRACE_CLIENT_IP_ENABLED = coalesce(
+          options.clientIpEnabled,
+          process.env.DD_TRACE_CLIENT_IP_ENABLED && isTrue(process.env.DD_TRACE_CLIENT_IP_ENABLED),
+          false
+        );
+        const DD_TRACE_CLIENT_IP_HEADER = coalesce(
+          options.clientIpHeader,
+          process.env.DD_TRACE_CLIENT_IP_HEADER,
+          null
+        );
+        const DD_TRACE_B3_ENABLED = coalesce(
+          options.experimental && options.experimental.b3,
+          process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
+          false
+        );
+        const defaultPropagationStyle = ["tracecontext", "datadog"];
+        if (isTrue(DD_TRACE_B3_ENABLED)) {
+          defaultPropagationStyle.push("b3");
+          defaultPropagationStyle.push("b3 single header");
+        }
+        if (process.env.DD_TRACE_PROPAGATION_STYLE && (process.env.DD_TRACE_PROPAGATION_STYLE_INJECT || process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT)) {
+          log.warn(
+            "Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables"
+          );
+        }
+        const DD_TRACE_PROPAGATION_STYLE_INJECT = propagationStyle(
+          "inject",
+          options.tracePropagationStyle,
+          defaultPropagationStyle
+        );
+        const DD_TRACE_PROPAGATION_STYLE_EXTRACT = propagationStyle(
+          "extract",
+          options.tracePropagationStyle,
+          defaultPropagationStyle
+        );
+        const DD_TRACE_RUNTIME_ID_ENABLED = coalesce(
+          options.experimental && options.experimental.runtimeId,
+          process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
+          false
+        );
+        const DD_TRACE_EXPORTER = coalesce(
+          options.experimental && options.experimental.exporter,
+          process.env.DD_TRACE_EXPERIMENTAL_EXPORTER
+        );
+        const DD_TRACE_GET_RUM_DATA_ENABLED = coalesce(
+          options.experimental && options.experimental.enableGetRumData,
+          process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
+          false
+        );
+        const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
+          process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
+          "512"
+        );
+        const DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
+          options.stats,
+          process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
+          false
+        );
+        const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
+          options.traceId128BitGenerationEnabled,
+          process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
+          false
+        );
+        const DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = coalesce(
+          options.traceId128BitLoggingEnabled,
+          process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,
+          false
+        );
+        let appsec = options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec;
+        if (typeof appsec === "boolean") {
+          appsec = {
+            enabled: appsec
+          };
+        } else if (appsec == null) {
+          appsec = {};
+        }
+        const DD_APPSEC_ENABLED = coalesce(
+          appsec.enabled,
+          process.env.DD_APPSEC_ENABLED && isTrue(process.env.DD_APPSEC_ENABLED)
+        );
+        const DD_APPSEC_RULES = coalesce(
+          appsec.rules,
+          process.env.DD_APPSEC_RULES
+        );
+        const DD_APPSEC_TRACE_RATE_LIMIT = coalesce(
+          parseInt(appsec.rateLimit),
+          parseInt(process.env.DD_APPSEC_TRACE_RATE_LIMIT),
+          100
+        );
+        const DD_APPSEC_WAF_TIMEOUT = coalesce(
+          parseInt(appsec.wafTimeout),
+          parseInt(process.env.DD_APPSEC_WAF_TIMEOUT),
+          5e3
+          // µs
+        );
+        const DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = coalesce(
+          appsec.obfuscatorKeyRegex,
+          process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
+          `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?)key)|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization`
+        );
+        const DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = coalesce(
+          appsec.obfuscatorValueRegex,
+          process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
+          `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
+        );
+        const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = coalesce(
+          maybeFile(appsec.blockedTemplateHtml),
+          maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
+        );
+        const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = coalesce(
+          maybeFile(appsec.blockedTemplateJson),
+          maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
+        );
+        const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== void 0;
+        const remoteConfigOptions = options.remoteConfig || {};
+        const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
+          process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
+          !inAWSLambda
+        );
+        const DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = coalesce(
+          parseInt(remoteConfigOptions.pollInterval),
+          parseInt(process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS),
+          5
+          // seconds
+        );
+        const iastOptions = options.experimental && options.experimental.iast;
+        const DD_IAST_ENABLED = coalesce(
+          iastOptions && (iastOptions === true || iastOptions.enabled === true),
+          process.env.DD_IAST_ENABLED,
+          false
+        );
+        const DD_TELEMETRY_LOG_COLLECTION_ENABLED = coalesce(
+          process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED,
+          DD_IAST_ENABLED
+        );
+        const defaultIastRequestSampling = 30;
+        const iastRequestSampling = coalesce(
+          parseInt(iastOptions && iastOptions.requestSampling),
+          parseInt(process.env.DD_IAST_REQUEST_SAMPLING),
+          defaultIastRequestSampling
+        );
+        const DD_IAST_REQUEST_SAMPLING = iastRequestSampling < 0 || iastRequestSampling > 100 ? defaultIastRequestSampling : iastRequestSampling;
+        const DD_IAST_MAX_CONCURRENT_REQUESTS = coalesce(
+          parseInt(iastOptions && iastOptions.maxConcurrentRequests),
+          parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS),
+          2
+        );
+        const DD_IAST_MAX_CONTEXT_OPERATIONS = coalesce(
+          parseInt(iastOptions && iastOptions.maxContextOperations),
+          parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS),
+          2
+        );
+        const DD_IAST_DEDUPLICATION_ENABLED = coalesce(
+          iastOptions && iastOptions.deduplicationEnabled,
+          process.env.DD_IAST_DEDUPLICATION_ENABLED && isTrue(process.env.DD_IAST_DEDUPLICATION_ENABLED),
+          true
+        );
+        const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
+          process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
+          true
+        );
+        const ingestion = options.ingestion || {};
+        const dogstatsd = coalesce(options.dogstatsd, {});
+        const sampler = {
+          sampleRate: coalesce(
+            options.sampleRate,
+            process.env.DD_TRACE_SAMPLE_RATE,
+            ingestion.sampleRate
+          ),
+          rateLimit: coalesce(options.rateLimit, process.env.DD_TRACE_RATE_LIMIT, ingestion.rateLimit),
+          rules: coalesce(
+            options.samplingRules,
+            safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES),
+            []
+          ).map((rule) => {
+            return remapify(rule, {
+              sample_rate: "sampleRate"
+            });
+          }),
+          spanSamplingRules: coalesce(
+            options.spanSamplingRules,
+            safeJsonParse(maybeFile(process.env.DD_SPAN_SAMPLING_RULES_FILE)),
+            safeJsonParse(process.env.DD_SPAN_SAMPLING_RULES),
+            []
+          ).map((rule) => {
+            return remapify(rule, {
+              sample_rate: "sampleRate",
+              max_per_second: "maxPerSecond"
+            });
+          })
+        };
+        const defaultFlushInterval = inAWSLambda ? 0 : 2e3;
+        this.tracing = !isFalse(DD_TRACING_ENABLED);
+        this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE;
+        this.logInjection = isTrue(DD_LOGS_INJECTION);
+        this.env = DD_ENV;
+        this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL2(DD_CIVISIBILITY_AGENTLESS_URL) : getAgentUrl(DD_TRACE_AGENT_URL, options);
+        this.site = coalesce(options.site, process.env.DD_SITE, "datadoghq.com");
+        this.hostname = DD_AGENT_HOST || this.url && this.url.hostname;
+        this.port = String(DD_TRACE_AGENT_PORT || this.url && this.url.port);
+        this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval);
+        this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS;
+        this.sampleRate = coalesce(Math.min(Math.max(sampler.sampleRate, 0), 1), 1);
+        this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP;
+        this.clientIpEnabled = DD_TRACE_CLIENT_IP_ENABLED;
+        this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER;
+        this.plugins = !!coalesce(options.plugins, true);
+        this.service = DD_SERVICE;
+        this.serviceMapping = DD_SERVICE_MAPPING;
+        this.version = DD_VERSION;
+        this.dogstatsd = {
+          hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, this.hostname),
+          port: String(coalesce(dogstatsd.port, process.env.DD_DOGSTATSD_PORT, 8125))
+        };
+        this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED);
+        this.tracePropagationStyle = {
+          inject: DD_TRACE_PROPAGATION_STYLE_INJECT,
+          extract: DD_TRACE_PROPAGATION_STYLE_EXTRACT
+        };
+        this.experimental = {
+          runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
+          exporter: DD_TRACE_EXPORTER,
+          enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED)
+        };
+        this.sampler = sampler;
+        this.reportHostname = isTrue(coalesce(options.reportHostname, process.env.DD_TRACE_REPORT_HOSTNAME, false));
+        this.scope = process.env.DD_TRACE_SCOPE;
+        this.profiling = {
+          enabled: isTrue(DD_PROFILING_ENABLED),
+          sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
+          exporters: DD_PROFILING_EXPORTERS
+        };
+        this.lookup = options.lookup;
+        this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS);
+        this.telemetry = {
+          enabled: DD_TRACE_EXPORTER !== "datadog" && isTrue(DD_TRACE_TELEMETRY_ENABLED),
+          logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
+          debug: isTrue(DD_TELEMETRY_DEBUG_ENABLED)
+        };
+        this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION;
+        this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH);
+        this.appsec = {
+          enabled: DD_APPSEC_ENABLED,
+          // rules: DD_APPSEC_RULES ? safeJsonParse(maybeFile(DD_APPSEC_RULES)) : require('./appsec/recommended.json'),
+          customRulesProvided: !!DD_APPSEC_RULES,
+          rateLimit: DD_APPSEC_TRACE_RATE_LIMIT,
+          wafTimeout: DD_APPSEC_WAF_TIMEOUT,
+          obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
+          obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
+          blockedTemplateHtml: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
+          blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
+        };
+        this.remoteConfig = {
+          enabled: DD_REMOTE_CONFIGURATION_ENABLED,
+          pollInterval: DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
+        };
+        this.iast = {
+          enabled: isTrue(DD_IAST_ENABLED),
+          requestSampling: DD_IAST_REQUEST_SAMPLING,
+          maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
+          maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
+          deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED
+        };
+        this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY);
+        this.isIntelligentTestRunnerEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_ITR_ENABLED);
+        this.isGitUploadEnabled = this.isCiVisibility && (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED));
+        this.stats = {
+          enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
+        };
+        this.traceId128BitGenerationEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED);
+        this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED);
+        tagger.add(this.tags, {
+          service: this.service,
+          env: this.env,
+          version: this.version,
+          "runtime-id": uuid()
+        });
+      }
+    };
+    function getAgentUrl(url, options) {
+      if (url)
+        return new URL2(url);
+      if (os.type() === "Windows_NT")
+        return;
+      if (!options.hostname && !options.port && !process.env.DD_AGENT_HOST && !process.env.DD_TRACE_AGENT_HOSTNAME && !process.env.DD_TRACE_AGENT_PORT && fs.existsSync("/var/run/datadog/apm.socket")) {
+        return new URL2("unix:///var/run/datadog/apm.socket");
+      }
+    }
+    module2.exports = Config;
+  }
+});
+
+// packages/dd-trace/src/require-package-json.js
+var require_require_package_json = __commonJS({
+  "packages/dd-trace/src/require-package-json.js"(exports2, module2) {
+    "use strict";
+    var path = require("path");
+    var fs = require("fs");
+    function requirePackageJson(name, module3) {
+      if (path.isAbsolute(name)) {
+        const candidate = path.join(name, "package.json");
+        return JSON.parse(fs.readFileSync(candidate, "utf8"));
+      }
+      for (const modulePath of module3.paths) {
+        const candidate = path.join(modulePath, name, "package.json");
+        try {
+          return JSON.parse(fs.readFileSync(candidate, "utf8"));
+        } catch (e) {
+          continue;
+        }
+      }
+      throw new Error(`could not find ${name}/package.json`);
+    }
+    module2.exports = requirePackageJson;
+  }
+});
+
+// packages/dd-trace/src/telemetry/send-data.js
+var require_send_data = __commonJS({
+  "packages/dd-trace/src/telemetry/send-data.js"(exports2, module2) {
+    var request = require_request();
+    var seqId = 0;
+    function sendData(config, application, host, reqType, payload = {}) {
+      const {
+        hostname,
+        port,
+        url
+      } = config;
+      const { logger, tags, serviceMapping, ...trimmedPayload } = payload;
+      const options = {
+        url,
+        hostname,
+        port,
+        method: "POST",
+        path: "/telemetry/proxy/api/v2/apmtelemetry",
+        headers: {
+          "content-type": "application/json",
+          "dd-telemetry-api-version": "v1",
+          "dd-telemetry-request-type": reqType
+        }
+      };
+      const data = JSON.stringify({
+        api_version: "v1",
+        request_type: reqType,
+        tracer_time: Math.floor(Date.now() / 1e3),
+        runtime_id: config.tags["runtime-id"],
+        seq_id: ++seqId,
+        payload: trimmedPayload,
+        application,
+        host
+      });
+      request(data, options, () => {
+      });
+    }
+    module2.exports = { sendData };
+  }
+});
+
+// packages/dd-trace/src/telemetry/dependencies.js
+var require_dependencies = __commonJS({
+  "packages/dd-trace/src/telemetry/dependencies.js"(exports2, module2) {
+    "use strict";
+    var path = require("path");
+    var parse = require("module-details-from-path");
+    var requirePackageJson = require_require_package_json();
+    var { sendData } = require_send_data();
+    var dc = require_diagnostics_channel();
+    var { fileURLToPath } = require("url");
+    var savedDependencies = /* @__PURE__ */ new Set();
+    var detectedDependencyNames = /* @__PURE__ */ new Set();
+    var FILE_URI_START = `file://`;
+    var moduleLoadStartChannel = dc.channel("dd-trace:moduleLoadStart");
+    var immediate;
+    var config;
+    var application;
+    var host;
+    function waitAndSend(config2, application2, host2) {
+      if (!immediate) {
+        immediate = setImmediate(() => {
+          immediate = null;
+          if (savedDependencies.size > 0) {
+            const dependencies = Array.from(savedDependencies.values()).splice(0, 1e3).map((pair) => {
+              savedDependencies.delete(pair);
+              const [name, version] = pair.split(" ");
+              return { name, version };
+            });
+            sendData(config2, application2, host2, "app-dependencies-loaded", { dependencies });
+            if (savedDependencies.size > 0) {
+              waitAndSend(config2, application2, host2);
+            }
+          }
+        });
+        immediate.unref();
+      }
+    }
+    function onModuleLoad(data) {
+      if (data) {
+        let filename = data.filename;
+        if (filename && filename.startsWith(FILE_URI_START)) {
+          try {
+            filename = fileURLToPath(filename);
+          } catch (e) {
+          }
+        }
+        const parseResult = filename && parse(filename);
+        const request = data.request || parseResult && parseResult.name;
+        if (filename && request && isDependency(filename, request) && !detectedDependencyNames.has(request)) {
+          detectedDependencyNames.add(request);
+          if (parseResult) {
+            const { name, basedir } = parseResult;
+            if (basedir) {
+              try {
+                const { version } = requirePackageJson(basedir, module2);
+                savedDependencies.add(`${name} ${version}`);
+                waitAndSend(config, application, host);
+              } catch (e) {
+              }
+            }
+          }
+        }
+      }
+    }
+    function start(_config, _application, _host) {
+      config = _config;
+      application = _application;
+      host = _host;
+      moduleLoadStartChannel.subscribe(onModuleLoad);
+    }
+    function isDependency(filename, request) {
+      const isDependencyWithSlash = isDependencyWithSeparator(filename, request, "/");
+      if (isDependencyWithSlash && process.platform === "win32") {
+        return isDependencyWithSeparator(filename, request, path.sep);
+      }
+      return isDependencyWithSlash;
+    }
+    function isDependencyWithSeparator(filename, request, sep) {
+      return request.indexOf(`..${sep}`) !== 0 && request.indexOf(`.${sep}`) !== 0 && request.indexOf(sep) !== 0 && request.indexOf(`:${sep}`) !== 1;
+    }
+    function stop() {
+      config = null;
+      application = null;
+      host = null;
+      detectedDependencyNames.clear();
+      savedDependencies.clear();
+      if (moduleLoadStartChannel.hasSubscribers) {
+        moduleLoadStartChannel.unsubscribe(onModuleLoad);
+      }
+    }
+    module2.exports = { start, stop };
+  }
+});
+
+// packages/dd-trace/src/telemetry/index.js
+var require_telemetry = __commonJS({
+  "packages/dd-trace/src/telemetry/index.js"(exports2, module2) {
+    "use strict";
+    var tracerVersion = require_package().version;
+    var dc = require_diagnostics_channel();
+    var os = require("os");
+    var dependencies = require_dependencies();
+    var { sendData } = require_send_data();
+    var HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL ? Number(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1e3 : 6e4;
+    var telemetryStartChannel = dc.channel("datadog:telemetry:start");
+    var telemetryStopChannel = dc.channel("datadog:telemetry:stop");
+    var config;
+    var pluginManager;
+    var application;
+    var host;
+    var interval;
+    var sentIntegrations = /* @__PURE__ */ new Set();
+    function getIntegrations() {
+      const newIntegrations = [];
+      for (const pluginName in pluginManager._pluginsByName) {
+        if (sentIntegrations.has(pluginName)) {
+          continue;
+        }
+        newIntegrations.push({
+          name: pluginName,
+          enabled: pluginManager._pluginsByName[pluginName]._enabled,
+          auto_enabled: true
+        });
+        sentIntegrations.add(pluginName);
+      }
+      return newIntegrations;
+    }
+    function flatten(input, result = [], prefix = [], traversedObjects = null) {
+      traversedObjects = traversedObjects || /* @__PURE__ */ new WeakSet();
+      if (traversedObjects.has(input)) {
+        return;
+      }
+      traversedObjects.add(input);
+      for (const [key, value] of Object.entries(input)) {
+        if (typeof value === "object" && value !== null) {
+          flatten(value, result, [...prefix, key], traversedObjects);
+        } else {
+          result.push({ name: [...prefix, key].join("."), value });
+        }
+      }
+      return result;
+    }
+    function appStarted() {
+      return {
+        integrations: getIntegrations(),
+        dependencies: [],
+        configuration: flatten(config),
+        additional_payload: []
+      };
+    }
+    function onBeforeExit() {
+      process.removeListener("beforeExit", onBeforeExit);
+      sendData(config, application, host, "app-closing");
+    }
+    function createAppObject() {
+      return {
+        service_name: config.service,
+        env: config.env,
+        service_version: config.version,
+        tracer_version: tracerVersion,
+        language_name: "nodejs",
+        language_version: process.versions.node
+      };
+    }
+    function createHostObject() {
+      const osName = os.type();
+      if (osName === "Linux" || osName === "Darwin") {
+        return {
+          hostname: os.hostname(),
+          os: osName,
+          architecture: os.arch(),
+          kernel_version: os.version(),
+          kernel_release: os.release(),
+          kernel_name: osName
+        };
+      }
+      if (osName === "Windows_NT") {
+        return {
+          hostname: os.hostname(),
+          os: osName,
+          architecture: os.arch(),
+          os_version: os.version()
+        };
+      }
+      return {
+        hostname: os.hostname(),
+        // TODO is this enough?
+        os: osName
+      };
+    }
+    function getTelemetryData() {
+      return { config, application, host, heartbeatInterval: HEARTBEAT_INTERVAL };
+    }
+    function start(aConfig, thePluginManager) {
+      if (!aConfig.telemetry.enabled) {
+        return;
+      }
+      config = aConfig;
+      pluginManager = thePluginManager;
+      application = createAppObject();
+      host = createHostObject();
+      dependencies.start(config, application, host);
+      sendData(config, application, host, "app-started", appStarted());
+      interval = setInterval(() => {
+        sendData(config, application, host, "app-heartbeat");
+      }, HEARTBEAT_INTERVAL);
+      interval.unref();
+      process.on("beforeExit", onBeforeExit);
+      telemetryStartChannel.publish(getTelemetryData());
+    }
+    function stop() {
+      if (!config) {
+        return;
+      }
+      clearInterval(interval);
+      process.removeListener("beforeExit", onBeforeExit);
+      telemetryStopChannel.publish(getTelemetryData());
+      config = void 0;
+    }
+    function updateIntegrations() {
+      if (!config || !config.telemetry.enabled) {
+        return;
+      }
+      const integrations = getIntegrations();
+      if (integrations.length === 0) {
+        return;
+      }
+      sendData(config, application, host, "app-integrations-change", { integrations });
+    }
+    module2.exports = {
+      start,
+      stop,
+      updateIntegrations
+    };
+  }
+});
+
+// packages/dd-trace/src/plugins/index.js
+var require_plugins = __commonJS({
+  "packages/dd-trace/src/plugins/index.js"(exports2, module2) {
+    "use strict";
+    module2.exports = {
+      // get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
+      // get '@cucumber/cucumber' () { return require('../../../datadog-plugin-cucumber/src') },
+      // get '@playwright/test' () { return require('../../../datadog-plugin-playwright/src') },
+      // get '@elastic/elasticsearch' () { return require('../../../datadog-plugin-elasticsearch/src') },
+      // get '@elastic/transport' () { return require('../../../datadog-plugin-elasticsearch/src') },
+      // get '@google-cloud/pubsub' () { return require('../../../datadog-plugin-google-cloud-pubsub/src') },
+      // get '@grpc/grpc-js' () { return require('../../../datadog-plugin-grpc/src') },
+      // get '@hapi/hapi' () { return require('../../../datadog-plugin-hapi/src') },
+      // get '@jest/core' () { return require('../../../datadog-plugin-jest/src') },
+      // get '@koa/router' () { return require('../../../datadog-plugin-koa/src') },
+      // get '@node-redis/client' () { return require('../../../datadog-plugin-redis/src') },
+      // get '@opensearch-project/opensearch' () { return require('../../../datadog-plugin-opensearch/src') },
+      // get '@redis/client' () { return require('../../../datadog-plugin-redis/src') },
+      // get 'amqp10' () { return require('../../../datadog-plugin-amqp10/src') },
+      // get 'amqplib' () { return require('../../../datadog-plugin-amqplib/src') },
+      // get 'aws-sdk' () { return require('../../../datadog-plugin-aws-sdk/src') },
+      // get 'bunyan' () { return require('../../../datadog-plugin-bunyan/src') },
+      // get 'cassandra-driver' () { return require('../../../datadog-plugin-cassandra-driver/src') },
+      // get 'connect' () { return require('../../../datadog-plugin-connect/src') },
+      // get 'couchbase' () { return require('../../../datadog-plugin-couchbase/src') },
+      // get 'cypress' () { return require('../../../datadog-plugin-cypress/src') },
+      // get 'dns' () { return require('../../../datadog-plugin-dns/src') },
+      // get 'elasticsearch' () { return require('../../../datadog-plugin-elasticsearch/src') },
+      // get 'express' () { return require('../../../datadog-plugin-express/src') },
+      // get 'fastify' () { return require('../../../datadog-plugin-fastify/src') },
+      // get 'find-my-way' () { return require('../../../datadog-plugin-find-my-way/src') },
+      // get 'graphql' () { return require('../../../datadog-plugin-graphql/src') },
+      // get 'grpc' () { return require('../../../datadog-plugin-grpc/src') },
+      // get 'hapi' () { return require('../../../datadog-plugin-hapi/src') },
+      // get 'http' () { return require('../../../datadog-plugin-http/src') },
+      // get 'http2' () { return require('../../../datadog-plugin-http2/src') },
+      // get 'https' () { return require('../../../datadog-plugin-http/src') },
+      // get 'ioredis' () { return require('../../../datadog-plugin-ioredis/src') },
+      // get 'jest-circus' () { return require('../../../datadog-plugin-jest/src') },
+      // get 'jest-config' () { return require('../../../datadog-plugin-jest/src') },
+      // get 'jest-environment-node' () { return require('../../../datadog-plugin-jest/src') },
+      // get 'jest-environment-jsdom' () { return require('../../../datadog-plugin-jest/src') },
+      // get 'jest-jasmine2' () { return require('../../../datadog-plugin-jest/src') },
+      // get 'jest-worker' () { return require('../../../datadog-plugin-jest/src') },
+      // get 'koa' () { return require('../../../datadog-plugin-koa/src') },
+      // get 'koa-router' () { return require('../../../datadog-plugin-koa/src') },
+      // get 'kafkajs' () { return require('../../../datadog-plugin-kafkajs/src') },
+      // get 'mariadb' () { return require('../../../datadog-plugin-mariadb/src') },
+      // get 'memcached' () { return require('../../../datadog-plugin-memcached/src') },
+      // get 'microgateway-core' () { return require('../../../datadog-plugin-microgateway-core/src') },
+      // get 'mocha' () { return require('../../../datadog-plugin-mocha/src') },
+      // get 'mocha-each' () { return require('../../../datadog-plugin-mocha/src') },
+      // get 'moleculer' () { return require('../../../datadog-plugin-moleculer/src') },
+      // get 'mongodb' () { return require('../../../datadog-plugin-mongodb-core/src') },
+      // get 'mongodb-core' () { return require('../../../datadog-plugin-mongodb-core/src') },
+      // get 'mysql' () { return require('../../../datadog-plugin-mysql/src') },
+      // get 'mysql2' () { return require('../../../datadog-plugin-mysql2/src') },
+      // get 'net' () { return require('../../../datadog-plugin-net/src') },
+      // get 'next' () { return require('../../../datadog-plugin-next/src') },
+      // get 'oracledb' () { return require('../../../datadog-plugin-oracledb/src') },
+      // get 'paperplane' () { return require('../../../datadog-plugin-paperplane/src') },
+      // get 'pg' () { return require('../../../datadog-plugin-pg/src') },
+      // get 'pino' () { return require('../../../datadog-plugin-pino/src') },
+      // get 'pino-pretty' () { return require('../../../datadog-plugin-pino/src') },
+      // get 'redis' () { return require('../../../datadog-plugin-redis/src') },
+      // get 'restify' () { return require('../../../datadog-plugin-restify/src') },
+      // get 'rhea' () { return require('../../../datadog-plugin-rhea/src') },
+      // get 'router' () { return require('../../../datadog-plugin-router/src') },
+      // get 'sharedb' () { return require('../../../datadog-plugin-sharedb/src') },
+      // get 'tedious' () { return require('../../../datadog-plugin-tedious/src') },
+      // get 'winston' () { return require('../../../datadog-plugin-winston/src') }
+    };
+  }
+});
+
+// packages/dd-trace/src/iitm.js
+var require_iitm = __commonJS({
+  "packages/dd-trace/src/iitm.js"(exports2, module2) {
+    "use strict";
+    var semver = require("semver");
+    var logger = require_log();
+    var { addHook } = require("import-in-the-middle");
+    var dc = require_diagnostics_channel();
+    if (semver.satisfies(process.versions.node, ">=14.13.1")) {
+      const moduleLoadStartChannel = dc.channel("dd-trace:moduleLoadStart");
+      addHook((name, namespace) => {
+        if (moduleLoadStartChannel.hasSubscribers) {
+          moduleLoadStartChannel.publish({
+            filename: name,
+            module: namespace
+          });
+        }
+      });
+      module2.exports = require("import-in-the-middle");
+    } else {
+      logger.warn("ESM is not fully supported by this version of Node.js, so dd-trace will not intercept ESM loading.");
+      module2.exports = () => ({
+        unhook: () => {
+        }
+      });
+      module2.exports.addHook = () => {
+      };
+      module2.exports.removeHook = () => {
+      };
+    }
+  }
+});
+
+// packages/dd-trace/src/ritm.js
+var require_ritm = __commonJS({
+  "packages/dd-trace/src/ritm.js"(exports2, module2) {
+    "use strict";
+    var path = require("path");
+    var Module = require("module");
+    var parse = require("module-details-from-path");
+    var dc = require_diagnostics_channel();
+    var origRequire = Module.prototype.require;
+    module2.exports = Hook;
+    var moduleHooks = /* @__PURE__ */ Object.create(null);
+    var cache = /* @__PURE__ */ Object.create(null);
+    var patching = /* @__PURE__ */ Object.create(null);
+    var patchedRequire = null;
+    var moduleLoadStartChannel = dc.channel("dd-trace:moduleLoadStart");
+    var moduleLoadEndChannel = dc.channel("dd-trace:moduleLoadEnd");
+    function Hook(modules, options, onrequire) {
+      if (!(this instanceof Hook))
+        return new Hook(modules, options, onrequire);
+      if (typeof modules === "function") {
+        onrequire = modules;
+        modules = null;
+        options = {};
+      } else if (typeof options === "function") {
+        onrequire = options;
+        options = {};
+      }
+      modules = modules || [];
+      options = options || {};
+      this.modules = modules;
+      this.options = options;
+      this.onrequire = onrequire;
+      if (Array.isArray(modules)) {
+        for (const mod of modules) {
+          const hooks = moduleHooks[mod];
+          if (hooks) {
+            hooks.push(onrequire);
+          } else {
+            moduleHooks[mod] = [onrequire];
+          }
+        }
+      }
+      if (patchedRequire)
+        return;
+      patchedRequire = Module.prototype.require = function(request) {
+        const filename = Module._resolveFilename(request, this);
+        const core = filename.indexOf(path.sep) === -1;
+        let name, basedir, hooks;
+        if (cache[filename]) {
+          if (require.cache[filename] && require.cache[filename].exports !== cache[filename].original) {
+            return require.cache[filename].exports;
+          }
+          return cache[filename].exports;
+        }
+        const patched = patching[filename];
+        if (patched) {
+          return origRequire.apply(this, arguments);
+        } else {
+          patching[filename] = true;
+        }
+        const payload = {
+          filename,
+          request
+        };
+        if (moduleLoadStartChannel.hasSubscribers) {
+          moduleLoadStartChannel.publish(payload);
+        }
+        const exports3 = origRequire.apply(this, arguments);
+        payload.module = exports3;
+        if (moduleLoadEndChannel.hasSubscribers) {
+          moduleLoadEndChannel.publish(payload);
+        }
+        delete patching[filename];
+        if (core) {
+          hooks = moduleHooks[filename];
+          if (!hooks)
+            return exports3;
+          name = filename;
+        } else {
+          const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== void 0;
+          const hasLambdaHandler = process.env.DD_LAMBDA_HANDLER !== void 0;
+          const segments = filename.split(path.sep);
+          const filenameFromNodeModule = segments.lastIndexOf("node_modules") !== -1;
+          const stat = inAWSLambda && hasLambdaHandler && !filenameFromNodeModule ? { name: filename } : parse(filename);
+          if (!stat)
+            return exports3;
+          name = stat.name;
+          basedir = stat.basedir;
+          hooks = moduleHooks[name];
+          if (!hooks)
+            return exports3;
+          const paths = Module._resolveLookupPaths(name, this, true);
+          if (!paths) {
+            return exports3;
+          }
+          const res = Module._findPath(name, [basedir, ...paths]);
+          if (res !== filename) {
+            name = name + path.sep + path.relative(basedir, filename);
+          }
+        }
+        cache[filename] = { exports: exports3 };
+        cache[filename].original = exports3;
+        for (const hook of hooks) {
+          cache[filename].exports = hook(cache[filename].exports, name, basedir);
+        }
+        return cache[filename].exports;
+      };
+    }
+    Hook.reset = function() {
+      Module.prototype.require = origRequire;
+      patchedRequire = null;
+      patching = /* @__PURE__ */ Object.create(null);
+      cache = /* @__PURE__ */ Object.create(null);
+      moduleHooks = /* @__PURE__ */ Object.create(null);
+    };
+    Hook.prototype.unhook = function() {
+      for (const mod of this.modules) {
+        const hooks = (moduleHooks[mod] || []).filter((hook) => hook !== this.onrequire);
+        if (hooks.length > 0) {
+          moduleHooks[mod] = hooks;
+        } else {
+          delete moduleHooks[mod];
+        }
+      }
+      if (Object.keys(moduleHooks).length === 0) {
+        Hook.reset();
+      }
+    };
+  }
+});
+
+// packages/dd-trace/src/dcitm.js
+var require_dcitm = __commonJS({
+  "packages/dd-trace/src/dcitm.js"(exports2, module2) {
+    "use strict";
+    var dc = require("diagnostics_channel");
+    var CHANNEL_PREFIX = "dd-trace:bundledModuleLoadStart";
+    if (!dc.subscribe) {
+      dc.subscribe = (channel, cb) => {
+        dc.channel(channel).subscribe(cb);
+      };
+    }
+    if (!dc.unsubscribe) {
+      dc.unsubscribe = (channel, cb) => {
+        if (dc.channel(channel).hasSubscribers) {
+          dc.channel(channel).unsubscribe(cb);
+        }
+      };
+    }
+    module2.exports = DcitmHook;
+    function DcitmHook(moduleNames, options, onrequire) {
+      if (!(this instanceof DcitmHook))
+        return new DcitmHook(moduleNames, options, onrequire);
+      function onModuleLoad(payload) {
+        payload.module = onrequire(payload.module, payload.path, void 0, payload.version);
+      }
+      for (const moduleName of moduleNames) {
+        dc.subscribe(`${CHANNEL_PREFIX}:${moduleName}`, onModuleLoad);
+      }
+      this.unhook = function dcitmUnload() {
+        for (const moduleName of moduleNames) {
+          dc.unsubscribe(`${CHANNEL_PREFIX}:${moduleName}`, onModuleLoad);
+        }
+      };
+    }
+  }
+});
+
+// packages/datadog-instrumentations/src/helpers/hook.js
+var require_hook = __commonJS({
+  "packages/datadog-instrumentations/src/helpers/hook.js"(exports2, module2) {
+    "use strict";
+    var path = require("path");
+    var iitm = require_iitm();
+    var ritm = require_ritm();
+    var dcitm = require_dcitm();
+    function Hook(modules, onrequire) {
+      if (!(this instanceof Hook))
+        return new Hook(modules, onrequire);
+      this._patched = /* @__PURE__ */ Object.create(null);
+      const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
+        const parts = [moduleBaseDir, moduleName].filter((v) => v);
+        const filename = path.join(...parts);
+        if (this._patched[filename])
+          return moduleExports;
+        this._patched[filename] = true;
+        return onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion);
+      };
+      this._ritmHook = ritm(modules, {}, safeHook);
+      this._iitmHook = iitm(modules, {}, (moduleExports, moduleName, moduleBaseDir) => {
+        if (moduleExports && moduleExports.default) {
+          moduleExports.default = safeHook(moduleExports.default, moduleName, moduleBaseDir);
+          return moduleExports;
+        } else {
+          return safeHook(moduleExports, moduleName, moduleBaseDir);
+        }
+      });
+      this._dcitmHook = dcitm(modules, {}, safeHook);
+    }
+    Hook.prototype.unhook = function() {
+      this._ritmHook.unhook();
+      this._iitmHook.unhook();
+      this._dcitmHook.unhook();
+      this._patched = /* @__PURE__ */ Object.create(null);
+    };
+    module2.exports = Hook;
+  }
+});
+
+// packages/datadog-instrumentations/src/helpers/hooks.js
+var require_hooks = __commonJS({
+  "packages/datadog-instrumentations/src/helpers/hooks.js"(exports2, module2) {
+    "use strict";
+    module2.exports = {
+      // '@aws-sdk/smithy-client': () => require('../aws-sdk'),
+      // '@cucumber/cucumber': () => require('../cucumber'),
+      // '@playwright/test': () => require('../playwright'),
+      // '@elastic/elasticsearch': () => require('../elasticsearch'),
+      // '@elastic/transport': () => require('../elasticsearch'),
+      // '@google-cloud/pubsub': () => require('../google-cloud-pubsub'),
+      // '@grpc/grpc-js': () => require('../grpc'),
+      // '@hapi/hapi': () => require('../hapi'),
+      // '@jest/core': () => require('../jest'),
+      // '@jest/reporters': () => require('../jest'),
+      // '@koa/router': () => require('../koa'),
+      // '@node-redis/client': () => require('../redis'),
+      // '@opensearch-project/opensearch': () => require('../opensearch'),
+      // '@redis/client': () => require('../redis'),
+      // 'amqp10': () => require('../amqp10'),
+      // 'amqplib': () => require('../amqplib'),
+      // 'aws-sdk': () => require('../aws-sdk'),
+      // 'bluebird': () => require('../bluebird'),
+      // 'body-parser': () => require('../body-parser'),
+      // 'bunyan': () => require('../bunyan'),
+      // 'cassandra-driver': () => require('../cassandra-driver'),
+      // 'child_process': () => require('../child-process'),
+      // 'node:child_process': () => require('../child-process'),
+      // 'connect': () => require('../connect'),
+      // 'couchbase': () => require('../couchbase'),
+      // 'crypto': () => require('../crypto'),
+      // 'cypress': () => require('../cypress'),
+      // 'dns': () => require('../dns'),
+      // 'elasticsearch': () => require('../elasticsearch'),
+      // 'express': () => require('../express'),
+      // 'fastify': () => require('../fastify'),
+      // 'find-my-way': () => require('../find-my-way'),
+      // 'fs': () => require('../fs'),
+      // 'node:fs': () => require('../fs'),
+      // 'graphql': () => require('../graphql'),
+      // 'grpc': () => require('../grpc'),
+      // 'hapi': () => require('../hapi'),
+      // 'http': () => require('../http'),
+      // 'http2': () => require('../http2'),
+      // 'https': () => require('../http'),
+      // 'ioredis': () => require('../ioredis'),
+      // 'jest-circus': () => require('../jest'),
+      // 'jest-config': () => require('../jest'),
+      // 'jest-environment-node': () => require('../jest'),
+      // 'jest-environment-jsdom': () => require('../jest'),
+      // 'jest-jasmine2': () => require('../jest'),
+      // 'jest-worker': () => require('../jest'),
+      // 'koa': () => require('../koa'),
+      // 'koa-router': () => require('../koa'),
+      // 'kafkajs': () => require('../kafkajs'),
+      // 'ldapjs': () => require('../ldapjs'),
+      // 'limitd-client': () => require('../limitd-client'),
+      // 'mariadb': () => require('../mariadb'),
+      // 'memcached': () => require('../memcached'),
+      // 'microgateway-core': () => require('../microgateway-core'),
+      // 'mocha': () => require('../mocha'),
+      // 'mocha-each': () => require('../mocha'),
+      // 'moleculer': () => require('../moleculer'),
+      // 'mongodb': () => require('../mongodb-core'),
+      // 'mongodb-core': () => require('../mongodb-core'),
+      // 'mongoose': () => require('../mongoose'),
+      // 'mysql': () => require('../mysql'),
+      // 'mysql2': () => require('../mysql2'),
+      // 'net': () => require('../net'),
+      // 'next': () => require('../next'),
+      // 'oracledb': () => require('../oracledb'),
+      // 'paperplane': () => require('../paperplane'),
+      // 'pg': () => require('../pg'),
+      // 'pino': () => require('../pino'),
+      // 'pino-pretty': () => require('../pino'),
+      // 'promise-js': () => require('../promise-js'),
+      // 'promise': () => require('../promise'),
+      // 'q': () => require('../q'),
+      // 'qs': () => require('../qs'),
+      // 'redis': () => require('../redis'),
+      // 'restify': () => require('../restify'),
+      // 'rhea': () => require('../rhea'),
+      // 'router': () => require('../router'),
+      // 'sharedb': () => require('../sharedb'),
+      // 'tedious': () => require('../tedious'),
+      // 'when': () => require('../when'),
+      // 'winston': () => require('../winston')
+    };
+  }
+});
+
+// packages/datadog-instrumentations/src/helpers/instrumentations.js
+var require_instrumentations = __commonJS({
+  "packages/datadog-instrumentations/src/helpers/instrumentations.js"(exports2, module2) {
+    "use strict";
+    var sym = Symbol.for("_ddtrace_instrumentations");
+    global[sym] = global[sym] || {};
+    module2.exports = global[sym];
+  }
+});
+
+// packages/datadog-instrumentations/src/helpers/register.js
+var require_register = __commonJS({
+  "packages/datadog-instrumentations/src/helpers/register.js"(exports2, module2) {
+    "use strict";
+    var { channel } = require_diagnostics_channel();
+    var path = require("path");
+    var semver = require("semver");
+    var Hook = require_hook();
+    var requirePackageJson = require_require_package_json();
+    var log = require_log();
+    var hooks = require_hooks();
+    var instrumentations = require_instrumentations();
+    var names = Object.keys(hooks);
+    var pathSepExpr = new RegExp(`\\${path.sep}`, "g");
+    var loadChannel = channel("dd-trace:instrumentation:load");
+    for (const packageName of names) {
+      Hook([packageName], (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
+        moduleName = moduleName.replace(pathSepExpr, "/");
+        hooks[packageName]();
+        for (const { name, file, versions, hook } of instrumentations[packageName]) {
+          const fullFilename = filename(name, file);
+          if (moduleName === fullFilename) {
+            const version = moduleVersion || getVersion(moduleBaseDir);
+            if (matchVersion(version, versions)) {
+              try {
+                loadChannel.publish({ name, version, file });
+                moduleExports = hook(moduleExports, version);
+              } catch (e) {
+                log.error(e);
+              }
+            }
+          }
+        }
+        return moduleExports;
+      });
+    }
+    function matchVersion(version, ranges) {
+      return !version || ranges && ranges.some((range) => semver.satisfies(semver.coerce(version), range));
+    }
+    function getVersion(moduleBaseDir) {
+      if (moduleBaseDir) {
+        return requirePackageJson(moduleBaseDir, module2).version;
+      }
+    }
+    function filename(name, file) {
+      return [name, file].filter((val) => val).join("/");
+    }
+    module2.exports = {
+      filename,
+      pathSepExpr
+    };
+  }
+});
+
+// packages/datadog-instrumentations/index.js
+var require_datadog_instrumentations = __commonJS({
+  "packages/datadog-instrumentations/index.js"() {
+    "use strict";
+    require_register();
+  }
+});
+
+// packages/datadog-instrumentations/src/helpers/instrument.js
+var require_instrument = __commonJS({
+  "packages/datadog-instrumentations/src/helpers/instrument.js"(exports2) {
+    "use strict";
+    var dc = require_diagnostics_channel();
+    var semver = require("semver");
+    var instrumentations = require_instrumentations();
+    var { AsyncResource } = require("async_hooks");
+    var channelMap = {};
+    exports2.channel = function(name) {
+      const maybe = channelMap[name];
+      if (maybe)
+        return maybe;
+      const ch = dc.channel(name);
+      channelMap[name] = ch;
+      return ch;
+    };
+    exports2.addHook = function addHook({ name, versions, file }, hook) {
+      if (!instrumentations[name]) {
+        instrumentations[name] = [];
+      }
+      instrumentations[name].push({ name, versions, file, hook });
+    };
+    if (semver.satisfies(process.versions.node, ">=17.8.0")) {
+      exports2.AsyncResource = AsyncResource;
+    } else {
+      exports2.AsyncResource = class extends AsyncResource {
+        static bind(fn, type, thisArg) {
+          type = type || fn.name;
+          return new exports2.AsyncResource(type || "bound-anonymous-fn").bind(fn, thisArg);
+        }
+        bind(fn, thisArg) {
+          let bound;
+          if (thisArg === void 0) {
+            const resource = this;
+            bound = function(...args) {
+              args.unshift(fn, this);
+              return Reflect.apply(resource.runInAsyncScope, resource, args);
+            };
+          } else {
+            bound = this.runInAsyncScope.bind(this, fn, thisArg);
+          }
+          Object.defineProperties(bound, {
+            "length": {
+              configurable: true,
+              enumerable: false,
+              value: fn.length,
+              writable: false
+            },
+            "asyncResource": {
+              configurable: true,
+              enumerable: true,
+              value: this,
+              writable: true
+            }
+          });
+          return bound;
+        }
+      };
+    }
+  }
+});
+
+// packages/dd-trace/src/lambda/runtime/errors.js
+var require_errors = __commonJS({
+  "packages/dd-trace/src/lambda/runtime/errors.js"(exports2, module2) {
+    "use strict";
+    var ExtendedError = class extends Error {
+      constructor(reason) {
+        super(reason);
+        Object.setPrototypeOf(this, new.target.prototype);
+      }
+    };
+    var ImpendingTimeout = class extends ExtendedError {
+    };
+    ImpendingTimeout.prototype.name = "Impending Timeout";
+    module2.exports = {
+      ImpendingTimeout
+    };
+  }
+});
+
+// packages/dd-trace/src/lambda/handler.js
+var require_handler = __commonJS({
+  "packages/dd-trace/src/lambda/handler.js"(exports2) {
+    "use strict";
+    var log = require_log();
+    var { channel } = require_instrument();
+    var { ERROR_MESSAGE, ERROR_TYPE } = require_constants();
+    var { ImpendingTimeout } = require_errors();
+    var globalTracer = global._ddtrace;
+    var tracer = globalTracer._tracer;
+    var timeoutChannel = channel("apm:aws:lambda:timeout");
+    timeoutChannel.subscribe((_) => {
+      crashFlush();
+    });
+    var __lambdaTimeout;
+    function checkTimeout(context) {
+      const remainingTimeInMillis = context.getRemainingTimeInMillis();
+      let apmFlushDeadline = parseInt(process.env.DD_APM_FLUSH_DEADLINE_MILLISECONDS) || 100;
+      apmFlushDeadline = apmFlushDeadline < 0 ? 100 : apmFlushDeadline;
+      __lambdaTimeout = setTimeout(() => {
+        timeoutChannel.publish(void 0);
+      }, remainingTimeInMillis - apmFlushDeadline);
+    }
+    function crashFlush() {
+      const activeSpan = tracer.scope().active();
+      if (activeSpan !== null) {
+        const error = new ImpendingTimeout("Datadog detected an impending timeout");
+        activeSpan.addTags({
+          [ERROR_MESSAGE]: error.message,
+          [ERROR_TYPE]: error.name
+        });
+      } else {
+        log.debug("An impending timeout was reached, but no root span was found. No error will be tagged.");
+      }
+      tracer._processor.killAll();
+      if (activeSpan !== null) {
+        activeSpan.finish();
+      }
+    }
+    function extractContext(args) {
+      let context = args.length > 1 ? args[1] : void 0;
+      if (context === void 0 || context.getRemainingTimeInMillis === void 0) {
+        context = args.length > 2 ? args[2] : void 0;
+        if (context === void 0 || context.getRemainingTimeInMillis === void 0) {
+          throw Error("Could not extract context");
+        }
+      }
+      return context;
+    }
+    exports2.datadog = function datadog(lambdaHandler) {
+      return (...args) => {
+        const patched = lambdaHandler.apply(this, args);
+        try {
+          const context = extractContext(args);
+          checkTimeout(context);
+          if (patched) {
+            patched.then((_) => clearTimeout(__lambdaTimeout));
+          }
+        } catch (e) {
+          log.debug("Error patching AWS Lambda handler. Timeout spans will not be generated.");
+        }
+        return patched;
+      };
+    };
+  }
+});
+
+// packages/datadog-shimmer/src/shimmer.js
+var require_shimmer = __commonJS({
+  "packages/datadog-shimmer/src/shimmer.js"(exports2, module2) {
+    "use strict";
+    var unwrappers = /* @__PURE__ */ new WeakMap();
+    function copyProperties(original, wrapped) {
+      Object.setPrototypeOf(wrapped, original);
+      const props = Object.getOwnPropertyDescriptors(original);
+      const keys = Reflect.ownKeys(props);
+      for (const key of keys) {
+        try {
+          Object.defineProperty(wrapped, key, props[key]);
+        } catch (e) {
+        }
+      }
+    }
+    function wrapFn(original, delegate) {
+      assertFunction(delegate);
+      assertNotClass(original);
+      const shim = function shim2() {
+        return delegate.apply(this, arguments);
+      };
+      unwrappers.set(shim, () => {
+        delegate = original;
+      });
+      copyProperties(original, shim);
+      return shim;
+    }
+    function wrapMethod(target, name, wrapper) {
+      assertMethod(target, name);
+      assertFunction(wrapper);
+      const original = target[name];
+      const wrapped = wrapper(original);
+      const descriptor = Object.getOwnPropertyDescriptor(target, name);
+      const attributes = {
+        configurable: true,
+        ...descriptor
+      };
+      copyProperties(original, wrapped);
+      if (descriptor) {
+        unwrappers.set(wrapped, () => Object.defineProperty(target, name, descriptor));
+        if (descriptor.get || descriptor.set) {
+          attributes.get = () => wrapped;
+        } else {
+          attributes.value = wrapped;
+        }
+        if (descriptor.configurable === false) {
+          return Object.create(target, {
+            [name]: attributes
+          });
+        }
+      } else {
+        unwrappers.set(wrapped, () => delete target[name]);
+        attributes.value = wrapped;
+        attributes.writable = true;
+      }
+      Object.defineProperty(target, name, attributes);
+      return target;
+    }
+    function wrap(target, name, wrapper) {
+      return typeof name === "function" ? wrapFn(target, name) : wrapMethod(target, name, wrapper);
+    }
+    function unwrap(target, name) {
+      if (!target)
+        return target;
+      const unwrapper = unwrappers.get(name ? target[name] : target);
+      if (!unwrapper)
+        return target;
+      unwrapper();
+      return target;
+    }
+    function massWrap(targets, names, wrapper) {
+      targets = toArray(targets);
+      names = toArray(names);
+      for (const target of targets) {
+        for (const name of names) {
+          wrap(target, name, wrapper);
+        }
+      }
+    }
+    function massUnwrap(targets, names) {
+      targets = toArray(targets);
+      names = toArray(names);
+      for (const target of targets) {
+        for (const name of names) {
+          unwrap(target, name);
+        }
+      }
+    }
+    function toArray(maybeArray) {
+      return Array.isArray(maybeArray) ? maybeArray : [maybeArray];
+    }
+    function assertMethod(target, name) {
+      if (!target) {
+        throw new Error("No target object provided.");
+      }
+      if (typeof target !== "object" && typeof target !== "function") {
+        throw new Error("Invalid target.");
+      }
+      if (!target[name]) {
+        throw new Error(`No original method ${name}.`);
+      }
+      if (typeof target[name] !== "function") {
+        throw new Error(`Original method ${name} is not a function.`);
+      }
+    }
+    function assertFunction(target) {
+      if (!target) {
+        throw new Error("No function provided.");
+      }
+      if (typeof target !== "function") {
+        throw new Error("Target is not a function.");
+      }
+    }
+    function assertNotClass(target) {
+      if (Function.prototype.toString.call(target).startsWith("class")) {
+        throw new Error("Target is a native class constructor and cannot be wrapped.");
+      }
+    }
+    module2.exports = {
+      wrap,
+      massWrap,
+      unwrap,
+      massUnwrap
+    };
+  }
+});
+
+// packages/datadog-shimmer/index.js
+var require_datadog_shimmer = __commonJS({
+  "packages/datadog-shimmer/index.js"(exports2, module2) {
+    "use strict";
+    module2.exports = require_shimmer();
+  }
+});
+
+// packages/dd-trace/src/lambda/runtime/patch.js
+var require_patch = __commonJS({
+  "packages/dd-trace/src/lambda/runtime/patch.js"() {
+    "use strict";
+    var path = require("path");
+    var { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler, _getLambdaFilePath } = require_ritm2();
+    var { datadog } = require_handler();
+    var { addHook } = require_instrument();
+    var shimmer = require_datadog_shimmer();
+    var patchDatadogLambdaModule = (datadogLambdaModule) => {
+      shimmer.wrap(datadogLambdaModule, "datadog", patchDatadogLambdaHandler);
+      return datadogLambdaModule;
+    };
+    function patchDatadogLambdaHandler(datadogHandler) {
+      return (userHandler) => {
+        return datadogHandler(datadog(userHandler));
+      };
+    }
+    var patchLambdaModule = (handlerPath) => (lambdaModule) => {
+      shimmer.wrap(lambdaModule, handlerPath, patchLambdaHandler);
+      return lambdaModule;
+    };
+    function patchLambdaHandler(lambdaHandler) {
+      return datadog(lambdaHandler);
+    }
+    var lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT;
+    var originalLambdaHandler = process.env.DD_LAMBDA_HANDLER;
+    if (originalLambdaHandler !== void 0) {
+      const [moduleRoot, moduleAndHandler] = _extractModuleRootAndHandler(originalLambdaHandler);
+      const [_module, handlerPath] = _extractModuleNameAndHandlerPath(moduleAndHandler);
+      const lambdaStylePath = path.resolve(lambdaTaskRoot, moduleRoot, _module);
+      const lambdaFilePath = _getLambdaFilePath(lambdaStylePath);
+      addHook({ name: lambdaFilePath }, patchLambdaModule(handlerPath));
+    } else {
+      addHook({ name: "datadog-lambda-js" }, patchDatadogLambdaModule);
+    }
+  }
+});
+
+// packages/dd-trace/src/lambda/runtime/ritm.js
+var require_ritm2 = __commonJS({
+  "packages/dd-trace/src/lambda/runtime/ritm.js"(exports2, module2) {
+    "use strict";
+    var fs = require("fs");
+    var path = require("path");
+    var log = require_log();
+    var Hook = require_hook();
+    var instrumentations = require_instrumentations();
+    var {
+      filename,
+      pathSepExpr
+    } = require_register();
+    function _extractModuleRootAndHandler(fullHandler) {
+      const handlerString = path.basename(fullHandler);
+      const moduleRoot = fullHandler.substring(0, fullHandler.indexOf(handlerString));
+      return [moduleRoot, handlerString];
+    }
+    function _extractModuleNameAndHandlerPath(handler) {
+      const FUNCTION_EXPR = /^([^.]*)\.(.*)$/;
+      const match = handler.match(FUNCTION_EXPR);
+      if (!match || match.length !== 3) {
+        return;
+      }
+      return [match[1], match[2]];
+    }
+    function _getLambdaFilePath(lambdaStylePath) {
+      let lambdaFilePath = lambdaStylePath;
+      if (fs.existsSync(lambdaStylePath + ".js")) {
+        lambdaFilePath += ".js";
+      } else if (fs.existsSync(lambdaStylePath + ".mjs")) {
+        lambdaFilePath += ".mjs";
+      } else if (fs.existsSync(lambdaStylePath + ".cjs")) {
+        lambdaFilePath += ".cjs";
+      }
+      return lambdaFilePath;
+    }
+    var registerLambdaHook = () => {
+      const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT;
+      const originalLambdaHandler = process.env.DD_LAMBDA_HANDLER;
+      if (originalLambdaHandler !== void 0) {
+        const [moduleRoot, moduleAndHandler] = _extractModuleRootAndHandler(originalLambdaHandler);
+        const [_module] = _extractModuleNameAndHandlerPath(moduleAndHandler);
+        const lambdaStylePath = path.resolve(lambdaTaskRoot, moduleRoot, _module);
+        const lambdaFilePath = _getLambdaFilePath(lambdaStylePath);
+        Hook([lambdaFilePath], (moduleExports) => {
+          require_patch();
+          for (const { hook } of instrumentations[lambdaFilePath]) {
+            try {
+              moduleExports = hook(moduleExports);
+            } catch (e) {
+              log.error(e);
+            }
+          }
+          return moduleExports;
+        });
+      } else {
+        const moduleToPatch = "datadog-lambda-js";
+        Hook([moduleToPatch], (moduleExports, moduleName, _) => {
+          moduleName = moduleName.replace(pathSepExpr, "/");
+          require_patch();
+          for (const { name, file, hook } of instrumentations[moduleToPatch]) {
+            const fullFilename = filename(name, file);
+            if (moduleName === fullFilename) {
+              try {
+                moduleExports = hook(moduleExports);
+              } catch (e) {
+                log.error(e);
+              }
+            }
+          }
+          return moduleExports;
+        });
+      }
+    };
+    module2.exports = {
+      _extractModuleRootAndHandler,
+      _extractModuleNameAndHandlerPath,
+      _getLambdaFilePath,
+      registerLambdaHook
+    };
+  }
+});
+
+// packages/dd-trace/src/lambda/index.js
+var require_lambda = __commonJS({
+  "packages/dd-trace/src/lambda/index.js"() {
+    "use strict";
+    var { registerLambdaHook } = require_ritm2();
+    registerLambdaHook();
+  }
+});
+
+// packages/dd-trace/src/plugin_manager.js
+var require_plugin_manager = __commonJS({
+  "packages/dd-trace/src/plugin_manager.js"(exports2, module2) {
+    "use strict";
+    var { channel } = require_diagnostics_channel();
+    var { isFalse } = require_util();
+    var plugins = require_plugins();
+    var log = require_log();
+    var loadChannel = channel("dd-trace:instrumentation:load");
+    require_datadog_instrumentations();
+    if (process.env.AWS_LAMBDA_FUNCTION_NAME !== void 0) {
+      require_lambda();
+    }
+    var { DD_TRACE_DISABLED_PLUGINS } = process.env;
+    var disabledPlugins = new Set(
+      DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(",").map((plugin) => plugin.trim())
+    );
+    var pluginClasses = {};
+    loadChannel.subscribe(({ name }) => {
+      const Plugin = plugins[name];
+      if (!Plugin || typeof Plugin !== "function")
+        return;
+      if (!pluginClasses[Plugin.id]) {
+        const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`;
+        const enabled = process.env[envName.replace(/[^a-z0-9_]/ig, "_")];
+        if (isFalse(enabled) || disabledPlugins.has(Plugin.id)) {
+          log.debug(`Plugin "${Plugin.id}" was disabled via configuration option.`);
+          pluginClasses[Plugin.id] = null;
+        } else {
+          pluginClasses[Plugin.id] = Plugin;
+        }
+      }
+    });
+    module2.exports = class PluginManager {
+      constructor(tracer) {
+        this._tracer = tracer;
+        this._tracerConfig = null;
+        this._pluginsByName = {};
+        this._configsByName = {};
+        this._loadedSubscriber = ({ name }) => {
+          const Plugin = plugins[name];
+          if (!Plugin || typeof Plugin !== "function")
+            return;
+          this.loadPlugin(Plugin.id);
+        };
+        loadChannel.subscribe(this._loadedSubscriber);
+      }
+      loadPlugin(name) {
+        const Plugin = pluginClasses[name];
+        if (!Plugin)
+          return;
+        if (!this._pluginsByName[name]) {
+          this._pluginsByName[name] = new Plugin(this._tracer);
+        }
+        if (!this._tracerConfig)
+          return;
+        const pluginConfig = this._configsByName[name] || {
+          enabled: this._tracerConfig.plugins !== false
+        };
+        this._pluginsByName[name].configure({
+          ...this._getSharedConfig(name),
+          ...pluginConfig
+        });
+      }
+      // TODO: merge config instead of replacing
+      configurePlugin(name, pluginConfig) {
+        const enabled = this._isEnabled(pluginConfig);
+        this._configsByName[name] = {
+          ...pluginConfig,
+          enabled
+        };
+        this.loadPlugin(name);
+      }
+      // like instrumenter.enable()
+      configure(config = {}) {
+        this._tracerConfig = config;
+        for (const name in pluginClasses) {
+          this.loadPlugin(name);
+        }
+      }
+      // This is basically just for testing. like intrumenter.disable()
+      destroy() {
+        for (const name in this._pluginsByName) {
+          this._pluginsByName[name].configure({ enabled: false });
+        }
+        loadChannel.unsubscribe(this._loadedSubscriber);
+      }
+      _isEnabled(pluginConfig) {
+        if (typeof pluginConfig === "boolean")
+          return pluginConfig;
+        if (!pluginConfig)
+          return true;
+        return pluginConfig.enabled !== false;
+      }
+      // TODO: figure out a better way to handle this
+      _getSharedConfig(name) {
+        const {
+          logInjection,
+          serviceMapping,
+          queryStringObfuscation,
+          site,
+          url,
+          dbmPropagationMode
+        } = this._tracerConfig;
+        const sharedConfig = {};
+        if (logInjection !== void 0) {
+          sharedConfig.logInjection = logInjection;
+        }
+        if (queryStringObfuscation !== void 0) {
+          sharedConfig.queryStringObfuscation = queryStringObfuscation;
+        }
+        sharedConfig.dbmPropagationMode = dbmPropagationMode;
+        if (serviceMapping && serviceMapping[name]) {
+          sharedConfig.service = serviceMapping[name];
+        }
+        sharedConfig.site = site;
+        sharedConfig.url = url;
+        return sharedConfig;
+      }
+    };
+  }
+});
+
+// packages/dd-trace/src/exporters/common/form-data.js
+var require_form_data = __commonJS({
+  "packages/dd-trace/src/exporters/common/form-data.js"(exports2, module2) {
+    "use strict";
+    var { Readable } = require("stream");
+    var id = require_id();
+    var FormData = class extends Readable {
+      constructor() {
+        super();
+        this._boundary = id().toString();
+        this._data = [];
+      }
+      append(key, value, options = {}) {
+        this._appendBoundary();
+        if (options.filename) {
+          this._appendFile(key, value, options);
+        } else {
+          this._appendMetadata(key, value, options);
+        }
+      }
+      getHeaders() {
+        return { "Content-Type": "multipart/form-data; boundary=" + this._boundary };
+      }
+      _appendBoundary() {
+        this._data.push(`--${this._boundary}\r
+`);
+      }
+      _appendMetadata(key, value) {
+        this._data.push(`Content-Disposition: form-data; name="${key}"\r
+\r
+${value}\r
+`);
+      }
+      _appendFile(key, value, { filename, contentType = "application/octet-stream" }) {
+        this._data.push(`Content-Disposition: form-data; name="${key}"; filename="${filename}"\r
+`);
+        this._data.push(`Content-Type: ${contentType}\r
+\r
+`);
+        this._data.push(value);
+        this._data.push("\r\n");
+      }
+      _read() {
+        this.push(this._data.shift());
+        if (this._data.length === 0) {
+          this.push(`--${this._boundary}--\r
+`);
+          this.push(null);
+        }
+      }
+    };
+    module2.exports = FormData;
+  }
+});
+
+// packages/dd-trace/src/profiling/exporters/agent.js
+var require_agent2 = __commonJS({
+  "packages/dd-trace/src/profiling/exporters/agent.js"(exports2, module2) {
+    "use strict";
+    var retry = require("retry");
+    var { request } = require("http");
+    var docker = require_docker();
+    var FormData = require_form_data();
+    var { storage } = require_datadog_core();
+    var version = require_package().version;
+    var containerId = docker.id();
+    function sendRequest(options, form, callback) {
+      const store = storage.getStore();
+      storage.enterWith({ noop: true });
+      const req = request(options, (res) => {
+        if (res.statusCode >= 400) {
+          const error = new Error(`HTTP Error ${res.statusCode}`);
+          error.status = res.statusCode;
+          callback(error);
+        } else {
+          callback(null, res);
+        }
+      });
+      req.on("error", callback);
+      if (form)
+        form.pipe(req);
+      storage.enterWith(store);
+    }
+    function getBody(stream, callback) {
+      const chunks = [];
+      stream.on("error", callback);
+      stream.on("data", (chunk) => chunks.push(chunk));
+      stream.on("end", () => {
+        callback(null, Buffer.concat(chunks));
+      });
+    }
+    function computeRetries(uploadTimeout) {
+      let tries = 0;
+      while (tries < 2 || uploadTimeout > 1e3) {
+        tries++;
+        uploadTimeout /= 2;
+      }
+      return [tries, Math.floor(uploadTimeout)];
+    }
+    var AgentExporter = class {
+      constructor({ url, logger, uploadTimeout } = {}) {
+        this._url = url;
+        this._logger = logger;
+        const [backoffTries, backoffTime] = computeRetries(uploadTimeout);
+        this._backoffTime = backoffTime;
+        this._backoffTries = backoffTries;
+      }
+      export({ profiles, start, end, tags }) {
+        const types = Object.keys(profiles);
+        const fields = [
+          ["recording-start", start.toISOString()],
+          ["recording-end", end.toISOString()],
+          ["language", "javascript"],
+          ["runtime", "nodejs"],
+          ["runtime_version", process.version],
+          ["profiler_version", version],
+          ["format", "pprof"],
+          ["tags[]", "language:javascript"],
+          ["tags[]", "runtime:nodejs"],
+          ["tags[]", `runtime_version:${process.version}`],
+          ["tags[]", `profiler_version:${version}`],
+          ["tags[]", "format:pprof"],
+          ...Object.entries(tags).map(([key, value]) => ["tags[]", `${key}:${value}`])
+        ];
+        this._logger.debug(() => {
+          const body = fields.map(([key, value]) => `  ${key}: ${value}`).join("\n");
+          return `Building agent export report: ${"\n" + body}`;
+        });
+        for (let index = 0; index < types.length; index++) {
+          const type = types[index];
+          const buffer = profiles[type];
+          this._logger.debug(() => {
+            const bytes = buffer.toString("hex").match(/../g).join(" ");
+            return `Adding ${type} profile to agent export: ` + bytes;
+          });
+          fields.push([`types[${index}]`, type]);
+          fields.push([`data[${index}]`, buffer, {
+            filename: `${type}.pb.gz`,
+            contentType: "application/octet-stream",
+            knownLength: buffer.length
+          }]);
+        }
+        return new Promise((resolve, reject) => {
+          const operation = retry.operation({
+            randomize: true,
+            minTimeout: this._backoffTime,
+            retries: this._backoffTries,
+            unref: true
+          });
+          operation.attempt((attempt) => {
+            const form = new FormData();
+            for (const [key, value, options2] of fields) {
+              form.append(key, value, options2);
+            }
+            const options = {
+              method: "POST",
+              path: "/profiling/v1/input",
+              headers: form.getHeaders(),
+              timeout: this._backoffTime * Math.pow(2, attempt)
+            };
+            if (containerId) {
+              options.headers["Datadog-Container-ID"] = containerId;
+            }
+            if (this._url.protocol === "unix:") {
+              options.socketPath = this._url.pathname;
+            } else {
+              options.protocol = this._url.protocol;
+              options.hostname = this._url.hostname;
+              options.port = this._url.port;
+            }
+            this._logger.debug(() => {
+              return `Submitting profiler agent report attempt #${attempt} to: ${JSON.stringify(options)}`;
+            });
+            sendRequest(options, form, (err, response) => {
+              if (operation.retry(err)) {
+                this._logger.error(`Error from the agent: ${err.message}`);
+                return;
+              } else if (err) {
+                reject(new Error("Profiler agent export back-off period expired"));
+                return;
+              }
+              getBody(response, (err2, body) => {
+                if (err2) {
+                  this._logger.error(`Error reading agent response: ${err2.message}`);
+                } else {
+                  this._logger.debug(() => {
+                    const bytes = (body.toString("hex").match(/../g) || []).join(" ");
+                    return `Agent export response: ${bytes}`;
+                  });
+                }
+              });
+              resolve();
+            });
+          });
+        });
+      }
+    };
+    module2.exports = { AgentExporter, computeRetries };
+  }
+});
+
+// packages/dd-trace/src/profiling/exporters/file.js
+var require_file = __commonJS({
+  "packages/dd-trace/src/profiling/exporters/file.js"(exports2, module2) {
+    "use strict";
+    var fs = require("fs");
+    var { promisify } = require("util");
+    var writeFile = promisify(fs.writeFile);
+    function formatDateTime(t) {
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${t.getUTCFullYear()}${pad(t.getUTCMonth() + 1)}${pad(t.getUTCDate())}T${pad(t.getUTCHours())}${pad(t.getUTCMinutes())}${pad(t.getUTCSeconds())}Z`;
+    }
+    var FileExporter = class {
+      constructor({ pprofPrefix } = {}) {
+        this._pprofPrefix = pprofPrefix || "";
+      }
+      export({ profiles, end }) {
+        const types = Object.keys(profiles);
+        const dateStr = formatDateTime(end);
+        const tasks = types.map((type) => {
+          return writeFile(`${this._pprofPrefix}${type}_${dateStr}.pprof`, profiles[type]);
+        });
+        return Promise.all(tasks);
+      }
+    };
+    module2.exports = { FileExporter };
+  }
+});
+
+// packages/dd-trace/src/profiling/loggers/console.js
+var require_console = __commonJS({
+  "packages/dd-trace/src/profiling/loggers/console.js"(exports2, module2) {
+    "use strict";
+    var mapping = {
+      error: 3,
+      warn: 4,
+      info: 6,
+      debug: 7
+    };
+    var ConsoleLogger = class {
+      constructor(options = {}) {
+        this._level = mapping[options.level] || mapping["error"];
+      }
+      debug(message) {
+        this._log("debug", message);
+      }
+      info(message) {
+        this._log("info", message);
+      }
+      warn(message) {
+        this._log("warn", message);
+      }
+      error(message) {
+        this._log("error", message);
+      }
+      _log(level, message) {
+        if (mapping[level] > this._level)
+          return;
+        console[level](message);
+      }
+    };
+    module2.exports = { ConsoleLogger };
+  }
+});
+
+// packages/dd-trace/src/profiling/profilers/cpu.js
+var require_cpu = __commonJS({
+  "packages/dd-trace/src/profiling/profilers/cpu.js"(exports2, module2) {
+    "use strict";
+    var { storage } = require_datadog_core();
+    var dc = require_diagnostics_channel();
+    var beforeCh = dc.channel("dd-trace:storage:before");
+    var afterCh = dc.channel("dd-trace:storage:after");
+    function getActiveSpan() {
+      const store = storage.getStore();
+      if (!store)
+        return;
+      return store.span;
+    }
+    function getStartedSpans(activeSpan) {
+      const context = activeSpan.context();
+      if (!context)
+        return;
+      return context._trace.started;
+    }
+    function getSpanContextTags(span) {
+      return span.context()._tags;
+    }
+    function isWebServerSpan(tags) {
+      return tags["span.type"] === "web";
+    }
+    function endpointNameFromTags(tags) {
+      return tags["resource.name"] || [
+        tags["http.method"],
+        tags["http.route"]
+      ].filter((v) => v).join(" ");
+    }
+    var NativeCpuProfiler = class {
+      constructor(options = {}) {
+        this.type = "cpu";
+        this._frequency = options.frequency || 99;
+        this._mapper = void 0;
+        this._pprof = void 0;
+        this._started = false;
+        this._cpuProfiler = void 0;
+        this._endpointCollection = options.endpointCollection;
+        this._enter = this._enter.bind(this);
+        this._exit = this._exit.bind(this);
+      }
+      _enter() {
+        if (!this._cpuProfiler)
+          return;
+        const active = getActiveSpan();
+        if (!active)
+          return;
+        const activeCtx = active.context();
+        if (!activeCtx)
+          return;
+        const spans = getStartedSpans(active);
+        if (!spans || !spans.length)
+          return;
+        const firstCtx = spans[0].context();
+        if (!firstCtx)
+          return;
+        const labels = {
+          "local root span id": firstCtx.toSpanId(),
+          "span id": activeCtx.toSpanId()
+        };
+        if (this._endpointCollection) {
+          const webServerTags = spans.map(getSpanContextTags).filter(isWebServerSpan)[0];
+          if (webServerTags) {
+            labels["trace endpoint"] = endpointNameFromTags(webServerTags);
+          }
+        }
+        this._cpuProfiler.labels = labels;
+      }
+      _exit() {
+        if (!this._cpuProfiler)
+          return;
+        this._cpuProfiler.labels = {};
+      }
+      start({ mapper } = {}) {
+        if (this._started)
+          return;
+        this._started = true;
+        this._mapper = mapper;
+        if (!this._pprof) {
+          this._pprof = require("@datadog/pprof");
+          this._cpuProfiler = new this._pprof.CpuProfiler();
+        }
+        this._cpuProfiler.start(this._frequency);
+        this._enter();
+        beforeCh.subscribe(this._enter);
+        afterCh.subscribe(this._exit);
+      }
+      profile() {
+        if (!this._started)
+          return;
+        return this._cpuProfiler.profile();
+      }
+      encode(profile) {
+        return this._pprof.encode(profile);
+      }
+      stop() {
+        if (!this._started)
+          return;
+        this._started = false;
+        this._cpuProfiler.stop();
+        beforeCh.unsubscribe(this._enter);
+        afterCh.unsubscribe(this._exit);
+      }
+    };
+    module2.exports = NativeCpuProfiler;
+  }
+});
+
+// packages/dd-trace/src/profiling/profilers/wall.js
+var require_wall = __commonJS({
+  "packages/dd-trace/src/profiling/profilers/wall.js"(exports2, module2) {
+    "use strict";
+    var NativeWallProfiler = class {
+      constructor(options = {}) {
+        this.type = "wall";
+        this._samplingInterval = options.samplingInterval || 1e6 / 99;
+        this._mapper = void 0;
+        this._pprof = void 0;
+      }
+      start({ mapper } = {}) {
+        this._mapper = mapper;
+        this._pprof = require("@datadog/pprof");
+        if (!process._startProfilerIdleNotifier) {
+          process._startProfilerIdleNotifier = () => {
+          };
+        }
+        if (!process._stopProfilerIdleNotifier) {
+          process._stopProfilerIdleNotifier = () => {
+          };
+        }
+        this._record();
+      }
+      profile() {
+        if (!this._stop)
+          return;
+        return this._stop(true);
+      }
+      encode(profile) {
+        return this._pprof.encode(profile);
+      }
+      stop() {
+        if (!this._stop)
+          return;
+        this._stop();
+        this._stop = void 0;
+      }
+      _record() {
+        this._stop = this._pprof.time.start(
+          this._samplingInterval,
+          null,
+          this._mapper,
+          false
+        );
+      }
+    };
+    module2.exports = NativeWallProfiler;
+  }
+});
+
+// packages/dd-trace/src/profiling/constants.js
+var require_constants2 = __commonJS({
+  "packages/dd-trace/src/profiling/constants.js"(exports2, module2) {
+    "use strict";
+    var snapshotKinds = Object.freeze({
+      PERIODIC: "periodic",
+      ON_SHUTDOWN: "on_shutdown",
+      ON_OUT_OF_MEMORY: "on_oom"
+    });
+    var oomExportStrategies = Object.freeze({
+      PROCESS: "process",
+      ASYNC_CALLBACK: "async",
+      INTERRUPT_CALLBACK: "interrupt",
+      LOGS: "logs"
+    });
+    module2.exports = { snapshotKinds, oomExportStrategies };
+  }
+});
+
+// packages/dd-trace/src/profiling/profilers/space.js
+var require_space = __commonJS({
+  "packages/dd-trace/src/profiling/profilers/space.js"(exports2, module2) {
+    "use strict";
+    var { oomExportStrategies } = require_constants2();
+    function strategiesToCallbackMode(strategies, callbackMode) {
+      const hasInterrupt = strategies.includes(oomExportStrategies.INTERRUPT_CALLBACK) ? callbackMode.Interrupt : 0;
+      const hasCallback = strategies.includes(oomExportStrategies.ASYNC_CALLBACK) ? callbackMode.Async : 0;
+      return hasInterrupt | hasCallback;
+    }
+    var NativeSpaceProfiler = class {
+      constructor(options = {}) {
+        this.type = "space";
+        this._samplingInterval = options.samplingInterval || 512 * 1024;
+        this._stackDepth = options.stackDepth || 64;
+        this._pprof = void 0;
+        this._oomMonitoring = options.oomMonitoring || {};
+      }
+      start({ mapper, nearOOMCallback } = {}) {
+        this._mapper = mapper;
+        this._pprof = require("@datadog/pprof");
+        this._pprof.heap.start(this._samplingInterval, this._stackDepth);
+        if (this._oomMonitoring.enabled) {
+          const strategies = this._oomMonitoring.exportStrategies;
+          this._pprof.heap.monitorOutOfMemory(
+            this._oomMonitoring.heapLimitExtensionSize,
+            this._oomMonitoring.maxHeapExtensionCount,
+            strategies.includes(oomExportStrategies.LOGS),
+            strategies.includes(oomExportStrategies.PROCESS) ? this._oomMonitoring.exportCommand : [],
+            (profile) => nearOOMCallback(this.type, this._pprof.encodeSync(profile)),
+            strategiesToCallbackMode(strategies, this._pprof.heap.CallbackMode)
+          );
+        }
+      }
+      profile() {
+        return this._pprof.heap.profile(void 0, this._mapper);
+      }
+      encode(profile) {
+        return this._pprof.encode(profile);
+      }
+      stop() {
+        this._pprof.heap.stop();
+      }
+    };
+    module2.exports = NativeSpaceProfiler;
+  }
+});
+
+// packages/dd-trace/src/profiling/tagger.js
+var require_tagger2 = __commonJS({
+  "packages/dd-trace/src/profiling/tagger.js"(exports2, module2) {
+    "use strict";
+    var tagger = {
+      parse(tags) {
+        if (!tags)
+          return {};
+        switch (typeof tags) {
+          case "object":
+            if (Array.isArray(tags)) {
+              return tags.reduce((prev, next) => {
+                const parts = next.split(":");
+                const key = parts.shift().trim();
+                const value = parts.join(":").trim();
+                if (!key || !value)
+                  return prev;
+                return Object.assign(prev, { [key]: value });
+              }, {});
+            } else {
+              return tagger.parse(Object.keys(tags).filter((key) => tags[key] !== void 0 && tags[key] !== null).map((key) => `${key}:${tags[key]}`));
+            }
+          case "string":
+            return tagger.parse(tags.split(","));
+          default:
+            return {};
+        }
+      }
+    };
+    module2.exports = { tagger };
+  }
+});
+
+// packages/dd-trace/src/profiling/config.js
+var require_config2 = __commonJS({
+  "packages/dd-trace/src/profiling/config.js"(exports2, module2) {
+    "use strict";
+    var coalesce = require("koalas");
+    var os = require("os");
+    var path = require("path");
+    var { URL: URL2, format, pathToFileURL } = require("url");
+    var { AgentExporter } = require_agent2();
+    var { FileExporter } = require_file();
+    var { ConsoleLogger } = require_console();
+    var CpuProfiler = require_cpu();
+    var WallProfiler = require_wall();
+    var SpaceProfiler = require_space();
+    var { oomExportStrategies, snapshotKinds } = require_constants2();
+    var { tagger } = require_tagger2();
+    var { isTrue } = require_util();
+    var Config = class {
+      constructor(options = {}) {
+        const {
+          DD_PROFILING_ENABLED,
+          DD_PROFILING_PROFILERS,
+          DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
+          DD_ENV,
+          DD_TAGS,
+          DD_SERVICE,
+          DD_VERSION,
+          DD_TRACE_AGENT_URL,
+          DD_AGENT_HOST,
+          DD_TRACE_AGENT_PORT,
+          DD_PROFILING_UPLOAD_TIMEOUT,
+          DD_PROFILING_SOURCE_MAP,
+          DD_PROFILING_UPLOAD_PERIOD,
+          DD_PROFILING_PPROF_PREFIX,
+          DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
+          DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
+          DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
+          DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES
+        } = process.env;
+        const enabled = isTrue(coalesce(options.enabled, DD_PROFILING_ENABLED, true));
+        const env = coalesce(options.env, DD_ENV);
+        const service = options.service || DD_SERVICE || "node";
+        const host = os.hostname();
+        const version = coalesce(options.version, DD_VERSION);
+        const functionname = process.env.AWS_LAMBDA_FUNCTION_NAME;
+        const flushInterval = coalesce(options.interval, Number(DD_PROFILING_UPLOAD_PERIOD) * 1e3, 65 * 1e3);
+        const uploadTimeout = coalesce(
+          options.uploadTimeout,
+          Number(DD_PROFILING_UPLOAD_TIMEOUT),
+          60 * 1e3
+        );
+        const sourceMap = coalesce(
+          options.sourceMap,
+          DD_PROFILING_SOURCE_MAP,
+          true
+        );
+        const endpointCollection = coalesce(
+          options.endpointCollection,
+          DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
+          false
+        );
+        const pprofPrefix = coalesce(
+          options.pprofPrefix,
+          DD_PROFILING_PPROF_PREFIX
+        );
+        this.enabled = enabled;
+        this.service = service;
+        this.env = env;
+        this.host = host;
+        this.functionname = functionname;
+        this.version = version;
+        this.tags = Object.assign(
+          tagger.parse(DD_TAGS),
+          tagger.parse(options.tags),
+          tagger.parse({ env, host, service, version, functionname })
+        );
+        this.logger = ensureLogger(options.logger);
+        this.flushInterval = flushInterval;
+        this.uploadTimeout = uploadTimeout;
+        this.sourceMap = sourceMap;
+        this.endpointCollection = endpointCollection;
+        this.pprofPrefix = pprofPrefix;
+        const hostname = coalesce(options.hostname, DD_AGENT_HOST) || "localhost";
+        const port = coalesce(options.port, DD_TRACE_AGENT_PORT) || 8126;
+        this.url = new URL2(coalesce(options.url, DD_TRACE_AGENT_URL, format({
+          protocol: "http:",
+          hostname,
+          port
+        })));
+        this.exporters = ensureExporters(options.exporters || [
+          new AgentExporter(this)
+        ], this);
+        const oomMonitoringEnabled = isTrue(coalesce(
+          options.oomMonitoring,
+          DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
+          false
+        ));
+        const heapLimitExtensionSize = coalesce(
+          options.oomHeapLimitExtensionSize,
+          Number(DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE),
+          0
+        );
+        const maxHeapExtensionCount = coalesce(
+          options.oomMaxHeapExtensionCount,
+          Number(DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT),
+          0
+        );
+        const exportStrategies = ensureOOMExportStrategies(coalesce(
+          options.oomExportStrategies,
+          DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES
+        ), this);
+        const exportCommand = oomMonitoringEnabled ? buildExportCommand(this) : void 0;
+        this.oomMonitoring = {
+          enabled: oomMonitoringEnabled,
+          heapLimitExtensionSize,
+          maxHeapExtensionCount,
+          exportStrategies,
+          exportCommand
+        };
+        const profilers = coalesce(options.profilers, DD_PROFILING_PROFILERS, [
+          new WallProfiler(this),
+          new SpaceProfiler(this)
+        ]);
+        this.profilers = ensureProfilers(profilers, this);
+      }
+    };
+    module2.exports = { Config };
+    function getExportStrategy(name, options) {
+      const strategy = Object.values(oomExportStrategies).find((value) => value === name);
+      if (strategy === void 0) {
+        options.logger.error(`Unknown oom export strategy "${name}"`);
+      }
+      return strategy;
+    }
+    function ensureOOMExportStrategies(strategies, options) {
+      if (!strategies) {
+        return [];
+      }
+      if (typeof strategies === "string") {
+        strategies = strategies.split(",");
+      }
+      for (let i = 0; i < strategies.length; i++) {
+        const strategy = strategies[i];
+        if (typeof strategy === "string") {
+          strategies[i] = getExportStrategy(strategy, options);
+        }
+      }
+      return [...new Set(strategies)];
+    }
+    function getExporter(name, options) {
+      switch (name) {
+        case "agent":
+          return new AgentExporter(options);
+        case "file":
+          return new FileExporter(options);
+      }
+    }
+    function ensureExporters(exporters, options) {
+      if (typeof exporters === "string") {
+        exporters = exporters.split(",");
+      }
+      for (let i = 0; i < exporters.length; i++) {
+        const exporter = exporters[i];
+        if (typeof exporter === "string") {
+          exporters[i] = getExporter(exporter, options);
+        }
+      }
+      return exporters;
+    }
+    function getProfiler(name, options) {
+      switch (name) {
+        case "cpu":
+        case "wall":
+          return new WallProfiler(options);
+        case "space":
+          return new SpaceProfiler(options);
+        case "cpu-experimental":
+          return new CpuProfiler(options);
+        default:
+          options.logger.error(`Unknown profiler "${name}"`);
+      }
+    }
+    function ensureProfilers(profilers, options) {
+      if (typeof profilers === "string") {
+        profilers = profilers.split(",");
+      }
+      for (let i = 0; i < profilers.length; i++) {
+        const profiler = profilers[i];
+        if (typeof profiler === "string") {
+          profilers[i] = getProfiler(profiler, options);
+        }
+      }
+      return profilers.filter((v) => v);
+    }
+    function ensureLogger(logger) {
+      if (typeof logger !== "object" || typeof logger.debug !== "function" || typeof logger.info !== "function" || typeof logger.warn !== "function" || typeof logger.error !== "function") {
+        return new ConsoleLogger();
+      }
+      return logger;
+    }
+    function buildExportCommand(options) {
+      const tags = [
+        ...Object.entries(options.tags),
+        ["snapshot", snapshotKinds.ON_OUT_OF_MEMORY]
+      ].map(([key, value]) => `${key}:${value}`).join(",");
+      const urls = [];
+      for (const exporter of options.exporters) {
+        if (exporter instanceof AgentExporter) {
+          urls.push(options.url.toString());
+        } else if (exporter instanceof FileExporter) {
+          urls.push(pathToFileURL(options.pprofPrefix).toString());
+        }
+      }
+      return [
+        process.execPath,
+        path.join(__dirname, "exporter_cli.js"),
+        urls.join(","),
+        tags,
+        "space"
+      ];
+    }
+  }
+});
+
+// packages/dd-trace/src/profiling/profiler.js
+var require_profiler = __commonJS({
+  "packages/dd-trace/src/profiling/profiler.js"(exports2, module2) {
+    "use strict";
+    var { EventEmitter } = require("events");
+    var { Config } = require_config2();
+    var { snapshotKinds } = require_constants2();
+    function maybeSourceMap(sourceMap) {
+      if (!sourceMap)
+        return;
+      const { SourceMapper } = require("@datadog/pprof");
+      return SourceMapper.create([
+        process.cwd()
+      ]);
+    }
+    var Profiler = class extends EventEmitter {
+      constructor() {
+        super();
+        this._enabled = false;
+        this._logger = void 0;
+        this._config = void 0;
+        this._timer = void 0;
+        this._lastStart = void 0;
+        this._timeoutInterval = void 0;
+      }
+      start(options) {
+        this._start(options).catch(() => {
+        });
+        return this;
+      }
+      async _start(options) {
+        if (this._enabled)
+          return;
+        const config = this._config = new Config(options);
+        if (!config.enabled)
+          return;
+        this._logger = config.logger;
+        this._enabled = true;
+        this._setInterval();
+        let mapper;
+        try {
+          mapper = await maybeSourceMap(config.sourceMap);
+        } catch (err) {
+          this._logger.error(err);
+        }
+        try {
+          for (const profiler of config.profilers) {
+            profiler.start({
+              mapper,
+              nearOOMCallback: this._nearOOMExport.bind(this)
+            });
+            this._logger.debug(`Started ${profiler.type} profiler`);
+          }
+          this._capture(this._timeoutInterval);
+        } catch (e) {
+          this._logger.error(e);
+          this._stop();
+        }
+      }
+      _nearOOMExport(profileType, encodedProfile) {
+        const start = this._lastStart;
+        const end = /* @__PURE__ */ new Date();
+        this._submit({
+          [profileType]: encodedProfile
+        }, start, end, snapshotKinds.ON_OUT_OF_MEMORY);
+      }
+      _setInterval() {
+        this._timeoutInterval = this._config.flushInterval;
+      }
+      async stop() {
+        if (!this._enabled)
+          return;
+        this._collect(snapshotKinds.ON_SHUTDOWN);
+        this._stop();
+      }
+      _stop() {
+        if (!this._enabled)
+          return;
+        this._enabled = false;
+        for (const profiler of this._config.profilers) {
+          profiler.stop();
+          this._logger.debug(`Stopped ${profiler.type} profiler`);
+        }
+        clearTimeout(this._timer);
+        this._timer = void 0;
+        return this;
+      }
+      _capture(timeout) {
+        if (!this._enabled)
+          return;
+        this._lastStart = /* @__PURE__ */ new Date();
+        if (!this._timer || timeout !== this._timeoutInterval) {
+          this._timer = setTimeout(() => this._collect(snapshotKinds.PERIODIC), timeout);
+          this._timer.unref();
+        } else {
+          this._timer.refresh();
+        }
+      }
+      async _collect(snapshotKind) {
+        if (!this._enabled)
+          return;
+        const start = this._lastStart;
+        const end = /* @__PURE__ */ new Date();
+        const profiles = [];
+        const encodedProfiles = {};
+        try {
+          for (const profiler of this._config.profilers) {
+            const profile = profiler.profile();
+            if (!profile)
+              continue;
+            profiles.push({ profiler, profile });
+          }
+          for (const { profiler, profile } of profiles) {
+            encodedProfiles[profiler.type] = await profiler.encode(profile);
+            this._logger.debug(() => {
+              const profileJson = JSON.stringify(profile, (key, value) => {
+                return typeof value === "bigint" ? value.toString() : value;
+              });
+              return `Collected ${profiler.type} profile: ` + profileJson;
+            });
+          }
+          this._capture(this._timeoutInterval);
+          await this._submit(encodedProfiles, start, end, snapshotKind);
+          this._logger.debug("Submitted profiles");
+        } catch (err) {
+          this._logger.error(err);
+          this._stop();
+        }
+      }
+      _submit(profiles, start, end, snapshotKind) {
+        if (!Object.keys(profiles).length) {
+          return Promise.reject(new Error("No profiles to submit"));
+        }
+        const { tags } = this._config;
+        const tasks = [];
+        tags.snapshot = snapshotKind;
+        for (const exporter of this._config.exporters) {
+          const task = exporter.export({ profiles, start, end, tags }).catch((err) => this._logger.error(err));
+          tasks.push(task);
+        }
+        return Promise.all(tasks);
+      }
+    };
+    var ServerlessProfiler = class extends Profiler {
+      constructor() {
+        super();
+        this._profiledIntervals = 0;
+        this._interval = 1;
+        this._flushAfterIntervals = void 0;
+      }
+      _setInterval() {
+        this._timeoutInterval = this._interval * 1e3;
+        this._flushAfterIntervals = this._config.flushInterval / 1e3;
+      }
+      async _collect(snapshotKind) {
+        if (this._profiledIntervals >= this._flushAfterIntervals) {
+          this._profiledIntervals = 0;
+          await super._collect(snapshotKind);
+        } else {
+          this._profiledIntervals += 1;
+          this._capture(this._timeoutInterval);
+        }
+      }
+    };
+    module2.exports = { Profiler, ServerlessProfiler };
+  }
+});
+
+// packages/dd-trace/src/profiling/index.js
+var require_profiling = __commonJS({
+  "packages/dd-trace/src/profiling/index.js"(exports2, module2) {
+    "use strict";
+    var { Profiler, ServerlessProfiler } = require_profiler();
+    var CpuProfiler = require_cpu();
+    var WallProfiler = require_wall();
+    var SpaceProfiler = require_space();
+    var { AgentExporter } = require_agent2();
+    var { FileExporter } = require_file();
+    var { ConsoleLogger } = require_console();
+    var profiler = process.env.AWS_LAMBDA_FUNCTION_NAME ? new ServerlessProfiler() : new Profiler();
+    module2.exports = {
+      profiler,
+      AgentExporter,
+      FileExporter,
+      CpuProfiler,
+      WallProfiler,
+      SpaceProfiler,
+      ConsoleLogger
+    };
+  }
+});
+
+// packages/dd-trace/src/profiler.js
+var require_profiler2 = __commonJS({
+  "packages/dd-trace/src/profiler.js"(exports2, module2) {
+    "use strict";
+    var log = require_log();
+    var { profiler } = require_profiling();
+    process.once("beforeExit", () => {
+      profiler.stop();
+    });
+    module2.exports = {
+      start: (config) => {
+        const { service, version, env, url, hostname, port, tags } = config;
+        const { enabled, sourceMap, exporters } = config.profiling;
+        const logger = {
+          debug: (message) => log.debug(message),
+          info: (message) => log.info(message),
+          warn: (message) => log.warn(message),
+          error: (message) => log.error(message)
+        };
+        profiler.start({
+          enabled,
+          service,
+          version,
+          env,
+          logger,
+          sourceMap,
+          exporters,
+          url,
+          hostname,
+          port,
+          tags
+        });
+      },
+      stop: () => {
+        profiler.stop();
+      }
+    };
+  }
+});
+
+// packages/dd-trace/src/proxy.js
+var require_proxy2 = __commonJS({
+  "packages/dd-trace/src/proxy.js"(exports2, module2) {
+    "use strict";
+    var NoopProxy = require_proxy();
+    var DatadogTracer = require_tracer3();
+    var Config = require_config();
+    var metrics = require_metrics();
+    var log = require_log();
+    var { setStartupLogPluginManager } = require_startup_log();
+    var telemetry = require_telemetry();
+    var PluginManager = require_plugin_manager();
+    var Tracer = class extends NoopProxy {
+      constructor() {
+        super();
+        this._initialized = false;
+        this._pluginManager = new PluginManager(this);
+      }
+      init(options) {
+        if (this._initialized)
+          return this;
+        this._initialized = true;
+        try {
+          const config = new Config(options);
+          if (config.remoteConfig.enabled && !config.isCiVisibility) {
+          }
+          if (config.profiling.enabled) {
+            try {
+              const profiler = require_profiler2();
+              profiler.start(config);
+            } catch (e) {
+              log.error(e);
+            }
+          }
+          if (config.runtimeMetrics) {
+            metrics.start(config);
+          }
+          if (config.tracing) {
+            this._tracer = new DatadogTracer(config);
+            this._pluginManager.configure(config);
+            setStartupLogPluginManager(this._pluginManager);
+            telemetry.start(config, this._pluginManager);
+          }
+        } catch (e) {
+          log.error(e);
+        }
+        return this;
+      }
+      use() {
+        this._pluginManager.configurePlugin(...arguments);
+        return this;
+      }
+    };
+    module2.exports = Tracer;
+  }
+});
+
+// packages/dd-trace/src/index.js
+var require_src2 = __commonJS({
+  "packages/dd-trace/src/index.js"(exports2, module2) {
+    "use strict";
+    var { isFalse } = require_util();
+    var inJestWorker = typeof jest !== "undefined";
+    module2.exports = isFalse(process.env.DD_TRACE_ENABLED) || inJestWorker ? require_proxy() : require_proxy2();
+  }
+});
+
+// packages/dd-trace/index.js
+var require_dd_trace = __commonJS({
+  "packages/dd-trace/index.js"(exports2, module2) {
+    "use strict";
+    if (!global._ddtrace) {
+      const TracerProxy = require_src2();
+      Object.defineProperty(global, "_ddtrace", {
+        value: new TracerProxy(),
+        enumerable: false,
+        configurable: true,
+        writable: true
+      });
+      global._ddtrace.default = global._ddtrace;
+      global._ddtrace.tracer = global._ddtrace;
+    }
+    module2.exports = global._ddtrace;
+  }
+});
+
+// index-src.js
+module.exports = require_dd_trace();
