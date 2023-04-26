@@ -253,10 +253,10 @@
     "@babel/helper-validator-identifier" "^7.19.1"
     to-fast-properties "^2.0.0"
 
-"@datadog/native-appsec@2.0.0":
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-2.0.0.tgz#ad65ba19bfd68e6b6c6cf64bb8ef55d099af8edc"
-  integrity sha512-XHARZ6MVgbnfOUO6/F3ZoZ7poXHJCNYFlgcyS2Xetuk9ITA5bfcooX2B2F7tReVB+RLJ+j8bsm0t55SyF04KDw==
+"@datadog/native-appsec@^3.1.0":
+  version "3.1.0"
+  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-3.1.0.tgz#967145398dbbc8e13b8e2baa76e0a55f0a1569ff"
+  integrity sha512-YSso/MWlphS5F0KDja42Oe5wGRL0CplremEf0fWE7OcoTQiHZKEPFtKAfT8bDQI+x8N4MRAVQGk4ew7AG2ICgQ==
   dependencies:
     node-gyp-build "^3.9.0"
 
