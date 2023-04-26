@@ -35,8 +35,8 @@ class Tracer extends NoopProxy {
       //   serverless.maybeStartServerlessMiniAgent()
       // }
 
-      const serverless = require('./serverless')
-      serverless.maybeStartServerlessMiniAgent()
+      const { isInGCPFunction } = require('./gcp_function/serverless')
+      console.log('is in gcp function? ' + isInGCPFunction())
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         remoteConfig.enable(config)
