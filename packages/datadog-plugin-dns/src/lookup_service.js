@@ -10,7 +10,7 @@ class DNSLookupServicePlugin extends ClientPlugin {
     this.startSpan('dns.lookup_service', {
       service: this.config.service,
       resource: `${address}:${port}`,
-      kind: 'client',
+      kind: 'internal',
       meta: {
         'dns.address': address
       },

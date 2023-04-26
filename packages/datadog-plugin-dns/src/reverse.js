@@ -10,7 +10,7 @@ class DNSReversePlugin extends ClientPlugin {
     this.startSpan('dns.reverse', {
       service: this.config.service,
       resource: ip,
-      kind: 'client',
+      kind: 'internal',
       meta: {
         'dns.ip': ip
       }

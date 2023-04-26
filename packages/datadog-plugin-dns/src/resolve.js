@@ -12,7 +12,7 @@ class DNSResolvePlugin extends ClientPlugin {
     this.startSpan('dns.resolve', {
       service: this.config.service,
       resource: `${rrtype} ${hostname}`,
-      kind: 'client',
+      kind: 'internal',
       meta: {
         'dns.hostname': hostname,
         'dns.rrtype': rrtype

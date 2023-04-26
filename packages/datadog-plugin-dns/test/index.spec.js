@@ -32,7 +32,7 @@ describe('Plugin', () => {
           })
           expect(traces[0][0].meta).to.deep.include({
             'component': 'dns',
-            'span.kind': 'client',
+            'span.kind': 'internal',
             'dns.hostname': 'localhost',
             'dns.address': '127.0.0.1'
           })
@@ -53,7 +53,7 @@ describe('Plugin', () => {
           })
           expect(traces[0][0].meta).to.deep.include({
             'component': 'dns',
-            'span.kind': 'client',
+            'span.kind': 'internal',
             'dns.hostname': 'localhost',
             'dns.address': '127.0.0.1',
             'dns.addresses': '127.0.0.1,::1'
@@ -76,7 +76,7 @@ describe('Plugin', () => {
           })
           expect(traces[0][0].meta).to.deep.include({
             'component': 'dns',
-            'span.kind': 'client',
+            'span.kind': 'internal',
             'dns.hostname': 'fakedomain.faketld',
             [ERROR_TYPE]: 'Error',
             [ERROR_MESSAGE]: 'getaddrinfo ENOTFOUND fakedomain.faketld'
@@ -100,7 +100,7 @@ describe('Plugin', () => {
           })
           expect(traces[0][0].meta).to.deep.include({
             'component': 'dns',
-            'span.kind': 'client',
+            'span.kind': 'internal',
             'dns.address': '127.0.0.1'
           })
           expect(traces[0][0].metrics).to.deep.include({
@@ -123,7 +123,7 @@ describe('Plugin', () => {
           })
           expect(traces[0][0].meta).to.deep.include({
             'component': 'dns',
-            'span.kind': 'client',
+            'span.kind': 'internal',
             'dns.hostname': 'lvh.me',
             'dns.rrtype': 'A'
           })
@@ -144,7 +144,7 @@ describe('Plugin', () => {
           })
           expect(traces[0][0].meta).to.deep.include({
             'component': 'dns',
-            'span.kind': 'client',
+            'span.kind': 'internal',
             'dns.hostname': 'lvh.me',
             'dns.rrtype': 'ANY'
           })
@@ -165,7 +165,7 @@ describe('Plugin', () => {
           })
           expect(traces[0][0].meta).to.deep.include({
             'component': 'dns',
-            'span.kind': 'client',
+            'span.kind': 'internal',
             'dns.ip': '127.0.0.1'
           })
         })
