@@ -15,7 +15,7 @@ async function resetLocalStackS3() {
     }
   }
   
-describe.only('Plugin', () => {
+describe('Plugin', () => {
   describe('aws-sdk (s3)', function () {
     setup()
 
