@@ -7,10 +7,11 @@ class EventBridge extends BaseAwsSdkPlugin {
 
   generateTags (params, operation, response) {
     if (!params || !params.source) return {}
-
+    const rulename = params.Name ? params.Name : null;
     return {
       'resource.name': `${operation} ${params.source}`,
-      'aws.eventbridge.source': params.source
+      'aws.eventbridge.source': `${params.source}`,
+      'rulename': `${rulename}`
     }
   }
 

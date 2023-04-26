@@ -12,7 +12,8 @@ class CloudwatchLogs extends BaseAwsSdkPlugin {
 
     return Object.assign(tags, {
       'resource.name': `${operation} ${params.logGroupName}`,
-      'aws.cloudwatch.logs.log_group_name': params.logGroupName
+      'aws.cloudwatch.logs.log_group_name': params.logGroupName,
+      'loggroupname': params.logGroupName
     })
   }
 }
