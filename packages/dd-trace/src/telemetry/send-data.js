@@ -1,9 +1,4 @@
 const request = require('../exporters/common/request')
-const { isTrue } = require('../util')
-
-const debug = process.env.DD_TELEMETRY_DEBUG
-  ? isTrue(process.env.DD_TELEMETRY_DEBUG)
-  : false
 
 function getHeaders (reqType, debug, application) {
   const headers = {
@@ -41,6 +36,7 @@ function sendData (config, application, host, reqType, payload = {}) {
     url
   } = config
 
+  const debug = config.telemetry && config.telemetry.debug
   const options = {
     url,
     hostname,
