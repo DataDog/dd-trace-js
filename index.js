@@ -1,5 +1,5 @@
 'use strict'
 
-// foo
+// foobar
 
 module.exports = require('./packages/dd-trace')
