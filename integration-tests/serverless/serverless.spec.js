@@ -7,7 +7,7 @@ describe('serverless', () => {
     let testOutput = ''
 
     const child = await spawn(
-      path.join(__dirname, 'deploy-mini-agent-gcloud-function.sh'),
+      path.join(__dirname, 'test-gcloud-function.sh'),
       { env: { ...process.env, SERVERLESS_INTEGRATION_DIR_PATH: __dirname } }
     )
 

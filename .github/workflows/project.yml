@@ -46,27 +46,6 @@ jobs:
           node-version: ${{ matrix.version }}
       - run: yarn test:integration:${{ matrix.framework }}
 
-  integration-serverless:
-    strategy:
-      matrix:
-        version: [14, latest]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - uses: actions/setup-node@v3
-        with:
-          node-version: ${{ matrix.version }}
-      - name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v1'
-        with:
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v1'
-      - run: yarn test:integration:serverless
-
   lint:
     runs-on: ubuntu-latest
     steps:
