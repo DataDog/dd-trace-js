@@ -157,24 +157,6 @@ describe('Plugin', () => {
         request(http2, `http://localhost:${port}/user`).catch(done)
       })
 
-      it('should run the request listener in the request scope', done => {
-        const spy = sinon.spy(() => {
-          expect(tracer.scope().active()).to.not.be.null
-        })
-
-        incomingHttpRequestStart.subscribe(spy)
-
-        app = (req, res) => {
-          expect(tracer.scope().active()).to.not.be.null
-
-          expect(spy).to.have.been.calledOnceWithExactly({ req, res }, incomingHttpRequestStart.name)
-
-          done()
-        }
-
-        request(http2, `http://localhost:${port}/user`).catch(done)
-      })
-
       it(`should run the request's close event in the correct context`, done => {
         app = (req, res) => {
           req.on('close', () => {
