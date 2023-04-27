@@ -9,7 +9,7 @@ class EventBridge extends BaseAwsSdkPlugin {
     if (!params || !params.source) return {}
     const rulename = params.Name ? params.Name : '';
     return {
-      'resource.name': `${operation} ${params.source}`,
+      'resource.name': operation ? `${operation} ${params.source}` : params.source,
       'aws.eventbridge.source': `${params.source}`,
       'rulename': `${rulename}`
     }
