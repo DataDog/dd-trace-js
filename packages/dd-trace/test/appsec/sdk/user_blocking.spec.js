@@ -8,8 +8,6 @@ const Config = require('../../../src/config')
 const getPort = require('get-port')
 const axios = require('axios')
 const path = require('path')
-const waf = require('../../../src/appsec/waf')
-const { USER_ID } = require('../../../src/appsec/addresses')
 
 describe('user_blocking', () => {
   describe('Internal API', () => {
@@ -17,15 +15,11 @@ describe('user_blocking', () => {
     const res = { headersSent: false }
     const tracer = {}
 
-    let rootSpan, getRootSpan, block, storage, log, userBlocking
-
-    before(() => {
-      const runStub = sinon.stub(waf, 'run')
-      runStub.withArgs({ [USER_ID]: 'user' }).returns(['block'])
-      runStub.withArgs({ [USER_ID]: 'gooduser' }).returns([''])
-    })
+    let propagate, rootSpan, getRootSpan, block, storage, log, userBlocking
 
     beforeEach(() => {
+      propagate = sinon.stub().returns([['something'], ['block']])
+
       rootSpan = {
         context: () => {
           return { _tags: {} }
@@ -45,6 +39,7 @@ describe('user_blocking', () => {
       }
 
       userBlocking = proxyquire('../../../src/appsec/sdk/user_blocking', {
+        '../gateway/engine': { propagate },
         './utils': { getRootSpan },
         '../blocking': { block },
         '../../../../datadog-core': { storage },
@@ -94,6 +89,8 @@ describe('user_blocking', () => {
       })
 
       it('should return false when received no results', () => {
+        propagate.returns([])
+
         const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'gooduser' })
         expect(ret).to.be.false
         expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('usr.id', 'gooduser')

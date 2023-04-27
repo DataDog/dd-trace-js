@@ -3,8 +3,8 @@
 const log = require('../log')
 const RuleManager = require('./rule_manager')
 const remoteConfig = require('./remote_config')
-const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('./channels')
-const waf = require('./waf')
+const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('./gateway/channels')
+const Gateway = require('./gateway/engine')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const web = require('../plugins/util/web')
@@ -21,23 +21,39 @@ function enable (_config) {
   try {
     setTemplates(_config)
 
-    RuleManager.applyRules(_config.appsec.rules, _config.appsec)
-
-    remoteConfig.enableWafUpdate(_config.appsec)
-
-    Reporter.setRateLimit(_config.appsec.rateLimit)
-
-    incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
-    incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
-
-    isEnabled = true
-    config = _config
+    // TODO: inline this function
+    enableFromRules(_config, _config.appsec.rules)
   } catch (err) {
-    log.error('Unable to start AppSec')
-    log.error(err)
-
-    disable()
+    abortEnable(err)
   }
+}
+
+function enableFromRules (_config, rules) {
+  RuleManager.applyRules(rules, _config.appsec)
+  remoteConfig.enableAsmData(_config.appsec)
+
+  Reporter.setRateLimit(_config.appsec.rateLimit)
+
+  incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
+  incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
+
+  // add fields needed for HTTP context reporting
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_HEADERS)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_ENDPOINT)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
+  Gateway.manager.addresses.add(addresses.HTTP_INCOMING_REMOTE_IP)
+
+  isEnabled = true
+  config = _config
+}
+
+function abortEnable (err) {
+  log.error('Unable to start AppSec')
+  log.error(err)
+
+  // abort AppSec start
+  RuleManager.clearAllRules()
+  remoteConfig.disableAsmData()
 }
 
 function incomingHttpStartTranslator ({ req, res, abortController }) {
@@ -52,61 +68,78 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     [HTTP_CLIENT_IP]: clientIp
   })
 
+  const store = Gateway.startContext()
+
+  store.set('req', req)
+  store.set('res', res)
+
+  const context = store.get('context')
+
   if (clientIp) {
-    const actions = waf.run({
+    const results = Gateway.propagate({
       [addresses.HTTP_CLIENT_IP]: clientIp
-    }, req)
+    }, context)
 
-    if (!actions || !abortController) return
+    if (!results || !abortController) return
 
-    if (actions.includes('block')) {
-      block(req, res, rootSpan, abortController)
+    for (const entry of results) {
+      if (entry && entry.includes('block')) {
+        block(req, res, rootSpan, abortController)
+        break
+      }
     }
   }
 }
 
-function incomingHttpEndTranslator ({ req, res }) {
-  const requestHeaders = Object.assign({}, req.headers)
+function incomingHttpEndTranslator (data) {
+  const context = Gateway.getContext()
+  if (!context) return
+
+  const requestHeaders = Object.assign({}, data.req.headers)
   delete requestHeaders.cookie
 
   // TODO: this doesn't support headers sent with res.writeHead()
-  const responseHeaders = Object.assign({}, res.getHeaders())
+  const responseHeaders = Object.assign({}, data.res.getHeaders())
   delete responseHeaders['set-cookie']
 
   const payload = {
-    [addresses.HTTP_INCOMING_URL]: req.url,
+    [addresses.HTTP_INCOMING_URL]: data.req.url,
     [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
-    [addresses.HTTP_INCOMING_METHOD]: req.method,
-    [addresses.HTTP_INCOMING_RESPONSE_CODE]: res.statusCode,
+    [addresses.HTTP_INCOMING_METHOD]: data.req.method,
+    [addresses.HTTP_INCOMING_REMOTE_IP]: data.req.socket.remoteAddress,
+    [addresses.HTTP_INCOMING_REMOTE_PORT]: data.req.socket.remotePort,
+    [addresses.HTTP_INCOMING_RESPONSE_CODE]: data.res.statusCode,
     [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
   }
 
   // TODO: temporary express instrumentation, will use express plugin later
-  if (req.body !== undefined && req.body !== null) {
-    payload[addresses.HTTP_INCOMING_BODY] = req.body
+  if (data.req.body !== undefined && data.req.body !== null) {
+    payload[addresses.HTTP_INCOMING_BODY] = data.req.body
   }
 
-  if (req.query && typeof req.query === 'object') {
-    payload[addresses.HTTP_INCOMING_QUERY] = req.query
+  if (data.req.query && typeof data.req.query === 'object') {
+    payload[addresses.HTTP_INCOMING_QUERY] = data.req.query
   }
 
-  if (req.params && typeof req.params === 'object') {
-    payload[addresses.HTTP_INCOMING_PARAMS] = req.params
+  if (data.req.route && typeof data.req.route.path === 'string') {
+    payload[addresses.HTTP_INCOMING_ENDPOINT] = data.req.route.path
   }
 
-  if (req.cookies && typeof req.cookies === 'object') {
+  if (data.req.params && typeof data.req.params === 'object') {
+    payload[addresses.HTTP_INCOMING_PARAMS] = data.req.params
+  }
+
+  if (data.req.cookies && typeof data.req.cookies === 'object') {
     payload[addresses.HTTP_INCOMING_COOKIES] = {}
 
-    for (const k of Object.keys(req.cookies)) {
-      payload[addresses.HTTP_INCOMING_COOKIES][k] = [req.cookies[k]]
+    for (const k of Object.keys(data.req.cookies)) {
+      payload[addresses.HTTP_INCOMING_COOKIES][k] = [data.req.cookies[k]]
     }
   }
 
-  waf.run(payload, req)
+  Gateway.propagate(payload, context)
 
-  waf.disposeContext(req)
-
-  Reporter.finishRequest(req, res)
+  Reporter.finishRequest(data.req, context)
 }
 
 function disable () {
@@ -114,8 +147,7 @@ function disable () {
   config = null
 
   RuleManager.clearAllRules()
-
-  remoteConfig.disableWafUpdate()
+  remoteConfig.disableAsmData()
 
   // Channel#unsubscribe() is undefined for non active channels
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)

@@ -2,15 +2,18 @@
 
 const proxyquire = require('proxyquire')
 const log = require('../../src/log')
-const waf = require('../../src/appsec/waf')
 const RuleManager = require('../../src/appsec/rule_manager')
+const remoteConfig = require('../../src/appsec/remote_config')
 const appsec = require('../../src/appsec')
-const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../src/appsec/channels')
+const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../src/appsec/gateway/channels')
+const Gateway = require('../../src/appsec/gateway/engine')
+const addresses = require('../../src/appsec/addresses')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
 const Config = require('../../src/config')
 const axios = require('axios')
 const getPort = require('get-port')
+
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 
 describe('AppSec Index', () => {
@@ -48,11 +51,13 @@ describe('AppSec Index', () => {
       './blocking': blocking
     })
 
-    sinon.stub(waf, 'init').callThrough()
     sinon.stub(RuleManager, 'applyRules')
+    sinon.stub(remoteConfig, 'enableAsmData')
+    sinon.stub(remoteConfig, 'disableAsmData')
     sinon.stub(Reporter, 'setRateLimit')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
+    Gateway.manager.clear()
   })
 
   afterEach(() => {
@@ -66,10 +71,17 @@ describe('AppSec Index', () => {
 
       expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
       expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly(RULES, config.appsec)
+      expect(remoteConfig.enableAsmData).to.have.been.calledOnce
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
+      expect(Gateway.manager.addresses).to.have.all.keys(
+        addresses.HTTP_INCOMING_HEADERS,
+        addresses.HTTP_INCOMING_ENDPOINT,
+        addresses.HTTP_INCOMING_RESPONSE_HEADERS,
+        addresses.HTTP_INCOMING_REMOTE_IP
+      )
     })
 
     it('should log when enable fails', () => {
@@ -84,8 +96,10 @@ describe('AppSec Index', () => {
       expect(log.error).to.have.been.calledTwice
       expect(log.error.firstCall).to.have.been.calledWithExactly('Unable to start AppSec')
       expect(log.error.secondCall).to.have.been.calledWithExactly(err)
+      expect(remoteConfig.disableAsmData).to.have.been.calledOnce
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
+      expect(Gateway.manager.addresses).to.be.empty
     })
   })
 
@@ -104,6 +118,7 @@ describe('AppSec Index', () => {
       AppSec.disable()
 
       expect(RuleManager.clearAllRules).to.have.been.calledOnce
+      expect(remoteConfig.disableAsmData).to.have.been.calledOnce
       expect(incomingHttpRequestStart.unsubscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.unsubscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
@@ -123,11 +138,11 @@ describe('AppSec Index', () => {
   describe('incomingHttpStartTranslator', () => {
     beforeEach(() => {
       AppSec.enable(config)
-
-      sinon.stub(waf, 'run')
     })
 
     it('should propagate incoming http start data', () => {
+      const store = new Map()
+      sinon.stub(Gateway, 'startContext').returns(store)
       const rootSpan = {
         addTags: sinon.stub()
       }
@@ -149,14 +164,21 @@ describe('AppSec Index', () => {
       }
       const res = {}
 
+      sinon.stub(Gateway, 'propagate')
+
       AppSec.incomingHttpStartTranslator({ req, res })
+
+      expect(Gateway.startContext).to.have.been.calledOnce
+
+      expect(store.get('req')).to.equal(req)
+      expect(store.get('res')).to.equal(res)
 
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
         '_dd.appsec.enabled': 1,
         '_dd.runtime_family': 'nodejs',
         'http.client_ip': '127.0.0.1'
       })
-      expect(waf.run).to.have.been.calledOnceWith({
+      expect(Gateway.propagate).to.have.been.calledOnceWith({
         'http.client_ip': '127.0.0.1'
       })
     })
@@ -165,13 +187,29 @@ describe('AppSec Index', () => {
   describe('incomingHttpEndTranslator', () => {
     beforeEach(() => {
       AppSec.enable(config)
-
-      sinon.stub(waf, 'run')
-
       const rootSpan = {
         addTags: sinon.stub()
       }
       web.root.returns(rootSpan)
+    })
+
+    it('should do nothing when context is not found', () => {
+      const req = {}
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        statusCode: 201
+      }
+
+      sinon.stub(Gateway, 'propagate')
+      sinon.stub(Reporter, 'finishRequest')
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(Gateway.propagate).to.not.have.been.called
+      expect(Reporter.finishRequest).to.not.have.been.called
     })
 
     it('should propagate incoming http end data', () => {
@@ -196,29 +234,39 @@ describe('AppSec Index', () => {
         statusCode: 201
       }
 
-      web.patch(req)
-
+      AppSec.incomingHttpStartTranslator({ req, res })
+      sinon.stub(Gateway, 'propagate')
       sinon.stub(Reporter, 'finishRequest')
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
+      expect(Gateway.propagate).to.have.been.calledOnceWith({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
           'user-agent': 'Arachni',
           'host': 'localhost'
         },
         'server.request.method': 'POST',
+        'server.request.client_ip': '127.0.0.1',
+        'server.request.client_port': 8080,
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
           'content-lenght': 42
         }
-      }, req)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+      })
+      expect(Reporter.finishRequest).to.have.been.calledOnceWith(req)
     })
 
     it('should propagate incoming http end data with invalid framework properties', () => {
+      const context = {
+        dispatch: sinon.stub()
+      }
+      const store = new Map()
+      store.set('context', context)
+      sinon.stub(Gateway, 'startContext').returns(store)
+      sinon.stub(Gateway, 'getContext').returns(context)
+
       const req = {
         url: '/path',
         headers: {
@@ -245,30 +293,40 @@ describe('AppSec Index', () => {
         statusCode: 201
       }
 
-      web.patch(req)
-
+      AppSec.incomingHttpStartTranslator({ req, res })
+      sinon.stub(Gateway, 'propagate')
       sinon.stub(Reporter, 'finishRequest')
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
+      expect(Gateway.startContext).to.have.been.calledOnce
+      expect(store.get('req')).to.equal(req)
+      expect(store.get('res')).to.equal(res)
+      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
           'user-agent': 'Arachni',
           'host': 'localhost'
         },
         'server.request.method': 'POST',
+        'server.request.client_ip': '127.0.0.1',
+        'server.request.client_port': 8080,
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
           'content-lenght': 42
         }
-      }, req)
-
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+      }, context)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, context)
     })
 
     it('should propagate incoming http end data with express', () => {
+      const context = { dispatch: sinon.stub() }
+      const store = new Map()
+      store.set('context', context)
+      sinon.stub(Gateway, 'startContext').returns(store)
+      sinon.stub(Gateway, 'getContext').returns(context)
+
       const req = {
         url: '/path',
         headers: {
@@ -305,19 +363,24 @@ describe('AppSec Index', () => {
         }),
         statusCode: 201
       }
-
-      web.patch(req)
-
+      AppSec.incomingHttpStartTranslator({ req, res })
+      sinon.stub(Gateway, 'propagate')
       sinon.stub(Reporter, 'finishRequest')
+
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
+      expect(Gateway.startContext).to.have.been.calledOnce
+      expect(store.get('req')).to.equal(req)
+      expect(store.get('res')).to.equal(res)
+      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': {
           'user-agent': 'Arachni',
           'host': 'localhost'
         },
         'server.request.method': 'POST',
+        'server.request.client_ip': '127.0.0.1',
+        'server.request.client_port': 8080,
         'server.response.status': 201,
         'server.response.headers.no_cookies': {
           'content-type': 'application/json',
@@ -325,10 +388,11 @@ describe('AppSec Index', () => {
         },
         'server.request.body': { a: '1' },
         'server.request.query': { b: '2' },
+        'server.request.framework_endpoint': '/path/:c',
         'server.request.path_params': { c: '3' },
-        'server.request.cookies': { d: ['4'], e: ['5'] }
-      }, req)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+        'server.request.cookies': { d: [ '4' ], e: [ '5' ] }
+      }, context)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, context)
     })
   })
 })
@@ -345,13 +409,6 @@ describe('IP blocking', () => {
       type: 'data_with_expiration'
     }]
   }
-
-  const toModify = [{
-    product: 'ASM_DATA',
-    id: '1',
-    file: ruleData
-  }]
-
   let http, appListener, port
   before(() => {
     return getPort().then(newPort => {
@@ -378,7 +435,7 @@ describe('IP blocking', () => {
         enabled: true
       }
     }))
-    RuleManager.updateWafFromRC({ toUnapply: [], toApply: [], toModify })
+    RuleManager.updateAsmData('apply', ruleData, 'asm_data')
   })
   afterEach(() => {
     appsec.disable()

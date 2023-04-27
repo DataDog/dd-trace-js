@@ -1,10 +1,9 @@
 'use strict'
-
 const { AbortController } = require('node-abort-controller') // AbortController is not available in node <15
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios')
-const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
+const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/gateway/channels')
 
 describe('Plugin', () => {
   let http
@@ -118,7 +117,7 @@ describe('Plugin', () => {
       })
 
       it('should run the request listener in the request scope', done => {
-        const spy = sinon.spy(() => {
+        const spy = sinon.spy((...args) => {
           expect(tracer.scope().active()).to.not.be.null
         })
 

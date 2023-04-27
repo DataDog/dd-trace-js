@@ -1,7 +1,6 @@
 'use strict'
 
 const Capabilities = require('../../../src/appsec/remote_config/capabilities')
-const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../../src/appsec/remote_config/apply_states')
 
 const noop = () => {}
 
@@ -273,7 +272,7 @@ describe('RemoteConfigManager', () => {
     beforeEach(() => {
       sinon.stub(rc, 'dispatch').callsFake((list, action) => {
         for (const item of list) {
-          item.apply_state = ACKNOWLEDGED
+          item.apply_state = 2
 
           if (action === 'unapply') rc.appliedConfigs.delete(item.path)
           else rc.appliedConfigs.set(item.path, item)
@@ -360,7 +359,7 @@ describe('RemoteConfigManager', () => {
         product: 'UNAPPLY',
         id: 'confId',
         version: 69,
-        apply_state: ACKNOWLEDGED,
+        apply_state: 2,
         apply_error: '',
         length: 147,
         hashes: { sha256: 'anotherHash' },
@@ -371,7 +370,7 @@ describe('RemoteConfigManager', () => {
         product: 'IGNORE',
         id: 'confId',
         version: 43,
-        apply_state: ACKNOWLEDGED,
+        apply_state: 2,
         apply_error: '',
         length: 420,
         hashes: { sha256: 'sameHash' },
@@ -382,7 +381,7 @@ describe('RemoteConfigManager', () => {
         product: 'MODIFY',
         id: 'confId',
         version: 11,
-        apply_state: ACKNOWLEDGED,
+        apply_state: 2,
         apply_error: '',
         length: 147,
         hashes: { sha256: 'oldHash' },
@@ -455,7 +454,7 @@ describe('RemoteConfigManager', () => {
         product: 'UNAPPLY',
         id: 'confId',
         version: 69,
-        apply_state: ACKNOWLEDGED,
+        apply_state: 2,
         apply_error: '',
         length: 147,
         hashes: { sha256: 'anotherHash' },
@@ -466,7 +465,7 @@ describe('RemoteConfigManager', () => {
         product: 'APPLY',
         id: 'confId',
         version: 1,
-        apply_state: ACKNOWLEDGED,
+        apply_state: 2,
         apply_error: '',
         length: 0,
         hashes: { sha256: 'haaaxx' },
@@ -477,7 +476,7 @@ describe('RemoteConfigManager', () => {
         product: 'MODIFY',
         id: 'confId',
         version: 12,
-        apply_state: ACKNOWLEDGED,
+        apply_state: 2,
         apply_error: '',
         length: 147,
         hashes: { sha256: 'newHash' },
@@ -489,21 +488,21 @@ describe('RemoteConfigManager', () => {
           id: 'confId',
           version: 43,
           product: 'IGNORE',
-          apply_state: ACKNOWLEDGED,
+          apply_state: 2,
           apply_error: ''
         },
         {
           id: 'confId',
           version: 12,
           product: 'MODIFY',
-          apply_state: ACKNOWLEDGED,
+          apply_state: 2,
           apply_error: ''
         },
         {
           id: 'confId',
           version: 1,
           product: 'APPLY',
-          apply_state: ACKNOWLEDGED,
+          apply_state: 2,
           apply_error: ''
         }
       ])
@@ -533,16 +532,14 @@ describe('RemoteConfigManager', () => {
     })
 
     it('should call emit for each config, catch errors, and update the state', () => {
-      rc.emit.onFirstCall().returns(true)
       rc.emit.onSecondCall().throws(new Error('Unable to apply config'))
-      rc.emit.onThirdCall().returns(true)
 
       const list = [
         {
           id: 'asm_features',
           path: 'datadog/42/ASM_FEATURES/confId/config',
           product: 'ASM_FEATURES',
-          apply_state: UNACKNOWLEDGED,
+          apply_state: 1,
           apply_error: '',
           file: { asm: { enabled: true } }
         },
@@ -550,7 +547,7 @@ describe('RemoteConfigManager', () => {
           id: 'asm_data',
           path: 'datadog/42/ASM_DATA/confId/config',
           product: 'ASM_DATA',
-          apply_state: UNACKNOWLEDGED,
+          apply_state: 1,
           apply_error: '',
           file: { data: [1, 2, 3] }
         },
@@ -558,7 +555,7 @@ describe('RemoteConfigManager', () => {
           id: 'asm_dd',
           path: 'datadog/42/ASM_DD/confId/config',
           product: 'ASM_DD',
-          apply_state: UNACKNOWLEDGED,
+          apply_state: 1,
           apply_error: '',
           file: { rules: [4, 5, 6] }
         }
@@ -572,11 +569,11 @@ describe('RemoteConfigManager', () => {
       expect(rc.emit.secondCall).to.have.been.calledWithExactly('ASM_DATA', 'apply', { data: [1, 2, 3] }, 'asm_data')
       expect(rc.emit.thirdCall).to.have.been.calledWithExactly('ASM_DD', 'apply', { rules: [4, 5, 6] }, 'asm_dd')
 
-      expect(list[0].apply_state).to.equal(ACKNOWLEDGED)
+      expect(list[0].apply_state).to.equal(2)
       expect(list[0].apply_error).to.equal('')
-      expect(list[1].apply_state).to.equal(ERROR)
+      expect(list[1].apply_state).to.equal(3)
       expect(list[1].apply_error).to.equal('Error: Unable to apply config')
-      expect(list[2].apply_state).to.equal(ACKNOWLEDGED)
+      expect(list[2].apply_state).to.equal(2)
       expect(list[2].apply_error).to.equal('')
 
       expect(rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')).to.equal(list[0])
@@ -589,7 +586,7 @@ describe('RemoteConfigManager', () => {
         id: 'asm_data',
         path: 'datadog/42/ASM_FEATURES/confId/config',
         product: 'ASM_FEATURES',
-        apply_state: ACKNOWLEDGED,
+        apply_state: 2,
         apply_error: '',
         file: { asm: { enabled: true } }
       })

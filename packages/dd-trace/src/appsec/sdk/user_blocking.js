@@ -1,7 +1,7 @@
 'use strict'
 
 const { USER_ID } = require('../addresses')
-const waf = require('../waf')
+const Gateway = require('../gateway/engine')
 const { getRootSpan } = require('./utils')
 const { block } = require('../blocking')
 const { storage } = require('../../../../datadog-core')
@@ -9,11 +9,19 @@ const { setUserTags } = require('./set_user')
 const log = require('../../log')
 
 function isUserBlocked (user) {
-  const actions = waf.run({ [USER_ID]: user.id })
+  const results = Gateway.propagate({ [USER_ID]: user.id })
 
-  if (!actions) return false
+  if (!results) {
+    return false
+  }
 
-  return actions.includes('block')
+  for (const entry of results) {
+    if (entry && entry.includes('block')) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function checkUserAndSetUser (tracer, user) {

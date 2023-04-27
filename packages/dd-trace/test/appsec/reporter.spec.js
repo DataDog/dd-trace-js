@@ -1,7 +1,9 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const { storage } = require('../../../datadog-core')
+const Engine = require('../../src/appsec/gateway/engine')
+const { Context } = require('../../src/appsec/gateway/engine/engine')
+const addresses = require('../../src/appsec/addresses')
 
 describe('reporter', () => {
   let Reporter
@@ -28,8 +30,75 @@ describe('reporter', () => {
 
   afterEach(() => {
     sinon.restore()
+    Engine.manager.clear()
     Reporter.setRateLimit(100)
     Reporter.metricsQueue.clear()
+  })
+
+  describe('resolveHTTPRequest', () => {
+    it('should return empty object when passed no context', () => {
+      const result = Reporter.resolveHTTPRequest()
+
+      expect(result).to.be.an('object').that.is.empty
+    })
+
+    it('should return resolved addresses', () => {
+      const context = new Context()
+
+      context.store = new Map(Object.entries({
+        [addresses.HTTP_INCOMING_URL]: '/path?query=string',
+        [addresses.HTTP_INCOMING_HEADERS]: {
+          host: 'localhost',
+          'user-agent': 'arachni',
+          secret: 'password'
+        },
+        [addresses.HTTP_INCOMING_METHOD]: 'GET',
+        [addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8',
+        [addresses.HTTP_INCOMING_REMOTE_PORT]: 1337
+      }))
+
+      const result = Reporter.resolveHTTPRequest(context)
+
+      expect(result).to.deep.equal({
+        headers: {
+          'http.request.headers.host': 'localhost',
+          'http.request.headers.user-agent': 'arachni'
+        },
+        remote_ip: '8.8.8.8'
+      })
+    })
+  })
+
+  describe('resolveHTTPResponse', () => {
+    it('should return empty object when passed no context', () => {
+      const result = Reporter.resolveHTTPResponse()
+
+      expect(result).to.be.an('object').that.is.empty
+    })
+
+    it('should return resolved addresses', () => {
+      const context = new Context()
+
+      context.store = new Map(Object.entries({
+        [addresses.HTTP_INCOMING_ENDPOINT]: '/path/:param',
+        [addresses.HTTP_INCOMING_RESPONSE_CODE]: 201,
+        [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
+          'content-type': 'application/json',
+          'content-length': 42,
+          secret: 'password'
+        }
+      }))
+
+      const result = Reporter.resolveHTTPResponse(context)
+
+      expect(result).to.deep.equal({
+        endpoint: '/path/:param',
+        headers: {
+          'http.response.headers.content-type': 'application/json',
+          'http.response.headers.content-length': '42'
+        }
+      })
+    })
   })
 
   describe('filterHeaders', () => {
@@ -71,37 +140,42 @@ describe('reporter', () => {
   })
 
   describe('reportMetrics', () => {
-    let req
-
-    beforeEach(() => {
-      req = {}
-      storage.enterWith({ req })
-    })
-
     it('should do nothing when passed incomplete objects', () => {
+      const req = {}
+
       web.root.returns(null)
 
-      Reporter.reportMetrics({})
-
-      expect(span.setTag).not.to.have.been.called
+      expect(Reporter.reportMetrics({}, null)).to.be.false
+      expect(Reporter.reportMetrics({}, new Map())).to.be.false
+      expect(Reporter.reportMetrics({}, new Map([['req', null]]))).to.be.false
+      expect(Reporter.reportMetrics({}, new Map([['req', req]]))).to.be.false
     })
 
     it('should set duration metrics if set', () => {
-      Reporter.reportMetrics({ duration: 1337 })
+      const req = {}
+      const store = new Map([['req', req]])
+
+      Reporter.reportMetrics({ duration: 1337 }, store)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
       expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.waf.duration', 1337)
     })
 
     it('should set ext duration metrics if set', () => {
-      Reporter.reportMetrics({ durationExt: 42 })
+      const req = {}
+      const store = new Map([['req', req]])
+
+      Reporter.reportMetrics({ durationExt: 42 }, store)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
       expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.waf.duration_ext', 42)
     })
 
     it('should set rulesVersion if set', () => {
-      Reporter.reportMetrics({ rulesVersion: '1.2.3' })
+      const req = {}
+      const store = new Map([['req', req]])
+
+      Reporter.reportMetrics({ rulesVersion: '1.2.3' }, store)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
       expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.event_rules.version', '1.2.3')
@@ -109,23 +183,37 @@ describe('reporter', () => {
   })
 
   describe('reportAttack', () => {
-    let req
+    it('should do nothing when passed incomplete objects', () => {
+      const req = {}
 
-    beforeEach(() => {
-      req = {
-        socket: {
-          remoteAddress: '8.8.8.8'
-        },
-        headers: {
-          host: 'localhost',
-          'user-agent': 'arachni'
-        }
-      }
-      storage.enterWith({ req })
+      web.root.returns(null)
+
+      expect(Reporter.reportAttack('', null)).to.be.false
+      expect(Reporter.reportAttack('', new Map())).to.be.false
+      expect(Reporter.reportAttack('', new Map([['req', null]]))).to.be.false
+      expect(Reporter.reportAttack('', new Map([['req', req]]))).to.be.false
     })
 
     it('should add tags to request span', () => {
-      const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]')
+      const req = {}
+
+      const context = new Context()
+
+      context.store = new Map(Object.entries({
+        [addresses.HTTP_INCOMING_URL]: '/path?query=string',
+        [addresses.HTTP_INCOMING_HEADERS]: {
+          host: 'localhost',
+          'user-agent': 'arachni',
+          secret: 'password'
+        },
+        [addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8'
+      }))
+
+      const store = new Map()
+      store.set('req', req)
+      store.set('context', context)
+
+      const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]', store)
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
@@ -142,27 +230,28 @@ describe('reporter', () => {
     })
 
     it('should not add manual.keep when rate limit is reached', (done) => {
+      const req = {}
       const addTags = span.addTags
-      const params = {}
+      const store = new Map([[ 'req', req ]])
 
-      expect(Reporter.reportAttack('', params)).to.not.be.false
+      expect(Reporter.reportAttack('', store)).to.not.be.false
       expect(addTags.getCall(0).firstArg).to.have.property('manual.keep').that.equals('true')
-      expect(Reporter.reportAttack('', params)).to.not.be.false
+      expect(Reporter.reportAttack('', store)).to.not.be.false
       expect(addTags.getCall(1).firstArg).to.have.property('manual.keep').that.equals('true')
-      expect(Reporter.reportAttack('', params)).to.not.be.false
+      expect(Reporter.reportAttack('', store)).to.not.be.false
       expect(addTags.getCall(2).firstArg).to.have.property('manual.keep').that.equals('true')
 
       Reporter.setRateLimit(1)
 
-      expect(Reporter.reportAttack('', params)).to.not.be.false
+      expect(Reporter.reportAttack('', store)).to.not.be.false
       expect(addTags.getCall(3).firstArg).to.have.property('appsec.event').that.equals('true')
       expect(addTags.getCall(3).firstArg).to.have.property('manual.keep').that.equals('true')
-      expect(Reporter.reportAttack('', params)).to.not.be.false
+      expect(Reporter.reportAttack('', store)).to.not.be.false
       expect(addTags.getCall(4).firstArg).to.have.property('appsec.event').that.equals('true')
       expect(addTags.getCall(4).firstArg).to.not.have.property('manual.keep')
 
       setTimeout(() => {
-        expect(Reporter.reportAttack('', params)).to.not.be.false
+        expect(Reporter.reportAttack('', store)).to.not.be.false
         expect(addTags.getCall(5).firstArg).to.have.property('manual.keep').that.equals('true')
         done()
       }, 1e3)
@@ -171,58 +260,63 @@ describe('reporter', () => {
     it('should not overwrite origin tag', () => {
       span.context()._tags = { '_dd.origin': 'tracer' }
 
-      const result = Reporter.reportAttack('[]', {})
+      const req = {}
+      const store = new Map()
+      store.set('req', req)
+
+      const result = Reporter.reportAttack('[]', store)
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
-        'http.request.headers.host': 'localhost',
-        'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
         'manual.keep': 'true',
-        '_dd.appsec.json': '{"triggers":[]}',
-        'http.useragent': 'arachni',
-        'network.client.ip': '8.8.8.8'
+        '_dd.appsec.json': '{"triggers":[]}'
       })
     })
 
     it('should merge attacks json', () => {
       span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 
-      const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]')
+      const req = {}
+      const context = new Context()
+
+      context.store = new Map(Object.entries({
+        [addresses.HTTP_INCOMING_URL]: '/path?query=string',
+        [addresses.HTTP_INCOMING_HEADERS]: {
+          host: 'localhost',
+          secret: 'password'
+        },
+        [addresses.HTTP_INCOMING_REMOTE_IP]: '8.8.8.8'
+      }))
+
+      const store = new Map()
+      store.set('req', req)
+      store.set('context', context)
+
+      const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]', store)
       expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
-        'http.request.headers.host': 'localhost',
-        'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
         'manual.keep': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
-        'http.useragent': 'arachni',
+        'http.request.headers.host': 'localhost',
         'network.client.ip': '8.8.8.8'
       })
     })
   })
 
   describe('finishRequest', () => {
-    let wafContext
-
-    beforeEach(() => {
-      wafContext = {
-        dispose: sinon.stub()
-      }
-    })
-
     it('should do nothing when passed incomplete objects', () => {
-      span.context()._tags['appsec.event'] = 'true'
+      const req = {}
 
-      web.root.withArgs(null).returns(null)
-      web.root.withArgs({}).returns(span)
+      web.root.returns(null)
 
-      Reporter.finishRequest(null, null)
-      expect(span.addTags).not.to.have.been.called
+      expect(Reporter.finishRequest(null, {})).to.be.false
+      expect(Reporter.finishRequest(req, {})).to.be.false
     })
 
     it('should add metrics tags from metricsQueue', () => {
@@ -231,7 +325,7 @@ describe('reporter', () => {
       Reporter.metricsQueue.set('a', 1)
       Reporter.metricsQueue.set('b', 2)
 
-      Reporter.finishRequest(req, wafContext, {})
+      Reporter.finishRequest(req)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
       expect(span.addTags).to.have.been.calledOnceWithExactly({ a: 1, b: 2 })
@@ -241,30 +335,41 @@ describe('reporter', () => {
     it('should not add http response data when no attack was previously found', () => {
       const req = {}
 
-      Reporter.finishRequest(req)
+      const context = new Context()
+
+      context.store = new Map(Object.entries({
+        [addresses.HTTP_INCOMING_ENDPOINT]: '/path/:param',
+        [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
+          'content-type': 'application/json',
+          'content-length': 42,
+          secret: 'password'
+        }
+      }))
+
+      const result = Reporter.finishRequest(req, context)
+      expect(result).to.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
       expect(span.addTags).to.not.have.been.called
     })
 
     it('should add http response data inside request span', () => {
-      const req = {
-        route: {
-          path: '/path/:param'
-        }
-      }
+      const req = {}
 
-      const res = {
-        getHeaders: () => {
-          return {
-            'content-type': 'application/json',
-            'content-length': '42'
-          }
+      const context = new Context()
+
+      context.store = new Map(Object.entries({
+        [addresses.HTTP_INCOMING_ENDPOINT]: '/path/:param',
+        [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
+          'content-type': 'application/json',
+          'content-length': 42,
+          secret: 'password'
         }
-      }
+      }))
 
       span.context()._tags['appsec.event'] = 'true'
 
-      Reporter.finishRequest(req, res)
+      const result = Reporter.finishRequest(req, context)
+      expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
@@ -276,18 +381,21 @@ describe('reporter', () => {
 
     it('should add http response data inside request span without endpoint', () => {
       const req = {}
-      const res = {
-        getHeaders: () => {
-          return {
-            'content-type': 'application/json',
-            'content-length': '42'
-          }
+
+      const context = new Context()
+
+      context.store = new Map(Object.entries({
+        [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: {
+          'content-type': 'application/json',
+          'content-length': 42,
+          secret: 'password'
         }
-      }
+      }))
 
       span.context()._tags['appsec.event'] = 'true'
 
-      Reporter.finishRequest(req, res)
+      const result = Reporter.finishRequest(req, context)
+      expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
