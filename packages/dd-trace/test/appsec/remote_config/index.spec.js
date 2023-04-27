@@ -138,6 +138,7 @@ describe('Remote Config index', () => {
         expect(rc.updateCapabilities.getCall(4))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
 
+        expect(rc.on.callCount).to.be.equal(4)
         expect(rc.on.getCall(0)).to.have.been.calledWith('ASM_DATA')
         expect(rc.on.getCall(1)).to.have.been.calledWith('ASM_DD')
         expect(rc.on.getCall(2)).to.have.been.calledWith('ASM')
@@ -160,8 +161,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
         expect(rc.updateCapabilities.getCall(4))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
-        expect(rc.on.callCount).to.be.equal(4)
 
+        expect(rc.on.callCount).to.be.equal(4)
         expect(rc.on.getCall(0)).to.have.been.calledWith('ASM_DATA')
         expect(rc.on.getCall(1)).to.have.been.calledWith('ASM_DD')
         expect(rc.on.getCall(2)).to.have.been.calledWith('ASM')

@@ -149,7 +149,7 @@ describe('AppSec Index', () => {
   describe('incomingHttpStartTranslator', () => {
     beforeEach(() => {
       AppSec.enable(config)
-      waf.init(require('../../src/appsec/recommended.json'), config.appsec)
+
       sinon.stub(waf, 'run')
     })
 
@@ -197,7 +197,6 @@ describe('AppSec Index', () => {
     beforeEach(() => {
       AppSec.enable(config)
 
-      waf.init(require('../../src/appsec/recommended.json'), config.appsec)
       sinon.stub(waf, 'run')
 
       const rootSpan = {
@@ -230,27 +229,16 @@ describe('AppSec Index', () => {
 
       web.patch(req)
 
-      AppSec.incomingHttpStartTranslator({ req, res })
       sinon.stub(Reporter, 'finishRequest')
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledTwice
-      expect(waf.run.firstCall).to.have.been.calledWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-        'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080,
-        'http.client_ip': '127.0.0.1'
-      }, req)
-
-      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+      expect(waf.run).to.have.been.calledOnceWithExactly({
         'server.response.status': 201,
         'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
       }, req)
 
-      expect(Reporter.finishRequest).to.have.been.calledOnceWith(req, res)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
 
     it('should propagate incoming http end data with invalid framework properties', () => {
@@ -282,21 +270,11 @@ describe('AppSec Index', () => {
 
       web.patch(req)
 
-      AppSec.incomingHttpStartTranslator({ req, res })
       sinon.stub(Reporter, 'finishRequest')
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledTwice
-      expect(waf.run.firstCall).to.have.been.calledWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-        'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080,
-        'http.client_ip': '127.0.0.1'
-      }, req)
-      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+      expect(waf.run).to.have.been.calledOnceWithExactly({
         'server.response.status': 201,
         'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
       }, req)
@@ -344,20 +322,10 @@ describe('AppSec Index', () => {
 
       web.patch(req)
 
-      AppSec.incomingHttpStartTranslator({ req, res })
       sinon.stub(Reporter, 'finishRequest')
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledTwice
-      expect(waf.run.firstCall).to.have.been.calledWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-        'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080,
-        'http.client_ip': '127.0.0.1'
-      }, req)
-      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+      expect(waf.run).to.have.been.calledOnceWithExactly({
         'server.response.status': 201,
         'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
         'server.request.path_params': { c: '3' },
@@ -565,6 +533,7 @@ describe('IP blocking', () => {
     })
 
     appsec.enable(config)
+
     RuleManager.updateWafFromRC({ toUnapply: [], toApply: [], toModify })
   })
 

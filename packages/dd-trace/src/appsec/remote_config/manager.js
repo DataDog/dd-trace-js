@@ -234,7 +234,11 @@ class RemoteConfigManager extends EventEmitter {
 
   dispatch (list, action) {
     for (const item of list) {
-      if (item.apply_state === UNACKNOWLEDGED) { // in case the item was already handled by kPreUpdate
+      // TODO: we need a way to tell if unapply configs were handled by kPreUpdate or not, because they're always
+      // emitted unlike the apply and modify configs
+
+      // in case the item was already handled by kPreUpdate
+      if (item.apply_state === UNACKNOWLEDGED || action === 'unapply') {
         try {
           // TODO: do we want to pass old and new config ?
           const hadListeners = this.emit(item.product, action, item.file, item.id)
