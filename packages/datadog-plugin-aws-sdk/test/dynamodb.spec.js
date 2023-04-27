@@ -43,7 +43,7 @@ describe('Plugin', () => {
           return agent.close({ ritmReset: false })
         })
 
-        it.only('should allow disabling a specific span kind of a service', (done) => {
+        it('should allow disabling a specific span kind of a service', (done) => {
           let total = 0
         
           agent.use(traces => {
