@@ -139,20 +139,6 @@ module.exports = {
       plugins: false
     }, tracerConfig))
 
-    // // update headers to include the agent port to proxy trace to
-    // if (!(
-    //   tracerConfig.hasOwnProperty('experimental') &&
-    //   tracerConfig.experimental.hasOwnProperty('exporter')) &&
-    //   useTestAgent
-    // ) {
-    //   const currentHeaders = tracer._tracer._exporter._writer.headers
-    //   currentHeaders['X-Datadog-Proxy-Port'] = port.toString()
-    //   tracer._tracer._exporter._writer.headers = currentHeaders
-    //   tracer.setUrl(testAgentUrl)
-    // } else {
-    //   //tracer.setUrl(`http://127.0.0.1:${port}`)
-    // }
-
     tracer.setUrl(`http://127.0.0.1:${port}`)
 
     for (let i = 0, l = pluginName.length; i < l; i++) {

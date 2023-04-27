@@ -38,7 +38,7 @@ const loadAgent = ({ exporter = 'agent' } = {}) => {
     experimental: {
       exporter
     }
-  }, process.env.DD_TEST_AGENT_ENABLED != false)
+  }, process.env.DD_TEST_AGENT_ENABLED !== 'false')
 }
 
 /**
