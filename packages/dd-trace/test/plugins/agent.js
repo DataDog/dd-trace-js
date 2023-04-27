@@ -35,6 +35,17 @@ function ciVisRequestHandler (request, response) {
   })
 }
 
+function handleTraceRequest (req, res) {
+  res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
+  handlers.forEach(({ handler, spanResourceMatch }) => {
+    const trace = req.body
+    const spans = trace.flatMap(span => span)
+    if (isMatchingTrace(spans, spanResourceMatch)) {
+      handler(trace)
+    }
+  })
+}
+
 const DEFAULT_AVAILABLE_ENDPOINTS = ['/evp_proxy/v2']
 
 let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
@@ -63,16 +74,8 @@ module.exports = {
       res.status(404).end()
     })
 
-    agent.post('/v0.4/traces', (req, res) => {
-      res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
-      handlers.forEach(({ handler, spanResourceMatch }) => {
-        const trace = req.body
-        const spans = trace.flatMap(span => span)
-        if (isMatchingTrace(spans, spanResourceMatch)) {
-          handler(trace)
-        }
-      })
-    })
+    agent.put('/v0.4/traces', handleTraceRequest)
+    agent.post('/v0.4/traces', handleTraceRequest)
 
     // CI Visibility Agentless intake
     agent.post('/api/v2/citestcycle', ciVisRequestHandler)
@@ -82,7 +85,7 @@ module.exports = {
 
     const port = await getPort()
 
-    const testAgentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126';
+    const testAgentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
 
     const server = this.server = http.createServer(agent)
     const emit = server.emit
