@@ -72,6 +72,9 @@ function getRootDir (playwrightRunner) {
   if (playwrightRunner._configDir) {
     return playwrightRunner._configDir
   }
+  if (playwrightRunner._config && playwrightRunner._config.config) {
+    return playwrightRunner._config.config.rootDir
+  }
   return process.cwd()
 }
 

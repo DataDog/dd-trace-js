@@ -5,6 +5,8 @@ const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/he
 const id = require('../../dd-trace/src/id')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
+const namingSchema = require('./naming')
+
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
 const TIMEOUT = 30000
 
@@ -46,8 +48,16 @@ describe('Plugin', () => {
           pubsub = new lib.PubSub({ projectId: project })
         })
         describe('createTopic', () => {
+          withNamingSchema(
+            async () => pubsub.createTopic(topicName),
+            () => namingSchema.controlPlane.opName,
+            () => namingSchema.controlPlane.serviceName
+          )
+
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
+              name: namingSchema.controlPlane.opName,
+              service: namingSchema.controlPlane.serviceName,
               meta: {
                 'pubsub.method': 'createTopic',
                 'span.kind': 'client',
@@ -68,6 +78,8 @@ describe('Plugin', () => {
             }, gax)
 
             const expectedSpanPromise = expectSpanWithDefaults({
+              name: namingSchema.controlPlane.opName,
+              service: namingSchema.controlPlane.serviceName,
               meta: {
                 'pubsub.method': 'createTopic',
                 'span.kind': 'client',
@@ -83,6 +95,8 @@ describe('Plugin', () => {
 
           it('should be instrumented w/ error', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
+              name: namingSchema.controlPlane.opName,
+              service: namingSchema.controlPlane.serviceName,
               error: 1,
               meta: {
                 'pubsub.method': 'createTopic',
@@ -94,7 +108,7 @@ describe('Plugin', () => {
             try {
               await publisher.createTopic({ name })
             } catch (e) {
-              // this is just to prevent mocha from crashing
+            // this is just to prevent mocha from crashing
             }
             return expectedSpanPromise
           })
@@ -111,6 +125,8 @@ describe('Plugin', () => {
         describe('publish', () => {
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
+              name: namingSchema.send.opName,
+              service: namingSchema.send.serviceName,
               meta: {
                 'pubsub.topic': resource,
                 'pubsub.method': 'publish',
@@ -133,12 +149,22 @@ describe('Plugin', () => {
                 expect(tracer.scope().active()).to.equal(firstSpan)
               })
           })
+
+          withNamingSchema(
+            async () => {
+              const [topic] = await pubsub.createTopic(topicName)
+              await publish(topic, { data: Buffer.from('hello') })
+            },
+            () => namingSchema.send.opName,
+            () => namingSchema.send.serviceName
+          )
         })
 
         describe('onmessage', () => {
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: 'pubsub.receive',
+              name: namingSchema.receive.opName,
+              service: namingSchema.receive.serviceName,
               type: 'worker',
               meta: {
                 'component': 'google-cloud-pubsub',
@@ -158,7 +184,8 @@ describe('Plugin', () => {
 
           it('should give the current span a parentId from the sender', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: 'pubsub.receive',
+              name: namingSchema.receive.opName,
+              service: namingSchema.receive.serviceName,
               meta: { 'span.kind': 'consumer' }
             })
             const [topic] = await pubsub.createTopic(topicName)
@@ -183,7 +210,8 @@ describe('Plugin', () => {
           it('should be instrumented w/ error', async () => {
             const error = new Error('bad')
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: 'pubsub.receive',
+              name: namingSchema.receive.opName,
+              service: namingSchema.receive.serviceName,
               error: 1,
               meta: {
                 [ERROR_MESSAGE]: error.message,
@@ -218,6 +246,17 @@ describe('Plugin', () => {
             await publish(topic, { data: Buffer.from('hello') })
             return expectedSpanPromise
           })
+
+          withNamingSchema(
+            async () => {
+              const [topic] = await pubsub.createTopic(topicName)
+              const [sub] = await topic.createSubscription('foo')
+              sub.on('message', msg => msg.ack())
+              await publish(topic, { data: Buffer.from('hello') })
+            },
+            () => namingSchema.receive.opName,
+            () => namingSchema.receive.serviceName
+          )
         })
 
         describe('when disabled', () => {
@@ -254,6 +293,7 @@ describe('Plugin', () => {
         describe('createTopic', () => {
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
+              name: namingSchema.controlPlane.opName,
               service: 'a_test_service',
               meta: { 'pubsub.method': 'createTopic' }
             })
