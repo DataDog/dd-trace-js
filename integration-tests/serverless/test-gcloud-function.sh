@@ -34,7 +34,7 @@ curl -s ${TRIGGER_URL}
 echo "Waiting 20 seconds before tailing logs"
 sleep 20
 
-LOGS=$(gcloud functions logs read david-dd-trace-js-integration-test-${STAGE} --region us-east1 --gen2 --limit 500)
+LOGS=$(gcloud functions logs read dd-trace-js-sls-mini-agent-integration-test-${STAGE} --region us-east1 --gen2 --limit 500)
 
 echo "$LOGS"
 
