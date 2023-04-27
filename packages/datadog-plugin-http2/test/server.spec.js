@@ -3,7 +3,6 @@
 const { EventEmitter } = require('events')
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
 
 class MockAbortController {
   constructor () {
