@@ -200,6 +200,9 @@ class Config {
       process.env.DD_TRACE_TELEMETRY_ENABLED,
       !process.env.AWS_LAMBDA_FUNCTION_NAME
     )
+    const DD_TELEMETRY_HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
+      ? parseInt(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000
+      : 60000
     const DD_TELEMETRY_DEBUG = coalesce(
       process.env.DD_TELEMETRY_DEBUG,
       false
@@ -492,6 +495,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     // Disabled for CI Visibility's agentless
     this.telemetry = {
       enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
+      heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
       diagnosticLogCollection: isTrue(DD_TELEMETRY_DIAGNOSTIC_LOG_COLLECTION_ENABLED),
       debug: isTrue(DD_TELEMETRY_DEBUG)
