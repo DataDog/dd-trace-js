@@ -11,7 +11,7 @@ const amqpOutbound = {
 }
 
 const messaging = {
-  outbound: {
+  producer: {
     amqplib: amqpOutbound,
     amqp10: amqpOutbound,
     'google-cloud-pubsub': {
@@ -24,7 +24,7 @@ const messaging = {
     },
     rhea: amqpOutbound
   },
-  inbound: {
+  consumer: {
     amqplib: amqpInbound,
     amqp10: amqpInbound,
     'google-cloud-pubsub': {
@@ -37,7 +37,7 @@ const messaging = {
     },
     rhea: amqpInbound
   },
-  controlPlane: {
+  client: {
     amqplib: {
       opName: () => 'amqp.command',
       serviceName: identityService

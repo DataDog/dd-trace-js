@@ -5,7 +5,7 @@ function amqpServiceName (service) {
 }
 
 const messaging = {
-  outbound: {
+  producer: {
     amqplib: {
       opName: () => 'amqp.command',
       serviceName: amqpServiceName
@@ -27,7 +27,7 @@ const messaging = {
       serviceName: service => `${service}-amqp-producer`
     }
   },
-  inbound: {
+  consumer: {
     amqplib: {
       opName: () => 'amqp.command',
       serviceName: amqpServiceName
@@ -49,7 +49,7 @@ const messaging = {
       serviceName: identityService
     }
   },
-  controlPlane: {
+  client: {
     amqplib: {
       opName: () => 'amqp.command',
       serviceName: amqpServiceName
