@@ -105,7 +105,11 @@ describe('Kinesis', function () {
     it('generates tags for proper input', done => {
       agent.use(traces => {
         const span = traces[0][0]
-
+        expect(span.meta).to.include({
+          'streamname': 'MyStream',
+          'aws_service': 'Kinesis',
+          'region': 'us-east-1'
+        })
         expect(span.resource).to.equal('putRecord MyStream')
         expect(span.meta).to.have.property('streamname', 'MyStream')
       }).then(done, done)

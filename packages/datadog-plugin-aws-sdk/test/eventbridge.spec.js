@@ -5,9 +5,9 @@ const EventBridge = require('../src/services/eventbridge')
 const tracer = require('../../dd-trace')
 const { randomBytes } = require('crypto')
 
-describe('EventBridge', function () {
+describe.only('EventBridge', () => {
   let span
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], '2.3.0', (version, moduleName) => {
     let traceId
     let parentId
     let spanId
@@ -50,12 +50,12 @@ describe('EventBridge', function () {
       const eventbridge = new EventBridge(tracer)
       const params = {
         source: 'my.event',
-        Name: 'myRuleName'
+        Name: 'my-rule-name'
       }
       expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({
         'aws.eventbridge.source': 'my.event',
         'resource.name': 'putEvent my.event',
-        'rulename': 'myRuleName'
+        'rulename': 'my-rule-name'
       })
     })
     it('won\'t create tags for a malformed event', () => {
@@ -110,5 +110,57 @@ describe('EventBridge', function () {
       eventbridge.requestInject(span.context(), request)
       expect(request.params).to.deep.equal(request.params)
     })
+
+    it('returns an empty object when params is null', () => {
+      const eventbridge = new EventBridge(tracer)
+      expect(eventbridge.generateTags(null, 'putEvent', {})).to.deep.equal({})
+    })
+    
+    it('returns an empty object when params.source is an empty string', () => {
+      const eventbridge = new EventBridge(tracer)
+      const params = {
+        source: ''
+      }
+      expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({})
+    })
+    
+    it('sets rulename as an empty string when params.Name is null', () => {
+      const eventbridge = new EventBridge(tracer)
+      const params = {
+        source: 'my.event',
+        Name: null
+      }
+      expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({
+        'aws.eventbridge.source': 'my.event',
+        'resource.name': 'putEvent my.event',
+        'rulename': ''
+      })
+    })
+    
+    it('sets resource.name as params.source when operation is null', () => {
+      const eventbridge = new EventBridge(tracer)
+      const params = {
+        source: 'my.event',
+        Name: 'my-rule-name'
+      }
+      expect(eventbridge.generateTags(params, null, {})).to.deep.equal({
+        'aws.eventbridge.source': 'my.event',
+        'resource.name': 'my.event',
+        'rulename': 'my-rule-name'
+      })
+    })
+    it('handles null response gracefully', () => {
+      const eventbridge = new EventBridge(tracer)
+      const params = {
+        source: 'my.event',
+        Name: 'my-rule-name'
+      }
+      expect(eventbridge.generateTags(params, 'putEvent', null)).to.deep.equal({
+        'aws.eventbridge.source': 'my.event',
+        'resource.name': 'putEvent my.event',
+        'rulename': 'my-rule-name'
+      })
+    })
+    
   })
 })

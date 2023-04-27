@@ -1,12 +1,13 @@
 'use strict'
 
-const addresses = require('./addresses')
 const Limiter = require('../rate_limiter')
+const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
 
+// TODO: use precomputed maps instead
 const REQUEST_HEADERS_PASSLIST = [
   'accept',
   'accept-encoding',
@@ -37,28 +38,6 @@ const RESPONSE_HEADERS_PASSLIST = [
 
 const metricsQueue = new Map()
 
-function resolveHTTPRequest (context) {
-  if (!context) return {}
-
-  const headers = context.resolve(addresses.HTTP_INCOMING_HEADERS)
-
-  return {
-    remote_ip: context.resolve(addresses.HTTP_INCOMING_REMOTE_IP),
-    headers: filterHeaders(headers, REQUEST_HEADERS_PASSLIST, 'http.request.headers.')
-  }
-}
-
-function resolveHTTPResponse (context) {
-  if (!context) return {}
-
-  const headers = context.resolve(addresses.HTTP_INCOMING_RESPONSE_HEADERS)
-
-  return {
-    endpoint: context.resolve(addresses.HTTP_INCOMING_ENDPOINT),
-    headers: filterHeaders(headers, RESPONSE_HEADERS_PASSLIST, 'http.response.headers.')
-  }
-}
-
 function filterHeaders (headers, passlist, prefix) {
   const result = {}
 
@@ -68,7 +47,7 @@ function filterHeaders (headers, passlist, prefix) {
     const headerName = passlist[i]
 
     if (headers[headerName]) {
-      result[`${prefix}${formatHeaderName(headerName)}`] = headers[headerName] + ''
+      result[`${prefix}${formatHeaderName(headerName)}`] = '' + headers[headerName]
     }
   }
 
@@ -84,10 +63,11 @@ function formatHeaderName (name) {
     .toLowerCase()
 }
 
-function reportMetrics (metrics, store) {
-  const req = store && store.get('req')
-  const rootSpan = web.root(req)
-  if (!rootSpan) return false
+function reportMetrics (metrics) {
+  // TODO: metrics should be incremental, there already is an RFC to report metrics
+  const store = storage.getStore()
+  const rootSpan = store && store.req && web.root(store.req)
+  if (!rootSpan) return
 
   if (metrics.duration) {
     rootSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
@@ -102,16 +82,17 @@ function reportMetrics (metrics, store) {
   }
 }
 
-function reportAttack (attackData, store) {
-  const req = store && store.get('req')
+function reportAttack (attackData) {
+  const store = storage.getStore()
+  const req = store && store.req
   const rootSpan = web.root(req)
-  if (!rootSpan) return false
+  if (!rootSpan) return
 
   const currentTags = rootSpan.context()._tags
 
-  const newTags = {
-    'appsec.event': 'true'
-  }
+  const newTags = filterHeaders(req.headers, REQUEST_HEADERS_PASSLIST, 'http.request.headers.')
+
+  newTags['appsec.event'] = 'true'
 
   if (limiter.isAllowed()) {
     newTags['manual.keep'] = 'true' // TODO: figure out how to keep appsec traces with sampling revamp
@@ -126,32 +107,24 @@ function reportAttack (attackData, store) {
 
   // merge JSON arrays without parsing them
   if (currentJson) {
-    newTags['_dd.appsec.json'] = currentJson.slice(0, -2) + ',' + attackData.slice(1, -1) + currentJson.slice(-2)
+    newTags['_dd.appsec.json'] = currentJson.slice(0, -2) + ',' + attackData.slice(1) + '}'
   } else {
     newTags['_dd.appsec.json'] = '{"triggers":' + attackData + '}'
   }
 
-  const context = store.get('context')
-
-  if (context) {
-    const resolvedRequest = resolveHTTPRequest(context)
-
-    Object.assign(newTags, resolvedRequest.headers)
-
-    const ua = resolvedRequest.headers['http.request.headers.user-agent']
-    if (ua) {
-      newTags['http.useragent'] = ua
-    }
-
-    newTags['network.client.ip'] = resolvedRequest.remote_ip
+  const ua = newTags['http.request.headers.user-agent']
+  if (ua) {
+    newTags['http.useragent'] = ua
   }
+
+  newTags['network.client.ip'] = req.socket.remoteAddress
 
   rootSpan.addTags(newTags)
 }
 
-function finishRequest (req, context) {
+function finishRequest (req, res) {
   const rootSpan = web.root(req)
-  if (!rootSpan) return false
+  if (!rootSpan) return
 
   if (metricsQueue.size) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
@@ -159,14 +132,12 @@ function finishRequest (req, context) {
     metricsQueue.clear()
   }
 
-  if (!context || !rootSpan.context()._tags['appsec.event']) return false
+  if (!rootSpan.context()._tags['appsec.event']) return
 
-  const resolvedResponse = resolveHTTPResponse(context)
+  const newTags = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_PASSLIST, 'http.response.headers.')
 
-  const newTags = resolvedResponse.headers
-
-  if (resolvedResponse.endpoint) {
-    newTags['http.endpoint'] = resolvedResponse.endpoint
+  if (req.route && typeof req.route.path === 'string') {
+    newTags['http.endpoint'] = req.route.path
   }
 
   rootSpan.addTags(newTags)
@@ -178,8 +149,6 @@ function setRateLimit (rateLimit) {
 
 module.exports = {
   metricsQueue,
-  resolveHTTPRequest,
-  resolveHTTPResponse,
   filterHeaders,
   formatHeaderName,
   reportMetrics,

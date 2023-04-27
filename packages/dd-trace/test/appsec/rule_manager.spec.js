@@ -1,21 +1,21 @@
 'use strict'
 
-const { applyRules, clearAllRules, updateAsmData } = require('../../src/appsec/rule_manager')
-const callbacks = require('../../src/appsec/callbacks')
-const Gateway = require('../../src/appsec/gateway/engine')
+const { applyRules, clearAllRules, updateWafFromRC } = require('../../src/appsec/rule_manager')
+const Config = require('../../src/config')
 
-const rules = [{ a: 'thatsarule' }, { b: 'thatsanotherone' }]
+const rules = require('../../src/appsec/recommended.json')
+const waf = require('../../src/appsec/waf')
 
 describe('AppSec Rule Manager', () => {
-  let FakeDDWAF
+  let config
 
   beforeEach(() => {
-    FakeDDWAF = sinon.spy()
+    clearAllRules()
+    config = new Config()
 
-    FakeDDWAF.prototype.clear = sinon.spy()
-    FakeDDWAF.prototype.updateRuleData = sinon.spy()
-
-    sinon.stub(callbacks, 'DDWAF').get(() => FakeDDWAF)
+    sinon.stub(waf, 'init').callThrough()
+    sinon.stub(waf, 'destroy').callThrough()
+    sinon.stub(waf, 'update').callThrough()
   })
 
   afterEach(() => {
@@ -24,314 +24,361 @@ describe('AppSec Rule Manager', () => {
   })
 
   describe('applyRules', () => {
-    it('should apply a DDWAF rule only idempotently', () => {
-      const config = {}
+    it('should call waf init with proper params', () => {
+      applyRules(rules, config.appsec)
 
-      applyRules(rules, config)
+      expect(waf.init).to.have.been.calledOnceWithExactly(rules, config.appsec)
+    })
 
-      applyRules(rules)
-
-      expect(callbacks.DDWAF).to.have.been.calledOnce
-      expect(FakeDDWAF).to.have.been.calledOnceWithExactly(rules, config)
+    it('should throw if null/undefined are passed', () => {
+      // TODO: fix the exception thrown in the waf or catch it in rule_manager?
+      expect(() => { applyRules(undefined, config.appsec) }).to.throw()
+      expect(() => { applyRules(null, config.appsec) }).to.throw()
     })
   })
 
   describe('clearAllRules', () => {
     it('should call clear method on all applied rules', () => {
-      applyRules(rules)
-
-      expect(callbacks.DDWAF).to.have.been.calledOnce
-      expect(FakeDDWAF).to.have.been.calledOnce
-
-      sinon.stub(Gateway.manager, 'clear')
+      applyRules(rules, config.appsec)
+      expect(waf.init).to.have.been.calledOnce
 
       clearAllRules()
-
-      expect(Gateway.manager.clear).to.have.been.calledOnce
-      expect(FakeDDWAF.prototype.clear).to.have.been.calledOnce
-
-      applyRules(rules)
-
-      expect(callbacks.DDWAF).to.have.been.calledTwice
-      expect(FakeDDWAF).to.have.been.calledTwice
+      expect(waf.destroy).to.have.been.calledOnce
     })
   })
 
-  describe('updateAsmData', () => {
-    it('should call updateAsmData on all applied rules', () => {
-      const rulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc' }
+  describe('updateWafFromRC', () => {
+    describe('ASM_DATA', () => {
+      it('should call update with modified rules', () => {
+        const rulesData = {
+          rules_data: [{
+            data: [
+              { value: '1.2.3.4' }
+            ],
+            id: 'blocked_ips',
+            type: 'data_with_expiration'
+          }]
+        }
+
+        const toModify = [{
+          product: 'ASM_DATA',
+          id: '1',
+          file: rulesData
+        }]
+
+        updateWafFromRC({ toUnapply: [], toApply: [], toModify })
+        expect(waf.update).to.have.been.calledOnceWithExactly(rulesData)
+      })
+
+      it('should apply/modify the last rule with same id', () => {
+        const rulesDataFirst = {
+          rules_data: [{
+            data: [
+              { value: '1.2.3.4' }
+            ],
+            id: 'blocked_ips',
+            type: 'data_with_expiration'
+          }]
+        }
+
+        const rulesDataSecond = {
+          rules_data: [{
+            data: [
+              { value: '4.3.2.1' }
+            ],
+            id: 'blocked_ips',
+            type: 'data_with_expiration'
+          }]
+        }
+
+        const toModify = [
+          {
+            product: 'ASM_DATA',
+            id: '1',
+            file: rulesDataFirst
+          },
+          {
+            product: 'ASM_DATA',
+            id: '1',
+            file: rulesDataSecond
+          }
         ]
-      }]
 
-      applyRules(rules)
-      updateAsmData('apply', { rules_data: rulesData }, '1')
-
-      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledOnceWithExactly(rulesData)
-    })
-
-    it('should merge rules data with same dataId and no expiration', () => {
-      const oneRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc' }
-        ]
-      }]
-
-      const anotherRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'def' }
-        ]
-      }]
-
-      const expectedMergedRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc' },
-          { value: 'def' }
-        ]
-      }]
-
-      applyRules(rules)
-      updateAsmData('apply', { rules_data: oneRulesData }, 'id1')
-      updateAsmData('apply', { rules_data: anotherRulesData }, 'id2')
-
-      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledTwice
-      expect(FakeDDWAF.prototype.updateRuleData.lastCall.args[0]).to.deep.equal(expectedMergedRulesData)
-    })
-
-    it('should merge rules data with different dataId and no expiration', () => {
-      const oneRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc' }
-        ]
-      }]
-
-      const anotherRulesData = [{
-        id: 'dataB',
-        type: 'dataType',
-        data: [
-          { value: 'def' }
-        ]
-      }]
-
-      const expectedMergedRulesData = [
-        {
-          id: 'dataA',
-          type: 'dataType',
-          data: [
-            { value: 'abc' }
-          ]
-        },
-        {
-          id: 'dataB',
-          type: 'dataType',
-          data: [
-            { value: 'def' }
+        const expectedPayload = {
+          rules_data: [
+            { data: [{ value: '4.3.2.1' }], id: 'blocked_ips', type: 'data_with_expiration' }
           ]
         }
-      ]
 
-      applyRules(rules)
-      updateAsmData('apply', { rules_data: oneRulesData }, 'id1')
-      updateAsmData('apply', { rules_data: anotherRulesData }, 'id2')
+        updateWafFromRC({ toUnapply: [], toApply: [], toModify })
+        expect(waf.update).to.have.been.calledOnce
+        expect(waf.update).calledWithExactly(expectedPayload)
+      })
 
-      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledTwice
-      expect(FakeDDWAF.prototype.updateRuleData.lastCall.args[0]).to.deep.equal(expectedMergedRulesData)
-    })
-
-    it('should merge rules data with different expiration', () => {
-      const oneRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc', expiration: 100 }
+      it('should merge all apply/modify rules', () => {
+        const toModify = [
+          {
+            product: 'ASM_DATA',
+            id: '1',
+            file: {
+              rules_data: [{
+                data: [
+                  { value: '1.2.3.4' }
+                ],
+                id: 'blocked_ips',
+                type: 'data_with_expiration'
+              }]
+            }
+          },
+          {
+            product: 'ASM_DATA',
+            id: '2',
+            file: {
+              rules_data: [{
+                data: [
+                  { value: '4.3.2.1' }
+                ],
+                id: 'blocked_ips',
+                type: 'data_with_expiration'
+              }]
+            }
+          }
         ]
-      }]
 
-      const anotherRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc', expiration: 200 }
-        ]
-      }]
-
-      const expectedMergedRulesData = [
-        {
-          id: 'dataA',
-          type: 'dataType',
-          data: [
-            { value: 'abc', expiration: 200 }
+        const expectedPayload = {
+          rules_data: [
+            { data: [{ value: '1.2.3.4' }, { value: '4.3.2.1' }], id: 'blocked_ips', type: 'data_with_expiration' }
           ]
         }
-      ]
 
-      applyRules(rules)
-      updateAsmData('apply', { rules_data: oneRulesData }, 'id1')
-      updateAsmData('apply', { rules_data: anotherRulesData }, 'id2')
+        updateWafFromRC({ toUnapply: [], toApply: [], toModify })
+        expect(waf.update).to.have.been.calledOnce
+        expect(waf.update).calledWithExactly(expectedPayload)
+      })
 
-      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledTwice
-      expect(FakeDDWAF.prototype.updateRuleData.lastCall.args[0]).to.deep.equal(expectedMergedRulesData)
-    })
-
-    it('should merge rules data with different expiration different order', () => {
-      const oneRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc', expiration: 200 }
+      it('should merge all apply/modify and unapply rules', () => {
+        const toModify = [
+          {
+            product: 'ASM_DATA',
+            id: '1',
+            file: {
+              rules_data: [{
+                data: [
+                  { value: '4.3.2.1' }
+                ],
+                id: 'blocked_ips',
+                type: 'data_with_expiration'
+              }]
+            }
+          },
+          {
+            product: 'ASM_DATA',
+            id: '2',
+            file: {
+              rules_data: [{
+                data: [
+                  { value: '4.3.2.1' }
+                ],
+                id: 'blocked_ips',
+                type: 'data_with_expiration'
+              }]
+            }
+          }
         ]
-      }]
 
-      const anotherRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc', expiration: 100 }
+        const toUnapply = [
+          {
+            product: 'ASM_DATA',
+            id: '2',
+            file: {
+              rules_data: [{
+                data: [
+                  { value: '1.2.3.4' }
+                ],
+                id: 'blocked_ips',
+                type: 'data_with_expiration'
+              }]
+            }
+          }
         ]
-      }]
 
-      const expectedMergedRulesData = [
-        {
-          id: 'dataA',
-          type: 'dataType',
-          data: [
-            { value: 'abc', expiration: 200 }
+        const expectedPayload = {
+          rules_data: [
+            { data: [{ value: '4.3.2.1' }], id: 'blocked_ips', type: 'data_with_expiration' }
           ]
         }
-      ]
 
-      applyRules(rules)
-      updateAsmData('apply', { rules_data: oneRulesData }, 'id1')
-      updateAsmData('apply', { rules_data: anotherRulesData }, 'id2')
+        updateWafFromRC({ toUnapply, toApply: [], toModify })
+        expect(waf.update).to.have.been.calledOnce
+        expect(waf.update).calledWithExactly(expectedPayload)
+      })
 
-      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledTwice
-      expect(FakeDDWAF.prototype.updateRuleData.lastCall.args[0]).to.deep.equal(expectedMergedRulesData)
-    })
-
-    it('should merge rules data with and without expiration', () => {
-      const oneRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc' }
+      it('should merge all apply/modify rules with different expiration', () => {
+        // TODO: use case from previous tests, not sure if this can happen.
+        const toApply = [
+          {
+            product: 'ASM_DATA',
+            id: '1',
+            file: {
+              rules_data: [{
+                data: [
+                  { value: '1.2.3.4', expiration: 200 }
+                ],
+                id: 'blocked_ips',
+                type: 'data_with_expiration'
+              }]
+            }
+          },
+          {
+            product: 'ASM_DATA',
+            id: '2',
+            file: {
+              rules_data: [{
+                data: [
+                  { value: '1.2.3.4', expiration: 100 }
+                ],
+                id: 'blocked_ips',
+                type: 'data_with_expiration'
+              }]
+            }
+          }
         ]
-      }]
 
-      const anotherRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc', expiration: 200 }
-        ]
-      }]
-
-      const expectedMergedRulesData = [
-        {
-          id: 'dataA',
-          type: 'dataType',
-          data: [
-            { value: 'abc' }
+        const expectedPayload = {
+          rules_data: [
+            { data: [{ value: '1.2.3.4', expiration: 200 }], id: 'blocked_ips', type: 'data_with_expiration' }
           ]
         }
-      ]
 
-      applyRules(rules)
-      updateAsmData('apply', { rules_data: oneRulesData }, 'id1')
-      updateAsmData('apply', { rules_data: anotherRulesData }, 'id2')
+        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+        expect(waf.update).to.have.been.calledOnce
+        expect(waf.update).calledWithExactly(expectedPayload)
+      })
+    })
+    describe('ASM_DD', () => {
+      beforeEach(() => {
+        applyRules(rules, config.appsec)
+      })
 
-      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledTwice
-      expect(FakeDDWAF.prototype.updateRuleData.lastCall).calledWithExactly(expectedMergedRulesData)
+      it('should apply new rules', () => {
+        const testRules = {
+          version: '2.2',
+          metadata: { 'rules_version': '1.5.0' },
+          rules: [{
+            'id': 'test-id',
+            'name': 'test-name',
+            'tags': {
+              'type': 'security_scanner',
+              'category': 'attack_attempt',
+              'confidence': '1'
+            },
+            'conditions': []
+          }]
+        }
+
+        const toApply = [
+          {
+            product: 'ASM_DD',
+            id: '1',
+            file: testRules
+          }
+        ]
+
+        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+        expect(waf.update).to.have.been.calledOnceWithExactly(testRules)
+      })
+
+      it('should maintain previously added exclusions and rules_overrides', () => {
+        const asm = {
+          exclusions: [{
+            ekey: 'eValue'
+          }]
+        }
+        const testRules = {
+          version: '2.2',
+          metadata: { 'rules_version': '1.5.0' },
+          rules: [{
+            'id': 'test-id',
+            'name': 'test-name',
+            'tags': {
+              'type': 'security_scanner',
+              'category': 'attack_attempt',
+              'confidence': '1'
+            },
+            'conditions': []
+          }]
+        }
+
+        const toApply = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: asm
+          },
+          {
+            product: 'ASM_DD',
+            id: '2',
+            file: testRules
+          }
+        ]
+
+        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+        expect(waf.update).to.have.been.calledWithExactly({ ...testRules, ...asm })
+      })
     })
 
-    it('should merge rules data with and without expiration different order', () => {
-      const oneRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc', expiration: 200 }
-        ]
-      }]
-
-      const anotherRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc' }
-        ]
-      }]
-
-      const expectedMergedRulesData = [
-        {
-          id: 'dataA',
-          type: 'dataType',
-          data: [
-            { value: 'abc' }
-          ]
+    describe('ASM', () => {
+      it('should apply both rules_override and exclusions', () => {
+        const asm = {
+          'exclusions': [{
+            ekey: 'eValue'
+          }],
+          'rules_override': [{
+            roKey: 'roValue'
+          }]
         }
-      ]
 
-      applyRules(rules)
-      updateAsmData('apply', { rules_data: oneRulesData }, 'id1')
-      updateAsmData('apply', { rules_data: anotherRulesData }, 'id2')
-
-      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.calledTwice
-      expect(FakeDDWAF.prototype.updateRuleData.lastCall).calledWithExactly(expectedMergedRulesData)
-    })
-
-    it('should merge and unapply rules data', () => {
-      const oneRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc', expiration: 200 }
+        const toApply = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: asm
+          }
         ]
-      }]
 
-      const twoRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc' }
-        ]
-      }]
+        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
 
-      const threeRulesData = [{
-        id: 'dataA',
-        type: 'dataType',
-        data: [
-          { value: 'abc', expiration: 100 }
-        ]
-      }]
+        expect(waf.update).to.have.been.calledOnceWithExactly(asm)
+      })
 
-      const expectedMergedRulesData = [
-        {
-          id: 'dataA',
-          type: 'dataType',
-          data: [
-            { value: 'abc', expiration: 200 }
-          ]
+      it('should ignore other properties', () => {
+        const asm = {
+          'exclusions': [{
+            ekey: 'eValue'
+          }],
+          'rules_override': [{
+            roKey: 'roValue'
+          }],
+          'not_supported': [{
+            nsKey: 'nsValue'
+          }]
         }
-      ]
 
-      applyRules(rules)
-      updateAsmData('apply', { rules_data: oneRulesData }, 'id1')
-      updateAsmData('apply', { rules_data: twoRulesData }, 'id2')
-      updateAsmData('apply', { rules_data: threeRulesData }, 'id3')
-      updateAsmData('unapply', null, 'id2')
+        const toApply = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: asm
+          }
+        ]
 
-      expect(FakeDDWAF.prototype.updateRuleData).to.have.been.callCount(4)
-      expect(FakeDDWAF.prototype.updateRuleData.lastCall).calledWithExactly(expectedMergedRulesData)
+        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+
+        expect(waf.update).to.have.been.calledOnceWithExactly({
+          'exclusions': asm['exclusions'],
+          'rules_override': asm['rules_override']
+        })
+      })
     })
   })
 })

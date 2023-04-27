@@ -2,7 +2,6 @@
 
 const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
-const RuleManager = require('../rule_manager')
 
 let rc
 
@@ -32,28 +31,46 @@ function enable (config) {
   }
 }
 
-function enableAsmData (appsecConfig) {
+function enableWafUpdate (appsecConfig) {
   if (rc && appsecConfig && !appsecConfig.customRulesProvided) {
+    // dirty require to make startup faster for serverless
+    const RuleManager = require('../rule_manager')
+
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
-    rc.on('ASM_DATA', _asmDataListener)
+    // TODO: we should have a different capability for rule override
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
+
+    rc.on('ASM_DATA', noop)
+    rc.on('ASM_DD', noop)
+    rc.on('ASM', noop)
+
+    rc.on(RemoteConfigManager.kPreUpdate, RuleManager.updateWafFromRC)
   }
 }
 
-function disableAsmData () {
+function disableWafUpdate () {
   if (rc) {
+    const RuleManager = require('../rule_manager')
+
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, false)
-    rc.off('ASM_DATA', _asmDataListener)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSIONS, false)
+
+    rc.off('ASM_DATA', noop)
+    rc.off('ASM_DD', noop)
+    rc.off('ASM', noop)
+
+    rc.off(RemoteConfigManager.kPreUpdate, RuleManager.updateWafFromRC)
   }
 }
 
-function _asmDataListener (action, ruleData, ruleId) {
-  RuleManager.updateAsmData(action, ruleData, ruleId)
-}
+function noop () {}
 
 module.exports = {
   enable,
-  enableAsmData,
-  disableAsmData
+  enableWafUpdate,
+  disableWafUpdate
 }

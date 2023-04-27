@@ -37,8 +37,10 @@ class BaseAwsSdkPlugin extends Plugin {
         'span.kind': 'client',
         'service.name': serviceName,
         'aws.operation': operation,
+        'aws.region': awsRegion,
         'region': awsRegion,
         'aws_service': awsService,
+        'aws.service': awsService,
         'component': 'aws-sdk'
       }
       if (this.requestTags) this.requestTags.set(request, tags)
@@ -59,6 +61,7 @@ class BaseAwsSdkPlugin extends Plugin {
       if (!store) return
       const { span } = store
       if (!span) return
+      span.setTag('aws.region', region)
       span.setTag('region', region)
     })
 

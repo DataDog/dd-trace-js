@@ -195,6 +195,11 @@ describe('Plugin', () => {
               resource: `sendMessage ${QueueUrl}`
             })
 
+            expect(span.meta).to.include({
+              'queuename': 'SQS_QUEUE_NAME',
+              'aws_service': 'SQS',
+              'region': 'us-east-1'
+            })
             total++
           }).catch(() => {}, { timeoutMs: 100 })
 
