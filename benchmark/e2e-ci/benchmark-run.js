@@ -57,25 +57,37 @@ const triggerWorkflow = () => {
 }
 
 const getWorkflowRunsInProgress = () => {
+  const NUM_RETRIES = 5
   return new Promise((resolve, reject) => {
-    let response = ''
-    const request = https.request(
-      `${GET_WORKFLOWS_URL}?event=workflow_dispatch&status=in_progress OR waiting OR requested OR queued`,
-      {
-        headers: getCommonHeaders()
-      },
-      (res) => {
-        res.on('data', (chunk) => {
-          response += chunk
+    const getWorkflows = (retryIndex = 0) => {
+      if (retryIndex === NUM_RETRIES) {
+        return reject(new Error('Could not find in progress jobs'))
+      }
+      let response = ''
+      const request = https.request(
+        `${GET_WORKFLOWS_URL}?event=workflow_dispatch&status=in_progress`,
+        {
+          headers: getCommonHeaders()
+        },
+        (res) => {
+          res.on('data', (chunk) => {
+            response += chunk
+          })
+          res.on('end', () => {
+            const workflowsInProgress = JSON.parse(response)
+            if (workflowsInProgress.total_count === 0) {
+              getWorkflows(retryIndex + 1)
+            } else {
+              resolve(workflowsInProgress)
+            }
+          })
         })
-        res.on('end', () => {
-          resolve(JSON.parse(response))
-        })
+      request.on('error', err => {
+        reject(err)
       })
-    request.on('error', err => {
-      reject(err)
-    })
-    request.end()
+      request.end()
+    }
+    getWorkflows()
   })
 }
 
