@@ -9,17 +9,13 @@ class RheaProducerPlugin extends ProducerPlugin {
 
   constructor (...args) {
     super(...args)
-
     this.addTraceSub('encode', this.encode.bind(this))
   }
 
   start ({ targetAddress, host, port }) {
     const name = targetAddress || 'amq.topic'
-
-    this.startSpan('amqp.send', {
-      service: this.config.service || `${this.tracer._service}-amqp-producer`,
+    this.startSpan({
       resource: name,
-      kind: 'producer',
       meta: {
         'component': 'rhea',
         'amqp.link.target.address': name,
