@@ -26,11 +26,13 @@ class Tracer extends NoopProxy {
     try {
       const config = new Config(options) // TODO: support dynamic config
 
-      require('./serverless').maybeStartServerlessMiniAgent()
-
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         remoteConfig.enable(config)
       }
+
+      const { maybeStartServerlessMiniAgent } = require('./serverless')
+
+      maybeStartServerlessMiniAgent()
 
       if (config.profiling.enabled) {
         // do not stop tracer initialization if the profiler fails to be imported
