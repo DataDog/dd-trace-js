@@ -14,7 +14,7 @@ function maybeStartServerlessMiniAgent () {
   if (process.env.DD_MINI_AGENT_PATH !== undefined) {
     rustBinaryPath = process.env.DD_MINI_AGENT_PATH
   }
-  const log = require('log')
+  const log = require('./log')
   const fs = require('fs')
 
   // trying to spawn with an invalid path will return a non-descriptive error, so we want to catch
