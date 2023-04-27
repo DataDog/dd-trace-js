@@ -50,11 +50,11 @@ jobs:
 
   windows:
     runs-on: windows-latest
+    env: 
+      DD_TEST_AGENT_ENABLED: false
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
-      - run: docker pull williamconti549/dd-apm-test-agent:latest
-      - run: docker run -e LOG_LEVEL=DEBUG -e TRACE_LANGUAGE=javascript -e DISABLED_CHECKS=trace_content_length -e PORT=9126 -p 127.0.0.1:9126:9126 williamconti549/dd-apm-test-agent:latest
       - run: yarn install
       - run: yarn test:lambda:ci
       - uses: codecov/codecov-action@v2
