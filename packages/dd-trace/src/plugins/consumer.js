@@ -1,24 +1,9 @@
 'use strict'
 
-const InboundPlugin = require('./inbound')
+const IncomingPlugin = require('./incoming')
 
-class ConsumerPlugin extends InboundPlugin {
+class ConsumerPlugin extends IncomingPlugin {
   static get operation () { return 'receive' }
-  static get kind () { return 'consumer' }
-  static get type () { return 'messaging' }
-
-  startSpan (options) {
-    const spanDefaults = {
-      service: this.config.service || this.serviceName(),
-      kind: this.constructor.kind
-    }
-    Object.keys(spanDefaults).forEach(
-      key => {
-        if (!options[key]) options[key] = spanDefaults[key]
-      }
-    )
-    return super.startSpan(this.operationName(), options)
-  }
 }
 
 module.exports = ConsumerPlugin
