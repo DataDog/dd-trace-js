@@ -2,24 +2,25 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
-const axios = require('axios');
+const axios = require('axios')
 
 const bucketName = 's3-bucket-name-test'
 
-async function resetLocalStackS3() {
-    try {
-      await axios.post('http://localhost:4566/reset');
-      console.log('LocalStack S3 reset successful');
-    } catch (error) {
-      console.error('Error resetting LocalStack S3:', error.message);
-    }
+/* eslint-disable no-console */
+async function resetLocalStackS3 () {
+  try {
+    await axios.post('http://localhost:4566/reset')
+    console.log('LocalStack S3 reset successful')
+  } catch (error) {
+    console.error('Error resetting LocalStack S3:', error.message)
   }
-  
+}
+
 describe('Plugin', () => {
   describe('aws-sdk (s3)', function () {
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], '2.3.0', (version, moduleName) => {
+    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
       let AWS
       let s3
       let tracer
@@ -28,7 +29,7 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         before(() => {
           tracer = require('../../dd-trace')
-
+          tracer.init()
           return agent.load('aws-sdk')
         })
 
@@ -48,30 +49,30 @@ describe('Plugin', () => {
           })
         })
 
-        after(async() => {
-          await resetLocalStackS3();
+        after(async () => {
+          await resetLocalStackS3()
           return agent.close({ ritmReset: false })
         })
 
         it('should allow disabling a specific span kind of a service', (done) => {
           let total = 0
-        
+
           agent.use(traces => {
             const span = traces[0][0]
             expect(span).to.include({
               name: 'aws.request',
               resource: `putObject ${bucketName}`
             })
-        
+
             expect(span.meta).to.include({
               'bucketname': bucketName,
               'aws_service': 'S3',
               'region': 'us-east-1'
             })
-        
+
             total++
           }).catch(() => {}, { timeoutMs: 100 })
-        
+
           s3.putObject({
             Bucket: bucketName,
             Key: 'test-key',

@@ -5,9 +5,9 @@ const EventBridge = require('../src/services/eventbridge')
 const tracer = require('../../dd-trace')
 const { randomBytes } = require('crypto')
 
-describe.only('EventBridge', () => {
+describe('EventBridge', () => {
   let span
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], '2.3.0', (version, moduleName) => {
+  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let traceId
     let parentId
     let spanId
@@ -115,7 +115,7 @@ describe.only('EventBridge', () => {
       const eventbridge = new EventBridge(tracer)
       expect(eventbridge.generateTags(null, 'putEvent', {})).to.deep.equal({})
     })
-    
+
     it('returns an empty object when params.source is an empty string', () => {
       const eventbridge = new EventBridge(tracer)
       const params = {
@@ -123,7 +123,7 @@ describe.only('EventBridge', () => {
       }
       expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({})
     })
-    
+
     it('sets rulename as an empty string when params.Name is null', () => {
       const eventbridge = new EventBridge(tracer)
       const params = {
@@ -136,7 +136,7 @@ describe.only('EventBridge', () => {
         'rulename': ''
       })
     })
-    
+
     it('sets resource.name as params.source when operation is null', () => {
       const eventbridge = new EventBridge(tracer)
       const params = {
@@ -161,6 +161,5 @@ describe.only('EventBridge', () => {
         'rulename': 'my-rule-name'
       })
     })
-    
   })
 })
