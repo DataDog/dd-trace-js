@@ -57,37 +57,25 @@ const triggerWorkflow = () => {
 }
 
 const getWorkflowRunsInProgress = () => {
-  const NUM_RETRIES = 5
   return new Promise((resolve, reject) => {
-    const getWorkflows = (retryIndex = 0) => {
-      if (retryIndex === NUM_RETRIES) {
-        return reject(new Error('Could not find in progress jobs'))
-      }
-      let response = ''
-      const request = https.request(
-        `${GET_WORKFLOWS_URL}?event=workflow_dispatch&status=in_progress`,
-        {
-          headers: getCommonHeaders()
-        },
-        (res) => {
-          res.on('data', (chunk) => {
-            response += chunk
-          })
-          res.on('end', () => {
-            const workflowsInProgress = JSON.parse(response)
-            if (workflowsInProgress.total_count === 0) {
-              getWorkflows(retryIndex + 1)
-            } else {
-              resolve(workflowsInProgress)
-            }
-          })
+    let response = ''
+    const request = https.request(
+      `${GET_WORKFLOWS_URL}?event=workflow_dispatch`,
+      {
+        headers: getCommonHeaders()
+      },
+      (res) => {
+        res.on('data', (chunk) => {
+          response += chunk
         })
-      request.on('error', err => {
-        reject(err)
+        res.on('end', () => {
+          resolve(JSON.parse(response))
+        })
       })
-      request.end()
-    }
-    getWorkflows()
+    request.on('error', err => {
+      reject(err)
+    })
+    request.end()
   })
 }
 
@@ -131,17 +119,26 @@ async function main () {
   console.log('Triggering CI Visibility test environment workflow.')
   const httpResponseCode = await triggerWorkflow()
   console.log('GitHub API response code:', httpResponseCode)
+
+  if (httpResponseCode !== 204) {
+    throw new Error('Could not trigger workflow')
+  }
+
   // Give some time for GH to process the request
   await wait(15000)
+
   // Get the run ID from the workflow we just triggered
   const workflowsInProgress = await getWorkflowRunsInProgress()
-  console.log('Workflows in progress:', workflowsInProgress)
   const { total_count: numWorkflows, workflow_runs: workflows } = workflowsInProgress
   if (numWorkflows === 0) {
     throw new Error('Could not find the triggered workflow')
   }
   // Pick the first one (most recently triggered one)
-  const [{ id: runId } = {}] = workflows
+  const [triggeredWorkflow] = workflows
+
+  console.log('Triggered workflow:', triggeredWorkflow)
+
+  const { id: runId } = triggeredWorkflow || {}
 
   console.log(`Workflow URL: https://github.com/DataDog/test-environment/actions/runs/${runId}`)
 
