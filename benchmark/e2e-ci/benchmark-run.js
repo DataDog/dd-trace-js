@@ -60,7 +60,7 @@ const getWorkflowRunsInProgress = () => {
   return new Promise((resolve, reject) => {
     let response = ''
     const request = https.request(
-      `${GET_WORKFLOWS_URL}?event=workflow_dispatch&status=in_progress OR waiting OR requested OR queued`,
+      `${GET_WORKFLOWS_URL}?event=workflow_dispatch`,
       {
         headers: getCommonHeaders()
       },
@@ -119,17 +119,26 @@ async function main () {
   console.log('Triggering CI Visibility test environment workflow.')
   const httpResponseCode = await triggerWorkflow()
   console.log('GitHub API response code:', httpResponseCode)
+
+  if (httpResponseCode !== 204) {
+    throw new Error('Could not trigger workflow')
+  }
+
   // Give some time for GH to process the request
   await wait(15000)
+
   // Get the run ID from the workflow we just triggered
   const workflowsInProgress = await getWorkflowRunsInProgress()
-  console.log('Workflows in progress:', workflowsInProgress)
   const { total_count: numWorkflows, workflow_runs: workflows } = workflowsInProgress
   if (numWorkflows === 0) {
     throw new Error('Could not find the triggered workflow')
   }
   // Pick the first one (most recently triggered one)
-  const [{ id: runId } = {}] = workflows
+  const [triggeredWorkflow] = workflows
+
+  console.log('Triggered workflow:', triggeredWorkflow)
+
+  const { id: runId } = triggeredWorkflow || {}
 
   console.log(`Workflow URL: https://github.com/DataDog/test-environment/actions/runs/${runId}`)
 
