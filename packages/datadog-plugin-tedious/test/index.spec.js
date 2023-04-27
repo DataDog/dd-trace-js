@@ -123,8 +123,8 @@ describe('Plugin', () => {
 
         const promise = agent
           .use(traces => {
-            expect(traces[0][0]).to.have.property('name', 'tedious.request')
-            expect(traces[0][0]).to.have.property('service', 'test-mssql')
+            expect(traces[0][0]).to.have.property('name', namingSchema.client.opName)
+            expect(traces[0][0]).to.have.property('service', namingSchema.client.serviceName)
             expect(traces[0][0]).to.have.property('resource', query)
             expect(traces[0][0]).to.have.property('type', 'sql')
             expect(traces[0][0].meta).to.have.property('component', 'tedious')
@@ -148,8 +148,8 @@ describe('Plugin', () => {
 
         const promise = agent
           .use(traces => {
-            expect(traces[0][0]).to.have.property('name', 'tedious.request')
-            expect(traces[0][0]).to.have.property('service', 'test-mssql')
+            expect(traces[0][0]).to.have.property('name', namingSchema.client.opName)
+            expect(traces[0][0]).to.have.property('service', namingSchema.client.serviceName)
             expect(traces[0][0]).to.have.property('resource', query)
           })
 
@@ -167,8 +167,8 @@ describe('Plugin', () => {
 
         const promise = agent
           .use(traces => {
-            expect(traces[0][0]).to.have.property('name', 'tedious.request')
-            expect(traces[0][0]).to.have.property('service', 'test-mssql')
+            expect(traces[0][0]).to.have.property('name', namingSchema.client.opName)
+            expect(traces[0][0]).to.have.property('service', namingSchema.client.serviceName)
             expect(traces[0][0]).to.have.property('resource', query)
           })
 
@@ -184,8 +184,8 @@ describe('Plugin', () => {
 
         agent
           .use(traces => {
-            expect(traces[0][0]).to.have.property('name', 'tedious.request')
-            expect(traces[0][0]).to.have.property('service', 'test-mssql')
+            expect(traces[0][0]).to.have.property('name', namingSchema.client.opName)
+            expect(traces[0][0]).to.have.property('service', namingSchema.client.serviceName)
             expect(traces[0][0]).to.have.property('resource', query)
           })
           .then(done)
@@ -202,8 +202,8 @@ describe('Plugin', () => {
 
         const promise = agent
           .use(traces => {
-            expect(traces[0][0]).to.have.property('name', 'tedious.request')
-            expect(traces[0][0]).to.have.property('service', 'test-mssql')
+            expect(traces[0][0]).to.have.property('name', namingSchema.client.opName)
+            expect(traces[0][0]).to.have.property('service', namingSchema.client.serviceName)
             expect(traces[0][0]).to.have.property('resource', query)
           })
 
@@ -223,8 +223,8 @@ describe('Plugin', () => {
 
         const promise = agent
           .use(traces => {
-            expect(traces[0][0]).to.have.property('name', 'tedious.request')
-            expect(traces[0][0]).to.have.property('service', 'test-mssql')
+            expect(traces[0][0]).to.have.property('name', namingSchema.client.opName)
+            expect(traces[0][0]).to.have.property('service', namingSchema.client.serviceName)
             expect(traces[0][0]).to.have.property('resource', query)
           })
 
@@ -244,8 +244,8 @@ describe('Plugin', () => {
 
         const promise = agent
           .use(traces => {
-            expect(traces[0][0]).to.have.property('name', 'tedious.request')
-            expect(traces[0][0]).to.have.property('service', 'test-mssql')
+            expect(traces[0][0]).to.have.property('name', namingSchema.client.opName)
+            expect(traces[0][0]).to.have.property('service', namingSchema.client.serviceName)
             expect(traces[0][0]).to.have.property('resource', procedure)
           })
 
@@ -335,7 +335,7 @@ describe('Plugin', () => {
 
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('name', 'tedious.request')
+                expect(traces[0][0]).to.have.property('name', namingSchema.client.opName)
                 expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
               })
               .then(done)
@@ -351,7 +351,7 @@ describe('Plugin', () => {
 
               const promise = agent
                 .use(traces => {
-                  expect(traces[0][0]).to.have.property('name', 'tedious.request')
+                  expect(traces[0][0]).to.have.property('name', namingSchema.client.opName)
                   expect(traces[0][0]).to.have.property('resource', bulkLoad.getBulkInsertSql())
                 })
 
