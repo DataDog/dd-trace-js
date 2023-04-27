@@ -3,12 +3,12 @@
 const fs = require('fs')
 const log = require('../src/log')
 const Proxy = require('../src/proxy')
-const serverless = require('../src/serverless')
+const childProcess = require('child_process')
 
 require('./setup/tap')
 
 describe('Serverless', () => {
-  const maybeStartServerlessMiniAgentSpy = sinon.spy(serverless, 'maybeStartServerlessMiniAgent')
+  const spawnSpy = sinon.spy(childProcess, 'spawn')
   const existsSyncStub = sinon.stub(fs, 'existsSync').returns(true)
 
   let env
@@ -22,7 +22,8 @@ describe('Serverless', () => {
 
   afterEach(() => {
     process.env = env
-    maybeStartServerlessMiniAgentSpy.resetHistory()
+    spawnSpy.resetHistory()
+    existsSyncStub.returns(true)
   })
 
   it('should not spawn mini agent if not in google cloud function', () => {
@@ -32,7 +33,7 @@ describe('Serverless', () => {
 
     proxy.init()
 
-    expect(maybeStartServerlessMiniAgentSpy).to.not.have.been.called
+    expect(spawnSpy).to.not.have.been.called
     delete process.env.DD_MINI_AGENT_PATH
   })
 
@@ -43,7 +44,7 @@ describe('Serverless', () => {
 
     proxy.init()
 
-    expect(maybeStartServerlessMiniAgentSpy).to.have.been.calledOnce
+    expect(spawnSpy).to.have.been.calledOnce
   })
 
   it('should spawn mini agent when K_SERVICE and FUNCTION_TARGET env vars are defined', () => {
@@ -53,7 +54,7 @@ describe('Serverless', () => {
 
     proxy.init()
 
-    expect(maybeStartServerlessMiniAgentSpy).to.have.been.calledOnce
+    expect(spawnSpy).to.have.been.calledOnce
   })
 
   it('should log error if mini agent binary path is invalid', () => {
@@ -72,6 +73,5 @@ describe('Serverless', () => {
     expect(logErrorSpy).to.have.been.calledOnceWith(
       'Serverless Mini Agent did not start. Could not find mini agent binary.'
     )
-    existsSyncStub.returns(true)
   })
 })
