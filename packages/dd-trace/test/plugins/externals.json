@@ -9,6 +9,10 @@
       "versions": [">=3"]
     },
     {
+      "name": "@aws-sdk/client-dynamodb",
+      "versions": [">=3"]
+    },
+    {
       "name": "@aws-sdk/client-s3",
       "versions": [">=3"]
     },
