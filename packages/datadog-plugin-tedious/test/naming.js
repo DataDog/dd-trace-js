@@ -5,6 +5,10 @@ module.exports = resolveNaming({
     v0: {
       opName: 'tedious.request',
       serviceName: 'test-mssql'
+    },
+    v1: {
+      opName: 'mssql.query',
+      serviceName: 'test'
     }
   }
 })

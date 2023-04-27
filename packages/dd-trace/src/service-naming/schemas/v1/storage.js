@@ -14,7 +14,11 @@ const storage = {
       opName: () => 'memcached.command',
       serviceName: configWithFallback
     },
-    redis: redisNaming
+    redis: redisNaming,
+    tedious: {
+      opName: () => 'mssql.query',
+      serviceName: configWithFallback
+    }
   }
 }
 

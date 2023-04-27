@@ -3,6 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const namingSchema = require('./naming')
 
 const MSSQL_USERNAME = 'sa'
 const MSSQL_PASSWORD = 'DD_HUNTER2'
@@ -70,6 +71,18 @@ describe('Plugin', () => {
           connection.close()
         }
       })
+
+      withNamingSchema(
+        done => {
+          const query = 'SELECT 1 + 1 AS solution'
+          const request = new tds.Request(query, (err) => {
+            if (err) return done(err)
+          })
+          connection.execSql(request)
+        },
+        () => namingSchema.client.opName,
+        () => namingSchema.client.serviceName
+      )
 
       describe('with tedious disabled', () => {
         beforeEach(() => {
