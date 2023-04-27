@@ -28,6 +28,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
             // also add span type to match serverless convention
             Object.assign(tags, {
               'resource.name': `${operation} ${tableName}`,
+              'aws.dynamodb.table_name': tableName,
               'tablename': tableName
             })
           }
