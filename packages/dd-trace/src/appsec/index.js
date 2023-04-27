@@ -64,9 +64,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
   const payload = {
     [addresses.HTTP_INCOMING_URL]: req.url,
     [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
-    [addresses.HTTP_INCOMING_METHOD]: req.method,
-    [addresses.HTTP_INCOMING_REMOTE_IP]: req.socket.remoteAddress,
-    [addresses.HTTP_INCOMING_REMOTE_PORT]: req.socket.remotePort
+    [addresses.HTTP_INCOMING_METHOD]: req.method
   }
 
   if (clientIp) {

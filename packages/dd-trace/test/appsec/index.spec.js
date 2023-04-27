@@ -186,8 +186,6 @@ describe('AppSec Index', () => {
         'server.request.uri.raw': '/path',
         'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
         'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080,
         'http.client_ip': '127.0.0.1'
       }, req)
     })
