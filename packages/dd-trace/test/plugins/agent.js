@@ -35,7 +35,30 @@ function ciVisRequestHandler (request, response) {
   })
 }
 
-function handleTraceRequest (req, res) {
+function handleTraceRequest (req, res, sendToTestAgent) {
+  // handles the received trace request and sends trace to Test Agent if bool enabled.
+  if (sendToTestAgent) {
+    const testAgentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
+
+    // remove incorrect headers
+    delete req.headers['host']
+    delete req.headers['content-type']
+    delete req.headers['content-length']
+
+    const testAgentReq = http.request(
+      `${testAgentUrl}/v0.4/traces`, {
+        method: 'PUT',
+        headers: {
+          ...req.headers,
+          'X-Datadog-Agent-Proxy-Disabled': 'True',
+          'Content-Type': 'application/json'
+        }
+      })
+
+    testAgentReq.write(JSON.stringify(req.body))
+    testAgentReq.end()
+  }
+
   res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
   handlers.forEach(({ handler, spanResourceMatch }) => {
     const trace = req.body
@@ -74,8 +97,9 @@ module.exports = {
       res.status(404).end()
     })
 
-    agent.put('/v0.4/traces', handleTraceRequest)
-    agent.post('/v0.4/traces', handleTraceRequest)
+    agent.put('/v0.4/traces', (req, res) => {
+      handleTraceRequest(req, res, useTestAgent)
+    })
 
     // CI Visibility Agentless intake
     agent.post('/api/v2/citestcycle', ciVisRequestHandler)
@@ -84,8 +108,6 @@ module.exports = {
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
 
     const port = await getPort()
-
-    const testAgentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
 
     const server = this.server = http.createServer(agent)
     const emit = server.emit
@@ -117,19 +139,21 @@ module.exports = {
       plugins: false
     }, tracerConfig))
 
-    // update headers to include the agent port to proxy trace to
-    if (!(
-      tracerConfig.hasOwnProperty('experimental') &&
-      tracerConfig.experimental.hasOwnProperty('exporter')) &&
-      useTestAgent
-    ) {
-      const currentHeaders = tracer._tracer._exporter._writer.headers
-      currentHeaders['X-Datadog-Proxy-Port'] = port.toString()
-      tracer._tracer._exporter._writer.headers = currentHeaders
-      tracer.setUrl(testAgentUrl)
-    } else {
-      tracer.setUrl(`http://127.0.0.1:${port}`)
-    }
+    // // update headers to include the agent port to proxy trace to
+    // if (!(
+    //   tracerConfig.hasOwnProperty('experimental') &&
+    //   tracerConfig.experimental.hasOwnProperty('exporter')) &&
+    //   useTestAgent
+    // ) {
+    //   const currentHeaders = tracer._tracer._exporter._writer.headers
+    //   currentHeaders['X-Datadog-Proxy-Port'] = port.toString()
+    //   tracer._tracer._exporter._writer.headers = currentHeaders
+    //   tracer.setUrl(testAgentUrl)
+    // } else {
+    //   //tracer.setUrl(`http://127.0.0.1:${port}`)
+    // }
+
+    tracer.setUrl(`http://127.0.0.1:${port}`)
 
     for (let i = 0, l = pluginName.length; i < l; i++) {
       tracer.use(pluginName[i], config[i])

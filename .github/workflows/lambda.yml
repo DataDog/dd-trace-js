@@ -20,8 +20,6 @@ jobs:
         run: |
           brew install docker docker-machine docker-compose
           sudo docker --version
-      - name: Set hostname
-        run: sudo scutil --set HostName testrunner
       - run: colima start # run docker
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
@@ -35,8 +33,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2      
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -56,8 +52,6 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v2      
-      - name: Set hostname
-        run: Start-Process powershell -Verb RunAs -ArgumentList "-Command Set-ComputerName -NewName 'testrunner'"
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install

@@ -21,14 +21,6 @@ class Writer extends BaseWriter {
     this._headers = headers
   }
 
-  set headers (headers) {
-    this._headers = headers
-  }
-
-  get headers () {
-    return this._headers
-  }
-
   _sendPayload (data, count, done) {
     metrics.increment(`${METRIC_PREFIX}.requests`, true)
 

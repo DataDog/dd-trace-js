@@ -34,8 +34,6 @@ jobs:
       SERVICES: qpid
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -61,8 +59,6 @@ jobs:
       SERVICES: rabbitmq
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -96,8 +92,6 @@ jobs:
       SERVICES: localstack
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -115,8 +109,6 @@ jobs:
       PLUGINS: axios
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -134,8 +126,6 @@ jobs:
       PLUGINS: bluebird
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -153,8 +143,6 @@ jobs:
       PLUGINS: bunyan
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -182,8 +170,6 @@ jobs:
       SERVICES: cassandra
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -220,8 +206,6 @@ jobs:
       PLUGINS: connect
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -241,8 +225,6 @@ jobs:
       PLUGINS: cucumber
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -261,8 +243,6 @@ jobs:
       PLUGINS: cypress
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -280,8 +260,6 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
@@ -309,8 +287,6 @@ jobs:
       SERVICES: elasticsearch
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -328,8 +304,6 @@ jobs:
       PLUGINS: express
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -347,8 +321,6 @@ jobs:
       PLUGINS: fastify
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -366,8 +338,6 @@ jobs:
       PLUGINS: generic-pool
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -391,8 +361,6 @@ jobs:
       SERVICES: gpubsub
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -410,8 +378,6 @@ jobs:
       PLUGINS: graphql
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -432,8 +398,6 @@ jobs:
       PLUGINS: grpc
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -450,8 +414,6 @@ jobs:
       PLUGINS: hapi
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -467,8 +429,6 @@ jobs:
       PLUGINS: http
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -490,8 +450,6 @@ jobs:
       PLUGINS: http2
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -539,8 +497,6 @@ jobs:
       SERVICES: kafka
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -558,8 +514,6 @@ jobs:
       PLUGINS: knex
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -577,8 +531,6 @@ jobs:
       PLUGINS: koa
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -608,8 +560,6 @@ jobs:
       SERVICES: limitd
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -633,8 +583,6 @@ jobs:
       SERVICES: memcached
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -652,8 +600,6 @@ jobs:
       PLUGINS: microgateway-core
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -685,8 +631,6 @@ jobs:
       PLUGINS: moleculer
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -710,8 +654,6 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -735,8 +677,6 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -763,8 +703,6 @@ jobs:
       SERVICES: mysql
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -782,8 +720,6 @@ jobs:
       PLUGINS: net
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -811,8 +747,6 @@ jobs:
       RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - uses: actions/setup-node@v3
@@ -839,8 +773,6 @@ jobs:
       SERVICES: opensearch
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -871,12 +803,11 @@ jobs:
         env:
             LOG_LEVEL: DEBUG
             TRACE_LANGUAGE: javascript
-            DD_TRACE_AGENT_URL: http://host.docker.internal:9126
+            DISABLED_CHECKS: trace_content_length
             PORT: 9126
     env:
       PLUGINS: oracledb
       SERVICES: oracledb
-      DD_TRACE_AGENT_URL: http://testagent:9126
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
@@ -890,8 +821,6 @@ jobs:
       PLUGINS: paperplane
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -908,8 +837,6 @@ jobs:
       PLUGINS: pino
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -936,8 +863,6 @@ jobs:
       SERVICES: postgres
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -953,8 +878,6 @@ jobs:
       PLUGINS: promise
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -974,8 +897,6 @@ jobs:
       PLUGINS: promise-js
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -993,8 +914,6 @@ jobs:
       PLUGINS: q
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -1018,8 +937,6 @@ jobs:
       SERVICES: redis
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -1037,8 +954,6 @@ jobs:
       PLUGINS: restify
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -1056,8 +971,6 @@ jobs:
       PLUGINS: router
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -1075,8 +988,6 @@ jobs:
       PLUGINS: sharedb
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -1104,8 +1015,6 @@ jobs:
       SERVICES: mssql
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -1125,8 +1034,6 @@ jobs:
       PLUGINS: when
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
@@ -1144,8 +1051,6 @@ jobs:
       PLUGINS: winston
     steps:
       - uses: actions/checkout@v2
-      - name: Set hostname
-        run: sudo hostnamectl set-hostname testrunner
       - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install

@@ -22,7 +22,7 @@ describe('Plugin', () => {
     withVersions('oracledb', 'oracledb', version => {
       describe('without configuration', () => {
         before(async () => {
-          await agent.load('oracledb', {}, {}, false)
+          await agent.load('oracledb', {}, {})
           oracledb = require(`../../../versions/oracledb@${version}`).get()
           tracer = require('../../dd-trace')
         })
