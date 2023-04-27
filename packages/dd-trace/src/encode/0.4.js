@@ -3,6 +3,8 @@
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const Chunk = require('./chunk')
 const log = require('../log')
+const { isTrue } = require('../util')
+const coalesce = require('koalas')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 
@@ -24,6 +26,10 @@ class AgentEncoder {
     this._stringBytes = new Chunk()
     this._writer = writer
     this._reset()
+    this._debugEncoding = isTrue(coalesce(
+      process.env.DD_TRACE_ENCODING_DEBUG,
+      false
+    ))
   }
 
   count () {
@@ -40,11 +46,13 @@ class AgentEncoder {
 
     const end = bytes.length
 
-    log.debug(() => {
-      const hex = bytes.buffer.subarray(start, end).toString('hex').match(/../g).join(' ')
+    if (this._debugEncoding) {
+      log.debug(() => {
+        const hex = bytes.buffer.subarray(start, end).toString('hex').match(/../g).join(' ')
 
-      return `Adding encoded trace to buffer: ${hex}`
-    })
+        return `Adding encoded trace to buffer: ${hex}`
+      })
+    }
 
     // we can go over the soft limit since the agent has a 50MB hard limit
     if (this._traceBytes.length > this._limit || this._stringBytes.length > this._limit) {
