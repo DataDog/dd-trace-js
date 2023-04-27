@@ -1,11 +1,16 @@
 'use strict'
 
-function maybeStartServerlessMiniAgent () {
+// In Google Cloud Functions, there is no overlap between env vars set by older deprecated runtimes newer
+// runtimes.
+// https://cloud.google.com/functions/docs/configuring/env-var#runtime_environment_variables_set_automatically
+function inGCPFunction () {
   const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
   const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
-  const inGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
+  return isDeprecatedGCPFunction || isNewerGCPFunction
+}
 
-  if (!inGCPFunction) {
+function maybeStartServerlessMiniAgent () {
+  if (!inGCPFunction()) {
     return
   }
 
@@ -41,5 +46,6 @@ function maybeStartServerlessMiniAgent () {
 }
 
 module.exports = {
+  inGCPFunction,
   maybeStartServerlessMiniAgent
 }

@@ -9,6 +9,7 @@ const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const uuid = require('crypto-randomuuid')
+const { inGCPFunction } = require('./serverless')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -188,15 +189,7 @@ class Config {
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
 
-    // In Google Cloud Functions, there is no overlap between env vars set by older deprecated runtimes newer
-    // runtimes.
-    // https://cloud.google.com/functions/docs/configuring/env-var#runtime_environment_variables_set_automatically
-    const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
-    const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
-
-    const inGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
-
-    const inServerlessEnvironment = inAWSLambda || inGCPFunction
+    const inServerlessEnvironment = inAWSLambda || inGCPFunction()
 
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED,
