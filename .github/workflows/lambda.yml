@@ -51,11 +51,8 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v2      
-      - run: docker-compose up -d testagent # Start the testagent container in the background
+      - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - run: yarn test:lambda:ci      
-      - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+      - run: yarn test:lambda:ci
       - uses: codecov/codecov-action@v2
