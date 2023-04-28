@@ -33,12 +33,12 @@ function publishQueryParsedAndNext (req, res, next) {
   return function () {
     if (queryParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
+
       queryParserReadCh.publish({ req, res, abortController })
 
-      if (abortController.signal.aborted) {
-        return
-      }
+      if (abortController.signal.aborted) return
     }
+
     next.apply(this, arguments)
   }
 }
@@ -50,6 +50,7 @@ addHook({
 }, query => {
   return shimmer.wrap(query, function () {
     const queryMiddleware = query.apply(this, arguments)
+
     return shimmer.wrap(queryMiddleware, function (req, res, next) {
       arguments[2] = publishQueryParsedAndNext(req, res, next)
       return queryMiddleware.apply(this, arguments)
