@@ -2,7 +2,7 @@
 
 const { createWrapRouterMethod } = require('./router')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 const { AbortController } = require('node-abort-controller')
 
 const handleChannel = channel('apm:express:request:handle')
@@ -51,8 +51,7 @@ addHook({
   return shimmer.wrap(query, function () {
     const queryMiddleware = query.apply(this, arguments)
     return shimmer.wrap(queryMiddleware, function (req, res, next) {
-      const nextResource = new AsyncResource('bound-anonymous-fn')
-      arguments[2] = nextResource.bind(publishQueryParsedAndNext(req, res, next))
+      arguments[2] = publishQueryParsedAndNext(req, res, next)
       return queryMiddleware.apply(this, arguments)
     })
   })
