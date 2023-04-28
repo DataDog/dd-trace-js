@@ -71,16 +71,60 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@v2
 
-  express:
+  postgres:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:9.5
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
     env:
-      PLUGINS: express|body-parser
+      PG_TEST_NATIVE: 'true'
+      PLUGINS: pg
+      SERVICES: postgres
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/14
+      - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/16
+      - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/18
+      - run: yarn test:appsec:plugins:ci
+      - uses: codecov/codecov-action@v2
+
+  mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mariadb:10.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: 'db'
+        ports:
+          - 3306:3306
+    env:
+      PLUGINS: mysql|mysql2
+      SERVICES: mysql
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/14
+      - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/16
+      - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/18
+
+  express:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: express|body-parser
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@v2
