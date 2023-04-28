@@ -25,7 +25,10 @@ gcloud functions deploy dd-trace-js-sls-mini-agent-integration-test-${STAGE} \
     --entry-point=helloGET \
     --trigger-http \
     --allow-unauthenticated \
-    --set-env-vars NODE_OPTIONS="-r dd-trace/init",DD_TRACE_DEBUG="true",DD_MINI_AGENT_PATH="/workspace/node_modules/david-test-datadog-sma/datadog-serverless-agent-linux-amd64/datadog-serverless-trace-mini-agent"
+    --set-env-vars \
+    NODE_OPTIONS="-r dd-trace/init",\
+    DD_TRACE_DEBUG="true",\
+    DD_MINI_AGENT_PATH="/workspace/node_modules/@thedavl/david-test-datadog-sma/datadog-serverless-agent-linux-amd64/datadog-serverless-trace-mini-agent"
 
 echo "Calling deployed cloud function"
 

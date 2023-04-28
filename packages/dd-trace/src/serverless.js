@@ -15,7 +15,7 @@ function maybeStartServerlessMiniAgent () {
   }
 
   let rustBinaryPath =
-    '/workspace/node_modules/datadog-sma/datadog-serverless-agent-linux-amd64/datadog-serverless-trace-mini-agent'
+    '/workspace/node_modules/@datadog/sma/datadog-serverless-agent-linux-amd64/datadog-serverless-trace-mini-agent'
   if (process.env.DD_MINI_AGENT_PATH !== undefined) {
     rustBinaryPath = process.env.DD_MINI_AGENT_PATH
   }

@@ -6,7 +6,7 @@
   },
   "dependencies": {
     "@google-cloud/functions-framework": "^3.1.0",
-    "david-test-datadog-sma": "^0.0.3",
+    "@thedavl/david-test-datadog-sma": "^0.0.1",
     "dd-trace": "./dd-trace-integration-test.tgz"
   }
 }
