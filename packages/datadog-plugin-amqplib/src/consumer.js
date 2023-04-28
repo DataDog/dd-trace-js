@@ -13,11 +13,9 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
 
     const childOf = extract(this.tracer, message)
 
-    this.startSpan('amqp.command', {
+    this.startSpan({
       childOf,
-      service: this.config.service || `${this.tracer._service}-amqp`,
       resource: getResourceName(method, fields),
-      kind: 'consumer',
       type: 'worker',
       meta: {
         'amqp.queue': fields.queue,
