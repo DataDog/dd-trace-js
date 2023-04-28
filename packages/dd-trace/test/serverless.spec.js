@@ -9,6 +9,8 @@ require('./setup/tap')
 
 describe('Serverless', () => {
   const spawnSpy = sinon.spy(childProcess, 'spawn')
+
+  // so maybeStartServerlessMiniAgent thinks the default mini agent binary path exists
   const existsSyncStub = sinon.stub(fs, 'existsSync').returns(true)
 
   let env
@@ -23,13 +25,10 @@ describe('Serverless', () => {
   afterEach(() => {
     process.env = env
     spawnSpy.resetHistory()
-    existsSyncStub.returns(true)
   })
 
   it('should not spawn mini agent if not in google cloud function', () => {
-    // if (K_SERVICE && FUNCTION_TARGET) env vars are set, we are in a GCP function with a newer runtime
-    // if (FUNCTION_NAME && GCP_PROJECT) env vars are set, we are in a GCP function with a deprecated runtime
-    process.env.DD_MINI_AGENT_PATH = 'fake_path'
+    // do not set any GCP environment variables
 
     proxy.init()
 
@@ -40,7 +39,6 @@ describe('Serverless', () => {
   it('should spawn mini agent when FUNCTION_NAME and GCP_PROJECT env vars are defined', () => {
     process.env.FUNCTION_NAME = 'test_function'
     process.env.GCP_PROJECT = 'test_project'
-    process.env.DD_MINI_AGENT_PATH = 'fake_path'
 
     proxy.init()
 
@@ -50,7 +48,6 @@ describe('Serverless', () => {
   it('should spawn mini agent when K_SERVICE and FUNCTION_TARGET env vars are defined', () => {
     process.env.K_SERVICE = 'test_function'
     process.env.FUNCTION_TARGET = 'function_target'
-    process.env.DD_MINI_AGENT_PATH = 'fake_path'
 
     proxy.init()
 
@@ -60,7 +57,6 @@ describe('Serverless', () => {
   it('should log error if mini agent binary path is invalid', () => {
     process.env.K_SERVICE = 'test_function'
     process.env.FUNCTION_TARGET = 'function_target'
-    process.env.DD_MINI_AGENT_PATH = 'fake_path'
 
     const logErrorSpy = sinon.spy(log, 'error')
 
@@ -73,5 +69,6 @@ describe('Serverless', () => {
     expect(logErrorSpy).to.have.been.calledOnceWith(
       'Serverless Mini Agent did not start. Could not find mini agent binary.'
     )
+    existsSyncStub.returns(true)
   })
 })
