@@ -3,8 +3,6 @@
 const axios = require('axios')
 const getPort = require('get-port')
 const path = require('path')
-const os = require('os')
-const fs = require('fs')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
@@ -12,7 +10,7 @@ const { json } = require('../../src/appsec/blocked_templates')
 
 withVersions('express', 'express', version => {
   describe('Suspicious request blocking - query', () => {
-    let port, server, requestBody, rulesPath
+    let port, server, requestBody
 
     before(() => {
       return agent.load(['express', 'http'], { client: false })
@@ -35,52 +33,9 @@ withVersions('express', 'express', version => {
       })
     })
 
-    before(() => {
-      const rules = {
-        version: '2.2',
-        metadata: {
-          rules_version: '1.5.0'
-        },
-        rules: [
-          {
-            id: 'test-rule-id-1',
-            name: 'test-rule-name-1',
-            tags: {
-              type: 'security_scanner',
-              category: 'attack_attempt'
-            },
-            conditions: [
-              {
-                parameters: {
-                  inputs: [
-                    {
-                      address: 'server.request.query'
-                    }
-                  ],
-                  list: [
-                    'testattack'
-                  ]
-                },
-                operator: 'phrase_match'
-              }
-            ],
-            transformers: ['lowercase'],
-            on_match: ['block']
-          }
-        ]
-      }
-      rulesPath = path.join(os.tmpdir(), 'test-body-suspicious-request-blocking-rules.json')
-      try {
-        fs.unlinkSync(rulesPath)
-      } catch {
-        // do nothing
-      }
-      fs.writeFileSync(rulesPath, JSON.stringify(rules))
-    })
-
     beforeEach(async () => {
       requestBody = sinon.stub()
-      appsec.enable(new Config({ appsec: { enabled: true, rules: rulesPath } }))
+      appsec.enable(new Config({ appsec: { enabled: true, rules: path.join(__dirname, 'express-rules.json') } }))
     })
 
     afterEach(() => {
@@ -88,11 +43,6 @@ withVersions('express', 'express', version => {
     })
 
     after(() => {
-      try {
-        fs.unlinkSync(rulesPath)
-      } catch {
-        // do nothing
-      }
       server.close()
       return agent.close({ ritmReset: false })
     })
