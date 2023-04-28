@@ -38,7 +38,7 @@ function maybeStartServerlessMiniAgent () {
       log.error(`Mini Agent exited with code ${code}`)
     })
     miniAgentProcess.on('error', (err) => {
-      log.error(`Mini Agent errored out: ${err}`)
+      log.error(err.toString())
     })
   } catch (err) {
     log.error(`Error spawning mini agent process: ${err}`)
