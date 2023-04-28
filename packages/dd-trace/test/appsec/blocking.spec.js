@@ -68,7 +68,7 @@ describe('blocking', () => {
 
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
       expect(res.setHeader).to.have.been.calledTwice
-      expect(res.setHeader.firstCall).to.have.been.calledWithExactly('Content-Type', 'text/html')
+      expect(res.setHeader.firstCall).to.have.been.calledWithExactly('Content-Type', 'text/html; charset=utf-8')
       expect(res.setHeader.secondCall).to.have.been.calledWithExactly('Content-Length', 12)
       expect(res.end).to.have.been.calledOnceWithExactly('htmlBodyéé')
     })
