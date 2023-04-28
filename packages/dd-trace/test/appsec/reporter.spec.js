@@ -78,6 +78,10 @@ describe('reporter', () => {
       storage.enterWith({ req })
     })
 
+    afterEach(() => {
+      storage.disable()
+    })
+
     it('should do nothing when passed incomplete objects', () => {
       web.root.returns(null)
 
@@ -122,6 +126,10 @@ describe('reporter', () => {
         }
       }
       storage.enterWith({ req })
+    })
+
+    afterEach(() => {
+      storage.disable()
     })
 
     it('should add tags to request span', () => {
@@ -213,6 +221,10 @@ describe('reporter', () => {
       wafContext = {
         dispose: sinon.stub()
       }
+    })
+
+    afterEach(() => {
+      sinon.restore()
     })
 
     it('should do nothing when passed incomplete objects', () => {
