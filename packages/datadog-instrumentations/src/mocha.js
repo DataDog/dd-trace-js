@@ -10,7 +10,7 @@ const {
   mergeCoverage,
   getTestSuitePath,
   fromCoverageMapToCoverage,
-  getTestLineStart
+  getCallSites
 } = require('../../dd-trace/src/plugins/util/test')
 
 const testStartCh = channel('ci:mocha:test:start')
@@ -37,27 +37,6 @@ const testToAr = new WeakMap()
 const originalFns = new WeakMap()
 const testFileToSuiteAr = new Map()
 const testToStartLine = new WeakMap()
-
-// this seems to be faster, but is it because of the search of the stack (regex in getTestLineStart)
-// rather than the new Error() method?
-function getStack() {
-  const oldLimit = Error.stackTraceLimit;
-  Error.stackTraceLimit = Infinity;
-
-  const dummyObject = {};
-
-  const v8Handler = Error.prepareStackTrace;
-  Error.prepareStackTrace = function(dummyObject, v8StackTrace) {
-    return v8StackTrace;
-  };
-  Error.captureStackTrace(dummyObject);
-
-  const v8StackTrace = dummyObject.stack;
-  Error.prepareStackTrace = v8Handler;
-  Error.stackTraceLimit = oldLimit;
-
-  return v8StackTrace;
-}
 
 // `isWorker` is true if it's a Mocha worker
 let isWorker = false
@@ -414,15 +393,12 @@ addHook({
   file: 'lib/suite.js'
 }, (Suite) => {
   shimmer.wrap(Suite.prototype, 'addTest', addTest => function (test) {
-    debugger
-    const callSites = getStack()
+    const callSites = getCallSites()
     let startLine
-    const testLine = callSites.find(site => site.getFileName() === test.file)
-    if (testLine) {
-      startLine = testLine.getLineNumber()
+    const testCallSite = callSites.find(site => site.getFileName().includes(test.file))
+    if (testCallSite) {
+      startLine = testCallSite.getLineNumber()
     }
-
-    // In here, the test definition is in the stack, so we search for it.
     testToStartLine.set(test, startLine)
     return addTest.apply(this, arguments)
   })
