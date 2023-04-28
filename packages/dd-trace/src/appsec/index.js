@@ -87,6 +87,12 @@ function incomingHttpEndTranslator ({ req, res }) {
     [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
   }
 
+  // we need to keep this to support other body parsers
+  // TODO: no need to analyze it if it was already done by the body-parser hook
+  if (req.body !== undefined && req.body !== null) {
+    payload[addresses.HTTP_INCOMING_BODY] = req.body
+  }
+
   // TODO: temporary express instrumentation, will use express plugin later
   if (req.params && typeof req.params === 'object') {
     payload[addresses.HTTP_INCOMING_PARAMS] = req.params
