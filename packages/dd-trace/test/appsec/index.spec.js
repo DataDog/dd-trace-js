@@ -326,8 +326,9 @@ describe('AppSec Index', () => {
       expect(waf.run).to.have.been.calledOnceWithExactly({
         'server.response.status': 201,
         'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
+        'server.request.body': { a: '1' },
         'server.request.path_params': { c: '3' },
-        'server.request.cookies': { d: [ '4' ], e: [ '5' ] }
+        'server.request.cookies': { d: ['4'], e: ['5'] }
       }, req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
