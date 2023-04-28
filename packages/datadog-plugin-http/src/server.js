@@ -33,7 +33,7 @@ class HttpServerPlugin extends Plugin {
       }
 
       if (incomingHttpRequestStart.hasSubscribers) {
-        incomingHttpRequestStart.publish({ req, res, abortController })
+        incomingHttpRequestStart.publish({ req, res, abortController }) // TODO: no need to make a new object here
       }
     })
 
