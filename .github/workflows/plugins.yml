@@ -264,7 +264,7 @@ jobs:
   express:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: express
+      PLUGINS: express|body-parser
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
