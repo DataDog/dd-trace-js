@@ -95,6 +95,26 @@ describe('Plugin', () => {
             })
           })
 
+          it('should send queries to agent when using query config of format', done => {
+            agent.use(traces => {
+              expect(traces[0][0]).to.have.property('resource', `SELECT $1::text as message`)
+              done()
+            })
+
+            const query = {
+              text: 'SELECT $1::text as message',
+              values: ['test']
+            }
+
+            client.query(query, (err, result) => {
+              if (err) throw err
+
+              client.end((err) => {
+                if (err) throw err
+              })
+            })
+          })
+
           if (semver.intersects(version, '>=5.1')) { // initial promise support
             it('should do automatic instrumentation when using promises', done => {
               agent.use(traces => {
