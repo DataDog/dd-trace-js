@@ -44,7 +44,7 @@ withVersions('express', 'express', version => {
     })
 
     it('should not abort the request with non blocker subscription', async () => {
-      function noop () { }
+      function noop () {}
       queryParserReadCh.subscribe(noop)
 
       const res = await axios.get(`http://localhost:${port}/`)
@@ -66,19 +66,6 @@ withVersions('express', 'express', version => {
 
       expect(requestBody).not.to.be.called
       expect(res.data).to.be.equal('BLOCKED')
-
-      queryParserReadCh.unsubscribe(blockRequest)
-    })
-
-    it('should stop the request even when res.end is not called on abort', async () => {
-      function blockRequest ({ abortController }) {
-        abortController.abort()
-      }
-      queryParserReadCh.subscribe(blockRequest)
-
-      await axios.post(`http://localhost:${port}/`, { key: 'value' })
-
-      expect(requestBody).not.to.be.called
 
       queryParserReadCh.unsubscribe(blockRequest)
     })

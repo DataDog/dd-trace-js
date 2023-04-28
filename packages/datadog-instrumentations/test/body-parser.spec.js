@@ -46,7 +46,7 @@ withVersions('body-parser', 'body-parser', version => {
     })
 
     it('should not abort the request with non blocker subscription', async () => {
-      function noop () { }
+      function noop () {}
       bodyParserReadCh.subscribe(noop)
 
       const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
@@ -68,19 +68,6 @@ withVersions('body-parser', 'body-parser', version => {
 
       expect(middlewareProcessBodyStub).not.to.be.called
       expect(res.data).to.be.equal('BLOCKED')
-
-      bodyParserReadCh.unsubscribe(blockRequest)
-    })
-
-    it('should stop the request even when res.end is not called on abort', async () => {
-      function blockRequest ({ abortController }) {
-        abortController.abort()
-      }
-      bodyParserReadCh.subscribe(blockRequest)
-
-      await axios.post(`http://localhost:${port}/`, { key: 'value' })
-
-      expect(middlewareProcessBodyStub).not.to.be.called
 
       bodyParserReadCh.unsubscribe(blockRequest)
     })

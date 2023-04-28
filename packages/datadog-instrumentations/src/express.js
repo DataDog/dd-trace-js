@@ -36,7 +36,6 @@ function publishQueryParsedAndNext (req, res, next) {
       queryParserReadCh.publish({ req, res, abortController })
 
       if (abortController.signal.aborted) {
-        res.end()
         return
       }
     }
