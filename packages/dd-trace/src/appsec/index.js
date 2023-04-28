@@ -113,40 +113,37 @@ function incomingHttpEndTranslator ({ req, res }) {
   Reporter.finishRequest(req, res)
 }
 
-function getBodyPayload (req) {
-  if (req.body !== undefined && req.body !== null) {
-    return {
-      [addresses.HTTP_INCOMING_BODY]: req.body
-    }
-  }
-  return null
+function onRequestBodyParsed ({ req, res, abortController }) {
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
+
+  if (req.body === undefined || req.body === null) return
+
+  const results = waf.run({
+    [addresses.HTTP_INCOMING_BODY]: req.body
+  }, req)
+
+  handleResults(results, req, res, rootSpan, abortController)
 }
 
-function onRequestBodyParsed (channelData) {
-  checkRequestData(channelData, getBodyPayload(channelData.req))
+function onRequestQueryParsed ({ req, res, abortController }) {
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
+
+  if (!req.query || typeof req.query !== 'object') return
+
+  const results = waf.run({
+    [addresses.HTTP_INCOMING_QUERY]: req.query
+  }, req)
+
+  handleResults(results, req, res, rootSpan, abortController)
 }
 
-function getQueryPayload (req) {
-  if (req.query && typeof req.query === 'object') {
-    return {
-      [addresses.HTTP_INCOMING_QUERY]: req.query
-    }
-  }
-  return null
-}
+function handleResults (actions, req, res, rootSpan, abortController) {
+  if (!actions || !req || !res || !rootSpan || !abortController) return
 
-function onRequestQueryParsed (channelData) {
-  checkRequestData(channelData, getQueryPayload(channelData.req))
-}
-
-function checkRequestData ({ req, res, abortController }, payload) {
-  if (payload) {
-    const rootSpan = web.root(req)
-    if (!rootSpan) return
-
-    const results = waf.run(payload, req)
-
-    handleResults(results, req, res, rootSpan, abortController)
+  if (actions.includes('block')) {
+    block(req, res, rootSpan, abortController)
   }
 }
 
@@ -163,14 +160,6 @@ function disable () {
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
   if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)
   if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
-}
-
-function handleResults (actions, req, res, rootSpan, abortController) {
-  if (!actions || !req || !res || !rootSpan || !abortController) return
-
-  if (actions.includes('block')) {
-    block(req, res, rootSpan, abortController)
-  }
 }
 
 module.exports = {
