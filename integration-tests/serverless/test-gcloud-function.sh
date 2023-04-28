@@ -30,7 +30,7 @@ OUTPUT=$(gcloud functions deploy dd-trace-js-sls-mini-agent-integration-test-${S
 echo "Calling deployed cloud function"
 # TRIGGER_URL=$(echo $OUTPUT | awk '{for (I=1;I<NF;I++) if ($I == "uri:") print $(I+1)}')
 # curl -s ${TRIGGER_URL}
-gcloud functions call dd-trace-js-sls-mini-agent-integration-test-${STAGE} --region us-east1 --gen2
+gcloud functions call dd-trace-js-sls-mini-agent-integration-test-${STAGE} --region us-east1 --gen2 --project datadog-sandbox
 
 echo "Waiting 20 seconds before tailing logs"
 sleep 20
