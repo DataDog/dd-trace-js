@@ -1,7 +1,7 @@
 /* eslint-disable max-len */
 'use strict'
 
-const html = `<!-- Sorry, you've been blocked -->
+const html = `<!-- Sorry, you’ve been blocked -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -102,14 +102,7 @@ const html = `<!-- Sorry, you've been blocked -->
 </html>
 `
 
-const json = `{
-  "errors": [
-    {
-      "title": "You've been blocked",
-      "detail": "Sorry, you cannot access this page. Please contact the customer service team. Security provided by Datadog."
-    }
-  ]
-}`
+const json = `{"errors": [{"title": "You've been blocked", "detail": "Sorry, you cannot access this page. Please contact the customer service team. Security provided by Datadog."}]}`
 
 module.exports = {
   html,
