@@ -398,8 +398,8 @@ addHook({
     const testCallSite = callSites.find(site => site.getFileName() === test.file)
     if (testCallSite) {
       startLine = testCallSite.getLineNumber()
+      testToStartLine.set(test, startLine)
     }
-    testToStartLine.set(test, startLine)
     return addTest.apply(this, arguments)
   })
   return Suite
