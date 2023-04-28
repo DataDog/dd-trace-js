@@ -55,7 +55,8 @@ function wrapEmit (emit) {
 
       try {
         if (abortController.signal.aborted) {
-          return res.end()
+          // TODO: should this always return true ?
+          return this.listenerCount(eventName) > 0
         }
         return emit.apply(this, arguments)
       } catch (err) {

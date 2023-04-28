@@ -5,7 +5,6 @@
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const web = require('../../dd-trace/src/plugins/util/web')
-const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class Http2ServerPlugin extends Plugin {
@@ -29,10 +28,6 @@ class Http2ServerPlugin extends Plugin {
       if (!context.instrumented) {
         context.res.writeHead = web.wrapWriteHead(context)
         context.instrumented = true
-      }
-
-      if (incomingHttpRequestStart.hasSubscribers) {
-        incomingHttpRequestStart.publish({ req, res })
       }
     })
 
