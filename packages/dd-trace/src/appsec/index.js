@@ -1,10 +1,14 @@
 'use strict'
 
-const dc = require('../../../diagnostics_channel')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
 const remoteConfig = require('./remote_config')
-const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('./channels')
+const {
+  incomingHttpRequestStart,
+  incomingHttpRequestEnd,
+  bodyParser,
+  queryParser
+} = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
@@ -12,9 +16,6 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { block, setTemplates } = require('./blocking')
-
-const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
-const queryParserChannel = dc.channel('datadog:query:read:finish')
 
 let isEnabled = false
 let config
@@ -33,8 +34,8 @@ function enable (_config) {
 
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
-    bodyParserChannel.subscribe(onRequestBodyParsed)
-    queryParserChannel.subscribe(onRequestQueryParsed)
+    bodyParser.subscribe(onRequestBodyParsed)
+    queryParser.subscribe(onRequestQueryParsed)
 
     isEnabled = true
     config = _config
@@ -154,8 +155,8 @@ function disable () {
   // Channel#unsubscribe() is undefined for non active channels
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
-  if (bodyParserChannel.hasSubscribers) bodyParserChannel.unsubscribe(onRequestBodyParsed)
-  if (queryParserChannel.hasSubscribers) queryParserChannel.unsubscribe(onRequestQueryParsed)
+  if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)
+  if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
 }
 
 function handleResults (actions, req, res, rootSpan, abortController) {
