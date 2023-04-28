@@ -1,13 +1,16 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-
-const dc = require('../../../diagnostics_channel')
 const log = require('../../src/log')
 const waf = require('../../src/appsec/waf')
 const RuleManager = require('../../src/appsec/rule_manager')
 const appsec = require('../../src/appsec')
-const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../src/appsec/channels')
+const {
+  incomingHttpRequestStart,
+  incomingHttpRequestEnd,
+  bodyParser,
+  queryParser
+} = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
 const Config = require('../../src/config')
@@ -90,16 +93,13 @@ describe('AppSec Index', () => {
     })
 
     it('should subscribe to blockable channels', () => {
-      const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
-      const queryParserChannel = dc.channel('datadog:query:read:finish')
-
-      expect(bodyParserChannel.hasSubscribers).to.be.false
-      expect(queryParserChannel.hasSubscribers).to.be.false
+      expect(bodyParser.hasSubscribers).to.be.false
+      expect(queryParser.hasSubscribers).to.be.false
 
       AppSec.enable(config)
 
-      expect(bodyParserChannel.hasSubscribers).to.be.true
-      expect(queryParserChannel.hasSubscribers).to.be.true
+      expect(bodyParser.hasSubscribers).to.be.true
+      expect(queryParser.hasSubscribers).to.be.true
     })
   })
 
@@ -134,15 +134,12 @@ describe('AppSec Index', () => {
     })
 
     it('should unsubscribe to blockable channels', () => {
-      const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
-      const queryParserChannel = dc.channel('datadog:query:read:finish')
-
       AppSec.enable(config)
 
       AppSec.disable()
 
-      expect(bodyParserChannel.hasSubscribers).to.be.false
-      expect(queryParserChannel.hasSubscribers).to.be.false
+      expect(bodyParser.hasSubscribers).to.be.false
+      expect(queryParser.hasSubscribers).to.be.false
     })
   })
 
@@ -336,6 +333,7 @@ describe('AppSec Index', () => {
 
   describe('checkRequestData', () => {
     let abortController, req, res, rootSpan
+
     beforeEach(() => {
       rootSpan = {
         addTags: sinon.stub()
@@ -374,14 +372,10 @@ describe('AppSec Index', () => {
     })
 
     describe('onRequestBodyParsed', () => {
-      const bodyParserChannel = dc.channel('datadog:body-parser:read:finish')
-
       it('Should not block without body', () => {
         sinon.stub(waf, 'run')
 
-        bodyParserChannel.publish({
-          req, res, abortController
-        })
+        bodyParser.publish({ req, res, abortController })
 
         expect(waf.run).not.to.have.been.called
         expect(abortController.abort).not.to.have.been.called
@@ -392,11 +386,11 @@ describe('AppSec Index', () => {
         req.body = { key: 'value' }
         sinon.stub(waf, 'run')
 
-        bodyParserChannel.publish({
-          req, res, abortController
-        })
+        bodyParser.publish({ req, res, abortController })
 
-        expect(waf.run).to.have.been.called
+        expect(waf.run).to.have.been.calledOnceWith({
+          'server.request.body': { key: 'value' }
+        })
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
       })
@@ -405,37 +399,21 @@ describe('AppSec Index', () => {
         req.body = { key: 'value' }
         sinon.stub(waf, 'run').returns(['block'])
 
-        bodyParserChannel.publish({
-          req, res, abortController
-        })
-
-        expect(abortController.abort).to.have.been.called
-        expect(res.end).to.have.been.called
-      })
-
-      it('Should propagate request body', () => {
-        req.body = { key: 'value' }
-        sinon.stub(waf, 'run')
-
-        bodyParserChannel.publish({
-          req, res, abortController
-        })
+        bodyParser.publish({ req, res, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.body': { key: 'value' }
         })
+        expect(abortController.abort).to.have.been.called
+        expect(res.end).to.have.been.called
       })
     })
 
     describe('onRequestQueryParsed', () => {
-      const queryParserReadChannel = dc.channel('datadog:query:read:finish')
-
       it('Should not block without query', () => {
         sinon.stub(waf, 'run')
 
-        queryParserReadChannel.publish({
-          req, res, abortController
-        })
+        queryParser.publish({ req, res, abortController })
 
         expect(waf.run).not.to.have.been.called
         expect(abortController.abort).not.to.have.been.called
@@ -446,11 +424,11 @@ describe('AppSec Index', () => {
         req.query = { key: 'value' }
         sinon.stub(waf, 'run')
 
-        queryParserReadChannel.publish({
-          req, res, abortController
-        })
+        queryParser.publish({ req, res, abortController })
 
-        expect(waf.run).to.have.been.called
+        expect(waf.run).to.have.been.calledOnceWith({
+          'server.request.query': { key: 'value' }
+        })
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
       })
@@ -459,25 +437,13 @@ describe('AppSec Index', () => {
         req.query = { key: 'value' }
         sinon.stub(waf, 'run').returns(['block'])
 
-        queryParserReadChannel.publish({
-          req, res, abortController
-        })
-
-        expect(abortController.abort).to.have.been.called
-        expect(res.end).to.have.been.called
-      })
-
-      it('Should run request query', () => {
-        req.query = { key: 'value' }
-        sinon.stub(waf, 'run')
-
-        queryParserReadChannel.publish({
-          req, res, abortController
-        })
+        queryParser.publish({ req, res, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.query': { key: 'value' }
         })
+        expect(abortController.abort).to.have.been.called
+        expect(res.end).to.have.been.called
       })
     })
   })
@@ -503,7 +469,6 @@ describe('IP blocking', () => {
   }]
 
   let http, appListener, port
-  let config
   before(() => {
     return getPort().then(newPort => {
       port = newPort
@@ -525,13 +490,11 @@ describe('IP blocking', () => {
   })
 
   beforeEach(() => {
-    config = new Config({
+    appsec.enable(new Config({
       appsec: {
         enabled: true
       }
-    })
-
-    appsec.enable(config)
+    }))
 
     RuleManager.updateWafFromRC({ toUnapply: [], toApply: [], toModify })
   })
