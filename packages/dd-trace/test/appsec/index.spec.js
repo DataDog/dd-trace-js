@@ -17,11 +17,11 @@ const Config = require('../../src/config')
 const axios = require('axios')
 const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
-const web = require('../../src/plugins/util/web')
 
 describe('AppSec Index', () => {
   let config
   let AppSec
+  let web
   let blocking
 
   const RULES = { rules: [{ a: 1 }] }
@@ -39,8 +39,10 @@ describe('AppSec Index', () => {
         blockedTemplateJson: blockedTemplate.json
       }
     }
-    sinon.stub(web, 'root')
-    sinon.stub(web, 'getContext').returns({})
+
+    web = {
+      root: sinon.stub()
+    }
 
     blocking = {
       setTemplates: sinon.stub()
