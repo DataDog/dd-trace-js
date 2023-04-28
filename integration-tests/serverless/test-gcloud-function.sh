@@ -17,19 +17,18 @@ trap cleanup EXIT
 
 echo "Deploying integration test cloud function"
 
-OUTPUT=$(gcloud functions deploy dd-trace-js-sls-mini-agent-integration-test-${STAGE} \
---gen2 \
---runtime=nodejs18 \
---region=us-east1 \
---source="${SERVERLESS_INTEGRATION_DIR_PATH}/test-project/" \
---entry-point=helloGET \
---trigger-http \
---allow-unauthenticated \
---set-env-vars NODE_OPTIONS="-r dd-trace/init",DD_TRACE_DEBUG="true",DD_MINI_AGENT_PATH="/workspace/node_modules/david-test-datadog-sma/datadog-serverless-agent-linux-amd64/datadog-serverless-trace-mini-agent")
+gcloud functions deploy dd-trace-js-sls-mini-agent-integration-test-${STAGE} \
+    --gen2 \
+    --runtime=nodejs18 \
+    --region=us-east1 \
+    --source="${SERVERLESS_INTEGRATION_DIR_PATH}/test-project/" \
+    --entry-point=helloGET \
+    --trigger-http \
+    --allow-unauthenticated \
+    --set-env-vars NODE_OPTIONS="-r dd-trace/init",DD_TRACE_DEBUG="true",DD_MINI_AGENT_PATH="/workspace/node_modules/david-test-datadog-sma/datadog-serverless-agent-linux-amd64/datadog-serverless-trace-mini-agent"
 
 echo "Calling deployed cloud function"
-# TRIGGER_URL=$(echo $OUTPUT | awk '{for (I=1;I<NF;I++) if ($I == "uri:") print $(I+1)}')
-# curl -s ${TRIGGER_URL}
+
 curl -s "https://us-east1-datadog-sandbox.cloudfunctions.net/dd-trace-js-sls-mini-agent-integration-test-${STAGE}"
 
 echo "Waiting 20 seconds before tailing logs"

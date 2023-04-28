@@ -3,7 +3,7 @@ name: Serverless Integration Test
 on: [push]
 
 jobs:
-  integration-serverless:
+  integration:
     # Google Auth permissions
     permissions:
       contents: 'read'
