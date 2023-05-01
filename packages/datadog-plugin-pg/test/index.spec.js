@@ -458,7 +458,7 @@ describe('Plugin', () => {
           })
         })
       })
-      describe('DBM propagation enabled with full should handle prepared statements', () => {
+      describe('DBM propagation enabled with full should handle query config objects', () => {
         const tracer = require('../../dd-trace')
 
         before(() => {
@@ -482,9 +482,10 @@ describe('Plugin', () => {
           client.connect(err => done(err))
         })
 
-        it('prepared statements should be handled', done => {
+        it('query config objects should be handled', done => {
           let queryText = ''
           const query = {
+            name: 'monkeyFoot',
             text: 'SELECT $1::text as message'
           }
           agent.use(traces => {
@@ -503,6 +504,23 @@ describe('Plugin', () => {
             })
           })
           queryText = client.queryQueue[0].text
+        })
+        it('query config object should persist when comment is injected', done => {
+          const query = {
+            name: 'pgSelectQuery',
+            text: 'SELECT $1::text as message'
+          }
+          client.query(query, ['Hello world!'], (err) => {
+            if (err) return done(err)
+
+            client.end((err) => {
+              if (err) return done(err)
+            })
+          })
+          agent.use(traces => {
+            expect(query).to.have.property(
+              'name', 'pgSelectQuery')
+          }).then(done, done)
         })
       })
     })
