@@ -9,7 +9,7 @@ class PGPlugin extends DatabasePlugin {
   static get system () { return 'postgres' }
 
   start ({ params = {}, query, processId }) {
-    const service = getServiceName(this.config, params)
+    const service = getServiceName(this, params)
     const originalStatement = query.text
 
     this.startSpan('pg.query', {
@@ -31,12 +31,12 @@ class PGPlugin extends DatabasePlugin {
   }
 }
 
-function getServiceName (config, params) {
-  if (typeof config.service === 'function') {
-    return config.service(params)
+function getServiceName (tracer, params) {
+  if (typeof tracer.config.service === 'function') {
+    return tracer.config.service(params)
   }
 
-  return config.service
+  return tracer.config.service || `${tracer._tracer._tracer._service}-postgres`
 }
 
 module.exports = PGPlugin
