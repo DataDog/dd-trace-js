@@ -6,7 +6,7 @@ const util = require('util')
 
 // Port from node core lib/internal/errors.js
 class ERR_INVALID_ARG_TYPE extends TypeError {
-  constructor(message, actual) {
+  constructor (message, actual) {
     super()
 
     if (actual == null) {
@@ -35,29 +35,29 @@ class ERR_INVALID_ARG_TYPE extends TypeError {
         value: message,
         enumerable: false,
         writable: true,
-        configurable: true,
+        configurable: true
       },
       toString: {
-        value() {
+        value () {
           return `${this.name} [${this.code}]: ${this.message}`
         },
         enumerable: false,
         writable: true,
-        configurable: true,
-      },
+        configurable: true
+      }
     })
   }
 }
 
 class ActiveChannel {
-  subscribe(subscription) {
+  subscribe (subscription) {
     if (typeof subscription !== 'function') {
       throw new ERR_INVALID_ARG_TYPE('The "subscription" argument must be of type function', subscription)
     }
     this._subscribers.push(subscription)
   }
 
-  unsubscribe(subscription) {
+  unsubscribe (subscription) {
     const index = this._subscribers.indexOf(subscription)
     if (index === -1) return false
 
@@ -72,11 +72,11 @@ class ActiveChannel {
     return true
   }
 
-  get hasSubscribers() {
+  get hasSubscribers () {
     return true
   }
 
-  publish(data) {
+  publish (data) {
     for (let i = 0; i < this._subscribers.length; i++) {
       try {
         const onMessage = this._subscribers[i]
@@ -91,37 +91,37 @@ class ActiveChannel {
 }
 
 class Channel {
-  constructor(name) {
+  constructor (name) {
     this._subscribers = undefined
     this.name = name
   }
 
-  static [Symbol.hasInstance](instance) {
+  static [Symbol.hasInstance] (instance) {
     const prototype = Object.getPrototypeOf(instance)
     return prototype === Channel.prototype ||
            prototype === ActiveChannel.prototype
   }
 
-  subscribe(subscription) {
+  subscribe (subscription) {
     Object.setPrototypeOf(this, ActiveChannel.prototype)
     this._subscribers = []
     this.subscribe(subscription)
   }
 
-  unsubscribe() {
+  unsubscribe () {
     return false
   }
 
-  get hasSubscribers() {
+  get hasSubscribers () {
     return false
   }
 
-  publish() {}
+  publish () {}
 }
 
 const channels = {}
 
-function channel(name) {
+function channel (name) {
   const channel = channels[name]
   if (channel) return channel
 
@@ -129,10 +129,11 @@ function channel(name) {
     throw new ERR_INVALID_ARG_TYPE('The "channel" argument must be one of type string or symbol', name)
   }
 
-  return channels[name] = new Channel(name)
+  channels[name] = new Channel(name)
+  return channels[name]
 }
 
-function hasSubscribers(name) {
+function hasSubscribers (name) {
   const channel = channels[name]
   if (!channel) {
     return false
@@ -141,7 +142,7 @@ function hasSubscribers(name) {
   return channel.hasSubscribers
 }
 
-function deleteChannel(name) {
+function deleteChannel (name) {
   if (channels[name]) {
     channels[name] = null
     return true
