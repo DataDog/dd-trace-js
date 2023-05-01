@@ -505,6 +505,53 @@ describe('Plugin', () => {
           queryText = client.queryQueue[0].text
         })
       })
+      describe('DBM propagation enabled with full should handle prepared statements', () => {
+        const tracer = require('../../dd-trace')
+
+        before(() => {
+          return agent.load('pg')
+        })
+        beforeEach(done => {
+          pg = require('../../../versions/pg@>=8.0.3').get()
+
+          tracer.init()
+          tracer.use('pg', {
+            dbmPropagationMode: 'full',
+            service: 'post'
+          })
+
+          client = new pg.Client({
+            host: '127.0.0.1',
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres'
+          })
+          client.connect(err => done(err))
+        })
+
+        it('prepared statements should be handled', done => {
+          let queryText = ''
+          const query = {
+            text: 'SELECT $1::text as message'
+          }
+          agent.use(traces => {
+            const traceId = traces[0][0].trace_id.toString(16).padStart(32, '0')
+            const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
+
+            expect(queryText).to.equal(
+              `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0',` +
+              `traceparent='00-${traceId}-${spanId}-00'*/ SELECT $1::text as message`)
+          }).then(done, done)
+          client.query(query, ['Hello world!'], (err) => {
+            if (err) return done(err)
+
+            client.end((err) => {
+              if (err) return done(err)
+            })
+          })
+          queryText = client.queryQueue[0].text
+        })
+      })
     })
   })
 })
