@@ -13,8 +13,8 @@ console.log(`cd ${TEST_DIR}`)
 process.chdir(TEST_DIR)
 
 // eslint-disable-next-line no-console
-console.log('npm run link')
-chproc.execSync('npm run link')
+console.log('bash npm run link')
+chproc.execSync('bash npm run link')
 
 // eslint-disable-next-line no-console
 console.log('npm run build')
