@@ -387,8 +387,7 @@ describe('Plugin', () => {
 
           tracer.init()
           tracer.use('pg', {
-            dbmPropagationMode: 'full',
-            service: 'post'
+            dbmPropagationMode: 'full'
           })
 
           client = new pg.Client({
@@ -404,8 +403,8 @@ describe('Plugin', () => {
             if (strBuf.includes('traceparent=\'')) {
               strBuf = strBuf.split('-')
               seenTraceParent = true
-              seenTraceId = strBuf[1]
-              seenSpanId = strBuf[2]
+              seenTraceId = strBuf[2]
+              seenSpanId = strBuf[3]
             }
             return originalWrite.apply(this, arguments)
           }
@@ -432,6 +431,21 @@ describe('Plugin', () => {
         it('query should inject _dd.dbm_trace_injected into span', done => {
           agent.use(traces => {
             expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
+            done()
+          })
+
+          client.query('SELECT $1::text as message', ['Hello World!'], (err, result) => {
+            if (err) return done(err)
+
+            client.end((err) => {
+              if (err) return done(err)
+            })
+          })
+        })
+        it('service should default to tracer service name', done => {
+          tracer
+          agent.use(traces => {
+            expect(traces[0][0]).to.have.property('service', 'test-postgres')
             done()
           })
 
