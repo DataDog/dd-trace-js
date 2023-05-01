@@ -1,23 +1,8 @@
 'use strict'
 
-// TODO: Figure out why we can't use the internal version.
-// eslint-disable-next-line n/no-restricted-require
-const dc = require('diagnostics_channel')
+const dc = require('../../../diagnostics_channel')
 
 const CHANNEL_PREFIX = 'dd-trace:bundledModuleLoadStart'
-
-if (!dc.subscribe) {
-  dc.subscribe = (channel, cb) => {
-    dc.channel(channel).subscribe(cb)
-  }
-}
-if (!dc.unsubscribe) {
-  dc.unsubscribe = (channel, cb) => {
-    if (dc.channel(channel).hasSubscribers) {
-      dc.channel(channel).unsubscribe(cb)
-    }
-  }
-}
 
 module.exports = DcitmHook
 
@@ -40,14 +25,12 @@ function DcitmHook (moduleNames, options, onrequire) {
   }
 
   for (const moduleName of moduleNames) {
-    // dc.channel(`${CHANNEL_PREFIX}:${moduleName}`).subscribe(onModuleLoad)
-    dc.subscribe(`${CHANNEL_PREFIX}:${moduleName}`, onModuleLoad)
+    dc.channel(`${CHANNEL_PREFIX}:${moduleName}`).subscribe(onModuleLoad)
   }
 
   this.unhook = function dcitmUnload () {
     for (const moduleName of moduleNames) {
-      // dc.channel(`${CHANNEL_PREFIX}:${moduleName}`).unsubscribe(onModuleLoad)
-      dc.unsubscribe(`${CHANNEL_PREFIX}:${moduleName}`, onModuleLoad)
+      dc.channel(`${CHANNEL_PREFIX}:${moduleName}`).unsubscribe(onModuleLoad)
     }
   }
 }

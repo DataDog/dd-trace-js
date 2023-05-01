@@ -74,7 +74,7 @@ module.exports.setup = function (build) {
 
     // JSON.stringify adds double quotes. For perf gain could simply add in quotes when we know it's safe.
     const contents = `
-      const dc = require('diagnostics_channel');
+      const dc = require('dd-trace/diagnostics_channel');
       const ch = dc.channel(${JSON.stringify(DC_CHANNEL + ':' + args.path)});
       const mod = require(${JSON.stringify(args.path)});
       const payload = {
