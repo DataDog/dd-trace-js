@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+/* eslint-disable no-console */
+
 'use strict'
 
 const chproc = require('child_process')
@@ -15,8 +17,8 @@ process.chdir(DD_DIR)
 console.log('yarn link')
 chproc.execSync('yarn link')
 
-console.log(`cd ${CWD}`)
-process.chdir(CWD)
+console.log(`cd ${TEST_DIR}`)
+process.chdir(TEST_DIR)
 
 console.log('yarn link dd-trace')
 chproc.execSync('yarn link dd-trace')
@@ -24,22 +26,12 @@ chproc.execSync('yarn link dd-trace')
 console.log('npm run build')
 chproc.execSync('npm run build')
 
-// eslint-disable-next-line no-console
-console.log(`cd ${TEST_DIR}`)
-process.chdir(TEST_DIR)
-
-// eslint-disable-next-line no-console
-console.log('npm run build')
-chproc.execSync('npm run build')
-
-// eslint-disable-next-line no-console
-console.log('npm run built')
 try {
+  console.log('npm run built')
   chproc.execSync('npm run built', {
     timeout: 1000 * 30
   })
 } catch (err) {
-  // eslint-disable-next-line no-console
   console.error(err)
   process.exit(1)
 } finally {
