@@ -485,7 +485,7 @@ describe('Plugin', () => {
         it('query config objects should be handled', done => {
           let queryText = ''
           const query = {
-            name: 'monkeyFoot',
+            name: 'pgSelectQuery',
             text: 'SELECT $1::text as message'
           }
           agent.use(traces => {
