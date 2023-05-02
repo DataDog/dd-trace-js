@@ -34,7 +34,7 @@ jobs:
   integration-ci:
     strategy:
       matrix:
-        version: [14, latest]
+        version: [16, latest]
         framework: [cucumber, cypress, playwright]
     runs-on: ubuntu-latest
     steps:
