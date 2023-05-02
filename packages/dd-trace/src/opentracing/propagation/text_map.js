@@ -215,7 +215,11 @@ class TextMapPropagator {
           spanContext = this._extractDatadogContext(carrier)
           break
         case 'tracecontext':
-          spanContext = this._extractTraceparentContext(carrier)
+          if (carrier.hasOwnProperty(googleCloudTraceContextKey) && carrier.hasOwnProperty(traceKey)) {
+            spanContext = this._extractDatadogContext(carrier)
+          } else {
+            spanContext = this._extractTraceparentContext(carrier)
+          }
           break
         case 'b3': // TODO: should match "b3 single header" in next major
         case 'b3multi':
