@@ -17,7 +17,7 @@ const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
 const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 
 function enable (config, _tracer) {
-  telemetry.configure(config)
+  telemetry.configure(config, 'iast')
   enableAllAnalyzers()
   enableTaintTracking(config.iast, telemetry.verbosity)
   requestStart.subscribe(onIncomingHttpRequestStart)
@@ -28,7 +28,7 @@ function enable (config, _tracer) {
 }
 
 function disable () {
-  telemetry.stop()
+  telemetry.stop('iast')
   disableAllAnalyzers()
   disableTaintTracking()
   overheadController.finishGlobalContext()

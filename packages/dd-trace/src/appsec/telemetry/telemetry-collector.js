@@ -1,6 +1,5 @@
 'use strict'
 
-const { aggregated, conflated, delegating } = require('./handlers')
 const log = require('../../log')
 const DD_TELEMETRY_COLLECTOR = Symbol('_dd.appsec.telemetryCollector')
 
@@ -23,7 +22,7 @@ class TelemetryCollector {
     return handler
   }
 
-  drainMetrics () {
+  drainMetricsAndDistributions () {
     const result = []
     for (const handler of this.handlers.values()) {
       const values = handler.drain()
@@ -49,8 +48,8 @@ class TelemetryCollector {
 }
 
 const GLOBAL = new TelemetryCollector(metric => metric.hasRequestScope()
-  ? aggregated(metric)
-  : conflated(metric)
+  ? metric.aggregated()
+  : metric.conflated()
 )
 
 function getMetricCollector (metric, context) {
@@ -64,11 +63,11 @@ function getMetricCollector (metric, context) {
 }
 
 function init (context) {
-  if (!context) return
+  if (!context || context[DD_TELEMETRY_COLLECTOR]) return
 
   const collector = new TelemetryCollector((metric) => metric.hasRequestScope()
-    ? conflated(metric)
-    : delegating(metric, GLOBAL)
+    ? metric.conflated()
+    : metric.delegating(GLOBAL)
   )
   context[DD_TELEMETRY_COLLECTOR] = collector
   return collector
@@ -84,7 +83,7 @@ function getFromContext (context, deleteCollector) {
 
 function addValue (metric, value, tag, context) {
   try {
-    if (!metric) return
+    if (!metric || !value) return
 
     const collector = getMetricCollector(metric, context)
     collector.addMetric(metric, value, tag)
@@ -93,9 +92,9 @@ function addValue (metric, value, tag, context) {
   }
 }
 
-function drain () {
+function drainMetricsAndDistributions () {
   const drained = []
-  for (const metricData of GLOBAL.drainMetrics()) {
+  for (const metricData of GLOBAL.drainMetricsAndDistributions()) {
     if (metricData.metric && metricData.points) {
       drained.push(metricData.getPayload())
     }
@@ -105,7 +104,7 @@ function drain () {
 
 module.exports = {
   addValue,
-  drain,
+  drainMetricsAndDistributions,
   getMetricCollector,
   init,
   getFromContext,

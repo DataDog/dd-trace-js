@@ -58,8 +58,18 @@ class AggregatedCombiner {
   }
 }
 
+class DistributedCombiner extends AggregatedCombiner {
+  add (value) {
+    this.value.push(value)
+    if (this.value.length === MAX_QUEUE_SIZE) {
+      this.value.shift()
+    }
+  }
+}
+
 module.exports = {
   ConflatedCombiner,
   AggregatedCombiner,
+  DistributedCombiner,
   Point
 }

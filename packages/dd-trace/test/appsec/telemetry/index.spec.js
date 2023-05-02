@@ -8,13 +8,7 @@ const { REQUEST_TAINTED, EXECUTED_SINK, INSTRUMENTED_PROPAGATION } = require('..
 const TAG_PREFIX = '_dd.instrumentation_telemetry_data.iast'
 
 describe('Telemetry', () => {
-  const defaultConfig = {
-    telemetry: {
-      enabled: true,
-      metrics: true
-    }
-  }
-
+  let defaultConfig
   let collector
   let telemetryMetrics
   let telemetryLogs
@@ -22,6 +16,12 @@ describe('Telemetry', () => {
   let logCollector
 
   beforeEach(() => {
+    defaultConfig = {
+      telemetry: {
+        enabled: true,
+        metrics: true
+      }
+    }
     collector = {
       init: sinon.spy(),
       getFromContext: (context) => context['collector'],
@@ -114,6 +114,22 @@ describe('Telemetry', () => {
       expect(telemetryMetrics.init).to.not.be.called
       expect(telemetryLogs.init).to.not.be.called
     })
+
+    it('should allow register multiple clients but register providers only once', () => {
+      const telemetryConfig = { enabled: true, metrics: true }
+      telemetry.configure({
+        telemetry: telemetryConfig
+      }, 'client_one')
+
+      telemetry.configure({
+        telemetry: telemetryConfig
+      }, 'client_two')
+
+      expect(telemetry.enabled).to.be.true
+      expect(telemetry.verbosity).to.be.eq(Verbosity.INFORMATION)
+      expect(telemetryMetrics.init).to.be.calledOnceWith(telemetryConfig)
+      expect(telemetryLogs.init).to.be.calledOnceWith(telemetryConfig)
+    })
   })
 
   describe('stop', () => {
@@ -121,6 +137,41 @@ describe('Telemetry', () => {
       telemetry.configure(defaultConfig)
 
       telemetry.stop()
+      expect(telemetry.enabled).to.be.false
+      expect(telemetryMetrics.stop).to.be.calledOnce
+      expect(telemetryLogs.stop).to.be.calledOnce
+    })
+
+    it('should keep telemetry enabled if there are clients still registered', () => {
+      const telemetryConfig = { enabled: true, metrics: true }
+      telemetry.configure({
+        telemetry: telemetryConfig
+      }, 'client_one')
+
+      telemetry.configure({
+        telemetry: telemetryConfig
+      }, 'client_two')
+
+      telemetry.stop('client_one')
+
+      expect(telemetry.enabled).to.be.true
+      expect(telemetryMetrics.stop).to.not.be.calledOnce
+      expect(telemetryLogs.stop).to.not.be.calledOnce
+    })
+
+    it('should disable telemetry only when clients are empty', () => {
+      const telemetryConfig = { enabled: true, metrics: true }
+      telemetry.configure({
+        telemetry: telemetryConfig
+      }, 'client_one')
+
+      telemetry.configure({
+        telemetry: telemetryConfig
+      }, 'client_two')
+
+      telemetry.stop('client_one')
+      telemetry.stop('client_two')
+
       expect(telemetry.enabled).to.be.false
       expect(telemetryMetrics.stop).to.be.calledOnce
       expect(telemetryLogs.stop).to.be.calledOnce
@@ -178,13 +229,13 @@ describe('Telemetry', () => {
 
       iastContext = {
         collector: {
-          drainMetrics: sinon.stub().returns(metrics)
+          drainMetricsAndDistributions: sinon.stub().returns(metrics)
         }
       }
 
       telemetry.onRequestEnded(iastContext, rootSpan, TAG_PREFIX)
 
-      expect(iastContext.collector.drainMetrics).to.be.calledOnce
+      expect(iastContext.collector.drainMetricsAndDistributions).to.be.calledOnce
       expect(rootSpan.addTags).to.be.called
 
       const tag = rootSpan.addTags.getCalls()[0].args[0]
@@ -208,13 +259,13 @@ describe('Telemetry', () => {
 
       iastContext = {
         collector: {
-          drainMetrics: sinon.stub().returns(metrics)
+          drainMetricsAndDistributions: sinon.stub().returns(metrics)
         }
       }
 
       telemetry.onRequestEnded(iastContext, rootSpan, TAG_PREFIX)
 
-      expect(iastContext.collector.drainMetrics).to.be.calledOnce
+      expect(iastContext.collector.drainMetricsAndDistributions).to.be.calledOnce
       expect(rootSpan.addTags).to.be.calledTwice
 
       const calls = rootSpan.addTags.getCalls()
@@ -235,13 +286,13 @@ describe('Telemetry', () => {
 
       iastContext = {
         collector: {
-          drainMetrics: sinon.stub().returns(metrics)
+          drainMetricsAndDistributions: sinon.stub().returns(metrics)
         }
       }
 
       telemetry.onRequestEnded(iastContext, rootSpan)
 
-      expect(iastContext.collector.drainMetrics).to.be.calledOnce
+      expect(iastContext.collector.drainMetricsAndDistributions).to.be.calledOnce
       expect(rootSpan.addTags).to.not.be.called
     })
 
@@ -257,7 +308,7 @@ describe('Telemetry', () => {
 
       iastContext = {
         collector: {
-          drainMetrics: sinon.stub().returns(metrics)
+          drainMetricsAndDistributions: sinon.stub().returns(metrics)
         }
       }
 
@@ -276,7 +327,7 @@ describe('Telemetry', () => {
 
       iastContext = {
         collector: {
-          drainMetrics: sinon.stub().returns(metrics)
+          drainMetricsAndDistributions: sinon.stub().returns(metrics)
         }
       }
 

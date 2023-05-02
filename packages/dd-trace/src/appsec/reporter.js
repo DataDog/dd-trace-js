@@ -3,6 +3,7 @@
 const Limiter = require('../rate_limiter')
 const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
+const { updateWafResults, incWafInitMetric, incWafRequests, incWafUpdatesMetric } = require('./metrics')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -37,6 +38,7 @@ const RESPONSE_HEADERS_PASSLIST = [
 ]
 
 const metricsQueue = new Map()
+const wafMetricsStore = {}
 
 function filterHeaders (headers, passlist, prefix) {
   const result = {}
@@ -63,11 +65,23 @@ function formatHeaderName (name) {
     .toLowerCase()
 }
 
+function reportInitMetrics ({ wafVersion, eventRules }) {
+  metricsQueue.set('_dd.appsec.waf.version', wafVersion)
+
+  metricsQueue.set('_dd.appsec.event_rules.loaded', eventRules.loaded)
+  metricsQueue.set('_dd.appsec.event_rules.error_count', eventRules.failed)
+  if (eventRules.failed) metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(eventRules.errors))
+
+  metricsQueue.set('manual.keep', 'true')
+
+  incWafInitMetric(wafVersion, eventRules.version)
+}
+
 function reportMetrics (metrics) {
   // TODO: metrics should be incremental, there already is an RFC to report metrics
   const store = storage.getStore()
   const rootSpan = store && store.req && web.root(store.req)
-  if (!rootSpan) return
+  if (!rootSpan) return false
 
   if (metrics.duration) {
     rootSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
@@ -80,6 +94,8 @@ function reportMetrics (metrics) {
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
+
+  updateWafResults(metrics, wafMetricsStore)
 }
 
 function reportAttack (attackData) {
@@ -122,6 +138,14 @@ function reportAttack (attackData) {
   rootSpan.addTags(newTags)
 }
 
+function reportUpdateRuleData (wafVersion, eventRulesVersion) {
+  incWafUpdatesMetric(wafVersion, eventRulesVersion)
+}
+
+function reportBlock () {
+  updateWafResults({ requestBlocked: true }, wafMetricsStore)
+}
+
 function finishRequest (req, res) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
@@ -133,6 +157,8 @@ function finishRequest (req, res) {
   }
 
   if (!rootSpan.context()._tags['appsec.event']) return
+
+  incWafRequests(wafMetricsStore)
 
   const newTags = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_PASSLIST, 'http.response.headers.')
 
@@ -151,8 +177,11 @@ module.exports = {
   metricsQueue,
   filterHeaders,
   formatHeaderName,
-  reportMetrics,
+  reportInitMetrics,
   reportAttack,
+  reportBlock,
+  reportMetrics,
+  reportUpdateRuleData,
   finishRequest,
   setRateLimit
 }

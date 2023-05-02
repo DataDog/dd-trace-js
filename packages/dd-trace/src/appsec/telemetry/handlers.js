@@ -1,7 +1,7 @@
 'use strict'
 
-const { AggregatedCombiner, ConflatedCombiner } = require('./combiners')
-
+// eslint-disable-next-line max-len
+// https://github.com/DataDog/instrumentation-telemetry-api-docs/blob/main/GeneratedDocumentation/ApiDocs/v2/SchemaDocumentation/Schemas/metric_data.md
 class MetricData {
   constructor (metric, points, tag) {
     this.metric = metric
@@ -13,8 +13,6 @@ class MetricData {
     return this.metric.getTags(this.tag)
   }
 
-  // eslint-disable-next-line max-len
-  // https://github.com/DataDog/instrumentation-telemetry-api-docs/blob/main/GeneratedDocumentation/ApiDocs/v2/SchemaDocumentation/Schemas/metric_data.md
   getPayload () {
     return {
       metric: this.metric.name,
@@ -28,7 +26,15 @@ class MetricData {
 
   getPayloadPoints (points) {
     return points
-      .map(point => [point.timestamp, point.value])
+      .map(point => this.metric.getPoint(point))
+  }
+}
+
+// eslint-disable-next-line max-len
+// https://github.com/DataDog/instrumentation-telemetry-api-docs/blob/main/GeneratedDocumentation/ApiDocs/v1/SchemaDocumentation/Schemas/distribution_series.md
+class DistributionSeries extends MetricData {
+  getPayloadPoints (points) {
+    return points
   }
 }
 
@@ -44,7 +50,7 @@ class DefaultHandler {
 
   drain () {
     const points = this.combiner.drain()
-    return [new MetricData(this.metric, points)]
+    return [this.metric.serialize(points)]
   }
 
   merge (metricData) {
@@ -68,10 +74,14 @@ class TaggedHandler {
     for (const [key, value] of this.combiners) {
       const points = value.drain()
       if (points && points.length) {
-        result.push(new MetricData(this.metric, points, key))
+        result.push(this.metric.serialize(points, this.getMetricDataTag(key)))
       }
     }
     return result
+  }
+
+  getMetricDataTag (tag) {
+    return tag
   }
 
   getOrCreateCombiner (tag) {
@@ -104,29 +114,31 @@ class DelegatingHandler {
   merge () { /* merge not supported */ }
 }
 
-function aggregated (metric) {
-  return metric.metricTag
-    ? new TaggedHandler(metric, () => new AggregatedCombiner())
-    : new DefaultHandler(metric, new AggregatedCombiner())
-}
+class CompositeTaggedHandler extends TaggedHandler {
+  constructor (metric, supplier) {
+    super(metric, supplier)
+    this.compositeTags = new Map()
+  }
 
-function conflated (metric) {
-  return metric.metricTag
-    ? new TaggedHandler(metric, () => new ConflatedCombiner())
-    : new DefaultHandler(metric, new ConflatedCombiner())
-}
+  getOrCreateCombiner (compositeTag) {
+    const tag = compositeTag && compositeTag.key ? compositeTag.key() : compositeTag
+    const combiner = super.getOrCreateCombiner(tag)
+    if (!this.compositeTags.has(tag)) {
+      this.compositeTags.set(tag, compositeTag)
+    }
+    return combiner
+  }
 
-function delegating (metric, collector) {
-  return new DelegatingHandler(metric, collector)
+  getMetricDataTag (tag) {
+    return this.compositeTags.get(tag) || tag
+  }
 }
 
 module.exports = {
   DefaultHandler,
   TaggedHandler,
   DelegatingHandler,
+  CompositeTaggedHandler,
   MetricData,
-
-  aggregated,
-  conflated,
-  delegating
+  DistributionSeries
 }

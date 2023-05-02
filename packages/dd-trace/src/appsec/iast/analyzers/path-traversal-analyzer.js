@@ -53,8 +53,7 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
   }
 
   analyze (value) {
-    const store = storage.getStore()
-    const iastContext = getIastContext(store)
+    const iastContext = getIastContext(storage.getStore())
     if (!iastContext) {
       return
     }

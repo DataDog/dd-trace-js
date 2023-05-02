@@ -4,7 +4,7 @@ const logs = require('./api/logs-plugin')
 const metrics = require('./api/metrics-plugin')
 const { Verbosity, isDebugAllowed, isInfoAllowed, getVerbosity } = require('./verbosity')
 const {
-  drain: drainMetrics,
+  drain: drainMetricsAndDistributions,
   init: initTelemetryCollector,
   getFromContext,
   GLOBAL
@@ -16,27 +16,46 @@ const {
 
 const TRACE_METRIC_PATTERN = '_dd.instrumentation_telemetry_data.appsec'
 
+const telemetryClients = new Set()
+function isClientsEmpty () {
+  return telemetryClients.size === 0
+}
+
 class Telemetry {
-  configure (config) {
+  configure (config, client) {
     // in order to telemetry be enabled, tracer telemetry and metrics collection have to be enabled
     this.enabled = config && config.telemetry && config.telemetry.enabled && config.telemetry.metrics
     this.logCollectionDebugEnabled = this.enabled && config.telemetry.debug
     this.verbosity = this.enabled ? getVerbosity() : Verbosity.OFF
 
-    if (this.enabled) {
-      metrics.registerProvider(drainMetrics)
+    if (this.providersAreNotRegistered(this.enabled)) {
+      metrics.registerProvider(drainMetricsAndDistributions)
         .init(config.telemetry)
 
       logs.registerProvider(drainLogs)
         .init(config.telemetry, initLogCollector)
     }
+
+    if (this.enabled && client) {
+      telemetryClients.add(client)
+    }
   }
 
-  stop () {
-    this.enabled = false
+  providersAreNotRegistered (enabled) {
+    return enabled && isClientsEmpty()
+  }
 
-    metrics.stop()
-    logs.stop()
+  stop (client) {
+    if (client) {
+      telemetryClients.delete(client)
+    }
+
+    this.enabled = !isClientsEmpty()
+
+    if (!this.enabled) {
+      metrics.stop()
+      logs.stop()
+    }
   }
 
   isEnabled () {
@@ -67,7 +86,7 @@ class Telemetry {
     const collector = getFromContext(context, true)
     if (!collector) return
 
-    const metrics = collector.drainMetrics()
+    const metrics = collector.drainMetricsAndDistributions()
     this.addMetricsToSpan(rootSpan, metrics, tagPrefix || TRACE_METRIC_PATTERN)
     GLOBAL.merge(metrics)
   }

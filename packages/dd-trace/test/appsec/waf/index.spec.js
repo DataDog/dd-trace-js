@@ -21,7 +21,7 @@ describe('WAF Manager', () => {
     DDWAF.prototype.createContext = sinon.stub()
     DDWAF.prototype.update = sinon.stub()
     DDWAF.prototype.rulesInfo = {
-      loaded: true, failed: 0
+      loaded: true, failed: 0, version: '0.0.1'
     }
     DDWAF.prototype.requiredAddresses = new Map([
       ['server.request.headers.no_cookies', { 'header': 'value' }],
@@ -39,6 +39,7 @@ describe('WAF Manager', () => {
     sinon.stub(Reporter.metricsQueue, 'set')
     sinon.stub(Reporter, 'reportMetrics')
     sinon.stub(Reporter, 'reportAttack')
+    sinon.stub(Reporter, 'reportUpdateRuleData')
 
     webContext = {}
     sinon.stub(web, 'getContext').returns(webContext)
@@ -122,6 +123,29 @@ describe('WAF Manager', () => {
       waf.update(rules)
 
       expect(DDWAF.prototype.update).to.be.calledOnceWithExactly(rules)
+    })
+
+    it('should call Reporter.reportUpdateRuleData', () => {
+      const rules = {
+        'rules_data': [
+          {
+            id: 'blocked_users',
+            type: 'data_with_expiration',
+            data: [
+              {
+                expiration: 9999999999,
+                value: 'user1'
+              }
+            ]
+          }
+        ]
+      }
+
+      const wafVersion = '2.3.4'
+      DDWAF.prototype.constructor.version.returns(wafVersion)
+      waf.update(rules)
+
+      expect(Reporter.reportUpdateRuleData).to.be.calledOnceWithExactly(wafVersion, DDWAF.prototype.rulesInfo.version)
     })
   })
 

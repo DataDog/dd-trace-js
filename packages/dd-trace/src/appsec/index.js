@@ -16,6 +16,7 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { block, setTemplates } = require('./blocking')
+const telemetry = require('./telemetry')
 
 let isEnabled = false
 let config
@@ -24,6 +25,8 @@ function enable (_config) {
   if (isEnabled) return
 
   try {
+    telemetry.configure(_config, 'appsec')
+
     setTemplates(_config)
 
     RuleManager.applyRules(_config.appsec.rules, _config.appsec)
@@ -144,10 +147,15 @@ function handleResults (actions, req, res, rootSpan, abortController) {
 
   if (actions.includes('block')) {
     block(req, res, rootSpan, abortController)
+
+    // NOTE: should we report only if the call to block has been successful?
+    Reporter.reportBlock()
   }
 }
 
 function disable () {
+  telemetry.stop('appsec')
+
   isEnabled = false
   config = null
 

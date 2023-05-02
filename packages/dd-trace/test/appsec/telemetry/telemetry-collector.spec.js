@@ -12,10 +12,10 @@ const {
   getMetricCollector,
   init,
   getFromContext,
-  drain,
+  drainMetricsAndDistributions,
   DD_TELEMETRY_COLLECTOR,
   GLOBAL,
-  TelemetryCollector 
+  TelemetryCollector
 } = require('../../../src/appsec/telemetry/telemetry-collector')
 
 function getHandler (metric) {
@@ -105,7 +105,7 @@ describe('IAST TelemetryCollector', () => {
         collector.addMetric(metric, 5)
         collector.addMetric(otherMetric, 5)
 
-        collector.drainMetrics()
+        collector.drainMetricsAndDistributions()
 
         expect(testHandler.drain).to.be.calledOnce
         expect(otherHandler.drain).to.be.calledOnce
@@ -314,7 +314,7 @@ describe('IAST TelemetryCollector', () => {
     })
   })
 
-  describe('drain', () => {
+  describe('drainMetricsAndDistributions', () => {
     it('should drain GLOBAL metrics', () => {
       GLOBAL.addMetric(INSTRUMENTED_SOURCE, 5, 'http.request.param')
       GLOBAL.addMetric(INSTRUMENTED_SOURCE, 5, 'http.request.param')
@@ -325,7 +325,7 @@ describe('IAST TelemetryCollector', () => {
       GLOBAL.addMetric(REQUEST_TAINTED, 15)
       GLOBAL.addMetric(REQUEST_TAINTED, 20)
 
-      const drained = drain()
+      const drained = drainMetricsAndDistributions()
       expect(drained.length).to.eq(3)
 
       // conflated

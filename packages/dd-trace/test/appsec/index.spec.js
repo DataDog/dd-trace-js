@@ -12,11 +12,13 @@ const {
   queryParser
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
+const telemetry = require('../../src/appsec/telemetry')
 const agent = require('../plugins/agent')
 const Config = require('../../src/config')
 const axios = require('axios')
 const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
+const { expect } = require('chai')
 
 describe('AppSec Index', () => {
   let config
@@ -58,6 +60,7 @@ describe('AppSec Index', () => {
     sinon.stub(Reporter, 'setRateLimit')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
+    sinon.stub(telemetry, 'configure')
   })
 
   afterEach(() => {
@@ -103,6 +106,12 @@ describe('AppSec Index', () => {
       expect(bodyParser.hasSubscribers).to.be.true
       expect(queryParser.hasSubscribers).to.be.true
     })
+
+    it('should configure telemetry and appsec as a client', () => {
+      AppSec.enable(config)
+
+      expect(telemetry.configure).to.be.calledOnceWithExactly(config, 'appsec')
+    })
   })
 
   describe('disable', () => {
@@ -142,6 +151,16 @@ describe('AppSec Index', () => {
 
       expect(bodyParser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
+    })
+
+    it('should stop telemetry for appsec client', () => {
+      AppSec.enable(config)
+
+      sinon.stub(telemetry, 'stop')
+
+      AppSec.disable()
+
+      expect(telemetry.stop).to.be.calledOnceWithExactly('appsec')
     })
   })
 
