@@ -23,7 +23,7 @@ const b3SampledKey = 'x-b3-sampled'
 const b3FlagsKey = 'x-b3-flags'
 const b3HeaderKey = 'b3'
 const sqsdHeaderHey = 'x-aws-sqsd-attr-_datadog'
-const googleCloudTraceKey = 'x-cloud-trace-context'
+const googleCloudTraceContextKey = 'x-cloud-trace-context'
 const b3HeaderExpr = /^(([0-9a-f]{16}){1,2}-[0-9a-f]{16}(-[01d](-[0-9a-f]{16})?)?|[01d])$/i
 const baggageExpr = new RegExp(`^${baggagePrefix}(.+)$`)
 const tagKeyExpr = /^_dd\.p\.[\x21-\x2b\x2d-\x7e]+$/ // ASCII minus spaces and commas
@@ -362,7 +362,7 @@ class TextMapPropagator {
 
       this._extractBaggageItems(carrier, spanContext)
 
-      if (carrier.hasOwnProperty(googleCloudTraceKey) && !carrier.hasOwnProperty(traceKey)) {
+      if (carrier.hasOwnProperty(googleCloudTraceContextKey) && !carrier.hasOwnProperty(traceKey)) {
         spanContext._spanId = 0
       }
 
