@@ -297,6 +297,10 @@ class TextMapPropagator {
   }
 
   _extractTraceparentContext (carrier) {
+    if (carrier.hasOwnProperty('x-cloud-trace-context')) {
+      return null
+    }
+
     const headerValue = carrier[traceparentKey]
     if (!headerValue) {
       return null

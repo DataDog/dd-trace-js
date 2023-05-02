@@ -34,7 +34,7 @@ curl -s "https://us-east1-datadog-sandbox.cloudfunctions.net/dd-trace-js-sls-min
 echo "Waiting 20 seconds before tailing logs"
 sleep 20
 
-LOGS=$(gcloud functions logs read dd-trace-js-sls-mini-agent-integration-test-${STAGE} --region us-east1 --gen2 --limit 500)
+LOGS=$(gcloud functions logs read dd-trace-js-sls-mini-agent-integration-test-${STAGE} --region us-east1 --gen2 --limit 1000)
 
 echo "$LOGS"
 
