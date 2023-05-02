@@ -51,7 +51,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       const pathwayCtx = Hash.encodePathwayContext(pathwayHash, originTimestamp, currentTimestamp)
 
       header.metrics['parent_hash'] = parentHash
-      header.metrics['edge_tags'] = { service, env, groupId, topic, partition }
+      header.metrics['edge_tags'] = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
       header.metrics['edge_latency'] = edgeLatency
       header.metrics['pathway_latency'] = pathwayLatency
       header.metrics['dd-pathway-ctx'] = pathwayCtx

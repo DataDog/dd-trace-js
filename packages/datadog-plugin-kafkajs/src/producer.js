@@ -41,7 +41,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
         currentTimestamp: currentTimestamp,
         metrics: {
           'parent_hash': parentHash,
-          'edge_tags': { service, env, topic },
+          'edge_tags': ['direction:out', `topic:${topic}`, 'type:kafka'],
           'dd-pathway-ctx': pathwayCtx,
           'edge_latency': edgeLatency,
           'pathway_latency': pathwayLatency
