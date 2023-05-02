@@ -116,7 +116,7 @@ function start (aConfig, thePluginManager) {
   pluginManager = thePluginManager
   application = createAppObject()
   host = createHostObject()
-  heartbeatInterval = config.telemetry.heartbeatInterval || 60000
+  heartbeatInterval = config.telemetry.heartbeatInterval
 
   dependencies.start(config, application, host)
   sendData(config, application, host, 'app-started', appStarted())

@@ -19,8 +19,12 @@ describe('sendData', () => {
   })
 
   it('should call to request (TCP)', () => {
-    sendDataModule.sendData({ hostname: '', port: '12345', tags: { 'runtime-id': '123' } },
-      application, 'test', 'req-type')
+    sendDataModule.sendData({
+      hostname: '',
+      port: '12345',
+      tags: { 'runtime-id': '123' }
+    },
+    application, 'test', 'req-type')
     expect(request).to.have.been.calledOnce
     const options = request.getCall(0).args[1]
 
@@ -41,8 +45,11 @@ describe('sendData', () => {
   })
 
   it('should call to request (UDP)', () => {
-    sendDataModule.sendData({ url: 'unix:/foo/bar/baz', tags: { 'runtime-id': '123' } },
-      application, 'test', 'req-type')
+    sendDataModule.sendData({
+      url: 'unix:/foo/bar/baz',
+      tags: { 'runtime-id': '123' }
+    },
+    application, 'test', 'req-type')
     expect(request).to.have.been.calledOnce
     const options = request.getCall(0).args[1]
 
@@ -63,14 +70,12 @@ describe('sendData', () => {
   })
 
   it('should add debug header if DD_TELEMETRY_DEBUG is present', () => {
-    sendDataModule = proxyquire('../../src/telemetry/send-data', {
-      '../exporters/common/request': request
-    })
-
-    sendDataModule.sendData({ url: '/test',
+    sendDataModule.sendData({
+      url: '/test',
       tags: { 'runtime-id': '123' },
       telemetry: { debug: true }
-    }, application, 'test', 'req-type')
+    },
+    application, 'test', 'req-type')
 
     expect(request).to.have.been.calledOnce
     const options = request.getCall(0).args[1]
