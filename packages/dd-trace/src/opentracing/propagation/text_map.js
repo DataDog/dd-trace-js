@@ -297,10 +297,6 @@ class TextMapPropagator {
   }
 
   _extractTraceparentContext (carrier) {
-    if (carrier.hasOwnProperty('x-cloud-trace-context')) {
-      return null
-    }
-
     const headerValue = carrier[traceparentKey]
     if (!headerValue) {
       return null
@@ -308,6 +304,7 @@ class TextMapPropagator {
     const matches = headerValue.trim().match(traceparentExpr)
     if (matches.length) {
       const [ version, traceId, spanId, flags, tail ] = matches.slice(1)
+
       const traceparent = { version }
       const tracestate = TraceState.fromString(carrier.tracestate)
       if (invalidSegment.test(traceId)) return null
@@ -363,6 +360,11 @@ class TextMapPropagator {
       })
 
       this._extractBaggageItems(carrier, spanContext)
+
+      if (!carrier.hasOwnProperty(traceKey)) {
+        spanContext._spanId = 0
+      }
+
       return spanContext
     }
     return null
