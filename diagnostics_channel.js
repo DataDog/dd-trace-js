@@ -1,3 +1,3 @@
 'use strict'
 
-module.exports = require('./packages/diagnostics_channel/src/polyfill.js')
+module.exports = require('./packages/diagnostics_channel')
