@@ -1,6 +1,9 @@
 {
   "parserOptions": {
-    "ecmaVersion": 2020
+    "ecmaVersion": 2020,
+    "ecmaFeatures": {
+      "globalReturn": true
+    }
   },
   "extends": [
     "eslint:recommended",
