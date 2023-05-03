@@ -48,4 +48,30 @@ describe('sendData', () => {
       port: undefined
     })
   })
+
+  it('should remove not wanted properties from a payload with object type', () => {
+    const payload = {
+      message: 'test',
+      logger: {},
+      tags: {},
+      serviceMapping: {}
+    }
+    sendDataModule.sendData({ tags: { 'runtime-id': '123' } }, 'test', 'test', 'req-type', payload)
+
+    expect(request).to.have.been.calledOnce
+    const data = JSON.parse(request.getCall(0).args[0])
+
+    const { logger, tags, serviceMapping, ...trimmedPayload } = payload
+    expect(data.payload).to.deep.equal(trimmedPayload)
+  })
+
+  it('should not destructure a payload with array type', () => {
+    const arrayPayload = [{ message: 'test' }, { message: 'test2' }]
+    sendDataModule.sendData({ tags: { 'runtime-id': '123' } }, 'test', 'test', 'req-type', arrayPayload)
+
+    expect(request).to.have.been.calledOnce
+    const data = JSON.parse(request.getCall(0).args[0])
+
+    expect(data.payload).to.deep.equal(arrayPayload)
+  })
 })
