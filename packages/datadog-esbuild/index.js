@@ -7,8 +7,6 @@ const NAMESPACE = 'datadog'
 const instrumented = Object.keys(require('../datadog-instrumentations/src/helpers/hooks.js'))
 const rawBuiltins = require('module').builtinModules
 
-warnIfUnsupported()
-
 const builtins = new Set()
 
 for (const builtin of rawBuiltins) {
@@ -91,21 +89,4 @@ module.exports.setup = function (build) {
       loader: 'js'
     }
   })
-}
-
-// Currently esbuild support requires Node.js >=v16.17 or >=v18.7
-// Better yet it would support Node >=v14.17 or >=v16
-// Of course, the most ideal would be to support all versions of Node that dd-trace supports.
-// Version constraints based on Node's diagnostics_channel support
-function warnIfUnsupported () {
-  const [major, minor] = process.versions.node.split('.').map(Number)
-  if (
-    major < 16 ||
-    (major === 16 && minor < 17) ||
-    (major === 18 && minor < 7)) {
-    console.error('WARNING: Esbuild support isn\'t available for older versions of Node.js.')
-    console.error(`Expected: Node.js >=v16.17 or >=v18.7. Actual: Node.js = ${process.version}.`)
-    console.error('This application may build properly with this version of Node.js, but unless a')
-    console.error('more recent version is used at runtime, third party packages won\'t be instrumented.')
-  }
 }
