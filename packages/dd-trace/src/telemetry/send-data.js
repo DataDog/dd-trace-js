@@ -2,16 +2,16 @@ const request = require('../exporters/common/request')
 
 function getHeaders (reqType, debug, application) {
   const headers = {
-    'Content-Type': 'application/json',
-    'DD-Telemetry-API-Version': 'v1',
-    'DD-Telemetry-Request-Type': reqType
+    'content-type': 'application/json',
+    'dd-telemetry-api-version': 'v1',
+    'dd-telemetry-request-type': reqType
   }
   if (debug) {
-    headers['DD-Telemetry-Debug-Enabled'] = 'true'
+    headers['dd-telemetry-debug-enabled'] = 'true'
   }
   if (application) {
-    headers['DD-Client-Library-Language'] = application.language_name
-    headers['DD-Client-Library-Version'] = application.tracer_version
+    headers['dd-client-library-language'] = application.language_name
+    headers['dd-client-library-version'] = application.tracer_version
   }
   return headers
 }

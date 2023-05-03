@@ -23,8 +23,8 @@ describe('sendData', () => {
       hostname: '',
       port: '12345',
       tags: { 'runtime-id': '123' }
-    },
-    application, 'test', 'req-type')
+    }, application, 'test', 'req-type')
+
     expect(request).to.have.been.calledOnce
     const options = request.getCall(0).args[1]
 
@@ -32,11 +32,11 @@ describe('sendData', () => {
       method: 'POST',
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
-        'Content-Type': 'application/json',
-        'DD-Telemetry-API-Version': 'v1',
-        'DD-Telemetry-Request-Type': 'req-type',
-        'DD-Client-Library-Language': application.language_name,
-        'DD-Client-Library-Version': application.tracer_version
+        'content-type': 'application/json',
+        'dd-telemetry-api-version': 'v1',
+        'dd-telemetry-request-type': 'req-type',
+        'dd-client-library-language': application.language_name,
+        'dd-client-library-version': application.tracer_version
       },
       url: undefined,
       hostname: '',
@@ -48,8 +48,8 @@ describe('sendData', () => {
     sendDataModule.sendData({
       url: 'unix:/foo/bar/baz',
       tags: { 'runtime-id': '123' }
-    },
-    application, 'test', 'req-type')
+    }, application, 'test', 'req-type')
+
     expect(request).to.have.been.calledOnce
     const options = request.getCall(0).args[1]
 
@@ -57,11 +57,11 @@ describe('sendData', () => {
       method: 'POST',
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
-        'Content-Type': 'application/json',
-        'DD-Telemetry-API-Version': 'v1',
-        'DD-Telemetry-Request-Type': 'req-type',
-        'DD-Client-Library-Language': application.language_name,
-        'DD-Client-Library-Version': application.tracer_version
+        'content-type': 'application/json',
+        'dd-telemetry-api-version': 'v1',
+        'dd-telemetry-request-type': 'req-type',
+        'dd-client-library-language': application.language_name,
+        'dd-client-library-version': application.tracer_version
       },
       url: 'unix:/foo/bar/baz',
       hostname: undefined,
@@ -74,8 +74,7 @@ describe('sendData', () => {
       url: '/test',
       tags: { 'runtime-id': '123' },
       telemetry: { debug: true }
-    },
-    application, 'test', 'req-type')
+    }, application, 'test', 'req-type')
 
     expect(request).to.have.been.calledOnce
     const options = request.getCall(0).args[1]
@@ -84,12 +83,12 @@ describe('sendData', () => {
       method: 'POST',
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
-        'Content-Type': 'application/json',
-        'DD-Telemetry-API-Version': 'v1',
-        'DD-Telemetry-Request-Type': 'req-type',
-        'DD-Telemetry-Debug-Enabled': 'true',
-        'DD-Client-Library-Language': application.language_name,
-        'DD-Client-Library-Version': application.tracer_version
+        'content-type': 'application/json',
+        'dd-telemetry-api-version': 'v1',
+        'dd-telemetry-request-type': 'req-type',
+        'dd-telemetry-debug-enabled': 'true',
+        'dd-client-library-language': application.language_name,
+        'dd-client-library-version': application.tracer_version
       },
       url: '/test',
       hostname: undefined,
