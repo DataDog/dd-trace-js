@@ -4,7 +4,7 @@ const logs = require('./api/logs-plugin')
 const metrics = require('./api/metrics-plugin')
 const { Verbosity, isDebugAllowed, isInfoAllowed, getVerbosity } = require('./verbosity')
 const {
-  drain: drainMetricsAndDistributions,
+  drainMetricsAndDistributions,
   init: initTelemetryCollector,
   getFromContext,
   GLOBAL

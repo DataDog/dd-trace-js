@@ -156,9 +156,9 @@ function finishRequest (req, res) {
     metricsQueue.clear()
   }
 
-  if (!rootSpan.context()._tags['appsec.event']) return
-
   incWafRequests(wafMetricsStore)
+
+  if (!rootSpan.context()._tags['appsec.event']) return
 
   const newTags = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_PASSLIST, 'http.response.headers.')
 
