@@ -488,7 +488,7 @@ addHook({
   versions: ['>=24.8.0'],
   file: 'build/jasmineAsyncInstall.js'
 }, (jestJasmineAsyncInstallExport, jestVersion) => {
-  if (semver.gte(ddTraceVersion, '4')) {
+  if (semver.gte(ddTraceVersion, '4.0.0')) {
     return jestJasmineAsyncInstallExport
   }
   return jasmineAsyncInstallWraper(jestJasmineAsyncInstallExport, jestVersion)

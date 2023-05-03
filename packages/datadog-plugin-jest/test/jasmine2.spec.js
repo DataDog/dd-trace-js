@@ -23,7 +23,7 @@ const {
 
 const { version: ddTraceVersion } = require('../../../package.json')
 
-const describeFunction = semver.gte(ddTraceVersion, '4') ? describe.skip : describe
+const describeFunction = semver.gte(ddTraceVersion, '4.0.0') ? describe.skip : describe
 
 describeFunction('Plugin', function () {
   this.retries(2)
