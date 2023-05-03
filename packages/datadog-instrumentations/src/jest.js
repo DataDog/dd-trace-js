@@ -483,16 +483,13 @@ function jasmineAsyncInstallWraper (jasmineAsyncInstallExport, jestVersion) {
   }
 }
 
-addHook({
-  name: 'jest-jasmine2',
-  versions: ['>=24.8.0'],
-  file: 'build/jasmineAsyncInstall.js'
-}, (jestJasmineAsyncInstallExport, jestVersion) => {
-  if (semver.gte(ddTraceVersion, '4.0.0')) {
-    return jestJasmineAsyncInstallExport
-  }
-  return jasmineAsyncInstallWraper(jestJasmineAsyncInstallExport, jestVersion)
-})
+if (semver.lt(ddTraceVersion, '4.0.0')) {
+  addHook({
+    name: 'jest-jasmine2',
+    versions: ['>=24.8.0'],
+    file: 'build/jasmineAsyncInstall.js'
+  }, jasmineAsyncInstallWraper)
+}
 
 addHook({
   name: 'jest-worker',
