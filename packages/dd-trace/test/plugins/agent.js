@@ -69,13 +69,33 @@ function handleTraceRequest (req, res, sendToTestAgent) {
   })
 }
 
+function checkAgentStatus () {
+  const agentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
+
+  return new Promise((resolve, reject) => {
+    const request = http.request(`${agentUrl}/info`, { method: 'GET' }, response => {
+      if (response.statusCode === 200) {
+        resolve(true)
+      } else {
+        resolve(false)
+      }
+    })
+
+    request.on('error', error => {
+      reject(error)
+    })
+
+    request.end()
+  })
+}
+
 const DEFAULT_AVAILABLE_ENDPOINTS = ['/evp_proxy/v2']
 
 let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
 
 module.exports = {
   // Load the plugin on the tracer with an optional config and start a mock agent.
-  async load (pluginName, config, tracerConfig = {}, useTestAgent = true) {
+  async load (pluginName, config, tracerConfig = {}) {
     tracer = require('../..')
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -86,6 +106,14 @@ module.exports = {
       }
       next()
     })
+
+    let useTestAgent
+
+    try {
+      useTestAgent = await checkAgentStatus()
+    } catch (error) {
+      useTestAgent = false
+    }
 
     agent.get('/info', (req, res) => {
       res.status(202).send({

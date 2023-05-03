@@ -19,7 +19,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
 
     prepareTestServerForIast('ldapjs', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       beforeEach(async () => {
-        await agent.load('ldapjs', null, {}, false)
+        await agent.load('ldapjs')
         vulnerabilityReporter.clearCache()
         const ldapjs = require(`../../../../../../versions/ldapjs@${version}`).get()
         client = ldapjs.createClient({

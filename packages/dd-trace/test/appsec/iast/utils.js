@@ -39,7 +39,7 @@ function testInRequest (app, tests) {
   })
 
   beforeEach(() => {
-    return agent.load('http', undefined, { flushInterval: 1 }, false)
+    return agent.load('http', undefined, { flushInterval: 1 })
       .then(() => {
         http = require('http')
       })
@@ -61,7 +61,7 @@ function testInRequest (app, tests) {
 
 function testOutsideRequestHasVulnerability (fnToTest, vulnerability) {
   beforeEach(async () => {
-    await agent.load(null, null, {}, false)
+    await agent.load()
   })
   afterEach(() => {
     return agent.close({ ritmReset: false })
@@ -130,7 +130,7 @@ function prepareTestServerForIast (description, tests) {
     })
 
     before(() => {
-      return agent.load('http', undefined, { flushInterval: 1 }, false)
+      return agent.load('http', undefined, { flushInterval: 1 })
         .then(() => {
           http = require('http')
         })

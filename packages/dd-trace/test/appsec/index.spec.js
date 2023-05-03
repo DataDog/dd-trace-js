@@ -359,7 +359,7 @@ describe('IP blocking', () => {
     })
   })
   before(() => {
-    return agent.load('http', null, {}, false)
+    return agent.load('http')
       .then(() => {
         http = require('http')
       })

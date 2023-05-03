@@ -233,7 +233,7 @@ describe('track_event', () => {
 
     before(async () => {
       port = await getPort()
-      await agent.load('http', null, {}, false)
+      await agent.load('http')
       http = require('http')
     })
 

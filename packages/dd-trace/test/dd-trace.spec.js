@@ -12,7 +12,7 @@ describe('dd-trace', () => {
 
   beforeEach(() => {
     tracer = require('../')
-    return agent.load(null, null, {}, false)
+    return agent.load()
   })
 
   afterEach(() => {
