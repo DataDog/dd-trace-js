@@ -2,6 +2,7 @@
 const fs = require('fs')
 const path = require('path')
 
+const semver = require('semver')
 const nock = require('nock')
 
 const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -22,7 +23,9 @@ const {
 
 const { version: ddTraceVersion } = require('../../../package.json')
 
-describe('Plugin', function () {
+const describeFunction = semver.gte(ddTraceVersion, '4') ? describe.skip : describe
+
+describeFunction('Plugin', function () {
   this.retries(2)
   let jestExecutable
 
