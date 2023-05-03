@@ -26,10 +26,6 @@ class DatadogTracer extends Tracer {
       childOf: this.scope().active()
     }, options)
 
-    if (!options.childOf && options.orphanable === false) {
-      return fn(null, () => {})
-    }
-
     const span = this.startSpan(name, options)
 
     addTags(span, options)
@@ -79,10 +75,6 @@ class DatadogTracer extends Tracer {
       let optionsObj = options
       if (typeof optionsObj === 'function' && typeof fn === 'function') {
         optionsObj = optionsObj.apply(this, arguments)
-      }
-
-      if (optionsObj && optionsObj.orphanable === false && !tracer.scope().active()) {
-        return fn.apply(this, arguments)
       }
 
       const lastArgId = arguments.length - 1
