@@ -103,7 +103,8 @@ module.exports = {
   resetCoverage,
   mergeCoverage,
   fromCoverageMapToCoverage,
-  getTestLineStart
+  getTestLineStart,
+  getCallSites
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -394,4 +395,24 @@ function getTestLineStart (err, testSuitePath) {
   } catch (e) {
     return null
   }
+}
+
+// From https://github.com/felixge/node-stack-trace/blob/ba06dcdb50d465cd440d84a563836e293b360427/index.js#L1
+function getCallSites () {
+  const oldLimit = Error.stackTraceLimit
+  Error.stackTraceLimit = Infinity
+
+  const dummy = {}
+
+  const v8Handler = Error.prepareStackTrace
+  Error.prepareStackTrace = function (_, v8StackTrace) {
+    return v8StackTrace
+  }
+  Error.captureStackTrace(dummy)
+
+  const v8StackTrace = dummy.stack
+  Error.prepareStackTrace = v8Handler
+  Error.stackTraceLimit = oldLimit
+
+  return v8StackTrace
 }
