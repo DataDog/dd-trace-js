@@ -2,6 +2,11 @@
 
 // https://github.com/simon-id/diagnostics_channel-polyfill
 
+if (Number(process.versions.node.split('.')[0]) >= 20) {
+  module.exports = require('diagnostics_channel')
+  return
+}
+
 const util = require('util')
 
 // Port from node core lib/internal/errors.js
