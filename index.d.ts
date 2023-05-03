@@ -77,9 +77,6 @@ export declare interface Tracer extends opentracing.Tracer {
    * span will finish when that callback is called.
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
-   *
-   * If the `orphanable` option is set to false, the function will not be traced
-   * unless there is already an active span or `childOf` option.
    */
   trace<T> (name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
   trace<T> (name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
@@ -492,12 +489,6 @@ export declare interface TracerOptions {
    * @default 'debug'
    */
   logLevel?: 'error' | 'debug'
-
-  /**
-   * If false, require a parent in order to trace.
-   * @default true
-   */
-  orphanable?: boolean
 
   /**
    * Enables DBM to APM link using tag injection.
