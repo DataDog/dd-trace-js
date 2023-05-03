@@ -5,7 +5,6 @@ const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
 const TraceState = require('./tracestate')
-const { inGCPFunction } = require('../../serverless')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 
@@ -360,11 +359,6 @@ class TextMapPropagator {
       })
 
       this._extractBaggageItems(carrier, spanContext)
-
-      if (inGCPFunction()) {
-        spanContext._spanId = 0
-      }
-
       return spanContext
     }
     return null
