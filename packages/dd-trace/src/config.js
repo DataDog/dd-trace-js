@@ -31,19 +31,6 @@ function safeJsonParse (input) {
   }
 }
 
-const namingVersions = ['v0', 'v1']
-const defaultVersion = 'v0'
-
-function validateNamingVersion (versionString) {
-  if (!namingVersions.includes(versionString)) {
-    log.warn(
-      `Unexpected input for config.spanAttributeSchema, picked default ${defaultVersion}`
-    )
-    return defaultVersion
-  }
-  return versionString
-}
-
 // Shallow clone with property name remapping
 function remapify (input, mappings) {
   if (!input) return
@@ -270,9 +257,7 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       false
     )
-    const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
-      process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
-    )
+
     const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
       process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       '512'
@@ -479,7 +464,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
       exporters: DD_PROFILING_EXPORTERS
     }
-    this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
