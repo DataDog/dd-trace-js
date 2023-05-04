@@ -1,8 +1,8 @@
 'use strict'
 
-const InboundPlugin = require('./inbound')
+const IncomingPlugin = require('./incoming')
 
-class ServerPlugin extends InboundPlugin {
+class ServerPlugin extends IncomingPlugin {
   static get operation () { return 'request' }
 }
 

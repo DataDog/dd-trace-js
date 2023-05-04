@@ -3,7 +3,6 @@
 const { expect } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const namingSchema = require('./naming')
 
 describe('Plugin', () => {
   let tracer
@@ -51,10 +50,10 @@ describe('Plugin', () => {
               agent.use(traces => {
                 const span = traces[0][0]
                 expect(span).to.include({
-                  name: namingSchema.send.opName,
+                  name: 'amqp.send',
                   resource: 'amq.topic',
                   error: 0,
-                  service: namingSchema.send.serviceName
+                  service: 'test-amqp-producer'
                 })
                 expect(span).to.not.have.property('type')
                 expect(span.meta).to.include({
@@ -95,11 +94,6 @@ describe('Plugin', () => {
                 context.sender.send(encodedMessage, undefined, 0)
               })
             })
-
-            withNamingSchema(
-              () => { context.sender.send({ body: 'Hello World!' }) },
-              () => namingSchema.send.opName, () => namingSchema.send.serviceName
-            )
           })
 
           describe('receiving a message', () => {
@@ -107,10 +101,10 @@ describe('Plugin', () => {
               agent.use(traces => {
                 const span = traces[0][0]
                 expect(span).to.include({
-                  name: namingSchema.receive.opName,
+                  name: 'amqp.receive',
                   resource: 'amq.topic',
                   error: 0,
-                  service: namingSchema.receive.serviceName,
+                  service: 'test',
                   type: 'worker'
                 })
                 expect(span.meta).to.include({
@@ -132,12 +126,6 @@ describe('Plugin', () => {
               })
               context.sender.send({ body: 'Hello World!' })
             })
-
-            withNamingSchema(
-              () => { context.sender.send({ body: 'Hello World!' }) },
-              () => namingSchema.receive.opName,
-              () => namingSchema.receive.serviceName
-            )
           })
         })
 
@@ -163,25 +151,19 @@ describe('Plugin', () => {
             connection.open_receiver('amq.topic')
           })
 
-          withNamingSchema(
-            () => { context.sender.send({ body: 'Hello World!' }) },
-            () => namingSchema.receive.opName, () => 'a_test_service'
-          )
-
           it('should use the configuration for the receiver', (done) => {
             agent.use(traces => {
               const span = traces[0][0]
-              expect(span).to.have.property('name', namingSchema.receive.opName)
+              expect(span).to.have.property('name', 'amqp.receive')
               expect(span).to.have.property('service', 'a_test_service')
             })
               .then(done, done)
             context.sender.send({ body: 'Hello World!' })
           })
-
           it('should use the configuration for the sender', (done) => {
             agent.use(traces => {
               const span = traces[0][0]
-              expect(span).to.have.property('name', namingSchema.send.opName)
+              expect(span).to.have.property('name', 'amqp.send')
               expect(span).to.have.property('service', 'a_test_service')
             })
               .then(done, done)
@@ -240,7 +222,7 @@ describe('Plugin', () => {
 
           describe('client sent message', () => {
             it('should be instrumented on receiving', done => {
-              const p = expectReceiving(agent, namingSchema)
+              const p = expectReceiving(agent)
 
               server.on('message', msg => {
                 p.then(done, done)
@@ -249,7 +231,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on sending', done => {
-              const p = expectSending(agent, namingSchema, null, 'amq.topic.2')
+              const p = expectSending(agent, null, 'amq.topic.2')
 
               server.on('message', msg => {
                 p.then(done, done)
@@ -260,7 +242,7 @@ describe('Plugin', () => {
 
           describe('server sent message', () => {
             it('should be instrumented on receiving', done => {
-              const p = expectReceiving(agent, namingSchema, null, 'amq.topic.2')
+              const p = expectReceiving(agent, null, 'amq.topic.2')
 
               client.on('message', msg => {
                 p.then(done, done)
@@ -269,7 +251,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on sending', done => {
-              const p = expectSending(agent, namingSchema)
+              const p = expectSending(agent)
 
               client.on('message', msg => {
                 p.then(done, done)
@@ -342,7 +324,7 @@ describe('Plugin', () => {
 
           describe('client sent message', () => {
             it('should be instrumented on sending', done => {
-              const p = expectSending(agent, namingSchema, false)
+              const p = expectSending(agent, false)
 
               server.on('message', msg => {
                 p.then(done, done)
@@ -351,7 +333,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on receiving', done => {
-              const p = expectReceiving(agent, namingSchema)
+              const p = expectReceiving(agent)
 
               server.on('message', msg => {
                 p.then(done, done)
@@ -362,7 +344,7 @@ describe('Plugin', () => {
 
           describe('server sent message', () => {
             it('should be instrumented on sending', done => {
-              const p = expectSending(agent, namingSchema)
+              const p = expectSending(agent)
 
               client.on('message', msg => {
                 p.then(done, done)
@@ -371,7 +353,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on receiving', done => {
-              const p = expectReceiving(agent, namingSchema)
+              const p = expectReceiving(agent)
 
               client.on('message', msg => {
                 p.then(done, done)
@@ -403,7 +385,7 @@ describe('Plugin', () => {
 
           describe('server sent message', () => {
             it('should be instrumented on sending', done => {
-              const p = expectSending(agent, namingSchema)
+              const p = expectSending(agent)
 
               client.on('message', msg => {
                 msg.delivery.accept()
@@ -413,7 +395,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on receiving and accepting', done => {
-              const p = expectReceiving(agent, namingSchema)
+              const p = expectReceiving(agent)
 
               client.on('message', msg => {
                 process.nextTick(() => {
@@ -425,7 +407,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on receiving and rejecting', done => {
-              const p = expectReceiving(agent, namingSchema, 'rejected')
+              const p = expectReceiving(agent, 'rejected')
 
               client.on('message', msg => {
                 process.nextTick(() => {
@@ -437,7 +419,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on receiving and releasing', done => {
-              const p = expectReceiving(agent, namingSchema, 'released')
+              const p = expectReceiving(agent, 'released')
 
               client.on('message', msg => {
                 process.nextTick(() => {
@@ -449,7 +431,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on receiving and modifying', done => {
-              const p = expectReceiving(agent, namingSchema, 'modified')
+              const p = expectReceiving(agent, 'modified')
 
               client.on('message', msg => {
                 process.nextTick(() => {
@@ -497,10 +479,10 @@ describe('Plugin', () => {
             agent.use(traces => {
               const span = traces[0][0]
               expect(span).to.include({
-                name: namingSchema.send.opName,
+                name: 'amqp.send',
                 resource: 'amq.topic',
                 error: 1,
-                service: namingSchema.send.serviceName
+                service: 'test-amqp-producer'
               })
               expect(span.meta).to.include({
                 'span.kind': 'producer',
@@ -529,10 +511,10 @@ describe('Plugin', () => {
             agent.use(traces => {
               const span = traces[0][0]
               expect(span).to.include({
-                name: namingSchema.receive.opName,
+                name: 'amqp.receive',
                 resource: 'amq.topic',
                 error: 1,
-                service: namingSchema.receive.serviceName
+                service: 'test'
               })
               expect(span.meta).to.include({
                 'span.kind': 'consumer',
@@ -558,16 +540,16 @@ describe('Plugin', () => {
   })
 })
 
-function expectReceiving (agent, namingSchema, deliveryState, topic) {
+function expectReceiving (agent, deliveryState, topic) {
   deliveryState = deliveryState || deliveryState === false ? undefined : 'accepted'
   topic = topic || 'amq.topic'
   return Promise.resolve().then(() => agent.use(traces => {
     const span = traces[0][0]
     expect(span).to.include({
-      name: namingSchema.receive.opName,
+      name: 'amqp.receive',
       resource: topic,
       error: 0,
-      service: namingSchema.receive.serviceName,
+      service: 'test',
       type: 'worker'
     })
     const expectedMeta = {
@@ -583,16 +565,16 @@ function expectReceiving (agent, namingSchema, deliveryState, topic) {
   }))
 }
 
-function expectSending (agent, namingSchema, deliveryState, topic) {
+function expectSending (agent, deliveryState, topic) {
   deliveryState = deliveryState || deliveryState === false ? undefined : 'accepted'
   topic = topic || 'amq.topic'
   return Promise.resolve().then(() => agent.use(traces => {
     const span = traces[0][0]
     expect(span).to.include({
-      name: namingSchema.send.opName,
+      name: 'amqp.send',
       resource: topic,
       error: 0,
-      service: namingSchema.send.serviceName
+      service: 'test-amqp-producer'
     })
     expect(span).to.not.have.property('type')
     const expectedMeta = {

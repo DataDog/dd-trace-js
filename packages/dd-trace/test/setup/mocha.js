@@ -9,13 +9,10 @@ const externals = require('../plugins/externals.json')
 const slackReport = require('./slack-report')
 const metrics = require('../../src/metrics')
 const agent = require('../plugins/agent')
-const Nomenclature = require('../../../dd-trace/src/service-naming')
 const { storage } = require('../../../datadog-core')
-const { schemaDefinitions } = require('../../src/service-naming/schemas')
 
 global.withVersions = withVersions
 global.withExports = withExports
-global.withNamingSchema = withNamingSchema
 
 const packageVersionFailures = Object.create({})
 
@@ -44,40 +41,6 @@ function loadInstFile (file, instrumentations) {
   proxyquire.noPreserveCache()(instPath, {
     './helpers/instrument': instrument,
     '../helpers/instrument': instrument
-  })
-}
-
-function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName) {
-  let fullConfig
-
-  describe('service and operation naming', () => {
-    Object.keys(schemaDefinitions).forEach(versionName => {
-      describe(`in version ${versionName}`, () => {
-        before(() => {
-          fullConfig = Nomenclature.config
-          Nomenclature.configure({
-            spanAttributeSchema: versionName,
-            service: fullConfig.service // Hack: only way to retrieve the test agent configuration
-          })
-        })
-
-        after(() => {
-          Nomenclature.configure(fullConfig)
-        })
-
-        it(`should conform to the naming schema`, done => {
-          agent
-            .use(traces => {
-              const span = traces[0][0]
-              expect(span).to.have.property('name', expectedOpName())
-              expect(span).to.have.property('service', expectedServiceName())
-            })
-            .then(done)
-            .catch(done)
-          spanProducerFn()
-        })
-      })
-    })
   })
 }
 

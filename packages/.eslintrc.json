@@ -9,7 +9,6 @@
     "expect": true,
     "sinon": true,
     "proxyquire": true,
-    "withNamingSchema": true,
     "withVersions": true,
     "withExports": true
   },
