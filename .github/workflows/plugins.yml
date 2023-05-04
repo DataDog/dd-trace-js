@@ -29,12 +29,20 @@ jobs:
           QPIDD_ADMIN_PASSWORD: admin
         ports:
           - 5673:5672
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: amqp10|rhea
       SERVICES: qpid
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -44,7 +52,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   amqplib:
@@ -253,6 +261,16 @@ jobs:
 
   dns:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: dns
     steps:
@@ -260,7 +278,6 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
@@ -269,7 +286,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
       - run: docker-compose down # Stop and remove the testagent container
 
