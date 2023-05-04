@@ -1,4 +1,6 @@
 'use strict'
 
-require('tap').mochaGlobals()
-require('./core')
+if (!process.env.DISABLE_TAP) {
+  require('tap').mochaGlobals()
+  require('./core')
+}
