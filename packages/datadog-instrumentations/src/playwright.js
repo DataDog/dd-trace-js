@@ -214,10 +214,20 @@ function runnerHook (runnerExport, playwrightVersion) {
     })
 
     const runAllTestsReturn = await runAllTests.apply(this, arguments)
+
+    Object.values(remainingTestsByFile).forEach(tests => {
+      // `tests` should normally be empty, but if it isn't,
+      // there were tests that did not go through `testBegin` or `testEnd`,
+      // because they were skipped
+      tests.forEach(test => {
+        testBeginHandler(test)
+        testEndHandler(test, 'skip')
+      })
+    })
+
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 
     let onDone
-
     const flushWait = new Promise(resolve => {
       onDone = resolve
     })
