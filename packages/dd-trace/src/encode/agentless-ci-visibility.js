@@ -170,15 +170,20 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       this._encodeString(bytes, 'test_session_id')
       this._encodeId(bytes, id(content.meta.test_session_id, 10))
       delete content.meta.test_session_id
+    }
 
+    if (content.meta.test_module_id) {
       this._encodeString(bytes, 'test_module_id')
       this._encodeId(bytes, id(content.meta.test_module_id, 10))
       delete content.meta.test_module_id
+    }
 
+    if (content.meta.test_suite_id) {
       this._encodeString(bytes, 'test_suite_id')
       this._encodeId(bytes, id(content.meta.test_suite_id, 10))
       delete content.meta.test_suite_id
     }
+
     this._encodeString(bytes, 'meta')
     this._encodeMap(bytes, content.meta)
     this._encodeString(bytes, 'metrics')
