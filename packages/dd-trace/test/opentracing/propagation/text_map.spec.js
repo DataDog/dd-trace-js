@@ -9,6 +9,7 @@ const TraceState = require('../../../src/opentracing/propagation/tracestate')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
+const { MAJOR } = require('../../../../../version')
 const { expect } = require('chai')
 
 describe('TextMapPropagator', () => {
@@ -200,7 +201,7 @@ describe('TextMapPropagator', () => {
         }
       })
 
-      config.tracePropagationStyle.inject = ['b3multi']
+      config.tracePropagationStyle.inject = MAJOR >= 4 ? ['b3multi'] : ['b3']
 
       propagator.inject(spanContext, carrier)
 
@@ -222,7 +223,7 @@ describe('TextMapPropagator', () => {
         }
       })
 
-      config.tracePropagationStyle.inject = ['b3multi']
+      config.tracePropagationStyle.inject = MAJOR >= 4 ? ['b3multi'] : ['b3']
 
       propagator.inject(spanContext, carrier)
 
@@ -240,7 +241,7 @@ describe('TextMapPropagator', () => {
         }
       })
 
-      config.tracePropagationStyle.inject = ['b3multi']
+      config.tracePropagationStyle.inject = MAJOR >= 4 ? ['b3multi'] : ['b3']
 
       propagator.inject(spanContext, carrier)
 
