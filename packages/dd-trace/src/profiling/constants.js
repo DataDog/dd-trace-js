@@ -9,7 +9,6 @@ const snapshotKinds = Object.freeze({
 const oomExportStrategies = Object.freeze({
   PROCESS: 'process',
   ASYNC_CALLBACK: 'async',
-  INTERRUPT_CALLBACK: 'interrupt',
   LOGS: 'logs'
 })
 
