@@ -465,7 +465,7 @@ describe('Plugin', () => {
           return agent.load('pg')
         })
         beforeEach(done => {
-          pg = require('../../../versions/pg@>=8.0.3').get()
+          pg = require(`../../../versions/pg@${version}`).get()
 
           tracer.init()
           tracer.use('pg', {
