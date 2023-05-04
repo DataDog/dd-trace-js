@@ -123,6 +123,15 @@ describe('Config', () => {
     expect(log.toggle).to.have.been.calledWith(config.debug)
   })
 
+  it('should not warn on undefined DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', () => {
+    const config = new Config({
+      logger: {},
+      debug: true
+    })
+    expect(log.warn).not.to.be.called
+    expect(config).to.have.property('spanAttributeSchema', 'v0')
+  })
+
   it('should initialize from the default service', () => {
     pkg.name = 'test'
 

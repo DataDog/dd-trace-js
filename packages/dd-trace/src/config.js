@@ -37,14 +37,17 @@ function safeJsonParse (input) {
 }
 
 const namingVersions = ['v0', 'v1']
-const defaultVersion = 'v0'
+const defaultNamingVersion = 'v0'
 
 function validateNamingVersion (versionString) {
+  if (!versionString) {
+    return defaultNamingVersion
+  }
   if (!namingVersions.includes(versionString)) {
     log.warn(
-      `Unexpected input for config.spanAttributeSchema, picked default ${defaultVersion}`
+      `Unexpected input for config.spanAttributeSchema, picked default ${defaultNamingVersion}`
     )
-    return defaultVersion
+    return defaultNamingVersion
   }
   return versionString
 }
