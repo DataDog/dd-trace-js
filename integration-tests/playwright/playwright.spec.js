@@ -75,18 +75,22 @@ versions.forEach((version) => {
 
             assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
               'test_suite.todo-list-page-test.js',
-              'test_suite.landing-page-test.js'
+              'test_suite.landing-page-test.js',
+              'test_suite.skipped-suite-test.js'
             ])
 
             assert.includeMembers(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
               'pass',
-              'fail'
+              'fail',
+              'skip'
             ])
 
             assert.includeMembers(testEvents.map(test => test.content.resource), [
               'landing-page-test.js.should work with passing tests',
               'landing-page-test.js.should work with skipped tests',
-              'todo-list-page-test.js.should work with failing tests'
+              'landing-page-test.js.should work with fixme',
+              'todo-list-page-test.js.should work with failing tests',
+              'todo-list-page-test.js.should work with fixme root'
             ])
 
             assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
