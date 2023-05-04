@@ -5,8 +5,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
-const namingSchema = require('./naming')
-
 describe('Plugin', () => {
   describe('kafkajs', function () {
     this.timeout(10000) // TODO: remove when new internal trace has landed
@@ -33,8 +31,8 @@ describe('Plugin', () => {
         describe('producer', () => {
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: namingSchema.send.opName,
-              service: namingSchema.send.serviceName,
+              name: 'kafka.produce',
+              service: 'test-kafka',
               meta: {
                 'span.kind': 'producer',
                 'component': 'kafkajs'
@@ -54,7 +52,7 @@ describe('Plugin', () => {
 
           it('should be instrumented w/ error', async () => {
             const producer = kafka.producer()
-            const resourceName = namingSchema.send.opName
+            const resourceName = 'kafka.produce'
 
             let error
 
@@ -63,7 +61,7 @@ describe('Plugin', () => {
 
               expect(span).to.include({
                 name: resourceName,
-                service: namingSchema.send.serviceName,
+                service: 'test-kafka',
                 resource: resourceName,
                 error: 1
               })
@@ -88,12 +86,6 @@ describe('Plugin', () => {
               return expectedSpanPromise
             }
           })
-
-          withNamingSchema(
-            async () => sendMessages(kafka, testTopic, messages),
-            () => namingSchema.send.opName,
-            () => namingSchema.send.serviceName
-          )
         })
         describe('consumer', () => {
           let consumer
@@ -106,11 +98,10 @@ describe('Plugin', () => {
           afterEach(async () => {
             await consumer.disconnect()
           })
-
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: namingSchema.receive.opName,
-              service: namingSchema.receive.serviceName,
+              name: 'kafka.consume',
+              service: 'test-kafka',
               meta: {
                 'span.kind': 'consumer',
                 'component': 'kafkajs'
@@ -127,7 +118,6 @@ describe('Plugin', () => {
 
             return expectedSpanPromise
           })
-
           it('should run the consumer in the context of the consumer span', done => {
             const firstSpan = tracer.scope().active()
 
@@ -136,7 +126,7 @@ describe('Plugin', () => {
 
               try {
                 expect(currentSpan).to.not.equal(firstSpan)
-                expect(currentSpan.context()._name).to.equal(namingSchema.receive.opName)
+                expect(currentSpan.context()._name).to.equal('kafka.consume')
                 done()
               } catch (e) {
                 done(e)
@@ -171,8 +161,8 @@ describe('Plugin', () => {
           it('should be instrumented w/ error', async () => {
             const fakeError = new Error('Oh No!')
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: namingSchema.receive.opName,
-              service: namingSchema.receive.serviceName,
+              name: 'kafka.consume',
+              service: 'test-kafka',
               meta: {
                 [ERROR_TYPE]: fakeError.name,
                 [ERROR_MESSAGE]: fakeError.message,
@@ -218,15 +208,6 @@ describe('Plugin', () => {
               .then(() => sendMessages(kafka, testTopic, messages))
               .catch(done)
           })
-
-          withNamingSchema(
-            async () => {
-              await consumer.run({ eachMessage: () => {} })
-              await sendMessages(kafka, testTopic, messages)
-            },
-            () => namingSchema.send.opName,
-            () => namingSchema.send.serviceName
-          )
         })
       })
     })
