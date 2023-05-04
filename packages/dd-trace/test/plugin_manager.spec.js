@@ -6,7 +6,6 @@ const { channel } = require('../../diagnostics_channel')
 const proxyquire = require('proxyquire')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
-const Nomenclature = require('../../dd-trace/src/service-naming')
 
 describe('Plugin Manager', () => {
   let tracer
@@ -240,26 +239,6 @@ describe('Plugin Manager', () => {
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
       expect(instantiated).to.deep.equal(['two', 'four'])
-    })
-    describe('service naming schema manager', () => {
-      const config = {
-        foo: { 'bar': 1 },
-        baz: 2
-      }
-      let configureSpy
-
-      beforeEach(() => {
-        configureSpy = sinon.spy(Nomenclature, 'configure')
-      })
-
-      afterEach(() => {
-        configureSpy.restore()
-      })
-
-      it('is configured when plugin manager is configured', () => {
-        pm.configure(config)
-        expect(configureSpy).to.have.been.calledWith(config)
-      })
     })
     it('skips configuring plugins entirely when plugins is false', () => {
       pm.configurePlugin = sinon.spy()
