@@ -4,6 +4,7 @@
 
 const { channel, addHook, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const major = parseInt(require('../../../package.json').version.split('.')[0])
 
 const startChannel = channel('apm:next:request:start')
 const finishChannel = channel('apm:next:request:finish')
@@ -168,7 +169,11 @@ addHook({ name: 'next', versions: ['>=11.1 <13.2'], file: 'dist/server/next-serv
   return nextServer
 })
 
-addHook({ name: 'next', versions: ['>=9.5 <11.1'], file: 'dist/next-server/server/next-server.js' }, nextServer => {
+addHook({
+  name: 'next',
+  versions: major >= 4 ? ['>=10.2 <11.1'] : ['>=9.5 <11.1'],
+  file: 'dist/next-server/server/next-server.js'
+}, nextServer => {
   const Server = nextServer.default
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
