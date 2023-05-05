@@ -1,5 +1,7 @@
 'use strict'
 
+const { deprecate } = require('util')
+
 const NoopTracer = require('./tracer')
 const NoopAppsecSdk = require('../appsec/sdk/noop')
 
@@ -76,5 +78,10 @@ class Tracer {
     return this
   }
 }
+
+Tracer.prototype.setUser = deprecate(
+  Tracer.prototype.setUser,
+  'tracer.setUser() is deprecated. Please use tracer.appsec.setUser() instead'
+)
 
 module.exports = Tracer
