@@ -253,4 +253,29 @@ describe('agentless-ci-visibility-encode', () => {
     expect(decodedTrace.events[0].type).to.equal('test_session_end')
     expect(decodedTrace.events[0].content.type).to.eql('test_session_end')
   })
+
+  it('does not crash if test_session_id is in meta but not test_module_id', () => {
+    const traceToTruncate = [{
+      trace_id: id('1234abcd1234abcd'),
+      span_id: id('1234abcd1234abcd'),
+      parent_id: id('1234abcd1234abcd'),
+      error: 0,
+      meta: {
+        test_session_id: '1234abcd1234abcd'
+      },
+      metrics: {},
+      start: 123,
+      duration: 456,
+      type: 'foo',
+      name: '',
+      resource: '',
+      service: ''
+    }]
+    encoder.encode(traceToTruncate)
+    const buffer = encoder.makePayload()
+    const decodedTrace = msgpack.decode(buffer, { codec })
+    const spanEvent = decodedTrace.events[0]
+    expect(spanEvent.type).to.equal('span')
+    expect(spanEvent.version.toNumber()).to.equal(1)
+  })
 })

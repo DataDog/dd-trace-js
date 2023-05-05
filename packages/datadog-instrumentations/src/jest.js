@@ -1,7 +1,10 @@
 'use strict'
+const semver = require('semver')
+
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const { version: ddTraceVersion } = require('../../../package.json')
 const {
   getCoveredFilenamesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -480,11 +483,13 @@ function jasmineAsyncInstallWraper (jasmineAsyncInstallExport, jestVersion) {
   }
 }
 
-addHook({
-  name: 'jest-jasmine2',
-  versions: ['>=24.8.0'],
-  file: 'build/jasmineAsyncInstall.js'
-}, jasmineAsyncInstallWraper)
+if (semver.lt(ddTraceVersion, '4.0.0')) {
+  addHook({
+    name: 'jest-jasmine2',
+    versions: ['>=24.8.0'],
+    file: 'build/jasmineAsyncInstall.js'
+  }, jasmineAsyncInstallWraper)
+}
 
 addHook({
   name: 'jest-worker',
