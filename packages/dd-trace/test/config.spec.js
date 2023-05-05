@@ -768,6 +768,26 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
   })
 
+  it('should not set DD_TRACE_TELEMETRY_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', () => {
+    // FUNCTION_NAME and GCP_PROJECT env vars indicate a gcp function with a deprecated runtime
+    process.env.FUNCTION_NAME = 'function_name'
+    process.env.GCP_PROJECT = 'project_name'
+
+    const config = new Config()
+
+    expect(config.telemetry.enabled).to.be.false
+  })
+
+  it('should not set DD_TRACE_TELEMETRY_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
+    // K_SERVICE and FUNCTION_TARGET env vars indicate a gcp function with a newer runtime
+    process.env.K_SERVICE = 'function_name'
+    process.env.FUNCTION_TARGET = 'function_target'
+
+    const config = new Config()
+
+    expect(config.telemetry.enabled).to.be.false
+  })
+
   it('should set telemetry default values', () => {
     const config = new Config()
 
@@ -823,6 +843,24 @@ describe('Config', () => {
 
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+
+    const config = new Config()
+
+    expect(config.remoteConfig.enabled).to.be.false
+  })
+
+  it('should not set DD_REMOTE_CONFIGURATION_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', () => {
+    process.env.FUNCTION_NAME = 'function_name'
+    process.env.GCP_PROJECT = 'project_name'
+
+    const config = new Config()
+
+    expect(config.remoteConfig.enabled).to.be.false
+  })
+
+  it('should not set DD_REMOTE_CONFIGURATION_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
+    process.env.K_SERVICE = 'function_name'
+    process.env.FUNCTION_TARGET = 'function_target'
 
     const config = new Config()
 
