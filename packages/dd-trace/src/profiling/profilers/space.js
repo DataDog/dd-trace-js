@@ -3,9 +3,7 @@
 const { oomExportStrategies } = require('../constants')
 
 function strategiesToCallbackMode (strategies, callbackMode) {
-  const hasInterrupt = strategies.includes(oomExportStrategies.INTERRUPT_CALLBACK) ? callbackMode.Interrupt : 0
-  const hasCallback = strategies.includes(oomExportStrategies.ASYNC_CALLBACK) ? callbackMode.Async : 0
-  return hasInterrupt | hasCallback
+  return strategies.includes(oomExportStrategies.ASYNC_CALLBACK) ? callbackMode.Async : 0
 }
 
 class NativeSpaceProfiler {

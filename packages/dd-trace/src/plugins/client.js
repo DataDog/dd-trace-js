@@ -1,10 +1,9 @@
 'use strict'
 
-const OutboundPlugin = require('./outbound')
+const OutgoingPlugin = require('./outgoing')
 
-class ClientPlugin extends OutboundPlugin {
+class ClientPlugin extends OutgoingPlugin {
   static get operation () { return 'request' }
-  static get kind () { return 'client' }
 }
 
 module.exports = ClientPlugin

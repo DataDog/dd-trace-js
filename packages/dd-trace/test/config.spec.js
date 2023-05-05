@@ -90,7 +90,6 @@ describe('Config', () => {
     expect(config).to.have.property('logLevel', 'debug')
     expect(config).to.have.property('traceId128BitGenerationEnabled', false)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
-    expect(config).to.have.property('spanAttributeSchema', 'v0')
     expect(config).to.have.deep.property('serviceMapping', {})
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['tracecontext', 'datadog'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext', 'datadog'])
@@ -177,7 +176,6 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
-    process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
     process.env.DD_APPSEC_ENABLED = 'true'
     process.env.DD_APPSEC_RULES = RULES_JSON_PATH
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = '42'
@@ -215,7 +213,6 @@ describe('Config', () => {
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
-    expect(config).to.have.property('spanAttributeSchema', 'v1')
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
     expect(config).to.have.deep.nested.property('sampler', {
@@ -498,16 +495,6 @@ describe('Config', () => {
     expect(log.warn).to.have.been.calledWith('Use either the DD_TRACE_PROPAGATION_STYLE ' +
       'environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and ' +
       'DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables')
-  })
-
-  it('should warn if defaulting to v0 span attribute schema', () => {
-    process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'foo'
-
-    // eslint-disable-next-line no-new
-    const config = new Config()
-
-    expect(log.warn).to.have.been.calledWith('Unexpected input for config.spanAttributeSchema, picked default v0')
-    expect(config).to.have.property('spanAttributeSchema', 'v0')
   })
 
   it('should give priority to the common agent environment variable', () => {
