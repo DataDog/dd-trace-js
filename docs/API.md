@@ -410,7 +410,7 @@ For example:
 const tracer = require('dd-trace').init()
 
 function handle () {
-  tracer.setUser({
+  tracer.appsec.setUser({
     id: '123456789', // *REQUIRED* Unique identifier of the user.
 
     // All other fields are optional.

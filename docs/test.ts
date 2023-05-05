@@ -372,8 +372,6 @@ tracer.wrap('x', () => {
   const rumData: string = tracer.getRumData();
 })
 
-const result: Tracer = tracer.setUser({ id: '123' })
-
 const user: User = {
   id: '123',
   email: 'a@b.c',
@@ -396,11 +394,10 @@ tracer.appsec.trackUserLoginFailureEvent('user_id', false, meta)
 tracer.appsec.trackCustomEvent('event_name')
 tracer.appsec.trackCustomEvent('event_name', meta)
 
-tracer.setUser(user)
-
 const resUserBlock: boolean = tracer.appsec.isUserBlocked(user)
 let resBlockRequest: boolean = tracer.appsec.blockRequest()
 const req = {} as IncomingMessage
 const res = {} as OutgoingMessage
 resBlockRequest = tracer.appsec.blockRequest(req, res)
 tracer.appsec.setUser(user)
+tracer.appsec.setUser({ id: '123' })
