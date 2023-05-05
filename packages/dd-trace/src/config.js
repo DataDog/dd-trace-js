@@ -393,6 +393,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       true
     )
 
+    const DD_TRACE_GIT_METADATA_ENABLED = coalesce(
+      process.env.DD_TRACE_GIT_METADATA_ENABLED,
+      true
+    )
+
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
     const sampler = {
@@ -505,6 +510,23 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.isIntelligentTestRunnerEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
     this.isGitUploadEnabled = this.isCiVisibility &&
       (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
+
+    this.isTraceGitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
+
+    if (this.isTraceGitMetadataEnabled) {
+      const repositoryUrl = coalesce(
+        process.env.DD_GIT_REPOSITORY_URL,
+        this.tags['git.repository_url']
+      )
+      const commitSHA = coalesce(
+        process.env.DD_GIT_COMMIT_SHA,
+        this.tags['git.commit.sha']
+      )
+      tagger.add(this.tags, {
+        '_dd.git.repository_url': repositoryUrl,
+        '_dd.git.commit.sha': commitSHA
+      })
+    }
 
     this.stats = {
       enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
