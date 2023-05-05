@@ -9,7 +9,6 @@ const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const uuid = require('crypto-randomuuid')
-const { inGCPFunction } = require('./serverless')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -202,7 +201,11 @@ class Config {
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
 
-    const inServerlessEnvironment = inAWSLambda || inGCPFunction()
+    const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
+    const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
+    const isGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
+
+    const inServerlessEnvironment = inAWSLambda || isGCPFunction
 
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED,
@@ -292,7 +295,7 @@ class Config {
     const DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
       options.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
-      inGCPFunction()
+      isGCPFunction
     )
 
     const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
@@ -534,6 +537,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     this.traceId128BitGenerationEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
+
+    this.isGCPFunction = isGCPFunction
 
     tagger.add(this.tags, {
       service: this.service,
