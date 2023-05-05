@@ -19,7 +19,7 @@ function maybeStartServerlessMiniAgent () {
     const { spawn } = require('child_process')
     const miniAgentProcess = spawn(rustBinaryPath)
     miniAgentProcess.stdout.on('data', (data) => {
-      log.debug(data.toString())
+      log.info(data.toString())
     })
     miniAgentProcess.on('close', (code) => {
       log.error(`Mini Agent exited with code ${code}`)
