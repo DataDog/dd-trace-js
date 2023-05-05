@@ -1,11 +1,8 @@
-const v0 = require('./schemas/v0')
-const v1 = require('./schemas/v1')
+const { schemaDefinitions } = require('./schemas')
 
-const schemas = { v0, v1 }
-
-class Schema {
+class SchemaManager {
   constructor () {
-    this.schemas = schemas
+    this.schemas = schemaDefinitions
     this.config = { spanAttributeSchema: 'v0' }
   }
 
@@ -17,9 +14,17 @@ class Schema {
     return this.config.spanAttributeSchema
   }
 
+  opName (type, ioDirection, plugin, opNameArgs) {
+    return this.schema.getOpName(type, ioDirection, plugin, opNameArgs)
+  }
+
+  serviceName (type, ioDirection, plugin, serviceNameArgs) {
+    return this.schema.getServiceName(type, ioDirection, plugin, this.config.service, serviceNameArgs)
+  }
+
   configure (config = {}) {
     this.config = config
   }
 }
 
-module.exports = new Schema()
+module.exports = new SchemaManager()
