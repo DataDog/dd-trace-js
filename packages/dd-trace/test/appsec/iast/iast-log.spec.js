@@ -10,7 +10,7 @@ describe('IAST log', () => {
     config: {
       telemetry: {
         logCollection: true,
-        diagnosticLogCollector: true
+        diagnosticLogCollection: true
       }
     }
   }
@@ -19,7 +19,7 @@ describe('IAST log', () => {
     config: {
       telemetry: {
         logCollection: true,
-        diagnosticLogCollector: false
+        diagnosticLogCollection: false
       }
     }
   }

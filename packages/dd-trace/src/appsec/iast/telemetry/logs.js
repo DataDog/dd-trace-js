@@ -28,7 +28,7 @@ function sendLogs () {
 }
 
 function isLevelEnabled (level) {
-  return isLogCollectionEnabled(config) && (level !== 'DEBUG' || config.telemetry.diagnosticLogCollector)
+  return isLogCollectionEnabled(config) && (level !== 'DEBUG' || config.telemetry.diagnosticLogCollection)
 }
 
 function isLogCollectionEnabled (config) {

@@ -134,7 +134,7 @@ describe('telemetry logs', () => {
     const app = {}
     const host = {}
 
-    it('should be called with DEBUG level and error if config.telemetry.diagnosticLogCollector = true', () => {
+    it('should be called with DEBUG level and error if config.telemetry.diagnosticLogCollection = true', () => {
       const logCollectorAdd = sinon.stub()
       const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
         '../../../../../diagnostics_channel': dc,
@@ -144,7 +144,7 @@ describe('telemetry logs', () => {
       })
       logs.start()
 
-      onTelemetryStartMsg.config.telemetry.diagnosticLogCollector = true
+      onTelemetryStartMsg.config.telemetry.diagnosticLogCollection = true
       onTelemetryStartMsg.application = app
       onTelemetryStartMsg.host = host
       onTelemetryStart()(onTelemetryStartMsg)
@@ -156,7 +156,7 @@ describe('telemetry logs', () => {
       expect(logCollectorAdd).to.be.calledOnceWith(match({ message: 'test', level: 'DEBUG', stack_trace: stack }))
     })
 
-    it('should be not called with DEBUG level if config.telemetry.diagnosticLogCollector = false', () => {
+    it('should be not called with DEBUG level if config.telemetry.diagnosticLogCollection = false', () => {
       const logCollectorAdd = sinon.stub()
       const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
         '../../../../../diagnostics_channel': dc,
