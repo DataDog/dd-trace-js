@@ -8,7 +8,7 @@ const childProcess = require('child_process')
 require('./setup/tap')
 
 describe('Serverless', () => {
-  const spawnSpy = sinon.spy(childProcess, 'spawn')
+  const spawnStub = sinon.stub(childProcess, 'spawn').returns(null)
 
   // so maybeStartServerlessMiniAgent thinks the default mini agent binary path exists
   const existsSyncStub = sinon.stub(fs, 'existsSync').returns(true)
@@ -24,7 +24,7 @@ describe('Serverless', () => {
 
   afterEach(() => {
     process.env = env
-    spawnSpy.resetHistory()
+    spawnStub.resetHistory()
   })
 
   it('should not spawn mini agent if not in google cloud function', () => {
@@ -32,7 +32,7 @@ describe('Serverless', () => {
 
     proxy.init()
 
-    expect(spawnSpy).to.not.have.been.called
+    expect(spawnStub).to.not.have.been.called
     delete process.env.DD_MINI_AGENT_PATH
   })
 
@@ -42,7 +42,7 @@ describe('Serverless', () => {
 
     proxy.init()
 
-    expect(spawnSpy).to.have.been.calledOnce
+    expect(spawnStub).to.have.been.calledOnce
   })
 
   it('should spawn mini agent when K_SERVICE and FUNCTION_TARGET env vars are defined', () => {
@@ -51,7 +51,7 @@ describe('Serverless', () => {
 
     proxy.init()
 
-    expect(spawnSpy).to.have.been.calledOnce
+    expect(spawnStub).to.have.been.calledOnce
   })
 
   it('should log error if mini agent binary path is invalid', () => {
