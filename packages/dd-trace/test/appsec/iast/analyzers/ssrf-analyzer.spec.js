@@ -11,27 +11,41 @@ describe('ssrf analyzer', () => {
       ['http', 'https'].forEach(pluginName => {
         function executeHttpGet (http, url) {
           return new Promise((resolve, reject) => {
-            http.get(url, (res) => {
-              res.on('data', () => {})
-              res.on('end', () => {
+            const clientRequest = http.get(url, () => {})
+            let resolved = false
+            clientRequest.on('error', () => {
+              if (!resolved) {
+                resolved = true
                 resolve()
-              })
-            }).on('error', () => {
-              resolve()
+              }
             })
+            clientRequest.on('close', () => {
+              if (!resolved) {
+                resolved = true
+                resolve()
+              }
+            })
+            clientRequest.destroy()
           })
         }
 
         function executeHttpRequest (http, url) {
           return new Promise((resolve) => {
-            http.request(url, (res) => {
-              res.on('data', () => {})
-              res.on('end', () => {
+            const clientRequest = http.request(url, (res) => {})
+            let resolved = false
+            clientRequest.on('error', () => {
+              if (!resolved) {
+                resolved = true
                 resolve()
-              })
-            }).on('error', () => {
-              resolve()
+              }
             })
+            clientRequest.on('close', () => {
+              if (!resolved) {
+                resolved = true
+                resolve()
+              }
+            })
+            clientRequest.destroy()
           })
         }
         describe(pluginName, () => {
@@ -50,13 +64,13 @@ describe('ssrf analyzer', () => {
                 testThatRequestHasVulnerability(() => {
                   const store = storage.getStore()
                   const iastContext = iastContextFunctions.getIastContext(store)
-                  const url = newTaintedString(iastContext, pluginName + '://www.datadoghq.com', 'param', 'Request')
+                  const url = newTaintedString(iastContext, pluginName + '://www.google.com', 'param', 'Request')
                   const https = require(pluginName)
                   return requestMethodData.methodToExecute(https, url)
                 }, 'SSRF')
 
                 testThatRequestHasNoVulnerability(() => {
-                  const url = pluginName + '://www.datadoghq.com'
+                  const url = pluginName + '://www.google.com'
                   const https = require(pluginName)
                   return requestMethodData.methodToExecute(https, url)
                 }, 'SSRF')
@@ -66,7 +80,7 @@ describe('ssrf analyzer', () => {
                 testThatRequestHasVulnerability(() => {
                   const store = storage.getStore()
                   const iastContext = iastContextFunctions.getIastContext(store)
-                  const host = newTaintedString(iastContext, 'www.datadoghq.com', 'param', 'Request')
+                  const host = newTaintedString(iastContext, 'www.google.com', 'param', 'Request')
                   const options = {
                     host,
                     protocol: `${pluginName}:`
@@ -75,7 +89,7 @@ describe('ssrf analyzer', () => {
                 }, 'SSRF')
 
                 testThatRequestHasNoVulnerability(() => {
-                  const host = 'www.datadoghq.com'
+                  const host = 'www.google.com'
                   const options = {
                     host,
                     protocol: `${pluginName}:`
