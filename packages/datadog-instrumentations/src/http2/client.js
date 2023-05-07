@@ -3,6 +3,7 @@
 const shimmer = require('../../../datadog-shimmer')
 const { addHook, channel, AsyncResource } = require('../helpers/instrument')
 
+const connectChannel = channel('apm:http2:client:connect:start')
 const startChannel = channel('apm:http2:client:request:start')
 const finishChannel = channel('apm:http2:client:request:finish')
 const errorChannel = channel('apm:http2:client:request:error')
@@ -52,6 +53,9 @@ function createWrapRequest (authority, options) {
 
 function wrapConnect (connect) {
   return function (authority, options) {
+    if (connectChannel.hasSubscribers) {
+      connectChannel.publish({ args: arguments })
+    }
     const session = connect.apply(this, arguments)
 
     shimmer.wrap(session, 'request', createWrapRequest(authority, options))
