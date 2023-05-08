@@ -15,8 +15,8 @@ const DEFAULT_IAST_REDACTION_VALUE_PATTERN =
 
 class SensitiveHandler {
   constructor () {
-    this._namePattern = new RegExp(DEFAULT_IAST_REDACTION_NAME_PATTERN)
-    this._valuePattern = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN)
+    this._namePattern = new RegExp(DEFAULT_IAST_REDACTION_NAME_PATTERN, 'gmi')
+    this._valuePattern = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
 
     this._tokenizers = new Map()
     this._tokenizers.set(vulnerabilities.COMMAND_INJECTION, new CommandRegexTokenizer())
@@ -25,10 +25,12 @@ class SensitiveHandler {
   }
 
   isSensibleName (name) {
+    this._namePattern.lastIndex = 0
     return this._namePattern.test(name)
   }
 
   isSensibleValue (value) {
+    this._valuePattern.lastIndex = 0
     return this._valuePattern.test(value)
   }
 
