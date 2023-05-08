@@ -18,24 +18,20 @@ env:
 
 # TODO: upstream jobs
 
-plugin_job_with_testagent:
-  runs-on: ubuntu-latest
-  services:
-    testagent:
-      image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
-      ports:
-        - "127.0.0.1:9126:9126"
-      env:
-        LOG_LEVEL: DEBUG
-        TRACE_LANGUAGE: javascript
-        DISABLED_CHECKS: trace_content_length
-        PORT: 9126
 
 jobs:
   amqp10: # TODO: move rhea to its own job
-    extends:
-      - plugin_job_with_testagent
+    runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       qpid:
         image: scholzj/qpid-cpp:1.38.0
         env:
@@ -63,6 +59,15 @@ jobs:
   amqplib:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       rabbitmq:
         image: rabbitmq:3.6-alpine
         ports:
@@ -72,7 +77,6 @@ jobs:
       SERVICES: rabbitmq
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -82,12 +86,21 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   aws-sdk:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       localstack:
         image: localstack/localstack:1.1.0
         env:
@@ -105,7 +118,6 @@ jobs:
       SERVICES: localstack
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -113,16 +125,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   axios:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: axios
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -130,16 +151,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:upstream
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   bluebird:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: bluebird
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -148,15 +178,24 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
 
   bunyan:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: bunyan
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -166,12 +205,21 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   cassandra:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       cassandra:
         image: spotify/cassandra
         env:
@@ -183,7 +231,6 @@ jobs:
       SERVICES: cassandra
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -191,7 +238,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # couchbase:
@@ -215,11 +262,20 @@ jobs:
 
   connect:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: connect
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -229,16 +285,25 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   cucumber:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: cucumber
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -246,27 +311,45 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # TODO: fix performance issues and test more Node versions
   cypress:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: cypress
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   dns:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       testagent:
         image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
         ports:
@@ -298,6 +381,15 @@ jobs:
   elasticsearch:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       elasticsearch:
         image: docker.elastic.co/elasticsearch/elasticsearch:7.14.0
         env:
@@ -309,7 +401,6 @@ jobs:
       SERVICES: elasticsearch
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -317,16 +408,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   express:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
-      PLUGINS: express|body-parser
+      PLUGINS: express
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -334,16 +434,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   fastify:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: fastify
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -351,16 +460,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   generic-pool:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: generic-pool
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -368,12 +486,21 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   google-cloud-pubsub:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       pubsub:
         image: ridedott/pubsub-emulator
         ports:
@@ -383,7 +510,6 @@ jobs:
       SERVICES: gpubsub
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -391,16 +517,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   graphql:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: graphql
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -410,48 +545,75 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # The grpc version ranges we support only support up to Node 14.
   grpc:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: grpc
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # The hapi version ranges we support only support up to Node 14.
   hapi:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: hapi
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   http:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: http
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -463,16 +625,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   http2:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: http2
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -484,27 +655,45 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # TODO: fix performance issues and test more Node versions
   jest:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: jest
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   kafkajs:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       kafka:
         image: debezium/kafka:1.7
         env:
@@ -522,7 +711,6 @@ jobs:
       SERVICES: kafka
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -530,16 +718,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   knex:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: knex
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -547,16 +744,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   koa:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: koa
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -566,12 +772,21 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   limitd-client:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       limitd:
         image: rochdev/limitd
         env:
@@ -585,7 +800,6 @@ jobs:
       SERVICES: limitd
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -593,12 +807,21 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   memcached:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       memcached:
         image: memcached:1.5-alpine
         ports:
@@ -608,7 +831,6 @@ jobs:
       SERVICES: memcached
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -616,16 +838,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   microgateway-core:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: microgateway-core
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -633,16 +864,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   mocha:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: mocha
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -651,15 +891,24 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
 
   moleculer:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: moleculer
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -667,12 +916,21 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   mongodb-core:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       mongodb:
         image: circleci/mongo
         ports:
@@ -682,7 +940,6 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -690,12 +947,21 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   mongoose:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       mongodb:
         image: circleci/mongo
         ports:
@@ -705,7 +971,6 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -713,12 +978,21 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   mysql:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       mysql:
         image: mariadb:10.4
         env:
@@ -731,7 +1005,6 @@ jobs:
       SERVICES: mysql
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -739,16 +1012,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   net:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: net
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -760,7 +1042,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # TODO: fix performance issues and test more Node versions
@@ -768,17 +1050,23 @@ jobs:
     strategy:
       matrix:
         node-version: [14, 16]
-        range: ['>=9.5 <11.1', '>=11.1 <13.2']
-        include:
-          - node-version: 18
-            range: '>=13.2'
+        range: ['>=9.5 <11.1', '>=11.1 <13.2', '>=13.2']
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: next
       RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - uses: actions/setup-node@v3
         with:
@@ -786,12 +1074,21 @@ jobs:
       - run: yarn install
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   opensearch:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       opensearch:
         image: opensearchproject/opensearch:2
         env:
@@ -804,7 +1101,6 @@ jobs:
       SERVICES: opensearch
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -812,7 +1108,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # TODO: Install the Oracle client on the host and test Node >=14.
@@ -849,40 +1145,67 @@ jobs:
 
   paperplane:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: paperplane
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # TODO: re-enable upstream tests if it ever stops being flaky
   pino:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: pino
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       # - run: yarn test:plugins:upstream
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   # The pg version range we support doesn't work beyond Node 14.
   postgres:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       postgres:
         image: postgres:9.5
         env:
@@ -895,22 +1218,30 @@ jobs:
       SERVICES: postgres
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   promise:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: promise
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -920,16 +1251,25 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   promise-js:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: promise-js
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -937,16 +1277,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   q:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: q
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -954,12 +1303,21 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   redis:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       redis:
         image: redis:4.0-alpine
         ports:
@@ -969,7 +1327,6 @@ jobs:
       SERVICES: redis
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -977,16 +1334,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   restify:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: restify
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -994,16 +1360,25 @@ jobs:
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   router:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: router
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -1011,16 +1386,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   sharedb:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: sharedb
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -1028,12 +1412,21 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   tedious:
     runs-on: ubuntu-latest
     services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
       mssql:
         image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
         env:
@@ -1047,7 +1440,6 @@ jobs:
       SERVICES: mssql
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/16
@@ -1057,16 +1449,25 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   when:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: when
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -1074,16 +1475,25 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   winston:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     env:
       PLUGINS: winston
     steps:
       - uses: actions/checkout@v2
-      - run: docker-compose up -d testagent # Start the testagent container in the background
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -1091,4 +1501,4 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
