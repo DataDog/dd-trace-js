@@ -10,7 +10,7 @@ const {
   mergeCoverage,
   getTestSuitePath,
   fromCoverageMapToCoverage,
-  getTestLineStart
+  getCallSites
 } = require('../../dd-trace/src/plugins/util/test')
 
 const testStartCh = channel('ci:mocha:test:start')
@@ -393,9 +393,13 @@ addHook({
   file: 'lib/suite.js'
 }, (Suite) => {
   shimmer.wrap(Suite.prototype, 'addTest', addTest => function (test) {
-    // In here, the test definition is in the stack, so we search for it.
-    const startLine = getTestLineStart(new Error(), test.file)
-    testToStartLine.set(test, startLine)
+    const callSites = getCallSites()
+    let startLine
+    const testCallSite = callSites.find(site => site.getFileName() === test.file)
+    if (testCallSite) {
+      startLine = testCallSite.getLineNumber()
+      testToStartLine.set(test, startLine)
+    }
     return addTest.apply(this, arguments)
   })
   return Suite

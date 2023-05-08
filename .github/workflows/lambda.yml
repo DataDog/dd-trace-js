@@ -12,23 +12,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install docker
-        run: |
-          brew install docker docker-machine docker-compose
-          sudo docker --version
-      - run: colima start # run docker
-      - run: docker-compose up -d testagent # Start the testagent container in the background
-      - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - run: yarn test:lambda:ci
-      - if: always()
-        run: docker-compose logs testagent # Display the log output of the testagent container
-      - uses: codecov/codecov-action@v2
-
   ubuntu:
     runs-on: ubuntu-latest
     services:
@@ -55,13 +38,4 @@ jobs:
       - run: yarn test:lambda:ci
       - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
-      - uses: codecov/codecov-action@v2
-
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - run: yarn test:lambda:ci
       - uses: codecov/codecov-action@v2

@@ -1,5 +1,6 @@
 'use strict'
 
+const semver = require('semver')
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
@@ -10,6 +11,7 @@ describe('sql-injection-analyzer with pg', () => {
   let pg
   let client
   withVersions('pg', 'pg', version => {
+    if (semver.satisfies(version, '<8.0.3')) return
     prepareTestServerForIast('pg', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       beforeEach((done) => {
         pg = require(`../../../../../../versions/pg@${version}`).get()

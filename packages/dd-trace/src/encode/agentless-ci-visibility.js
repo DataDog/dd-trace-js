@@ -129,12 +129,17 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   _encodeEventContent (bytes, content) {
     const keysLength = Object.keys(content).length
 
+    let totalKeysLength = keysLength
     if (content.meta.test_session_id) {
-      this._encodeMapPrefix(bytes, keysLength + 3)
-    } else {
-      this._encodeMapPrefix(bytes, keysLength)
+      totalKeysLength = totalKeysLength + 1
     }
-
+    if (content.meta.test_module_id) {
+      totalKeysLength = totalKeysLength + 1
+    }
+    if (content.meta.test_suite_id) {
+      totalKeysLength = totalKeysLength + 1
+    }
+    this._encodeMapPrefix(bytes, totalKeysLength)
     if (content.type) {
       this._encodeString(bytes, 'type')
       this._encodeString(bytes, content.type)
@@ -170,15 +175,20 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       this._encodeString(bytes, 'test_session_id')
       this._encodeId(bytes, id(content.meta.test_session_id, 10))
       delete content.meta.test_session_id
+    }
 
+    if (content.meta.test_module_id) {
       this._encodeString(bytes, 'test_module_id')
       this._encodeId(bytes, id(content.meta.test_module_id, 10))
       delete content.meta.test_module_id
+    }
 
+    if (content.meta.test_suite_id) {
       this._encodeString(bytes, 'test_suite_id')
       this._encodeId(bytes, id(content.meta.test_suite_id, 10))
       delete content.meta.test_suite_id
     }
+
     this._encodeString(bytes, 'meta')
     this._encodeMap(bytes, content.meta)
     this._encodeString(bytes, 'metrics')
