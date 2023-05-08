@@ -76,7 +76,9 @@ class SensitiveHandler {
           nextSensitive = entries.length > 0 ? entries[0] : null
         }
 
-        if (this.isSensibleSource(sources[sourceIndex]) || redactedSources.indexOf(sourceIndex) > -1) {
+        this.isSensibleSource(sources[sourceIndex]) && redactedSources.push(sourceIndex)
+
+        if (redactedSources.indexOf(sourceIndex) > -1) {
           this.writeRedactedValuePart(valueParts, sourceIndex)
         } else {
           const substringEnd = Math.min(nextTainted.end, value.length)
