@@ -91,8 +91,8 @@ class SensitiveHandler {
         i = start - 1
         nextTainted = ranges.shift()
         nextTaintedIndex++
+        sourceIndex = null
       } else if (nextSensitive != null && nextSensitive.start === i) {
-        if (!nextTainted) sourceIndex = null
         this.writeValuePart(valueParts, value.substring(start, i), sourceIndex)
         if (nextTainted != null && intersects(nextSensitive, nextTainted)) {
           sourceIndex = sourcesIndexes[nextTaintedIndex]
