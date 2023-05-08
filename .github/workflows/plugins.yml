@@ -85,7 +85,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -124,7 +124,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -150,7 +150,7 @@ jobs:
       - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:upstream
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -177,7 +177,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
 
   bunyan:
@@ -204,7 +204,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -237,7 +237,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -284,7 +284,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -310,7 +310,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -334,7 +334,7 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -364,7 +364,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
       - run: docker-compose down # Stop and remove the testagent container
@@ -398,7 +398,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -424,7 +424,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -450,7 +450,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -476,7 +476,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -507,7 +507,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -535,7 +535,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -560,7 +560,7 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -585,7 +585,7 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -615,7 +615,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -645,7 +645,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -669,7 +669,7 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -708,7 +708,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -734,7 +734,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -762,7 +762,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -797,7 +797,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -828,7 +828,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -854,7 +854,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -881,7 +881,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
 
   moleculer:
@@ -906,7 +906,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -937,7 +937,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -968,7 +968,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1002,7 +1002,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1032,7 +1032,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1041,7 +1041,10 @@ jobs:
     strategy:
       matrix:
         node-version: [14, 16]
-        range: ['>=9.5 <11.1', '>=11.1 <13.2', '>=13.2']
+        range: ['>=9.5 <11.1', '>=11.1 <13.2']
+        include:
+          - node-version: 18
+            range: '>=13.2'
     runs-on: ubuntu-latest
     services:
       testagent:
@@ -1064,7 +1067,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - run: yarn install
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1098,7 +1101,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1154,7 +1157,7 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/14
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1180,7 +1183,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       # - run: yarn test:plugins:upstream
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1213,7 +1216,7 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1241,7 +1244,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1267,7 +1270,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1293,7 +1296,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1324,7 +1327,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1350,7 +1353,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1376,7 +1379,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1402,7 +1405,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1439,7 +1442,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1465,7 +1468,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
@@ -1491,5 +1494,5 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - if: success() || failure()
+      - if: always()
         run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
