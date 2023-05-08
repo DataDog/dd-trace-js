@@ -5,6 +5,7 @@ const format = require('./format')
 const SpanSampler = require('./span_sampler')
 
 const { SpanStatsProcessor } = require('./span_stats')
+const { SCI_COMMIT_SHA, SCI_REPOSITORY_URL } = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -25,13 +26,17 @@ class SpanProcessor {
     const active = []
     const formatted = []
     const trace = spanContext._trace
-    const { flushMinSpans } = this._config
+    const { flushMinSpans, isTraceGitMetadataEnabled } = this._config
     const { started, finished } = trace
 
     if (trace.record === false) return
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this._prioritySampler.sample(spanContext)
       this._spanSampler.sample(spanContext)
+
+      if (isTraceGitMetadataEnabled) {
+        this.addRepositoryMetadata(started)
+      }
 
       for (const span of started) {
         if (span._duration !== undefined) {
@@ -57,6 +62,13 @@ class SpanProcessor {
         }
       })
     }
+  }
+
+  addRepositoryMetadata (spans) {
+    const { repositoryUrl, commitSHA } = this._config
+    const firstSpan = spans[0]
+    firstSpan.setTag(SCI_REPOSITORY_URL, repositoryUrl)
+    firstSpan.setTag(SCI_COMMIT_SHA, commitSHA)
   }
 
   killAll () {

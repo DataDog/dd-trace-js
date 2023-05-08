@@ -514,18 +514,14 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.isTraceGitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
 
     if (this.isTraceGitMetadataEnabled) {
-      const repositoryUrl = coalesce(
+      this.repositoryUrl = coalesce(
         process.env.DD_GIT_REPOSITORY_URL,
         this.tags['git.repository_url']
       )
-      const commitSHA = coalesce(
+      this.commitSHA = coalesce(
         process.env.DD_GIT_COMMIT_SHA,
         this.tags['git.commit.sha']
       )
-      tagger.add(this.tags, {
-        '_dd.git.repository_url': repositoryUrl,
-        '_dd.git.commit.sha': commitSHA
-      })
     }
 
     this.stats = {

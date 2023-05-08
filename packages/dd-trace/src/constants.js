@@ -25,5 +25,7 @@ module.exports = {
   ERROR_MESSAGE: 'error.message',
   ERROR_STACK: 'error.stack',
   COMPONENT: 'component',
-  CLIENT_PORT_KEY: 'network.destination.port'
+  CLIENT_PORT_KEY: 'network.destination.port',
+  SCI_REPOSITORY_URL: '_dd.git.repository_url',
+  SCI_COMMIT_SHA: '_dd.git.commit.sha'
 }
