@@ -17,7 +17,7 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
 
   _getEvidence (value, iastContext, dialect) {
     const ranges = getRanges(iastContext, value)
-    return { value, ranges, dialect}
+    return { value, ranges, dialect }
   }
 
   analyze (value, dialect) {

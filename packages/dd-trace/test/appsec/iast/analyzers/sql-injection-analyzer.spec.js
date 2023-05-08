@@ -59,7 +59,7 @@ describe('sql-injection-analyzer', () => {
       '../iast-context': {
         getIastContext: () => iastContext
       },
-      '../overhead-controller': { hasQuota: () => true },
+      '../overhead-controller': { hasQuota: () => true }
     })
     const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
       '../taint-tracking/operations': TaintTrackingMock,
@@ -76,6 +76,9 @@ describe('sql-injection-analyzer', () => {
       })
     proxiedSqlInjectionAnalyzer.analyze(TAINTED_QUERY, dialect)
     expect(addVulnerability).to.have.been.calledOnce
-    expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'SQL_INJECTION', evidence: { dialect : dialect }})
+    expect(addVulnerability).to.have.been.calledWithMatch({}, {
+      type: 'SQL_INJECTION',
+      evidence: { dialect: dialect }
+    })
   })
 })

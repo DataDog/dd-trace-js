@@ -5,12 +5,11 @@ const iastLog = require('../../../iast-log')
 const LDAP_PATTERN = '\\(.*?(?:~=|=|<=|>=)(?<LITERAL>[^)]+)\\)'
 
 class LdapRegexTokenizer {
-
-  getPattern() {
+  getPattern () {
     return new RegExp(LDAP_PATTERN, 'gmid')
   }
 
-  tokenize(evidence) {
+  tokenize (evidence) {
     try {
       const result = evidence.value.matchAll(this.getPattern())
       const tokens = []
@@ -26,7 +25,6 @@ class LdapRegexTokenizer {
     }
     return []
   }
-
 }
 
 module.exports = LdapRegexTokenizer

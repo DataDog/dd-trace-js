@@ -8,11 +8,13 @@ const CommandRegexTokenizer = require('./tokenizers/command-regex-tokenizer')
 const LdapRegexTokenizer = require('./tokenizers/ldap-regex-tokenizer')
 const SqlRegexTokenizer = require('./tokenizers/sql-regex-tokenizer')
 
-const DEFAULT_IAST_REDACTION_NAME_PATTERN = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)'
-const DEFAULT_IAST_REDACTION_VALUE_PATTERN = '(?:bearer\\s+[a-z0-9\\._\\-]+|glpat-[\\w\\-]{20}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=\\-]+\\.ey[I-L][\\w=\\-]+(?:\\.[\\w.+/=\\-]+)?|(?:[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY[\\-]{5}|ssh-rsa\\s*[a-z0-9/\\.+]{100,}))'
+const DEFAULT_IAST_REDACTION_NAME_PATTERN =
+  '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)'
+const DEFAULT_IAST_REDACTION_VALUE_PATTERN =
+  '(?:bearer\\s+[a-z0-9\\._\\-]+|glpat-[\\w\\-]{20}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=\\-]+\\.ey[I-L][\\w=\\-]+(?:\\.[\\w.+/=\\-]+)?|(?:[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY[\\-]{5}|ssh-rsa\\s*[a-z0-9/\\.+]{100,}))'
 
 class SensitiveHandler {
-  constructor() {
+  constructor () {
     this._namePattern = new RegExp(DEFAULT_IAST_REDACTION_NAME_PATTERN)
     this._valuePattern = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN)
 
@@ -22,19 +24,19 @@ class SensitiveHandler {
     this._tokenizers.set(vulnerabilities.SQL_INJECTION, new SqlRegexTokenizer())
   }
 
-  isSensibleName(name) {
+  isSensibleName (name) {
     return this._namePattern.test(name)
   }
 
-  isSensibleValue(value) {
+  isSensibleValue (value) {
     return this._valuePattern.test(value)
   }
 
-  isSensibleSource(source) {
+  isSensibleSource (source) {
     return source != null && (this.isSensibleName(source.name) || this.isSensibleValue(source.value))
   }
 
-  scrubEvidence(vulnerabilityType, evidence, sourcesIndexes, sources) {
+  scrubEvidence (vulnerabilityType, evidence, sourcesIndexes, sources) {
     const tokenizer = this._tokenizers.get(vulnerabilityType)
     if (tokenizer) {
       const sensitiveRanges = tokenizer.tokenize(evidence)
@@ -43,8 +45,7 @@ class SensitiveHandler {
     return null
   }
 
-
-  toRedactedJson(evidence, sensitive, sourcesIndexes, sources) {
+  toRedactedJson (evidence, sensitive, sourcesIndexes, sources) {
     const valueParts = []
     const redactedSources = []
 
@@ -64,18 +65,18 @@ class SensitiveHandler {
         sourceIndex = sourcesIndexes[nextTaintedIndex]
 
         while (nextSensitive != null && contains(nextTainted, nextSensitive)) {
-          sourceIndex!= null && redactedSources.push(sourceIndex)
+          sourceIndex != null && redactedSources.push(sourceIndex)
           nextSensitive = sensitive.shift()
         }
 
         if (nextSensitive != null && intersects(nextSensitive, nextTainted)) {
-          sourceIndex!= null && redactedSources.push(sourceIndex)
+          sourceIndex != null && redactedSources.push(sourceIndex)
 
           const entries = remove(nextSensitive, nextTainted)
           nextSensitive = entries.length > 0 ? entries[0] : null
         }
 
-        if(this.isSensibleSource(sources[sourceIndex]) || redactedSources.indexOf(sourceIndex) > -1) {
+        if (this.isSensibleSource(sources[sourceIndex]) || redactedSources.indexOf(sourceIndex) > -1) {
           this.writeRedactedValuePart(valueParts, sourceIndex)
         } else {
           const substringEnd = Math.min(nextTainted.end, value.length)
@@ -93,7 +94,7 @@ class SensitiveHandler {
           sourceIndex = sourcesIndexes[nextTaintedIndex]
           sourceIndex != null && redactedSources.push(sourceIndex)
 
-          for (let entry of remove(nextSensitive, nextTainted)) {
+          for (const entry of remove(nextSensitive, nextTainted)) {
             if (entry.start === i) {
               nextSensitive = entry
             } else {
@@ -105,7 +106,7 @@ class SensitiveHandler {
         this.writeRedactedValuePart(valueParts)
 
         start = i + (nextSensitive.end - nextSensitive.start)
-        i = start - 1;
+        i = start - 1
         nextSensitive = sensitive.shift()
       }
     }
@@ -117,7 +118,7 @@ class SensitiveHandler {
     return { redactedValueParts: valueParts, redactedSources }
   }
 
-  writeValuePart(valueParts, value, source) {
+  writeValuePart (valueParts, value, source) {
     if (value.length > 0) {
       if (source != null) {
         valueParts.push({ value, source })
@@ -127,7 +128,7 @@ class SensitiveHandler {
     }
   }
 
-  writeRedactedValuePart(valueParts, source) {
+  writeRedactedValuePart (valueParts, source) {
     if (source != null) {
       valueParts.push({ redacted: true, source })
     } else {

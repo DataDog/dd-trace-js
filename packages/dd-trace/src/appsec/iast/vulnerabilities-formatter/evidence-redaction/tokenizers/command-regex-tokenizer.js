@@ -5,12 +5,11 @@ const iastLog = require('../../../iast-log')
 const COMMAND_PATTERN = '^(?:\\s*(?:sudo|doas)\\s+)?\\b\\S+\\b(.*)'
 
 class CommandRegexTokenizer {
-
-  getPattern() {
+  getPattern () {
     return new RegExp(COMMAND_PATTERN, 'gmid')
   }
 
-  tokenize(evidence) {
+  tokenize (evidence) {
     try {
       const pattern = this.getPattern()
       const { indices } = pattern.exec(evidence.value)
@@ -25,7 +24,6 @@ class CommandRegexTokenizer {
     }
     return []
   }
-
 }
 
 module.exports = CommandRegexTokenizer

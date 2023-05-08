@@ -4,7 +4,7 @@ const vulnerabilityFormatter = require('../../../../src/appsec/iast/vulnerabilit
 
 const { suite } = require('./resources/evidence-redaction-suite.json')
 
-function doTest(testCase, parameter) {
+function doTest (testCase, parameter) {
   let { description, input, expected } = testCase
   if (parameter) {
     description = description.replaceAll(parameter.name, parameter.value)
@@ -34,8 +34,7 @@ function doTest(testCase, parameter) {
   })
 }
 
-describe.skip('Evidence redaction', () => {
-
+describe('Evidence redaction', () => {
   describe('Vulnerability redaction', () => {
     suite.filter(testCase => testCase.type === 'VULNERABILITIES').forEach((testCase) => {
       if (!testCase.parameters) {
@@ -43,11 +42,10 @@ describe.skip('Evidence redaction', () => {
       } else {
         for (const name in testCase.parameters) {
           testCase.parameters[name].forEach(value => {
-            doTest(testCase, {name, value})
+            doTest(testCase, { name, value })
           })
         }
       }
     })
   })
-
 })
