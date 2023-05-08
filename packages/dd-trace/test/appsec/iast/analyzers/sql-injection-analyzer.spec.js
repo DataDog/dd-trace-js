@@ -42,6 +42,7 @@ describe('sql-injection-analyzer', () => {
   })
 
   it('should report "SQL_INJECTION" vulnerability', () => {
+    const dialect = 'DIALECT'
     const addVulnerability = sinon.stub()
     const iastContext = {
       rootSpan: {
@@ -59,7 +60,6 @@ describe('sql-injection-analyzer', () => {
         getIastContext: () => iastContext
       },
       '../overhead-controller': { hasQuota: () => true },
-      '../vulnerability-reporter': { addVulnerability }
     })
     const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
       '../taint-tracking/operations': TaintTrackingMock,
@@ -67,10 +67,15 @@ describe('sql-injection-analyzer', () => {
     })
     const proxiedSqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer',
       {
-        './injection-analyzer': InjectionAnalyzer
+        './injection-analyzer': InjectionAnalyzer,
+        '../taint-tracking/operations': TaintTrackingMock,
+        '../iast-context': {
+          getIastContext: () => iastContext
+        },
+        '../vulnerability-reporter': { addVulnerability }
       })
-    proxiedSqlInjectionAnalyzer.analyze(TAINTED_QUERY)
+    proxiedSqlInjectionAnalyzer.analyze(TAINTED_QUERY, dialect)
     expect(addVulnerability).to.have.been.calledOnce
-    expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'SQL_INJECTION' })
+    expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'SQL_INJECTION', evidence: { dialect : dialect }})
   })
 })
