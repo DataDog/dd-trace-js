@@ -7,9 +7,9 @@ const { suite } = require('./resources/evidence-redaction-suite.json')
 function doTest (testCase, parameter) {
   let { description, input, expected } = testCase
   if (parameter) {
-    description = description.replaceAll(parameter.name, parameter.value)
-    input = JSON.parse(JSON.stringify(input).replaceAll(parameter.name, parameter.value))
-    expected = JSON.parse(JSON.stringify(expected).replaceAll(parameter.name, parameter.value))
+    description = description.split(parameter.name).join(parameter.value)
+    input = JSON.parse(JSON.stringify(input).split(parameter.name).join(parameter.value))
+    expected = JSON.parse(JSON.stringify(expected).split(parameter.name).join(parameter.value))
   }
 
   it(description, () => {
