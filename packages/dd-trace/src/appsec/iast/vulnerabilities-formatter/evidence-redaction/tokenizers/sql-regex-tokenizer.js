@@ -4,7 +4,7 @@ const iastLog = require('../../../iast-log')
 
 const STRING_LITERAL = /'(?:''|[^'])*'/
 const POSTGRESQL_ESCAPED_LITERAL = /\$([^$]*)\$.*?\$\1\$/
-const MYSQL_STRING_LITERAL = /\"(?:\\\"|[^\"])*\"|'(?:\\'|[^'])*'/
+const MYSQL_STRING_LITERAL = /"(?:\\"|[^"])*"|'(?:\\'|[^'])*'/
 const LINE_COMMENT = /--.*$/
 const BLOCK_COMMENT = /\/\*[\s\S]*\*\//
 const EXPONENT = /(?:E[-+]?\d+[fd]?)?/
