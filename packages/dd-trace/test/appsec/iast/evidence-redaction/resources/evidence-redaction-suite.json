@@ -466,13 +466,13 @@
                   "value": "users"
                 },
                 {
-                  "value": " where username = $2"
+                  "value": " where username = $1"
                 },
                 {
                   "redacted": true
                 },
                 {
-                  "value": "$2"
+                  "value": "$1"
                 }
               ]
             }

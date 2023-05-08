@@ -68,7 +68,7 @@ class SqlRegexTokenizer {
             start += 3
             end -= 2
           } else if (startChar === '$') {
-            const match = matches.group()
+            const match = regexResult[0]
             const size = match.indexOf('$', 1) + 1
             if (size > 1) {
               start += size
