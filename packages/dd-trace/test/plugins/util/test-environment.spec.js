@@ -51,7 +51,7 @@ describe('test environment data', () => {
         if (envVars && expectedEnvVars) {
           expect(JSON.parse(envVars)).to.eql(JSON.parse(expectedEnvVars))
         }
-        // `CI_NODE_LABELS` key contains a list, so we do a `eql` comparison
+        // `CI_NODE_LABELS` key contains an array, so we do a `to.have.same.members` comparison
         if (nodeLabels && expectedNodeLabels) {
           expect(JSON.parse(nodeLabels)).to.have.same.members(JSON.parse(expectedNodeLabels))
         }
