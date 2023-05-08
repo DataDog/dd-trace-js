@@ -48,6 +48,7 @@ describe('ssrf analyzer', () => {
             clientRequest.destroy()
           })
         }
+
         describe(pluginName, () => {
           [
             {
