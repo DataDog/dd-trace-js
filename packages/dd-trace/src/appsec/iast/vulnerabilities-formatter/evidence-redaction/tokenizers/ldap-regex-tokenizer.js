@@ -6,18 +6,21 @@ const LDAP_PATTERN = '\\(.*?(?:~=|=|<=|>=)(?<LITERAL>[^)]+)\\)'
 
 class LdapRegexTokenizer {
   getPattern () {
-    return new RegExp(LDAP_PATTERN, 'gmid')
+    return new RegExp(LDAP_PATTERN, 'gmi')
   }
 
   tokenize (evidence) {
     try {
-      const result = evidence.value.matchAll(this.getPattern())
+      const pattern = this.getPattern(evidence.dialect)
       const tokens = []
-      for (const match of result) {
-        if (!match.indices.groups.LITERAL) continue
-        const start = match.indices.groups.LITERAL[0]
-        const end = match.indices.groups.LITERAL[1]
+
+      let regexResult = pattern.exec(evidence.value)
+      while (regexResult != null) {
+        if (!regexResult.groups.LITERAL) continue
+        const start = regexResult.index + (regexResult[0].length - regexResult.groups.LITERAL.length - 1)
+        const end = start + regexResult.groups.LITERAL.length
         tokens.push({ start, end })
+        regexResult = pattern.exec(evidence.value)
       }
       return tokens
     } catch (e) {

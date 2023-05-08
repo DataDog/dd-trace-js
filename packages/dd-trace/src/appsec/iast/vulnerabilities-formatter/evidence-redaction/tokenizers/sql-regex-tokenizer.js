@@ -41,22 +41,18 @@ const patterns = {
 
 class SqlRegexTokenizer {
   getPattern (dialect) {
-    return new RegExp(patterns[dialect].map(p => p.source).join('|'), 'gmid')
+    return new RegExp(patterns[dialect].map(p => p.source).join('|'), 'gmi')
   }
 
   tokenize (evidence) {
     try {
       const pattern = this.getPattern(evidence.dialect)
       const tokens = []
+
       let regexResult = pattern.exec(evidence.value)
       while (regexResult != null) {
-        const { indices } = regexResult
-        delete indices.groups
-
-        const matches = indices.filter(i => i).map(i => ({ start: i[0], end: i[1] }))
-
-        let start = matches[0].start
-        let end = matches[0].end
+        let start = regexResult.index
+        let end = regexResult.index + regexResult[0].length
         const startChar = evidence.value.charAt(start)
         if (startChar === '\'' || startChar === '"') {
           start++
