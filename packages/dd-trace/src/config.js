@@ -9,6 +9,7 @@ const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const uuid = require('crypto-randomuuid')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -516,11 +517,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     if (this.isTraceGitMetadataEnabled) {
       this.repositoryUrl = coalesce(
         process.env.DD_GIT_REPOSITORY_URL,
-        this.tags['git.repository_url']
+        this.tags[GIT_REPOSITORY_URL]
       )
       this.commitSHA = coalesce(
         process.env.DD_GIT_COMMIT_SHA,
-        this.tags['git.commit.sha']
+        this.tags[GIT_COMMIT_SHA]
       )
     }
 

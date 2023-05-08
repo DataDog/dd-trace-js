@@ -8,8 +8,12 @@ const {
 } = require('./helpers')
 const path = require('path')
 const { assert } = require('chai')
+const { SCI_COMMIT_SHA, SCI_REPOSITORY_URL } = require('../packages/dd-trace/src/constants')
 
-describe(`sci embedding`, function () {
+const DUMMY_GIT_SHA = '13851f2b092e97acebab1b73f6c0e7818e795b50'
+const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/sci_git_example.git'
+
+describe('sci embedding', function () {
   let agent
   let proc
   let sandbox
@@ -34,44 +38,45 @@ describe(`sci embedding`, function () {
   })
 
   context('via DD_GIT_* tags', () => {
-    it('in the first span', async () => {
-      proc = await spawnProc(path.join(cwd, 'sci-embedding/express.js'), {
+    it('shows in the first span', async () => {
+      proc = await spawnProc(path.join(cwd, 'sci-embedding/index.js'), {
         cwd,
         env: {
           AGENT_PORT: agent.port,
-          DD_GIT_REPOSITORY_URL: 'git@github.com:DataDog/sci_git_example.git',
-          DD_GIT_COMMIT_SHA: '13851f2b092e97acebab1b73f6c0e7818e795b50'
-        }
+          DD_GIT_REPOSITORY_URL: DUMMY_REPOSITORY_URL,
+          DD_GIT_COMMIT_SHA: DUMMY_GIT_SHA
+        },
+        stdio: 'inherit'
       })
-      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+      return curlAndAssertMessage(agent, proc, ({ payload }) => {
         const firstSpan = payload[0][0]
-        assert.equal(firstSpan.meta['_dd.git.commit.sha'], '13851f2b092e97acebab1b73f6c0e7818e795b50')
-        assert.equal(firstSpan.meta['_dd.git.repository_url'], 'git@github.com:DataDog/sci_git_example.git')
+        assert.equal(firstSpan.meta[SCI_COMMIT_SHA], DUMMY_GIT_SHA)
+        assert.equal(firstSpan.meta[SCI_REPOSITORY_URL], DUMMY_REPOSITORY_URL)
 
         const secondSpan = payload[0][1]
-        assert.notExists(secondSpan.meta['_dd.git.commit.sha'])
-        assert.notExists(secondSpan.meta['_dd.git.repository_url'])
+        assert.notExists(secondSpan.meta[SCI_COMMIT_SHA])
+        assert.notExists(secondSpan.meta[SCI_REPOSITORY_URL])
       })
     })
   })
   context('via DD_TAGS', () => {
-    it('in the first span', async () => {
-      proc = await spawnProc(path.join(cwd, 'sci-embedding/express.js'), {
+    it('shows in the first span', async () => {
+      proc = await spawnProc(path.join(cwd, 'sci-embedding/index.js'), {
         cwd,
         env: {
           AGENT_PORT: agent.port,
-          DD_TAGS: 'git.repository_url:git@github.com:DataDog/sci_git_example.git,' +
-           'git.commit.sha:13851f2b092e97acebab1b73f6c0e7818e795b50'
-        }
+          DD_TAGS: `git.repository_url:${DUMMY_REPOSITORY_URL},git.commit.sha:${DUMMY_GIT_SHA}`
+        },
+        stdio: 'inherit'
       })
-      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+      return curlAndAssertMessage(agent, proc, ({ payload }) => {
         const firstSpan = payload[0][0]
-        assert.equal(firstSpan.meta['_dd.git.commit.sha'], '13851f2b092e97acebab1b73f6c0e7818e795b50')
-        assert.equal(firstSpan.meta['_dd.git.repository_url'], 'git@github.com:DataDog/sci_git_example.git')
+        assert.equal(firstSpan.meta[SCI_COMMIT_SHA], DUMMY_GIT_SHA)
+        assert.equal(firstSpan.meta[SCI_REPOSITORY_URL], DUMMY_REPOSITORY_URL)
 
         const secondSpan = payload[0][1]
-        assert.notExists(secondSpan.meta['_dd.git.commit.sha'])
-        assert.notExists(secondSpan.meta['_dd.git.repository_url'])
+        assert.notExists(secondSpan.meta[SCI_COMMIT_SHA])
+        assert.notExists(secondSpan.meta[SCI_REPOSITORY_URL])
       })
     })
   })
