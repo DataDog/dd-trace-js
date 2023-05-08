@@ -25,15 +25,24 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:lambda:ci
-      - if: success() || failure()
+      - if: always()
         run: docker-compose logs testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   ubuntu:
     runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
     steps:
-      - uses: actions/checkout@v2      
-      - run: docker-compose up -d testagent # Start the testagent container in the background
+      - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -44,14 +53,12 @@ jobs:
       - run: yarn test:lambda:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:lambda:ci
-      - if: success() || failure()
-        run: docker-compose logs testagent # Display the log output of the testagent container
+      - if: always()
+        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   windows:
     runs-on: windows-latest
-    env: 
-      DD_TEST_AGENT_ENABLED: false
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
