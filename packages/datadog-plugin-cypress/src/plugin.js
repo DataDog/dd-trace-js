@@ -17,7 +17,9 @@ const {
   TEST_COMMAND,
   TEST_MODULE,
   TEST_SOURCE_START,
-  finishAllTraceSpans
+  finishAllTraceSpans,
+  getCoveredFilenamesFromCoverage,
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
@@ -50,6 +52,14 @@ function getCypressVersion (details) {
     return details.config.version
   }
   return ''
+}
+
+function getRootDir (details) {
+  // TODO: make it work with other versions
+  if (details && details.config) {
+    return details.config.repoRoot
+  }
+  return process.cwd()
 }
 
 function getCypressCommand (details) {
@@ -91,10 +101,12 @@ module.exports = (on, config) => {
   let testSuiteSpan = null
   let command = null
   let frameworkVersion
+  let rootDir
 
   on('before:run', (details) => {
     const childOf = getTestParentSpan(tracer)
 
+    rootDir = getRootDir(details)
     command = getCypressCommand(details)
     frameworkVersion = getCypressVersion(details)
 
@@ -132,9 +144,13 @@ module.exports = (on, config) => {
     }
 
     return new Promise(resolve => {
-      tracer._tracer._exporter._writer.flush(() => {
+      if (tracer._tracer._exporter.flush) {
+        tracer._tracer._exporter.flush(() => {
+          resolve(null)
+        })
+      } else {
         resolve(null)
-      })
+      }
     })
   })
   on('task', {
@@ -153,9 +169,19 @@ module.exports = (on, config) => {
       })
       return null
     },
-    'dd:testSuiteFinish': (suiteStats) => {
+    'dd:testSuiteFinish': ({ stats, coverage }) => {
       if (testSuiteSpan) {
-        const status = getSuiteStatus(suiteStats)
+        if (coverage && tracer._tracer._exporter.exportCoverage) {
+          const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
+          const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, rootDir))
+          const formattedCoverage = {
+            traceId: testSuiteSpan.context()._traceId,
+            spanId: testSuiteSpan.context()._spanId,
+            files: relativeCoverageFiles
+          }
+          tracer._tracer._exporter.exportCoverage(formattedCoverage)
+        }
+        const status = getSuiteStatus(stats)
         testSuiteSpan.setTag(TEST_STATUS, status)
         testSuiteSpan.finish()
         testSuiteSpan = null

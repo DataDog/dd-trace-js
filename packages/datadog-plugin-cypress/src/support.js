@@ -13,8 +13,8 @@ before(() => {
 })
 
 after(() => {
-  cy.task('dd:testSuiteFinish', Cypress.mocha.getRunner().stats)
   cy.window().then(win => {
+    cy.task('dd:testSuiteFinish', { stats: Cypress.mocha.getRunner().stats, coverage: win.__coverage__ })
     win.dispatchEvent(new Event('beforeunload'))
   })
 })
