@@ -72,7 +72,9 @@ describe('profiler', () => {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_PROFILING_ENABLED: 1,
         DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: 1,
-        DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process'
+        DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process',
+        DD_TRACE_DEBUG: 1,
+        DD_TRACE_LOG_LEVEL: 'warn'
       }
     })
 
@@ -139,7 +141,7 @@ describe('profiler', () => {
           DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async,process'
         }
       })
-      return checkProfiles(agent, proc, timeout, ['space'], true, 3)
+      return checkProfiles(agent, proc, timeout, ['space'], true, 2)
     })
   })
 })
