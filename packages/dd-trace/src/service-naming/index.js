@@ -14,14 +14,6 @@ class SchemaManager {
     return this.config.spanAttributeSchema
   }
 
-  opName (type, ioDirection, plugin, opNameArgs) {
-    return this.schema.getOpName(type, ioDirection, plugin, opNameArgs)
-  }
-
-  serviceName (type, ioDirection, plugin, serviceNameArgs) {
-    return this.schema.getServiceName(type, ioDirection, plugin, this.config.service, serviceNameArgs)
-  }
-
   configure ({ service, spanAttributeSchema }) {
     this.config = { service, spanAttributeSchema }
   }
