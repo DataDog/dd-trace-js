@@ -22,8 +22,8 @@ class SchemaManager {
     return this.schema.getServiceName(type, ioDirection, plugin, this.config.service, serviceNameArgs)
   }
 
-  configure (config = {}) {
-    this.config = config
+  configure ({ service, spanAttributeSchema }) {
+    this.config = { service, spanAttributeSchema }
   }
 }
 
