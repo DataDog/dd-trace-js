@@ -71,7 +71,7 @@ function handleTraceRequest (req, res, sendToTestAgent) {
         }
       })
 
-    testAgentReq.on('response',  testAgentRes => {
+    testAgentReq.on('response', testAgentRes => {
       if (testAgentRes.statusCode !== 200) {
         // handle request failures from the Test Agent here
         let body = ''
@@ -79,7 +79,6 @@ function handleTraceRequest (req, res, sendToTestAgent) {
           body += chunk
         })
         testAgentRes.on('end', () => {
-          console.log(body)
           res.status(400).send(body)
         })
       }
