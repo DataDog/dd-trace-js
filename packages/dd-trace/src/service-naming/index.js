@@ -14,8 +14,8 @@ class SchemaManager {
     return this.config.spanAttributeSchema
   }
 
-  configure ({ service, spanAttributeSchema }) {
-    this.config = { service, spanAttributeSchema }
+  configure ({ spanAttributeSchema }) {
+    this.config = { spanAttributeSchema }
   }
 }
 

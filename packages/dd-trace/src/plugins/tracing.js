@@ -34,7 +34,8 @@ class TracingPlugin extends Plugin {
 
   serviceName (serviceArgs) {
     const { type, ioDirection, id } = this.constructor
-    return Nomenclature.schema.serviceName(type, ioDirection, id, serviceArgs)
+    const service = this.tracer._service
+    return Nomenclature.schema.serviceName(type, ioDirection, id, service, serviceArgs)
   }
 
   operationName (opNameArgs) {

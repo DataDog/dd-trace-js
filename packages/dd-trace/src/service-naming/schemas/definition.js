@@ -5,11 +5,11 @@ function getSchemaItem (schema, type, kind, plugin) {
 
 function bindSchema (schema) {
   return {
-    getOpName: (type, subType, plugin, opNameArgs) => {
+    opName: (type, subType, plugin, opNameArgs) => {
       const item = getSchemaItem(schema, type, subType, plugin)
       return item.opName(opNameArgs)
     },
-    getServiceName: (type, subType, plugin, service, serviceNameArgs) => {
+    serviceName: (type, subType, plugin, service, serviceNameArgs) => {
       const item = getSchemaItem(schema, type, subType, plugin)
       return item.serviceName(service, serviceNameArgs)
     }
