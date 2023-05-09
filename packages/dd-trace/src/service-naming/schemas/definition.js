@@ -1,8 +1,6 @@
 
 function getSchemaItem (schema, type, kind, plugin) {
-  if (schema && schema[type] && schema[type][kind] && schema[type][kind][plugin]) {
-    return schema[type][kind][plugin]
-  }
+  return schema[type][kind][plugin]
 }
 
 function bindSchema (schema) {
