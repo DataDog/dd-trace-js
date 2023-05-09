@@ -30,6 +30,7 @@ module.exports = class Plugin {
     this._subscriptions = []
     this._enabled = false
     this._tracer = tracer
+    this._storesByContext = new WeakMap()
   }
 
   get tracer () {
@@ -39,6 +40,10 @@ module.exports = class Plugin {
   enter (span, store) {
     store = store || storage.getStore()
     storage.enterWith({ ...store, span })
+  }
+
+  exit (ctx) {
+    storage.enterWith(this.getStoreByContext(ctx))
   }
 
   // TODO: Implement filters on resource name for all plugins.
@@ -59,6 +64,14 @@ module.exports = class Plugin {
     if (!store.span._spanContext._tags['error']) {
       store.span.setTag('error', error || 1)
     }
+  }
+
+  setStoreByContext (context, store) {
+    this._storesByContext.set(context, store)
+  }
+
+  getStoreByContext (context) {
+    return this._storesByContext.get(context)
   }
 
   configure (config) {

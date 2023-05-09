@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel, addHook, AsyncResource } = require('./helpers/instrument')
+const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 const rrtypes = {
@@ -48,11 +48,12 @@ function patchResolveShorthands (prototype) {
 
 function wrap (prefix, fn, expectedArgs, rrtype) {
   const startCh = channel(prefix + ':start')
-  const finishCh = channel(prefix + ':finish')
+  const asyncEndCh = channel(prefix + ':async_end')
+  const endCh = channel(prefix + ':end')
   const errorCh = channel(prefix + ':error')
 
   const wrapped = function () {
-    const cb = AsyncResource.bind(arguments[arguments.length - 1])
+    const cb = arguments[arguments.length - 1]
     if (
       !startCh.hasSubscribers ||
       arguments.length < expectedArgs ||
@@ -67,28 +68,31 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
       startArgs.push(rrtype)
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      startCh.publish(startArgs)
+    const context = { args: startArgs }
+    startCh.publish(context)
 
-      arguments[arguments.length - 1] = asyncResource.bind(function (error, result) {
-        if (error) {
-          errorCh.publish(error)
-        }
-        finishCh.publish(result)
-        cb.apply(this, arguments)
-      })
-
-      try {
-        return fn.apply(this, arguments)
-      // TODO deal with promise versions when we support `dns/promises`
-      } catch (error) {
-        error.stack // trigger getting the stack at the original throwing point
-        errorCh.publish(error)
-
-        throw error
+    arguments[arguments.length - 1] = function (error, result) {
+      if (error) {
+        context.error = error
+        errorCh.publish(context)
       }
-    })
+      context.result = result
+      asyncEndCh.publish(context)
+      cb.apply(this, arguments)
+    }
+
+    try {
+      return fn.apply(this, arguments)
+      // TODO deal with promise versions when we support `dns/promises`
+    } catch (error) {
+      error.stack // trigger getting the stack at the original throwing point
+      context.error = error
+      errorCh.publish(context)
+
+      throw error
+    } finally {
+      endCh.publish(context)
+    }
   }
 
   return shimmer.wrap(fn, wrapped)
