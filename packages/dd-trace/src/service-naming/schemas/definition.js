@@ -1,24 +1,21 @@
-class SchemaDefinition {
-  constructor (schema) {
-    this.schema = schema
-  }
 
-  getSchemaItem (type, ioDirection, plugin) {
-    const schema = this.schema
-    if (schema && schema[type] && schema[type][ioDirection] && schema[type][ioDirection][plugin]) {
-      return schema[type][ioDirection][plugin]
-    }
-  }
-
-  getOpName (type, ioDirection, plugin, opNameArgs) {
-    const item = this.getSchemaItem(type, ioDirection, plugin)
-    return item.opName(opNameArgs)
-  }
-
-  getServiceName (type, ioDirection, plugin, service, serviceNameArgs) {
-    const item = this.getSchemaItem(type, ioDirection, plugin)
-    return item.serviceName(service, serviceNameArgs)
+function getSchemaItem (schema, type, kind, plugin) {
+  if (schema && schema[type] && schema[type][kind] && schema[type][kind][plugin]) {
+    return schema[type][kind][plugin]
   }
 }
 
-module.exports = SchemaDefinition
+function bindSchema (schema) {
+  return {
+    getOpName: (type, subType, plugin, opNameArgs) => {
+      const item = getSchemaItem(schema, type, subType, plugin)
+      return item.opName(opNameArgs)
+    },
+    getServiceName: (type, subType, plugin, service, serviceNameArgs) => {
+      const item = getSchemaItem(schema, type, subType, plugin)
+      return item.serviceName(service, serviceNameArgs)
+    }
+  }
+}
+
+module.exports = bindSchema

@@ -21,4 +21,4 @@ const schema = {
   }
 }
 
-module.exports = new SchemaDefinition(schema)
+module.exports = SchemaDefinition(schema)
