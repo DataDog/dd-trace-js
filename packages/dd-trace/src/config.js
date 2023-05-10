@@ -512,9 +512,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.isGitUploadEnabled = this.isCiVisibility &&
       (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
 
-    this.isTraceGitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
+    this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
 
-    if (this.isTraceGitMetadataEnabled) {
+    if (this.gitMetadataEnabled) {
       this.repositoryUrl = coalesce(
         process.env.DD_GIT_REPOSITORY_URL,
         this.tags[GIT_REPOSITORY_URL]
