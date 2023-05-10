@@ -22,7 +22,7 @@ const NUMERIC_LITERAL =
     ].join('|')
   })`
 
-class SqlRegexTokenizer {
+class SqlSensitiveAnalyzer {
   constructor () {
     this._patterns = {
       MYSQL: new RegExp(
@@ -47,7 +47,7 @@ class SqlRegexTokenizer {
     }
   }
 
-  tokenize (evidence) {
+  extractSensitiveRanges (evidence) {
     try {
       const pattern = this._patterns[evidence.dialect]
       pattern.lastIndex = 0
@@ -92,4 +92,4 @@ class SqlRegexTokenizer {
   }
 }
 
-module.exports = SqlRegexTokenizer
+module.exports = SqlSensitiveAnalyzer

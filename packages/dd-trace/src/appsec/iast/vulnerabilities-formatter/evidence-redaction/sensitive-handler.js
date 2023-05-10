@@ -4,9 +4,9 @@ const vulnerabilities = require('../../vulnerabilities')
 
 const { contains, intersects, remove } = require('./range-utils')
 
-const CommandRegexTokenizer = require('./tokenizers/command-regex-tokenizer')
-const LdapRegexTokenizer = require('./tokenizers/ldap-regex-tokenizer')
-const SqlRegexTokenizer = require('./tokenizers/sql-regex-tokenizer')
+const CommandSensitiveAnalyzer = require('./sensitive-analyzers/command-sensitive-analyzer')
+const LdapSensitiveAnalyzer = require('./sensitive-analyzers/ldap-sensitive-analyzer')
+const SqlSensitiveAnalyzer = require('./sensitive-analyzers/sql-sensitive-analyzer')
 
 // eslint-disable-next-line max-len
 const DEFAULT_IAST_REDACTION_NAME_PATTERN = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)'
@@ -18,10 +18,10 @@ class SensitiveHandler {
     this._namePattern = new RegExp(DEFAULT_IAST_REDACTION_NAME_PATTERN, 'gmi')
     this._valuePattern = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
 
-    this._tokenizers = new Map()
-    this._tokenizers.set(vulnerabilities.COMMAND_INJECTION, new CommandRegexTokenizer())
-    this._tokenizers.set(vulnerabilities.LDAP_INJECTION, new LdapRegexTokenizer())
-    this._tokenizers.set(vulnerabilities.SQL_INJECTION, new SqlRegexTokenizer())
+    this._sensitiveAnalyzers = new Map()
+    this._sensitiveAnalyzers.set(vulnerabilities.COMMAND_INJECTION, new CommandSensitiveAnalyzer())
+    this._sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, new LdapSensitiveAnalyzer())
+    this._sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, new SqlSensitiveAnalyzer())
   }
 
   isSensibleName (name) {
@@ -39,9 +39,9 @@ class SensitiveHandler {
   }
 
   scrubEvidence (vulnerabilityType, evidence, sourcesIndexes, sources) {
-    const tokenizer = this._tokenizers.get(vulnerabilityType)
-    if (tokenizer) {
-      const sensitiveRanges = tokenizer.tokenize(evidence)
+    const sensitiveAnalyzer = this._sensitiveAnalyzers.get(vulnerabilityType)
+    if (sensitiveAnalyzer) {
+      const sensitiveRanges = sensitiveAnalyzer.extractSensitiveRanges(evidence)
       return this.toRedactedJson(evidence, sensitiveRanges, sourcesIndexes, sources)
     }
     return null

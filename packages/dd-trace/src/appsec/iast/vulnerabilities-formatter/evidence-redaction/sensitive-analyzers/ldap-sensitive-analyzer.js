@@ -4,12 +4,12 @@ const iastLog = require('../../../iast-log')
 
 const LDAP_PATTERN = '\\(.*?(?:~=|=|<=|>=)(?<LITERAL>[^)]+)\\)'
 
-class LdapRegexTokenizer {
+class LdapSensitiveAnalyzer {
   constructor () {
     this._pattern = new RegExp(LDAP_PATTERN, 'gmi')
   }
 
-  tokenize (evidence) {
+  extractSensitiveRanges (evidence) {
     try {
       this._pattern.lastIndex = 0
       const tokens = []
@@ -32,4 +32,4 @@ class LdapRegexTokenizer {
   }
 }
 
-module.exports = LdapRegexTokenizer
+module.exports = LdapSensitiveAnalyzer

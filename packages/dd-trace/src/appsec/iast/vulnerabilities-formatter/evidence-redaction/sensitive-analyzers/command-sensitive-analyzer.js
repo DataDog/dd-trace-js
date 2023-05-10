@@ -4,12 +4,12 @@ const iastLog = require('../../../iast-log')
 
 const COMMAND_PATTERN = '^(?:\\s*(?:sudo|doas)\\s+)?\\b\\S+\\b(.*)'
 
-class CommandRegexTokenizer {
+class CommandSensitiveAnalyzer {
   constructor () {
     this._pattern = new RegExp(COMMAND_PATTERN, 'gmi')
   }
 
-  tokenize (evidence) {
+  extractSensitiveRanges (evidence) {
     try {
       this._pattern.lastIndex = 0
 
@@ -26,4 +26,4 @@ class CommandRegexTokenizer {
   }
 }
 
-module.exports = CommandRegexTokenizer
+module.exports = CommandSensitiveAnalyzer
