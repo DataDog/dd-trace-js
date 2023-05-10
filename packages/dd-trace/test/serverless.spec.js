@@ -46,6 +46,15 @@ describe('Serverless', () => {
   })
 
   it('should spawn mini agent when K_SERVICE and FUNCTION_TARGET env vars are defined', () => {
+    process.env.FUNCTIONS_WORKER_RUNTIME = 'random_runtime'
+    process.env.AzureWebJobsStorage = 'random_value'
+
+    proxy.init()
+
+    expect(spawnStub).to.have.been.calledOnce
+  })
+
+  it('should spawn mini agent when Azure Function env vars are defined', () => {
     process.env.K_SERVICE = 'test_function'
     process.env.FUNCTION_TARGET = 'function_target'
 
