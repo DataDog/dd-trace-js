@@ -43,9 +43,10 @@ function getFirstNonDDPathAndLineFromCallsites (callsites) {
       const callsite = callsites[i]
       const filepath = callsite.getFileName()
       if (!isExcluded(callsite) && filepath.indexOf(pathLine.ddBasePath) === -1) {
-        if (path.indexOf('fs') > -1) {
+        if (filepath.indexOf('fs') > -1) {
           console.log('file path for vulnerability', filepath)
           console.log('Current stack trace', (new Error()).stack)
+          console.log('path.isAbsolute(filepath)', path.isAbsolute(filepath))
         }
         return {
           path: path.relative(process.cwd(), filepath),
