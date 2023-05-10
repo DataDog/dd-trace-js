@@ -9,7 +9,9 @@ const {
   getCoveredFilenamesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
-  getTestLineStart
+  getTestLineStart,
+  getTestSuitePath,
+  getTestParametersString
 } = require('../../dd-trace/src/plugins/util/test')
 
 const testSessionStartCh = channel('ci:jest:session:start')
@@ -36,11 +38,6 @@ const jestItrConfigurationCh = channel('ci:jest:itr-configuration')
 let skippableSuites = []
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
-
-const {
-  getTestSuitePath,
-  getTestParametersString
-} = require('../../dd-trace/src/plugins/util/test')
 
 const { getFormattedJestTestParameters, getJestTestName } = require('../../datadog-plugin-jest/src/util')
 
@@ -430,7 +427,7 @@ addHook({
     const { tests } = testPaths
 
     const filteredTests = tests.filter(({ path: testPath }) => {
-      const relativePath = testPath.replace(`${rootDir}/`, '')
+      const relativePath = getTestSuitePath(testPath, rootDir)
       return !skippableSuites.includes(relativePath)
     })
 
