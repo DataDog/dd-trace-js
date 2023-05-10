@@ -454,6 +454,7 @@ addHook({
 }, jestConfigSyncWrapper)
 
 function jasmineAsyncInstallWraper (jasmineAsyncInstallExport, jestVersion) {
+  log.warn('jest-jasmine2 support is removed from dd-trace@v4. Consider changing to jest-circus as `testRunner`.')
   return function (globalConfig, globalInput) {
     globalInput._ddtrace = global._ddtrace
     shimmer.wrap(globalInput.jasmine.Spec.prototype, 'execute', execute => function (onComplete) {
