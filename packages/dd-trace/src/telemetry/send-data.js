@@ -4,15 +4,13 @@ function getHeaders (config, application, reqType) {
   const headers = {
     'content-type': 'application/json',
     'dd-telemetry-api-version': 'v1',
-    'dd-telemetry-request-type': reqType
+    'dd-telemetry-request-type': reqType,
+    'dd-client-library-language': application.language_name,
+    'dd-client-library-version': application.tracer_version
   }
   const debug = config.telemetry && config.telemetry.debug
   if (debug) {
     headers['dd-telemetry-debug-enabled'] = 'true'
-  }
-  if (application) {
-    headers['dd-client-library-language'] = application.language_name
-    headers['dd-client-library-version'] = application.tracer_version
   }
   return headers
 }
