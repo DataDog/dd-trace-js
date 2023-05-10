@@ -31,7 +31,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.isGCPFunction || config.isAzureFunction) {
-        require('./serverless').maybeStartServerlessMiniAgent()
+        require('./serverless').maybeStartServerlessMiniAgent(config)
       }
 
       if (config.profiling.enabled) {
