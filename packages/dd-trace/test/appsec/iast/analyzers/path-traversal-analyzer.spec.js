@@ -169,7 +169,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
             callArgs[vulnerableIndex] = newTaintedString(iastCtx, callArgs[vulnerableIndex], 'param', 'Request')
           }
           return fn(callArgs)
-        }, 'PATH_TRAVERSAL')
+        }, 'PATH_TRAVERSAL', 1)
       })
       describe('no vulnerable', () => {
         testThatRequestHasNoVulnerability(function () {
