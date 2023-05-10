@@ -1,11 +1,12 @@
 const request = require('../exporters/common/request')
 
-function getHeaders (reqType, debug, application) {
+function getHeaders (config, application, reqType) {
   const headers = {
     'content-type': 'application/json',
     'dd-telemetry-api-version': 'v1',
     'dd-telemetry-request-type': reqType
   }
+  const debug = config.telemetry && config.telemetry.debug
   if (debug) {
     headers['dd-telemetry-debug-enabled'] = 'true'
   }
@@ -36,14 +37,13 @@ function sendData (config, application, host, reqType, payload = {}) {
     url
   } = config
 
-  const debug = config.telemetry && config.telemetry.debug
   const options = {
     url,
     hostname,
     port,
     method: 'POST',
     path: '/telemetry/proxy/api/v2/apmtelemetry',
-    headers: getHeaders(reqType, debug, application)
+    headers: getHeaders(config, application, reqType)
   }
   const data = JSON.stringify({
     api_version: 'v1',
