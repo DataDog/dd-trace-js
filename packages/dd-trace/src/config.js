@@ -3,6 +3,7 @@
 const fs = require('fs')
 const os = require('os')
 const URL = require('url').URL
+const { deprecate } = require('util')
 const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
@@ -300,6 +301,14 @@ class Config {
     )
 
     let appsec = options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
+
+    if (options.experiemental.appsec != null) {
+      // use noop utils.deprecate for standardized deprecation
+      deprecate(
+        () => {},
+        'config.experimental.appsec field in tracer.init(config) is deprecated. Please use config.appsec instead'
+      )()
+    }
 
     if (typeof appsec === 'boolean') {
       appsec = {
