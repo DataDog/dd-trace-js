@@ -1,7 +1,10 @@
 'use strict'
+const semver = require('semver')
+
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const { version: ddTraceVersion } = require('../../../package.json')
 const {
   getCoveredFilenamesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -451,6 +454,7 @@ addHook({
 }, jestConfigSyncWrapper)
 
 function jasmineAsyncInstallWraper (jasmineAsyncInstallExport, jestVersion) {
+  log.warn('jest-jasmine2 support is removed from dd-trace@v4. Consider changing to jest-circus as `testRunner`.')
   return function (globalConfig, globalInput) {
     globalInput._ddtrace = global._ddtrace
     shimmer.wrap(globalInput.jasmine.Spec.prototype, 'execute', execute => function (onComplete) {
@@ -480,11 +484,13 @@ function jasmineAsyncInstallWraper (jasmineAsyncInstallExport, jestVersion) {
   }
 }
 
-addHook({
-  name: 'jest-jasmine2',
-  versions: ['>=24.8.0'],
-  file: 'build/jasmineAsyncInstall.js'
-}, jasmineAsyncInstallWraper)
+if (semver.lt(ddTraceVersion, '4.0.0')) {
+  addHook({
+    name: 'jest-jasmine2',
+    versions: ['>=24.8.0'],
+    file: 'build/jasmineAsyncInstall.js'
+  }, jasmineAsyncInstallWraper)
+}
 
 addHook({
   name: 'jest-worker',

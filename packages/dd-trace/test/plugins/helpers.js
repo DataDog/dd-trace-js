@@ -5,16 +5,6 @@ const { Int64BE } = require('int64-buffer') // TODO remove dependency
 const { AssertionError } = require('assert')
 const { AsyncResource } = require('../../../datadog-instrumentations/src/helpers/instrument')
 
-const Nomenclature = require('../../src/service-naming')
-
-function resolveNaming (namingSchema) {
-  return new Proxy(namingSchema, {
-    get (target, prop, receiver) {
-      return target[prop][Nomenclature.version]
-    }
-  })
-}
-
 function expectSomeSpan (agent, expected, timeout) {
   return agent.use(traces => {
     const scoredErrors = []
@@ -122,7 +112,6 @@ module.exports = {
   compare,
   deepInclude,
   expectSomeSpan,
-  resolveNaming,
   unbreakThen,
   withDefaults
 }

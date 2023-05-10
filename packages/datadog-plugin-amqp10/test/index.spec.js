@@ -3,8 +3,6 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
-const namingSchema = require('./naming')
-
 describe('Plugin', () => {
   let tracer
   let client
@@ -65,8 +63,8 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
 
-                expect(span).to.have.property('name', namingSchema.send.opName)
-                expect(span).to.have.property('service', namingSchema.send.serviceName)
+                expect(span).to.have.property('name', 'amqp.send')
+                expect(span).to.have.property('service', 'test-amqp')
                 expect(span).to.have.property('resource', 'send amq.topic')
                 expect(span).to.not.have.property('type')
                 expect(span.meta).to.have.property('span.kind', 'producer')
@@ -86,6 +84,7 @@ describe('Plugin', () => {
 
             sender.send({ key: 'value' })
           })
+
           it('should handle errors', done => {
             let error
 
@@ -124,12 +123,6 @@ describe('Plugin', () => {
               expect(promise).to.have.property('value')
             })
           })
-
-          withNamingSchema(
-            () => sender.send({ key: 'value' }),
-            () => namingSchema.send.opName,
-            () => namingSchema.send.serviceName
-          )
         })
 
         describe('when consuming messages', () => {
@@ -137,8 +130,8 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', namingSchema.receive.opName)
-                expect(span).to.have.property('service', namingSchema.receive.serviceName)
+                expect(span).to.have.property('name', 'amqp.receive')
+                expect(span).to.have.property('service', 'test-amqp')
                 expect(span).to.have.property('resource', 'receive amq.topic')
                 expect(span).to.have.property('type', 'worker')
                 expect(span.meta).to.have.property('span.kind', 'consumer')
@@ -170,18 +163,12 @@ describe('Plugin', () => {
 
             sender.send({ key: 'value' })
           })
-
-          withNamingSchema(
-            () => sender.send({ key: 'value' }),
-            () => namingSchema.receive.opName,
-            () => namingSchema.receive.serviceName
-          )
         })
       })
 
       describe('with configuration', () => {
         beforeEach(() => {
-          agent.reload('amqp10', { service: 'test-custom-name' })
+          agent.reload('amqp10', { service: 'test' })
 
           const amqp = require(`../../../versions/amqp10@${version}`).get()
 
@@ -205,19 +192,13 @@ describe('Plugin', () => {
             .use(traces => {
               const span = traces[0][0]
 
-              expect(span).to.have.property('service', 'test-custom-name')
+              expect(span).to.have.property('service', 'test')
             }, 2)
             .then(done)
             .catch(done)
 
           sender.send({ key: 'value' })
         })
-
-        withNamingSchema(
-          () => sender.send({ key: 'value' }),
-          () => namingSchema.receive.opName,
-          () => 'test-custom-name'
-        )
       })
     })
   })

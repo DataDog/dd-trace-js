@@ -11,3 +11,9 @@ test.describe('playwright', () => {
     ])
   })
 })
+
+test.fixme('should work with fixme root', async ({ page }) => {
+  await expect(page.locator('.hello-world')).toHaveText([
+    'Hello Warld'
+  ])
+})
