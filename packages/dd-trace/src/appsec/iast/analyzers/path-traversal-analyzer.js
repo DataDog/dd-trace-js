@@ -55,6 +55,8 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
   _isExcluded (location) {
     let ret = true
     if (location && location.path) {
+      console.log('path-traversal-analyzer', location)
+      console.log('path-traversal-analyzer location.path', location.path)
       // Exclude from reporting those vulnerabilities which location is from an internal fs call
       if (location.isInternal) {
         ret = this.internalExclusionList.some(elem => location.path.includes(elem))
