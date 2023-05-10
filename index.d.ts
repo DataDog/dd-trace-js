@@ -442,6 +442,7 @@ export declare interface TracerOptions {
       deduplicationEnabled?: boolean
       /**
        * Whether to enable vulnerability redaction
+       * @default true
        */
       redactionEnabled?: boolean
     }
