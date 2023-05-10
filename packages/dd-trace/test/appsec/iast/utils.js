@@ -167,13 +167,25 @@ function prepareTestServerForIast (description, tests) {
       return agent.close({ ritmReset: false })
     })
 
-    function testThatRequestHasVulnerability (fn, vulnerability) {
+    function testThatRequestHasVulnerability (fn, vulnerability, occurrences) {
       it(`should have ${vulnerability} vulnerability`, function (done) {
         this.timeout(5000)
         app = fn
         agent
           .use(traces => {
-            expect(traces[0][0].meta['_dd.iast.json']).to.include(`"${vulnerability}"`)
+            expect(traces[0][0].meta).to.have.property('_dd.iast.json')
+            const vulnerabilitiesTrace = JSON.parse(traces[0][0].meta['_dd.iast.json'])
+            expect(vulnerabilitiesTrace).to.not.be.null
+            const vulnerabilitiesCount = new Map()
+            vulnerabilitiesTrace.vulnerabilities.forEach(v => {
+              let count = vulnerabilitiesCount.get(v.type) || 0
+              vulnerabilitiesCount.set(v.type, ++count)
+            })
+
+            expect(vulnerabilitiesCount.get(vulnerability)).to.not.be.null
+            if (occurrences) {
+              expect(vulnerabilitiesCount.get(vulnerability)).to.equal(occurrences)
+            }
           })
           .then(done)
           .catch(done)
