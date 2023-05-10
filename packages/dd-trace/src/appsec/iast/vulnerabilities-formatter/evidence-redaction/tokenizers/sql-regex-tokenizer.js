@@ -2,51 +2,55 @@
 
 const iastLog = require('../../../iast-log')
 
-const STRING_LITERAL = /'(?:''|[^'])*'/
-const POSTGRESQL_ESCAPED_LITERAL = /\$([^$]*)\$.*?\$\1\$/
-const MYSQL_STRING_LITERAL = /"(?:\\"|[^"])*"|'(?:\\'|[^'])*'/
-const LINE_COMMENT = /--.*$/
-const BLOCK_COMMENT = /\/\*[\s\S]*\*\//
-const EXPONENT = /(?:E[-+]?\d+[fd]?)?/
-const INTEGER_NUMBER = /(?<!\w)\d+/
-const DECIMAL_NUMBER = /\d*\.\d+/
-const HEX_NUMBER = /x'[0-9a-f]+'|0x[0-9a-f]+/
-const BIN_NUMBER = /b'[0-9a-f]+'|0b[0-9a-f]+/
-const NUMERIC_LITERAL = new RegExp(
+const STRING_LITERAL = '\'(?:\'\'|[^\'])*\''
+const POSTGRESQL_ESCAPED_LITERAL = '\\$([^$]*)\\$.*?\\$\\1\\$'
+const MYSQL_STRING_LITERAL = '"(?:\\\\"|[^"])*"|\'(?:\\\\\'|[^\'])*\''
+const LINE_COMMENT = '--.*$'
+const BLOCK_COMMENT = '/\\*[\\s\\S]*\\*/'
+const EXPONENT = '(?:E[-+]?\\d+[fd]?)?'
+const INTEGER_NUMBER = '(?<!\\w)\\d+'
+const DECIMAL_NUMBER = '\\d*\\.\\d+'
+const HEX_NUMBER = 'x\'[0-9a-f]+\'|0x[0-9a-f]+'
+const BIN_NUMBER = 'b\'[0-9a-f]+\'|0b[0-9a-f]+'
+const NUMERIC_LITERAL =
   `[-+]?(?:${
     [
-      HEX_NUMBER.source,
-      BIN_NUMBER.source,
-      DECIMAL_NUMBER.source + EXPONENT.source,
-      INTEGER_NUMBER.source + EXPONENT.source
+      HEX_NUMBER,
+      BIN_NUMBER,
+      DECIMAL_NUMBER + EXPONENT,
+      INTEGER_NUMBER + EXPONENT
     ].join('|')
   })`
-)
-
-const patterns = {
-  MYSQL: [
-    NUMERIC_LITERAL,
-    MYSQL_STRING_LITERAL,
-    LINE_COMMENT,
-    BLOCK_COMMENT
-  ],
-  POSTGRES: [
-    NUMERIC_LITERAL,
-    POSTGRESQL_ESCAPED_LITERAL,
-    STRING_LITERAL,
-    LINE_COMMENT,
-    BLOCK_COMMENT
-  ]
-}
 
 class SqlRegexTokenizer {
-  getPattern (dialect) {
-    return new RegExp(patterns[dialect].map(p => p.source).join('|'), 'gmi')
+  constructor () {
+    this._patterns = {
+      MYSQL: new RegExp(
+        [
+          NUMERIC_LITERAL,
+          MYSQL_STRING_LITERAL,
+          LINE_COMMENT,
+          BLOCK_COMMENT
+        ].join('|'),
+        'gmi'
+      ),
+      POSTGRES: new RegExp(
+        [
+          NUMERIC_LITERAL,
+          POSTGRESQL_ESCAPED_LITERAL,
+          STRING_LITERAL,
+          LINE_COMMENT,
+          BLOCK_COMMENT
+        ].join('|'),
+        'gmi'
+      )
+    }
   }
 
   tokenize (evidence) {
     try {
-      const pattern = this.getPattern(evidence.dialect)
+      const pattern = this._patterns[evidence.dialect]
+      pattern.lastIndex = 0
       const tokens = []
 
       let regexResult = pattern.exec(evidence.value)
