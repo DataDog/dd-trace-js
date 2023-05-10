@@ -48,7 +48,7 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
       'node:fs',
       'node:internal/fs',
       'fs.js',
-      'internal/fs',
+      'internal/fs'
     ]
   }
 
