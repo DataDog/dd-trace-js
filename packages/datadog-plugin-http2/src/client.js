@@ -52,7 +52,8 @@ class Http2ClientPlugin extends Plugin {
           'resource.name': method,
           'span.type': 'http',
           'http.method': method,
-          'http.url': uri
+          'http.url': uri,
+          'out.host': sessionDetails.host
         }
       })
 

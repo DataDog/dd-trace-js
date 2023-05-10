@@ -45,7 +45,8 @@ class HttpClientPlugin extends Plugin {
           'resource.name': method,
           'span.type': 'http',
           'http.method': method,
-          'http.url': uri
+          'http.url': uri,
+          'out.host': hostname
         }
       })
 
