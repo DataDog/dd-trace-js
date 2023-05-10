@@ -131,32 +131,7 @@ describe('telemetry logs', () => {
   })
 
   describe('sendData', () => {
-    const app = {}
-    const host = {}
-
-    it('should be called with DEBUG level and error if config.telemetry.diagnosticLogCollection = true', () => {
-      const logCollectorAdd = sinon.stub()
-      const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
-        '../../../../../diagnostics_channel': dc,
-        './log_collector': {
-          add: logCollectorAdd
-        }
-      })
-      logs.start()
-
-      onTelemetryStartMsg.config.telemetry.diagnosticLogCollection = true
-      onTelemetryStartMsg.application = app
-      onTelemetryStartMsg.host = host
-      onTelemetryStart()(onTelemetryStartMsg)
-
-      const error = new Error('test')
-      const stack = error.stack
-      logs.publish({ message: error.message, stack_trace: stack, level: 'DEBUG' })
-
-      expect(logCollectorAdd).to.be.calledOnceWith(match({ message: 'test', level: 'DEBUG', stack_trace: stack }))
-    })
-
-    it('should be not called with DEBUG level if config.telemetry.diagnosticLogCollection = false', () => {
+    it('should be not called with DEBUG level', () => {
       const logCollectorAdd = sinon.stub()
       const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
         '../../../../../diagnostics_channel': dc,

@@ -378,10 +378,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED,
       DD_IAST_ENABLED
     )
-    const DD_TELEMETRY_DIAGNOSTIC_LOG_COLLECTION_ENABLED = coalesce(
-      process.env.DD_TELEMETRY_DIAGNOSTIC_LOG_COLLECTION_ENABLED,
-      false
-    )
 
     const defaultIastRequestSampling = 30
     const iastRequestSampling = coalesce(
@@ -497,7 +493,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
       heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
-      diagnosticLogCollection: isTrue(DD_TELEMETRY_DIAGNOSTIC_LOG_COLLECTION_ENABLED),
       debug: isTrue(DD_TELEMETRY_DEBUG)
     }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
