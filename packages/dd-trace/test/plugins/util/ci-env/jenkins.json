@@ -686,5 +686,28 @@
       "git.commit.sha": "jenkins-git-commit",
       "git.repository_url": "https://github.com/DataDog/dogweb.git"
     }
+  ],
+  [
+    {
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_URL": "jenkins-pipeline-url",
+      "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
+      "GIT_COMMIT": "jenkins-git-commit",
+      "JENKINS_URL": "jenkins",
+      "JOB_URL": "jenkins-job-url",
+      "NODE_LABELS": "built-in linux",
+      "NODE_NAME": "my-node"
+    },
+    {
+      "_dd.ci.env_vars": "{\"DD_CUSTOM_TRACE_ID\":\"jenkins-custom-trace-id\"}",
+      "ci.node.labels": "[\"built-in\",\"linux\"]",
+      "ci.node.name": "my-node",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "jenkins-pipeline-url",
+      "ci.provider.name": "jenkins",
+      "git.commit.sha": "jenkins-git-commit"
+    }
   ]
 ]
