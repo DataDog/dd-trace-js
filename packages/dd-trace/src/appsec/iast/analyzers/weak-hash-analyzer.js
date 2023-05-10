@@ -1,5 +1,6 @@
 'use strict'
 const Analyzer = require('./vulnerability-analyzer')
+const { WEAK_HASH } = require('../vulnerabilities')
 
 const INSECURE_HASH_ALGORITHMS = new Set([
   'md4', 'md4WithRSAEncryption', 'RSA-MD4',
@@ -9,7 +10,7 @@ const INSECURE_HASH_ALGORITHMS = new Set([
 
 class WeakHashAnalyzer extends Analyzer {
   constructor () {
-    super('WEAK_HASH')
+    super(WEAK_HASH)
     this.addSub('datadog:crypto:hashing:start', ({ algorithm }) => this.analyze(algorithm))
   }
 

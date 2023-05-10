@@ -4,10 +4,11 @@ const path = require('path')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
 const InjectionAnalyzer = require('./injection-analyzer')
+const { PATH_TRAVERSAL } = require('../vulnerabilities')
 
 class PathTraversalAnalyzer extends InjectionAnalyzer {
   constructor () {
-    super('PATH_TRAVERSAL')
+    super(PATH_TRAVERSAL)
     this.addSub('apm:fs:operation:start', obj => {
       const pathArguments = []
       if (obj.dest) {
