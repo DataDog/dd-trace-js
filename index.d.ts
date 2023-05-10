@@ -443,6 +443,11 @@ export declare interface TracerOptions {
        * Whether to enable vulnerability deduplication
        */
       deduplicationEnabled?: boolean
+      /**
+       * Whether to enable vulnerability redaction
+       * @default true
+       */
+      redactionEnabled?: boolean
     }
   };
 
