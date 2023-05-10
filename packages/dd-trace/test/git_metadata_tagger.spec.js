@@ -10,7 +10,7 @@ const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/sci_git_example.git'
 
 const oldEnv = process.env
 
-describe('dd-trace', () => {
+describe('git metadata tagging', () => {
   let tracer
 
   beforeEach(() => {
@@ -31,7 +31,7 @@ describe('dd-trace', () => {
     process.env = oldEnv
   })
 
-  it(`should include git metadata when using DD_GIT_* tags and DD_TAGS`, async () => {
+  it('should include git metadata when using DD_GIT_* tags and DD_TAGS', async () => {
     const span = tracer.startSpan('hello', {
       tags: {
         'resource.name': '/hello/:name'

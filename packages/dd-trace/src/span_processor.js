@@ -6,7 +6,6 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 
 const { SpanStatsProcessor } = require('./span_stats')
-const { SCI_COMMIT_SHA, SCI_REPOSITORY_URL } = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
