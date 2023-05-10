@@ -399,7 +399,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     const DD_IAST_REDACTION_ENABLED = coalesce(
       iastOptions && iastOptions.redactionEnabled,
-      process.env.DD_IAST_REDACTION_ENABLED && isTrue(process.env.DD_IAST_REDACTION_ENABLED),
+      !isFalse(process.env.DD_IAST_REDACTION_ENABLED),
       true
     )
 
