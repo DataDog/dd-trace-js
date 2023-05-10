@@ -9,7 +9,7 @@ const externals = require('../plugins/externals.json')
 const slackReport = require('./slack-report')
 const metrics = require('../../src/metrics')
 const agent = require('../plugins/agent')
-const Nomenclature = require('../../../dd-trace/src/service-naming')
+const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { schemaDefinitions } = require('../../src/service-naming/schemas')
 
