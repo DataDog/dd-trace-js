@@ -70,7 +70,7 @@
     "@datadog/native-iast-rewriter": "2.0.1",
     "@datadog/native-iast-taint-tracking": "^1.4.0",
     "@datadog/native-metrics": "^1.6.0",
-    "@datadog/pprof": "^2.2.0",
+    "@datadog/pprof": "^2.2.1",
     "@datadog/sketches-js": "^2.1.0",
     "@types/node": "<18.13",
     "crypto-randomuuid": "^1.0.0",
