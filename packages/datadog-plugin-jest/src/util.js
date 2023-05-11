@@ -1,3 +1,5 @@
+const { getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
+
 /**
  * There are two ways to call `test.each` in `jest`:
  * 1. With an array of arrays: https://jestjs.io/docs/api#1-testeachtablename-fn-timeout
@@ -45,4 +47,11 @@ function getJestTestName (test) {
   return titles.join(' ')
 }
 
-module.exports = { getFormattedJestTestParameters, getJestTestName }
+function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
+  return originalTests.filter(({ path: testPath }) => {
+    const relativePath = getTestSuitePath(testPath, rootDir)
+    return !skippableSuites.includes(relativePath)
+  })
+}
+
+module.exports = { getFormattedJestTestParameters, getJestTestName, getJestSuitesToRun }
