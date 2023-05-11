@@ -154,6 +154,7 @@ $ yarn lint
 ### Experimental ESM Support
 
 > **Warning**
+> 
 > ESM support has been temporarily disabled starting from Node 20 as significant
 > changes are in progress.
 
