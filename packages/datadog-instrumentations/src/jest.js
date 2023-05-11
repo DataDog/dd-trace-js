@@ -13,6 +13,11 @@ const {
   getTestSuitePath,
   getTestParametersString
 } = require('../../dd-trace/src/plugins/util/test')
+const {
+  getFormattedJestTestParameters,
+  getJestTestName,
+  getJestSuitesToRun
+} = require('../../datadog-plugin-jest/src/util')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -38,8 +43,6 @@ const jestItrConfigurationCh = channel('ci:jest:itr-configuration')
 let skippableSuites = []
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
-
-const { getFormattedJestTestParameters, getJestTestName } = require('../../datadog-plugin-jest/src/util')
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -426,10 +429,7 @@ addHook({
     const testPaths = await getTestPaths.apply(this, arguments)
     const { tests } = testPaths
 
-    const filteredTests = tests.filter(({ path: testPath }) => {
-      const relativePath = getTestSuitePath(testPath, rootDir)
-      return !skippableSuites.includes(relativePath)
-    })
+    const filteredTests = getJestSuitesToRun(skippableSuites, tests, rootDir)
 
     skippableSuites = []
 
