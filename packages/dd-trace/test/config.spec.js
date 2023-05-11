@@ -24,6 +24,7 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_HTML = readFileSync(BLOCKED_TEMPLATE_HTML_PATH, { encoding: 'utf8' })
   const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('./fixtures/config/appsec-blocked-template.json')
   const BLOCKED_TEMPLATE_JSON = readFileSync(BLOCKED_TEMPLATE_JSON_PATH, { encoding: 'utf8' })
+  const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
 
   beforeEach(() => {
     pkg = {
@@ -1056,6 +1057,18 @@ describe('Config', () => {
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
         expect(config).to.have.property('isGitUploadEnabled', false)
       })
+    })
+  })
+
+  context('sci embedding', () => {
+    afterEach(() => {
+      delete process.env.DD_GIT_PROPERTIES_FILE
+    })
+    it('reads git.properties', () => {
+      process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d')
+      expect(config).to.have.property('repositoryUrl', 'git@github.com:DataDog/dd-trace-js.git')
     })
   })
 })
