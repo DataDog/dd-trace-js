@@ -2,14 +2,15 @@
 
 const fs = require('fs')
 const os = require('os')
+const uuid = require('crypto-randomuuid')
 const URL = require('url').URL
 const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
-const uuid = require('crypto-randomuuid')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
+const { getGitMetadataFromGitProperties } = require('./git_properties')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -539,6 +540,18 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
         process.env.DD_GIT_COMMIT_SHA,
         this.tags[GIT_COMMIT_SHA]
       )
+      if (!this.repositoryUrl || !this.commitSHA) {
+        const DD_GIT_PROPERTIES_FILE = coalesce(
+          process.env.DD_GIT_PROPERTIES_FILE,
+          `${process.cwd()}/git.properties`
+        )
+        const gitPropertiesString = maybeFile(DD_GIT_PROPERTIES_FILE)
+        if (gitPropertiesString) {
+          const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
+          this.commitSHA = this.commitSHA || commitSHA
+          this.repositoryUrl = this.repositoryUrl || repositoryUrl
+        }
+      }
     }
 
     this.stats = {
