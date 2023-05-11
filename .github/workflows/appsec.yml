@@ -27,8 +27,6 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/14
-      - run: yarn test:appsec:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/node/18
@@ -90,8 +88,6 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/14
-      - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/18
@@ -115,8 +111,6 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/14
-      - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/18
