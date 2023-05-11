@@ -678,6 +678,7 @@ jobs:
       - uses: codecov/codecov-action@v2
 
   # TODO: Install the Oracle client on the host and test Node >=16.
+  # TODO: Figure out why nyc stopped working with EACCESS errors.
   oracledb:
     runs-on: ubuntu-latest
     container: bengl/node-12-with-oracle-client
@@ -696,7 +697,8 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install --ignore-engine
-      - run: yarn test:plugins:ci
+      - run: yarn services
+      - run: yarn test:plugins
       - uses: codecov/codecov-action@v2
 
   paperplane:
