@@ -2,7 +2,7 @@
 
 const iastLog = require('../../../iast-log')
 
-const COMMAND_PATTERN = '^(?:\\s*(?:sudo|doas)\\s+)?\\b\\S+\\b(.*)'
+const COMMAND_PATTERN = '^(?:\\s*(?:sudo|doas)\\s+)?\\b\\S+\\b\\s(.*)'
 
 class CommandSensitiveAnalyzer {
   constructor () {
