@@ -4,6 +4,45 @@ This guide describes the steps to upgrade dd-trace from a major version to the
 next. If you are having any issues related to migrating, please feel free to
 open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
+## 3.0 to 4.0
+
+### Node 14 is no longer supported
+
+Node.js 14 has reached EOL in April 2023 and is no longer supported. Generally
+speaking, we highly recommend always keeping Node.js up to date regardless of
+our support policy.
+
+### The `orphanable` option was removed
+
+This option was only useful internally for a single integration that has since
+been removed. It was never useful for manual instrumentation since all that is
+needed to orphan a span on creation is to use
+`tracer.trace('web.request', { childOf: null })`.
+
+### Support for `jest-jasmine2` has been removed
+
+The default runner for Jest was changed to `jest-circus` around 2 years ago and
+is no longer supported by our Jest integration for CI Visibility. We recommend
+upgrading to `jest-circus` to anyone still using `jest-jasmine2`.
+
+### Support for older Next.js versions was removed
+
+We now support only Next.js 10.2 and up.
+
+### W3C headers are now prioritized over Datadog headers
+
+As we move towards open standards, we have decided to prioritize W3C Trace
+Context headers over our own vendor-specific headers for context propagation
+across services. For most applications this shouldn't change anything and
+distributed tracing should continue to work seamlessly.
+
+In some rare cases it's possible that some of the services involved in a trace
+are not instrumented by Datadog at all which can cause spans within the trace to
+become disconnected. While the data would still be available in the UI, the
+relationship between spans would no longer be visible. This can be addressed by
+restoring the previous behaviour using
+`DD_TRACE_PROPAGATION_STYLE='datadog,tracecontext'`.
+
 ## 2.0 to 3.0
 
 ### Node 12 is no longer supported
