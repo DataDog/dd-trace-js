@@ -21,7 +21,7 @@ needed to orphan a span on creation is to use
 
 ### Support for `jest-jasmine2` has been removed
 
-The default runner for Jest was changed to `jest-circus` around 2 years ago and
+The default test runner for Jest was changed to `jest-circus` around 2 years ago and
 is no longer supported by our Jest integration for CI Visibility. We recommend
 upgrading to `jest-circus` to anyone still using `jest-jasmine2`.
 
