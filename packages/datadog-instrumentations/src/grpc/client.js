@@ -4,6 +4,8 @@ const types = require('./types')
 const { addHook, channel, AsyncResource } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
+const nodeMajor = parseInt(process.versions.node.split('.')[0])
+
 const patched = new WeakSet()
 const instances = new WeakMap()
 
@@ -232,13 +234,15 @@ function patch (grpc) {
   return grpc
 }
 
-addHook({ name: 'grpc', versions: ['>=1.24.3'] }, patch)
+if (nodeMajor <= 14) {
+  addHook({ name: 'grpc', versions: ['>=1.24.3'] }, patch)
 
-addHook({ name: 'grpc', versions: ['>=1.24.3'], file: 'src/client.js' }, client => {
-  shimmer.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor())
+  addHook({ name: 'grpc', versions: ['>=1.24.3'], file: 'src/client.js' }, client => {
+    shimmer.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor())
 
-  return client
-})
+    return client
+  })
+}
 
 addHook({ name: '@grpc/grpc-js', versions: ['>=1.0.3'] }, patch)
 
