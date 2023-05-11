@@ -4,10 +4,11 @@ const path = require('path')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
 const InjectionAnalyzer = require('./injection-analyzer')
+const { PATH_TRAVERSAL } = require('../vulnerabilities')
 
 class PathTraversalAnalyzer extends InjectionAnalyzer {
   constructor () {
-    super('PATH_TRAVERSAL')
+    super(PATH_TRAVERSAL)
     this.addSub('apm:fs:operation:start', obj => {
       const pathArguments = []
       if (obj.dest) {
@@ -40,13 +41,29 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
       this.analyze(pathArguments)
     })
 
-    this.exclusionList = [ path.join('node_modules', 'send') + path.sep ]
+    this.exclusionList = [
+      path.join('node_modules', 'send') + path.sep
+    ]
+
+    this.internalExclusionList = [
+      'node:fs',
+      'node:internal/fs',
+      'node:internal\\fs',
+      'fs.js',
+      'internal/fs',
+      'internal\\fs'
+    ]
   }
 
   _isExcluded (location) {
-    let ret = false
+    let ret = true
     if (location && location.path) {
-      ret = this.exclusionList.some(elem => location.path.includes(elem))
+      // Exclude from reporting those vulnerabilities which location is from an internal fs call
+      if (location.isInternal) {
+        ret = this.internalExclusionList.some(elem => location.path.includes(elem))
+      } else {
+        ret = this.exclusionList.some(elem => location.path.includes(elem))
+      }
     }
     return ret
   }
@@ -59,7 +76,7 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
 
     if (value && value.constructor === Array) {
       for (const val of value) {
-        if (this._isVulnerable(val, iastContext)) {
+        if (this._isVulnerable(val, iastContext) && this._checkOCE(iastContext)) {
           this._report(val, iastContext)
           // no support several evidences in the same vulnerability, just report the 1st one
           break

@@ -10,6 +10,7 @@ const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const uuid = require('crypto-randomuuid')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -406,8 +407,19 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       true
     )
 
+    const DD_IAST_REDACTION_ENABLED = coalesce(
+      iastOptions && iastOptions.redactionEnabled,
+      !isFalse(process.env.DD_IAST_REDACTION_ENABLED),
+      true
+    )
+
     const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
+      true
+    )
+
+    const DD_TRACE_GIT_METADATA_ENABLED = coalesce(
+      process.env.DD_TRACE_GIT_METADATA_ENABLED,
       true
     )
 
@@ -515,7 +527,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       requestSampling: DD_IAST_REQUEST_SAMPLING,
       maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
-      deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED
+      deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
+      redactionEnabled: DD_IAST_REDACTION_ENABLED
     }
 
     this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
@@ -523,6 +536,19 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.isIntelligentTestRunnerEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
     this.isGitUploadEnabled = this.isCiVisibility &&
       (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
+
+    this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
+
+    if (this.gitMetadataEnabled) {
+      this.repositoryUrl = coalesce(
+        process.env.DD_GIT_REPOSITORY_URL,
+        this.tags[GIT_REPOSITORY_URL]
+      )
+      this.commitSHA = coalesce(
+        process.env.DD_GIT_COMMIT_SHA,
+        this.tags[GIT_COMMIT_SHA]
+      )
+    }
 
     this.stats = {
       enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
