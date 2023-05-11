@@ -3,6 +3,7 @@
 const log = require('./log')
 const format = require('./format')
 const SpanSampler = require('./span_sampler')
+const GitMetadataTagger = require('./git_metadata_tagger')
 
 const { SpanStatsProcessor } = require('./span_stats')
 
@@ -18,6 +19,7 @@ class SpanProcessor {
 
     this._stats = new SpanStatsProcessor(config)
     this._spanSampler = new SpanSampler(config.sampler)
+    this._gitMetadataTagger = new GitMetadataTagger(config)
   }
 
   process (span) {
@@ -32,6 +34,7 @@ class SpanProcessor {
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this._prioritySampler.sample(spanContext)
       this._spanSampler.sample(spanContext)
+      this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       for (const span of started) {
         if (span._duration !== undefined) {
