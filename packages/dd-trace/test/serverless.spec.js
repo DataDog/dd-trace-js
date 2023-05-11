@@ -75,7 +75,7 @@ describe('Serverless', () => {
 
     // trying to spawn with an invalid path will return a non-descriptive error, so we want to catch
     // invalid paths and log our own error.
-    expect(logErrorSpy).to.have.been.calledOnceWith(
+    expect(logErrorSpy).to.have.been.calledWith(
       'Serverless Mini Agent did not start. Could not find mini agent binary.'
     )
     existsSyncStub.returns(true)

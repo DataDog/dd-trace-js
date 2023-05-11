@@ -24,6 +24,7 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_HTML = readFileSync(BLOCKED_TEMPLATE_HTML_PATH, { encoding: 'utf8' })
   const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('./fixtures/config/appsec-blocked-template.json')
   const BLOCKED_TEMPLATE_JSON = readFileSync(BLOCKED_TEMPLATE_JSON_PATH, { encoding: 'utf8' })
+  const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
 
   beforeEach(() => {
     pkg = {
@@ -936,7 +937,7 @@ describe('Config', () => {
       }
     })
 
-    expect(log.error).to.be.calledThrice
+    expect(log.error).to.be.callCount(4)
     expect(log.error.firstCall).to.have.been.calledWithExactly(error)
     expect(log.error.secondCall).to.have.been.calledWithExactly(error)
     expect(log.error.thirdCall).to.have.been.calledWithExactly(error)
@@ -1074,6 +1075,75 @@ describe('Config', () => {
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
         expect(config).to.have.property('isGitUploadEnabled', false)
       })
+    })
+  })
+
+  context('sci embedding', () => {
+    const DUMMY_COMMIT_SHA = 'b7b5dfa992008c77ab3f8a10eb8711e0092445b0'
+    const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/dd-trace-js.git'
+    let ddTags
+    beforeEach(() => {
+      ddTags = process.env.DD_TAGS
+    })
+    afterEach(() => {
+      delete process.env.DD_GIT_PROPERTIES_FILE
+      delete process.env.DD_GIT_COMMIT_SHA
+      delete process.env.DD_GIT_REPOSITORY_URL
+      delete process.env.DD_TRACE_GIT_METADATA_ENABLED
+      process.env.DD_TAGS = ddTags
+    })
+    it('reads DD_GIT_* env vars', () => {
+      process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
+      process.env.DD_GIT_REPOSITORY_URL = DUMMY_REPOSITORY_URL
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
+      expect(config).to.have.property('repositoryUrl', DUMMY_REPOSITORY_URL)
+    })
+    it('reads DD_TAGS env var', () => {
+      process.env.DD_TAGS = `git.commit.sha:${DUMMY_COMMIT_SHA},git.repository_url:${DUMMY_REPOSITORY_URL}`
+      process.env.DD_GIT_REPOSITORY_URL = DUMMY_REPOSITORY_URL
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
+      expect(config).to.have.property('repositoryUrl', DUMMY_REPOSITORY_URL)
+    })
+    it('reads git.properties if it is available', () => {
+      process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d')
+      expect(config).to.have.property('repositoryUrl', DUMMY_REPOSITORY_URL)
+    })
+    it('does not crash if git.properties is not available', () => {
+      process.env.DD_GIT_PROPERTIES_FILE = '/does/not/exist'
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', undefined)
+      expect(config).to.have.property('repositoryUrl', undefined)
+    })
+    it('does not read git.properties if env vars are passed', () => {
+      process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
+      process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
+      process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:env-var/dd-trace-js.git'
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
+      expect(config).to.have.property('repositoryUrl', 'https://github.com:env-var/dd-trace-js.git')
+    })
+    it('still reads git.properties if one of the env vars is missing', () => {
+      process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
+      process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
+      expect(config).to.have.property('repositoryUrl', DUMMY_REPOSITORY_URL)
+    })
+    it('reads git.properties and filters out credentials', () => {
+      process.env.DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties.credentials')
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d')
+      expect(config).to.have.property('repositoryUrl', 'https://github.com/datadog/dd-trace-js')
+    })
+    it('does not read git metadata if DD_TRACE_GIT_METADATA_ENABLED is false', () => {
+      process.env.DD_TRACE_GIT_METADATA_ENABLED = 'false'
+      const config = new Config({})
+      expect(config).not.to.have.property('commitSHA')
+      expect(config).not.to.have.property('repositoryUrl')
     })
   })
 })
