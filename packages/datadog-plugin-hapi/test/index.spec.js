@@ -6,6 +6,10 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
+const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
+  ? '<17 || >18'
+  : ''
+
 describe('Plugin', () => {
   let tracer
   let Hapi
@@ -15,7 +19,7 @@ describe('Plugin', () => {
   let reply
 
   describe('hapi', () => {
-    withVersions('hapi', ['hapi', '@hapi/hapi'], (version, module) => {
+    withVersions('hapi', ['hapi', '@hapi/hapi'], versionRange, (version, module) => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         handler = (request, h, body) => h.response ? h.response(body) : h(body)
