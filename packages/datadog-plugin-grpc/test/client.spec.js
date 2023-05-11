@@ -5,8 +5,10 @@ const getPort = require('get-port')
 const Readable = require('stream').Readable
 const getService = require('./service')
 const loader = require('../../../versions/@grpc/proto-loader').get()
-const pkgs = ['grpc', '@grpc/grpc-js']
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+
+const nodeMajor = parseInt(process.versions.node.split('.')[0])
+const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
 describe('Plugin', () => {
   let grpc
