@@ -352,7 +352,6 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
-  # The hapi version ranges we support only support up to Node 14.
   hapi:
     runs-on: ubuntu-latest
     env:
@@ -362,6 +361,8 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
