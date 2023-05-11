@@ -2,9 +2,9 @@
 
 const { channel } = require('../../diagnostics_channel')
 const { isFalse } = require('./util')
+const Nomenclature = require('./service-naming')
 const plugins = require('./plugins')
 const log = require('./log')
-const Nomenclature = require('./service-naming')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
