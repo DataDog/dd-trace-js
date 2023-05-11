@@ -160,6 +160,8 @@ class Config {
       process.env.DD_SERVICE_NAME ||
       this.tags.service ||
       process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      process.env.FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
+      process.env.K_SERVICE || // Google Cloud Function Name set by newer runtimes
       pkg.name ||
       'node'
     const DD_SERVICE_MAPPING = coalesce(
@@ -184,9 +186,18 @@ class Config {
       process.env.DD_TRACE_STARTUP_LOGS,
       false
     )
+
+    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+
+    const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
+    const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
+    const isGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
+
+    const inServerlessEnvironment = inAWSLambda || isGCPFunction
+
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED,
-      !process.env.AWS_LAMBDA_FUNCTION_NAME
+      !inServerlessEnvironment
     )
     const DD_TELEMETRY_DEBUG_ENABLED = coalesce(
       process.env.DD_TELEMETRY_DEBUG_ENABLED,
@@ -270,7 +281,7 @@ class Config {
     const DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
       options.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
-      false
+      isGCPFunction
     )
 
     const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
@@ -337,12 +348,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
     )
 
-    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
-
     const remoteConfigOptions = options.remoteConfig || {}
     const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
       process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
-      !inAWSLambda
+      !inServerlessEnvironment
     )
     const DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = coalesce(
       parseInt(remoteConfigOptions.pollInterval),
@@ -389,6 +398,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       true
     )
 
+    const DD_IAST_REDACTION_ENABLED = coalesce(
+      iastOptions && iastOptions.redactionEnabled,
+      !isFalse(process.env.DD_IAST_REDACTION_ENABLED),
+      true
+    )
+
     const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
       true
@@ -430,7 +445,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       })
     }
 
-    const defaultFlushInterval = inAWSLambda ? 0 : 2000
+    const defaultFlushInterval = inServerlessEnvironment ? 0 : 2000
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
@@ -503,7 +518,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       requestSampling: DD_IAST_REQUEST_SAMPLING,
       maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
-      deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED
+      deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
+      redactionEnabled: DD_IAST_REDACTION_ENABLED
     }
 
     this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
@@ -531,6 +547,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     this.traceId128BitGenerationEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
+
+    this.isGCPFunction = isGCPFunction
 
     tagger.add(this.tags, {
       service: this.service,

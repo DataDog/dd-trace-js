@@ -108,6 +108,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
+    expect(config).to.have.nested.property('iast.redactionEnabled', true)
   })
 
   it('should support logging', () => {
@@ -191,6 +192,7 @@ describe('Config', () => {
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
     process.env.DD_IAST_DEDUPLICATION_ENABLED = false
+    process.env.DD_IAST_REDACTION_ENABLED = false
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
 
@@ -256,6 +258,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 3)
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
+    expect(config).to.have.nested.property('iast.redactionEnabled', false)
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -367,7 +370,8 @@ describe('Config', () => {
           requestSampling: 50,
           maxConcurrentRequests: 4,
           maxContextOperations: 5,
-          deduplicationEnabled: false
+          deduplicationEnabled: false,
+          redactionEnabled: false
         }
       },
       appsec: false,
@@ -419,6 +423,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 4)
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
+    expect(config).to.have.nested.property('iast.redactionEnabled', false)
     expect(config).to.have.deep.nested.property('sampler', {
       sampleRate: 0.5,
       rateLimit: 1000,
@@ -643,6 +648,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 2)
     expect(config).to.have.nested.property('iast.maxContextOperations', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', true)
+    expect(config).to.have.nested.property('iast.redactionEnabled', true)
   })
 
   it('should give priority to non-experimental options', () => {
@@ -768,6 +774,26 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
   })
 
+  it('should not set DD_TRACE_TELEMETRY_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', () => {
+    // FUNCTION_NAME and GCP_PROJECT env vars indicate a gcp function with a deprecated runtime
+    process.env.FUNCTION_NAME = 'function_name'
+    process.env.GCP_PROJECT = 'project_name'
+
+    const config = new Config()
+
+    expect(config.telemetry.enabled).to.be.false
+  })
+
+  it('should not set DD_TRACE_TELEMETRY_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
+    // K_SERVICE and FUNCTION_TARGET env vars indicate a gcp function with a newer runtime
+    process.env.K_SERVICE = 'function_name'
+    process.env.FUNCTION_TARGET = 'function_target'
+
+    const config = new Config()
+
+    expect(config.telemetry.enabled).to.be.false
+  })
+
   it('should set telemetry default values', () => {
     const config = new Config()
 
@@ -823,6 +849,24 @@ describe('Config', () => {
 
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+
+    const config = new Config()
+
+    expect(config.remoteConfig.enabled).to.be.false
+  })
+
+  it('should not set DD_REMOTE_CONFIGURATION_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', () => {
+    process.env.FUNCTION_NAME = 'function_name'
+    process.env.GCP_PROJECT = 'project_name'
+
+    const config = new Config()
+
+    expect(config.remoteConfig.enabled).to.be.false
+  })
+
+  it('should not set DD_REMOTE_CONFIGURATION_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
+    process.env.K_SERVICE = 'function_name'
+    process.env.FUNCTION_TARGET = 'function_target'
 
     const config = new Config()
 
