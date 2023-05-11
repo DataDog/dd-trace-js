@@ -9,6 +9,7 @@ const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const uuid = require('crypto-randomuuid')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -405,6 +406,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       true
     )
 
+    const DD_TRACE_GIT_METADATA_ENABLED = coalesce(
+      process.env.DD_TRACE_GIT_METADATA_ENABLED,
+      true
+    )
+
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
     const sampler = {
@@ -518,6 +524,19 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.isIntelligentTestRunnerEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
     this.isGitUploadEnabled = this.isCiVisibility &&
       (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
+
+    this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
+
+    if (this.gitMetadataEnabled) {
+      this.repositoryUrl = coalesce(
+        process.env.DD_GIT_REPOSITORY_URL,
+        this.tags[GIT_REPOSITORY_URL]
+      )
+      this.commitSHA = coalesce(
+        process.env.DD_GIT_COMMIT_SHA,
+        this.tags[GIT_COMMIT_SHA]
+      )
+    }
 
     this.stats = {
       enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
