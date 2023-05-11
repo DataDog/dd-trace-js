@@ -919,7 +919,7 @@ describe('Config', () => {
       }
     })
 
-    expect(log.error).to.be.calledThrice
+    expect(log.error).to.be.callCount(4)
     expect(log.error.firstCall).to.have.been.calledWithExactly(error)
     expect(log.error.secondCall).to.have.been.calledWithExactly(error)
     expect(log.error.thirdCall).to.have.been.calledWithExactly(error)
@@ -1071,6 +1071,7 @@ describe('Config', () => {
       delete process.env.DD_GIT_PROPERTIES_FILE
       delete process.env.DD_GIT_COMMIT_SHA
       delete process.env.DD_GIT_REPOSITORY_URL
+      delete process.env.DD_TRACE_GIT_METADATA_ENABLED
       process.env.DD_TAGS = ddTags
     })
     it('reads DD_GIT_* env vars', () => {
@@ -1119,6 +1120,12 @@ describe('Config', () => {
       const config = new Config({})
       expect(config).to.have.property('commitSHA', '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d')
       expect(config).to.have.property('repositoryUrl', 'https://github.com/datadog/dd-trace-js')
+    })
+    it('does not read git metadata if DD_TRACE_GIT_METADATA_ENABLED is false', () => {
+      process.env.DD_TRACE_GIT_METADATA_ENABLED = 'false'
+      const config = new Config({})
+      expect(config).not.to.have.property('commitSHA')
+      expect(config).not.to.have.property('repositoryUrl')
     })
   })
 })
