@@ -23,7 +23,7 @@ needed to orphan a span on creation is to use
 
 The default test runner for Jest was changed to `jest-circus` around 2 years ago and
 is no longer supported by our Jest integration for CI Visibility. We recommend
-upgrading to `jest-circus` to anyone still using `jest-jasmine2`.
+switching to `jest-circus` to anyone still using `jest-jasmine2`.
 
 ### Support for older Next.js versions was removed
 
