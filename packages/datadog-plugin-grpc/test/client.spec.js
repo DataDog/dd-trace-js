@@ -319,7 +319,7 @@ describe('Plugin', () => {
                     'component': 'grpc'
                   })
                   expect(traces[0][0].meta).to.have.property(ERROR_STACK)
-                  expect(traces[0][0].meta[ERROR_MESSAGE]).to.match(/^13 INTERNAL:.+$/)
+                  expect(traces[0][0].meta[ERROR_MESSAGE]).to.match(/^13 INTERNAL:.+$/m)
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 13)
                 })
             })
