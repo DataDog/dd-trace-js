@@ -18,6 +18,6 @@ log.use({
   error () {}
 })
 
-for (let i = 0; i < 1_000_000; i++) {
+for (let i = 0; i < 1000000; i++) {
   log[WITH_LEVEL](() => 'message')
 }
