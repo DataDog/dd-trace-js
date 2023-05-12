@@ -3,6 +3,7 @@
 const { channel } = require('../../diagnostics_channel')
 const { isFalse } = require('./util')
 const plugins = require('./plugins')
+const Dummy = require('./dummy-module')
 const log = require('./log')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
@@ -96,7 +97,7 @@ module.exports = class PluginManager {
   // like instrumenter.enable()
   configure (config = {}) {
     this._tracerConfig = config
-
+    Dummy.configure(config)
     for (const name in pluginClasses) {
       this.loadPlugin(name)
     }
