@@ -7,7 +7,7 @@ const { storage } = require('../../datadog-core')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { MAJOR } = require('../../../version')
+const { DD_MAJOR } = require('../../../version')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -27,7 +27,7 @@ class DatadogTracer extends Tracer {
       childOf: this.scope().active()
     }, options)
 
-    if (!options.childOf && options.orphanable === false && MAJOR < 4) {
+    if (!options.childOf && options.orphanable === false && DD_MAJOR < 4) {
       return fn(null, () => {})
     }
 
@@ -82,7 +82,7 @@ class DatadogTracer extends Tracer {
         optionsObj = optionsObj.apply(this, arguments)
       }
 
-      if (optionsObj && optionsObj.orphanable === false && !tracer.scope().active() && MAJOR < 4) {
+      if (optionsObj && optionsObj.orphanable === false && !tracer.scope().active() && DD_MAJOR < 4) {
         return fn.apply(this, arguments)
       }
 
