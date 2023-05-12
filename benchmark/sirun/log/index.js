@@ -4,7 +4,7 @@ const log = require('../../../packages/dd-trace/src/log')
 
 const {
   DD_TRACE_DEBUG = 'true',
-  ITERATIONS = 1000,
+  ITERATIONS = 5000,
   WITH_LEVEL = 'debug'
 } = process.env
 
