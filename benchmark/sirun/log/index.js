@@ -4,7 +4,6 @@ const log = require('../../../packages/dd-trace/src/log')
 
 const {
   DD_TRACE_DEBUG = 'true',
-  ITERATIONS = 5000,
   WITH_LEVEL = 'debug'
 } = process.env
 
@@ -19,6 +18,6 @@ log.use({
   error () {}
 })
 
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < 5000; i++) {
   log[WITH_LEVEL](() => 'message')
 }
