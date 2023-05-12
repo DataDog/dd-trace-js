@@ -8,13 +8,13 @@ const Config = require('../src/config')
 const tags = require('../../../ext/tags')
 const { expect } = require('chai')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { MAJOR } = require('../../../version')
+const { DD_MAJOR } = require('../../../version')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
 
-const describeOrphanable = MAJOR < 4 ? describe : describe.skip
+const describeOrphanable = DD_MAJOR < 4 ? describe : describe.skip
 
 describe('Tracer', () => {
   let Tracer

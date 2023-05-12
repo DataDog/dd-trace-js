@@ -8,7 +8,7 @@ const { execSync, spawn } = require('child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { writeFileSync } = require('fs')
 const { satisfies } = require('semver')
-const { MAJOR } = require('../../../version')
+const { DD_MAJOR } = require('../../../version')
 
 describe('Plugin', function () {
   let server
@@ -16,7 +16,7 @@ describe('Plugin', function () {
 
   describe('next', () => {
     // TODO: Figure out why 10.x tests are failing.
-    withVersions('next', 'next', MAJOR >= 4 && '>=11', version => {
+    withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
       const startServer = withConfig => {
         before(async () => {
           port = await getPort()
