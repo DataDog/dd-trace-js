@@ -54,7 +54,7 @@ function createWrapRequest (authority, options) {
 function wrapConnect (connect) {
   return function (authority, options) {
     if (connectChannel.hasSubscribers) {
-      connectChannel.publish({ args: arguments })
+      connectChannel.publish({ authority })
     }
     const session = connect.apply(this, arguments)
 
