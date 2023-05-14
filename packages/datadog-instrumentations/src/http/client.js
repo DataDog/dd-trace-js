@@ -169,13 +169,13 @@ function patch (http, methodName) {
   }
 
   function getOriginalArgs (args) {
-    let wholeUrl, originalOptions
+    let wholeUrl, options
     if (typeof args[0] === 'string') {
       wholeUrl = args[0]
-      originalOptions = args[1]
+      options = args[1]
     } else {
-      originalOptions = args[0]
+      options = args[0]
     }
-    return { wholeUrl, options: originalOptions }
+    return { wholeUrl, options }
   }
 }
