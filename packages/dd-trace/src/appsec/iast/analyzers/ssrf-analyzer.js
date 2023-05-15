@@ -1,10 +1,11 @@
 'use strict'
 
 const InjectionAnalyzer = require('./injection-analyzer')
+const { SSRF } = require('../vulnerabilities')
 
 class SSRFAnalyzer extends InjectionAnalyzer {
   constructor () {
-    super('SSRF')
+    super(SSRF)
 
     this.addSub('apm:http:client:request:start', ({ originalArgs }) => {
       if (originalArgs.wholeUrl) {
