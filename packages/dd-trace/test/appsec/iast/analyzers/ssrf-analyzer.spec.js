@@ -13,18 +13,21 @@ describe('ssrf analyzer', () => {
           return new Promise((resolve, reject) => {
             const clientRequest = http.get(url, () => {})
             let resolved = false
+
             clientRequest.on('error', () => {
               if (!resolved) {
                 resolved = true
                 resolve()
               }
             })
+
             clientRequest.on('close', () => {
               if (!resolved) {
                 resolved = true
                 resolve()
               }
             })
+
             clientRequest.destroy()
           })
         }
@@ -33,18 +36,21 @@ describe('ssrf analyzer', () => {
           return new Promise((resolve) => {
             const clientRequest = http.request(url, (res) => {})
             let resolved = false
+
             clientRequest.on('error', () => {
               if (!resolved) {
                 resolved = true
                 resolve()
               }
             })
+
             clientRequest.on('close', () => {
               if (!resolved) {
                 resolved = true
                 resolve()
               }
             })
+
             clientRequest.destroy()
           })
         }
@@ -65,8 +71,10 @@ describe('ssrf analyzer', () => {
                 testThatRequestHasVulnerability(() => {
                   const store = storage.getStore()
                   const iastContext = iastContextFunctions.getIastContext(store)
+
                   const url = newTaintedString(iastContext, pluginName + '://www.google.com', 'param', 'Request')
                   const https = require(pluginName)
+
                   return requestMethodData.methodToExecute(https, url)
                 }, 'SSRF')
 
@@ -81,11 +89,13 @@ describe('ssrf analyzer', () => {
                 testThatRequestHasVulnerability(() => {
                   const store = storage.getStore()
                   const iastContext = iastContextFunctions.getIastContext(store)
+
                   const host = newTaintedString(iastContext, 'www.google.com', 'param', 'Request')
                   const options = {
                     host,
                     protocol: `${pluginName}:`
                   }
+
                   return requestMethodData.methodToExecute(require(pluginName), options)
                 }, 'SSRF')
 
@@ -95,6 +105,7 @@ describe('ssrf analyzer', () => {
                     host,
                     protocol: `${pluginName}:`
                   }
+
                   return requestMethodData.methodToExecute(require(pluginName), options)
                 }, 'SSRF')
               })
@@ -107,16 +118,21 @@ describe('ssrf analyzer', () => {
         testThatRequestHasVulnerability(() => {
           const store = storage.getStore()
           const iastContext = iastContextFunctions.getIastContext(store)
+
           const url = newTaintedString(iastContext, 'http://www.datadoghq.com', 'param', 'Request')
           const http2 = require('http2')
+
           const session = http2.connect(url)
+
           session.destroy()
         }, 'SSRF')
 
         testThatRequestHasNoVulnerability(() => {
           const url = 'http://www.datadoghq.com'
           const http2 = require('http2')
+
           const session = http2.connect(url)
+
           session.destroy()
         }, 'SSRF')
       })
