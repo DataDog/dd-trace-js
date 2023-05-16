@@ -17,7 +17,7 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
     this.addSub('datadog:sequelize:query:start', ({ sql, dialect }) => {
       const parentStore = storage.getStore()
       if (parentStore) {
-        this.analyze(sql, dialect)
+        this.analyze(sql, dialect.toUpperCase())
 
         storage.enterWith({ ...parentStore, sqlAnalyzed: true, sequelizeParentStore: parentStore })
       }

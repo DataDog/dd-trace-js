@@ -13,7 +13,9 @@ addHook({ name: 'sequelize', versions: ['>=4'] }, Sequelize => {
   const finishCh = channel('datadog:sequelize:query:finish')
 
   shimmer.wrap(Sequelize.prototype, 'query', query => function (sql) {
-    if (!startCh.hasSubscribers) return query
+    if (!startCh.hasSubscribers) {
+      return query.apply(this, arguments)
+    }
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 

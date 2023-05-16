@@ -17,6 +17,16 @@ class TaintTrackingPlugin extends Plugin {
     this.addSub(
       'datadog:qs:parse:finish',
       ({ qs }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, qs))
+
+    this.addSub('apm:express:middleware:next', ({ req }) => {
+      if (req && req.body && typeof req.body === 'object') {
+        const iastContext = getIastContext(storage.getStore())
+        if (iastContext && iastContext['body'] !== req.body) {
+          this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body')
+          iastContext['body'] = req.body
+        }
+      }
+    })
   }
 
   _taintTrackingHandler (type, target, property) {
