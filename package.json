@@ -6,6 +6,7 @@
   "typings": "index.d.ts",
   "scripts": {
     "preinstall": "node scripts/preinstall.js",
+    "bundle": "node scripts/bundle",
     "bench": "node benchmark",
     "bench:profiler": "node benchmark/profiler",
     "bench:e2e": "SERVICES=mongo yarn services && cd benchmark/e2e && node benchmark-run.js --duration=30",
@@ -105,7 +106,8 @@
     "checksum": "^0.1.1",
     "cli-table3": "^0.5.1",
     "dotenv": "8.2.0",
-    "esbuild": "0.16.12",
+    "esbuild": "^0.17.18",
+    "esbuild-node-externals": "^1.7.0",
     "eslint": "^8.23.0",
     "eslint-config-standard": "^11.0.0-beta.0",
     "eslint-plugin-import": "^2.8.0",
