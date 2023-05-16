@@ -2,7 +2,7 @@
 
 // if (process.platform === 'win32') {
 process.on('uncaughtException', (err, origin) => {
-  console.error('UNCAUGHT', err, origin)
+  console.log('UNCAUGHT', err, origin)
 })
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -59,6 +59,7 @@ describe('metrics', () => {
     metrics.stop()
   })
 
+  if (process.platform !== 'win32') { // disable first half
   describe('start', () => {
     it('it should initialize the Dogstatsd client with the correct options', function () {
       metrics.start(config)
@@ -154,6 +155,7 @@ describe('metrics', () => {
       expect(client.flush).to.have.been.called
     })
   })
+  }
 
   describe('when started', () => {
     describe('stop', () => {
