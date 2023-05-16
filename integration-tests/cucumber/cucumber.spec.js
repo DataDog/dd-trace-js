@@ -53,6 +53,33 @@ versions.forEach(version => {
     })
     const reportMethods = ['agentless', 'evp proxy']
 
+    it('does not crash with parallel mode', (done) => {
+      let testOutput
+      childProcess = exec(
+        `${runTestsCommand} --parallel 2 --publish-quiet`,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_TRACE_DEBUG: 1,
+            DD_TRACE_LOG_LEVEL: 'warn'
+          },
+          stdio: 'inherit'
+        }
+      )
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.on('exit', () => {
+        assert.notInclude(testOutput, 'TypeError')
+        assert.include(testOutput, 'Unable to initialize CI Visibility because Cucumber is running in parallel mode.')
+        done()
+      })
+    })
+
     reportMethods.forEach((reportMethod) => {
       context(`reporting via ${reportMethod}`, () => {
         let envVars, isAgentless
