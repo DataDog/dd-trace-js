@@ -102,7 +102,7 @@ class SensitiveHandler {
             if (entry.start === i) {
               nextSensitive = entry
             } else {
-              sensitive.push(entry)
+              sensitive.unshift(entry)
             }
           }
         }
