@@ -17,7 +17,6 @@ addHook({ name: 'sequelize', versions: ['>=4'] }, Sequelize => {
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    const context = {}
     let dialect
     if (this.options && this.options.dialect) {
       dialect = this.options.dialect
@@ -27,14 +26,13 @@ addHook({ name: 'sequelize', versions: ['>=4'] }, Sequelize => {
 
     function onFinish () {
       asyncResource.bind(function () {
-        finishCh.publish({ context })
+        finishCh.publish()
       }, this).apply(this)
     }
 
     return asyncResource.bind(function () {
       startCh.publish({
         sql,
-        context,
         dialect
       })
 

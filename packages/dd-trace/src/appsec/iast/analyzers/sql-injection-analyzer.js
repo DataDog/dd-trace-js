@@ -14,19 +14,20 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
     this.addSub('apm:mysql2:query:start', ({ sql }) => this.analyze(sql, 'MYSQL'))
     this.addSub('apm:pg:query:start', ({ query }) => this.analyze(query.text, 'POSTGRES'))
 
-    this.addSub('datadog:sequelize:query:start', ({ sql, context, dialect }) => {
+    this.addSub('datadog:sequelize:query:start', ({ sql, dialect }) => {
       const parentStore = storage.getStore()
       if (parentStore) {
-        context.parentStore = parentStore
-
         this.analyze(sql, dialect)
 
-        storage.enterWith({ ...parentStore, sqlAnalyzed: true })
+        storage.enterWith({ ...parentStore, sqlAnalyzed: true, sequelizeParentStore: parentStore })
       }
     })
 
-    this.addSub('datadog:sequelize:query:finish', ({ context }) => {
-      if (context.parentStore) storage.enterWith(context.parentStore)
+    this.addSub('datadog:sequelize:query:finish', () => {
+      const store = storage.getStore()
+      if (store.sequelizeParentStore) {
+        if (store.sequelizeParentStore) storage.enterWith(store.sequelizeParentStore)
+      }
     })
   }
 
