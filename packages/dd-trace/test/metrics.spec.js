@@ -1,10 +1,14 @@
 'use strict'
 
-if (process.platform === 'win32') {
-  process.on('uncaughtException', (err, origin) => {
-    console.error('UNCAUGHT', err, origin)
-  })
-}
+// if (process.platform === 'win32') {
+process.on('uncaughtException', (err, origin) => {
+  console.error('UNCAUGHT', err, origin)
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.log('UNHANDLED', promise, reason);
+})
+// }
 
 require('./setup/tap')
 
