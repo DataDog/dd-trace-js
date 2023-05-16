@@ -1,5 +1,11 @@
 'use strict'
 
+if (process.platform === 'win32') {
+  process.on('uncaughtException', (err, origin) => {
+    console.error('UNCAUGHT', err, origin)
+  })
+}
+
 require('./setup/tap')
 
 describe('metrics', () => {
