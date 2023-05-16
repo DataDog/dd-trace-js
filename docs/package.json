@@ -12,5 +12,15 @@
   "devDependencies": {
     "typedoc": "^0.17.3",
     "typescript": "^3.8.3"
+  },
+  "overrides": {
+    "minimatch": "^3.0.5",
+    "minimist": "^1.2.6",
+    "shelljs": "^0.8.5"
+  },
+  "resolutions": {
+    "minimatch": "^3.0.5",
+    "minimist": "^1.2.6",
+    "shelljs": "^0.8.5"
   }
 }

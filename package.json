@@ -133,5 +133,30 @@
     "sinon-chai": "^3.7.0",
     "tap": "^16.3.4",
     "tape": "^4.9.1"
+  },
+  "overrides": {
+    "eslint-plugin-import": {
+      "tsconfig-paths": {
+        "json5": "^1.0.2"
+      }
+    },
+    "tap": {
+      "nyc": {
+        "istanbul-lib-instrument": {
+          "@babel/core": {
+            "json5": "^2.2.2"
+          }
+        }
+      }
+    },
+    "mocha": {
+      "minimatch": "^3.0.5",
+      "nanoid": "^3.1.31"
+    }
+  },
+  "resolutions": {
+    "json5": "^2.2.2",
+    "minimatch": "^3.0.5",
+    "nanoid": "^3.1.31"
   }
 }
