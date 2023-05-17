@@ -60,7 +60,7 @@ describe('metrics', () => {
   })
 
   describe('start', () => {
-    it.skip('it should initialize the Dogstatsd client with the correct options', function () {
+    it('it should initialize the Dogstatsd client with the correct options', function () {
       metrics.start(config)
 
       expect(Client).to.have.been.calledWithMatch({
@@ -73,7 +73,7 @@ describe('metrics', () => {
       })
     })
 
-    it.skip('it should initialize the Dogstatsd client with an IPv6 URL', function () {
+    it('it should initialize the Dogstatsd client with an IPv6 URL', function () {
       config.hostname = '::1'
 
       metrics.start(config)
@@ -88,6 +88,7 @@ describe('metrics', () => {
       })
     })
 
+    if (process.platform !== 'win32') {
     it('should start collecting metrics every 10 seconds', () => {
       metrics.start(config)
 
@@ -153,6 +154,7 @@ describe('metrics', () => {
 
       expect(client.flush).to.have.been.called
     })
+    }
   })
 
   describe('when started', () => {
