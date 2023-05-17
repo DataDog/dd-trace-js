@@ -55,9 +55,8 @@ function getCypressVersion (details) {
 }
 
 function getRootDir (details) {
-  // TODO: make it work with other versions
   if (details && details.config) {
-    return details.config.repoRoot
+    return details.config.repoRoot || details.config.projectRoot || process.cwd()
   }
   return process.cwd()
 }
@@ -149,7 +148,9 @@ module.exports = (on, config) => {
           resolve(null)
         })
       } else {
-        resolve(null)
+        tracer._tracer._exporter._writer.flush(() => {
+          resolve(null)
+        })
       }
     })
   })

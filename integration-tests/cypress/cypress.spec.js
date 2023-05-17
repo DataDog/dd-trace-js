@@ -13,6 +13,7 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const webAppServer = require('../ci-visibility/web-app-server')
+const coverageFixture = require('../ci-visibility/fixtures/coverage.json')
 const {
   TEST_STATUS,
   TEST_COMMAND,
@@ -22,7 +23,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
-// This is done because from playwright@>=1.22.0 node 12 is not supported
+// This is done because from cypress@>11.2.0 node 12 is not supported
 const isOldNode = semver.satisfies(process.version, '<=12')
 const versions = ['6.7.0', isOldNode ? '11.2.0' : 'latest']
 
@@ -52,6 +53,38 @@ versions.forEach((version) => {
       childProcess.kill()
       await receiver.stop()
     })
+    it('can report code coverage if it is available', (done) => {
+      const commandSuffix = version === '6.7.0' ? '--config-file cypress-config.json' : ''
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisAgentlessConfig(receiver.port)
+
+      receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcov', payloads => {
+        const [{ payload: coveragePayloads }] = payloads
+        const fileNames = coveragePayloads.map(coverage => coverage.content)
+          .flatMap(content => content.coverages)
+          .flatMap(coverageAttachment => coverageAttachment.files)
+          .map(file => file.filename)
+
+        assert.includeMembers(fileNames, Object.keys(coverageFixture))
+        done()
+      })
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+          },
+          stdio: 'pipe'
+        }
+      )
+    })
+
     const reportMethods = ['agentless', 'evp proxy']
 
     reportMethods.forEach((reportMethod) => {
