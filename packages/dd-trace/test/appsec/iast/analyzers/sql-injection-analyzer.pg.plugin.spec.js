@@ -26,6 +26,7 @@ describe('sql-injection-analyzer with pg', () => {
             pg = require(`../../../../../../versions/pg@${version}`).get()
             const Client = clients[implementation](pg)
             client = new Client({
+              host: '127.0.0.1',
               user: 'postgres',
               password: 'postgres',
               database: 'postgres',
