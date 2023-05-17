@@ -12,7 +12,13 @@ class TaintTrackingPlugin extends Plugin {
     this._type = 'taint-tracking'
     this.addSub(
       'datadog:body-parser:read:finish',
-      ({ req }) => this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body')
+      ({ req }) => {
+        const iastContext = getIastContext(storage.getStore())
+        if (iastContext && iastContext['body'] !== req.body) {
+          this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
+        }
+        iastContext['body'] = req.body
+      }
     )
     this.addSub(
       'datadog:qs:parse:finish',
@@ -22,17 +28,16 @@ class TaintTrackingPlugin extends Plugin {
       if (req && req.body && typeof req.body === 'object') {
         const iastContext = getIastContext(storage.getStore())
         if (iastContext && iastContext['body'] !== req.body) {
-          this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body')
+          this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
           iastContext['body'] = req.body
         }
       }
     })
   }
 
-  _taintTrackingHandler (type, target, property) {
-    const iastContext = getIastContext(storage.getStore())
+  _taintTrackingHandler (type, target, property, iastContext = getIastContext(storage.getStore())) {
     if (!property) {
-      target = taintObject(iastContext, target, type)
+      taintObject(iastContext, target, type)
     } else {
       target[property] = taintObject(iastContext, target[property], type)
     }
