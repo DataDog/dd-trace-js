@@ -171,6 +171,27 @@ describe('config', () => {
     })
   })
 
+  it('should use process as default strategy for OOM heap profiler', () => {
+    process.env = {
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: 'true'
+    }
+    const config = new Config()
+
+    expect(config.oomMonitoring).to.deep.equal({
+      enabled: true,
+      heapLimitExtensionSize: 0,
+      maxHeapExtensionCount: 0,
+      exportStrategies: ['process'],
+      exportCommand: [
+        process.execPath,
+        path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
+        'http://localhost:8126/',
+        `host:${config.host},service:node,snapshot:on_oom`,
+        'space'
+      ]
+    })
+  })
+
   it('should support OOM heap profiler configuration', () => {
     process.env = {
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: '1',
