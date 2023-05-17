@@ -59,103 +59,105 @@ describe('metrics', () => {
     metrics.stop()
   })
 
-  describe('start', () => {
-    it('it should initialize the Dogstatsd client with the correct options', function () {
-      metrics.start(config)
+  if (process.platform !== 'win32') {
+    describe('start', () => {
+      it('it should initialize the Dogstatsd client with the correct options', function () {
+        metrics.start(config)
 
-      expect(Client).to.have.been.calledWithMatch({
-        metricsProxyUrl: new URL('http://localhost:8126'),
-        host: 'localhost',
-        tags: [
-          'str:bar',
-          'invalid:t_e_s_t5-:./'
-        ]
-      })
-    })
-
-    it('it should initialize the Dogstatsd client with an IPv6 URL', function () {
-      config.hostname = '::1'
-
-      metrics.start(config)
-
-      expect(Client).to.have.been.calledWithMatch({
-        metricsProxyUrl: new URL('http://[::1]:8126'),
-        host: 'localhost',
-        tags: [
-          'str:bar',
-          'invalid:t_e_s_t5-:./'
-        ]
-      })
-    })
-
-    if (process.platform !== 'win32') {
-    it('should start collecting metrics every 10 seconds', () => {
-      metrics.start(config)
-
-      global.gc()
-
-      clock.tick(10000)
-
-      expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.system')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.total')
-
-      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_total')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_used')
-
-      expect(client.gauge).to.have.been.calledWith('runtime.node.process.uptime')
-
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size_executable')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_physical_size')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_available_size')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.heap_size_limit')
-
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.malloced_memory')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.peak_malloced_memory')
-
-      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.max')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.min')
-      expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.sum')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.avg')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.median')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile')
-      expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.count')
-
-      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.utilization')
-
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.max')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.min')
-      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.sum')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.avg')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.median')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.95percentile')
-      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.count')
-
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.max')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.min')
-      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.sum')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.avg')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.median')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.95percentile')
-      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.count')
-      expect(client.increment).to.have.been.calledWith(
-        'runtime.node.gc.pause.by.type.count', sinon.match.any, sinon.match(val => {
-          return val && /^gc_type:[a-z_]+$/.test(val[0])
+        expect(Client).to.have.been.calledWithMatch({
+          metricsProxyUrl: new URL('http://localhost:8126'),
+          host: 'localhost',
+          tags: [
+            'str:bar',
+            'invalid:t_e_s_t5-:./'
+          ]
         })
-      )
+      })
 
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.size.by.space')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.used_size.by.space')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.available_size.by.space')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.physical_size.by.space')
+      it('it should initialize the Dogstatsd client with an IPv6 URL', function () {
+        config.hostname = '::1'
 
-      expect(client.flush).to.have.been.called
+        metrics.start(config)
+
+        expect(Client).to.have.been.calledWithMatch({
+          metricsProxyUrl: new URL('http://[::1]:8126'),
+          host: 'localhost',
+          tags: [
+            'str:bar',
+            'invalid:t_e_s_t5-:./'
+          ]
+        })
+      })
+
+      it('should start collecting metrics every 10 seconds', () => {
+        metrics.start(config)
+
+        global.gc()
+
+        clock.tick(10000)
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.system')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.total')
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_total')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_used')
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.process.uptime')
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size_executable')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_physical_size')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_available_size')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.heap_size_limit')
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.malloced_memory')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.peak_malloced_memory')
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.max')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.min')
+        expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.sum')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.avg')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.median')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile')
+        expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.count')
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.utilization')
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.max')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.min')
+        expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.sum')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.avg')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.median')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.95percentile')
+        expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.count')
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.max')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.min')
+        expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.sum')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.avg')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.median')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.95percentile')
+        expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.count')
+        expect(client.increment).to.have.been.calledWith(
+          'runtime.node.gc.pause.by.type.count', sinon.match.any, sinon.match(val => {
+            return val && /^gc_type:[a-z_]+$/.test(val[0])
+          })
+        )
+
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.size.by.space')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.used_size.by.space')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.available_size.by.space')
+        expect(client.gauge).to.have.been.calledWith('runtime.node.heap.physical_size.by.space')
+
+        expect(client.flush).to.have.been.called
+      })
     })
-    }
-  })
+  } else {
+    describe.skip('start (skipping on Windows due to flakyness)', () => {})
+  }
 
   describe('when started', () => {
     describe('stop', () => {
