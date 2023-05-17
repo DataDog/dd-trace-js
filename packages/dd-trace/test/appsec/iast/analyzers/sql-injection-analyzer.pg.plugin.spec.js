@@ -25,35 +25,21 @@ describe('sql-injection-analyzer with pg', () => {
         client.connect(err => done(err))
       })
 
-      /*
       afterEach(async () => {
         await client.end()
       })
-      */
 
       testThatRequestHasVulnerability(() => {
         const store = storage.getStore()
         const iastCtx = iastContextFunctions.getIastContext(store)
         let sql = 'SELECT 1'
         sql = newTaintedString(iastCtx, sql, 'param', 'Request')
-        return client.query(sql, (err, result) => {
-          if (err) throw err
-
-          client.end((err) => {
-            if (err) throw err
-          })
-        })
+        return client.query(sql)
       }, 'SQL_INJECTION')
 
       testThatRequestHasNoVulnerability(() => {
         const sql = 'SELECT 1'
-        return client.query(sql, (err, result) => {
-          if (err) throw err
-
-          client.end((err) => {
-            if (err) throw err
-          })
-        })
+        return client.query(sql)
       }, 'SQL_INJECTION')
     })
   })
