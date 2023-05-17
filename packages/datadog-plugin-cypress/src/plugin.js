@@ -21,10 +21,10 @@ const {
   getCoveredFilenamesFromCoverage,
   getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
+const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
+const log = require('../../dd-trace/src/log')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
-
-const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 
 const CYPRESS_STATUS_TO_TEST_STATUS = {
   passed: 'pass',
@@ -88,9 +88,60 @@ function getSuiteStatus (suiteStats) {
   return 'pass'
 }
 
+function getItrConfig (tracer, testConfiguration) {
+  return new Promise(resolve => {
+    if (!tracer._tracer._exporter || !tracer._tracer._exporter.getItrConfiguration) {
+      return resolve({ err: new Error('CI Visibility was not initialized correctly') })
+    }
+
+    tracer._tracer._exporter.getItrConfiguration(testConfiguration, (err, itrConfig) => {
+      resolve({ err, itrConfig })
+    })
+  })
+}
+
+function getSkippableSuites (isSuitesSkippingEnabled, tracer, testConfiguration) {
+  if (!isSuitesSkippingEnabled) {
+    return Promise.resolve({ skippableSuites: [] })
+  }
+  return new Promise(resolve => {
+    if (!tracer._tracer._exporter || !tracer._tracer._exporter.getItrConfiguration) {
+      return resolve({ err: new Error('CI Visibility was not initialized correctly') })
+    }
+    tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableSuites) => {
+      resolve({
+        err,
+        skippableSuites: ['cypress/integration/examples/barcelona.spec.js'] // TODO: remove (this is for testing)
+      })
+    })
+  })
+}
+
 module.exports = (on, config) => {
   const tracer = require('../../dd-trace')
   const testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
+
+  const {
+    'git.repository_url': repositoryUrl,
+    'git.commit.sha': sha,
+    'os.version': osVersion,
+    'os.platform': osPlatform,
+    'os.architecture': osArchitecture,
+    'runtime.name': runtimeName,
+    'runtime.version': runtimeVersion,
+    'git.branch': branch
+  } = testEnvironmentMetadata
+
+  const testConfiguration = {
+    repositoryUrl,
+    sha,
+    osVersion,
+    osPlatform,
+    osArchitecture,
+    runtimeName,
+    runtimeVersion,
+    branch
+  }
 
   const codeOwnersEntries = getCodeOwnersFileEntries()
 
@@ -101,32 +152,52 @@ module.exports = (on, config) => {
   let command = null
   let frameworkVersion
   let rootDir
+  let isSuitesSkippingEnabled = false
+  let suitesToSkip = []
 
   on('before:run', (details) => {
-    const childOf = getTestParentSpan(tracer)
-
-    rootDir = getRootDir(details)
-    command = getCypressCommand(details)
-    frameworkVersion = getCypressVersion(details)
-
-    const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
-    const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
-
-    testSessionSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
-      childOf,
-      tags: {
-        [COMPONENT]: TEST_FRAMEWORK_NAME,
-        ...testEnvironmentMetadata,
-        ...testSessionSpanMetadata
+    return getItrConfig(tracer, testConfiguration).then(({ err, itrConfig }) => {
+      if (err) {
+        log.error(err)
+      } else {
+        // TODO: read isCodeCoverageEnabled and do not flush code coverage if it's disabled
+        isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled // TODO: remove true ||
       }
-    })
-    testModuleSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
-      childOf: testSessionSpan,
-      tags: {
-        [COMPONENT]: TEST_FRAMEWORK_NAME,
-        ...testEnvironmentMetadata,
-        ...testModuleSpanMetadata
-      }
+
+      getSkippableSuites(isSuitesSkippingEnabled, tracer, testConfiguration).then(({ err, skippableSuites }) => {
+        if (err) {
+          log.error(err)
+        } else {
+          suitesToSkip = skippableSuites
+        }
+
+        const childOf = getTestParentSpan(tracer)
+        rootDir = getRootDir(details)
+
+        command = getCypressCommand(details)
+        frameworkVersion = getCypressVersion(details)
+
+        const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
+        const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
+
+        testSessionSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
+          childOf,
+          tags: {
+            [COMPONENT]: TEST_FRAMEWORK_NAME,
+            ...testEnvironmentMetadata,
+            ...testSessionSpanMetadata
+          }
+        })
+        testModuleSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
+          childOf: testSessionSpan,
+          tags: {
+            [COMPONENT]: TEST_FRAMEWORK_NAME,
+            ...testEnvironmentMetadata,
+            ...testModuleSpanMetadata
+          }
+        })
+        return details
+      })
     })
   })
 
@@ -156,8 +227,12 @@ module.exports = (on, config) => {
   })
   on('task', {
     'dd:testSuiteStart': (suite) => {
+      // skip suite
+      if (suitesToSkip.includes(suite)) {
+        return true
+      }
       if (testSuiteSpan) {
-        return null
+        return false
       }
       const testSuiteSpanMetadata = getTestSuiteCommonTags(command, frameworkVersion, suite, TEST_FRAMEWORK_NAME)
       testSuiteSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
@@ -168,7 +243,7 @@ module.exports = (on, config) => {
           ...testSuiteSpanMetadata
         }
       })
-      return null
+      return false
     },
     'dd:testSuiteFinish': (stats) => {
       if (testSuiteSpan) {

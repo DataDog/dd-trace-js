@@ -8,8 +8,12 @@ beforeEach(() => {
   })
 })
 
-before(() => {
-  cy.task('dd:testSuiteStart', Cypress.mocha.getRootSuite().file)
+before(function () {
+  cy.task('dd:testSuiteStart', Cypress.mocha.getRootSuite().file).then((shouldSkip) => {
+    if (shouldSkip) {
+      this.skip()
+    }
+  })
 })
 
 after(() => {
