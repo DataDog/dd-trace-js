@@ -7,7 +7,8 @@ const {
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   bodyParser,
-  queryParser
+  queryParser,
+  passportVerify
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -16,6 +17,10 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { block, setTemplates } = require('./blocking')
+const { storage } = require('../../../datadog-core')
+const { trackEvent } = require('./sdk/track_event')
+const { setUserTags } = require('./sdk/set_user')
+
 
 let isEnabled = false
 let config
@@ -36,6 +41,8 @@ function enable (_config) {
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     bodyParser.subscribe(onRequestBodyParsed)
     queryParser.subscribe(onRequestQueryParsed)
+    passportVerify.subscribe(onPassportVerify)
+
 
     isEnabled = true
     config = _config
@@ -144,6 +151,30 @@ function handleResults (actions, req, res, rootSpan, abortController) {
 
   if (actions.includes('block')) {
     block(req, res, rootSpan, abortController)
+  }
+}
+
+function onPassportVerify ({ username, user, err, info, abortController }) {
+  const store = storage.getStore()
+  const rootSpan = store && store.req && web.root(store.req)
+
+  if (!rootSpan) {
+    log.warn('No rootSpan found in onPassportVerify')
+    return
+  }
+
+  if (username) {
+    // TODO: scrub sensitive information from username
+    if (user) {
+      // Success
+      setUserTags({ id: username }, rootSpan)
+      trackEvent('users.login.success', null, 'automatedUserEventSuccess', rootSpan)
+    } else {
+      // TODO: handle err and info?
+      trackEvent('users.login.failure', { 'usr.id': username }, 'automatedUserEventFailure', rootSpan)
+    }
+  } else {
+    log.warn('No username found in authentication instrumentation')
   }
 }
 

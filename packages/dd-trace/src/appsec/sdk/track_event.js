@@ -20,7 +20,7 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
 
   setUserTags(user, rootSpan)
 
-  trackEvent(tracer, 'users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan)
+  trackEvent('users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan)
 }
 
 function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
@@ -35,7 +35,7 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
     ...metadata
   }
 
-  trackEvent(tracer, 'users.login.failure', fields, 'trackUserLoginFailureEvent')
+  trackEvent('users.login.failure', fields, 'trackUserLoginFailureEvent', getRootSpan(tracer))
 }
 
 function trackCustomEvent (tracer, eventName, metadata) {
@@ -44,10 +44,10 @@ function trackCustomEvent (tracer, eventName, metadata) {
     return
   }
 
-  trackEvent(tracer, eventName, metadata, 'trackCustomEvent')
+  trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer))
 }
 
-function trackEvent (tracer, eventName, fields, sdkMethodName, rootSpan = getRootSpan(tracer)) {
+function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
   if (!rootSpan) {
     log.warn(`Root span not available in ${sdkMethodName}`)
     return
@@ -70,5 +70,6 @@ function trackEvent (tracer, eventName, fields, sdkMethodName, rootSpan = getRoo
 module.exports = {
   trackUserLoginSuccessEvent,
   trackUserLoginFailureEvent,
-  trackCustomEvent
+  trackCustomEvent,
+  trackEvent
 }
