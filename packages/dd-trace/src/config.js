@@ -348,6 +348,14 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maybeFile(appsec.blockedTemplateJson),
       maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
     )
+    const DD_APPSEC_USER_EVENTS_TRACKING_ENABLED = coalesce(
+       process.env.DD_APPSEC_USER_EVENTS_TRACKING_ENABLED,
+       true
+    )
+    const DD_APPSEC_USER_EVENTS_TRACKING = coalesce(
+      process.env.DD_APPSEC_USER_EVENTS_TRACKING,
+      'safe'
+    )
 
     const remoteConfigOptions = options.remoteConfig || {}
     const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
@@ -508,7 +516,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       blockedTemplateHtml: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
-      blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
+      blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
+      eventTracking: {
+        enabled: DD_APPSEC_USER_EVENTS_TRACKING_ENABLED,
+        mode: DD_APPSEC_USER_EVENTS_TRACKING
+      }
     }
     this.remoteConfig = {
       enabled: DD_REMOTE_CONFIGURATION_ENABLED,
