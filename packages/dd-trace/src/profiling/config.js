@@ -91,8 +91,10 @@ class Config {
       Number(DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE), 0)
     const maxHeapExtensionCount = coalesce(options.oomMaxHeapExtensionCount,
       Number(DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT), 0)
-    const exportStrategies = ensureOOMExportStrategies(coalesce(options.oomExportStrategies,
-      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES), this)
+    const exportStrategies = oomMonitoringEnabled
+      ? ensureOOMExportStrategies(coalesce(options.oomExportStrategies, DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
+        [oomExportStrategies.PROCESS]), this)
+      : []
     const exportCommand = oomMonitoringEnabled ? buildExportCommand(this) : undefined
     this.oomMonitoring = {
       enabled: oomMonitoringEnabled,
