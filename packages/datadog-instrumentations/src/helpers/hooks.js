@@ -68,6 +68,7 @@ module.exports = {
   'next': () => require('../next'),
   'oracledb': () => require('../oracledb'),
   'paperplane': () => require('../paperplane'),
+  'passport-local': () => require('../passport'),
   'pg': () => require('../pg'),
   'pino': () => require('../pino'),
   'pino-pretty': () => require('../pino'),
