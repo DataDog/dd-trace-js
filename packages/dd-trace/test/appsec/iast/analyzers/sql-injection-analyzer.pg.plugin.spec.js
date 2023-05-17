@@ -1,6 +1,6 @@
 'use strict'
 
-const semver = require('semver')
+//const semver = require('semver')
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
@@ -11,11 +11,11 @@ describe('sql-injection-analyzer with pg', () => {
   let pg
   let client
   withVersions('pg', 'pg', version => {
-    if (semver.satisfies(version, '<8.0.3')) return
+    //if (semver.satisfies(version, '<8.0.3')) return
     prepareTestServerForIast('pg', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       beforeEach((done) => {
         pg = require(`../../../../../../versions/pg@${version}`).get()
-        client = new pg.Client({
+        client = new pg.native.Client({
           user: 'postgres',
           password: 'postgres',
           database: 'postgres',
@@ -25,21 +25,35 @@ describe('sql-injection-analyzer with pg', () => {
         client.connect(err => done(err))
       })
 
+      /*
       afterEach(async () => {
         await client.end()
       })
+      */
 
       testThatRequestHasVulnerability(() => {
         const store = storage.getStore()
         const iastCtx = iastContextFunctions.getIastContext(store)
         let sql = 'SELECT 1'
         sql = newTaintedString(iastCtx, sql, 'param', 'Request')
-        return client.query(sql)
+        return client.query(sql, (err, result) => {
+          if (err) throw err
+
+          client.end((err) => {
+            if (err) throw err
+          })
+        })
       }, 'SQL_INJECTION')
 
       testThatRequestHasNoVulnerability(() => {
         const sql = 'SELECT 1'
-        return client.query(sql)
+        return client.query(sql, (err, result) => {
+          if (err) throw err
+
+          client.end((err) => {
+            if (err) throw err
+          })
+        })
       }, 'SQL_INJECTION')
     })
   })
