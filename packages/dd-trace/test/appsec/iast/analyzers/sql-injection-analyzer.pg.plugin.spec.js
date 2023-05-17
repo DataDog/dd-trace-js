@@ -32,7 +32,10 @@ describe('sql-injection-analyzer with pg', () => {
               application_name: 'test'
             })
             vulnerabilityReporter.clearCache()
-            client.connect(err => done(err))
+            client.connect(err => {
+              console.log(err)
+              done(err)
+            })
           })
 
           afterEach(async () => {
