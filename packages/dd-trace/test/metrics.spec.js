@@ -51,6 +51,7 @@ describe('metrics', () => {
 
   describe('start', () => {
     it('it should initialize the Dogstatsd client with the correct options', function () {
+      metrics.stop()
       metrics.start(config)
 
       expect(Client).to.have.been.calledWithMatch({
@@ -66,6 +67,7 @@ describe('metrics', () => {
     it('it should initialize the Dogstatsd client with an IPv6 URL', function () {
       config.hostname = '::1'
 
+      metrics.stop()
       metrics.start(config)
 
       expect(Client).to.have.been.calledWithMatch({
@@ -79,6 +81,7 @@ describe('metrics', () => {
     })
 
     it('should start collecting metrics every 10 seconds', () => {
+      metrics.stop()
       metrics.start(config)
 
       global.gc()
