@@ -4,7 +4,6 @@ const { exec } = require('child_process')
 
 const getPort = require('get-port')
 const { assert } = require('chai')
-const semver = require('semver')
 
 const {
   createSandbox,
@@ -21,11 +20,11 @@ const {
   TEST_FRAMEWORK_VERSION,
   TEST_TOOLCHAIN
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { NODE_MAJOR } = require('../../version')
 
 // TODO: remove when 2.x support is removed.
 // This is done because from cypress@>11.2.0 node 12 is not supported
-const isOldNode = semver.satisfies(process.version, '<=12')
-const versions = ['6.7.0', isOldNode ? '11.2.0' : 'latest']
+const versions = ['6.7.0', NODE_MAJOR <= 12 ? '11.2.0' : 'latest']
 
 versions.forEach((version) => {
   describe(`cypress@${version}`, function () {
