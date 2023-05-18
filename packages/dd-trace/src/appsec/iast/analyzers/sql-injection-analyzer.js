@@ -26,7 +26,7 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
     this.addSub('datadog:sequelize:query:finish', () => {
       const store = storage.getStore()
       if (store.sequelizeParentStore) {
-        if (store.sequelizeParentStore) storage.enterWith(store.sequelizeParentStore)
+        storage.enterWith(store.sequelizeParentStore)
       }
     })
   }
