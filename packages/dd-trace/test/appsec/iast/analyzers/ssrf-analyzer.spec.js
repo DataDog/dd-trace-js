@@ -11,7 +11,12 @@ describe('ssrf analyzer', () => {
       ['http', 'https'].forEach(pluginName => {
         function executeHttpGet (http, url) {
           return new Promise((resolve, reject) => {
-            const clientRequest = http.get(url, () => {})
+            const clientRequest = http.get(url, () => {
+              if (!resolved) {
+                resolved = true
+                resolve()
+              }
+            })
             let resolved = false
 
             clientRequest.on('error', () => {
@@ -34,7 +39,12 @@ describe('ssrf analyzer', () => {
 
         function executeHttpRequest (http, url) {
           return new Promise((resolve) => {
-            const clientRequest = http.request(url, (res) => {})
+            const clientRequest = http.request(url, (res) => {
+              if (!resolved) {
+                resolved = true
+                resolve()
+              }
+            })
             let resolved = false
 
             clientRequest.on('error', () => {
