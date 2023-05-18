@@ -170,18 +170,8 @@ module.exports = (on, config) => {
       })
       return null
     },
-    'dd:testSuiteFinish': ({ stats, coverage }) => {
+    'dd:testSuiteFinish': (stats) => {
       if (testSuiteSpan) {
-        if (coverage && tracer._tracer._exporter.exportCoverage) {
-          const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
-          const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, rootDir))
-          const formattedCoverage = {
-            traceId: testSuiteSpan.context()._traceId,
-            spanId: testSuiteSpan.context()._spanId,
-            files: relativeCoverageFiles
-          }
-          tracer._tracer._exporter.exportCoverage(formattedCoverage)
-        }
         const status = getSuiteStatus(stats)
         testSuiteSpan.setTag(TEST_STATUS, status)
         testSuiteSpan.finish()
@@ -231,9 +221,21 @@ module.exports = (on, config) => {
       }
       return activeSpan ? activeSpan.context().toTraceId() : null
     },
-    'dd:afterEach': (test) => {
+    'dd:afterEach': ({ test, coverage }) => {
       const { state, error, isRUMActive, testSourceLine } = test
       if (activeSpan) {
+        if (coverage && tracer._tracer._exporter.exportCoverage) {
+          const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
+          const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, rootDir))
+          const formattedCoverage = {
+            sessionId: testSuiteSpan.context()._traceId,
+            suiteId: testSuiteSpan.context()._spanId,
+            testId: activeSpan.context()._spanId,
+            files: relativeCoverageFiles
+          }
+          tracer._tracer._exporter.exportCoverage(formattedCoverage)
+        }
+
         activeSpan.setTag(TEST_STATUS, CYPRESS_STATUS_TO_TEST_STATUS[state])
         if (error) {
           activeSpan.setTag('error', error)

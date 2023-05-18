@@ -13,8 +13,8 @@ before(() => {
 })
 
 after(() => {
+  cy.task('dd:testSuiteFinish', Cypress.mocha.getRunner().stats)
   cy.window().then(win => {
-    cy.task('dd:testSuiteFinish', { stats: Cypress.mocha.getRunner().stats, coverage: win.__coverage__ })
     win.dispatchEvent(new Event('beforeunload'))
   })
 })
@@ -36,6 +36,6 @@ afterEach(() => {
     if (win.DD_RUM) {
       testInfo.isRUMActive = true
     }
-    cy.task('dd:afterEach', testInfo)
+    cy.task('dd:afterEach', { test: testInfo, coverage: win.__coverage__ })
   })
 })

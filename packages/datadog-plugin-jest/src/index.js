@@ -118,8 +118,8 @@ class JestPlugin extends CiPlugin {
 
     this.addSub('ci:jest:worker-report:coverage', data => {
       const formattedCoverages = JSON.parse(data).map(coverage => ({
-        traceId: id(coverage.traceId),
-        spanId: id(coverage.spanId),
+        sessionId: id(coverage.sessionId),
+        suiteId: id(coverage.suiteId),
         files: coverage.files
       }))
       formattedCoverages.forEach(formattedCoverage => {
@@ -151,8 +151,8 @@ class JestPlugin extends CiPlugin {
      */
     this.addSub('ci:jest:test-suite:code-coverage', (coverageFiles) => {
       const formattedCoverage = {
-        traceId: this.testSuiteSpan.context()._traceId,
-        spanId: this.testSuiteSpan.context()._spanId,
+        sessionId: this.testSuiteSpan.context()._traceId,
+        suiteId: this.testSuiteSpan.context()._spanId,
         files: coverageFiles
       }
       this.tracer._exporter.exportCoverage(formattedCoverage)
