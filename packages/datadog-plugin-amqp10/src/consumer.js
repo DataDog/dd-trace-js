@@ -11,11 +11,9 @@ class Amqp10ConsumerPlugin extends ConsumerPlugin {
     const source = getShortName(link)
     const address = getAddress(link)
 
-    this.startSpan('amqp.receive', {
-      service: this.config.service || `${this.tracer._service}-amqp`,
+    this.startSpan({
       resource: ['receive', source].filter(v => v).join(' '),
       type: 'worker',
-      kind: 'consumer',
       meta: {
         'amqp.link.source.address': source,
         'amqp.link.role': 'receiver',
