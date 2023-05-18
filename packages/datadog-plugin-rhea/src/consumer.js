@@ -19,12 +19,10 @@ class RheaConsumerPlugin extends ConsumerPlugin {
     const name = getResourceNameFromMessage(msgObj)
     const childOf = extractTextMap(msgObj, this.tracer)
 
-    this.startSpan('amqp.receive', {
+    this.startSpan({
       childOf,
-      service: this.config.service,
       resource: name,
       type: 'worker',
-      kind: 'consumer',
       meta: {
         'component': 'rhea',
         'amqp.link.source.address': name,
