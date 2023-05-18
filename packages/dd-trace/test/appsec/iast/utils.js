@@ -142,7 +142,7 @@ function prepareTestServerForIast (description, tests) {
         .listen(config.port, 'localhost', () => done())
     })
 
-    beforeEach(async () => {
+    beforeEach(() => {
       vulnerabilityReporter.clearCache()
     })
 
