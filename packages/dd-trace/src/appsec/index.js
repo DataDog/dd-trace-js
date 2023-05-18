@@ -41,7 +41,11 @@ function enable (_config) {
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     bodyParser.subscribe(onRequestBodyParsed)
     queryParser.subscribe(onRequestQueryParsed)
-    passportVerify.subscribe(onPassportVerify)
+
+    if (_config.appsec.eventTracking.enabled
+      && (_config.appsec.eventTracking.mode == 'safe' || _config.appsec.eventTracking.mode == 'extended')) {
+      passportVerify.subscribe(onPassportVerify)
+    }
 
 
     isEnabled = true
@@ -164,9 +168,7 @@ function onPassportVerify ({ username, user, err, info, abortController }) {
   }
 
   if (username) {
-    // TODO: scrub sensitive information from username
     if (user) {
-      // Success
       setUserTags({ id: username }, rootSpan)
       trackEvent('users.login.success', null, 'automatedUserEventSuccess', rootSpan)
     } else {
