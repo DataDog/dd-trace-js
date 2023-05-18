@@ -63,8 +63,17 @@ versions.forEach((version) => {
 
       receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcov', payloads => {
         const [{ payload: coveragePayloads }] = payloads
-        const fileNames = coveragePayloads.map(coverage => coverage.content)
+        const coverages = coveragePayloads.map(coverage => coverage.content)
           .flatMap(content => content.coverages)
+
+        coverages.forEach(coverage => {
+          assert.property(coverage, 'test_session_id')
+          assert.property(coverage, 'test_suite_id')
+          assert.property(coverage, 'span_id')
+          assert.property(coverage, 'files')
+        })
+
+        const fileNames = coverages
           .flatMap(coverageAttachment => coverageAttachment.files)
           .map(file => file.filename)
 
