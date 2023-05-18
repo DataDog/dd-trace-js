@@ -13,10 +13,8 @@ class AmqplibProducerPlugin extends ProducerPlugin {
     if (method !== 'basic.publish') return
 
     const stream = (channel.connection && channel.connection.stream) || {}
-    const span = this.startSpan('amqp.command', {
-      service: this.config.service || `${this.tracer._service}-amqp`,
+    const span = this.startSpan({
       resource: getResourceName(method, fields),
-      kind: 'producer',
       meta: {
         'out.host': stream._host,
         [CLIENT_PORT_KEY]: stream.remotePort,
