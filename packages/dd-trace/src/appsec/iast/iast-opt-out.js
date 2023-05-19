@@ -14,10 +14,10 @@ const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 
 function enable (config, _tracer) {
   // enableOptOutAnalyzers()
-  requestStart.subscribe(onIncomingHttpRequestStart)
-  requestClose.subscribe(onIncomingHttpRequestEnd)
-  overheadController.configure(config.iast)
-  overheadController.startGlobalContext()
+  // requestStart.subscribe(onIncomingHttpRequestStart)
+  // requestClose.subscribe(onIncomingHttpRequestEnd)
+  // overheadController.configure(config.iast)
+  // overheadController.startGlobalContext()
 }
 
 function onIncomingHttpRequestStart (data) {
