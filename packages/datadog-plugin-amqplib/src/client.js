@@ -7,6 +7,7 @@ const { getResourceName } = require('./util')
 
 class AmqplibClientPlugin extends ClientPlugin {
   static get id () { return 'amqplib' }
+  static get type () { return 'messaging' }
   static get operation () { return 'command' }
 
   start ({ channel = {}, method, fields }) {
@@ -14,10 +15,10 @@ class AmqplibClientPlugin extends ClientPlugin {
     if (method === 'basic.publish') return
 
     const stream = (channel.connection && channel.connection.stream) || {}
-    const span = this.startSpan('amqp.command', {
-      service: this.config.service || `${this.tracer._service}-amqp`,
+    const span = this.startSpan(this.operationName(), {
+      service: this.config.service || this.serviceName(),
       resource: getResourceName(method, fields),
-      kind: 'client',
+      kind: this.constructor.kind,
       meta: {
         'out.host': stream._host,
         [CLIENT_PORT_KEY]: stream.remotePort,
