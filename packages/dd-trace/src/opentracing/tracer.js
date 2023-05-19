@@ -14,6 +14,7 @@ const log = require('../log')
 const metrics = require('../metrics')
 const getExporter = require('../exporter')
 const SpanContext = require('./span_context')
+const { CollectorExporter } = require('../collector/exporter')
 
 const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
@@ -44,6 +45,11 @@ class DatadogTracer {
     }
     if (config.reportHostname) {
       this._hostname = os.hostname()
+    }
+
+    if (process.env.DD_COLLECTOR_ENABLED === 'true') {
+      this._collector = new CollectorExporter(config)
+      this._collector.start()
     }
   }
 
