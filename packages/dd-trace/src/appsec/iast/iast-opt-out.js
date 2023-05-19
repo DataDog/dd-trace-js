@@ -21,7 +21,7 @@ function enable (config, _tracer) {
 let isInIastRequest = false
 //
 function onIncomingHttpRequestStart (data) {
-  if (!isInIastRequest && Math.random() < 0.01) {
+  if (!isInIastRequest && Math.random() < 0) {
     isInIastRequest = true
     if (data && data.req) {
       const store = storage.getStore()
