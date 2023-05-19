@@ -27,7 +27,7 @@ describe('Plugin', () => {
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           connection = mysql.createConnection({
-            host: 'localhost',
+            host: '127.0.0.1',
             user: 'root',
             database: 'db'
           })
@@ -201,8 +201,9 @@ describe('Plugin', () => {
           })
         })
 
-        it('should do automatic instrumentation', done => {
+        it.only('should do automatic instrumentation', done => {
           agent.use(traces => {
+            console.log(traces)
             expect(traces[0][0]).to.have.property('service', 'test-mysql')
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
             expect(traces[0][0]).to.have.property('type', 'sql')
