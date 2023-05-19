@@ -151,7 +151,9 @@ function prepareTestServerForIast (description, tests) {
         experimental: {
           iast: {
             enabled: true,
-            requestSampling: 100
+            requestSampling: 100,
+            maxConcurrentRequests: 100,
+            maxContextOperations: 100
           }
         }
       }))
