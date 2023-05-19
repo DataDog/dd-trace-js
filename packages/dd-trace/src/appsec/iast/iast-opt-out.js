@@ -17,7 +17,7 @@ function enable (config, _tracer) {
   requestStart.subscribe(onIncomingHttpRequestStart)
   requestClose.subscribe(onIncomingHttpRequestEnd)
   overheadController.configure(config.iast)
-  // overheadController.startGlobalContext()
+  overheadController.startGlobalContext()
 }
 //
 function onIncomingHttpRequestStart (data) {
