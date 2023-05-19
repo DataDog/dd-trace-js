@@ -15,7 +15,7 @@ const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 function enable (config, _tracer) {
   // requestStart.subscribe(onIncomingHttpRequestStart)
   overheadController.configure(config.iast)
-  overheadController.startGlobalContext()
+  // overheadController.startGlobalContext()
 }
 
 let isInIastRequest = false
