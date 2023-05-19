@@ -6,10 +6,14 @@ const { storage } = require('../../../../../datadog-core')
 const InjectionAnalyzer = require('./injection-analyzer')
 const { PATH_TRAVERSAL } = require('../vulnerabilities')
 
+const ignoredOperations = ['dir.close', 'close']
+
 class PathTraversalAnalyzer extends InjectionAnalyzer {
   constructor () {
     super(PATH_TRAVERSAL)
     this.addSub('apm:fs:operation:start', obj => {
+      if (ignoredOperations.includes(obj.operation)) return
+
       const pathArguments = []
       if (obj.dest) {
         pathArguments.push(obj.dest)
