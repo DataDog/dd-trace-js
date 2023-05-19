@@ -25,6 +25,14 @@ function enableOptOutAnalyzers () {
   })
 }
 
+function disableOptOutAnalyzers () {
+  optOutAnalyzers.forEach(analyzerName => {
+    const analyzer = analyzers[analyzerName]
+    analyzer.configure(false)
+    enabledAnalyzers[analyzerName] = undefined
+  })
+}
+
 const httpResponseAnalyzers = ['INSECURE_COOKIE_ANALYZER']
 function getHttpResponseAnalyzers () {
   const analyzers = []
@@ -41,5 +49,6 @@ module.exports = {
   enableAllAnalyzers,
   enableOptOutAnalyzers,
   disableAllAnalyzers,
+  disableOptOutAnalyzers,
   getHttpResponseAnalyzers
 }
