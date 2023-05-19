@@ -27,7 +27,7 @@ function onIncomingHttpRequestStart (data) {
       const topContext = web.getContext(data.req)
       if (topContext) {
         const rootSpan = topContext.span
-        const isRequestAcquired = overheadController.acquireRequest(rootSpan)
+        const isRequestAcquired = overheadController.acquireRequest(rootSpan, 1)
         if (isRequestAcquired) {
           const iastContext = iastContextFunctions.saveIastContext(store, topContext, { rootSpan, req: data.req })
           overheadController.initializeRequestContext(iastContext)
