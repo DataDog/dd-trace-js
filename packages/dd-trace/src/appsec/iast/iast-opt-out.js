@@ -1,7 +1,7 @@
 'use strict'
 
 const { enableOptOutAnalyzers, getHttpResponseAnalyzers } = require('./analyzers')
-const overheadController = require('./overhead-controller')
+// const overheadController = require('./overhead-controller')
 const dc = require('../../../../diagnostics_channel')
 // const { storage } = require('../../../../datadog-core')
 // const web = require('../../plugins/util/web')
@@ -16,8 +16,8 @@ function enable (config, _tracer) {
   enableOptOutAnalyzers()
   requestStart.subscribe(onIncomingHttpRequestStart)
   requestClose.subscribe(onIncomingHttpRequestEnd)
-  overheadController.configure(config.iast)
-  overheadController.startGlobalContext()
+  // overheadController.configure(config.iast)
+  // overheadController.startGlobalContext()
 }
 //
 function onIncomingHttpRequestStart (data) {
