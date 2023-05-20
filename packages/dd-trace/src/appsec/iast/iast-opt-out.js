@@ -1,6 +1,6 @@
 'use strict'
 
-const { enableOptOutAnalyzers, disableOptOutAnalyzers } = require('./analyzers')
+// const { enableOptOutAnalyzers, disableOptOutAnalyzers } = require('./analyzers')
 const overheadController = require('./overhead-controller')
 const dc = require('../../../../diagnostics_channel')
 const { storage } = require('../../../../datadog-core')
@@ -20,29 +20,29 @@ function enable (config, _tracer) {
 
 let isInIastRequest = false
 //
-function onIncomingHttpRequestStart (data) {
-  if (!isInIastRequest && Math.random() < 0) {
-    isInIastRequest = true
-    if (data && data.req) {
-      const store = storage.getStore()
-      if (store) {
-        const topContext = web.getContext(data.req)
-        if (topContext) {
-          const rootSpan = topContext.span
-          const iastContext = iastContextFunctions.saveIastContext(store, topContext, { rootSpan, req: data.req })
-          overheadController.initializeRequestContext(iastContext)
-          if (rootSpan.addTags) {
-            rootSpan.addTags({
-              [IAST_ENABLED_TAG_KEY]: 1
-            })
-          }
-          enableOptOutAnalyzers()
-          requestClose.subscribe(onIncomingHttpRequestEnd)
-        }
-      }
-    }
-  }
-}
+// function onIncomingHttpRequestStart (data) {
+//   if (!isInIastRequest && Math.random() < 0) {
+//     isInIastRequest = true
+//     if (data && data.req) {
+//       const store = storage.getStore()
+//       if (store) {
+//         const topContext = web.getContext(data.req)
+//         if (topContext) {
+//           const rootSpan = topContext.span
+//           const iastContext = iastContextFunctions.saveIastContext(store, topContext, { rootSpan, req: data.req })
+//           overheadController.initializeRequestContext(iastContext)
+//           if (rootSpan.addTags) {
+//             rootSpan.addTags({
+//               [IAST_ENABLED_TAG_KEY]: 1
+//             })
+//           }
+//           enableOptOutAnalyzers()
+//           requestClose.subscribe(onIncomingHttpRequestEnd)
+//         }
+//       }
+//     }
+//   }
+// }
 //
 function onIncomingHttpRequestEnd (data) {
   if (data && data.req) {
