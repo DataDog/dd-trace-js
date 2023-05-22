@@ -17,7 +17,7 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     this._url = url || new URL(`https://citestcycle-intake.${site}`)
     this._writer = new Writer({ url: this._url, tags })
 
-    this._coverageUrl = url || new URL(`https://event-platform-intake.${site}`)
+    this._coverageUrl = url || new URL(`https://citestcov-intake.${site}`)
     this._coverageWriter = new CoverageWriter({ url: this._coverageUrl })
 
     this._apiUrl = url || new URL(`https://api.${site}`)
