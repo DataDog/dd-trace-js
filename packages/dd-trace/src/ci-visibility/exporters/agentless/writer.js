@@ -1,15 +1,10 @@
 'use strict'
 const request = require('../../../exporters/common/request')
+const { safeJSONStringify } = require('../../../exporters/common/util')
 const log = require('../../../log')
 
 const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')
-
-function safeJSONStringify (value) {
-  return JSON.stringify(value, (key, value) =>
-    key !== 'dd-api-key' ? value : undefined
-  )
-}
 
 class Writer extends BaseWriter {
   constructor ({ url, tags, evpProxyPrefix = '' }) {
