@@ -52,6 +52,7 @@ versions.forEach((version) => {
       childProcess.kill()
       await receiver.stop()
     })
+
     it('can report code coverage if it is available', (done) => {
       const commandSuffix = version === '6.7.0' ? '--config-file cypress-config.json' : ''
 
