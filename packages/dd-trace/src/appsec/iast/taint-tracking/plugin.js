@@ -16,7 +16,7 @@ class TaintTrackingPlugin extends Plugin {
         const iastContext = getIastContext(storage.getStore())
         if (iastContext && iastContext['body'] !== req.body) {
           this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
-          iastContext['body'] = req.body          
+          iastContext['body'] = req.body
         }
       }
     )
