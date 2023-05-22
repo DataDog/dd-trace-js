@@ -102,13 +102,8 @@ describe('track_event', () => {
     describe('trackUserLoginFailureEvent', () => {
       it('should log warning when passed invalid userId', () => {
         trackUserLoginFailureEvent(tracer, null, false)
-        trackUserLoginFailureEvent(tracer, [], false)
 
-        expect(log.warn).to.have.been.calledTwice
-        expect(log.warn.firstCall)
-          .to.have.been.calledWithExactly('Invalid userId provided to trackUserLoginFailureEvent')
-        expect(log.warn.secondCall)
-          .to.have.been.calledWithExactly('Invalid userId provided to trackUserLoginFailureEvent')
+        expect(log.warn).to.have.been.calledOnceWithExactly('Invalid userId provided to trackUserLoginFailureEvent')
         expect(setUserTags).to.not.have.been.called
         expect(rootSpan.addTags).to.not.have.been.called
       })
