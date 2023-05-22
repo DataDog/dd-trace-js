@@ -638,13 +638,13 @@ export declare interface Appsec {
 
   /**
    * Links a failed login event to the current trace.
-   * @param {string} userId The user id of the attemped login.
+   * @param {any} userId The user id of the attempted login.
    * @param {boolean} exists If the user id exists.
    * @param {[key: string]: string} metadata Custom fields to link to the login failure event.
    *
    * @beta This method is in beta and could change in future versions.
    */
-  trackUserLoginFailureEvent(userId: string, exists: boolean, metadata?: { [key: string]: string }): void
+  trackUserLoginFailureEvent(userId: any, exists: boolean, metadata?: { [key: string]: string }): void
 
   /**
    * Links a custom event to the current trace.
