@@ -227,9 +227,10 @@ module.exports = (on, config) => {
         if (coverage && tracer._tracer._exporter.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
           const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, rootDir))
+          const { _traceId, _spanId } = testSuiteSpan.context()
           const formattedCoverage = {
-            sessionId: testSuiteSpan.context()._traceId,
-            suiteId: testSuiteSpan.context()._spanId,
+            sessionId: _traceId,
+            suiteId: _spanId,
             testId: activeSpan.context()._spanId,
             files: relativeCoverageFiles
           }

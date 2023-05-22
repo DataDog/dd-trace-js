@@ -150,9 +150,10 @@ class JestPlugin extends CiPlugin {
      * fetching the ITR config.
      */
     this.addSub('ci:jest:test-suite:code-coverage', (coverageFiles) => {
+      const { _traceId, _spanId } = this.testSuiteSpan.context()
       const formattedCoverage = {
-        sessionId: this.testSuiteSpan.context()._traceId,
-        suiteId: this.testSuiteSpan.context()._spanId,
+        sessionId: _traceId,
+        suiteId: _spanId,
         files: coverageFiles
       }
       this.tracer._exporter.exportCoverage(formattedCoverage)

@@ -36,9 +36,11 @@ class MochaPlugin extends CiPlugin {
       const relativeCoverageFiles = [...coverageFiles, suiteFile]
         .map(filename => getTestSuitePath(filename, this.sourceRoot))
 
+      const { _traceId, _spanId } = testSuiteSpan.context()
+
       const formattedCoverage = {
-        sessionId: testSuiteSpan.context()._traceId,
-        suiteId: testSuiteSpan.context()._spanId,
+        sessionId: _traceId,
+        suiteId: _spanId,
         files: relativeCoverageFiles
       }
 
