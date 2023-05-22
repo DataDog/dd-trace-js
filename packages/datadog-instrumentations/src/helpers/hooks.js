@@ -69,6 +69,7 @@ module.exports = {
   'oracledb': () => require('../oracledb'),
   'paperplane': () => require('../paperplane'),
   'passport-local': () => require('../passport-local'),
+  'passport-jwt': () => require('../passport-jwt'),
   'pg': () => require('../pg'),
   'pino': () => require('../pino'),
   'pino-pretty': () => require('../pino'),
