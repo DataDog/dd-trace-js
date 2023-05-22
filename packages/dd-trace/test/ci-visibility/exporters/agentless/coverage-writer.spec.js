@@ -29,7 +29,7 @@ describe('CI Visibility Coverage Writer', () => {
 
     url = {
       protocol: 'https:',
-      hostname: 'event-platform-intake.datadog.com'
+      hostname: 'citestcov-intake.datadog.com'
     }
 
     log = {
