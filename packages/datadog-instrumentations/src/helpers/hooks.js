@@ -70,6 +70,7 @@ module.exports = {
   'paperplane': () => require('../paperplane'),
   'passport-local': () => require('../passport-local'),
   'passport-jwt': () => require('../passport-jwt'),
+  'passport-oauth2': () => require('../passport-oauth2'),
   'pg': () => require('../pg'),
   'pino': () => require('../pino'),
   'pino-pretty': () => require('../pino'),
