@@ -16,6 +16,7 @@ const { schemaDefinitions } = require('../../src/service-naming/schemas')
 global.withVersions = withVersions
 global.withExports = withExports
 global.withNamingSchema = withNamingSchema
+global.withPeerService = withPeerService
 
 const packageVersionFailures = Object.create({})
 
@@ -77,6 +78,33 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName) 
           spanProducerFn()
         })
       })
+    })
+  })
+}
+
+function withPeerService (tracer, spanGenerationFn, service, serviceSource) {
+  describe('peer service computation', () => {
+    let computePeerServiceSpy
+    beforeEach(() => {
+      // FIXME: workaround due to the evaluation order of mocha beforeEach
+      const tracerObj = typeof tracer === 'function' ? tracer() : tracer
+      computePeerServiceSpy = sinon.stub(tracerObj._tracer, '_computePeerService').value(true)
+    })
+    afterEach(() => {
+      computePeerServiceSpy.restore()
+    })
+
+    it('should compute peer service', done => {
+      agent
+        .use(traces => {
+          const span = traces[0][0]
+          expect(span.meta).to.have.property('peer.service', service)
+          expect(span.meta).to.have.property('_dd.peer.service.source', serviceSource)
+        })
+        .then(done)
+        .catch(done)
+
+      spanGenerationFn(done)
     })
   })
 }

@@ -56,6 +56,26 @@ describe('Plugin', () => {
             })
         })
 
+        withPeerService(
+          () => tracer,
+          () => {
+            const app = express()
+            app.get('/user', (req, res) => {
+              res.status(200).send()
+            })
+            getPort().then(port => {
+              appListener = server(app, port, () => {
+                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                  res.on('data', () => {})
+                })
+                req.end()
+              })
+            })
+          },
+          'localhost',
+          'out.host'
+        )
+
         it('should do automatic instrumentation', done => {
           const app = express()
           app.get('/user', (req, res) => {
