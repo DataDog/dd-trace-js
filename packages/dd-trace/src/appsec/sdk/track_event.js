@@ -24,7 +24,7 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
 }
 
 function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
-  if (!user || !user.id) {
+  if (!userId || !userId) {
     log.warn('Invalid userId provided to trackUserLoginFailureEvent')
     return
   }
