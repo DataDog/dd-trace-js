@@ -13,7 +13,7 @@ jobs:
       id-token: 'write'
     strategy:
       matrix:
-        version: [14, latest]
+        version: [16, latest]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3

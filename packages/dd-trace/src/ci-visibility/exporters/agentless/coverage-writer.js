@@ -1,15 +1,10 @@
 'use strict'
 const request = require('../../../exporters/common/request')
 const log = require('../../../log')
+const { safeJSONStringify } = require('../../../exporters/common/util')
 
 const { CoverageCIVisibilityEncoder } = require('../../../encode/coverage-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')
-
-function safeJSONStringify (value) {
-  return JSON.stringify(value, (key, value) =>
-    key !== 'dd-api-key' ? value : undefined
-  )
-}
 
 class Writer extends BaseWriter {
   constructor ({ url, evpProxyPrefix = '' }) {
@@ -34,7 +29,7 @@ class Writer extends BaseWriter {
     if (this._evpProxyPrefix) {
       options.path = `${this._evpProxyPrefix}/api/v2/citestcov`
       delete options.headers['dd-api-key']
-      options.headers['X-Datadog-EVP-Subdomain'] = 'event-platform-intake'
+      options.headers['X-Datadog-EVP-Subdomain'] = 'citestcov-intake'
     }
 
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)

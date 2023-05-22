@@ -1,6 +1,7 @@
 # `dd-trace`: Node.js APM Tracer Library
 
-[![npm v3](https://img.shields.io/npm/v/dd-trace/latest?color=blue&label=dd-trace%40v3&logo=npm)](https://www.npmjs.com/package/dd-trace)
+[![npm v4](https://img.shields.io/npm/v/dd-trace/latest?color=blue&label=dd-trace%40v4&logo=npm)](https://www.npmjs.com/package/dd-trace)
+[![npm v3](https://img.shields.io/npm/v/dd-trace/latest-node14?color=blue&label=dd-trace%40v3&logo=npm)](https://www.npmjs.com/package/dd-trace/v/latest-node12)
 [![npm v2](https://img.shields.io/npm/v/dd-trace/latest-node12?color=blue&label=dd-trace%40v2&logo=npm)](https://www.npmjs.com/package/dd-trace/v/latest-node12)
 [![npm dev](https://img.shields.io/npm/v/dd-trace/dev?color=orange&label=dd-trace%40dev&logo=npm)](https://www.npmjs.com/package/dd-trace/v/dev)
 [![codecov](https://codecov.io/gh/DataDog/dd-trace-js/branch/master/graph/badge.svg)](https://codecov.io/gh/DataDog/dd-trace-js)
@@ -28,27 +29,28 @@ Most of the documentation for `dd-trace` is available on these webpages:
 | :---:                                                    | :---:                                                                                                  | :---:    | :---:           | :---:          | :---:       |
 | [`v1`](https://github.com/DataDog/dd-trace-js/tree/v1.x) | ![npm v1](https://img.shields.io/npm/v/dd-trace/legacy-v1?color=white&label=%20&style=flat-square)     | `>= v12` | **End of Life** | 2021-07-13     | 2022-02-25  |
 | [`v2`](https://github.com/DataDog/dd-trace-js/tree/v2.x) | ![npm v2](https://img.shields.io/npm/v/dd-trace/latest-node12?color=white&label=%20&style=flat-square) | `>= v12` | **Maintenance** | 2022-01-28     | 2023-08-15  |
-| [`v3`](https://github.com/DataDog/dd-trace-js/tree/v3.x) | ![npm v3](https://img.shields.io/npm/v/dd-trace/latest?color=white&label=%20&style=flat-square)        | `>= v14` | **Current**     | 2022-08-15     | Unknown     |
+| [`v3`](https://github.com/DataDog/dd-trace-js/tree/v3.x) | ![npm v3](https://img.shields.io/npm/v/dd-trace/latest-node14?color=white&label=%20&style=flat-square) | `>= v14` | **Maintenance** | 2022-08-15     | 2024-05-15  |
+| [`v4`](https://github.com/DataDog/dd-trace-js/tree/v4.x) | ![npm v4](https://img.shields.io/npm/v/dd-trace/latest?color=white&label=%20&style=flat-square)        | `>= v16` | **Current**     | 2023-05-12     | Unknown     |
 
-We currently maintain two release lines, namely `v2` and `v3`.
-Features and bug fixes that are merged are released to the `v3` line and, if appropriate, also the `v2` line.
+We currently maintain three release lines, namely `v2`, `v3` and `v4`.
+Features and bug fixes that are merged are released to the `v4` line and, if appropriate, also the `v2` and `v3` line.
 
-For any new projects it is recommended to use the `v3` release line:
+For any new projects it is recommended to use the `v4` release line:
 
 ```sh
 $ npm install dd-trace
 $ yarn add dd-trace
 ```
 
-However, existing projects that already use the `v2` release line, or projects that need to support Node.js v12, may use the `v2` release line.
+However, existing projects that already use the `v2` or `v3` release lines, or projects that need to support EOL versions of Node.js, may continue to use these release lines.
 This is done by specifying the version when installing the package.
-Note that we also publish to npm using a `latest-node12` tag that can also be used for install:
+Note that we also publish to npm using a `latest-node12` and `latest-node14` tag that can also be used for install:
 
 ```sh
-$ npm install dd-trace@2
-$ yarn add dd-trace@2
-$ npm install dd-trace@latest-node12
-$ yarn add dd-trace@latest-node12
+$ npm install dd-trace@3
+$ yarn add dd-trace@3
+$ npm install dd-trace@latest-node14
+$ yarn add dd-trace@latest-node14
 ```
 
 Any backwards-breaking functionality that is introduced into the library will result in an increase of the major version of the library and therefore a new release line.
@@ -152,6 +154,11 @@ $ yarn lint
 
 
 ### Experimental ESM Support
+
+> **Warning**
+> 
+> ESM support has been temporarily disabled starting from Node 20 as significant
+> changes are in progress.
 
 ESM support is currently in the experimental stages, while CJS has been supported
 since inception. This means that code loaded using `require()` should work fine
