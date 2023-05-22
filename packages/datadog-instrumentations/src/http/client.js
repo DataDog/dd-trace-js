@@ -49,7 +49,7 @@ function patch (http, methodName) {
       const asyncResource = new AsyncResource('bound-anonymous-fn')
 
       return asyncResource.runInAsyncScope(() => {
-        startClientCh.publish({ args, http, originalArgs: getOriginalArgs(arguments) })
+        startClientCh.publish({ args, http, originalUrlAndOptions: getOriginalUrlAndOptions(arguments) })
 
         let finished = false
         let callback = args.callback
@@ -168,7 +168,7 @@ function patch (http, methodName) {
     return options
   }
 
-  function getOriginalArgs (args) {
+  function getOriginalUrlAndOptions (args) {
     let wholeUrl, options
     if (typeof args[0] === 'string') {
       wholeUrl = args[0]
