@@ -299,7 +299,7 @@ class Config {
 
     let appsec = options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
 
-    if (options.experiemental.appsec != null) {
+    if (options.experimental && options.experimental.appsec != null) {
       // use noop utils.deprecate for standardized deprecation
       deprecate(
         () => {},
