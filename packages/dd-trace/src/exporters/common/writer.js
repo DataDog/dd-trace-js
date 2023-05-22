@@ -2,6 +2,7 @@
 
 const request = require('./request')
 const log = require('../../log')
+const { safeJSONStringify } = require('./util')
 
 class Writer {
   constructor ({ url }) {
@@ -25,11 +26,11 @@ class Writer {
 
   append (payload) {
     if (!request.writable) {
-      log.debug(() => `Maximum number of active requests reached. Payload discarded: ${JSON.stringify(payload)}`)
+      log.debug(() => `Maximum number of active requests reached. Payload discarded: ${safeJSONStringify(payload)}`)
       return
     }
 
-    log.debug(() => `Encoding payload: ${JSON.stringify(payload)}`)
+    log.debug(() => `Encoding payload: ${safeJSONStringify(payload)}`)
 
     this._encode(payload)
   }
