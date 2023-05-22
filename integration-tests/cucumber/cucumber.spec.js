@@ -56,7 +56,7 @@ versions.forEach(version => {
     it('does not crash with parallel mode', (done) => {
       let testOutput
       childProcess = exec(
-        `${runTestsCommand} --parallel 2 --publish-quiet`,
+        `./node_modules/.bin/cucumber-js ci-visibility/features/farewell.feature --parallel 2 --publish-quiet`,
         {
           cwd,
           env: {
@@ -73,9 +73,10 @@ versions.forEach(version => {
       childProcess.stderr.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.on('exit', () => {
+      childProcess.on('exit', (code) => {
         assert.notInclude(testOutput, 'TypeError')
         assert.include(testOutput, 'Unable to initialize CI Visibility because Cucumber is running in parallel mode.')
+        assert.equal(code, 0)
         done()
       })
     })
