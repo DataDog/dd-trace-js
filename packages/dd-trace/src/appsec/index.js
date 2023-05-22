@@ -21,7 +21,6 @@ const { storage } = require('../../../datadog-core')
 const { trackEvent } = require('./sdk/track_event')
 const { setUserTags } = require('./sdk/set_user')
 
-
 let isEnabled = false
 let config
 
@@ -43,10 +42,9 @@ function enable (_config) {
     queryParser.subscribe(onRequestQueryParsed)
 
     if (_config.appsec.eventTracking.enabled
-      && (_config.appsec.eventTracking.mode == 'safe' || _config.appsec.eventTracking.mode == 'extended')) {
+      && (_config.appsec.eventTracking.mode === 'safe' || _config.appsec.eventTracking.mode === 'extended')) {
       passportVerify.subscribe(onPassportVerify)
     }
-
 
     isEnabled = true
     config = _config

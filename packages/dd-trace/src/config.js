@@ -349,8 +349,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
     )
     const DD_APPSEC_USER_EVENTS_TRACKING_ENABLED = coalesce(
-       process.env.DD_APPSEC_USER_EVENTS_TRACKING_ENABLED,
-       true
+      process.env.DD_APPSEC_USER_EVENTS_TRACKING_ENABLED,
+      true
     )
     const DD_APPSEC_USER_EVENTS_TRACKING = coalesce(
       process.env.DD_APPSEC_USER_EVENTS_TRACKING,

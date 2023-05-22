@@ -6,7 +6,7 @@ const { channel, addHook } = require('./helpers/instrument')
 
 const passportVerifyChannel = channel('datadog:passport:verify:finish')
 
-function wrapVerifiedAndPublish(username, password, verified) {
+function wrapVerifiedAndPublish (username, password, verified) {
   if (passportVerifyChannel.hasSubscribers) {
     const abortController = new AbortController()
 
@@ -18,7 +18,7 @@ function wrapVerifiedAndPublish(username, password, verified) {
   }
 }
 
-function wrapVerify(verify, passReq) {
+function wrapVerify (verify, passReq) {
   if (passReq) {
     return function (req, username, password, verified) {
       arguments[3] = wrapVerifiedAndPublish(username, password, verified)
@@ -38,7 +38,7 @@ addHook({
   versions: ['>=1.0.0']
 }, Strategy => {
   return shimmer.wrap(Strategy, function () {
-    if (typeof arguments[0] == 'function') {
+    if (typeof arguments[0] === 'function') {
       arguments[0] = wrapVerify(arguments[0], false)
     } else {
       arguments[1] = wrapVerify(arguments[1], arguments[0].passReqToCallback || false)
