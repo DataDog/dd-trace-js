@@ -29,7 +29,7 @@ class Writer extends BaseWriter {
     if (this._evpProxyPrefix) {
       options.path = `${this._evpProxyPrefix}/api/v2/citestcov`
       delete options.headers['dd-api-key']
-      options.headers['X-Datadog-EVP-Subdomain'] = 'event-platform-intake'
+      options.headers['X-Datadog-EVP-Subdomain'] = 'citestcov-intake'
     }
 
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)

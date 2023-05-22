@@ -817,7 +817,7 @@ testFrameworks.forEach(({
 
           const [coveragePayload] = coverageRequest.payload
           assert.notProperty(coverageRequest.headers, 'dd-api-key')
-          assert.propertyVal(coverageRequest.headers, 'x-datadog-evp-subdomain', 'event-platform-intake')
+          assert.propertyVal(coverageRequest.headers, 'x-datadog-evp-subdomain', 'citestcov-intake')
           assert.propertyVal(coveragePayload, 'name', 'coverage1')
           assert.propertyVal(coveragePayload, 'filename', 'coverage1.msgpack')
           assert.propertyVal(coveragePayload, 'type', 'application/msgpack')
