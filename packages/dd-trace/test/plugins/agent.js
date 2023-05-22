@@ -35,7 +35,7 @@ function ciVisRequestHandler (request, response) {
   })
 }
 
-function addEnvironementVariablesToHeaders (headers) {
+function addEnvironmentVariablesToHeaders (headers) {
   // get all environment variables that start with "DD_"
   const ddEnvVars = Object.entries(process.env)
     .filter(([key]) => key.startsWith('DD_'))
@@ -44,7 +44,7 @@ function addEnvironementVariablesToHeaders (headers) {
   // add the DD environment variables to the header if any exist
   // to send with trace to final agent destination
   if (ddEnvVars.length > 0) {
-    headers['X-Datadog-Environment'] = ddEnvVars.join(',')
+    headers['X-Datadog-Trace-Env-Variables'] = ddEnvVars.join(',')
   }
 }
 
@@ -59,7 +59,7 @@ function handleTraceRequest (req, res, sendToTestAgent) {
     delete req.headers['content-length']
 
     // add current environment variables to trace headers
-    addEnvironementVariablesToHeaders(req.headers)
+    addEnvironmentVariablesToHeaders(req.headers)
 
     const testAgentReq = http.request(
       `${testAgentUrl}/v0.4/traces`, {
