@@ -10,7 +10,7 @@ const id = require('../../src/id')
 describe('coverage-ci-visibility', () => {
   let encoder
   let logger
-  let formattedCoverage, formattedCoverage2
+  let formattedCoverage, formattedCoverage2, formattedCoverageTest
 
   beforeEach(() => {
     logger = {
@@ -22,14 +22,20 @@ describe('coverage-ci-visibility', () => {
     encoder = new CoverageCIVisibilityEncoder()
 
     formattedCoverage = {
-      traceId: id('1'),
-      spanId: id('2'),
+      sessionId: id('1'),
+      suiteId: id('2'),
       files: ['file.js']
     }
     formattedCoverage2 = {
-      traceId: id('3'),
-      spanId: id('4'),
+      sessionId: id('3'),
+      suiteId: id('4'),
       files: ['file2.js']
+    }
+    formattedCoverageTest = {
+      sessionId: id('5'),
+      suiteId: id('6'),
+      testId: id('7'),
+      files: ['file3.js']
     }
   })
 
@@ -87,5 +93,21 @@ describe('coverage-ci-visibility', () => {
     expect(decodedCoverages.version).to.equal(2)
     expect(decodedCoverages.coverages).to.have.length(1)
     expect(decodedCoverages.coverages[0]).to.contain({ test_session_id: 3, test_suite_id: 4 })
+  })
+
+  it('should be able to encode test coverages', () => {
+    encoder.encode(formattedCoverageTest)
+
+    const form = encoder.makePayload()
+
+    expect(form._data[1]).to.contain('Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"')
+    expect(form._data[2]).to.contain('Content-Type: application/msgpack')
+
+    const decodedCoverages = msgpack.decode(form._data[3])
+
+    expect(decodedCoverages.version).to.equal(2)
+    expect(decodedCoverages.coverages).to.have.length(1)
+    expect(decodedCoverages.coverages[0]).to.contain({ test_session_id: 5, test_suite_id: 6, span_id: 7 })
+    expect(decodedCoverages.coverages[0].files[0]).to.eql({ filename: 'file3.js' })
   })
 })

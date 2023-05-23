@@ -2,13 +2,15 @@
 
 const fs = require('fs')
 const os = require('os')
+const uuid = require('crypto-randomuuid')
 const URL = require('url').URL
 const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
-const uuid = require('crypto-randomuuid')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
+const { getGitMetadataFromGitProperties } = require('./git_properties')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -32,6 +34,22 @@ function safeJsonParse (input) {
   } catch (err) {
     return undefined
   }
+}
+
+const namingVersions = ['v0', 'v1']
+const defaultNamingVersion = 'v0'
+
+function validateNamingVersion (versionString) {
+  if (!versionString) {
+    return defaultNamingVersion
+  }
+  if (!namingVersions.includes(versionString)) {
+    log.warn(
+      `Unexpected input for config.spanAttributeSchema, picked default ${defaultNamingVersion}`
+    )
+    return defaultNamingVersion
+  }
+  return versionString
 }
 
 // Shallow clone with property name remapping
@@ -271,7 +289,9 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       false
     )
-
+    const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
+      process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+    )
     const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
       process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       '512'
@@ -397,8 +417,19 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       true
     )
 
+    const DD_IAST_REDACTION_ENABLED = coalesce(
+      iastOptions && iastOptions.redactionEnabled,
+      !isFalse(process.env.DD_IAST_REDACTION_ENABLED),
+      true
+    )
+
     const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
+      true
+    )
+
+    const DD_TRACE_GIT_METADATA_ENABLED = coalesce(
+      process.env.DD_TRACE_GIT_METADATA_ENABLED,
       true
     )
 
@@ -476,6 +507,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
       exporters: DD_PROFILING_EXPORTERS
     }
+    this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
@@ -506,7 +538,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       requestSampling: DD_IAST_REQUEST_SAMPLING,
       maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
-      deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED
+      deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
+      redactionEnabled: DD_IAST_REDACTION_ENABLED
     }
 
     this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
@@ -514,6 +547,31 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.isIntelligentTestRunnerEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
     this.isGitUploadEnabled = this.isCiVisibility &&
       (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
+
+    this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
+
+    if (this.gitMetadataEnabled) {
+      this.repositoryUrl = coalesce(
+        process.env.DD_GIT_REPOSITORY_URL,
+        this.tags[GIT_REPOSITORY_URL]
+      )
+      this.commitSHA = coalesce(
+        process.env.DD_GIT_COMMIT_SHA,
+        this.tags[GIT_COMMIT_SHA]
+      )
+      if (!this.repositoryUrl || !this.commitSHA) {
+        const DD_GIT_PROPERTIES_FILE = coalesce(
+          process.env.DD_GIT_PROPERTIES_FILE,
+          `${process.cwd()}/git.properties`
+        )
+        const gitPropertiesString = maybeFile(DD_GIT_PROPERTIES_FILE)
+        if (gitPropertiesString) {
+          const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
+          this.commitSHA = this.commitSHA || commitSHA
+          this.repositoryUrl = this.repositoryUrl || repositoryUrl
+        }
+      }
+    }
 
     this.stats = {
       enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)

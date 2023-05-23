@@ -286,11 +286,11 @@ describe('Overhead controller', () => {
                     const url = trace.meta['http.url']
                     if (url.includes(FIRST_REQUEST)) {
                       expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                      expect(trace.meta['_dd.iast.enabled']).eq('1')
+                      expect(trace.metrics['_dd.iast.enabled']).eq(1)
                       urlCounter++
                     } else if (url.includes(SECOND_REQUEST)) {
                       expect(trace.meta['_dd.iast.json']).to.be.undefined
-                      expect(trace.meta['_dd.iast.enabled']).eq('0')
+                      expect(trace.metrics['_dd.iast.enabled']).eq(0)
                       urlCounter++
                     }
                     if (urlCounter === 2) {
@@ -337,7 +337,7 @@ describe('Overhead controller', () => {
                   if (trace.type === 'web') {
                     urlCounter++
                     expect(trace.meta['_dd.iast.json']).not.to.be.undefined
-                    expect(trace.meta['_dd.iast.enabled']).eq('1')
+                    expect(trace.metrics['_dd.iast.enabled']).eq(1)
                     if (urlCounter === 2) {
                       done()
                     }
@@ -468,7 +468,7 @@ describe('Overhead controller', () => {
                     const url = trace.meta['http.url']
                     if (url.includes(SECURE_REQUEST)) {
                       expect(trace.meta['_dd.iast.json']).to.be.undefined
-                      expect(trace.meta['_dd.iast.enabled']).eq('1')
+                      expect(trace.metrics['_dd.iast.enabled']).eq(1)
                       done()
                     }
                   }

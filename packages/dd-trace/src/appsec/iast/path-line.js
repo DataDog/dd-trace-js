@@ -45,7 +45,8 @@ function getFirstNonDDPathAndLineFromCallsites (callsites) {
       if (!isExcluded(callsite) && filepath.indexOf(pathLine.ddBasePath) === -1) {
         return {
           path: path.relative(process.cwd(), filepath),
-          line: callsite.getLineNumber()
+          line: callsite.getLineNumber(),
+          isInternal: !path.isAbsolute(filepath)
         }
       }
     }

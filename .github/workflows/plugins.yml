@@ -88,7 +88,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/14
+      - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
@@ -229,8 +229,6 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/14
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
@@ -283,7 +281,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/14
+      - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
@@ -339,7 +337,6 @@ jobs:
       - run: yarn test:plugins:upstream
       - uses: codecov/codecov-action@v2
 
-  # The grpc version ranges we support only support up to Node 14.
   grpc:
     runs-on: ubuntu-latest
     env:
@@ -350,9 +347,10 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
-  # The hapi version ranges we support only support up to Node 14.
   hapi:
     runs-on: ubuntu-latest
     env:
@@ -362,6 +360,8 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
@@ -373,8 +373,6 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/14
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
@@ -391,8 +389,6 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/14
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
@@ -614,7 +610,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/14
+      - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
@@ -628,8 +624,6 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/14
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
@@ -642,7 +636,7 @@ jobs:
   next:
     strategy:
       matrix:
-        node-version: [14, 16]
+        node-version: [16]
         range: ['>=9.5 <11.1', '>=11.1 <13.2']
         include:
           - node-version: 18
@@ -683,7 +677,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
-  # TODO: Install the Oracle client on the host and test Node >=14.
+  # TODO: Install the Oracle client on the host and test Node >=16.
+  # TODO: Figure out why nyc stopped working with EACCESS errors.
   oracledb:
     runs-on: ubuntu-latest
     container: bengl/node-12-with-oracle-client
@@ -702,7 +697,8 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install --ignore-engine
-      - run: yarn test:plugins:ci
+      - run: yarn services
+      - run: yarn test:plugins
       - uses: codecov/codecov-action@v2
 
   paperplane:
@@ -713,7 +709,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/14
+      - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
@@ -731,7 +727,6 @@ jobs:
       # - run: yarn test:plugins:upstream
       - uses: codecov/codecov-action@v2
 
-  # The pg version range we support doesn't work beyond Node 14.
   postgres:
     runs-on: ubuntu-latest
     services:
@@ -750,6 +745,8 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 

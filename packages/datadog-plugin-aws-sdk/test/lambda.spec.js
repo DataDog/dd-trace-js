@@ -45,7 +45,7 @@ describe('Plugin', () => {
             Code: { ZipFile },
             Handler: 'handler.handle',
             Role: 'arn:aws:iam::123456:role/test',
-            Runtime: 'nodejs14.x'
+            Runtime: 'nodejs16.x'
           }, (err, res) => {
             if (err) return done(err)
 
