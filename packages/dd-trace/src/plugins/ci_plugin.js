@@ -21,7 +21,6 @@ const log = require('../log')
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
-    this.rootDir = process.cwd() // fallback in case session:start isn't emitted for any reason
 
     this.addSub(`ci:${this.constructor.id}:itr-configuration`, ({ onDone }) => {
       if (!this.tracer._exporter || !this.tracer._exporter.getItrConfiguration) {
