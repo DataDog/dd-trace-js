@@ -2,6 +2,7 @@
 
 const { applyRules, clearAllRules, updateWafFromRC } = require('../../src/appsec/rule_manager')
 const Config = require('../../src/config')
+const { ACKNOWLEDGED } = require('../../src/appsec/remote_config/apply_states')
 
 const rules = require('../../src/appsec/recommended.json')
 const waf = require('../../src/appsec/waf')
@@ -324,6 +325,55 @@ describe('AppSec Rule Manager', () => {
 
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
         expect(waf.update).to.have.been.calledWithExactly({ ...testRules, ...asm })
+      })
+
+      it('should support hotswapping ruleset in same batch', () => {
+        const rules1 = {
+          product: 'ASM_DD',
+          id: 'rules1',
+          file: {
+            version: '2.2',
+            metadata: { 'rules_version': '1.5.0' },
+            rules: [{
+              'id': 'test-id',
+              'name': 'test-name',
+              'tags': {
+                'type': 'security_scanner',
+                'category': 'attack_attempt',
+                'confidence': '1'
+              },
+              'conditions': []
+            }]
+          }
+        }
+
+        const rules2 = {
+          product: 'ASM_DD',
+          id: 'rules2',
+          file: {
+            version: '2.2',
+            metadata: { 'rules_version': '1.5.0' },
+            rules: [{
+              'id': 'test-id',
+              'name': 'test-name',
+              'tags': {
+                'type': 'security_scanner',
+                'category': 'attack_attempt',
+                'confidence': '1'
+              },
+              'conditions': []
+            }]
+          }
+        }
+
+        updateWafFromRC({ toUnapply: [], toApply: [rules1], toModify: [] })
+
+        updateWafFromRC({ toUnapply: [rules1], toApply: [rules2], toModify: [] })
+
+        expect(rules1.apply_state).to.equal(ACKNOWLEDGED)
+        expect(rules1.apply_error).to.equal(undefined)
+        expect(rules2.apply_state).to.equal(ACKNOWLEDGED)
+        expect(rules2.apply_error).to.equal(undefined)
       })
     })
 
