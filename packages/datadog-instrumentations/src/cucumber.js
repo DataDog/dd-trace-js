@@ -3,6 +3,7 @@ const { createCoverageMap } = require('istanbul-lib-coverage')
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
 
 const testStartCh = channel('ci:cucumber:test:start')
 const testFinishCh = channel('ci:cucumber:test:finish') // used for test steps too
@@ -175,6 +176,12 @@ function wrapRun (pl, isLatestVersion) {
 }
 
 function pickleHook (PickleRunner) {
+  if (process.env.CUCUMBER_WORKER_ID) {
+    // Parallel mode is not supported
+    log.warn('Unable to initialize CI Visibility because Cucumber is running in parallel mode.')
+    return PickleRunner
+  }
+
   const pl = PickleRunner.default
 
   wrapRun(pl, false)
@@ -183,6 +190,12 @@ function pickleHook (PickleRunner) {
 }
 
 function testCaseHook (TestCaseRunner) {
+  if (process.env.CUCUMBER_WORKER_ID) {
+    // Parallel mode is not supported
+    log.warn('Unable to initialize CI Visibility because Cucumber is running in parallel mode.')
+    return TestCaseRunner
+  }
+
   const pl = TestCaseRunner.default
 
   wrapRun(pl, true)
