@@ -31,6 +31,7 @@ versions.forEach((version) => {
     this.retries(2)
     this.timeout(60000)
     let sandbox, cwd, receiver, childProcess, webAppPort
+    const commandSuffix = version === '6.7.0' ? '--config-file cypress-config.json' : ''
     before(async () => {
       sandbox = await createSandbox([`cypress@${version}`], true)
       cwd = sandbox.folder
@@ -98,11 +99,13 @@ versions.forEach((version) => {
 
     reportMethods.forEach((reportMethod) => {
       context(`reporting via ${reportMethod}`, () => {
+        let envVars, isAgentless, reportUrl
+        beforeEach(() => {
+          isAgentless = reportMethod === 'agentless'
+          envVars = isAgentless ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+          reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
+        })
         it('can run and report tests', (done) => {
-          const envVars = reportMethod === 'agentless'
-            ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
-          const reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
-
           receiver.gatherPayloadsMaxTimeout(({ url }) => url === reportUrl, payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
@@ -190,8 +193,6 @@ versions.forEach((version) => {
             ...restEnvVars
           } = envVars
 
-          const commandSuffix = version === '6.7.0' ? '--config-file cypress-config.json' : ''
-
           childProcess = exec(
             `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
             {
@@ -203,6 +204,46 @@ versions.forEach((version) => {
               stdio: 'pipe'
             }
           )
+        })
+        context('intelligent test runner', () => {
+          it('can report git metadata', (done) => {
+            const searchCommitsRequestPromise = receiver.payloadReceived(
+              ({ url }) => url.endsWith('/api/v2/git/repository/search_commits')
+            )
+            const packfileRequestPromise = receiver
+              .payloadReceived(({ url }) => url.endsWith('/api/v2/git/repository/packfile'))
+
+            Promise.all([
+              searchCommitsRequestPromise,
+              packfileRequestPromise
+            ]).then(([searchCommitRequest, packfileRequest]) => {
+              if (isAgentless) {
+                assert.propertyVal(searchCommitRequest.headers, 'dd-api-key', '1')
+                assert.propertyVal(packfileRequest.headers, 'dd-api-key', '1')
+              } else {
+                assert.notProperty(searchCommitRequest.headers, 'dd-api-key')
+                assert.notProperty(packfileRequest.headers, 'dd-api-key')
+              }
+              done()
+            }).catch(done)
+
+            const {
+              NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+              ...restEnvVars
+            } = envVars
+
+            childProcess = exec(
+              `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
+              {
+                cwd,
+                env: {
+                  ...restEnvVars,
+                  CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+                },
+                stdio: 'pipe'
+              }
+            )
+          })
         })
       })
     })
