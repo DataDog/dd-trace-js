@@ -335,6 +335,9 @@ describe('AppSec Rule Manager', () => {
           }],
           'rules_override': [{
             roKey: 'roValue'
+          }],
+          'custom_rules': [{
+            piKey: 'piValue'
           }]
         }
 
