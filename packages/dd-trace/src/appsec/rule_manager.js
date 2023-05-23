@@ -87,7 +87,11 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   let newApplyState = ACKNOWLEDGED
   let newApplyError
 
-  if (newRulesData.modified || newRuleset || newRulesOverride.modified || newExclusions.modified || newCustomRules.modified) {
+  if (newRulesData.modified ||
+    newRuleset ||
+    newRulesOverride.modified ||
+    newExclusions.modified ||
+    newCustomRules.modified) {
     const payload = newRuleset || {}
 
     if (newRulesData.modified) {
