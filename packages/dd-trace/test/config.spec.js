@@ -959,7 +959,7 @@ describe('Config', () => {
       }
     })
 
-    expect(log.error).to.be.callCount(4)
+    expect(log.error).to.be.callCount(3)
     expect(log.error.firstCall).to.have.been.calledWithExactly(error)
     expect(log.error.secondCall).to.have.been.calledWithExactly(error)
     expect(log.error.thirdCall).to.have.been.calledWithExactly(error)
