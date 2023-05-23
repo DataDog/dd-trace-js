@@ -32,14 +32,14 @@ class TracingPlugin extends Plugin {
     return store && store.span
   }
 
-  serviceName (serviceArgs) {
+  serviceName (...serviceArgs) {
     const { type, id, kind } = this.constructor
-    return Nomenclature.serviceName(type, kind, id, serviceArgs)
+    return Nomenclature.serviceName(type, kind, id, ...serviceArgs)
   }
 
-  operationName (opNameArgs) {
+  operationName (...opNameArgs) {
     const { type, id, kind } = this.constructor
-    return Nomenclature.opName(type, kind, id, opNameArgs)
+    return Nomenclature.opName(type, kind, id, ...opNameArgs)
   }
 
   configure (config) {

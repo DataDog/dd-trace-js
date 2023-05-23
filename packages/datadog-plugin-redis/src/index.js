@@ -13,11 +13,10 @@ class RedisPlugin extends CachePlugin {
     const normalizedCommand = command.toUpperCase()
     if (!this.config.filter(normalizedCommand)) return this.skip()
 
-    this.startSpan('redis.command', {
-      service: getService(this.config, connectionName),
+    this.startSpan({
       resource,
+      service: this.serviceName(this.config, this.system, connectionName),
       type: 'redis',
-      kind: 'client',
       meta: {
         'db.type': 'redis',
         'db.name': db || '0',
@@ -31,16 +30,6 @@ class RedisPlugin extends CachePlugin {
   configure (config) {
     super.configure(normalizeConfig(config))
   }
-}
-
-function getService (config, connectionName) {
-  if (config.splitByInstance && connectionName) {
-    return config.service
-      ? `${config.service}-${connectionName}`
-      : connectionName
-  }
-
-  return config.service
 }
 
 function formatCommand (command, args) {
