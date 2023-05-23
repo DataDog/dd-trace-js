@@ -102,7 +102,7 @@ function getItrConfig (tracer, testConfiguration) {
 
 function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) {
   if (!isSuitesSkippingEnabled) {
-    return Promise.resolve({ skippableSuites: [] })
+    return Promise.resolve({ skippableTests: [] })
   }
   return new Promise(resolve => {
     if (!tracer._tracer._exporter || !tracer._tracer._exporter.getItrConfiguration) {
@@ -170,7 +170,7 @@ module.exports = (on, config) => {
         if (err) {
           log.error(err)
         } else {
-          testsToSkip = skippableTests
+          testsToSkip = skippableTests || []
         }
 
         const childOf = getTestParentSpan(tracer)
