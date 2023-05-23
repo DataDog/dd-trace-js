@@ -230,7 +230,7 @@ module.exports = (on, config) => {
   on('task', {
     'dd:testSuiteStart': (suite) => {
       if (testSuiteSpan) {
-        return false
+        return null
       }
       const testSuiteSpanMetadata = getTestSuiteCommonTags(command, frameworkVersion, suite, TEST_FRAMEWORK_NAME)
       testSuiteSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
@@ -241,7 +241,7 @@ module.exports = (on, config) => {
           ...testSuiteSpanMetadata
         }
       })
-      return false
+      return null
     },
     'dd:testSuiteFinish': (stats) => {
       if (testSuiteSpan) {

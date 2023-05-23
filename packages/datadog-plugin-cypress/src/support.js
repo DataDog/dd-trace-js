@@ -11,7 +11,7 @@ beforeEach(function () {
   })
 })
 
-before(function () {
+before(() => {
   cy.task('dd:testSuiteStart', Cypress.mocha.getRootSuite().file)
 })
 
