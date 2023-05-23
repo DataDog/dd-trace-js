@@ -9,11 +9,10 @@ class MemcachedPlugin extends CachePlugin {
   start ({ client, server, query }) {
     const address = getAddress(client, server, query)
 
-    this.startSpan('memcached.command', {
-      service: this.config.service,
+    this.startSpan({
+      service: this.serviceName(this.config, this.system),
       resource: query.type,
       type: 'memcached',
-      kind: 'client',
       meta: {
         'memcached.command': query.command,
         'out.host': address[0],
