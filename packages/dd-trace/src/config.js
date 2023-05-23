@@ -561,7 +561,15 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
           process.env.DD_GIT_PROPERTIES_FILE,
           `${process.cwd()}/git.properties`
         )
-        const gitPropertiesString = maybeFile(DD_GIT_PROPERTIES_FILE)
+        let gitPropertiesString
+        try {
+          gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
+        } catch (e) {
+          // Only log error if the user has set a git.properties path
+          if (process.env.DD_GIT_PROPERTIES_FILE) {
+            log.error(e)
+          }
+        }
         if (gitPropertiesString) {
           const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
           this.commitSHA = this.commitSHA || commitSHA
