@@ -26,11 +26,19 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   }
 
   encodeCodeCoverage (bytes, coverage) {
-    this._encodeMapPrefix(bytes, 3)
+    if (coverage.testId) {
+      this._encodeMapPrefix(bytes, 4)
+    } else {
+      this._encodeMapPrefix(bytes, 3)
+    }
     this._encodeString(bytes, 'test_session_id')
-    this._encodeId(bytes, coverage.traceId)
+    this._encodeId(bytes, coverage.sessionId)
     this._encodeString(bytes, 'test_suite_id')
-    this._encodeId(bytes, coverage.spanId)
+    this._encodeId(bytes, coverage.suiteId)
+    if (coverage.testId) {
+      this._encodeString(bytes, 'span_id')
+      this._encodeId(bytes, coverage.testId)
+    }
     this._encodeString(bytes, 'files')
     this._encodeArrayPrefix(bytes, coverage.files)
     for (const filename of coverage.files) {
