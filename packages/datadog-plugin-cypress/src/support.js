@@ -1,19 +1,18 @@
 /* eslint-disable */
-beforeEach(() => {
+beforeEach(function () {
   cy.task('dd:beforeEach', {
     testName: Cypress.mocha.getRunner().suite.ctx.currentTest.fullTitle(),
     testSuite: Cypress.mocha.getRootSuite().file
-  }).then(traceId => {
+  }).then(({ traceId, shouldSkip }) => {
     Cypress.env('traceId', traceId)
-  })
-})
-
-before(function () {
-  cy.task('dd:testSuiteStart', Cypress.mocha.getRootSuite().file).then((shouldSkip) => {
     if (shouldSkip) {
       this.skip()
     }
   })
+})
+
+before(function () {
+  cy.task('dd:testSuiteStart', Cypress.mocha.getRootSuite().file)
 })
 
 after(() => {

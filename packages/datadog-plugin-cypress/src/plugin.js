@@ -56,7 +56,7 @@ function getCypressVersion (details) {
 
 function getRootDir (details) {
   if (details && details.config) {
-    return details.config.repoRoot || details.config.projectRoot || process.cwd()
+    return details.config.projectRoot || details.config.repoRoot || process.cwd()
   }
   return process.cwd()
 }
@@ -100,7 +100,7 @@ function getItrConfig (tracer, testConfiguration) {
   })
 }
 
-function getSkippableSuites (isSuitesSkippingEnabled, tracer, testConfiguration) {
+function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) {
   if (!isSuitesSkippingEnabled) {
     return Promise.resolve({ skippableSuites: [] })
   }
@@ -108,10 +108,10 @@ function getSkippableSuites (isSuitesSkippingEnabled, tracer, testConfiguration)
     if (!tracer._tracer._exporter || !tracer._tracer._exporter.getItrConfiguration) {
       return resolve({ err: new Error('CI Visibility was not initialized correctly') })
     }
-    tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableSuites) => {
+    tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableTests) => {
       resolve({
         err,
-        skippableSuites: ['cypress/integration/examples/barcelona.spec.js'] // TODO: remove (this is for testing)
+        skippableTests
       })
     })
   })
@@ -140,7 +140,8 @@ module.exports = (on, config) => {
     osArchitecture,
     runtimeName,
     runtimeVersion,
-    branch
+    branch,
+    testLevel: 'test'
   }
 
   const codeOwnersEntries = getCodeOwnersFileEntries()
@@ -153,22 +154,23 @@ module.exports = (on, config) => {
   let frameworkVersion
   let rootDir
   let isSuitesSkippingEnabled = false
-  let suitesToSkip = []
+  let isCodeCoverageEnabled = false
+  let testsToSkip = []
 
   on('before:run', (details) => {
     return getItrConfig(tracer, testConfiguration).then(({ err, itrConfig }) => {
       if (err) {
         log.error(err)
       } else {
-        // TODO: read isCodeCoverageEnabled and do not flush code coverage if it's disabled
-        isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled // TODO: remove true ||
+        isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled
+        isCodeCoverageEnabled = itrConfig.isCodeCoverageEnabled
       }
 
-      getSkippableSuites(isSuitesSkippingEnabled, tracer, testConfiguration).then(({ err, skippableSuites }) => {
+      getSkippableTests(isSuitesSkippingEnabled, tracer, testConfiguration).then(({ err, skippableTests }) => {
         if (err) {
           log.error(err)
         } else {
-          suitesToSkip = skippableSuites
+          testsToSkip = skippableTests
         }
 
         const childOf = getTestParentSpan(tracer)
@@ -227,10 +229,6 @@ module.exports = (on, config) => {
   })
   on('task', {
     'dd:testSuiteStart': (suite) => {
-      // skip suite
-      if (suitesToSkip.includes(suite)) {
-        return true
-      }
       if (testSuiteSpan) {
         return false
       }
@@ -256,6 +254,12 @@ module.exports = (on, config) => {
     },
     'dd:beforeEach': (test) => {
       const { testName, testSuite } = test
+      // skip test
+      if (testsToSkip.find(test => {
+        return testName === test.name && testSuite === test.suite
+      })) {
+        return { shouldSkip: true }
+      }
 
       const testSuiteTags = {
         [TEST_COMMAND]: command,
@@ -294,12 +298,12 @@ module.exports = (on, config) => {
           }
         })
       }
-      return activeSpan ? activeSpan.context().toTraceId() : null
+      return activeSpan ? { traceId: activeSpan.context().toTraceId() } : {}
     },
     'dd:afterEach': ({ test, coverage }) => {
       const { state, error, isRUMActive, testSourceLine } = test
       if (activeSpan) {
-        if (coverage && tracer._tracer._exporter.exportCoverage) {
+        if (coverage && tracer._tracer._exporter.exportCoverage && isCodeCoverageEnabled) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
           const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, rootDir))
           const { _traceId, _spanId } = testSuiteSpan.context()
