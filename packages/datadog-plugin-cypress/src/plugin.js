@@ -17,7 +17,9 @@ const {
   TEST_COMMAND,
   TEST_MODULE,
   TEST_SOURCE_START,
-  finishAllTraceSpans
+  finishAllTraceSpans,
+  getCoveredFilenamesFromCoverage,
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
@@ -50,6 +52,13 @@ function getCypressVersion (details) {
     return details.config.version
   }
   return ''
+}
+
+function getRootDir (details) {
+  if (details && details.config) {
+    return details.config.repoRoot || details.config.projectRoot || process.cwd()
+  }
+  return process.cwd()
 }
 
 function getCypressCommand (details) {
@@ -91,10 +100,12 @@ module.exports = (on, config) => {
   let testSuiteSpan = null
   let command = null
   let frameworkVersion
+  let rootDir
 
   on('before:run', (details) => {
     const childOf = getTestParentSpan(tracer)
 
+    rootDir = getRootDir(details)
     command = getCypressCommand(details)
     frameworkVersion = getCypressVersion(details)
 
@@ -132,9 +143,15 @@ module.exports = (on, config) => {
     }
 
     return new Promise(resolve => {
-      tracer._tracer._exporter._writer.flush(() => {
-        resolve(null)
-      })
+      if (tracer._tracer._exporter.flush) {
+        tracer._tracer._exporter.flush(() => {
+          resolve(null)
+        })
+      } else {
+        tracer._tracer._exporter._writer.flush(() => {
+          resolve(null)
+        })
+      }
     })
   })
   on('task', {
@@ -153,9 +170,9 @@ module.exports = (on, config) => {
       })
       return null
     },
-    'dd:testSuiteFinish': (suiteStats) => {
+    'dd:testSuiteFinish': (stats) => {
       if (testSuiteSpan) {
-        const status = getSuiteStatus(suiteStats)
+        const status = getSuiteStatus(stats)
         testSuiteSpan.setTag(TEST_STATUS, status)
         testSuiteSpan.finish()
         testSuiteSpan = null
@@ -204,9 +221,22 @@ module.exports = (on, config) => {
       }
       return activeSpan ? activeSpan.context().toTraceId() : null
     },
-    'dd:afterEach': (test) => {
+    'dd:afterEach': ({ test, coverage }) => {
       const { state, error, isRUMActive, testSourceLine } = test
       if (activeSpan) {
+        if (coverage && tracer._tracer._exporter.exportCoverage) {
+          const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
+          const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, rootDir))
+          const { _traceId, _spanId } = testSuiteSpan.context()
+          const formattedCoverage = {
+            sessionId: _traceId,
+            suiteId: _spanId,
+            testId: activeSpan.context()._spanId,
+            files: relativeCoverageFiles
+          }
+          tracer._tracer._exporter.exportCoverage(formattedCoverage)
+        }
+
         activeSpan.setTag(TEST_STATUS, CYPRESS_STATUS_TO_TEST_STATUS[state])
         if (error) {
           activeSpan.setTag('error', error)

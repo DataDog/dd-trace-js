@@ -73,8 +73,8 @@ class CucumberPlugin extends CiPlugin {
         .map(filename => getTestSuitePath(filename, this.sourceRoot))
 
       const formattedCoverage = {
-        traceId: this.testSuiteSpan.context()._traceId,
-        spanId: this.testSuiteSpan.context()._spanId,
+        sessionId: this.testSuiteSpan.context()._traceId,
+        suiteId: this.testSuiteSpan.context()._spanId,
         files: relativeCoverageFiles
       }
 
