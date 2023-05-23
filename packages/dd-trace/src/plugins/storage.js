@@ -3,6 +3,8 @@
 const ClientPlugin = require('./client')
 
 class StoragePlugin extends ClientPlugin {
+  static get type () { return 'storage' }
+
   constructor (...args) {
     super(...args)
 
