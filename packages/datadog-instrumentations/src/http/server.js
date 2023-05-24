@@ -78,8 +78,9 @@ function wrapEmit (emit) {
 function wrapSetHeader (res) {
   shimmer.wrap(res, 'setHeader', setHeader => {
     return function (name, value) {
+      const setHeaderResult = setHeader.apply(this, arguments)
       finishSetHeaderCh.publish({ name, value, res })
-      return setHeader.apply(this, arguments)
+      return setHeaderResult
     }
   })
 }
