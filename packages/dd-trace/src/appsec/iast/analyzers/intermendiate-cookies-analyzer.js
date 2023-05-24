@@ -31,6 +31,7 @@ class IntermediateCookiesAnalyzer extends Analyzer {
     const cookieName = nameValueParts[0]
     const cookieValue = nameValueParts.slice(1).join('=')
     const cookieProperties = cookieParts.slice(1).map(part => part.trim())
+
     return { cookieName, cookieValue, cookieProperties, cookieString }
   }
 

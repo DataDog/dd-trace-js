@@ -32,6 +32,17 @@ describe('Insecure cookie vulnerability', () => {
         })
 
         testThatRequestHasVulnerability((req, res) => {
+          setCookieFunctions.insecureWithResCookieMethod('insecure', 'cookie', res)
+          setCookieFunctions.insecureWithResCookieMethod('insecure2', 'cookie2', res)
+        }, 'INSECURE_COOKIE', {
+          occurrences: 2,
+          location: {
+            path: setCookieFunctionsFilename,
+            line: 4
+          }
+        })
+
+        testThatRequestHasVulnerability((req, res) => {
           setCookieFunctions.insecureWithResHeaderMethod('insecure', 'cookie', res)
         }, 'INSECURE_COOKIE', {
           occurrences: 1,
@@ -53,6 +64,8 @@ describe('Insecure cookie vulnerability', () => {
 
         testThatRequestHasNoVulnerability((req, res) => {
           res.cookie('insecure', 'cookie', { secure: true })
+          res.header('set-cookie', 'other=secure; Secure')
+          res.header('set-cookie', ['other=safe; Secure', 'more=safe2; Secure'])
         }, 'INSECURE_COOKIE')
       })
   })

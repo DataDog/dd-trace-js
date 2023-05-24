@@ -1,7 +1,7 @@
 'use strict'
 
 function insecureWithResCookieMethod (key, value, res) {
-  res.cookie('insecure', 'cookie')
+  res.cookie(key, value)
 }
 
 function insecureWithResHeaderMethod (key, value, res) {
