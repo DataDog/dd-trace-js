@@ -230,7 +230,7 @@ class FakeCiVisIntake extends FakeAgent {
       }, timeout || 15000)
       const messageHandler = (message) => {
         if (!payloadMatch || payloadMatch(message)) {
-          clearInterval(timeoutId)
+          clearTimeout(timeoutId)
           resolve(message)
           this.off('message', messageHandler)
         }

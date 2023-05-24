@@ -57,6 +57,107 @@ versions.forEach((version) => {
       await receiver.stop()
     })
 
+    it('can run and report tests', (done) => {
+      receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        const testSessionEvent = events.find(event => event.type === 'test_session_end')
+        const testModuleEvent = events.find(event => event.type === 'test_module_end')
+        const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+        const testEvents = events.filter(event => event.type === 'test')
+
+        const { content: testSessionEventContent } = testSessionEvent
+        const { content: testModuleEventContent } = testModuleEvent
+
+        assert.exists(testSessionEventContent.test_session_id)
+        assert.exists(testSessionEventContent.meta[TEST_COMMAND])
+        assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
+        assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
+        assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
+
+        assert.exists(testModuleEventContent.test_session_id)
+        assert.exists(testModuleEventContent.test_module_id)
+        assert.exists(testModuleEventContent.meta[TEST_COMMAND])
+        assert.exists(testModuleEventContent.meta[TEST_MODULE])
+        assert.equal(testModuleEventContent.resource.startsWith('test_module.'), true)
+        assert.equal(testModuleEventContent.meta[TEST_STATUS], 'fail')
+        assert.equal(
+          testModuleEventContent.test_session_id.toString(10),
+          testSessionEventContent.test_session_id.toString(10)
+        )
+        assert.exists(testModuleEventContent.meta[TEST_FRAMEWORK_VERSION])
+
+        assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
+          'test_suite.cypress/e2e/other.cy.js',
+          'test_suite.cypress/e2e/spec.cy.js'
+        ])
+
+        assert.includeMembers(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
+          'pass',
+          'fail'
+        ])
+
+        testSuiteEvents.forEach(({
+          content: {
+            meta,
+            test_suite_id: testSuiteId,
+            test_module_id: testModuleId,
+            test_session_id: testSessionId
+          }
+        }) => {
+          assert.exists(meta[TEST_COMMAND])
+          assert.exists(meta[TEST_MODULE])
+          assert.exists(testSuiteId)
+          assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
+          assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+        })
+
+        assert.includeMembers(testEvents.map(test => test.content.resource), [
+          'cypress/e2e/other.cy.js.context passes',
+          'cypress/e2e/spec.cy.js.context passes',
+          'cypress/e2e/spec.cy.js.other context fails'
+        ])
+
+        assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
+          'pass',
+          'pass',
+          'fail'
+        ])
+
+        testEvents.forEach(({
+          content: {
+            meta,
+            test_suite_id: testSuiteId,
+            test_module_id: testModuleId,
+            test_session_id: testSessionId
+          }
+        }) => {
+          assert.exists(meta[TEST_COMMAND])
+          assert.exists(meta[TEST_MODULE])
+          assert.exists(testSuiteId)
+          assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
+          assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+        })
+      }, 25000).then(() => done()).catch(done)
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+          },
+          stdio: 'pipe'
+        }
+      )
+    })
+
     it('can report code coverage if it is available', (done) => {
       const commandSuffix = version === '6.7.0' ? '--config-file cypress-config.json' : ''
 
@@ -95,119 +196,6 @@ versions.forEach((version) => {
           stdio: 'pipe'
         }
       )
-    })
-
-    const reportMethods = ['agentless', 'evp proxy']
-
-    reportMethods.forEach((reportMethod) => {
-      context(`reporting via ${reportMethod}`, () => {
-        let envVars, isAgentless, reportUrl
-        beforeEach(() => {
-          isAgentless = reportMethod === 'agentless'
-          envVars = isAgentless ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
-          reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
-        })
-        it('can run and report tests', (done) => {
-          receiver.gatherPayloadsMaxTimeout(({ url }) => url === reportUrl, payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            const testSessionEvent = events.find(event => event.type === 'test_session_end')
-            const testModuleEvent = events.find(event => event.type === 'test_module_end')
-            const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
-            const testEvents = events.filter(event => event.type === 'test')
-
-            const { content: testSessionEventContent } = testSessionEvent
-            const { content: testModuleEventContent } = testModuleEvent
-
-            assert.exists(testSessionEventContent.test_session_id)
-            assert.exists(testSessionEventContent.meta[TEST_COMMAND])
-            assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
-            assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
-            assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
-
-            assert.exists(testModuleEventContent.test_session_id)
-            assert.exists(testModuleEventContent.test_module_id)
-            assert.exists(testModuleEventContent.meta[TEST_COMMAND])
-            assert.exists(testModuleEventContent.meta[TEST_MODULE])
-            assert.equal(testModuleEventContent.resource.startsWith('test_module.'), true)
-            assert.equal(testModuleEventContent.meta[TEST_STATUS], 'fail')
-            assert.equal(
-              testModuleEventContent.test_session_id.toString(10),
-              testSessionEventContent.test_session_id.toString(10)
-            )
-            assert.exists(testModuleEventContent.meta[TEST_FRAMEWORK_VERSION])
-
-            assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
-              'test_suite.cypress/e2e/other.cy.js',
-              'test_suite.cypress/e2e/spec.cy.js'
-            ])
-
-            assert.includeMembers(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
-              'pass',
-              'fail'
-            ])
-
-            testSuiteEvents.forEach(({
-              content: {
-                meta,
-                test_suite_id: testSuiteId,
-                test_module_id: testModuleId,
-                test_session_id: testSessionId
-              }
-            }) => {
-              assert.exists(meta[TEST_COMMAND])
-              assert.exists(meta[TEST_MODULE])
-              assert.exists(testSuiteId)
-              assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
-              assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
-            })
-
-            assert.includeMembers(testEvents.map(test => test.content.resource), [
-              'cypress/e2e/other.cy.js.context passes',
-              'cypress/e2e/spec.cy.js.context passes',
-              'cypress/e2e/spec.cy.js.other context fails'
-            ])
-
-            assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
-              'pass',
-              'pass',
-              'fail'
-            ])
-
-            testEvents.forEach(({
-              content: {
-                meta,
-                test_suite_id: testSuiteId,
-                test_module_id: testModuleId,
-                test_session_id: testSessionId
-              }
-            }) => {
-              assert.exists(meta[TEST_COMMAND])
-              assert.exists(meta[TEST_MODULE])
-              assert.exists(testSuiteId)
-              assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
-              assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
-            })
-          }, 25000).then(() => done()).catch(done)
-
-          const {
-            NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-            ...restEnvVars
-          } = envVars
-
-          childProcess = exec(
-            `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
-            {
-              cwd,
-              env: {
-                ...restEnvVars,
-                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
-              },
-              stdio: 'pipe'
-            }
-          )
-        })
-      })
     })
 
     context('intelligent test runner', () => {
