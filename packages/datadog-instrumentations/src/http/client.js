@@ -49,7 +49,7 @@ function patch (http, methodName) {
       const asyncResource = new AsyncResource('bound-anonymous-fn')
 
       return asyncResource.runInAsyncScope(() => {
-        startClientCh.publish({ args, http, originalUrlAndOptions: getOriginalUrlAndOptions(arguments) })
+        startClientCh.publish({ args, http })
 
         let finished = false
         let callback = args.callback
@@ -101,6 +101,7 @@ function patch (http, methodName) {
   }
 
   function normalizeArgs (inputURL, inputOptions, cb) {
+    const originalUrl = inputURL
     inputURL = normalizeOptions(inputURL)
 
     const [callback, inputOptionsNormalized] = normalizeCallback(inputOptions, cb, inputURL)
@@ -108,7 +109,7 @@ function patch (http, methodName) {
     normalizeHeaders(options)
     const uri = url.format(options)
 
-    return { uri, options, callback }
+    return { uri, options, callback, originalUrl }
   }
 
   function combineOptions (inputURL, inputOptions) {
@@ -166,16 +167,5 @@ function patch (http, methodName) {
       options.auth = `${url.username}:${url.password}`
     }
     return options
-  }
-
-  function getOriginalUrlAndOptions (args) {
-    let wholeUrl, options
-    if (typeof args[0] === 'string') {
-      wholeUrl = args[0]
-      options = args[1]
-    } else {
-      options = args[0]
-    }
-    return { wholeUrl, options }
   }
 }

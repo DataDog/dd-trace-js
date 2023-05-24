@@ -7,11 +7,11 @@ class SSRFAnalyzer extends InjectionAnalyzer {
   constructor () {
     super(SSRF)
 
-    this.addSub('apm:http:client:request:start', ({ originalUrlAndOptions }) => {
-      if (typeof originalUrlAndOptions.wholeUrl === 'string') {
-        this.analyze(originalUrlAndOptions.wholeUrl)
-      } else if (originalUrlAndOptions.options && originalUrlAndOptions.options.host) {
-        this.analyze(originalUrlAndOptions.options.host)
+    this.addSub('apm:http:client:request:start', ({ args }) => {
+      if (typeof args.originalUrl === 'string') {
+        this.analyze(args.originalUrl)
+      } else if (args.options && args.options.host) {
+        this.analyze(args.options.host)
       }
     })
 
