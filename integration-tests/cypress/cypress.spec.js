@@ -18,7 +18,10 @@ const {
   TEST_COMMAND,
   TEST_MODULE,
   TEST_FRAMEWORK_VERSION,
-  TEST_TOOLCHAIN
+  TEST_TOOLCHAIN,
+  TEST_CODE_COVERAGE_ENABLED,
+  TEST_ITR_SKIPPING_ENABLED,
+  TEST_ITR_TESTS_SKIPPED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { NODE_MAJOR } = require('../../version')
 
@@ -79,8 +82,7 @@ versions.forEach((version) => {
           .map(file => file.filename)
 
         assert.includeMembers(fileNames, Object.keys(coverageFixture))
-        done()
-      })
+      }, 20000).then(() => done()).catch(done)
 
       childProcess = exec(
         `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
@@ -205,46 +207,176 @@ versions.forEach((version) => {
             }
           )
         })
-        context('intelligent test runner', () => {
-          it('can report git metadata', (done) => {
-            const searchCommitsRequestPromise = receiver.payloadReceived(
-              ({ url }) => url.endsWith('/api/v2/git/repository/search_commits')
-            )
-            const packfileRequestPromise = receiver
-              .payloadReceived(({ url }) => url.endsWith('/api/v2/git/repository/packfile'))
+      })
+    })
 
-            Promise.all([
-              searchCommitsRequestPromise,
-              packfileRequestPromise
-            ]).then(([searchCommitRequest, packfileRequest]) => {
-              if (isAgentless) {
-                assert.propertyVal(searchCommitRequest.headers, 'dd-api-key', '1')
-                assert.propertyVal(packfileRequest.headers, 'dd-api-key', '1')
-              } else {
-                assert.notProperty(searchCommitRequest.headers, 'dd-api-key')
-                assert.notProperty(packfileRequest.headers, 'dd-api-key')
-              }
-              done()
-            }).catch(done)
+    context('intelligent test runner', () => {
+      it('can report git metadata', (done) => {
+        const searchCommitsRequestPromise = receiver.payloadReceived(
+          ({ url }) => url.endsWith('/api/v2/git/repository/search_commits')
+        )
+        const packfileRequestPromise = receiver
+          .payloadReceived(({ url }) => url.endsWith('/api/v2/git/repository/packfile'))
 
-            const {
-              NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-              ...restEnvVars
-            } = envVars
+        Promise.all([
+          searchCommitsRequestPromise,
+          packfileRequestPromise
+        ]).then(([searchCommitRequest, packfileRequest]) => {
+          assert.propertyVal(searchCommitRequest.headers, 'dd-api-key', '1')
+          assert.propertyVal(packfileRequest.headers, 'dd-api-key', '1')
+          done()
+        }).catch(done)
 
-            childProcess = exec(
-              `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
-              {
-                cwd,
-                env: {
-                  ...restEnvVars,
-                  CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
-                },
-                stdio: 'pipe'
-              }
-            )
-          })
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisAgentlessConfig(receiver.port)
+
+        childProcess = exec(
+          `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+      })
+      it('does not report code coverage if disabled by the API', (done) => {
+        receiver.setSettings({
+          code_coverage: false,
+          tests_skipping: false
         })
+
+        receiver.assertPayloadReceived(() => {
+          const error = new Error('it should not report code coverage')
+          done(error)
+        }, ({ url }) => url.endsWith('/api/v2/citestcov')).catch(() => {})
+
+        receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const eventTypes = events.map(event => event.type)
+          assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+        }).then(() => done()).catch(done)
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisAgentlessConfig(receiver.port)
+
+        childProcess = exec(
+          `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+      })
+      it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
+        receiver.setSuitesToSkip([{
+          type: 'test',
+          attributes: {
+            name: 'context passes',
+            suite: 'cypress/e2e/other.cy.js'
+          }
+        }])
+
+        const skippableRequestPromise = receiver
+          .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
+        const eventsRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcycle'))
+
+        Promise.all([
+          skippableRequestPromise,
+          eventsRequestPromise
+        ]).then(([skippableRequest, eventsRequest]) => {
+          assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
+          assert.propertyVal(skippableRequest.headers, 'dd-application-key', '1')
+
+          const eventTypes = eventsRequest.payload.events.map(event => event.type)
+
+          const skippedTest = eventsRequest.payload.events.find(event =>
+            event.content.resource === 'cypress/e2e/other.cy.js.context passes'
+          )
+          assert.notExists(skippedTest)
+          assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+
+          const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
+          assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
+          assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+          assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          const testModule = eventsRequest.payload.events.find(event => event.type === 'test_module_end').content
+          assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'true')
+          assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+          assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          done()
+        }).catch(done)
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisAgentlessConfig(receiver.port)
+
+        childProcess = exec(
+          `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+      })
+      it('does not skip tests if test skipping is disabled by the API', (done) => {
+        receiver.setSettings({
+          code_coverage: true,
+          tests_skipping: false
+        })
+
+        receiver.setSuitesToSkip([{
+          type: 'test',
+          attributes: {
+            name: 'context passes',
+            suite: 'cypress/e2e/other.cy.js'
+          }
+        }])
+
+        receiver.assertPayloadReceived(() => {
+          const error = new Error('should not request skippable')
+          done(error)
+        }, ({ url }) => url.endsWith('/api/v2/ci/tests/skippable')).catch(() => {})
+
+        receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const notSkippedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/other.cy.js.context passes'
+          )
+          assert.exists(notSkippedTest)
+        }).then(() => done()).catch(done)
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisAgentlessConfig(receiver.port)
+
+        childProcess = exec(
+          `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
       })
     })
   })

@@ -19,7 +19,8 @@ const {
   TEST_SOURCE_START,
   finishAllTraceSpans,
   getCoveredFilenamesFromCoverage,
-  getTestSuitePath
+  getTestSuitePath,
+  addIntelligentTestRunnerSpanTags
 } = require('../../dd-trace/src/plugins/util/test')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
@@ -208,6 +209,16 @@ module.exports = (on, config) => {
       const testStatus = getSessionStatus(suiteStats)
       testModuleSpan.setTag(TEST_STATUS, testStatus)
       testSessionSpan.setTag(TEST_STATUS, testStatus)
+
+      addIntelligentTestRunnerSpanTags(
+        testSessionSpan,
+        testModuleSpan,
+        {
+          isSuitesSkipped: !!testsToSkip.length,
+          isSuitesSkippingEnabled,
+          isCodeCoverageEnabled
+        }
+      )
 
       testModuleSpan.finish()
       testSessionSpan.finish()
