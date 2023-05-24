@@ -2,6 +2,8 @@
 
 module.exports = {
   'COMMAND_INJECTION_ANALYZER': require('./command-injection-analyzer'),
+  'INSECURE_COOKIE_ANALYZER': require('./insecure-cookie-analyzer'),
+  'INTERMEDIATE_COOKIES_ANALYZER': require('./intermendiate-cookies-analyzer'),
   'LDAP_ANALYZER': require('./ldap-injection-analyzer'),
   'PATH_TRAVERSAL_ANALYZER': require('./path-traversal-analyzer'),
   'SQL_INJECTION_ANALYZER': require('./sql-injection-analyzer'),
