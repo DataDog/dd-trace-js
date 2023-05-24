@@ -56,7 +56,7 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
 
   _report (value, context, dialect) {
     const evidence = this._getEvidence(value, context, dialect)
-    const location = this._getLocation(this._getExcludedLocations())
+    const location = this._getLocation()
     if (!this._isExcluded(location)) {
       const spanId = context && context.rootSpan && context.rootSpan.context().toSpanId()
       const vulnerability = this._createVulnerability(this._type, evidence, spanId, location)
@@ -64,7 +64,7 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
     }
   }
 
-  _getExcludedLocations () {
+  _getExcludedPaths () {
     return ['node_modules/mysql2', 'node_modules/sequelize']
   }
 }
