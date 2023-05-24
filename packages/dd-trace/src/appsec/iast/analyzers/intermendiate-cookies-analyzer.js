@@ -9,7 +9,6 @@ class IntermediateCookiesAnalyzer extends Analyzer {
     super()
     this.cookiesInRequest = new WeakMap()
     this.addSub('datadog:http:server:response:set-header:finish', ({ name, value, res }) => {
-      // TODO if name is 'set-cookie', parse cookie and send event
       if (name.toLowerCase() === 'set-cookie') {
         let allCookies = value
         if (typeof value === 'string') {
@@ -18,6 +17,7 @@ class IntermediateCookiesAnalyzer extends Analyzer {
         const alreadyCheckedCookies = this._getAlreadyCheckedCookiesInResponse(res)
         allCookies.forEach(cookieString => {
           if (!alreadyCheckedCookies.includes(cookieString)) {
+            alreadyCheckedCookies.push(cookieString)
             iastSetCookieChannel.publish(this._parseCookie(cookieString))
           }
         })
