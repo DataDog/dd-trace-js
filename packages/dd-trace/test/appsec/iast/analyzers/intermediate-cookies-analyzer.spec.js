@@ -36,12 +36,12 @@ describe('Test IntermediateCookiesAnalyzer', () => {
   })
 
   it('Should not send set-cookie-event if the header is not "set-cookie"', () => {
-    setCookieCallback = sinon.stub()
     setHeaderChannel.publish({
       name: 'location',
       value: 'https://www.datadoghq.com',
       res: {}
     })
+
     expect(setCookieCallback).to.not.have.been.called
   })
 
@@ -57,13 +57,16 @@ describe('Test IntermediateCookiesAnalyzer', () => {
       value: ['key1=value1', 'key2=value2; Secure'],
       res
     })
+
     expect(setCookieCallback).to.have.been.calledTwice
+
     expect(setCookieCallback.firstCall).to.have.been.calledWithExactly({
       cookieName: 'key1',
       cookieValue: 'value1',
       cookieProperties: [],
       cookieString: 'key1=value1'
     }, 'datadog:iast:set-cookie')
+
     expect(setCookieCallback.secondCall).to.have.been.calledWithExactly({
       cookieName: 'key2',
       cookieValue: 'value2',
