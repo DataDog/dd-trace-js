@@ -30,7 +30,7 @@ function newTaintedString (iastContext, string, name, type) {
   return result
 }
 
-function taintObject (iastContext, object, type) {
+function taintObject (iastContext, object, type, keyTainting, keyType) {
   let result = object
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
@@ -47,7 +47,12 @@ function taintObject (iastContext, object, type) {
           if (!parent) {
             result = tainted
           } else {
-            parent[property] = tainted
+            if (keyTainting) {
+              const taintedProperty = TaintedUtils.newTaintedString(transactionId, property, property, keyType)
+              parent[taintedProperty] = tainted
+            } else {
+              parent[property] = tainted
+            }
           }
         } else if (typeof value === 'object' && !visited.has(value)) {
           visited.add(value)
