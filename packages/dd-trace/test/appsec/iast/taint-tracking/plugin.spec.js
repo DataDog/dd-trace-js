@@ -8,6 +8,7 @@ const dc = require('../../../../../diagnostics_channel')
 const middlewareNextChannel = dc.channel('apm:express:middleware:next')
 const queryParseFinishChannel = dc.channel('datadog:qs:parse:finish')
 const bodyParserFinishChannel = dc.channel('datadog:body-parser:read:finish')
+const { createTransaction, removeTransaction } = require('../../../../src/appsec/iast/taint-tracking')
 
 describe('IAST Taint tracking plugin', () => {
   let taintTrackingPlugin
@@ -33,11 +34,12 @@ describe('IAST Taint tracking plugin', () => {
     sinon.restore()
   })
 
-  it('Should subscribe to body parser and qs channel', () => {
+  it('Should subscribe to body parser, qs and cookie channel', () => {
     expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(3)
     expect(taintTrackingPlugin._subscriptions[0]._channel.name).to.equals('datadog:body-parser:read:finish')
     expect(taintTrackingPlugin._subscriptions[1]._channel.name).to.equals('datadog:qs:parse:finish')
     expect(taintTrackingPlugin._subscriptions[2]._channel.name).to.equals('apm:express:middleware:next')
+    expect(taintTrackingPlugin._subscriptions[3]._channel.name).to.equals('datadog:cookie:parse:finish')
   })
 
   describe('taint sources', () => {
