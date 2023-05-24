@@ -248,7 +248,7 @@ function runnerHook (runnerExport, playwrightVersion) {
 addHook({
   name: '@playwright/test',
   file: 'lib/runner.js',
-  versions: ['>=1.18.0 <1.30.0']
+  versions: ['>=1.18.0 <=1.30.0']
 }, runnerHook)
 
 addHook({
