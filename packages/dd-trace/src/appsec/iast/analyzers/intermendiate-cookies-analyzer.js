@@ -32,7 +32,6 @@ class IntermediateCookiesAnalyzer extends Analyzer {
     const cookieValue = nameValueParts.slice(1).join('=')
     const cookieProperties = cookieParts.slice(1).map(part => part.trim())
     return { cookieName, cookieValue, cookieProperties, cookieString }
-
   }
 
   _getAlreadyCheckedCookiesInResponse (res) {

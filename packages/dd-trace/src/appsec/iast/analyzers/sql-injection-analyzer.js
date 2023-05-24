@@ -5,7 +5,7 @@ const { SQL_INJECTION } = require('../vulnerabilities')
 const { getRanges } = require('../taint-tracking/operations')
 const { storage } = require('../../../../../datadog-core')
 const { getIastContext } = require('../iast-context')
-const { createVulnerability, addVulnerability } = require('../vulnerability-reporter')
+const { addVulnerability } = require('../vulnerability-reporter')
 
 class SqlInjectionAnalyzer extends InjectionAnalyzer {
   constructor () {
@@ -59,7 +59,7 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
     const location = this._getLocation(this._getExcludedLocations())
     if (!this._isExcluded(location)) {
       const spanId = context && context.rootSpan && context.rootSpan.context().toSpanId()
-      const vulnerability = createVulnerability(this._type, evidence, spanId, location)
+      const vulnerability = this._createVulnerability(this._type, evidence, spanId, location)
       addVulnerability(context, vulnerability)
     }
   }

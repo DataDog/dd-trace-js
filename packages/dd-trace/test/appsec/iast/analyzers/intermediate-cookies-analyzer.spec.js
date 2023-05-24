@@ -13,7 +13,6 @@ describe('Test IntermediateCookiesAnalyzer', () => {
     setCookieCallback = sinon.stub()
     intermediateCookiesAnalyzer.configure(true)
     iastSetCookieChannel.subscribe(setCookieCallback)
-
   })
 
   afterEach(() => {
