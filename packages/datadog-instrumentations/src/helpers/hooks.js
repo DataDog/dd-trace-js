@@ -80,6 +80,7 @@ module.exports = {
   'rhea': () => require('../rhea'),
   'router': () => require('../router'),
   'sharedb': () => require('../sharedb'),
+  'sequelize': () => require('../sequelize'),
   'tedious': () => require('../tedious'),
   'when': () => require('../when'),
   'winston': () => require('../winston')
