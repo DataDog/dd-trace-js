@@ -17,16 +17,19 @@ describe('Headers sourcing', () => {
     const store = storage.getStore()
     const iastContext = iastContextFunctions.getIastContext(store)
 
-    Object.getOwnPropertySymbols(req.headers).forEach(headerName => {
+    Object.keys(req.headers).forEach(headerName => {
       const headerValue = req.headers[headerName]
       const isHeaderValueTainted = isTainted(iastContext, headerValue)
       expect(isHeaderValueTainted).to.be.true
       const taintedHeaderValueRanges = getRanges(iastContext, headerValue)
       expect(taintedHeaderValueRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_HEADER_VALUE)
-      const isHeaderNameTainted = isTainted(iastContext, headerName)
-      expect(isHeaderNameTainted).to.be.true
-      const taintedHeaderNameRanges = getRanges(iastContext, headerName)
-      expect(taintedHeaderNameRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_HEADER_NAME)
+      // @see packages/dd-trace/test/appsec/iast/taint-tracking/taint-tracking-operations.spec.js
+      if (headerName.length >= 10) {
+        const isHeaderNameTainted = isTainted(iastContext, headerName)
+        expect(isHeaderNameTainted).to.be.true
+        const taintedHeaderNameRanges = getRanges(iastContext, headerName)
+        expect(taintedHeaderNameRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_HEADER_NAME)
+      }
     })
   }
 
