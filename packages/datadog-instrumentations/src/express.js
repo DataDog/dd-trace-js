@@ -66,7 +66,7 @@ const wrapProcessParamsMethod = (requestPositionInArguments) => {
         processParamsStartCh.publish({ req: arguments[requestPositionInArguments] })
       }
 
-      original.apply(this, arguments)
+      return original.apply(this, arguments)
     }
   }
 }
