@@ -192,7 +192,7 @@ module.exports = {
         [GIT_TAG]: CI_COMMIT_TAG,
         [GIT_BRANCH]: CI_COMMIT_REF_NAME,
         [CI_WORKSPACE_PATH]: CI_PROJECT_DIR,
-        [CI_PIPELINE_URL]: GITLAB_PIPELINE_URL && GITLAB_PIPELINE_URL.replace('/-/pipelines/', '/pipelines/'),
+        [CI_PIPELINE_URL]: GITLAB_PIPELINE_URL,
         [CI_STAGE_NAME]: CI_JOB_STAGE,
         [CI_JOB_NAME]: GITLAB_CI_JOB_NAME,
         [GIT_COMMIT_MESSAGE]: CI_COMMIT_MESSAGE,
