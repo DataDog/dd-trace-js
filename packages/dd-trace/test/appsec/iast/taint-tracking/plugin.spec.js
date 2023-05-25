@@ -4,11 +4,15 @@ const proxyquire = require('proxyquire')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const taintTrackingOperations = require('../../../../src/appsec/iast/taint-tracking/operations')
 const dc = require('../../../../../diagnostics_channel')
+const {
+  HTTP_REQUEST_COOKIE_VALUE,
+  HTTP_REQUEST_COOKIE_NAME
+} = require('../../../../src/appsec/iast/taint-tracking/origin-types')
 
 const middlewareNextChannel = dc.channel('apm:express:middleware:next')
 const queryParseFinishChannel = dc.channel('datadog:qs:parse:finish')
 const bodyParserFinishChannel = dc.channel('datadog:body-parser:read:finish')
-const { createTransaction, removeTransaction } = require('../../../../src/appsec/iast/taint-tracking')
+const cookieParseFinishCh = dc.channel('datadog:cookie:parse:finish')
 
 describe('IAST Taint tracking plugin', () => {
   let taintTrackingPlugin
@@ -35,7 +39,7 @@ describe('IAST Taint tracking plugin', () => {
   })
 
   it('Should subscribe to body parser, qs and cookie channel', () => {
-    expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(3)
+    expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(4)
     expect(taintTrackingPlugin._subscriptions[0]._channel.name).to.equals('datadog:body-parser:read:finish')
     expect(taintTrackingPlugin._subscriptions[1]._channel.name).to.equals('datadog:qs:parse:finish')
     expect(taintTrackingPlugin._subscriptions[2]._channel.name).to.equals('apm:express:middleware:next')
@@ -110,11 +114,7 @@ describe('IAST Taint tracking plugin', () => {
       }
 
       taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
-      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
-        iastContext,
-        objToBeTainted[propertyToBeTainted],
-        originType
-      )
+      expect(taintTrackingOperations.taintObject).to.not.be.called
     })
 
     it('Should taint request parameter when qs event is published', () => {
@@ -180,6 +180,22 @@ describe('IAST Taint tracking plugin', () => {
         iastContext,
         req.body,
         'http.request.body'
+      )
+    })
+
+    it('Should taint cookies when cookie parser event is published', () => {
+      const cookies = {
+        cookie1: 'tainted_cookie'
+      }
+
+      cookieParseFinishCh.publish({ cookies })
+
+      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+        iastContext,
+        cookies,
+        HTTP_REQUEST_COOKIE_VALUE,
+        true,
+        HTTP_REQUEST_COOKIE_NAME
       )
     })
   })
