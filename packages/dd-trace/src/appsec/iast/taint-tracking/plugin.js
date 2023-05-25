@@ -59,8 +59,7 @@ class TaintTrackingPlugin extends Plugin {
     taintObject(iastContext, target, HTTP_REQUEST_COOKIE_VALUE, true, HTTP_REQUEST_COOKIE_NAME)
   }
 
-  taintHeaders (headers) {
-    const iastContext = getIastContext(storage.getStore())
+  taintHeaders (headers, iastContext) {
     taintObject(iastContext, headers, HTTP_REQUEST_HEADER_VALUE, true, HTTP_REQUEST_HEADER_NAME)
   }
 
