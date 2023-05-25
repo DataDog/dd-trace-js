@@ -169,7 +169,7 @@ function prepareTestServerForIast (description, tests) {
       return agent.close({ ritmReset: false })
     })
 
-    function testThatRequestHasVulnerability (fn, vulnerability, occurrences) {
+    function testThatRequestHasVulnerability (fn, vulnerability, { occurrences, location } = {}) {
       it(`should have ${vulnerability} vulnerability`, function (done) {
         this.timeout(5000)
         app = fn
@@ -185,8 +185,28 @@ function prepareTestServerForIast (description, tests) {
             })
 
             expect(vulnerabilitiesCount.get(vulnerability)).to.not.be.null
+
             if (occurrences) {
               expect(vulnerabilitiesCount.get(vulnerability)).to.equal(occurrences)
+            }
+
+            if (location) {
+              let found = false
+              vulnerabilitiesTrace.vulnerabilities.forEach(v => {
+                if (v.type === vulnerability && v.location.path.endsWith(location.path)) {
+                  if (location.line) {
+                    if (location.line === v.location.line) {
+                      found = true
+                    }
+                  } else {
+                    found = true
+                  }
+                }
+              })
+
+              if (!found) {
+                throw new Error(`Expected ${vulnerability} on ${location.path}:${location.line}`)
+              }
             }
           })
           .then(done)

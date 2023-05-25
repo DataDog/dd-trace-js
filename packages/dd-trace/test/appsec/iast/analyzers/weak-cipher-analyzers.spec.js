@@ -67,6 +67,6 @@ describe('weak-cipher-analyzer', () => {
       const key = '1111111111111111'
       const iv = 'abcdefgh'
       crypto.createCipheriv(VULNERABLE_CIPHER, key, iv)
-    }, 'WEAK_CIPHER')
+    }, 'WEAK_CIPHER', { occurrences: 1 })
   })
 })
