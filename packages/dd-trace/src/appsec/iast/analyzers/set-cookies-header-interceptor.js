@@ -1,8 +1,7 @@
 'use strict'
 
-const dc = require('../../../../../diagnostics_channel')
 const Plugin = require('../../../plugins/plugin')
-const iastSetCookieChannel = dc.channel('datadog:iast:set-cookie')
+const { setCookieChannel } = require('../../channels')
 
 class SetCookiesHeaderInterceptor extends Plugin {
   constructor () {
@@ -18,7 +17,7 @@ class SetCookiesHeaderInterceptor extends Plugin {
         allCookies.forEach(cookieString => {
           if (!alreadyCheckedCookies.includes(cookieString)) {
             alreadyCheckedCookies.push(cookieString)
-            iastSetCookieChannel.publish(this._parseCookie(cookieString))
+            setCookieChannel.publish(this._parseCookie(cookieString))
           }
         })
       }
