@@ -37,12 +37,12 @@ function getCallSiteInfo () {
   return callsiteList
 }
 
-function getFirstNonDDPathAndLineFromCallsites (callsites) {
+function getFirstNonDDPathAndLineFromCallsites (callsites, externallyExcludedLocations) {
   if (callsites) {
     for (let i = 0; i < callsites.length; i++) {
       const callsite = callsites[i]
       const filepath = callsite.getFileName()
-      if (!isExcluded(callsite) && filepath.indexOf(pathLine.ddBasePath) === -1) {
+      if (!isExcluded(callsite, externallyExcludedLocations) && filepath.indexOf(pathLine.ddBasePath) === -1) {
         return {
           path: path.relative(process.cwd(), filepath),
           line: callsite.getLineNumber(),
@@ -54,14 +54,18 @@ function getFirstNonDDPathAndLineFromCallsites (callsites) {
   return null
 }
 
-function isExcluded (callsite) {
+function isExcluded (callsite, externallyExcludedPaths) {
   if (callsite.isNative()) return true
   const filename = callsite.getFileName()
   if (!filename) {
     return true
   }
-  for (let i = 0; i < EXCLUDED_PATHS.length; i++) {
-    if (filename.indexOf(EXCLUDED_PATHS[i]) > -1) {
+  let excludedPaths = EXCLUDED_PATHS
+  if (externallyExcludedPaths) {
+    excludedPaths = [...excludedPaths, ...externallyExcludedPaths]
+  }
+  for (let i = 0; i < excludedPaths.length; i++) {
+    if (filename.indexOf(excludedPaths[i]) > -1) {
       return true
     }
   }
@@ -73,7 +77,7 @@ function isExcluded (callsite) {
   return false
 }
 
-function getFirstNonDDPathAndLine () {
-  return getFirstNonDDPathAndLineFromCallsites(getCallSiteInfo())
+function getFirstNonDDPathAndLine (externallyExcludedLocations) {
+  return getFirstNonDDPathAndLineFromCallsites(getCallSiteInfo(), externallyExcludedLocations)
 }
 module.exports = pathLine
