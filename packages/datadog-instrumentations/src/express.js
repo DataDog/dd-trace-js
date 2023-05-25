@@ -57,3 +57,26 @@ addHook({
     })
   })
 })
+
+const paramParserReadCh = channel('datadog:express:process_params:start')
+const wrapProcessParamsMethod = (requestPositionInArguments) => {
+  return (original) => {
+    return function () {
+      if (paramParserReadCh.hasSubscribers) {
+        paramParserReadCh.publish({ req: arguments[requestPositionInArguments] })
+      }
+
+      original.apply(this, arguments)
+    }
+  }
+}
+
+addHook({ name: 'express', versions: ['>=4.0.0 <4.3.0'] }, express => {
+  shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(1))
+  return express
+})
+
+addHook({ name: 'express', versions: ['>=4.3.0'] }, express => {
+  shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(2))
+  return express
+})
