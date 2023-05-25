@@ -21,10 +21,20 @@ const NUMERIC_LITERAL =
       INTEGER_NUMBER + EXPONENT
     ].join('|')
   })`
+const ORACLE_ESCAPED_LITERAL = 'q\'<.*?>\'|q\'\\(.*?\\)\'|q\'\\{.*?\\}\'|q\'\\[.*?\\]\'|q\'(?<ESCAPE>.).*?\\k<ESCAPE>\''
 
 class SqlSensitiveAnalyzer {
   constructor () {
     this._patterns = {
+      ANSI: new RegExp( // Default
+        [
+          NUMERIC_LITERAL,
+          STRING_LITERAL,
+          LINE_COMMENT,
+          BLOCK_COMMENT
+        ].join('|'),
+        'gmi'
+      ),
       MYSQL: new RegExp(
         [
           NUMERIC_LITERAL,
@@ -43,13 +53,26 @@ class SqlSensitiveAnalyzer {
           BLOCK_COMMENT
         ].join('|'),
         'gmi'
-      )
+      ),
+      ORACLE: new RegExp([
+        NUMERIC_LITERAL,
+        ORACLE_ESCAPED_LITERAL,
+        STRING_LITERAL,
+        LINE_COMMENT,
+        BLOCK_COMMENT
+      ].join('|'),
+      'gmi')
     }
+    this._patterns.SQLITE = this._patterns.MYSQL
+    this._patterns.MARIADB = this._patterns.MYSQL
   }
 
   extractSensitiveRanges (evidence) {
     try {
-      const pattern = this._patterns[evidence.dialect]
+      let pattern = this._patterns[evidence.dialect]
+      if (!pattern) {
+        pattern = this._patterns['ANSI']
+      }
       pattern.lastIndex = 0
       const tokens = []
 
