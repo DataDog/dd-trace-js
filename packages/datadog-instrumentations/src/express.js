@@ -58,12 +58,12 @@ addHook({
   })
 })
 
-const paramParserReadCh = channel('datadog:express:process_params:start')
+const processParamsStartCh = channel('datadog:express:process_params:start')
 const wrapProcessParamsMethod = (requestPositionInArguments) => {
   return (original) => {
     return function () {
-      if (paramParserReadCh.hasSubscribers) {
-        paramParserReadCh.publish({ req: arguments[requestPositionInArguments] })
+      if (processParamsStartCh.hasSubscribers) {
+        processParamsStartCh.publish({ req: arguments[requestPositionInArguments] })
       }
 
       original.apply(this, arguments)
