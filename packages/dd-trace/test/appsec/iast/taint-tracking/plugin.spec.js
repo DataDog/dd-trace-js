@@ -61,6 +61,10 @@ describe('IAST Taint tracking plugin', () => {
       )
     })
 
+    afterEach(() => {
+      taintTrackingOperations.removeTransaction(iastContext)
+    })
+
     it('Should taint full object', () => {
       const originType = 'ORIGIN_TYPE'
       const objToBeTainted = {
