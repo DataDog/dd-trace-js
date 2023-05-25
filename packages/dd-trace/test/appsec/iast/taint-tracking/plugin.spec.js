@@ -6,13 +6,15 @@ const taintTrackingOperations = require('../../../../src/appsec/iast/taint-track
 const dc = require('../../../../../diagnostics_channel')
 const {
   HTTP_REQUEST_COOKIE_VALUE,
-  HTTP_REQUEST_COOKIE_NAME
+  HTTP_REQUEST_COOKIE_NAME,
+  HTTP_REQUEST_PATH_PARAM
 } = require('../../../../src/appsec/iast/taint-tracking/origin-types')
 
 const middlewareNextChannel = dc.channel('apm:express:middleware:next')
 const queryParseFinishChannel = dc.channel('datadog:qs:parse:finish')
 const bodyParserFinishChannel = dc.channel('datadog:body-parser:read:finish')
 const cookieParseFinishCh = dc.channel('datadog:cookie:parse:finish')
+const processParamsStartCh = dc.channel('datadog:express:process_params:start')
 
 describe('IAST Taint tracking plugin', () => {
   let taintTrackingPlugin
@@ -202,6 +204,28 @@ describe('IAST Taint tracking plugin', () => {
         true,
         HTTP_REQUEST_COOKIE_NAME
       )
+    })
+
+    it('Should taint request params when process params event is published', () => {
+      const req = {
+        params: {
+          parameter1: 'tainted1'
+        }
+      }
+
+      processParamsStartCh.publish({ req })
+      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+        iastContext,
+        req.params,
+        HTTP_REQUEST_PATH_PARAM
+      )
+    })
+
+    it('Should not taint request params when process params event is published with non params request', () => {
+      const req = {}
+
+      processParamsStartCh.publish({ req })
+      expect(taintTrackingOperations.taintObject).to.not.be.called
     })
   })
 })

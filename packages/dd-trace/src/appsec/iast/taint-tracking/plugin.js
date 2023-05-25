@@ -49,7 +49,9 @@ class TaintTrackingPlugin extends Plugin {
     this.addSub(
       'datadog:express:process_params:start',
       ({ req }) => {
-        this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
+        if (req && req.params && typeof req.params === 'object') {
+          this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
+        }
       }
     )
   }
