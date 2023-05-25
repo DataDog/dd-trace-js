@@ -1,6 +1,6 @@
 'use strict'
 
-const intermediateCookiesAnalyzer = require('../../../../src/appsec/iast/analyzers/intermendiate-cookies-analyzer')
+const setCookiesHeaderInterceptor = require('../../../../src/appsec/iast/analyzers/set-cookies-header-interceptor')
 const dc = require('../../../../../diagnostics_channel')
 
 const iastSetCookieChannel = dc.channel('datadog:iast:set-cookie')
@@ -11,12 +11,12 @@ describe('Test IntermediateCookiesAnalyzer', () => {
 
   beforeEach(() => {
     setCookieCallback = sinon.stub()
-    intermediateCookiesAnalyzer.configure(true)
+    setCookiesHeaderInterceptor.configure(true)
     iastSetCookieChannel.subscribe(setCookieCallback)
   })
 
   afterEach(() => {
-    intermediateCookiesAnalyzer.configure(false)
+    setCookiesHeaderInterceptor.configure(false)
     iastSetCookieChannel.unsubscribe(setCookieCallback)
   })
 

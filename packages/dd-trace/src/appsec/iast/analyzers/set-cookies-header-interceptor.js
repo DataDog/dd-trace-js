@@ -1,10 +1,10 @@
 'use strict'
 
-const Analyzer = require('./vulnerability-analyzer')
 const dc = require('../../../../../diagnostics_channel')
+const Plugin = require('../../../plugins/plugin')
 const iastSetCookieChannel = dc.channel('datadog:iast:set-cookie')
 
-class IntermediateCookiesAnalyzer extends Analyzer {
+class SetCookiesHeaderInterceptor extends Plugin {
   constructor () {
     super()
     this.cookiesInRequest = new WeakMap()
@@ -45,4 +45,4 @@ class IntermediateCookiesAnalyzer extends Analyzer {
   }
 }
 
-module.exports = new IntermediateCookiesAnalyzer()
+module.exports = new SetCookiesHeaderInterceptor()
