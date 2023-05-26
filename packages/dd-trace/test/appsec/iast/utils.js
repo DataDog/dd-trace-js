@@ -63,9 +63,13 @@ function testInRequest (app, tests) {
 }
 
 function testOutsideRequestHasVulnerability (fnToTest, vulnerability) {
-  beforeEach(() => agent.load())
+  beforeEach((done) => {
+    agent.load().then(() => done(), err => done(err))
+  })
 
-  afterEach(() => agent.close({ ritmReset: false }))
+  afterEach((done) => {
+    agent.close({ ritmReset: false }).then(() => done(), err => done(err))
+  })
   beforeEach(() => {
     const tracer = require('../../..')
     iast.enable(new Config({
