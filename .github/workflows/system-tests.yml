@@ -42,7 +42,7 @@ jobs:
         run: ./build.sh
 
       - name: Run
-        run: ./run.sh
+        run: ./run.sh TRACER_ESSENTIAL_SCENARIOS
 
       - name: Compress artifact
         if: ${{ always() }}
