@@ -17,10 +17,11 @@ function testInRequest (app, tests) {
   let appListener
   const config = {}
 
-  beforeEach(() => {
-    return getPort().then(newPort => {
+  beforeEach((done) => {
+    getPort().then(newPort => {
       config.port = newPort
-    })
+      done()
+    }, err => done(err))
   })
 
   beforeEach(() => {
@@ -38,22 +39,24 @@ function testInRequest (app, tests) {
     }
   })
 
-  beforeEach(() => {
-    return agent.load('http', undefined, { flushInterval: 1 })
+  beforeEach((done) => {
+    agent.load('http', undefined, { flushInterval: 1 })
       .then(() => {
         http = require('http')
-      })
+        done()
+      }, err => done(err))
   })
 
   beforeEach(done => {
     const server = new http.Server(listener)
+    server.on('error', err => done(err))
     appListener = server
       .listen(config.port, 'localhost', () => done())
   })
 
-  afterEach(() => {
+  afterEach((done) => {
     appListener && appListener.close()
-    return agent.close({ ritmReset: false })
+    agent.close({ ritmReset: false }).then(() => done(), e => done(e))
   })
 
   tests(config)
@@ -126,11 +129,12 @@ function prepareTestServerForIast (description, tests) {
       }
     })
 
-    before(() => {
-      return agent.load('http', undefined, { flushInterval: 1 })
+    before((done) => {
+      agent.load('http', undefined, { flushInterval: 1 })
         .then(() => {
           http = require('http')
-        })
+          done()
+        }, err => done(err))
     })
 
     before(done => {
