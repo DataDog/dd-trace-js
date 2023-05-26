@@ -12,17 +12,15 @@ class ManualPlugin extends CiPlugin {
   constructor (...args) {
     super(...args)
     let activeTestSpan
-    this.addSub('ci:manual:test:start', (test) => {
-      activeTestSpan = this.startTestSpan(test)
+
+    this.addSub('ci:manual:test:start', ({ testName, testSuite }) => {
+      activeTestSpan = this.startTestSpan(testName, testSuite)
     })
-    this.addSub('ci:manual:test:end', ({ status }) => {
+    this.addSub('ci:manual:test:finish', ({ status }) => {
       activeTestSpan.setTag(TEST_STATUS, status)
       activeTestSpan.finish()
       finishAllTraceSpans(activeTestSpan)
     })
-  }
-  startTestSpan (testName) {
-    return super.startTestSpan(testName, 'my-test-file.js')
   }
 }
 
