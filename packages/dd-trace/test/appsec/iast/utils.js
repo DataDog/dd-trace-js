@@ -148,10 +148,14 @@ function prepareTestServerForIast (description, tests) {
     })
 
     beforeEach(() => {
+      console.time('vulnerabilityReporter.clearCache()')
       vulnerabilityReporter.clearCache()
+      const end =  process.hrtime.bigint()
+      console.timeEnd('vulnerabilityReporter.clearCache()')
     })
 
     beforeEach(() => {
+      console.time('iast.enable')
       iast.enable(new Config({
         experimental: {
           iast: {
@@ -162,6 +166,7 @@ function prepareTestServerForIast (description, tests) {
           }
         }
       }))
+      console.timeEnd('iast.enable')
     })
 
     afterEach(() => {
