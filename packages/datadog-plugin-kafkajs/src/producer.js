@@ -15,13 +15,17 @@ class KafkajsProducerPlugin extends ProducerPlugin {
 
     let pathwayCtx
     if (this.config.dsmEnabled) {
-      const active = this.activeSpan
+      let active
+      if (this.activeSpan.name == 'kafka.consume') {
+        active = this.activeSpan.name
+      }
       let parentHash
       let originTimestamp
       let prevTimestamp
       const currentTimestamp = Date.now()
       const checkpointString = getCheckpointString(service, env, topic)
       if (active) {
+        console.log('ACTIVE SPAN', active)
         const rootSpan = active.context()._trace.started[0];
         [ parentHash, originTimestamp, prevTimestamp ] =
         Hash.decodePathwayContext(rootSpan._spanContext._tags.metrics['dd-pathway-ctx'])

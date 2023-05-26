@@ -1,5 +1,5 @@
 
-const { SpanStatsEncoder } = require('../../encode/span-stats')
+const { LatencyStatsEncoder } = require('../../encode/latency-stats')
 
 const pkg = require('../../../../../package.json')
 
@@ -11,7 +11,7 @@ class Writer extends BaseWriter {
   constructor ({ url }) {
     super(...arguments)
     this._url = url
-    this._encoder = new SpanStatsEncoder(this)
+    this._encoder = new LatencyStatsEncoder(this)
   }
 
   _sendPayload (data, _, done) {

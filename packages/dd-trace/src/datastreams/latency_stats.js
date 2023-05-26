@@ -94,6 +94,7 @@ class LatencyStatsProcessor {
     this.enabled = dsmEnabled
     this.env = env
     this.tags = tags || {}
+    console.log('TAG', this.tags)
     this.sequence = 0
 
     if (this.enabled) {
