@@ -30,14 +30,14 @@ function newTaintedString (iastContext, string, name, type) {
   return result
 }
 
-function taintObject (iastContext, object, type, keyTainting, keyType) {
+function taintObject (iastContext, object, type) {
   let result = object
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
     const queue = [{ parent: null, property: null, value: object }]
     const visited = new WeakSet()
     while (queue.length > 0) {
-      const { parent, property, value, key } = queue.pop()
+      const { parent, property, value } = queue.pop()
       if (value === null) {
         continue
       }
@@ -47,23 +47,14 @@ function taintObject (iastContext, object, type, keyTainting, keyType) {
           if (!parent) {
             result = tainted
           } else {
-            if (keyTainting && key) {
-              const taintedProperty = TaintedUtils.newTaintedString(transactionId, key, property, keyType)
-              parent[taintedProperty] = tainted
-            } else {
-              parent[property] = tainted
-            }
+            parent[property] = tainted
           }
         } else if (typeof value === 'object' && !visited.has(value)) {
           visited.add(value)
           const keys = Object.keys(value)
           for (let i = 0; i < keys.length; i++) {
             const key = keys[i]
-            queue.push({ parent: value, property: property ? `${property}.${key}` : key, value: value[key], key })
-          }
-          if (parent && keyTainting && key) {
-            const taintedProperty = TaintedUtils.newTaintedString(transactionId, key, property, keyType)
-            parent[taintedProperty] = value
+            queue.push({ parent: value, property: property ? `${property}.${key}` : key, value: value[key] })
           }
         }
       } catch (e) {
