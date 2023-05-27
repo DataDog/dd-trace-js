@@ -1,7 +1,8 @@
 'use strict'
 
 const retry = require('retry')
-const { request } = require('http')
+const { request: httpRequest } = require('http')
+const { request: httpsRequest } = require('https')
 
 // TODO: avoid using dd-trace internals. Make this a separate module?
 const docker = require('../../exporters/common/docker')
@@ -12,6 +13,8 @@ const version = require('../../../../../package.json').version
 const containerId = docker.id()
 
 function sendRequest (options, form, callback) {
+  const request = options.protocol === 'https:' ? httpsRequest : httpRequest
+
   const store = storage.getStore()
   storage.enterWith({ noop: true })
   const req = request(options, res => {
