@@ -44,8 +44,8 @@ function block (req, res, rootSpan, abortController) {
       'appsec.blocked': 'true'
     })
 
-    if (blockingConfiguration && blockingConfiguration['type'] === 'block_request' &&
-      blockingConfiguration['parameters']['type'] === 'auto') {
+    if (blockingConfiguration && blockingConfiguration.type === 'block_request' &&
+        blockingConfiguration.parameters.type === 'auto') {
       res.statusCode = blockingConfiguration.parameters.status_code
     } else {
       res.statusCode = 403
