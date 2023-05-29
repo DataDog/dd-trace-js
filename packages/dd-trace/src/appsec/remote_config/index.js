@@ -63,6 +63,7 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSIONS, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
 
     rc.off('ASM_DATA', noop)
     rc.off('ASM_DD', noop)
