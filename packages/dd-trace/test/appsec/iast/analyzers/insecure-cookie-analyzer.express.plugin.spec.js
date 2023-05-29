@@ -63,7 +63,8 @@ describe('Insecure cookie vulnerability', () => {
         })
 
         testThatRequestHasNoVulnerability((req, res) => {
-          res.cookie('insecure', 'cookie', { secure: true })
+          res.cookie('secure', 'cookie', { secure: true })
+          res.clearCookie('deleteinsecure')
           res.header('set-cookie', 'other=secure; Secure')
           res.header('set-cookie', ['other=safe; Secure', 'more=safe2; Secure'])
         }, 'INSECURE_COOKIE')

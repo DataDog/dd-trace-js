@@ -38,5 +38,9 @@ describe('insecure cookie analyzer', () => {
       testThatRequestHasNoVulnerability((req, res) => {
         res.setHeader('set-cookie', 'key=value; Secure')
       }, INSECURE_COOKIE)
+
+      testThatRequestHasNoVulnerability((req, res) => {
+        res.setHeader('set-cookie', 'key=')
+      }, INSECURE_COOKIE)
     })
 })

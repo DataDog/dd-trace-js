@@ -9,8 +9,8 @@ class InsecureCookieAnalyzer extends Analyzer {
     this.addSub('datadog:iast:set-cookie', (cookieInfo) => this.analyze(cookieInfo))
   }
 
-  _isVulnerable ({ cookieProperties }) {
-    return !(cookieProperties && cookieProperties.map(x => x.toLowerCase().trim()).includes('secure'))
+  _isVulnerable ({ cookieProperties, cookieValue }) {
+    return cookieValue && !(cookieProperties && cookieProperties.map(x => x.toLowerCase().trim()).includes('secure'))
   }
 
   _getEvidence ({ cookieName }) {
