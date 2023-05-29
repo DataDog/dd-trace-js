@@ -5,10 +5,27 @@ const blockedTemplates = require('./blocked_templates')
 
 let templateHtml = blockedTemplates.html
 let templateJson = blockedTemplates.json
+let blockingConfiguration
 
 function block (req, res, rootSpan, abortController) {
   if (res.headersSent) {
     log.warn('Cannot send blocking response when headers have already been sent')
+    return
+  }
+
+  if (blockingConfiguration && blockingConfiguration.type === 'redirect_request') {
+    rootSpan.addTags({
+      'appsec.blocked': 'true'
+    })
+
+    res.writeHead(blockingConfiguration.parameters.status_code, {
+      'Location': blockingConfiguration.parameters.location
+    }).end()
+
+    if (abortController) {
+      abortController.abort()
+    }
+
     return
   }
 
@@ -30,7 +47,12 @@ function block (req, res, rootSpan, abortController) {
     'appsec.blocked': 'true'
   })
 
-  res.statusCode = 403
+  if (blockingConfiguration && blockingConfiguration['type'] === 'block_request' &&
+      blockingConfiguration['parameters']['type'] === 'auto') {
+    res.statusCode = blockingConfiguration.parameters.status_code
+  } else {
+    res.statusCode = 403
+  }
   res.setHeader('Content-Type', type)
   res.setHeader('Content-Length', Buffer.byteLength(body))
   res.end(body)
@@ -49,7 +71,16 @@ function setTemplates (config) {
   }
 }
 
+function updateBlockingConfiguration (newBlockingConfigurations) {
+  if (newBlockingConfigurations && newBlockingConfigurations.length) {
+    blockingConfiguration = newBlockingConfigurations[0]
+  } else {
+    blockingConfiguration = undefined
+  }
+}
+
 module.exports = {
   block,
-  setTemplates
+  setTemplates,
+  updateBlockingConfiguration
 }
