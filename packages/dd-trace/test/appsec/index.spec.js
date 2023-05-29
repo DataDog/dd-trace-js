@@ -608,6 +608,14 @@ describe('IP blocking', () => {
         })
       })
 
+      afterEach(() => {
+        RuleManager.updateWafFromRC({
+          toApply: [],
+          toModify: [],
+          toUnapply: [...toModify, ...toModifyCustomActions]
+        })
+      })
+
       it('Should block with custom status code and JSON content', () => {
         return axios.get(`http://localhost:${port}/`, {
           headers: {
