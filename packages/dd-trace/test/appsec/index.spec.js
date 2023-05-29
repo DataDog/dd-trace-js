@@ -609,11 +609,7 @@ describe('IP blocking', () => {
       })
 
       afterEach(() => {
-        RuleManager.updateWafFromRC({
-          toApply: [],
-          toModify: [],
-          toUnapply: [...toModify, ...toModifyCustomActions]
-        })
+        RuleManager.clearAllRules()
       })
 
       it('Should block with custom status code and JSON content', () => {
@@ -668,6 +664,10 @@ describe('IP blocking', () => {
           toApply: [],
           toModify: [...toModify, ...toModifyCustomActions]
         })
+      })
+
+      afterEach(() => {
+        RuleManager.clearAllRules()
       })
 
       it('Should block with redirect', () => {

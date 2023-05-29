@@ -247,6 +247,7 @@ function clearAllRules () {
   appliedRulesOverride.clear()
   appliedExclusions.clear()
   appliedCustomRules.clear()
+  appliedActions.clear()
 }
 
 module.exports = {
