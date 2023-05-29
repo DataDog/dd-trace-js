@@ -25,40 +25,38 @@ function block (req, res, rootSpan, abortController) {
     if (abortController) {
       abortController.abort()
     }
-
-    return
-  }
-
-  let type
-  let body
-
-  // parse the Accept header, ex: Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
-  const accept = req.headers.accept && req.headers.accept.split(',').map((str) => str.split(';', 1)[0].trim())
-
-  if (accept && accept.includes('text/html') && !accept.includes('application/json')) {
-    type = 'text/html; charset=utf-8'
-    body = templateHtml
   } else {
-    type = 'application/json'
-    body = templateJson
-  }
+    let type
+    let body
 
-  rootSpan.addTags({
-    'appsec.blocked': 'true'
-  })
+    // parse the Accept header, ex: Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
+    const accept = req.headers.accept && req.headers.accept.split(',').map((str) => str.split(';', 1)[0].trim())
 
-  if (blockingConfiguration && blockingConfiguration['type'] === 'block_request' &&
+    if (accept && accept.includes('text/html') && !accept.includes('application/json')) {
+      type = 'text/html; charset=utf-8'
+      body = templateHtml
+    } else {
+      type = 'application/json'
+      body = templateJson
+    }
+
+    rootSpan.addTags({
+      'appsec.blocked': 'true'
+    })
+
+    if (blockingConfiguration && blockingConfiguration['type'] === 'block_request' &&
       blockingConfiguration['parameters']['type'] === 'auto') {
-    res.statusCode = blockingConfiguration.parameters.status_code
-  } else {
-    res.statusCode = 403
-  }
-  res.setHeader('Content-Type', type)
-  res.setHeader('Content-Length', Buffer.byteLength(body))
-  res.end(body)
+      res.statusCode = blockingConfiguration.parameters.status_code
+    } else {
+      res.statusCode = 403
+    }
+    res.setHeader('Content-Type', type)
+    res.setHeader('Content-Length', Buffer.byteLength(body))
+    res.end(body)
 
-  if (abortController) {
-    abortController.abort()
+    if (abortController) {
+      abortController.abort()
+    }
   }
 }
 
