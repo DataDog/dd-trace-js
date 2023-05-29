@@ -7,7 +7,7 @@ let templateHtml = blockedTemplates.html
 let templateJson = blockedTemplates.json
 let blockingConfiguration
 
-function blockWithRedirect (rootSpan, res, abortController) {
+function blockWithRedirect (res, rootSpan, abortController) {
   rootSpan.addTags({
     'appsec.blocked': 'true'
   })
@@ -21,7 +21,7 @@ function blockWithRedirect (rootSpan, res, abortController) {
   }
 }
 
-function blockWithContent (req, rootSpan, res, abortController) {
+function blockWithContent (req, res, rootSpan, abortController) {
   let type
   let body
 
@@ -62,9 +62,9 @@ function block (req, res, rootSpan, abortController) {
   }
 
   if (blockingConfiguration && blockingConfiguration.type === 'redirect_request') {
-    blockWithRedirect(rootSpan, res, abortController)
+    blockWithRedirect(res, rootSpan, abortController)
   } else {
-    blockWithContent(req, rootSpan, res, abortController)
+    blockWithContent(req, res, rootSpan, abortController)
   }
 }
 
