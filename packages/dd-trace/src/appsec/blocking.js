@@ -7,6 +7,54 @@ let templateHtml = blockedTemplates.html
 let templateJson = blockedTemplates.json
 let blockingConfiguration
 
+function blockWithRedirect (rootSpan, res, abortController) {
+  rootSpan.addTags({
+    'appsec.blocked': 'true'
+  })
+
+  res.writeHead(blockingConfiguration.parameters.status_code, {
+    'Location': blockingConfiguration.parameters.location
+  }).end()
+
+  if (abortController) {
+    abortController.abort()
+  }
+}
+
+function blockWithContent (req, rootSpan, res, abortController) {
+  let type
+  let body
+
+  // parse the Accept header, ex: Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
+  const accept = req.headers.accept && req.headers.accept.split(',').map((str) => str.split(';', 1)[0].trim())
+
+  if (accept && accept.includes('text/html') && !accept.includes('application/json')) {
+    type = 'text/html; charset=utf-8'
+    body = templateHtml
+  } else {
+    type = 'application/json'
+    body = templateJson
+  }
+
+  rootSpan.addTags({
+    'appsec.blocked': 'true'
+  })
+
+  if (blockingConfiguration && blockingConfiguration.type === 'block_request' &&
+    blockingConfiguration.parameters.type === 'auto') {
+    res.statusCode = blockingConfiguration.parameters.status_code
+  } else {
+    res.statusCode = 403
+  }
+  res.setHeader('Content-Type', type)
+  res.setHeader('Content-Length', Buffer.byteLength(body))
+  res.end(body)
+
+  if (abortController) {
+    abortController.abort()
+  }
+}
+
 function block (req, res, rootSpan, abortController) {
   if (res.headersSent) {
     log.warn('Cannot send blocking response when headers have already been sent')
@@ -14,49 +62,9 @@ function block (req, res, rootSpan, abortController) {
   }
 
   if (blockingConfiguration && blockingConfiguration.type === 'redirect_request') {
-    rootSpan.addTags({
-      'appsec.blocked': 'true'
-    })
-
-    res.writeHead(blockingConfiguration.parameters.status_code, {
-      'Location': blockingConfiguration.parameters.location
-    }).end()
-
-    if (abortController) {
-      abortController.abort()
-    }
+    blockWithRedirect(rootSpan, res, abortController)
   } else {
-    let type
-    let body
-
-    // parse the Accept header, ex: Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
-    const accept = req.headers.accept && req.headers.accept.split(',').map((str) => str.split(';', 1)[0].trim())
-
-    if (accept && accept.includes('text/html') && !accept.includes('application/json')) {
-      type = 'text/html; charset=utf-8'
-      body = templateHtml
-    } else {
-      type = 'application/json'
-      body = templateJson
-    }
-
-    rootSpan.addTags({
-      'appsec.blocked': 'true'
-    })
-
-    if (blockingConfiguration && blockingConfiguration.type === 'block_request' &&
-        blockingConfiguration.parameters.type === 'auto') {
-      res.statusCode = blockingConfiguration.parameters.status_code
-    } else {
-      res.statusCode = 403
-    }
-    res.setHeader('Content-Type', type)
-    res.setHeader('Content-Length', Buffer.byteLength(body))
-    res.end(body)
-
-    if (abortController) {
-      abortController.abort()
-    }
+    blockWithContent(req, rootSpan, res, abortController)
   }
 }
 
