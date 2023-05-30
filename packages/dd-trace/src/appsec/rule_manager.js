@@ -239,6 +239,7 @@ function copyRulesData (rulesData) {
 
 function clearAllRules () {
   waf.destroy()
+  blocking.updateBlockingConfiguration(undefined)
 
   defaultRules = undefined
 

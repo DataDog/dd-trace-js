@@ -73,6 +73,7 @@ describe('AppSec Rule Manager', () => {
 
       clearAllRules()
       expect(waf.destroy).to.have.been.calledOnce
+      expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly(undefined)
     })
   })
 
