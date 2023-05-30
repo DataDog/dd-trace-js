@@ -1,0 +1,11 @@
+name: Start the Datadog APM TestAgent 2
+
+on:
+  workflow_call:
+
+jobs:
+  start_testagent_other:
+    name: Start the Datadog APM Test Agent
+    runs-on: ubuntu-latest
+    steps:
+      - run: docker-compose up -d testagent

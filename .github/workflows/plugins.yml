@@ -23,12 +23,12 @@ jobs:
   start_testagent:
     uses: ./.github/workflows/start-testagent.yml
 
-  # start_testagent_remote:
-  #   uses: DataDog/dd-trace-js/.github/workflows/start-testagent.yml@v1
+  start_testagent_other:
+    uses: ./.github/workflows/start-testagent-other.yml
 
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
-    needs: start_testagent
+    needs: start_testagent_other
     services:
       qpid:
         image: scholzj/qpid-cpp:1.38.0
@@ -51,7 +51,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: always()
-        run: docker logs ${{ needs.start_testagent.outputs.container_id }} # Display the log output of the testagent container
+        run: docker-compose logs -f testagent # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   amqplib:

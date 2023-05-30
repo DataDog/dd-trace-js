@@ -25,6 +25,7 @@ jobs:
     outputs:
       container_id: ${{ steps.get_container_id.outputs.container_id }}
     steps:
+      # - run: docker-compose up -d testagent
       - name: Get TestAgent Container ID
         id: get_container_id
         run: echo "container_id=${{ job.services.testagent.id }}" >> $GITHUB_OUTPUT
