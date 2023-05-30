@@ -22,6 +22,8 @@ module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
 
+    this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
+
     this.addSub(`ci:${this.constructor.id}:itr-configuration`, ({ onDone }) => {
       if (!this.tracer._exporter || !this.tracer._exporter.getItrConfiguration) {
         return onDone({ err: new Error('CI Visibility was not initialized correctly') })

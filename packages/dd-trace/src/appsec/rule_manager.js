@@ -9,6 +9,7 @@ let appliedRulesData = new Map()
 let appliedRulesetId
 let appliedRulesOverride = new Map()
 let appliedExclusions = new Map()
+let appliedCustomRules = new Map()
 
 function applyRules (rules, config) {
   defaultRules = rules
@@ -24,6 +25,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   let newRulesetId
   const newRulesOverride = new SpyMap(appliedRulesOverride)
   const newExclusions = new SpyMap(appliedExclusions)
+  const newCustomRules = new SpyMap(appliedCustomRules)
 
   for (const item of toUnapply) {
     const { product, id } = item
@@ -33,11 +35,11 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     } else if (product === 'ASM_DD') {
       if (appliedRulesetId === id) {
         newRuleset = defaultRules
-        newRulesetId = null
       }
     } else if (product === 'ASM') {
       newRulesOverride.delete(id)
       newExclusions.delete(id)
+      newCustomRules.delete(id)
     }
   }
 
@@ -51,7 +53,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
 
       batch.add(item)
     } else if (product === 'ASM_DD') {
-      if (appliedRulesetId && appliedRulesetId !== id) {
+      if (appliedRulesetId && appliedRulesetId !== id && newRuleset !== defaultRules) {
         item.apply_state = ERROR
         item.apply_error = 'Multiple ruleset received in ASM_DD'
       } else {
@@ -73,6 +75,10 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
         newExclusions.set(id, file.exclusions)
       }
 
+      if (file && file.custom_rules && file.custom_rules.length) {
+        newCustomRules.set(id, file.custom_rules)
+      }
+
       batch.add(item)
     }
   }
@@ -80,7 +86,11 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   let newApplyState = ACKNOWLEDGED
   let newApplyError
 
-  if (newRulesData.modified || newRuleset || newRulesOverride.modified || newExclusions.modified) {
+  if (newRulesData.modified ||
+    newRuleset ||
+    newRulesOverride.modified ||
+    newExclusions.modified ||
+    newCustomRules.modified) {
     const payload = newRuleset || {}
 
     if (newRulesData.modified) {
@@ -91,6 +101,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     }
     if (newExclusions.modified) {
       payload.exclusions = concatArrays(newExclusions)
+    }
+    if (newCustomRules.modified) {
+      payload.custom_rules = concatArrays(newCustomRules)
     }
 
     try {
@@ -107,6 +120,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       }
       if (newExclusions.modified) {
         appliedExclusions = newExclusions
+      }
+      if (newCustomRules.modified) {
+        appliedCustomRules = newCustomRules
       }
     } catch (err) {
       newApplyState = ERROR
@@ -200,12 +216,13 @@ function copyRulesData (rulesData) {
 function clearAllRules () {
   waf.destroy()
 
-  defaultRules = null
+  defaultRules = undefined
 
   appliedRulesData.clear()
-  appliedRulesetId = null
+  appliedRulesetId = undefined
   appliedRulesOverride.clear()
   appliedExclusions.clear()
+  appliedCustomRules.clear()
 }
 
 module.exports = {
