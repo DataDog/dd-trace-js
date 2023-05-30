@@ -8,4 +8,5 @@ jobs:
     name: Start the Datadog APM Test Agent
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v2
       - run: docker-compose up -d testagent
