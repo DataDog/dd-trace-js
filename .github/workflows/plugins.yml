@@ -23,8 +23,8 @@ jobs:
   start_testagent:
     uses: ./.github/workflows/start-testagent.yml
 
-  start_testagent_remote:
-    uses: DataDog/dd-trace-js/.github/workflows/start-testagent.yml@v1
+  # start_testagent_remote:
+  #   uses: DataDog/dd-trace-js/.github/workflows/start-testagent.yml@v1
 
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
@@ -56,7 +56,7 @@ jobs:
 
   amqplib:
     runs-on: ubuntu-latest
-    needs: start_testagent_remote
+    needs: start_testagent
     services:
       rabbitmq:
         image: rabbitmq:3.6-alpine
@@ -76,7 +76,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: always()
-        run: docker logs ${{ needs.start_testagent_remote.outputs.container_id }} # Display the log output of the testagent container
+        run: docker logs ${{ needs.start_testagent.outputs.container_id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   aws-sdk:
