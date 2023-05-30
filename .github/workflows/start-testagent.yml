@@ -6,7 +6,7 @@ on:
     outputs:
       container_id:
         description: "Container ID of TestAgent"
-        value: ${{ steps.start_testagent.outputs.container_id }}
+        value: ${{ jobs.start_testagent.outputs.container_id }}
 
 jobs:
   start_testagent:
