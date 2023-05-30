@@ -21,7 +21,7 @@ env:
 
 jobs:
   start_testagent:
-    uses: .github/workflows/start-testagent.yml@v1
+    uses: ./github/workflows/start-testagent.yml@v1
 
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
