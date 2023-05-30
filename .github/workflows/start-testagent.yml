@@ -27,4 +27,4 @@ jobs:
     steps:
       - name: Get TestAgent Container ID
         id: get_container_id
-        run: echo "container_id=${{ jobs.services.testagent.id }}" >> $GITHUB_OUTPUT
+        run: echo "container_id=${{ services.testagent.id }}" >> $GITHUB_OUTPUT
