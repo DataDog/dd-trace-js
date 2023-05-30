@@ -7,6 +7,9 @@ const { storage } = require('../../../../../datadog-core')
 const { getIastContext } = require('../iast-context')
 const { addVulnerability } = require('../vulnerability-reporter')
 
+const EXCLUDED_PATHS = ['node_modules/mysql2', 'node_modules/sequelize', 'node_modules\\mysql2',
+  'node_modules\\sequelize']
+
 class SqlInjectionAnalyzer extends InjectionAnalyzer {
   constructor () {
     super(SQL_INJECTION)
@@ -63,9 +66,8 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
       addVulnerability(context, vulnerability)
     }
   }
-
   _getExcludedPaths () {
-    return ['node_modules/mysql2', 'node_modules/sequelize']
+    return EXCLUDED_PATHS
   }
 }
 
