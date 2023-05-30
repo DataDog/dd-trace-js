@@ -21,16 +21,10 @@ env:
 
 jobs:
   start_testagent:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: ./.github/workflows/start-testagent.yml@v1
+    uses: ./.github/workflows/start-testagent.yml@v1
 
   start_testagent_remote:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: DataDog/dd-trace-js/.github/workflows/start-testagent.yml@v1
+    uses: DataDog/dd-trace-js/.github/workflows/start-testagent.yml@v1
 
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
