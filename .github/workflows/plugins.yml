@@ -21,7 +21,7 @@ env:
 
 jobs:
   start_testagent:
-    uses: ./.github/workflows/start-testagent.yml@v1
+    uses: ./.github/workflows/start-testagent.yml
 
   start_testagent_remote:
     uses: DataDog/dd-trace-js/.github/workflows/start-testagent.yml@v1
