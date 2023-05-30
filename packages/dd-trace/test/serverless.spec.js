@@ -13,7 +13,7 @@ describe('Serverless', () => {
   // so maybeStartServerlessMiniAgent thinks the default mini agent binary path exists
   const existsSyncStub = sinon.stub(fs, 'existsSync').returns(true)
 
-  sinon.stub(process, 'platform').value('linux'); // the mini agent will only spawn in linux + windows
+  sinon.stub(process, 'platform').value('linux') // the mini agent will only spawn in linux + windows
 
   let env
   let proxy
