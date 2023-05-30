@@ -27,6 +27,7 @@ class NativeWallProfiler {
     // Bind to this so the same value can be used to unsubscribe later
     this._enter = this._enter.bind(this)
     this._exit = this._exit.bind(this)
+    this._logger = options.logger
   }
 
   resetStack () {
@@ -37,6 +38,11 @@ class NativeWallProfiler {
   }
 
   start ({ mapper } = {}) {
+    if (this._hotspots && !this._emittedFFMessage && this._logger) {
+      this._logger.debug(`Wall profiler: Enable config_trace_show_breakdown_profiling_for_node feature flag to see code hotspots.`)
+      this._emittedFFMessage = true
+    }
+
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
 
