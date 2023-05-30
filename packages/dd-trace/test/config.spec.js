@@ -817,6 +817,16 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
   })
 
+  it('should not set DD_TRACE_TELEMETRY_ENABLED if AzureWebJobsScriptRoot and FUNCTIONS_EXTENSION_VERSION are present', () => {
+    // AzureWebJobsScriptRoot and FUNCTIONS_EXTENSION_VERSION env vars indicate an azure function
+    process.env.AzureWebJobsScriptRoot = '/home/site/wwwroot'
+    process.env.FUNCTIONS_EXTENSION_VERSION = '4'
+
+    const config = new Config()
+
+    expect(config.telemetry.enabled).to.be.false
+  })
+
   it('should set telemetry default values', () => {
     const config = new Config()
 
@@ -890,6 +900,16 @@ describe('Config', () => {
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
     process.env.K_SERVICE = 'function_name'
     process.env.FUNCTION_TARGET = 'function_target'
+
+    const config = new Config()
+
+    expect(config.remoteConfig.enabled).to.be.false
+  })
+
+  it('should not set DD_REMOTE_CONFIGURATION_ENABLED if AzureWebJobsScriptRoot and FUNCTIONS_EXTENSION_VERSION are present', () => {
+    // AzureWebJobsScriptRoot and FUNCTIONS_EXTENSION_VERSION env vars indicate an azure function
+    process.env.AzureWebJobsScriptRoot = '/home/site/wwwroot'
+    process.env.FUNCTIONS_EXTENSION_VERSION = '4'
 
     const config = new Config()
 
