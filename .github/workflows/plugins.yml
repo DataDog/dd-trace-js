@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: ./.github/workflows/start-testagent.yml@v1
+      - uses: ./.github/workflows/start-testagent
 
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
