@@ -53,10 +53,10 @@ describe('AppSec Rule Manager', () => {
       applyRules(testRules, config.appsec)
 
       expect(waf.init).to.have.been.calledOnceWithExactly(testRules, config.appsec)
-      expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly([{
+      expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly({
         id: 'block',
         otherParam: 'other'
-      }])
+      })
     })
 
     it('should throw if null/undefined are passed', () => {
@@ -458,11 +458,11 @@ describe('AppSec Rule Manager', () => {
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
 
         expect(waf.update).not.to.have.been.called
-        expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly([
+        expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly(
           {
             id: 'block',
             otherParam: 'other'
-          }])
+          })
       })
 
       it('should unapply blocking actions', () => {
@@ -499,7 +499,7 @@ describe('AppSec Rule Manager', () => {
         updateWafFromRC({ toUnapply, toApply: [], toModify: [] })
 
         expect(waf.update).not.to.have.been.called
-        expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly([])
+        expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly(undefined)
       })
 
       it('should ignore other properties', () => {

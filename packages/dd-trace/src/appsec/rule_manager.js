@@ -19,7 +19,7 @@ function applyRules (rules, config) {
   waf.init(rules, config)
 
   if (rules.actions) {
-    blocking.updateBlockingConfiguration(rules.actions.filter(action => action.id === 'block'))
+    blocking.updateBlockingConfiguration(rules.actions.find(action => action.id === 'block'))
   }
 }
 
@@ -155,7 +155,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   }
 
   if (newActions.modified) {
-    blocking.updateBlockingConfiguration(concatArrays(newActions).filter(action => action.id === 'block'))
+    blocking.updateBlockingConfiguration(concatArrays(newActions).find(action => action.id === 'block'))
     appliedActions = newActions
   }
 }

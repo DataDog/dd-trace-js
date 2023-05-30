@@ -145,14 +145,14 @@ describe('blocking', () => {
     }
 
     it('should block with default html template and custom status', () => {
-      updateBlockingConfiguration([{
+      updateBlockingConfiguration({
         id: 'block',
         type: 'block_request',
         parameters: {
           status_code: 401,
           type: 'auto'
         }
-      }])
+      })
       req.headers.accept = 'text/html'
       setTemplates(config)
 
@@ -163,14 +163,14 @@ describe('blocking', () => {
     })
 
     it('should block with default json template and custom status', () => {
-      updateBlockingConfiguration([{
+      updateBlockingConfiguration({
         id: 'block',
         type: 'block_request',
         parameters: {
           status_code: 401,
           type: 'auto'
         }
-      }])
+      })
       setTemplates(config)
 
       block(req, res, rootSpan)
@@ -180,14 +180,14 @@ describe('blocking', () => {
     })
 
     it('should block with custom redirect', () => {
-      updateBlockingConfiguration([{
+      updateBlockingConfiguration({
         id: 'block',
         type: 'redirect_request',
         parameters: {
           status_code: 301,
           location: '/you-have-been-blocked'
         }
-      }])
+      })
       setTemplates(config)
 
       block(req, res, rootSpan)

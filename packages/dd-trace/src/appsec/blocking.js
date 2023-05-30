@@ -77,12 +77,8 @@ function setTemplates (config) {
   }
 }
 
-function updateBlockingConfiguration (newBlockingConfigurations) {
-  if (newBlockingConfigurations && newBlockingConfigurations.length) {
-    blockingConfiguration = newBlockingConfigurations[0]
-  } else {
-    blockingConfiguration = undefined
-  }
+function updateBlockingConfiguration (newBlockingConfiguration) {
+  blockingConfiguration = newBlockingConfiguration
 }
 
 module.exports = {
