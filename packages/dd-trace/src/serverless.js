@@ -1,21 +1,23 @@
 'use strict'
 
 function maybeStartServerlessMiniAgent (config) {
-  let rustBinaryPath;
+  const log = require('./log')
+
+  let rustBinaryPath
   if (process.env.DD_MINI_AGENT_PATH !== undefined) {
     rustBinaryPath = process.env.DD_MINI_AGENT_PATH
   } else {
-    if (process.platform != 'win32' && process.platform != 'linux') {
+    if (process.platform !== 'win32' && process.platform !== 'linux') {
       log.error(`Serverless Mini Agent is only supported on Windows and Linux.`)
       return
     }
-    let rustBinaryPathRoot = config.isGCPFunction ? '/workspace' : '/home/site/wwwroot'
-    let rustBinaryPathOsFolder = process.platform === 'win32' ? 'datadog-serverless-agent-windows-amd64' : 'datadog-serverless-agent-linux-amd64'
+    const rustBinaryPathRoot = config.isGCPFunction ? '/workspace' : '/home/site/wwwroot'
+    const rustBinaryPathOsFolder =
+      process.platform === 'win32' ? 'datadog-serverless-agent-windows-amd64' : 'datadog-serverless-agent-linux-amd64'
     rustBinaryPath =
       `${rustBinaryPathRoot}/node_modules/@datadog/sma/${rustBinaryPathOsFolder}/datadog-serverless-trace-mini-agent`
   }
 
-  const log = require('./log')
   const fs = require('fs')
 
   // trying to spawn with an invalid path will return a non-descriptive error, so we want to catch
