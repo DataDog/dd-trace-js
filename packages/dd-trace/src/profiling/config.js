@@ -36,7 +36,8 @@ class Config {
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
-      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES
+      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED
     } = process.env
 
     const enabled = isTrue(coalesce(options.enabled, DD_PROFILING_ENABLED, true))
@@ -110,6 +111,8 @@ class Config {
     const profilers = options.profilers
       ? options.profilers
       : getProfilers({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS })
+    this.hotspots = isTrue(coalesce(options.hotspots,
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, false))
 
     this.profilers = ensureProfilers(profilers, this)
   }
