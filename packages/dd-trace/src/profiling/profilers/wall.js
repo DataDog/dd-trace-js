@@ -20,6 +20,7 @@ class NativeWallProfiler {
     this.type = 'wall'
     this._samplingInterval = options.samplingInterval || 1e6 / 99 // 99hz
     this._flushInterval = options.flushInterval || 60 * 1000 // 60 seconds
+    this._hotspots = options.hotspots
     this._mapper = undefined
     this._pprof = undefined
 
@@ -49,11 +50,12 @@ class NativeWallProfiler {
 
     this.resetStack()
     this._record()
-    this._enter()
-    beforeCh.subscribe(this._enter)
-    afterCh.subscribe(this._exit)
-    incomingHttpRequestStart.subscribe(this._enter)
-    incomingHttpRequestEnd.subscribe(this._exit)
+    if (this._hotspots) {
+      beforeCh.subscribe(this._enter)
+      afterCh.subscribe(this._exit)
+      incomingHttpRequestStart.subscribe(this._enter)
+      incomingHttpRequestEnd.subscribe(this._exit)
+    }
   }
 
   markAsSampled (span) {
@@ -72,7 +74,7 @@ class NativeWallProfiler {
   }
 
   _enter () {
-    if (!this._stop) return
+    if (!this._setLabels) return
 
     const lastSpan = this._currentSpan
     this.markAsSampled(lastSpan)
@@ -98,7 +100,7 @@ class NativeWallProfiler {
   }
 
   _exit () {
-    if (!this._stop) return
+    if (!this._setLabels) return
 
     this.markAsSampled(this._currentSpan)
     this._currentSpan = this._spanStack.pop()
@@ -119,19 +121,29 @@ class NativeWallProfiler {
     this._stop()
     this._stop = undefined
     this._setLabels = undefined
-    beforeCh.unsubscribe(this._enter)
-    afterCh.unsubscribe(this._exit)
-    incomingHttpRequestStart.unsubscribe(this._enter)
-    incomingHttpRequestEnd.unsubscribe(this._exit)
-    this.resetStack()
+    this._labelsCaptured = undefined
+    if (this._hotspots) {
+      beforeCh.unsubscribe(this._enter)
+      afterCh.unsubscribe(this._exit)
+      incomingHttpRequestStart.unsubscribe(this._enter)
+      incomingHttpRequestEnd.unsubscribe(this._exit)
+      this.resetStack()
+    }
   }
 
   _record () {
-    const { stop, setLabels, labelsCaptured } = this._pprof.time.start(
-      this._samplingInterval, this._flushInterval, null, this._mapper, false)
-    this._stop = stop
-    this._setLabels = setLabels
-    this._labelsCaptured = labelsCaptured
+    if (this._hotspots) {
+      const { stop, setLabels, labelsCaptured } = this._pprof.time.startWithLabels(
+        this._samplingInterval, this._flushInterval, null, this._mapper, false)
+      this._stop = stop
+      this._setLabels = setLabels
+      this._labelsCaptured = labelsCaptured
+    } else {
+      this._stop = this._pprof.time.start(
+        this._samplingInterval, null, this._mapper, false)
+      this._setLabels = undefined
+      this._labelsCaptured = undefined
+    }
   }
 }
 
