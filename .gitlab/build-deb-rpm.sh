@@ -13,6 +13,7 @@ fpm --input-type npm \
   --npm-package-name-prefix "" \
   --output-type dir --prefix "" \
   --version "$JS_PACKAGE_VERSION" \
+  --verbose \
   --name dd-trace dd-trace
 
 cp auto_inject-node.version dd-trace.dir/lib/version
