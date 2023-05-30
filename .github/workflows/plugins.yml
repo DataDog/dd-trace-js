@@ -20,18 +20,13 @@ env:
 
 
 jobs:
+  start_testagent:
+    uses: .github/workflows/start-testagent.yml@v1
+
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
+    needs: start_testagent
     services:
-      testagent:
-        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
-        ports:
-          - "127.0.0.1:9126:9126"
-        env:
-          LOG_LEVEL: DEBUG
-          TRACE_LANGUAGE: javascript
-          DISABLED_CHECKS: trace_content_length
-          PORT: 9126
       qpid:
         image: scholzj/qpid-cpp:1.38.0
         env:
@@ -53,21 +48,13 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: always()
-        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
+        run: docker logs ${{ needs.start_testagent.outputs.container_id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   amqplib:
     runs-on: ubuntu-latest
+    needs: start_testagent
     services:
-      testagent:
-        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
-        ports:
-          - "127.0.0.1:9126:9126"
-        env:
-          LOG_LEVEL: DEBUG
-          TRACE_LANGUAGE: javascript
-          DISABLED_CHECKS: trace_content_length
-          PORT: 9126
       rabbitmq:
         image: rabbitmq:3.6-alpine
         ports:
@@ -86,7 +73,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: always()
-        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
+        run: docker logs ${{ needs.start_testagent.outputs.container_id }} # Display the log output of the testagent container
       - uses: codecov/codecov-action@v2
 
   aws-sdk:

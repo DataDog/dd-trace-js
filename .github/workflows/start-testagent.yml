@@ -1,0 +1,30 @@
+name: Start the Datadog APM TestAgent
+
+on:
+  workflow_call:
+    # Map the workflow outputs to job outputs
+    outputs:
+      container_id:
+        description: "Container ID of TestAgent"
+        value: ${{ steps.start_testagent.outputs.container_id }}
+
+jobs:
+  start_testagent:
+    name: Start the Datadog APM Test Agent
+    runs-on: ubuntu-latest
+    services:
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        ports:
+          - "127.0.0.1:9126:9126"
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
+    outputs:
+      container_id: ${{ steps.get_container_id.outputs.container_id }}
+    steps:
+      - name: Get TestAgent Container ID
+        id: get_container_id
+        run: echo "container_id=${{ jobs.services.testagent.id }}" >> $GITHUB_OUTPUT
