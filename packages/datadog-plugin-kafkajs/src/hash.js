@@ -9,27 +9,27 @@ function getConnectionHash (checkpointString) {
   return Buffer.from(hash.hex(), 'hex')
 }
 
-function getPathwayHash (checkpointString, parentHash) {
+function computeHash (checkpointString, parentHash) {
   const currentHash = getConnectionHash(checkpointString)
   const buf = Buffer.concat([ currentHash, parentHash ], 16)
   return getConnectionHash(buf.toString())
 }
 
-function encodePathwayContext (pathwayHash, timeSinceOrigin, timeSincePrev) {
-  return Buffer.concat([ pathwayHash, encodeVarint(timeSinceOrigin), encodeVarint(timeSincePrev) ], 20)
+function encodePathwayContext (pathwayHash, pathwayStartNs, edgeStartNs) {
+  return Buffer.concat([ pathwayHash, encodeVarint(pathwayStartNs / 1e6), encodeVarint(edgeStartNs / 1e6) ], 20)
 }
 
 function decodePathwayContext (pathwayContext) {
   const pathwayHash = pathwayContext.subarray(0, 8)
   const encodedTimestamps = pathwayContext.subarray(8)
-  const [timeSinceOrigin, encodedTimeSincePrev] = decodeVarint(encodedTimestamps)
-  const [timeSincePrev] = decodeVarint(encodedTimeSincePrev)
-  return [ pathwayHash, timeSinceOrigin, timeSincePrev ]
+  const [pathwayStartMs, encodedTimeSincePrev] = decodeVarint(encodedTimestamps)
+  const [edgeStartMs] = decodeVarint(encodedTimeSincePrev)
+  return [ pathwayHash, pathwayStartMs * 1e6, edgeStartMs * 1e6 ]
 }
 
 module.exports = {
   getConnectionHash,
-  getPathwayHash,
+  getPathwayHash: computeHash,
   encodePathwayContext,
   decodePathwayContext
 }

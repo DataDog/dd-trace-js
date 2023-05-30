@@ -2,6 +2,7 @@
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const Hash = require('./hash')
+const { encodePathwayContext } = require('./hash')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
@@ -15,43 +16,46 @@ class KafkajsProducerPlugin extends ProducerPlugin {
 
     let pathwayCtx
     if (this.config.dsmEnabled) {
-      let active
-      if (this.activeSpan.name == 'kafka.consume') {
-        active = this.activeSpan.name
-      }
+      // todo[piochelepiotr] How is context propagated in javascript? Especially in await/async functions?
+      // let active
+      // if (this.activeSpan.name == 'kafka.consume') {
+      //   active = this.activeSpan.name
+      // }
       let parentHash
-      let originTimestamp
-      let prevTimestamp
-      const currentTimestamp = Date.now()
+      let pathwayStartNs
+      let edgeStartNs
+      const nowNs = Date.now() * 1e6
       const checkpointString = getCheckpointString(service, env, topic)
-      if (active) {
-        console.log('ACTIVE SPAN', active)
-        const rootSpan = active.context()._trace.started[0];
-        [ parentHash, originTimestamp, prevTimestamp ] =
-        Hash.decodePathwayContext(rootSpan._spanContext._tags.metrics['dd-pathway-ctx'])
-      } else {
-        parentHash = ENTRY_PARENT_HASH
-        originTimestamp = currentTimestamp
-        prevTimestamp = currentTimestamp
-      }
+      // if (active) {
+      //   console.log('ACTIVE SPAN', active)
+      //   const rootSpan = active.context()._trace.started[0];
+      //   [ parentHash, pathwayStartNs, edgeStartNs ] =
+      //   Hash.decodePathwayContext(rootSpan._spanContext._tags.metrics['dd-pathway-ctx'])
+      // } else {
+      //   parentHash = ENTRY_PARENT_HASH
+      //   pathwayStartNs = nowNs
+      //   edgeStartNs = nowNs
+      // }
+      parentHash = ENTRY_PARENT_HASH
+      pathwayStartNs = nowNs
+      edgeStartNs = nowNs
 
-      const pathwayHash = Hash.getPathwayHash(checkpointString, parentHash)
+      // todo[piochelepiotr] the hash computation should be done in the core tracer
+      const hash = Hash.getPathwayHash(checkpointString, parentHash)
 
-      const edgeLatency = currentTimestamp - prevTimestamp
-      const pathwayLatency = currentTimestamp - originTimestamp
-      pathwayCtx = Hash.encodePathwayContext(pathwayHash, originTimestamp, currentTimestamp)
+      const edgeLatencyNs = nowNs - edgeStartNs
+      const pathwayLatencyNs = nowNs - pathwayStartNs
+      // pathwayCtx = Hash.encodePathwayContext(pathwayHash, pathwayStartNs, nowNs)
 
       const checkpoint = {
-        currentTimestamp: currentTimestamp,
-        metrics: {
-          'parent_hash': parentHash,
-          'edge_tags': ['direction:out', `topic:${topic}`, 'type:kafka'],
-          'dd-pathway-ctx': pathwayCtx,
-          'edge_latency': edgeLatency,
-          'pathway_latency': pathwayLatency
-        }
+        currentTimestamp: nowNs,
+        parentHash: parentHash,
+        hash: hash,
+        edgeTags: ['direction:out', `topic:${topic}`, 'type:kafka'],
+        edgeLatencyNs: edgeLatencyNs,
+        pathwayLatencyNs: pathwayLatencyNs
       }
-
+      this.config.dataStreamsProcessor.setCheckpoint()
       this.config.latencyStatsProcessor.recordCheckpoint(checkpoint)
     }
 
@@ -70,7 +74,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
 
     for (const message of messages) {
       if (typeof message === 'object') {
-        if (this.config.dsmEnabled) message.headers['dd-pathway-ctx'] = pathwayCtx
+        if (this.config.dsmEnabled) message.headers['dd-pathway-ctx'] = encodePathwayContext(hash, pathwayStartNs, edgeStatsNs)
         this.tracer.inject(span, 'text_map', message.headers)
       }
     }

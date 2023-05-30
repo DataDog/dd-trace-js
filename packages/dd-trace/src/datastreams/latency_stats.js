@@ -1,62 +1,48 @@
 const os = require('os')
 const pkg = require('../../../../package.json')
-const { decodePathwayContext } = require('../../../datadog-plugin-kafkajs/src/hash')
+const Uint64 = require('int64-buffer').Uint64BE
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 
-const { LatencyStatsExporter } = require('../exporters/latency-stats')
+const { DataStreamsWriter } = require('./writer')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
-class AggStats {
-  constructor (aggKey) {
-    this.hash = aggKey.hash
-    this.parentHash = aggKey.parentHash
-    this.edgeTags = aggKey.edgeTags
+class StatsPoint {
+  constructor (hash, parentHash, edgeTags) {
+    console.log("hash is ", hash)
+    console.log("parent hash is ", parentHash)
+    this.hash = new Uint64(hash)
+    this.parentHash = new Uint64(parentHash)
+    this.edgeTags = edgeTags
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
   }
 
-  record (checkpoint) {
-    const edgeLatency = checkpoint.metrics.edge_latency
-    const pathwayLatency = checkpoint.metrics.pathway_latency
-    this.edgeLatency.accept(edgeLatency)
-    this.pathwayLatency.accept(pathwayLatency)
+  addLatencies (checkpoint) {
+    const edgeLatencySec = checkpoint.edgeLatencyNs / 1e9
+    const pathwayLatencySec = checkpoint.pathwayLatencyNs / 1e9
+    this.edgeLatency.accept(edgeLatencySec)
+    this.pathwayLatency.accept(pathwayLatencySec)
   }
 
-  toJSON () {
+  encode () {
     return {
       Hash: this.hash,
       ParentHash: this.parentHash,
       EdgeTags: this.edgeTags,
-      EdgeLatency: this.edgeLatency.toProto(), // TODO: custom proto encoding
-      PathwayLatency: this.pathwayLatency.toProto() // TODO: custom proto encoding
+      EdgeLatency: this.edgeLatency.toProto(),
+      PathwayLatency: this.pathwayLatency.toProto()
     }
   }
 }
 
-class AggKey {
-  constructor (checkpoint) {
-    this.hash = decodePathwayContext(checkpoint.metrics['dd-pathway-ctx'])[0]
-    this.parentHash = checkpoint.metrics.parent_hash
-    this.edgeTags = checkpoint.metrics.edge_tags
-  }
-
-  toString () {
-    return [
-      this.hash.toString(),
-      this.parentHash.toString()
-    ].join(',')
-  }
-}
-
-class SpanBuckets extends Map {
+class StatsBucket extends Map {
   forCheckpoint (checkpoint) {
-    const aggKey = new AggKey(checkpoint)
-    const key = aggKey.toString()
+    const key = checkpoint.hash
     // also include parentHash, edgeTags in ddsketch
     if (!this.has(key)) {
-      this.set(key, new AggStats(aggKey)) // StatsPoint
+      this.set(key, new StatsPoint(aggKey)) // StatsPoint
     }
 
     return this.get(key)
@@ -66,14 +52,14 @@ class SpanBuckets extends Map {
 class TimeBuckets extends Map {
   forTime (time) {
     if (!this.has(time)) {
-      this.set(time, new SpanBuckets())
+      this.set(time, new StatsBucket())
     }
 
     return this.get(time)
   }
 }
 
-class LatencyStatsProcessor {
+class DataStreamsProcessor {
   constructor ({
     dsmEnabled,
     hostname,
@@ -82,10 +68,9 @@ class LatencyStatsProcessor {
     env,
     tags
   } = {}) {
-    this.exporter = new LatencyStatsExporter({
+    this.writer = new DataStreamsWriter({
       hostname,
       port,
-      tags,
       url
     })
     this.bucketSizeNs = 1e10
@@ -94,53 +79,56 @@ class LatencyStatsProcessor {
     this.enabled = dsmEnabled
     this.env = env
     this.tags = tags || {}
+    this.service = this.tags.service || 'unnamed-nodejs-service'
     console.log('TAG', this.tags)
     this.sequence = 0
 
     if (this.enabled) {
-      this.timer = setInterval(this.onInterval.bind(this), 10000) // TODO: the right interval?
+      this.timer = setInterval(this.onInterval.bind(this), 10000) // TODO[piochelepiotr] Update to 10s
       this.timer.unref()
     }
   }
 
   onInterval () {
+    console.log('serializing buckets')
     const serialized = this._serializeBuckets()
     if (!serialized) return
-
-    this.exporter.export({
+    const payload = {
       Env: this.env,
-      Service: this.service, // exists?
-      PrimaryTag: this.tags,
+      Service: this.service,
       Stats: serialized,
       TracerVersion: pkg.version,
       Lang: 'javascript'
-    })
+    }
+    this.writer.flush(payload)
   }
 
   recordCheckpoint (checkpoint) {
     if (!this.enabled) return
+    console.log('setting checkpoint', checkpoint)
 
-    const bucketTime = checkpoint.currentTimestamp - (checkpoint.currentTimestamp % this.bucketSizeNs)
+    const bucketTime = Math.round(checkpoint.currentTimestamp - (checkpoint.currentTimestamp % this.bucketSizeNs))
+    console.log('bucketTime', bucketTime)
 
     this.buckets.forTime(bucketTime)
       .forCheckpoint(checkpoint)
-      .record(checkpoint)
+      .addLatencies(checkpoint)
   }
 
   _serializeBuckets () {
     const serializedBuckets = []
 
     for (const [ timeNs, bucket ] of this.buckets.entries()) {
-      const bucketAggStats = []
+      const points = []
 
       for (const stats of bucket.values()) {
-        bucketAggStats.push(stats.toJSON())
+        points.push(stats.encode())
       }
 
       serializedBuckets.push({
-        Start: timeNs,
-        Duration: this.bucketSizeNs,
-        Stats: bucketAggStats
+        Start: new Uint64(timeNs),
+        Duration: new Uint64(this.bucketSizeNs),
+        Stats: points
       })
     }
 
@@ -151,9 +139,9 @@ class LatencyStatsProcessor {
 }
 
 module.exports = {
-  LatencyStatsProcessor,
+  LatencyStatsProcessor: DataStreamsProcessor,
   AggKey,
-  AggStats,
-  SpanBuckets,
+  AggStats: StatsPoint,
+  SpanBuckets: StatsBucket,
   TimeBuckets
 }

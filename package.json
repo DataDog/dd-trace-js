@@ -89,6 +89,7 @@
     "module-details-from-path": "^1.0.3",
     "node-abort-controller": "^3.0.1",
     "opentracing": ">=0.12.1",
+    "pako": "^2.1.0",
     "path-to-regexp": "^0.1.2",
     "protobufjs": "^7.1.2",
     "retry": "^0.10.1",

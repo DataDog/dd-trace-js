@@ -154,7 +154,7 @@ module.exports = class PluginManager {
     sharedConfig.site = site
     sharedConfig.url = url
     // TODO: pass this to kafkajs plugin another way
-    sharedConfig.latencyStatsProcessor = this._latencyProcessor
+    sharedConfig.dataStreamsProcessor = this._latencyProcessor
 
     return sharedConfig
   }
