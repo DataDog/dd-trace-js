@@ -123,8 +123,10 @@ function endResponse (res, appResult) {
       res.end()
     })
   } else {
-    res.writeHead(200)
-    res.end()
+    if (!res.headersSent) {
+      res.writeHead(200)
+      res.end()
+    }
   }
 }
 
