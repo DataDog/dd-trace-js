@@ -37,12 +37,12 @@ class DatabasePlugin extends StoragePlugin {
     `ddps='${encodedDdps}',ddpv='${encodedDdpv}'`
   }
 
-  injectDbmQuery (query, serviceName) {
+  injectDbmQuery (query, serviceName, isPreparedStatement = false) {
     if (this.config.dbmPropagationMode === 'disabled') {
       return query
     }
     const servicePropagation = this.createDBMPropagationCommentService(serviceName)
-    if (this.config.dbmPropagationMode === 'service') {
+    if (isPreparedStatement || this.config.dbmPropagationMode === 'service') {
       return `/*${servicePropagation}*/ ${query}`
     } else if (this.config.dbmPropagationMode === 'full') {
       this.activeSpan.setTag('_dd.dbm_trace_injected', 'true')
