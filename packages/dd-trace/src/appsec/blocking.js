@@ -12,7 +12,12 @@ function blockWithRedirect (res, rootSpan, abortController) {
     'appsec.blocked': 'true'
   })
 
-  res.writeHead(blockingConfiguration.parameters.status_code, {
+  let statusCode = blockingConfiguration.parameters.status_code
+  if (!statusCode || statusCode < 300 || statusCode >= 400) {
+    statusCode = 303
+  }
+
+  res.writeHead(statusCode, {
     'Location': blockingConfiguration.parameters.location
   }).end()
 
@@ -28,12 +33,22 @@ function blockWithContent (req, res, rootSpan, abortController) {
   // parse the Accept header, ex: Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
   const accept = req.headers.accept && req.headers.accept.split(',').map((str) => str.split(';', 1)[0].trim())
 
-  if (accept && accept.includes('text/html') && !accept.includes('application/json')) {
-    type = 'text/html; charset=utf-8'
-    body = templateHtml
+  if (!blockingConfiguration || blockingConfiguration.parameters.type === 'auto') {
+    if (accept && accept.includes('text/html') && !accept.includes('application/json')) {
+      type = 'text/html; charset=utf-8'
+      body = templateHtml
+    } else {
+      type = 'application/json'
+      body = templateJson
+    }
   } else {
-    type = 'application/json'
-    body = templateJson
+    if (blockingConfiguration.parameters.type === 'html') {
+      type = 'text/html; charset=utf-8'
+      body = templateHtml
+    } else {
+      type = 'application/json'
+      body = templateJson
+    }
   }
 
   rootSpan.addTags({
@@ -41,7 +56,7 @@ function blockWithContent (req, res, rootSpan, abortController) {
   })
 
   if (blockingConfiguration && blockingConfiguration.type === 'block_request' &&
-    blockingConfiguration.parameters.type === 'auto') {
+    blockingConfiguration.parameters.status_code) {
     res.statusCode = blockingConfiguration.parameters.status_code
   } else {
     res.statusCode = 403
@@ -61,7 +76,7 @@ function block (req, res, rootSpan, abortController) {
     return
   }
 
-  if (blockingConfiguration && blockingConfiguration.type === 'redirect_request') {
+  if (blockingConfiguration && blockingConfiguration.type === 'redirect_request' && blockingConfiguration.parameters.location) {
     blockWithRedirect(res, rootSpan, abortController)
   } else {
     blockWithContent(req, res, rootSpan, abortController)

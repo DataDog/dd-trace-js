@@ -162,6 +162,42 @@ describe('blocking', () => {
       expect(res.statusCode).to.be.equal(401)
     })
 
+    it('should block with default json template and custom status when type is forced to json and accept is html', () => {
+      updateBlockingConfiguration({
+        id: 'block',
+        type: 'block_request',
+        parameters: {
+          status_code: 401,
+          type: 'json'
+        }
+      })
+      req.headers.accept = 'text/html'
+      setTemplates(config)
+
+      block(req, res, rootSpan)
+
+      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+      expect(res.statusCode).to.be.equal(401)
+    })
+
+    it('should block with default html template and custom status when type is forced to html and accept is html', () => {
+      updateBlockingConfiguration({
+        id: 'block',
+        type: 'block_request',
+        parameters: {
+          status_code: 401,
+          type: 'html'
+        }
+      })
+      req.headers.accept = 'text/html'
+      setTemplates(config)
+
+      block(req, res, rootSpan)
+
+      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
+      expect(res.statusCode).to.be.equal(401)
+    })
+
     it('should block with default json template and custom status', () => {
       updateBlockingConfiguration({
         id: 'block',
@@ -176,6 +212,40 @@ describe('blocking', () => {
       block(req, res, rootSpan)
 
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+      expect(res.statusCode).to.be.equal(401)
+    })
+
+    it('should block with default json template and custom status when type is forced to json and accept is not defined', () => {
+      updateBlockingConfiguration({
+        id: 'block',
+        type: 'block_request',
+        parameters: {
+          status_code: 401,
+          type: 'json'
+        }
+      })
+      setTemplates(config)
+
+      block(req, res, rootSpan)
+
+      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+      expect(res.statusCode).to.be.equal(401)
+    })
+
+    it('should block with default html template and custom status when type is forced to html and accept is not defined', () => {
+      updateBlockingConfiguration({
+        id: 'block',
+        type: 'block_request',
+        parameters: {
+          status_code: 401,
+          type: 'html'
+        }
+      })
+      setTemplates(config)
+
+      block(req, res, rootSpan)
+
+      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
       expect(res.statusCode).to.be.equal(401)
     })
 
