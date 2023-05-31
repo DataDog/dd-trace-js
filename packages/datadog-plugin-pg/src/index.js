@@ -27,7 +27,7 @@ class PGPlugin extends DatabasePlugin {
       }
     })
 
-    query.text = this.injectDbmQuery(query.text, service)
+    query.text = this.injectDbmQuery(query.text, service, !!query.name)
   }
 }
 
