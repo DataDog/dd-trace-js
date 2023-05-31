@@ -1,8 +1,16 @@
 'use strict'
 
+require('../setup/tap')
+
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const id = require('../../src/id')
+
+function randString (length) {
+  return Array.from({ length }, () => {
+    return String.fromCharCode(Math.floor(Math.random() * 256))
+  }).join('')
+}
 
 describe('encode 0.5', () => {
   let encoder
@@ -84,8 +92,11 @@ describe('encode 0.5', () => {
     expect(encoder.count()).to.equal(2)
   })
 
-  it('should flush when the payload size limit is reached', () => {
-    data[0].meta.foo = new Array(8 * 1024 * 1024).join('a')
+  it('should flush when the payload size limit is reached', function () {
+    // Make 8mb of data
+    for (let i = 0; i < 8 * 1024; i++) {
+      data[0].meta[`foo${i}`] = randString(1024)
+    }
 
     encoder.encode(data)
 

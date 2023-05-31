@@ -1,30 +1,36 @@
 'use strict'
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
-const Chunk = require('./chunk')
 const { AgentEncoder } = require('./0.4')
 const { version: ddTraceVersion } = require('../../../../package.json')
-
+const id = require('../../../dd-trace/src/id')
 const ENCODING_VERSION = 1
 
+const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
+
+const TEST_SUITE_KEYS_LENGTH = 12
+const TEST_MODULE_KEYS_LENGTH = 11
+const TEST_SESSION_KEYS_LENGTH = 10
+
+const INTAKE_SOFT_LIMIT = 2 * 1024 * 1024 // 2MB
+
 function formatSpan (span) {
+  let encodingVersion = ENCODING_VERSION
+  if (span.type === 'test' && span.meta && span.meta.test_session_id) {
+    encodingVersion = 2
+  }
   return {
-    type: span.type === 'test' ? 'test' : 'span',
-    version: ENCODING_VERSION,
+    type: ALLOWED_CONTENT_TYPES.includes(span.type) ? span.type : 'span',
+    version: encodingVersion,
     content: normalizeSpan(truncateSpan(span))
   }
 }
 
 class AgentlessCiVisibilityEncoder extends AgentEncoder {
-  constructor ({ runtimeId, service, env }) {
-    super(...arguments)
-    this._events = []
+  constructor (writer, { runtimeId, service, env }) {
+    super(writer, INTAKE_SOFT_LIMIT)
     this.runtimeId = runtimeId
     this.service = service
     this.env = env
-    this._traceBytes = new Chunk()
-    this._stringBytes = new Chunk()
-    this._stringCount = 0
-    this._stringMap = {}
 
     // Used to keep track of the number of encoded events to update the
     // length of `payload.events` when calling `makePayload`
@@ -33,8 +39,107 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this.reset()
   }
 
+  _encodeTestSuite (bytes, content) {
+    this._encodeMapPrefix(bytes, TEST_SUITE_KEYS_LENGTH)
+    this._encodeString(bytes, 'type')
+    this._encodeString(bytes, content.type)
+
+    this._encodeString(bytes, 'test_session_id')
+    this._encodeId(bytes, content.trace_id)
+
+    this._encodeString(bytes, 'test_module_id')
+    this._encodeId(bytes, content.parent_id)
+
+    this._encodeString(bytes, 'test_suite_id')
+    this._encodeId(bytes, content.span_id)
+
+    this._encodeString(bytes, 'error')
+    this._encodeNumber(bytes, content.error)
+    this._encodeString(bytes, 'name')
+    this._encodeString(bytes, content.name)
+    this._encodeString(bytes, 'service')
+    this._encodeString(bytes, content.service)
+    this._encodeString(bytes, 'resource')
+    this._encodeString(bytes, content.resource)
+    this._encodeString(bytes, 'start')
+    this._encodeNumber(bytes, content.start)
+    this._encodeString(bytes, 'duration')
+    this._encodeNumber(bytes, content.duration)
+    this._encodeString(bytes, 'meta')
+    this._encodeMap(bytes, content.meta)
+    this._encodeString(bytes, 'metrics')
+    this._encodeMap(bytes, content.metrics)
+  }
+
+  _encodeTestModule (bytes, content) {
+    this._encodeMapPrefix(bytes, TEST_MODULE_KEYS_LENGTH)
+    this._encodeString(bytes, 'type')
+    this._encodeString(bytes, content.type)
+
+    this._encodeString(bytes, 'test_session_id')
+    this._encodeId(bytes, content.trace_id)
+
+    this._encodeString(bytes, 'test_module_id')
+    this._encodeId(bytes, content.span_id)
+
+    this._encodeString(bytes, 'error')
+    this._encodeNumber(bytes, content.error)
+    this._encodeString(bytes, 'name')
+    this._encodeString(bytes, content.name)
+    this._encodeString(bytes, 'service')
+    this._encodeString(bytes, content.service)
+    this._encodeString(bytes, 'resource')
+    this._encodeString(bytes, content.resource)
+    this._encodeString(bytes, 'start')
+    this._encodeNumber(bytes, content.start)
+    this._encodeString(bytes, 'duration')
+    this._encodeNumber(bytes, content.duration)
+    this._encodeString(bytes, 'meta')
+    this._encodeMap(bytes, content.meta)
+    this._encodeString(bytes, 'metrics')
+    this._encodeMap(bytes, content.metrics)
+  }
+
+  _encodeTestSession (bytes, content) {
+    this._encodeMapPrefix(bytes, TEST_SESSION_KEYS_LENGTH)
+    this._encodeString(bytes, 'type')
+    this._encodeString(bytes, content.type)
+
+    this._encodeString(bytes, 'test_session_id')
+    this._encodeId(bytes, content.trace_id)
+
+    this._encodeString(bytes, 'error')
+    this._encodeNumber(bytes, content.error)
+    this._encodeString(bytes, 'name')
+    this._encodeString(bytes, content.name)
+    this._encodeString(bytes, 'service')
+    this._encodeString(bytes, content.service)
+    this._encodeString(bytes, 'resource')
+    this._encodeString(bytes, content.resource)
+    this._encodeString(bytes, 'start')
+    this._encodeNumber(bytes, content.start)
+    this._encodeString(bytes, 'duration')
+    this._encodeNumber(bytes, content.duration)
+    this._encodeString(bytes, 'meta')
+    this._encodeMap(bytes, content.meta)
+    this._encodeString(bytes, 'metrics')
+    this._encodeMap(bytes, content.metrics)
+  }
+
   _encodeEventContent (bytes, content) {
-    this._encodeMapPrefix(bytes, content)
+    const keysLength = Object.keys(content).length
+
+    let totalKeysLength = keysLength
+    if (content.meta.test_session_id) {
+      totalKeysLength = totalKeysLength + 1
+    }
+    if (content.meta.test_module_id) {
+      totalKeysLength = totalKeysLength + 1
+    }
+    if (content.meta.test_suite_id) {
+      totalKeysLength = totalKeysLength + 1
+    }
+    this._encodeMapPrefix(bytes, totalKeysLength)
     if (content.type) {
       this._encodeString(bytes, 'type')
       this._encodeString(bytes, content.type)
@@ -57,6 +162,33 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeNumber(bytes, content.start)
     this._encodeString(bytes, 'duration')
     this._encodeNumber(bytes, content.duration)
+    /**
+     * We include `test_session_id` and `test_suite_id`
+     * in the root of the event by passing them via the `meta` dict.
+     * This is to avoid changing the span format in packages/dd-trace/src/format.js,
+     * which can have undesired side effects in other products.
+     * But `test_session_id` and `test_suite_id` are *not* supposed to be in `meta`,
+     * so we delete them before enconding the dictionary.
+     * TODO: find a better way to do this.
+     */
+    if (content.meta.test_session_id) {
+      this._encodeString(bytes, 'test_session_id')
+      this._encodeId(bytes, id(content.meta.test_session_id, 10))
+      delete content.meta.test_session_id
+    }
+
+    if (content.meta.test_module_id) {
+      this._encodeString(bytes, 'test_module_id')
+      this._encodeId(bytes, id(content.meta.test_module_id, 10))
+      delete content.meta.test_module_id
+    }
+
+    if (content.meta.test_suite_id) {
+      this._encodeString(bytes, 'test_suite_id')
+      this._encodeId(bytes, id(content.meta.test_suite_id, 10))
+      delete content.meta.test_suite_id
+    }
+
     this._encodeString(bytes, 'meta')
     this._encodeMap(bytes, content.meta)
     this._encodeString(bytes, 'metrics')
@@ -64,7 +196,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeEvent (bytes, event) {
-    this._encodeMapPrefix(bytes, event)
+    this._encodeMapPrefix(bytes, Object.keys(event).length)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, event.type)
 
@@ -72,7 +204,15 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeNumber(bytes, event.version)
 
     this._encodeString(bytes, 'content')
-    this._encodeEventContent(bytes, event.content)
+    if (event.type === 'span' || event.type === 'test') {
+      this._encodeEventContent(bytes, event.content)
+    } else if (event.type === 'test_suite_end') {
+      this._encodeTestSuite(bytes, event.content)
+    } else if (event.type === 'test_module_end') {
+      this._encodeTestModule(bytes, event.content)
+    } else if (event.type === 'test_session_end') {
+      this._encodeTestSession(bytes, event.content)
+    }
   }
 
   _encodeNumber (bytes, value) {
@@ -89,41 +229,34 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     const lo = value >>> 0
     const flag = isPositive ? 0xcf : 0xd3
 
-    const buffer = bytes.buffer
     const offset = bytes.length
 
     // int 64
     bytes.reserve(9)
     bytes.length += 9
 
-    buffer[offset] = flag
-    buffer[offset + 1] = hi >> 24
-    buffer[offset + 2] = hi >> 16
-    buffer[offset + 3] = hi >> 8
-    buffer[offset + 4] = hi
-    buffer[offset + 5] = lo >> 24
-    buffer[offset + 6] = lo >> 16
-    buffer[offset + 7] = lo >> 8
-    buffer[offset + 8] = lo
-  }
-
-  _encodeMapPrefix (bytes, map) {
-    const keys = Object.keys(map)
-    const buffer = bytes.buffer
-    const offset = bytes.length
-
-    bytes.reserve(5)
-    bytes.length += 5
-    buffer[offset] = 0xdf
-    buffer[offset + 1] = keys.length >> 24
-    buffer[offset + 2] = keys.length >> 16
-    buffer[offset + 3] = keys.length >> 8
-    buffer[offset + 4] = keys.length
+    bytes.buffer[offset] = flag
+    bytes.buffer[offset + 1] = hi >> 24
+    bytes.buffer[offset + 2] = hi >> 16
+    bytes.buffer[offset + 3] = hi >> 8
+    bytes.buffer[offset + 4] = hi
+    bytes.buffer[offset + 5] = lo >> 24
+    bytes.buffer[offset + 6] = lo >> 16
+    bytes.buffer[offset + 7] = lo >> 8
+    bytes.buffer[offset + 8] = lo
   }
 
   _encode (bytes, trace) {
-    this._eventCount += trace.length
-    const events = trace.map(formatSpan)
+    const rawEvents = trace.map(formatSpan)
+
+    const testSessionEvents = rawEvents.filter(
+      event => event.type === 'test_session_end' || event.type === 'test_suite_end' || event.type === 'test_module_end'
+    )
+
+    const isTestSessionTrace = !!testSessionEvents.length
+    const events = isTestSessionTrace ? testSessionEvents : rawEvents
+
+    this._eventCount += events.length
 
     for (const event of events) {
       this._encodeEvent(bytes, event)
@@ -144,7 +277,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     const traceSize = bytes.length
     const buffer = Buffer.allocUnsafe(traceSize)
 
-    bytes.buffer.copy(buffer, 0, 0, bytes.length)
+    bytes.buffer.copy(buffer, 0, 0, traceSize)
 
     this.reset()
 
@@ -171,11 +304,11 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       payload.metadata['*']['runtime-id'] = this.runtimeId
     }
 
-    this._encodeMapPrefix(bytes, payload)
+    this._encodeMapPrefix(bytes, Object.keys(payload).length)
     this._encodeString(bytes, 'version')
     this._encodeNumber(bytes, payload.version)
     this._encodeString(bytes, 'metadata')
-    this._encodeMapPrefix(bytes, payload.metadata)
+    this._encodeMapPrefix(bytes, Object.keys(payload.metadata).length)
     this._encodeString(bytes, '*')
     this._encodeMap(bytes, payload.metadata['*'])
     this._encodeString(bytes, 'events')

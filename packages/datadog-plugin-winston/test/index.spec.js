@@ -45,7 +45,7 @@ describe('Plugin', () => {
   let span
   let logServer
 
-  async function setup (version, winstonConfiguration) {
+  async function setupTest (version, winstonConfiguration) {
     span = tracer.startSpan('test')
 
     winston = proxyquire(`../../../versions/winston@${version}`, {}).get()
@@ -63,6 +63,7 @@ describe('Plugin', () => {
     }
 
     Transport.prototype.log = log
+    Transport.prototype.name = 'dd'
 
     transport = new Transport()
     httpTransport = new winston.transports.Http({
@@ -96,6 +97,14 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
+        if (!winston.configure) {
+          winston.remove('dd')
+          winston.remove('http')
+          winston.add(winston.transports.Console)
+        }
+      })
+
+      afterEach(() => {
         return agent.close({ ritmReset: false })
       })
 
@@ -105,7 +114,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          return setup(version)
+          return setupTest(version)
         })
 
         afterEach(() => logServer.close())
@@ -133,7 +142,7 @@ describe('Plugin', () => {
 
         describe('without formatting', () => {
           beforeEach(() => {
-            return setup(version)
+            return setupTest(version)
           })
 
           afterEach(() => logServer.close())
@@ -223,26 +232,33 @@ describe('Plugin', () => {
             })
           }
 
-          it('should overwrite any existing "dd" property', async () => {
-            const meta = {
-              dd: {
-                trace_id: span.context().toTraceId(),
-                span_id: span.context().toSpanId()
-              }
-            }
-
+          it('should not overwrite any existing "dd" property', async () => {
             tracer.scope().activate(span, () => {
-              const logObj = {
-                some: 'data',
+              const meta = {
                 dd: 'something else'
               }
-              winston.info(logObj)
-              expect(logObj.dd).to.equal('something else')
+              winston.log('info', 'test', meta)
+              expect(meta.dd).to.equal('something else')
 
-              expect(spy).to.have.been.calledWithMatch(meta.dd)
+              expect(spy).to.have.been.calledWithMatch('something else')
             })
-            expect(await logServer.logPromise).to.include(meta.dd)
+            expect(await logServer.logPromise).to.include('something else')
           })
+
+          // New versions clone the meta object so it's always extensible.
+          if (semver.intersects(version, '<3')) {
+            it('should not add "dd" property to non-extensible objects', async () => {
+              tracer.scope().activate(span, () => {
+                const meta = {}
+                Object.preventExtensions(meta)
+                winston.log('info', 'test', meta)
+                expect(meta.dd).to.be.undefined
+
+                expect(spy).to.have.been.calledWith()
+              })
+              expect(await logServer.logPromise).to.be.undefined
+            })
+          }
 
           it('should skip injection without a store', async () => {
             expect(() => winston.info('message')).to.not.throw()
@@ -255,9 +271,9 @@ describe('Plugin', () => {
               const splatConfiguration = {
                 format: winston.format.combine(...[winston.format.splat(), winston.format.json()])
               }
-              return setup(version, splatConfiguration)
+              return setupTest(version, splatConfiguration)
             } else {
-              return setup(version)
+              return setupTest(version)
             }
           })
 

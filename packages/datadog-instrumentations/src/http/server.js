@@ -1,5 +1,6 @@
 'use strict'
 
+const { AbortController } = require('node-abort-controller') // AbortController is not available in node <15
 const {
   channel,
   addHook
@@ -7,9 +8,11 @@ const {
 const shimmer = require('../../../datadog-shimmer')
 
 const startServerCh = channel('apm:http:server:request:start')
-const endServerCh = channel('apm:http:server:request:end')
+const exitServerCh = channel('apm:http:server:request:exit')
 const errorServerCh = channel('apm:http:server:request:error')
-const asyncEndServerCh = channel('apm:http:server:request:finish')
+const finishServerCh = channel('apm:http:server:request:finish')
+
+const requestFinishedSet = new WeakSet()
 
 addHook({ name: 'https' }, http => {
   // http.ServerResponse not present on https
@@ -29,8 +32,9 @@ function wrapResponseEmit (emit) {
       return emit.apply(this, arguments)
     }
 
-    if (eventName === 'finish') {
-      asyncEndServerCh.publish({ req: this.req })
+    if (['finish', 'close'].includes(eventName) && !requestFinishedSet.has(this)) {
+      finishServerCh.publish({ req: this.req })
+      requestFinishedSet.add(this)
     }
 
     return emit.apply(this, arguments)
@@ -44,16 +48,23 @@ function wrapEmit (emit) {
 
     if (eventName === 'request') {
       res.req = req
-      startServerCh.publish({ req, res })
+
+      const abortController = new AbortController()
+
+      startServerCh.publish({ req, res, abortController })
 
       try {
+        if (abortController.signal.aborted) {
+          // TODO: should this always return true ?
+          return this.listenerCount(eventName) > 0
+        }
         return emit.apply(this, arguments)
       } catch (err) {
         errorServerCh.publish(err)
 
         throw err
       } finally {
-        endServerCh.publish(undefined)
+        exitServerCh.publish({ req })
       }
     }
     return emit.apply(this, arguments)

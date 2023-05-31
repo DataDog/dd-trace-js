@@ -3,6 +3,9 @@
 const { expect } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+
+const namingSchema = require('./naming')
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
@@ -24,14 +27,14 @@ describe('Plugin', () => {
           } = require(`../../../versions/kafkajs@${version}`).get()
           kafka = new Kafka({
             clientId: `kafkajs-test-${version}`,
-            brokers: ['localhost:9092']
+            brokers: ['127.0.0.1:9092']
           })
         })
         describe('producer', () => {
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: 'kafka.produce',
-              service: 'test-kafka',
+              name: namingSchema.send.opName,
+              service: namingSchema.send.serviceName,
               meta: {
                 'span.kind': 'producer',
                 'component': 'kafkajs'
@@ -51,7 +54,7 @@ describe('Plugin', () => {
 
           it('should be instrumented w/ error', async () => {
             const producer = kafka.producer()
-            const resourceName = 'kafka.produce'
+            const resourceName = namingSchema.send.opName
 
             let error
 
@@ -60,15 +63,16 @@ describe('Plugin', () => {
 
               expect(span).to.include({
                 name: resourceName,
-                service: 'test-kafka',
+                service: namingSchema.send.serviceName,
                 resource: resourceName,
                 error: 1
               })
 
               expect(span.meta).to.include({
-                'error.type': error.name,
-                'error.msg': error.message,
-                'error.stack': error.stack
+                [ERROR_TYPE]: error.name,
+                [ERROR_MESSAGE]: error.message,
+                [ERROR_STACK]: error.stack,
+                'component': 'kafkajs'
               })
             })
 
@@ -84,6 +88,12 @@ describe('Plugin', () => {
               return expectedSpanPromise
             }
           })
+
+          withNamingSchema(
+            async () => sendMessages(kafka, testTopic, messages),
+            () => namingSchema.send.opName,
+            () => namingSchema.send.serviceName
+          )
         })
         describe('consumer', () => {
           let consumer
@@ -96,10 +106,11 @@ describe('Plugin', () => {
           afterEach(async () => {
             await consumer.disconnect()
           })
+
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: 'kafka.consume',
-              service: 'test-kafka',
+              name: namingSchema.receive.opName,
+              service: namingSchema.receive.serviceName,
               meta: {
                 'span.kind': 'consumer',
                 'component': 'kafkajs'
@@ -116,6 +127,7 @@ describe('Plugin', () => {
 
             return expectedSpanPromise
           })
+
           it('should run the consumer in the context of the consumer span', done => {
             const firstSpan = tracer.scope().active()
 
@@ -124,7 +136,7 @@ describe('Plugin', () => {
 
               try {
                 expect(currentSpan).to.not.equal(firstSpan)
-                expect(currentSpan.context()._name).to.equal('kafka.consume')
+                expect(currentSpan.context()._name).to.equal(namingSchema.receive.opName)
                 done()
               } catch (e) {
                 done(e)
@@ -159,12 +171,13 @@ describe('Plugin', () => {
           it('should be instrumented w/ error', async () => {
             const fakeError = new Error('Oh No!')
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: 'kafka.consume',
-              service: 'test-kafka',
+              name: namingSchema.receive.opName,
+              service: namingSchema.receive.serviceName,
               meta: {
-                'error.type': fakeError.name,
-                'error.msg': fakeError.message,
-                'error.stack': fakeError.stack
+                [ERROR_TYPE]: fakeError.name,
+                [ERROR_MESSAGE]: fakeError.message,
+                [ERROR_STACK]: fakeError.stack,
+                'component': 'kafkajs'
               },
               resource: testTopic,
               error: 1,
@@ -205,6 +218,15 @@ describe('Plugin', () => {
               .then(() => sendMessages(kafka, testTopic, messages))
               .catch(done)
           })
+
+          withNamingSchema(
+            async () => {
+              await consumer.run({ eachMessage: () => {} })
+              await sendMessages(kafka, testTopic, messages)
+            },
+            () => namingSchema.send.opName,
+            () => namingSchema.send.serviceName
+          )
         })
       })
     })

@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../../../../dd-trace/test/setup/tap')
+
 const proxyquire = require('proxyquire')
 const { expect } = require('chai')
 
@@ -8,6 +10,7 @@ let writer
 let span
 let request
 let encoder
+let coverageEncoder
 let url
 let log
 
@@ -36,12 +39,23 @@ describe('CI Visibility Writer', () => {
       return encoder
     }
 
+    coverageEncoder = {
+      encode: sinon.stub(),
+      count: sinon.stub().returns(0),
+      makePayload: sinon.stub().returns([])
+    }
+
+    const CoverageCIVisibilityEncoder = function () {
+      return coverageEncoder
+    }
+
     Writer = proxyquire('../../../../src/ci-visibility/exporters/agentless/writer', {
       '../../../exporters/common/request': request,
       '../../../encode/agentless-ci-visibility': { AgentlessCiVisibilityEncoder },
+      '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
       '../../../log': log
     })
-    writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' } })
+    writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' }, coverageUrl: url })
   })
 
   describe('append', () => {
@@ -79,8 +93,7 @@ describe('CI Visibility Writer', () => {
 
       writer.flush(() => {
         expect(request).to.have.been.calledWithMatch([expectedData], {
-          protocol: url.protocol,
-          hostname: url.hostname,
+          url,
           path: '/api/v2/citestcycle',
           method: 'POST',
           headers: {
@@ -92,7 +105,6 @@ describe('CI Visibility Writer', () => {
     })
 
     describe('when request fails', function () {
-      this.timeout(100000)
       it('should log request errors', done => {
         const error = new Error('boom')
 

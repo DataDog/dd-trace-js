@@ -3,7 +3,7 @@
 const RouterPlugin = require('../../datadog-plugin-router/src')
 
 class ConnectPlugin extends RouterPlugin {
-  static get name () {
+  static get id () {
     return 'connect'
   }
 

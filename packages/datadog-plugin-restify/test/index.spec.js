@@ -1,9 +1,11 @@
 'use strict'
 
+const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
 const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let tracer
@@ -44,6 +46,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
                 expect(traces[0][0].meta).to.have.property('http.method', 'GET')
                 expect(traces[0][0].meta).to.have.property('http.status_code', '404')
+                expect(traces[0][0].meta).to.have.property('component', 'restify')
               })
               .then(done)
               .catch(done)
@@ -69,6 +72,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
                 expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                expect(traces[0][0].meta).to.have.property('component', 'restify')
               })
               .then(done)
               .catch(done)
@@ -83,12 +87,25 @@ describe('Plugin', () => {
 
         it('should run handlers in the request scope', done => {
           const server = restify.createServer()
+          const interval = setInterval(() => {
+            if (next) {
+              next()
+              clearInterval(interval)
+            }
+          })
+
+          let next
 
           server.pre((req, res, next) => {
             expect(tracer.scope().active()).to.not.be.null
             next()
           })
 
+          // break the async context
+          server.use((req, res, _next) => {
+            next = _next
+          })
+
           server.use((req, res, next) => {
             expect(tracer.scope().active()).to.not.be.null
             next()
@@ -96,36 +113,6 @@ describe('Plugin', () => {
 
           server.get('/user', (req, res, next) => {
             expect(tracer.scope().active()).to.not.be.null
-            res.send(200)
-            done()
-            next()
-          })
-
-          getPort().then(port => {
-            appListener = server.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
-          })
-        })
-
-        it('should reactivate the request span in middleware scopes', done => {
-          const server = restify.createServer()
-
-          let span
-
-          server.use((req, res, next) => {
-            span = tracer.scope().active()
-            tracer.scope().activate({}, () => next())
-          })
-
-          server.use((req, res, next) => {
-            expect(tracer.scope().active()).to.equal(span)
-            next()
-          })
-
-          server.get('/user', (req, res, next) => {
             res.send(200)
             done()
             next()
@@ -153,6 +140,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
                 expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                expect(traces[0][0].meta).to.have.property('component', 'restify')
               })
               .then(done)
               .catch(done)
@@ -160,6 +148,73 @@ describe('Plugin', () => {
             appListener = server.listen(port, 'localhost', () => {
               axios
                 .get(`http://localhost:${port}/user/123`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should keep user stores untouched', done => {
+          const server = restify.createServer()
+          const storage = new AsyncLocalStorage()
+          const store = {}
+
+          server.use((req, res, next) => {
+            storage.run(store, () => next())
+          })
+
+          server.get('/user', (req, res, next) => {
+            try {
+              expect(storage.getStore()).to.equal(store)
+              done()
+            } catch (e) {
+              done(e)
+            }
+
+            res.end()
+          })
+
+          getPort().then(port => {
+            appListener = server.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should allow handleUncaughtException', done => {
+          const server = restify.createServer({
+            handleUncaughtExceptions: true,
+            log: {
+              trace: function () {},
+              warn: function () {}
+            }
+          })
+          server.on('uncaughtException', function (req, res, route, err) {
+            res.send(599)
+          })
+
+          server.get('/error', [(req, res, next) => {
+            throw new Error('uncaught')
+          }])
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('resource', 'GET /error')
+                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'uncaught')
+                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/error`)
+                expect(traces[0][0].meta).to.have.property('http.status_code', '599')
+                expect(traces[0][0].meta).to.have.property('component', 'restify')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/error`, {
+                  validateStatus: status => status === 599
+                })
                 .catch(done)
             })
           })

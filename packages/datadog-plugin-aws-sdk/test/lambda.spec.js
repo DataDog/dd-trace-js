@@ -12,33 +12,40 @@ describe('Plugin', () => {
   describe('aws-sdk (lambda)', function () {
     setup()
 
-    withVersions('aws-sdk', 'aws-sdk', version => {
+    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
       let AWS
       let lambda
       let tracer
+
+      const lambdaClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-lambda' : 'aws-sdk'
+
+      const parsePayload = payload => {
+        if (typeof payload !== 'string') {
+          payload = Buffer.from(payload).toString()
+        }
+        return JSON.parse(payload)
+      }
 
       describe('with the new trace context propagation', () => {
         let ZipFile
 
         before(async () => {
-          const lambdaFunctionCode = 'def handle(event, context):\n  return event\n'
+          const lambdaFunctionCode = 'exports.handle = async function (event, context) {\n  return context \n}'
 
-          zip.file('handler.py', lambdaFunctionCode.toString())
+          zip.file('handler.js', lambdaFunctionCode.toString())
           ZipFile = await zip.generateAsync({ type: 'nodebuffer' })
         })
 
         before(done => {
-          AWS = require(`../../../versions/aws-sdk@${version}`).get()
+          AWS = require(`../../../versions/${lambdaClientName}@${version}`).get()
 
-          const lambdaEndpoint = new AWS.Endpoint('http://localhost:4566')
-          lambda = new AWS.Lambda({ endpoint: lambdaEndpoint, region: 'us-east-1' })
-
+          lambda = new AWS.Lambda({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
           lambda.createFunction({
             FunctionName: 'ironmaiden',
             Code: { ZipFile },
             Handler: 'handler.handle',
             Role: 'arn:aws:iam::123456:role/test',
-            Runtime: 'python3.7'
+            Runtime: 'nodejs16.x'
           }, (err, res) => {
             if (err) return done(err)
 
@@ -54,31 +61,42 @@ describe('Plugin', () => {
         })
 
         it('should propagate the tracing context with existing ClientContext and `custom` key', (done) => {
+          let receivedContext
+
           agent.use(traces => {
             const span = traces[0][0]
-            const clientContextSent = Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')
+            const clientContextSent = Buffer.from(receivedContext, 'base64').toString('utf-8')
             const injectedTraceData = JSON.parse(clientContextSent).custom
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
             expect(span.resource.startsWith('invoke')).to.equal(true)
-
+            expect(span.meta).to.include({
+              'functionname': 'ironmaiden',
+              'aws_service': 'Lambda',
+              'region': 'us-east-1'
+            })
             const parentId = span.span_id.toString()
             const traceId = span.trace_id.toString()
             expect(spanContext.toTraceId()).to.equal(traceId)
             expect(spanContext.toSpanId()).to.equal(parentId)
           }).then(done, done)
 
-          const lambdaReq = lambda.invoke({
+          lambda.invoke({
             FunctionName: 'ironmaiden',
             Payload: '{}',
             ClientContext: createClientContext({ custom: { megadeth: 'tornado of souls' } })
-          }, e => e && done(e))
+          }, (e, data) => {
+            receivedContext = parsePayload(data.Payload).client_context
+            e && done(e)
+          })
         })
 
         it('should propagate the tracing context with existing ClientContext and no `custom` key', (done) => {
+          let receivedContext
+
           agent.use(traces => {
             const span = traces[0][0]
-            const clientContextSent = Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')
+            const clientContextSent = Buffer.from(receivedContext, 'base64').toString('utf-8')
             const injectedTraceData = JSON.parse(clientContextSent).custom
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
@@ -90,17 +108,22 @@ describe('Plugin', () => {
             expect(spanContext.toSpanId()).to.equal(parentId)
           }).then(done, done)
 
-          const lambdaReq = lambda.invoke({
+          lambda.invoke({
             FunctionName: 'ironmaiden',
             Payload: '{}',
             ClientContext: createClientContext({ megadeth: 'tornado of souls' })
-          }, e => e && done(e))
+          }, (e, data) => {
+            receivedContext = parsePayload(data.Payload).client_context
+            e && done(e)
+          })
         })
 
         it('should propagate the tracing context without an existing ClientContext', (done) => {
+          let receivedContext
+
           agent.use(traces => {
             const span = traces[0][0]
-            const clientContextSent = Buffer.from(lambdaReq.params.ClientContext, 'base64').toString('utf-8')
+            const clientContextSent = Buffer.from(receivedContext, 'base64').toString('utf-8')
             const injectedTraceData = JSON.parse(clientContextSent).custom
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
@@ -112,10 +135,13 @@ describe('Plugin', () => {
             expect(spanContext.toSpanId()).to.equal(parentId)
           }).then(done, done)
 
-          const lambdaReq = lambda.invoke({
+          lambda.invoke({
             FunctionName: 'ironmaiden',
             Payload: '{}'
-          }, e => e && done(e))
+          }, (e, data) => {
+            receivedContext = parsePayload(data.Payload).client_context
+            e && done(e)
+          })
         })
       })
     })

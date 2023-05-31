@@ -1,52 +1,175 @@
 'use strict'
-const proxyquire = require('proxyquire')
 
-describe('CI Visibility Exporter', () => {
-  const url = 'www.example.com'
-  const flushInterval = 1000
-  const writer = {
-    append: sinon.spy(),
-    flush: sinon.spy()
-  }
-  const Writer = sinon.stub().returns(writer)
+require('../../../../../dd-trace/test/setup/tap')
 
-  const Exporter = proxyquire('../../../../src/ci-visibility/exporters/agentless', {
-    './writer': Writer
-  })
+const cp = require('child_process')
 
-  let exporter
+const { expect } = require('chai')
+const nock = require('nock')
+
+const AgentlessCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agentless')
+
+describe('CI Visibility Agentless Exporter', () => {
+  const url = new URL('http://www.example.com')
 
   beforeEach(() => {
-    sinon.resetHistory()
+    // to make sure `isShallowRepository` in `git.js` returns false
+    sinon.stub(cp, 'execSync').returns('false')
+    nock.cleanAll()
+  })
+  afterEach(() => {
+    sinon.restore()
   })
 
-  describe('when interval is set to a positive number', function () {
-    this.timeout(5000)
-    it('should flush after the configured interval', (done) => {
-      exporter = new Exporter({ url, flushInterval })
-      setTimeout(() => {
-        expect(writer.flush).to.have.been.called
+  before(() => {
+    process.env.DD_API_KEY = '1'
+    process.env.DD_APP_KEY = '1'
+  })
+
+  after(() => {
+    delete process.env.DD_API_KEY
+    delete process.env.DD_APP_KEY
+  })
+
+  it('can use CI Vis protocol right away', () => {
+    const agentlessExporter = new AgentlessCiVisibilityExporter({ url, isGitUploadEnabled: true, tags: {} })
+    expect(agentlessExporter.canReportSessionTraces()).to.be.true
+  })
+
+  describe('when ITR is enabled', () => {
+    it('will request configuration to api.site by default', (done) => {
+      const scope = nock('https://api.datadoge.c0m')
+        .post('/api/v2/libraries/tests/services/setting')
+        .reply(200, JSON.stringify({
+          data: {
+            attributes: {
+              code_coverage: true,
+              tests_skipping: true
+            }
+          }
+        }))
+      const agentlessExporter = new AgentlessCiVisibilityExporter({
+        site: 'datadoge.c0m',
+        isGitUploadEnabled: true,
+        isIntelligentTestRunnerEnabled: true,
+        tags: {}
+      })
+      expect(agentlessExporter.shouldRequestItrConfiguration()).to.be.true
+      agentlessExporter.getItrConfiguration({}, () => {
+        expect(scope.isDone()).to.be.true
+        expect(agentlessExporter.canReportCodeCoverage()).to.be.true
+        expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.true
         done()
-      }, flushInterval)
+      })
+    })
+    it('will request skippable to api.site by default', (done) => {
+      const scope = nock('https://api.datadoge.c0m')
+        .post('/api/v2/libraries/tests/services/setting')
+        .reply(200, JSON.stringify({
+          data: {
+            attributes: {
+              code_coverage: true,
+              tests_skipping: true
+            }
+          }
+        }))
+        .post('/api/v2/ci/tests/skippable')
+        .reply(200, JSON.stringify({
+          data: []
+        }))
+
+      const agentlessExporter = new AgentlessCiVisibilityExporter({
+        site: 'datadoge.c0m',
+        isGitUploadEnabled: true,
+        isIntelligentTestRunnerEnabled: true,
+        tags: {}
+      })
+      agentlessExporter._resolveGit()
+      agentlessExporter.getItrConfiguration({}, () => {
+        agentlessExporter.getSkippableSuites({}, () => {
+          expect(scope.isDone()).to.be.true
+          done()
+        })
+      })
+    })
+    it('can request ITR configuration right away', (done) => {
+      const scope = nock('http://www.example.com')
+        .post('/api/v2/libraries/tests/services/setting')
+        .reply(200, JSON.stringify({
+          data: {
+            attributes: {
+              code_coverage: true,
+              tests_skipping: true
+            }
+          }
+        }))
+      const agentlessExporter = new AgentlessCiVisibilityExporter({
+        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
+      })
+      expect(agentlessExporter.shouldRequestItrConfiguration()).to.be.true
+      agentlessExporter.getItrConfiguration({}, () => {
+        expect(scope.isDone()).to.be.true
+        expect(agentlessExporter.canReportCodeCoverage()).to.be.true
+        expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.true
+        done()
+      })
+    })
+    it('can report code coverages if enabled by the API', (done) => {
+      const scope = nock('http://www.example.com')
+        .post('/api/v2/libraries/tests/services/setting')
+        .reply(200, JSON.stringify({
+          data: {
+            attributes: {
+              code_coverage: true,
+              tests_skipping: true
+            }
+          }
+        }))
+      const agentlessExporter = new AgentlessCiVisibilityExporter({
+        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
+      })
+      agentlessExporter.getItrConfiguration({}, () => {
+        expect(scope.isDone()).to.be.true
+        expect(agentlessExporter.canReportCodeCoverage()).to.be.true
+        done()
+      })
+    })
+    it('will not allow skippable request if ITR configuration fails', (done) => {
+      // request will fail
+      delete process.env.DD_APP_KEY
+
+      const scope = nock('http://www.example.com')
+        .post('/api/v2/libraries/tests/services/setting')
+        .reply(200, JSON.stringify({
+          data: {
+            attributes: {
+              code_coverage: true,
+              tests_skipping: true
+            }
+          }
+        }))
+
+      const agentlessExporter = new AgentlessCiVisibilityExporter({
+        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
+      })
+      expect(agentlessExporter.shouldRequestItrConfiguration()).to.be.true
+      agentlessExporter.getItrConfiguration({}, (err) => {
+        expect(scope.isDone()).not.to.be.true
+        expect(err.message).to.contain(
+          'Request to settings endpoint was not done because Datadog application key is not defined'
+        )
+        expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.false
+        done()
+      })
     })
   })
 
-  describe('when export is called', () => {
-    it('should append a span', () => {
-      const span = {}
-      exporter = new Exporter({ url, flushInterval })
-      exporter.export([span])
-
-      expect(writer.append).to.have.been.calledWith([span])
-    })
-  })
-
-  describe('when interval is set to 0', () => {
-    it('should flush right away', () => {
-      const span = {}
-      exporter = new Exporter({ url, flushInterval: 0 })
-      exporter.export([span])
-      expect(writer.flush).to.have.been.called
+  describe('url', () => {
+    it('sets the default if URL param is not specified', () => {
+      const site = 'd4tad0g.com'
+      const agentlessExporter = new AgentlessCiVisibilityExporter({ site, tags: {} })
+      expect(agentlessExporter._url.href).to.equal(`https://citestcycle-intake.${site}/`)
+      expect(agentlessExporter._coverageUrl.href).to.equal(`https://citestcov-intake.${site}/`)
     })
   })
 })

@@ -1,9 +1,13 @@
 'use strict'
 
+const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
 const getPort = require('get-port')
 const semver = require('semver')
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+
+const host = 'localhost'
 
 describe('Plugin', () => {
   let tracer
@@ -57,11 +61,12 @@ describe('Plugin', () => {
                   expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
                   expect(spans[0].meta).to.have.property('http.method', 'GET')
                   expect(spans[0].meta).to.have.property('http.status_code', '200')
+                  expect(spans[0].meta).to.have.property('component', 'fastify')
                 })
                 .then(done)
                 .catch(done)
 
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios
                   .get(`http://localhost:${port}/user`)
                   .catch(done)
@@ -91,11 +96,12 @@ describe('Plugin', () => {
                   expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
                   expect(spans[0].meta).to.have.property('http.method', 'GET')
                   expect(spans[0].meta).to.have.property('http.status_code', '200')
+                  expect(spans[0].meta).to.have.property('component', 'fastify')
                 })
                 .then(done)
                 .catch(done)
 
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios
                   .get(`http://localhost:${port}/user/123`)
                   .catch(done)
@@ -124,11 +130,12 @@ describe('Plugin', () => {
                     expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
                     expect(spans[0].meta).to.have.property('http.method', 'GET')
                     expect(spans[0].meta).to.have.property('http.status_code', '200')
+                    expect(spans[0].meta).to.have.property('component', 'fastify')
                   })
                   .then(done)
                   .catch(done)
 
-                app.listen(port, 'localhost', () => {
+                app.listen({ host, port }, () => {
                   axios
                     .get(`http://localhost:${port}/user/123`)
                     .catch(done)
@@ -149,7 +156,7 @@ describe('Plugin', () => {
             })
 
             getPort().then(port => {
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios.get(`http://localhost:${port}/user`)
                   .then(() => done())
                   .catch(done)
@@ -166,7 +173,7 @@ describe('Plugin', () => {
             app.get('/user', (request, reply) => reply.send())
 
             getPort().then(port => {
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios.get(`http://localhost:${port}/user`)
                   .then(() => done())
                   .catch(done)
@@ -181,7 +188,7 @@ describe('Plugin', () => {
             })
 
             getPort().then(port => {
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
                   .then(() => done())
                   .catch(done)
@@ -205,7 +212,7 @@ describe('Plugin', () => {
             })
 
             getPort().then(port => {
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
                   .then(() => done())
                   .catch(done)
@@ -242,7 +249,7 @@ describe('Plugin', () => {
             })
 
             getPort().then(port => {
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
                   .then(() => done())
                   .catch(done)
@@ -264,14 +271,15 @@ describe('Plugin', () => {
 
                   expect(spans[0]).to.have.property('name', 'fastify.request')
                   expect(spans[0]).to.have.property('resource', 'GET /user')
-                  expect(spans[0].meta).to.have.property('error.type', error.name)
-                  expect(spans[0].meta).to.have.property('error.msg', error.message)
-                  expect(spans[0].meta).to.have.property('error.stack', error.stack)
+                  expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+                  expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                  expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
+                  expect(spans[0].meta).to.have.property('component', 'fastify')
                 })
                 .then(done)
                 .catch(done)
 
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios
                   .get(`http://localhost:${port}/user`)
                   .catch(() => {})
@@ -288,9 +296,38 @@ describe('Plugin', () => {
             })
 
             getPort().then(port => {
-              app.listen(port, 'localhost', async () => {
+              app.listen({ host, port }, async () => {
                 await axios.get(`http://localhost:${port}/user`)
                 done()
+              })
+            })
+          })
+
+          it('should keep user stores untouched', done => {
+            const storage = new AsyncLocalStorage()
+            const store = {}
+
+            global.getStore = () => storage.getStore()
+
+            app.addHook('onRequest', (request, reply, next) => {
+              storage.run(store, () => next())
+            })
+
+            app.get('/user', (request, reply) => {
+              try {
+                expect(storage.getStore()).to.equal(store)
+                done()
+              } catch (e) {
+                done(e)
+              }
+
+              reply.send()
+            })
+
+            getPort().then(port => {
+              app.listen({ host, port }, () => {
+                axios.get(`http://localhost:${port}/user`)
+                  .catch(done)
               })
             })
           })
@@ -314,14 +351,15 @@ describe('Plugin', () => {
                   expect(spans[0]).to.have.property('name', 'fastify.request')
                   expect(spans[0]).to.have.property('resource', 'GET /user')
                   expect(spans[0]).to.have.property('error', 1)
-                  expect(spans[0].meta).to.have.property('error.type', error.name)
-                  expect(spans[0].meta).to.have.property('error.msg', error.message)
-                  expect(spans[0].meta).to.have.property('error.stack', error.stack)
+                  expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+                  expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                  expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
+                  expect(spans[0].meta).to.have.property('component', 'fastify')
                 })
                 .then(done)
                 .catch(done)
 
-              app.listen(port, 'localhost', () => {
+              app.listen({ host, port }, () => {
                 axios
                   .get(`http://localhost:${port}/user`)
                   .catch(() => {})
@@ -346,11 +384,12 @@ describe('Plugin', () => {
                     expect(spans[0]).to.have.property('name', 'fastify.request')
                     expect(spans[0]).to.have.property('resource', 'GET /user')
                     expect(spans[0]).to.have.property('error', 0)
+                    expect(spans[0].meta).to.have.property('component', 'fastify')
                   })
                   .then(done)
                   .catch(done)
 
-                app.listen(port, 'localhost', () => {
+                app.listen({ host, port }, () => {
                   axios
                     .get(`http://localhost:${port}/user`)
                     .catch(() => {})
@@ -375,14 +414,15 @@ describe('Plugin', () => {
 
                     expect(spans[0]).to.have.property('name', 'fastify.request')
                     expect(spans[0]).to.have.property('resource', 'GET /user')
-                    expect(spans[0].meta).to.have.property('error.type', error.name)
-                    expect(spans[0].meta).to.have.property('error.msg', error.message)
-                    expect(spans[0].meta).to.have.property('error.stack', error.stack)
+                    expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+                    expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                    expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
+                    expect(spans[0].meta).to.have.property('component', 'fastify')
                   })
                   .then(done)
                   .catch(done)
 
-                app.listen(port, 'localhost', () => {
+                app.listen({ host, port }, () => {
                   axios
                     .get(`http://localhost:${port}/user`)
                     .catch(() => {})
@@ -394,6 +434,7 @@ describe('Plugin', () => {
               let error
 
               app.setErrorHandler((error, request, reply) => {
+                reply.statusCode = 500
                 reply.send()
               })
               app.get('/user', (request, reply) => {
@@ -407,14 +448,49 @@ describe('Plugin', () => {
 
                     expect(spans[0]).to.have.property('name', 'fastify.request')
                     expect(spans[0]).to.have.property('resource', 'GET /user')
-                    expect(spans[0].meta).to.have.property('error.type', error.name)
-                    expect(spans[0].meta).to.have.property('error.msg', error.message)
-                    expect(spans[0].meta).to.have.property('error.stack', error.stack)
+                    expect(spans[0]).to.have.property('error', 1)
+                    expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+                    expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                    expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
+                    expect(spans[0].meta).to.have.property('component', 'fastify')
                   })
                   .then(done)
                   .catch(done)
 
-                app.listen(port, 'localhost', () => {
+                app.listen({ host, port }, () => {
+                  axios
+                    .get(`http://localhost:${port}/user`)
+                    .catch(() => {})
+                })
+              })
+            })
+
+            it('should ignore reply exceptions if the request succeeds', done => {
+              app.setErrorHandler((error, request, reply) => {
+                reply.statusCode = 200
+                reply.send()
+              })
+              app.get('/user', (request, reply) => {
+                throw new Error('boom')
+              })
+
+              getPort().then(port => {
+                agent
+                  .use(traces => {
+                    const spans = traces[0]
+
+                    expect(spans[0]).to.have.property('name', 'fastify.request')
+                    expect(spans[0]).to.have.property('resource', 'GET /user')
+                    expect(spans[0]).to.have.property('error', 0)
+                    expect(spans[0].meta).to.not.have.property(ERROR_TYPE)
+                    expect(spans[0].meta).to.not.have.property(ERROR_MESSAGE)
+                    expect(spans[0].meta).to.not.have.property(ERROR_STACK)
+                    expect(spans[0].meta).to.have.property('component', 'fastify')
+                  })
+                  .then(done)
+                  .catch(done)
+
+                app.listen({ host, port }, () => {
                   axios
                     .get(`http://localhost:${port}/user`)
                     .catch(() => {})
@@ -445,14 +521,15 @@ describe('Plugin', () => {
                     expect(spans[0]).to.have.property('name', 'fastify.request')
                     expect(spans[0]).to.have.property('resource', 'GET /user')
                     expect(spans[0]).to.have.property('error', 1)
-                    expect(spans[0].meta).to.have.property('error.type', error.name)
-                    expect(spans[0].meta).to.have.property('error.msg', error.message)
-                    expect(spans[0].meta).to.have.property('error.stack', error.stack)
+                    expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+                    expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                    expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
+                    expect(spans[0].meta).to.have.property('component', 'fastify')
                   })
                   .then(done)
                   .catch(done)
 
-                app.listen(port, 'localhost', () => {
+                app.listen({ host, port }, () => {
                   axios
                     .get(`http://localhost:${port}/user`)
                     .catch(() => {})

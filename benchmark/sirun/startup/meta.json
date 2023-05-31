@@ -1,8 +1,10 @@
 {
   "name": "startup",
   "run": "node startup-test.js",
-  "cachegrind": true,
-  "iterations": 10,
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node startup-test.js\"",
+  "cachegrind": false,
+  "iterations": 20,
+  "instructions": true,
   "variants": {
     "control": {
       "env": {

@@ -4,7 +4,7 @@ const RouterPlugin = require('../../datadog-plugin-router/src')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 class RestifyPlugin extends RouterPlugin {
-  static get name () {
+  static get id () {
     return 'restify'
   }
 
@@ -17,6 +17,13 @@ class RestifyPlugin extends RouterPlugin {
 
     this.addSub('apm:restify:request:route', ({ req, route }) => {
       web.setRoute(req, route)
+    })
+  }
+
+  configure (config) {
+    return super.configure({
+      ...config,
+      middleware: false // not supported
     })
   }
 }

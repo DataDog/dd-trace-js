@@ -1,4 +1,4 @@
-import { ClientRequest, IncomingMessage, ServerResponse } from "http";
+import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
 import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
@@ -15,7 +15,7 @@ export declare interface Tracer extends opentracing.Tracer {
    * @param {SpanOptions} [options] Options for the newly created span.
    * @returns {Span} A new Span object.
    */
-  startSpan(name: string, options?: SpanOptions): Span;
+  startSpan (name: string, options?: SpanOptions): Span;
 
   /**
    * Injects the given SpanContext instance for cross-process propagation
@@ -27,7 +27,7 @@ export declare interface Tracer extends opentracing.Tracer {
    * @param  {string} format The format of the carrier.
    * @param  {any} carrier The carrier object.
    */
-  inject(spanContext: SpanContext | Span, format: string, carrier: any): void;
+  inject (spanContext: SpanContext | Span, format: string, carrier: any): void;
 
   /**
    * Returns a SpanContext instance extracted from `carrier` in the given
@@ -38,31 +38,31 @@ export declare interface Tracer extends opentracing.Tracer {
    *         The extracted SpanContext, or null if no such SpanContext could
    *         be found in `carrier`
    */
-  extract(format: string, carrier: any): SpanContext | null;
+  extract (format: string, carrier: any): SpanContext | null;
 
   /**
    * Initializes the tracer. This should be called before importing other libraries.
    */
-  init(options?: TracerOptions): this;
+  init (options?: TracerOptions): this;
 
   /**
    * Sets the URL for the trace agent. This should only be called _after_
    * init() is called, only in cases where the URL needs to be set after
    * initialization.
    */
-  setUrl(url: string): this;
+  setUrl (url: string): this;
 
   /**
    * Enable and optionally configure a plugin.
    * @param plugin The name of a built-in plugin.
    * @param config Configuration options. Can also be `false` to disable the plugin.
    */
-  use<P extends keyof Plugins>(plugin: P, config?: Plugins[P] | boolean): this;
+  use<P extends keyof Plugins> (plugin: P, config?: Plugins[P] | boolean): this;
 
   /**
    * Returns a reference to the current scope.
    */
-  scope(): Scope;
+  scope (): Scope;
 
   /**
    * Instruments a function by automatically creating a span activated on its
@@ -79,10 +79,11 @@ export declare interface Tracer extends opentracing.Tracer {
    * which case the span will finish at the end of the function execution.
    *
    * If the `orphanable` option is set to false, the function will not be traced
-   * unless there is already an active span or `childOf` option.
+   * unless there is already an active span or `childOf` option. Note that this
+   * option is deprecated and has been removed in version 4.0.
    */
-  trace<T>(name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
-  trace<T>(name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
+  trace<T> (name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
+  trace<T> (name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
 
   /**
    * Wrap a function to automatically create a span activated on its
@@ -98,23 +99,25 @@ export declare interface Tracer extends opentracing.Tracer {
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
    */
-  wrap<T = (...args: any[]) => any>(name: string, fn: T, requiresParent?: boolean): T;
-  wrap<T = (...args: any[]) => any>(name: string, options: TraceOptions & SpanOptions, fn: T): T;
-  wrap<T = (...args: any[]) => any>(name: string, options: (...args: any[]) => TraceOptions & SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any> (name: string, fn: T): T;
+  wrap<T = (...args: any[]) => any> (name: string, options: TraceOptions & SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any> (name: string, options: (...args: any[]) => TraceOptions & SpanOptions, fn: T): T;
 
   /**
    * Create and return a string that can be included in the <head> of a
    * document to enable RUM tracing to include it. The resulting string
    * should not be cached.
    */
-  getRumData(): string;
+  getRumData (): string;
 
   /**
    * Links an authenticated user to the current trace.
    * @param {User} user Properties of the authenticated user. Accepts custom fields.
    * @returns {Tracer} The Tracer instance for chaining.
    */
-  setUser(user: User): Tracer;
+  setUser (user: User): Tracer;
+
+  appsec: Appsec;
 }
 
 export declare interface TraceOptions extends Analyzable {
@@ -144,7 +147,7 @@ export declare interface TraceOptions extends Analyzable {
  * have children.
  */
 export declare interface Span extends opentracing.Span {
-  context(): SpanContext;
+  context (): SpanContext;
 }
 
 /**
@@ -161,12 +164,17 @@ export declare interface SpanContext extends opentracing.SpanContext {
   /**
    * Returns the string representation of the internal trace ID.
    */
-  toTraceId(): string;
+  toTraceId (): string;
 
   /**
    * Returns the string representation of the internal span ID.
    */
-  toSpanId(): string;
+  toSpanId (): string;
+
+  /**
+   * Returns the string representation used for DBM integration.
+   */
+  toTraceparent (): string;
 }
 
 /**
@@ -176,7 +184,7 @@ export declare interface SamplingRule {
   /**
    * Sampling rate for this rule.
    */
-  sampleRate: Number
+  sampleRate: number
 
   /**
    * Service on which to apply this rule. The rule will apply to all services if not provided.
@@ -187,6 +195,46 @@ export declare interface SamplingRule {
    * Operation name on which to apply this rule. The rule will apply to all operation names if not provided.
    */
   name?: string | RegExp
+}
+
+/**
+ * Span sampling rules to ingest single spans where the enclosing trace is dropped
+ */
+export declare interface SpanSamplingRule {
+  /**
+   * Sampling rate for this rule. Will default to 1.0 (always) if not provided.
+   */
+  sampleRate?: number
+
+  /**
+   * Maximum number of spans matching a span sampling rule to be allowed per second.
+   */
+  maxPerSecond?: number
+
+  /**
+   * Service name or pattern on which to apply this rule. The rule will apply to all services if not provided.
+   */
+  service?: string
+
+  /**
+   * Operation name or pattern on which to apply this rule. The rule will apply to all operation names if not provided.
+   */
+  name?: string
+}
+
+/**
+ * Selection and priority order of context propagation injection and extraction mechanisms.
+ */
+export declare interface PropagationStyle {
+  /**
+   * Selection of context propagation injection mechanisms.
+   */
+  inject: string[],
+
+  /**
+   * Selection and priority order of context propagation extraction mechanisms.
+   */
+  extract: string[]
 }
 
 /**
@@ -211,6 +259,11 @@ export declare interface TracerOptions {
    * will attempted to be inferred from package.json
    */
   service?: string;
+
+  /**
+   * Provide service name mappings for each plugin.
+   */
+  serviceMapping?: { [key: string]: string };
 
   /**
    * The url of the trace agent that the tracer will submit to.
@@ -268,6 +321,28 @@ export declare interface TracerOptions {
   sampleRate?: number;
 
   /**
+   * Global rate limit that is applied on the global sample rate and all rules,
+   * and controls the ingestion rate limit between the agent and the backend.
+   * Defaults to deferring the decision to the agent.
+   */
+  rateLimit?: number,
+
+  /**
+   * Sampling rules to apply to priority samplin. Each rule is a JSON,
+   * consisting of `service` and `name`, which are regexes to match against
+   * a trace's `service` and `name`, and a corresponding `sampleRate`. If not
+   * specified, will defer to global sampling rate for all spans.
+   * @default []
+   */
+  samplingRules?: SamplingRule[]
+
+  /**
+   * Span sampling rules that take effect when the enclosing trace is dropped, to ingest single spans
+   * @default []
+   */
+  spanSamplingRules?: SpanSamplingRule[]
+
+  /**
    * Interval in milliseconds at which the tracer will submit traces to the agent.
    * @default 2000
    */
@@ -277,7 +352,7 @@ export declare interface TracerOptions {
    *  Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces.
    * @default 1000
    */
-   flushMinSpans?: number;
+  flushMinSpans?: number;
 
   /**
    * Whether to enable runtime metrics.
@@ -298,7 +373,10 @@ export declare interface TracerOptions {
   protocolVersion?: string
 
   /**
-   * Configuration of the ingestion between the agent and the backend.
+   * Deprecated in favor of the global versions of the variables provided under this option
+   *
+   * @deprecated
+   * @hidden
    */
   ingestion?: {
     /**
@@ -307,16 +385,16 @@ export declare interface TracerOptions {
     sampleRate?: number
 
     /**
-     * Controls the ingestion rate limit between the agent and the backend.
+     * Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent.
      */
     rateLimit?: number
   };
 
   /**
-   * Experimental features can be enabled all at once by using true or individually using key / value pairs.
+   * Experimental features can be enabled individually using key / value pairs.
    * @default {}
    */
-  experimental?: boolean | {
+  experimental?: {
     b3?: boolean
     traceparent?: boolean
 
@@ -327,38 +405,51 @@ export declare interface TracerOptions {
     runtimeId?: boolean
 
     /**
-     * Whether to write traces to log output, rather than send to an agent
+     * Whether to write traces to log output or agentless, rather than send to an agent
      * @default false
      */
-    exporter?: 'log' | 'agent'
-
-    /**
-     * Configuration of the priority sampler. Supports a global config and rules by span name or service name. The first matching rule is applied, and if no rule matches it falls back to the global config or on the rates provided by the agent if there is no global config.
-     */
-    sampler?: {
-      /**
-       * Sample rate to apply globally when no other rule is matched. Omit to fallback on the dynamic rates returned by the agent instead.
-       */
-      sampleRate?: Number,
-
-      /**
-       * Global rate limit that is applied on the global sample rate and all rules.
-       * @default 100
-       */
-      rateLimit?: Number,
-
-      /**
-       * Sampling rules to apply to priority sampling.
-       * @default []
-       */
-      rules?: SamplingRule[]
-    }
+    exporter?: 'log' | 'agent' | 'datadog'
 
     /**
      * Whether to enable the experimental `getRumData` method.
      * @default false
      */
     enableGetRumData?: boolean
+
+    /**
+     * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
+     */
+    iast?: boolean | {
+      /**
+       * Whether to enable IAST.
+       * @default false
+       */
+      enabled?: boolean,
+      /**
+       * Controls the percentage of requests that iast will analyze
+       * @default 30
+       */
+      requestSampling?: number,
+      /**
+       * Controls how many request can be analyzing code vulnerabilities at the same time
+       * @default 2
+       */
+      maxConcurrentRequests?: number,
+      /**
+       * Controls how many code vulnerabilities can be detected in the same request
+       * @default 2
+       */
+      maxContextOperations?: number,
+      /**
+       * Whether to enable vulnerability deduplication
+       */
+      deduplicationEnabled?: boolean
+      /**
+       * Whether to enable vulnerability redaction
+       * @default true
+       */
+      redactionEnabled?: boolean
+    }
   };
 
   /**
@@ -406,8 +497,15 @@ export declare interface TracerOptions {
   /**
    * If false, require a parent in order to trace.
    * @default true
+   * @deprecated since version 4.0
    */
   orphanable?: boolean
+
+  /**
+   * Enables DBM to APM link using tag injection.
+   * @default 'disabled'
+   */
+  dbmPropagationMode?: 'disabled' | 'service' | 'full'
 
   /**
    * Configuration of the AppSec protection. Can be a boolean as an alias to `appsec.enabled`.
@@ -444,14 +542,51 @@ export declare interface TracerOptions {
     /**
      * Specifies a regex that will redact sensitive data by its value in attack reports.
      */
-    obfuscatorValueRegex?: string
+    obfuscatorValueRegex?: string,
+
+    /**
+     * Specifies a path to a custom blocking template html file.
+     */
+    blockedTemplateHtml?: string,
+
+    /**
+     * Specifies a path to a custom blocking template json file.
+     */
+    blockedTemplateJson?: string,
   };
+
+  /**
+   * Configuration of ASM Remote Configuration
+   */
+  remoteConfig?: {
+    /**
+     * Specifies the remote configuration polling interval in seconds
+     * @default 5
+     */
+    pollInterval?: number,
+  }
+
+  /**
+   * Whether to enable client IP collection from relevant IP headers
+   * @default false
+   */
+  clientIpEnabled?: boolean
+
+  /**
+   * Custom header name to source the http.client_ip tag from.
+   */
+  clientIpHeader?: string,
+
+  /**
+   * The selection and priority order of context propagation injection and extraction mechanisms.
+   */
+  propagationStyle?: string[] | PropagationStyle
 }
 
 /**
  * User object that can be passed to `tracer.setUser()`.
  */
- export declare interface User {
+export declare interface User {
   /**
    * Unique identifier of the user.
    * Mandatory.
@@ -491,13 +626,63 @@ export declare interface TracerOptions {
   [key: string]: string | undefined
 }
 
-/** @hidden */
-interface EventEmitter {
-  emit(eventName: string | symbol, ...args: any[]): any;
-  on?(eventName: string | symbol, listener: (...args: any[]) => any): any;
-  off?(eventName: string | symbol, listener: (...args: any[]) => any): any;
-  addListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;
-  removeListener?(eventName: string | symbol, listener: (...args: any[]) => any): any;
+export declare interface Appsec {
+  /**
+   * Links a successful login event to the current trace. Will link the passed user to the current trace with Appsec.setUser() internally.
+   * @param {User} user Properties of the authenticated user. Accepts custom fields.
+   * @param {[key: string]: string} metadata Custom fields to link to the login success event.
+   *
+   * @beta This method is in beta and could change in future versions.
+   */
+  trackUserLoginSuccessEvent(user: User, metadata?: { [key: string]: string }): void
+
+  /**
+   * Links a failed login event to the current trace.
+   * @param {string} userId The user id of the attemped login.
+   * @param {boolean} exists If the user id exists.
+   * @param {[key: string]: string} metadata Custom fields to link to the login failure event.
+   *
+   * @beta This method is in beta and could change in future versions.
+   */
+  trackUserLoginFailureEvent(userId: string, exists: boolean, metadata?: { [key: string]: string }): void
+
+  /**
+   * Links a custom event to the current trace.
+   * @param {string} eventName The name of the event.
+   * @param {[key: string]: string} metadata Custom fields to link to the event.
+   *
+   * @beta This method is in beta and could change in future versions.
+   */
+  trackCustomEvent(eventName: string, metadata?: { [key: string]: string }): void
+
+  /**
+   * Checks if the passed user should be blocked according to AppSec rules.
+   * If no user is linked to the current trace, will link the passed user to it.
+   * @param {User} user Properties of the authenticated user. Accepts custom fields.
+   * @return {boolean} Indicates whether the user should be blocked.
+   *
+   * @beta This method is in beta and could change in the future
+   */
+  isUserBlocked(user: User): boolean
+
+  /**
+   * Sends a "blocked" template response based on the request accept header and ends the response.
+   * **You should stop processing the request after calling this function!**
+   * @param {IncomingMessage} req Can be passed to force which request to act on. Optional.
+   * @param {OutgoingMessage} res Can be passed to force which response to act on. Optional.
+   * @return {boolean} Indicates if the action was successful.
+   *
+   * @beta This method is in beta and could change in the future
+   */
+  blockRequest(req?: IncomingMessage, res?: OutgoingMessage): boolean
+
+  /**
+   * Links an authenticated user to the current trace.
+   * @param {User} user Properties of the authenticated user. Accepts custom fields.
+   *
+   * @beta This method is in beta and could change in the future
+   */
+  setUser(user: User): void
 }
 
 /** @hidden */
@@ -523,7 +708,7 @@ export declare interface Scope {
    *
    * @returns {Span} The active span.
    */
-  active(): Span | null;
+  active (): Span | null;
 
   /**
    * Activate a span in the scope of a function.
@@ -532,19 +717,18 @@ export declare interface Scope {
    * @param {Function} fn Function that will have the span activated on its scope.
    * @returns The return value of the provided function.
    */
-  activate<T>(span: Span, fn: ((...args: any[]) => T)): T;
+  activate<T> (span: Span, fn: ((...args: any[]) => T)): T;
 
   /**
    * Binds a target to the provided span, or the active span if omitted.
    *
-   * @param {Function|Promise|EventEmitter} target Target that will have the span activated on its scope.
+   * @param {Function|Promise} target Target that will have the span activated on its scope.
    * @param {Span} [span=scope.active()] The span to activate.
    * @returns The bound target.
    */
-  bind<T extends (...args: any[]) => void>(fn: T, span?: Span | null): T;
-  bind<V, T extends (...args: any[]) => V>(fn: T, span?: Span | null): T;
-  bind<T>(fn: Promise<T>, span?: Span | null): Promise<T>;
-  bind(emitter: EventEmitter, span?: Span | null): EventEmitter;
+  bind<T extends (...args: any[]) => void> (fn: T, span?: Span | null): T;
+  bind<V, T extends (...args: any[]) => V> (fn: T, span?: Span | null): T;
+  bind<T> (fn: Promise<T>, span?: Span | null): Promise<T>;
 }
 
 /** @hidden */
@@ -562,7 +746,6 @@ interface Plugins {
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
   "fastify": plugins.fastify;
-  "fs": plugins.fs;
   "generic-pool": plugins.generic_pool;
   "google-cloud-pubsub": plugins.google_cloud_pubsub;
   "graphql": plugins.graphql;
@@ -575,6 +758,7 @@ interface Plugins {
   "kafkajs": plugins.kafkajs
   "knex": plugins.knex;
   "koa": plugins.koa;
+  "mariadb": plugins.mariadb;
   "memcached": plugins.memcached;
   "microgateway-core": plugins.microgateway_core;
   "mocha": plugins.mocha;
@@ -585,8 +769,10 @@ interface Plugins {
   "mysql2": plugins.mysql2;
   "net": plugins.net;
   "next": plugins.next;
+  "opensearch": plugins.opensearch;
   "oracledb": plugins.oracledb;
   "paperplane": plugins.paperplane;
+  "playwright": plugins.playwright;
   "pg": plugins.pg;
   "pino": plugins.pino;
   "redis": plugins.redis;
@@ -692,7 +878,7 @@ declare namespace plugins {
       /**
        * Hook to execute just before the request span finishes.
        */
-      request?: (span?: opentracing.Span, req?: IncomingMessage, res?: ServerResponse) => any;
+      request?: (span?: Span, req?: IncomingMessage, res?: ServerResponse) => any;
     };
 
     /**
@@ -717,7 +903,7 @@ declare namespace plugins {
      * status code as its only parameter and return `true` for success or `false`
      * for errors.
      *
-     * @default code => code < 400
+     * @default code => code < 400 || code >= 500
      */
     validateStatus?: (code: number) => boolean;
 
@@ -728,7 +914,7 @@ declare namespace plugins {
       /**
        * Hook to execute just before the request span finishes.
        */
-      request?: (span?: opentracing.Span, req?: ClientRequest, res?: IncomingMessage) => any;
+      request?: (span?: Span, req?: ClientRequest, res?: IncomingMessage) => any;
     };
 
     /**
@@ -751,7 +937,7 @@ declare namespace plugins {
      * status code as its only parameter and return `true` for success or `false`
      * for errors.
      *
-     * @default code => code < 400
+     * @default code => code < 400 || code >= 500
      */
     validateStatus?: (code: number) => boolean;
   }
@@ -818,7 +1004,7 @@ declare namespace plugins {
       /**
        * Hook to execute just before the aws span finishes.
        */
-      request?: (span?: opentracing.Span, response?: anyObject) => any;
+      request?: (span?: Span, response?: anyObject) => any;
     };
 
     /**
@@ -887,7 +1073,7 @@ declare namespace plugins {
       /**
        * Hook to execute just before the query span finishes.
        */
-      query?: (span?: opentracing.Span, params?: TransportRequestParams) => any;
+      query?: (span?: Span, params?: TransportRequestParams) => any;
     };
   }
 
@@ -902,12 +1088,6 @@ declare namespace plugins {
    * [fastify](https://www.fastify.io/) module.
    */
   interface fastify extends HttpServer {}
-
-  /**
-   * This plugin automatically instruments the
-   * [fs](https://nodejs.org/api/fs.html) module.
-   */
-  interface fs extends Instrumentation {}
 
   /**
    * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
@@ -993,7 +1173,8 @@ declare namespace plugins {
 
     /**
      * Whether to enable signature calculation for the resource name. This can
-     * be disabled if your GraphQL operations always have a name.
+     * be disabled if your GraphQL operations always have a name. Note that when
+     * disabled all queries will need to be named for this to work properly.
      *
      * @default true
      */
@@ -1062,7 +1243,7 @@ declare namespace plugins {
        * Hook to execute just before the request span finishes.
        */
       request?: (
-        span?: opentracing.Span,
+        span?: Span,
         req?: IncomingMessage | ClientRequest,
         res?: ServerResponse | IncomingMessage
       ) => any;
@@ -1160,6 +1341,18 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
+   * [ldapjs](https://github.com/ldapjs/node-ldapjs/) module.
+   */
+  interface ldapjs extends Instrumentation {}
+
+  /**
+   * This plugin automatically instruments the
+   * [mariadb](https://github.com/mariadb-corporation/mariadb-connector-nodejs) module.
+   */
+  interface mariadb extends mysql {}
+
+  /**
+   * This plugin automatically instruments the
    * [memcached](https://github.com/3rd-Eden/memcached) module.
    */
   interface memcached extends Instrumentation {}
@@ -1180,7 +1373,7 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [moleculer](https://moleculer.services/) module.
    */
-   interface moleculer extends Moleculer {
+  interface moleculer extends Moleculer {
     /**
      * Configuration for Moleculer clients. Set to false to disable client
      * instrumentation.
@@ -1198,7 +1391,12 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [mongodb-core](https://github.com/mongodb-js/mongodb-core) module.
    */
-  interface mongodb_core extends Instrumentation {}
+  interface mongodb_core extends Instrumentation {
+    /**
+     * Whether to include the query contents in the resource name.
+     */
+    queryInResourceName?: boolean;
+  }
 
   /**
    * This plugin automatically instruments the
@@ -1210,13 +1408,15 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [mysql](https://github.com/mysqljs/mysql) module.
    */
-  interface mysql extends Instrumentation {}
+  interface mysql extends Instrumentation {
+    service?: string | ((params: any) => string);
+  }
 
   /**
    * This plugin automatically instruments the
-   * [mysql2](https://github.com/brianmario/mysql2) module.
+   * [mysql2](https://github.com/sidorares/node-mysql2) module.
    */
-  interface mysql2 extends Instrumentation {}
+  interface mysql2 extends mysql {}
 
   /**
    * This plugin automatically instruments the
@@ -1232,13 +1432,19 @@ declare namespace plugins {
     /**
      * Hooks to run before spans are finished.
      */
-     hooks?: {
+    hooks?: {
       /**
        * Hook to execute just before the request span finishes.
        */
-      request?: (span?: opentracing.Span, req?: IncomingMessage, res?: ServerResponse) => any;
+      request?: (span?: Span, req?: IncomingMessage, res?: ServerResponse) => any;
     };
   }
+
+  /**
+   * This plugin automatically instruments the
+   * [opensearch](https://github.com/opensearch-project/opensearch-js) module.
+   */
+  interface opensearch extends elasticsearch {}
 
   /**
    * This plugin automatically instruments the
@@ -1255,7 +1461,13 @@ declare namespace plugins {
    * This plugin automatically instruments the
    * [paperplane](https://github.com/articulate/paperplane) module.
    */
-   interface paperplane extends HttpServer {}
+  interface paperplane extends HttpServer {}
+
+  /**
+  * This plugin automatically instruments the
+  * [playwright](https://github.com/microsoft/playwright) module.
+  */
+  interface playwright extends Integration {}
 
   /**
    * This plugin automatically instruments the
@@ -1343,12 +1555,12 @@ declare namespace plugins {
       /**
        * Hook to execute just when the span is created.
        */
-      receive?: (span?: opentracing.Span, request?: any) => any;
+      receive?: (span?: Span, request?: any) => any;
 
       /**
        * Hook to execute just when the span is finished.
        */
-      reply?: (span?: opentracing.Span, request?: any, response?: any) => any;
+      reply?: (span?: Span, request?: any, response?: any) => any;
     };
   }
 

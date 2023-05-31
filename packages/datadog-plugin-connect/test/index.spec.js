@@ -4,6 +4,8 @@ const axios = require('axios')
 const http = require('http')
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { AsyncLocalStorage } = require('async_hooks')
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
@@ -55,6 +57,7 @@ describe('Plugin', () => {
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
                 expect(spans[0].meta).to.have.property('http.status_code', '200')
+                expect(spans[0].meta).to.have.property('component', 'connect')
               })
               .then(done)
               .catch(done)
@@ -373,6 +376,7 @@ describe('Plugin', () => {
                 expect(spans[0]).to.have.property('error', 1)
                 expect(spans[0]).to.have.property('resource', 'GET /user')
                 expect(spans[0].meta).to.have.property('http.status_code', '500')
+                expect(spans[0].meta).to.have.property('component', 'connect')
               })
               .then(done)
               .catch(done)
@@ -407,6 +411,7 @@ describe('Plugin', () => {
                 expect(spans[0]).to.have.property('error', 0)
                 expect(spans[0]).to.have.property('resource', 'GET /user')
                 expect(spans[0].meta).to.have.property('http.status_code', '400')
+                expect(spans[0].meta).to.have.property('component', 'connect')
               })
               .then(done)
               .catch(done)
@@ -433,7 +438,11 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
                 expect(spans[0].meta).to.have.property('http.status_code', '500')
+                expect(spans[0].meta).to.have.property('component', 'connect')
               })
               .then(done)
               .catch(done)
@@ -443,6 +452,35 @@ describe('Plugin', () => {
                 .get(`http://localhost:${port}/user`, {
                   validateStatus: status => status === 500
                 })
+                .catch(done)
+            })
+          })
+        })
+
+        it('should keep user stores untouched', done => {
+          const app = connect()
+          const storage = new AsyncLocalStorage()
+          const store = {}
+
+          app.use((req, res, next) => {
+            storage.run(store, () => next())
+          })
+
+          app.use((req, res) => {
+            try {
+              expect(storage.getStore()).to.equal(store)
+              done()
+            } catch (e) {
+              done(e)
+            }
+
+            res.end()
+          })
+
+          getPort().then(port => {
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user`)
                 .catch(done)
             })
           })
@@ -463,10 +501,16 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(spans[0].meta).to.have.property('component', 'connect')
                 expect(spans[1]).to.have.property('error', 1)
-                expect(spans[1].meta).to.have.property('error.type', error.name)
-                expect(spans[1].meta).to.have.property('error.msg', error.message)
-                expect(spans[1].meta).to.have.property('error.stack', error.stack)
+                expect(spans[1].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[1].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(spans[1].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(spans[1].meta).to.have.property('component', 'connect')
               })
               .then(done)
               .catch(done)
@@ -599,6 +643,7 @@ describe('Plugin', () => {
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
                 expect(spans[0].meta).to.have.property('http.status_code', '200')
+                expect(spans[0].meta).to.have.property('component', 'connect')
               })
               .then(done)
               .catch(done)
@@ -626,10 +671,16 @@ describe('Plugin', () => {
               .use(traces => {
                 const spans = sort(traces[0])
 
+                expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(spans[0].meta).to.have.property('component', 'connect')
                 expect(spans[1]).to.have.property('error', 1)
-                expect(spans[1].meta).to.have.property('error.type', error.name)
-                expect(spans[1].meta).to.have.property('error.msg', error.message)
-                expect(spans[1].meta).to.have.property('error.stack', error.stack)
+                expect(spans[1].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[1].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(spans[1].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(spans[1].meta).to.have.property('component', 'connect')
               })
               .then(done)
               .catch(done)
@@ -656,7 +707,11 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
                 expect(spans[0].meta).to.have.property('http.status_code', '500')
+                expect(spans[0].meta).to.have.property('component', 'connect')
               })
               .then(done)
               .catch(done)
@@ -720,7 +775,6 @@ describe('Plugin', () => {
 
           app.use((req, res, next) => {
             span = tracer.scope().active()
-            tracer.scope().activate(null, () => next())
             next()
           })
 
@@ -759,10 +813,11 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
-                expect(spans[0].meta).to.have.property('error.type', error.name)
-                expect(spans[0].meta).to.have.property('error.msg', error.message)
-                expect(spans[0].meta).to.have.property('error.stack', error.stack)
+                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
                 expect(spans[0].meta).to.have.property('http.status_code', '500')
+                expect(spans[0].meta).to.have.property('component', 'connect')
               })
               .then(done)
               .catch(done)
@@ -789,7 +844,11 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 expect(spans[0]).to.have.property('error', 1)
+                expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
                 expect(spans[0].meta).to.have.property('http.status_code', '500')
+                expect(spans[0].meta).to.have.property('component', 'connect')
               })
               .then(done)
               .catch(done)

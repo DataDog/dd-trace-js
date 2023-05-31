@@ -1,191 +1,142 @@
 /* eslint-disable max-len */
 'use strict'
 
-const Kinesis = require('../src/services/kinesis')
-const tracer = require('../../dd-trace')
-const { randomBytes } = require('crypto')
-const { expect } = require('chai')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { setup } = require('./spec_helpers')
+const helpers = require('./kinesis_helpers')
 
 describe('Kinesis', () => {
-  let span
-  withVersions('aws-sdk', 'aws-sdk', version => {
-    let traceId
-    let parentId
-    let spanId
+  setup()
+
+  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    let AWS
+    let kinesis
+
+    const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
+
     before(() => {
-      tracer.init()
-      span = {
-        finish: sinon.spy(() => {}),
-        context: () => {
-          return {
-            _sampling: {
-              priority: 1
-            },
-            _trace: {
-              started: [],
-              origin: ''
-            },
-            _traceFlags: {
-              sampled: 1
-            },
-            'x-datadog-trace-id': traceId,
-            'x-datadog-parent-id': parentId,
-            'x-datadog-sampling-priority': '1',
-            toTraceId: () => {
-              return traceId
-            },
-            toSpanId: () => {
-              return spanId
-            }
-          }
-        },
-        addTags: sinon.stub(),
-        setTag: sinon.stub()
-      }
-      tracer._tracer.startSpan = sinon.spy(() => {
-        return span
-      })
+      return agent.load('aws-sdk')
     })
 
-    it('injects trace context to Kinesis putRecord', () => {
-      const kinesis = new Kinesis(tracer)
-      const request = {
-        params: {
-          Data: JSON.stringify({
-            custom: 'data',
-            for: 'my users',
-            from: 'Aaron Stuyvenberg'
-          })
-        },
-        operation: 'putRecord'
-      }
+    before(done => {
+      AWS = require(`../../../versions/${kinesisClientName}@${version}`).get()
 
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
-      kinesis.requestInject(span.context(), request)
-
-      expect(request.params).to.deep.equal({
-        Data: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}'
-      })
-    })
-
-    it('handles already b64 encoded data', () => {
-      const kinesis = new Kinesis(tracer)
-      const request = {
-        params: {
-          Data: Buffer.from(JSON.stringify({
-            custom: 'data',
-            for: 'my users',
-            from: 'Aaron Stuyvenberg'
-          })).toString('base64')
-        },
-        operation: 'putRecord'
-      }
-
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
-      kinesis.requestInject(span.context(), request)
-
-      expect(request.params).to.deep.equal({
-        Data: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}'
-      })
-    })
-
-    it('injects trace context to Kinesis putRecords', () => {
-      const kinesis = new Kinesis(tracer)
-      const request = {
-        params: {
-          Records: [
-            {
-              Data: JSON.stringify({
-                custom: 'data',
-                for: 'my users',
-                from: 'Aaron Stuyvenberg'
-              })
-            }
-          ]
-        },
-        operation: 'putRecords'
-      }
-
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
-      kinesis.requestInject(span.context(), request)
-
-      expect(request.params).to.deep.equal({
-        Records: [
-          {
-            Data: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}'
-          }
-        ]
-      })
-    })
-    it('skips injecting trace context to Kinesis if message is full', () => {
-      const kinesis = new Kinesis(tracer)
-      const request = {
-        params: {
-          Records: [
-            {
-              Data: JSON.stringify({
-                myData: randomBytes(1000000).toString('base64')
-              })
-            }
-          ]
-        },
-        operation: 'putRecords'
-      }
-
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
-      kinesis.requestInject(span.context(), request)
-      expect(request.params).to.deep.equal(request.params)
-    })
-
-    it('won\t crash with raw strings', () => {
-      const kinesis = new Kinesis(tracer)
-      const request = {
-        params: {
-          Data: Buffer.from('asldkfjasdljasdlfkj').toString('base64')
-        },
-        operation: 'putRecord'
-      }
-
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
-      kinesis.requestInject(span.context(), request)
-
-      expect(request.params).to.deep.equal(request.params)
-    })
-
-    it('won\t crash with an empty request', () => {
-      const kinesis = new Kinesis(tracer)
-      const request = {
-        params: {},
-        operation: 'putRecord'
-      }
-
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
-      kinesis.requestInject(span.context(), request)
-
-      expect(request.params).to.deep.equal(request.params)
-    })
-
-    it('generates tags for proper input', () => {
-      const kinesis = new Kinesis(tracer)
       const params = {
-        StreamName: 'my-great-stream'
+        endpoint: 'http://127.0.0.1:4566',
+        region: 'us-east-1'
       }
 
-      expect(kinesis.generateTags(params, 'putRecord')).to.deep.equal({
-        'aws.kinesis.stream_name': 'my-great-stream',
-        'resource.name': 'putRecord my-great-stream'
+      if (moduleName === '@aws-sdk/smithy-client') {
+        const { NodeHttpHandler } = require(`../../../versions/@aws-sdk/node-http-handler@${version}`).get()
+
+        params.requestHandler = new NodeHttpHandler()
+      }
+
+      kinesis = new AWS.Kinesis(params)
+      kinesis.createStream({
+        StreamName: 'MyStream',
+        ShardCount: 1
+      }, (err, res) => {
+        if (err) return done(err)
+
+        helpers.waitForActiveStream(kinesis, done)
+      })
+    })
+
+    after(done => {
+      kinesis.deleteStream({
+        StreamName: 'MyStream'
+      }, (err, res) => {
+        if (err) return done(err)
+
+        helpers.waitForDeletedStream(kinesis, done)
+      })
+    })
+
+    it('injects trace context to Kinesis putRecord', done => {
+      helpers.putTestRecord(kinesis, helpers.dataBuffer, (err, data) => {
+        if (err) return done(err)
+
+        helpers.getTestData(kinesis, data, (err, data) => {
+          if (err) return done(err)
+
+          expect(data).to.have.property('_datadog')
+          expect(data._datadog).to.have.property('x-datadog-trace-id')
+
+          done()
+        })
+      })
+    })
+
+    it('handles already b64 encoded data', done => {
+      helpers.putTestRecord(kinesis, helpers.dataBuffer.toString('base64'), (err, data) => {
+        if (err) return done(err)
+
+        helpers.getTestData(kinesis, data, (err, data) => {
+          if (err) return done(err)
+
+          expect(data).to.have.property('_datadog')
+          expect(data._datadog).to.have.property('x-datadog-trace-id')
+
+          done()
+        })
+      })
+    })
+
+    it('skips injecting trace context to Kinesis if message is full', done => {
+      const dataBuffer = Buffer.from(JSON.stringify({
+        myData: Array(1048576 - 100).join('a')
+      }))
+
+      helpers.putTestRecord(kinesis, dataBuffer, (err, data) => {
+        if (err) return done(err)
+
+        helpers.getTestData(kinesis, data, (err, data) => {
+          if (err) return done(err)
+
+          expect(data).to.not.have.property('_datadog')
+
+          done()
+        })
+      })
+    })
+
+    it('generates tags for proper input', done => {
+      agent.use(traces => {
+        const span = traces[0][0]
+        expect(span.meta).to.include({
+          'streamname': 'MyStream',
+          'aws_service': 'Kinesis',
+          'region': 'us-east-1'
+        })
+        expect(span.resource).to.equal('putRecord MyStream')
+        expect(span.meta).to.have.property('streamname', 'MyStream')
+      }).then(done, done)
+
+      helpers.putTestRecord(kinesis, helpers.dataBuffer, e => e && done(e))
+    })
+
+    describe('Disabled', () => {
+      before(() => {
+        process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = 'false'
+      })
+
+      after(() => {
+        delete process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED
+      })
+
+      it('skip injects trace context to Kinesis putRecord when disabled', done => {
+        helpers.putTestRecord(kinesis, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
+
+          helpers.getTestData(kinesis, data, (err, data) => {
+            if (err) return done(err)
+
+            expect(data).not.to.have.property('_datadog')
+
+            done()
+          })
+        })
       })
     })
   })

@@ -2,11 +2,16 @@
 
 const { expect } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const namingSchema = require('./naming')
 
 describe('Plugin', () => {
   let tracer
 
   describe('rhea', () => {
+    before(() => agent.load('rhea'))
+    after(() => agent.close({ ritmReset: false }))
+
     withVersions('rhea', 'rhea', version => {
       describe('with broker', () => {
         let container
@@ -17,14 +22,12 @@ describe('Plugin', () => {
         })
 
         afterEach((done) => {
-          agent.close({ ritmReset: false })
-          agent.wipe()
           context.connection.once('connection_close', () => done())
           context.connection.close()
         })
 
         describe('without configuration', () => {
-          beforeEach(() => agent.load('rhea'))
+          beforeEach(() => agent.reload('rhea'))
 
           beforeEach(done => {
             container = require(`../../../versions/rhea@${version}`).get()
@@ -48,10 +51,10 @@ describe('Plugin', () => {
               agent.use(traces => {
                 const span = traces[0][0]
                 expect(span).to.include({
-                  name: 'amqp.send',
+                  name: namingSchema.send.opName,
                   resource: 'amq.topic',
                   error: 0,
-                  service: 'test-amqp-producer'
+                  service: namingSchema.send.serviceName
                 })
                 expect(span).to.not.have.property('type')
                 expect(span.meta).to.include({
@@ -59,10 +62,11 @@ describe('Plugin', () => {
                   'amqp.link.target.address': 'amq.topic',
                   'amqp.link.role': 'sender',
                   'amqp.delivery.state': 'accepted',
-                  'out.host': 'localhost'
+                  'out.host': 'localhost',
+                  'component': 'rhea'
                 })
                 expect(span.metrics).to.include({
-                  'out.port': 5673
+                  'network.destination.port': 5673
                 })
               })
                 .then(done, done)
@@ -78,6 +82,24 @@ describe('Plugin', () => {
               })
               context.sender.send({ body: 'Hello World!' })
             })
+
+            it('should inject span context with encoded messages', (done) => {
+              container.once('message', msg => {
+                const keys = Object.keys(msg.message.delivery_annotations)
+                expect(keys).to.include('x-datadog-trace-id')
+                expect(keys).to.include('x-datadog-parent-id')
+                done()
+              })
+              tracer.trace('web.request', () => {
+                const encodedMessage = container.message.encode({ body: 'Hello World!' })
+                context.sender.send(encodedMessage, undefined, 0)
+              })
+            })
+
+            withNamingSchema(
+              () => { context.sender.send({ body: 'Hello World!' }) },
+              () => namingSchema.send.opName, () => namingSchema.send.serviceName
+            )
           })
 
           describe('receiving a message', () => {
@@ -85,16 +107,17 @@ describe('Plugin', () => {
               agent.use(traces => {
                 const span = traces[0][0]
                 expect(span).to.include({
-                  name: 'amqp.receive',
+                  name: namingSchema.receive.opName,
                   resource: 'amq.topic',
                   error: 0,
-                  service: 'test',
+                  service: namingSchema.receive.serviceName,
                   type: 'worker'
                 })
                 expect(span.meta).to.include({
                   'span.kind': 'consumer',
                   'amqp.link.source.address': 'amq.topic',
-                  'amqp.link.role': 'receiver'
+                  'amqp.link.role': 'receiver',
+                  'component': 'rhea'
                 })
               })
                 .then(done, done)
@@ -109,11 +132,17 @@ describe('Plugin', () => {
               })
               context.sender.send({ body: 'Hello World!' })
             })
+
+            withNamingSchema(
+              () => { context.sender.send({ body: 'Hello World!' }) },
+              () => namingSchema.receive.opName,
+              () => namingSchema.receive.serviceName
+            )
           })
         })
 
         describe('with configuration', () => {
-          beforeEach(() => agent.load('rhea', {
+          beforeEach(() => agent.reload('rhea', {
             service: 'a_test_service'
           }))
 
@@ -134,19 +163,25 @@ describe('Plugin', () => {
             connection.open_receiver('amq.topic')
           })
 
+          withNamingSchema(
+            () => { context.sender.send({ body: 'Hello World!' }) },
+            () => namingSchema.receive.opName, () => 'a_test_service'
+          )
+
           it('should use the configuration for the receiver', (done) => {
             agent.use(traces => {
               const span = traces[0][0]
-              expect(span).to.have.property('name', 'amqp.receive')
+              expect(span).to.have.property('name', namingSchema.receive.opName)
               expect(span).to.have.property('service', 'a_test_service')
             })
               .then(done, done)
             context.sender.send({ body: 'Hello World!' })
           })
+
           it('should use the configuration for the sender', (done) => {
             agent.use(traces => {
               const span = traces[0][0]
-              expect(span).to.have.property('name', 'amqp.send')
+              expect(span).to.have.property('name', namingSchema.send.opName)
               expect(span).to.have.property('service', 'a_test_service')
             })
               .then(done, done)
@@ -167,8 +202,6 @@ describe('Plugin', () => {
         })
 
         afterEach((done) => {
-          agent.close({ ritmReset: false })
-          agent.wipe()
           if (connection.socket_ready) {
             connection.once('connection_close', () => done())
             connection.close()
@@ -178,7 +211,7 @@ describe('Plugin', () => {
         })
 
         describe('with defaults', () => {
-          beforeEach(() => agent.load('rhea'))
+          beforeEach(() => agent.reload('rhea'))
 
           beforeEach(done => {
             const rhea = require(`../../../versions/rhea@${version}`).get()
@@ -207,7 +240,7 @@ describe('Plugin', () => {
 
           describe('client sent message', () => {
             it('should be instrumented on receiving', done => {
-              const p = expectReceiving(agent)
+              const p = expectReceiving(agent, namingSchema)
 
               server.on('message', msg => {
                 p.then(done, done)
@@ -216,7 +249,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on sending', done => {
-              const p = expectSending(agent, null, 'amq.topic.2')
+              const p = expectSending(agent, namingSchema, null, 'amq.topic.2')
 
               server.on('message', msg => {
                 p.then(done, done)
@@ -227,7 +260,7 @@ describe('Plugin', () => {
 
           describe('server sent message', () => {
             it('should be instrumented on receiving', done => {
-              const p = expectReceiving(agent, null, 'amq.topic.2')
+              const p = expectReceiving(agent, namingSchema, null, 'amq.topic.2')
 
               client.on('message', msg => {
                 p.then(done, done)
@@ -236,7 +269,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on sending', done => {
-              const p = expectSending(agent)
+              const p = expectSending(agent, namingSchema)
 
               client.on('message', msg => {
                 p.then(done, done)
@@ -265,9 +298,10 @@ describe('Plugin', () => {
                   const span = traces[0][0]
                   expect(span.error).to.equal(1)
                   expect(span.meta).to.include({
-                    'error.msg': 'this is an error',
-                    'error.type': 'Error',
-                    'error.stack': error.stack
+                    [ERROR_MESSAGE]: 'this is an error',
+                    [ERROR_TYPE]: 'Error',
+                    [ERROR_STACK]: error.stack,
+                    'component': 'rhea'
                   })
                   Session.prototype.on_transfer = onTransfer
                 }).then(done, done)
@@ -279,7 +313,7 @@ describe('Plugin', () => {
         })
 
         describe('with pre-settled messages', () => {
-          beforeEach(() => agent.load('rhea'))
+          beforeEach(() => agent.reload('rhea'))
 
           beforeEach(done => {
             const rhea = require(`../../../versions/rhea@${version}`).get()
@@ -308,7 +342,7 @@ describe('Plugin', () => {
 
           describe('client sent message', () => {
             it('should be instrumented on sending', done => {
-              const p = expectSending(agent, false)
+              const p = expectSending(agent, namingSchema, false)
 
               server.on('message', msg => {
                 p.then(done, done)
@@ -317,7 +351,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on receiving', done => {
-              const p = expectReceiving(agent)
+              const p = expectReceiving(agent, namingSchema)
 
               server.on('message', msg => {
                 p.then(done, done)
@@ -328,7 +362,7 @@ describe('Plugin', () => {
 
           describe('server sent message', () => {
             it('should be instrumented on sending', done => {
-              const p = expectSending(agent)
+              const p = expectSending(agent, namingSchema)
 
               client.on('message', msg => {
                 p.then(done, done)
@@ -337,7 +371,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on receiving', done => {
-              const p = expectReceiving(agent)
+              const p = expectReceiving(agent, namingSchema)
 
               client.on('message', msg => {
                 p.then(done, done)
@@ -348,7 +382,7 @@ describe('Plugin', () => {
         })
 
         describe('with manually settled messages', () => {
-          beforeEach(() => agent.load('rhea'))
+          beforeEach(() => agent.reload('rhea'))
 
           beforeEach(done => {
             const rhea = require(`../../../versions/rhea@${version}`).get()
@@ -369,7 +403,7 @@ describe('Plugin', () => {
 
           describe('server sent message', () => {
             it('should be instrumented on sending', done => {
-              const p = expectSending(agent)
+              const p = expectSending(agent, namingSchema)
 
               client.on('message', msg => {
                 msg.delivery.accept()
@@ -379,7 +413,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on receiving and accepting', done => {
-              const p = expectReceiving(agent)
+              const p = expectReceiving(agent, namingSchema)
 
               client.on('message', msg => {
                 process.nextTick(() => {
@@ -391,7 +425,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on receiving and rejecting', done => {
-              const p = expectReceiving(agent, 'rejected')
+              const p = expectReceiving(agent, namingSchema, 'rejected')
 
               client.on('message', msg => {
                 process.nextTick(() => {
@@ -403,7 +437,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on receiving and releasing', done => {
-              const p = expectReceiving(agent, 'released')
+              const p = expectReceiving(agent, namingSchema, 'released')
 
               client.on('message', msg => {
                 process.nextTick(() => {
@@ -415,7 +449,7 @@ describe('Plugin', () => {
             })
 
             it('should be instrumented on receiving and modifying', done => {
-              const p = expectReceiving(agent, 'modified')
+              const p = expectReceiving(agent, namingSchema, 'modified')
 
               client.on('message', msg => {
                 process.nextTick(() => {
@@ -429,7 +463,9 @@ describe('Plugin', () => {
         })
 
         describe('on disconnect', () => {
-          beforeEach(() => agent.load('rhea'))
+          beforeEach(() => agent.reload('rhea'))
+
+          let expectedServerPort
 
           beforeEach(done => {
             const rhea = require(`../../../versions/rhea@${version}`).get()
@@ -452,6 +488,7 @@ describe('Plugin', () => {
               connection = client.connect(Object.assign({ reconnect: false }, listener.address()))
               connection.open_receiver({ autoaccept: false })
               connection.open_sender()
+              expectedServerPort = listener.address().port
             })
           })
 
@@ -460,18 +497,22 @@ describe('Plugin', () => {
             agent.use(traces => {
               const span = traces[0][0]
               expect(span).to.include({
-                name: 'amqp.send',
+                name: namingSchema.send.opName,
                 resource: 'amq.topic',
                 error: 1,
-                service: 'test-amqp-producer'
+                service: namingSchema.send.serviceName
               })
               expect(span.meta).to.include({
                 'span.kind': 'producer',
                 'amqp.link.target.address': 'amq.topic',
                 'amqp.link.role': 'sender',
-                'error.type': 'Error',
-                'error.msg': 'fake protocol error',
-                'error.stack': err.stack
+                [ERROR_TYPE]: 'Error',
+                [ERROR_MESSAGE]: 'fake protocol error',
+                [ERROR_STACK]: err.stack,
+                'component': 'rhea'
+              })
+              expect(span.metrics).to.include({
+                'network.destination.port': expectedServerPort
               })
             }).then(done, done)
             connection.output = function () {
@@ -488,18 +529,19 @@ describe('Plugin', () => {
             agent.use(traces => {
               const span = traces[0][0]
               expect(span).to.include({
-                name: 'amqp.receive',
+                name: namingSchema.receive.opName,
                 resource: 'amq.topic',
                 error: 1,
-                service: 'test'
+                service: namingSchema.receive.serviceName
               })
               expect(span.meta).to.include({
                 'span.kind': 'consumer',
                 'amqp.link.source.address': 'amq.topic',
                 'amqp.link.role': 'receiver',
-                'error.type': 'Error',
-                'error.msg': 'fake protocol error',
-                'error.stack': err.stack
+                [ERROR_TYPE]: 'Error',
+                [ERROR_MESSAGE]: 'fake protocol error',
+                [ERROR_STACK]: err.stack,
+                'component': 'rhea'
               })
             }).then(done, done)
             client.on('message', msg => {
@@ -516,22 +558,23 @@ describe('Plugin', () => {
   })
 })
 
-function expectReceiving (agent, deliveryState, topic) {
+function expectReceiving (agent, namingSchema, deliveryState, topic) {
   deliveryState = deliveryState || deliveryState === false ? undefined : 'accepted'
   topic = topic || 'amq.topic'
   return Promise.resolve().then(() => agent.use(traces => {
     const span = traces[0][0]
     expect(span).to.include({
-      name: 'amqp.receive',
+      name: namingSchema.receive.opName,
       resource: topic,
       error: 0,
-      service: 'test',
+      service: namingSchema.receive.serviceName,
       type: 'worker'
     })
     const expectedMeta = {
       'span.kind': 'consumer',
       'amqp.link.source.address': topic,
-      'amqp.link.role': 'receiver'
+      'amqp.link.role': 'receiver',
+      'component': 'rhea'
     }
     if (deliveryState) {
       expectedMeta['amqp.delivery.state'] = deliveryState
@@ -540,22 +583,23 @@ function expectReceiving (agent, deliveryState, topic) {
   }))
 }
 
-function expectSending (agent, deliveryState, topic) {
+function expectSending (agent, namingSchema, deliveryState, topic) {
   deliveryState = deliveryState || deliveryState === false ? undefined : 'accepted'
   topic = topic || 'amq.topic'
   return Promise.resolve().then(() => agent.use(traces => {
     const span = traces[0][0]
     expect(span).to.include({
-      name: 'amqp.send',
+      name: namingSchema.send.opName,
       resource: topic,
       error: 0,
-      service: 'test-amqp-producer'
+      service: namingSchema.send.serviceName
     })
     expect(span).to.not.have.property('type')
     const expectedMeta = {
       'span.kind': 'producer',
       'amqp.link.target.address': topic,
-      'amqp.link.role': 'sender'
+      'amqp.link.role': 'sender',
+      'component': 'rhea'
     }
     if (deliveryState) {
       expectedMeta['amqp.delivery.state'] = deliveryState

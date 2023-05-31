@@ -11,17 +11,29 @@ const circularBufferConstructor = Symbol('circularBufferConstructor')
 const inFlightDeliveries = Symbol('inFlightDeliveries')
 
 const patched = new WeakSet()
-const dispatchCh = channel('apm:rhea:dispatch')
-const errorCh = channel('apm:rhea:error')
-const asyncEndCh = channel('apm:rhea:async-end')
-const endCh = channel('apm:rhea:end')
+
+const startSendCh = channel('apm:rhea:send:start')
+const encodeSendCh = channel('apm:rhea:send:encode')
+const errorSendCh = channel('apm:rhea:send:error')
+const finishSendCh = channel('apm:rhea:send:finish')
+
+const startReceiveCh = channel('apm:rhea:receive:start')
+const dispatchReceiveCh = channel('apm:rhea:receive:dispatch')
+const errorReceiveCh = channel('apm:rhea:receive:error')
+const finishReceiveCh = channel('apm:rhea:receive:finish')
 
 const contexts = new WeakMap()
 
-addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
-  const startSendCh = channel('apm:rhea:send:start')
-  const startReceiveCh = channel('apm:rhea:receive:start')
+addHook({ name: 'rhea', versions: ['>=1'] }, rhea => {
+  shimmer.wrap(rhea.message, 'encode', encode => function (msg) {
+    encodeSendCh.publish(msg)
+    return encode.apply(this, arguments)
+  })
 
+  return rhea
+})
+
+addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
   const Sender = obj.Sender
   const Receiver = obj.Receiver
   shimmer.wrap(Sender.prototype, 'send', send => function (msg, tag, format) {
@@ -35,24 +47,24 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
     const targetAddress = this.options && this.options.target &&
       this.options.target.address ? this.options.target.address : undefined
 
-    startSendCh.publish({ targetAddress, host, port, msg })
-    const delivery = send.apply(this, arguments)
     const asyncResource = new AsyncResource('bound-anonymous-fn')
-    const context = {
-      asyncResource
-    }
-    contexts.set(delivery, context)
+    return asyncResource.runInAsyncScope(() => {
+      startSendCh.publish({ targetAddress, host, port, msg })
+      const delivery = send.apply(this, arguments)
+      const context = {
+        asyncResource
+      }
+      contexts.set(delivery, context)
 
-    addToInFlightDeliveries(this.connection, delivery)
-    try {
-      return delivery
-    } catch (err) {
-      errorCh.publish(err)
+      addToInFlightDeliveries(this.connection, delivery)
+      try {
+        return delivery
+      } catch (err) {
+        errorSendCh.publish(err)
 
-      throw err
-    } finally {
-      endCh.publish(undefined)
-    }
+        throw err
+      }
+    })
   })
 
   shimmer.wrap(Receiver.prototype, 'dispatch', dispatch => function (eventName, msgObj) {
@@ -62,26 +74,26 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
     }
 
     if (eventName === 'message' && msgObj) {
-      startReceiveCh.publish({ msgObj, connection: this.connection })
+      const asyncResource = new AsyncResource('bound-anonymous-fn')
+      return asyncResource.runInAsyncScope(() => {
+        startReceiveCh.publish({ msgObj, connection: this.connection })
 
-      if (msgObj.delivery) {
-        const asyncResource = new AsyncResource('bound-anonymous-fn')
-        const context = {
-          asyncResource
+        if (msgObj.delivery) {
+          const context = {
+            asyncResource
+          }
+          contexts.set(msgObj.delivery, context)
+          msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery, msgObj.delivery.update)
+          addToInFlightDeliveries(this.connection, msgObj.delivery)
         }
-        contexts.set(msgObj.delivery, context)
-        msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery, msgObj.delivery.update)
-        addToInFlightDeliveries(this.connection, msgObj.delivery)
-      }
-      try {
-        return dispatch.apply(this, arguments)
-      } catch (err) {
-        errorCh.publish(err)
+        try {
+          return dispatch.apply(this, arguments)
+        } catch (err) {
+          errorReceiveCh.publish(err)
 
-        throw err
-      } finally {
-        endCh.publish(undefined)
-      }
+          throw err
+        }
+      })
     }
 
     return dispatch.apply(this, arguments)
@@ -96,10 +108,14 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/connection.js' }, Connecti
       if (this[inFlightDeliveries]) {
         this[inFlightDeliveries].forEach(delivery => {
           const context = contexts.get(delivery)
-          const asyncResource = context.asyncResource
+          const asyncResource = context && context.asyncResource
+
+          if (!asyncResource) return
+
           asyncResource.runInAsyncScope(() => {
-            errorCh.publish(error)
-            finish(delivery, null)
+            errorReceiveCh.publish(error)
+            beforeFinish(delivery, null)
+            finishReceiveCh.publish()
           })
         })
       }
@@ -135,7 +151,7 @@ function wrapDeliveryUpdate (obj, update) {
     const cb = asyncResource.bind(update)
     return AsyncResource.bind(function wrappedUpdate (settled, stateData) {
       const state = getStateFromData(stateData)
-      dispatchCh.publish({ state })
+      dispatchReceiveCh.publish({ state })
       return cb.apply(this, arguments)
     })
   }
@@ -160,19 +176,20 @@ function patchCircularBuffer (proto, Session) {
           shimmer.wrap(CircularBuffer.prototype, 'pop_if', popIf => function (fn) {
             arguments[0] = AsyncResource.bind(function (entry) {
               const context = contexts.get(entry)
-              const asyncResource = context.asyncResource
-              let shouldPop
-              if (asyncResource) {
-                fn = asyncResource.bind(fn, this)
-                shouldPop = fn(entry)
-                if (shouldPop && asyncResource) {
-                  const remoteState = entry.remote_state
-                  const state = remoteState && remoteState.constructor
-                    ? entry.remote_state.constructor.composite_type : undefined
-                  asyncResource.runInAsyncScope(() => {
-                    return finish(entry, state)
-                  })
-                }
+              const asyncResource = context && context.asyncResource
+
+              if (!asyncResource) return fn(entry)
+
+              const shouldPop = asyncResource.runInAsyncScope(() => fn(entry))
+
+              if (shouldPop) {
+                const remoteState = entry.remote_state
+                const state = remoteState && remoteState.constructor
+                  ? entry.remote_state.constructor.composite_type : undefined
+                asyncResource.runInAsyncScope(() => {
+                  beforeFinish(entry, state)
+                  finishSendCh.publish()
+                })
               }
 
               return shouldPop
@@ -199,13 +216,12 @@ function addToInFlightDeliveries (connection, delivery) {
   deliveries.add(delivery)
 }
 
-function finish (delivery, state) {
+function beforeFinish (delivery, state) {
   const obj = contexts.get(delivery)
   if (obj) {
     if (state) {
-      dispatchCh.publish({ state })
+      dispatchReceiveCh.publish({ state })
     }
-    asyncEndCh.publish(undefined)
     if (obj.connection && obj.connection[inFlightDeliveries]) {
       obj.connection[inFlightDeliveries].delete(delivery)
     }

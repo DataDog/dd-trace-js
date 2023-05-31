@@ -8,6 +8,15 @@ const API_REPOSITORY_URL = 'https://api.github.com/repos/DataDog/test-environmen
 const DISPATCH_WORKFLOW_URL = `${API_REPOSITORY_URL}/actions/workflows/dd-trace-js-tests.yml/dispatches`
 const GET_WORKFLOWS_URL = `${API_REPOSITORY_URL}/actions/runs`
 
+function getBranchUnderTest () {
+  /**
+   * GITHUB_HEAD_REF is only set for `pull_request` events
+   * GITHUB_REF_NAME is used for `push` events
+   * More info in: https://docs.github.com/en/actions/learn-github-actions/environment-variables
+   */
+  return process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME
+}
+
 const getCommonHeaders = () => {
   return {
     'Content-Type': 'application/json',
@@ -18,13 +27,13 @@ const getCommonHeaders = () => {
 }
 
 const triggerWorkflow = () => {
-  console.log(`Branch under test: ${process.env.CIRCLE_BRANCH}`)
+  console.log(`Branch under test: ${getBranchUnderTest()}`)
   return new Promise((resolve, reject) => {
     // eslint-disable-next-line
     let response = ''
     const body = JSON.stringify({
       ref: 'main',
-      inputs: { branch: process.env.CIRCLE_BRANCH }
+      inputs: { branch: getBranchUnderTest() }
     })
     const request = https.request(
       DISPATCH_WORKFLOW_URL,
@@ -51,7 +60,7 @@ const getWorkflowRunsInProgress = () => {
   return new Promise((resolve, reject) => {
     let response = ''
     const request = https.request(
-      `${GET_WORKFLOWS_URL}?event=workflow_dispatch&status=in_progress OR waiting OR requested OR queued`,
+      `${GET_WORKFLOWS_URL}?event=workflow_dispatch`,
       {
         headers: getCommonHeaders()
       },
@@ -107,29 +116,40 @@ const wait = (timeToWaitMs) => {
 
 async function main () {
   // Trigger JS GHA
-  console.log('Triggering CI Visibility Test Environment Workflow')
+  console.log('Triggering CI Visibility test environment workflow.')
   const httpResponseCode = await triggerWorkflow()
-  console.log('GitHub API Response code:', httpResponseCode)
+  console.log('GitHub API response code:', httpResponseCode)
+
+  if (httpResponseCode !== 204) {
+    throw new Error('Could not trigger workflow')
+  }
+
   // Give some time for GH to process the request
   await wait(15000)
+
   // Get the run ID from the workflow we just triggered
   const workflowsInProgress = await getWorkflowRunsInProgress()
-  console.log('Workflows in progress:', workflowsInProgress)
   const { total_count: numWorkflows, workflow_runs: workflows } = workflowsInProgress
   if (numWorkflows === 0) {
-    throw new Error('Could not find the triggered job')
+    throw new Error('Could not find the triggered workflow')
   }
   // Pick the first one (most recently triggered one)
-  const [{ id: runId } = {}] = workflows
+  const [triggeredWorkflow] = workflows
 
-  console.log('Waiting for the workflow to finish.')
-  console.log(`Job URL: https://github.com/DataDog/test-environment/actions/runs/${runId}`)
-  // Poll every 15 seconds until we have a finished status
+  console.log('Triggered workflow:', triggeredWorkflow)
+
+  const { id: runId } = triggeredWorkflow || {}
+
+  console.log(`Workflow URL: https://github.com/DataDog/test-environment/actions/runs/${runId}`)
+
+  // Wait an initial 1 minute, because we're sure it won't finish earlier
+  await wait(60000)
+
+  // Poll every 5 seconds until we have a finished status
   await new Promise((resolve, reject) => {
     const intervalId = setInterval(async () => {
       const currentWorkflow = await getCurrentWorkflowJobs(runId)
-      const { jobs, total_count: numJobs } = currentWorkflow
-      console.log('Number of jobs: ', numJobs)
+      const { jobs } = currentWorkflow
       const hasAnyJobFailed = jobs.some(({ status, conclusion }) => status === 'completed' && conclusion !== 'success')
       const hasEveryJobPassed = jobs.every(
         ({ status, conclusion }) => status === 'completed' && conclusion === 'success'
@@ -139,13 +159,13 @@ async function main () {
 Check https://github.com/DataDog/test-environment/actions/runs/${runId} for more details.`))
         clearInterval(intervalId)
       } else if (hasEveryJobPassed) {
-        console.log('Performance overhead test successful')
+        console.log('Performance overhead test successful.')
         resolve()
         clearInterval(intervalId)
       } else {
-        console.log(`Checking the result of Job ${runId} again`)
+        console.log(`Workflow https://github.com/DataDog/test-environment/actions/runs/${runId} is not finished yet.`)
       }
-    }, 15000)
+    }, 5000)
   })
 }
 

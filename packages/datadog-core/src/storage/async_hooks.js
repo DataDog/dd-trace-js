@@ -1,6 +1,6 @@
 'use strict'
 
-const { createHook, executionAsyncId } = require('async_hooks')
+const { executionAsyncId } = require('async_hooks')
 const AsyncResourceStorage = require('./async_resource')
 
 class AsyncHooksStorage extends AsyncResourceStorage {
@@ -17,10 +17,10 @@ class AsyncHooksStorage extends AsyncResourceStorage {
   }
 
   _createHook () {
-    return createHook({
-      init: this._init.bind(this),
+    return {
+      ...super._createHook(),
       destroy: this._destroy.bind(this)
-    })
+    }
   }
 
   _init (asyncId, type, triggerAsyncId, resource) {

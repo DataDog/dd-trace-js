@@ -89,6 +89,7 @@ describe('Plugin', () => {
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
                 expect(spans[0].meta).to.have.property('http.status_code', '200')
+                expect(spans[0].meta).to.have.property('component', 'paperplane')
               })
               .then(done)
               .catch(done)
@@ -349,6 +350,7 @@ describe('Plugin', () => {
               expect(spans[0]).to.have.property('error', 1)
               expect(spans[0]).to.have.property('resource', 'GET /user')
               expect(spans[0].meta).to.have.property('http.status_code', '500')
+              expect(spans[0].meta).to.have.property('component', 'paperplane')
 
               done()
             })
@@ -381,6 +383,7 @@ describe('Plugin', () => {
               expect(spans[0]).to.have.property('error', 0)
               expect(spans[0]).to.have.property('resource', 'GET /user')
               expect(spans[0].meta).to.have.property('http.status_code', '400')
+              expect(spans[0].meta).to.have.property('component', 'paperplane')
 
               done()
             })
@@ -409,6 +412,7 @@ describe('Plugin', () => {
 
                 expect(spans[0]).to.have.property('error', 1)
                 expect(spans[0].meta).to.have.property('http.status_code', '500')
+                expect(spans[0].meta).to.have.property('component', 'paperplane')
               })
               .then(done)
               .catch(done)
@@ -601,7 +605,7 @@ describe('Plugin', () => {
             })
           })
 
-          it('should not alter logs with no active span', () => {
+          it('should not inject trace_id or span_id without an active span', () => {
             /* eslint-disable no-console */
             paperplane.logger({ message: ':datadoge:' })
 
@@ -609,7 +613,9 @@ describe('Plugin', () => {
 
             const record = JSON.parse(console.info.firstCall.args[0])
 
-            expect(record).to.not.have.property('dd')
+            expect(record).to.have.property('dd')
+            expect(record.dd).to.not.have.property('trace_id')
+            expect(record.dd).to.not.have.property('span_id')
             expect(record).to.have.property('message', ':datadoge:')
             /* eslint-enable no-console */
           })

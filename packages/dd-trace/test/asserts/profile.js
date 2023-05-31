@@ -1,21 +1,16 @@
 'use strict'
 
-module.exports = ({ Assertion, expect }) => {
-  Assertion.addProperty('long', function () {
-    const obj = this._obj
-
-    expect(obj).to.be.an('object')
-    expect(obj.low).to.be.a('number')
-    expect(obj.high).to.be.a('number')
-    expect(obj.unsigned).to.be.a('boolean')
-  })
-
+module.exports = ({ Assertion, expect }, { expectTypes }) => {
   Assertion.addProperty('valueType', function () {
     const obj = this._obj
 
     expect(obj).to.be.a('object')
-    expect(obj.type).to.be.a.long
-    expect(obj.unit).to.be.a.long
+    expect(obj.type).to.be.a('number')
+    expect(obj.unit).to.be.a('number')
+  })
+
+  Assertion.addProperty('numeric', function () {
+    expectTypes(this, ['number', 'bigint'])
   })
 
   Assertion.addProperty('profile', function () {
@@ -23,24 +18,24 @@ module.exports = ({ Assertion, expect }) => {
 
     expect(obj).to.be.an('object')
 
-    expect(obj.timeNanos).to.be.a.long
-    expect(obj.period).to.be.a.long
+    expect(obj.timeNanos).to.be.a('bigint')
+    expect(obj.period).to.be.numeric
     expect(obj.periodType).to.be.a.valueType
     expect(obj.sampleType).to.be.an('array').and.have.length(2)
     expect(obj.sample).to.be.an('array')
     expect(obj.location).to.be.an('array')
     expect(obj.function).to.be.an('array')
-    expect(obj.stringTable).to.be.an('array').and.have.length.at.least(1)
-    expect(obj.stringTable[0]).to.equal('')
+    expect(obj.stringTable.strings).to.be.an('array').and.have.length.at.least(1)
+    expect(obj.stringTable.strings[0]).to.equal('')
 
     for (const sampleType of obj.sampleType) {
       expect(sampleType).to.be.a.valueType
     }
 
     for (const fn of obj.function) {
-      expect(fn.filename).to.be.a.long
-      expect(fn.systemName).to.be.a.long
-      expect(fn.name).to.be.a.long
+      expect(fn.filename).to.be.a('number')
+      expect(fn.systemName).to.be.a('number')
+      expect(fn.name).to.be.a('number')
       expect(fn.id).to.match(/\d+/)
     }
 
@@ -50,7 +45,7 @@ module.exports = ({ Assertion, expect }) => {
 
       for (const line of location.line) {
         expect(line.functionId).to.match(/\d+/)
-        expect(line.line).to.be.a.long
+        expect(line.line).to.be.a('number')
       }
     }
 

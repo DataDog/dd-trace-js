@@ -1,28 +1,42 @@
 'use strict'
 
-const fs = require('fs')
 const proxyquire = require('proxyquire')
 const log = require('../../src/log')
+const waf = require('../../src/appsec/waf')
 const RuleManager = require('../../src/appsec/rule_manager')
-const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../src/appsec/gateway/channels')
-const Gateway = require('../../src/appsec/gateway/engine')
-const addresses = require('../../src/appsec/addresses')
+const appsec = require('../../src/appsec')
+const {
+  incomingHttpRequestStart,
+  incomingHttpRequestEnd,
+  bodyParser,
+  queryParser
+} = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
+const agent = require('../plugins/agent')
+const Config = require('../../src/config')
+const axios = require('axios')
+const getPort = require('get-port')
+const blockedTemplate = require('../../src/appsec/blocked_templates')
 
 describe('AppSec Index', () => {
   let config
   let AppSec
   let web
+  let blocking
+
+  const RULES = { rules: [{ a: 1 }] }
 
   beforeEach(() => {
     config = {
       appsec: {
         enabled: true,
-        rules: './path/rules.json',
+        rules: RULES,
         rateLimit: 42,
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
-        obfuscatorValueRegex: '.*'
+        obfuscatorValueRegex: '.*',
+        blockedTemplateHtml: blockedTemplate.html,
+        blockedTemplateJson: blockedTemplate.json
       }
     }
 
@@ -30,16 +44,20 @@ describe('AppSec Index', () => {
       root: sinon.stub()
     }
 
+    blocking = {
+      setTemplates: sinon.stub()
+    }
+
     AppSec = proxyquire('../../src/appsec', {
-      '../plugins/util/web': web
+      '../plugins/util/web': web,
+      './blocking': blocking
     })
 
-    sinon.stub(fs, 'readFileSync').returns('{"rules": [{"a": 1}]}')
+    sinon.stub(waf, 'init').callThrough()
     sinon.stub(RuleManager, 'applyRules')
     sinon.stub(Reporter, 'setRateLimit')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
-    Gateway.manager.clear()
   })
 
   afterEach(() => {
@@ -48,21 +66,16 @@ describe('AppSec Index', () => {
   })
 
   describe('enable', () => {
-    it('should enable AppSec', () => {
+    it('should enable AppSec only once', () => {
+      AppSec.enable(config)
       AppSec.enable(config)
 
-      expect(fs.readFileSync).to.have.been.calledOnceWithExactly('./path/rules.json')
-      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly({ rules: [{ a: 1 }] }, config.appsec)
+      expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
+      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly(RULES, config.appsec)
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
-      expect(Gateway.manager.addresses).to.have.all.keys(
-        addresses.HTTP_INCOMING_HEADERS,
-        addresses.HTTP_INCOMING_ENDPOINT,
-        addresses.HTTP_INCOMING_RESPONSE_HEADERS,
-        addresses.HTTP_INCOMING_REMOTE_IP
-      )
     })
 
     it('should log when enable fails', () => {
@@ -79,7 +92,16 @@ describe('AppSec Index', () => {
       expect(log.error.secondCall).to.have.been.calledWithExactly(err)
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
-      expect(Gateway.manager.addresses).to.be.empty
+    })
+
+    it('should subscribe to blockable channels', () => {
+      expect(bodyParser.hasSubscribers).to.be.false
+      expect(queryParser.hasSubscribers).to.be.false
+
+      AppSec.enable(config)
+
+      expect(bodyParser.hasSubscribers).to.be.true
+      expect(queryParser.hasSubscribers).to.be.true
     })
   })
 
@@ -112,16 +134,30 @@ describe('AppSec Index', () => {
 
       expect(RuleManager.clearAllRules).to.have.been.calledOnce
     })
+
+    it('should unsubscribe to blockable channels', () => {
+      AppSec.enable(config)
+
+      AppSec.disable()
+
+      expect(bodyParser.hasSubscribers).to.be.false
+      expect(queryParser.hasSubscribers).to.be.false
+    })
   })
 
   describe('incomingHttpStartTranslator', () => {
-    it('should propagate incoming http start data', () => {
-      const store = new Map()
-      sinon.stub(Gateway, 'startContext').returns(store)
+    beforeEach(() => {
+      AppSec.enable(config)
 
-      const topSpan = {
+      sinon.stub(waf, 'run')
+    })
+
+    it('should propagate incoming http start data', () => {
+      const rootSpan = {
         addTags: sinon.stub()
       }
+
+      web.root.returns(rootSpan)
 
       const req = {
         url: '/path',
@@ -138,51 +174,35 @@ describe('AppSec Index', () => {
       }
       const res = {}
 
-      web.root.returns(topSpan)
-
-      sinon.stub(Gateway, 'propagate')
-
       AppSec.incomingHttpStartTranslator({ req, res })
 
-      expect(topSpan.addTags).to.have.been.calledOnceWithExactly({
+      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
         '_dd.appsec.enabled': 1,
-        '_dd.runtime_family': 'nodejs'
+        '_dd.runtime_family': 'nodejs',
+        'http.client_ip': '127.0.0.1'
       })
-      expect(Gateway.startContext).to.have.been.calledOnce
-      expect(store.get('req')).to.equal(req)
-      expect(store.get('res')).to.equal(res)
-      expect(Gateway.propagate).to.not.have.been.called
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+        'server.request.method': 'POST',
+        'http.client_ip': '127.0.0.1'
+      }, req)
     })
   })
 
   describe('incomingHttpEndTranslator', () => {
-    it('should do nothing when context is not found', () => {
-      sinon.stub(Gateway, 'getContext').returns(null)
+    beforeEach(() => {
+      AppSec.enable(config)
 
-      const req = {}
-      const res = {
-        getHeaders: () => ({
-          'content-type': 'application/json',
-          'content-lenght': 42
-        }),
-        statusCode: 201
+      sinon.stub(waf, 'run')
+
+      const rootSpan = {
+        addTags: sinon.stub()
       }
-
-      sinon.stub(Gateway, 'propagate')
-      sinon.stub(Reporter, 'finishRequest')
-
-      AppSec.incomingHttpEndTranslator({ req, res })
-
-      expect(Gateway.getContext).to.have.been.calledOnce
-      expect(Gateway.propagate).to.not.have.been.called
-      expect(Reporter.finishRequest).to.not.have.been.called
+      web.root.returns(rootSpan)
     })
 
     it('should propagate incoming http end data', () => {
-      const context = {}
-
-      sinon.stub(Gateway, 'getContext').returns(context)
-
       const req = {
         url: '/path',
         headers: {
@@ -204,35 +224,21 @@ describe('AppSec Index', () => {
         statusCode: 201
       }
 
-      sinon.stub(Gateway, 'propagate')
+      web.patch(req)
+
       sinon.stub(Reporter, 'finishRequest')
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(Gateway.getContext).to.have.been.calledOnce
-      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': {
-          'user-agent': 'Arachni',
-          'host': 'localhost'
-        },
-        'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080,
+      expect(waf.run).to.have.been.calledOnceWithExactly({
         'server.response.status': 201,
-        'server.response.headers.no_cookies': {
-          'content-type': 'application/json',
-          'content-lenght': 42
-        }
-      }, context)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, context)
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
+      }, req)
+
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
 
     it('should propagate incoming http end data with invalid framework properties', () => {
-      const context = {}
-
-      sinon.stub(Gateway, 'getContext').returns(context)
-
       const req = {
         url: '/path',
         headers: {
@@ -259,35 +265,21 @@ describe('AppSec Index', () => {
         statusCode: 201
       }
 
-      sinon.stub(Gateway, 'propagate')
+      web.patch(req)
+
       sinon.stub(Reporter, 'finishRequest')
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(Gateway.getContext).to.have.been.calledOnce
-      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': {
-          'user-agent': 'Arachni',
-          'host': 'localhost'
-        },
-        'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080,
+      expect(waf.run).to.have.been.calledOnceWithExactly({
         'server.response.status': 201,
-        'server.response.headers.no_cookies': {
-          'content-type': 'application/json',
-          'content-lenght': 42
-        }
-      }, context)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, context)
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
+      }, req)
+
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
 
     it('should propagate incoming http end data with express', () => {
-      const context = {}
-
-      sinon.stub(Gateway, 'getContext').returns(context)
-
       const req = {
         url: '/path',
         headers: {
@@ -325,33 +317,268 @@ describe('AppSec Index', () => {
         statusCode: 201
       }
 
-      sinon.stub(Gateway, 'propagate')
-      sinon.stub(Reporter, 'finishRequest')
+      web.patch(req)
 
+      sinon.stub(Reporter, 'finishRequest')
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(Gateway.getContext).to.have.been.calledOnce
-      expect(Gateway.propagate).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': {
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        'server.response.status': 201,
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
+        'server.request.body': { a: '1' },
+        'server.request.path_params': { c: '3' },
+        'server.request.cookies': { d: ['4'], e: ['5'] }
+      }, req)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+    })
+  })
+
+  describe('checkRequestData', () => {
+    let abortController, req, res, rootSpan
+
+    beforeEach(() => {
+      rootSpan = {
+        addTags: sinon.stub()
+      }
+      web.root.returns(rootSpan)
+
+      abortController = { abort: sinon.stub() }
+
+      req = {
+        url: '/path',
+        headers: {
           'user-agent': 'Arachni',
           'host': 'localhost'
         },
-        'server.request.method': 'POST',
-        'server.request.client_ip': '127.0.0.1',
-        'server.request.client_port': 8080,
-        'server.response.status': 201,
-        'server.response.headers.no_cookies': {
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      res = {
+        getHeaders: () => ({
           'content-type': 'application/json',
           'content-lenght': 42
-        },
-        'server.request.body': { a: '1' },
-        'server.request.query': { b: '2' },
-        'server.request.framework_endpoint': '/path/:c',
-        'server.request.path_params': { c: '3' },
-        'server.request.cookies': { d: [ '4' ], e: [ '5' ] }
-      }, context)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, context)
+        }),
+        setHeader: sinon.stub(),
+        end: sinon.stub()
+      }
+
+      AppSec.enable(config)
+      AppSec.incomingHttpStartTranslator({ req, res })
+    })
+
+    afterEach(() => {
+      AppSec.disable()
+    })
+
+    describe('onRequestBodyParsed', () => {
+      it('Should not block without body', () => {
+        sinon.stub(waf, 'run')
+
+        bodyParser.publish({ req, res, abortController })
+
+        expect(waf.run).not.to.have.been.called
+        expect(abortController.abort).not.to.have.been.called
+        expect(res.end).not.to.have.been.called
+      })
+
+      it('Should not block with body by default', () => {
+        req.body = { key: 'value' }
+        sinon.stub(waf, 'run')
+
+        bodyParser.publish({ req, res, abortController })
+
+        expect(waf.run).to.have.been.calledOnceWith({
+          'server.request.body': { key: 'value' }
+        })
+        expect(abortController.abort).not.to.have.been.called
+        expect(res.end).not.to.have.been.called
+      })
+
+      it('Should block when it is detected as attack', () => {
+        req.body = { key: 'value' }
+        sinon.stub(waf, 'run').returns(['block'])
+
+        bodyParser.publish({ req, res, abortController })
+
+        expect(waf.run).to.have.been.calledOnceWith({
+          'server.request.body': { key: 'value' }
+        })
+        expect(abortController.abort).to.have.been.called
+        expect(res.end).to.have.been.called
+      })
+    })
+
+    describe('onRequestQueryParsed', () => {
+      it('Should not block without query', () => {
+        sinon.stub(waf, 'run')
+
+        queryParser.publish({ req, res, abortController })
+
+        expect(waf.run).not.to.have.been.called
+        expect(abortController.abort).not.to.have.been.called
+        expect(res.end).not.to.have.been.called
+      })
+
+      it('Should not block with query by default', () => {
+        req.query = { key: 'value' }
+        sinon.stub(waf, 'run')
+
+        queryParser.publish({ req, res, abortController })
+
+        expect(waf.run).to.have.been.calledOnceWith({
+          'server.request.query': { key: 'value' }
+        })
+        expect(abortController.abort).not.to.have.been.called
+        expect(res.end).not.to.have.been.called
+      })
+
+      it('Should block when it is detected as attack', () => {
+        req.query = { key: 'value' }
+        sinon.stub(waf, 'run').returns(['block'])
+
+        queryParser.publish({ req, res, abortController })
+
+        expect(waf.run).to.have.been.calledOnceWith({
+          'server.request.query': { key: 'value' }
+        })
+        expect(abortController.abort).to.have.been.called
+        expect(res.end).to.have.been.called
+      })
+    })
+  })
+})
+
+describe('IP blocking', () => {
+  const invalidIp = '1.2.3.4'
+  const validIp = '4.3.2.1'
+  const ruleData = {
+    rules_data: [{
+      data: [
+        { value: invalidIp }
+      ],
+      id: 'blocked_ips',
+      type: 'data_with_expiration'
+    }]
+  }
+
+  const toModify = [{
+    product: 'ASM_DATA',
+    id: '1',
+    file: ruleData
+  }]
+
+  let http, appListener, port
+  before(() => {
+    return getPort().then(newPort => {
+      port = newPort
+    })
+  })
+  before(() => {
+    return agent.load('http')
+      .then(() => {
+        http = require('http')
+      })
+  })
+  before(done => {
+    const server = new http.Server((req, res) => {
+      res.writeHead(200)
+      res.end(JSON.stringify({ message: 'OK' }))
+    })
+    appListener = server
+      .listen(port, 'localhost', () => done())
+  })
+
+  beforeEach(() => {
+    appsec.enable(new Config({
+      appsec: {
+        enabled: true
+      }
+    }))
+
+    RuleManager.updateWafFromRC({ toUnapply: [], toApply: [], toModify })
+  })
+
+  afterEach(() => {
+    appsec.disable()
+  })
+
+  after(() => {
+    appListener && appListener.close()
+    return agent.close({ ritmReset: false })
+  })
+
+  describe('do not block the request', () => {
+    it('should not block the request by default', async () => {
+      await axios.get(`http://localhost:${port}/`).then((res) => {
+        expect(res.status).to.be.equal(200)
+      })
+    })
+  })
+  const ipHeaderList = [
+    'x-forwarded-for',
+    'x-real-ip',
+    'client-ip',
+    'x-forwarded',
+    'x-cluster-client-ip',
+    'forwarded-for',
+    'forwarded',
+    'via',
+    'true-client-ip'
+  ]
+  ipHeaderList.forEach(ipHeader => {
+    describe(`not block - ip in header ${ipHeader}`, () => {
+      it('should not block the request with valid X-Forwarded-For ip', async () => {
+        await axios.get(`http://localhost:${port}/`, {
+          headers: {
+            [ipHeader]: validIp
+          }
+        }).then((res) => {
+          expect(res.status).to.be.equal(200)
+        })
+      })
+    })
+
+    describe(`block - ip in header ${ipHeader}`, () => {
+      const htmlDefaultContent = blockedTemplate.html
+      const jsonDefaultContent = JSON.parse(blockedTemplate.json)
+
+      it('should block the request with JSON content if no headers', async () => {
+        await axios.get(`http://localhost:${port}/`, {
+          headers: {
+            [ipHeader]: invalidIp
+          }
+        }).catch((err) => {
+          expect(err.response.status).to.be.equal(403)
+          expect(err.response.data).to.deep.equal(jsonDefaultContent)
+        })
+      })
+
+      it('should block the request with JSON content if accept */*', async () => {
+        await axios.get(`http://localhost:${port}/`, {
+          headers: {
+            [ipHeader]: invalidIp,
+            'Accept': '*/*'
+          }
+        }).catch((err) => {
+          expect(err.response.status).to.be.equal(403)
+          expect(err.response.data).to.deep.equal(jsonDefaultContent)
+        })
+      })
+
+      it('should block the request with html content if accept text/html', async () => {
+        await axios.get(`http://localhost:${port}/`, {
+          headers: {
+            [ipHeader]: invalidIp,
+            'Accept': 'text/html'
+          }
+        }).catch((err) => {
+          expect(err.response.status).to.be.equal(403)
+          expect(err.response.data).to.be.equal(htmlDefaultContent)
+        })
+      })
     })
   })
 })

@@ -2,12 +2,15 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 class Kinesis extends BaseAwsSdkPlugin {
+  static get id () { return 'kinesis' }
+
   generateTags (params, operation, response) {
     if (!params || !params.StreamName) return {}
 
     return {
       'resource.name': `${operation} ${params.StreamName}`,
-      'aws.kinesis.stream_name': params.StreamName
+      'aws.kinesis.stream_name': params.StreamName,
+      'streamname': params.StreamName
     }
   }
 
@@ -48,8 +51,8 @@ class Kinesis extends BaseAwsSdkPlugin {
       const parsedData = this._tryParse(injectPath.Data)
       if (parsedData) {
         parsedData._datadog = traceData
-        const finalData = JSON.stringify(parsedData)
-        const byteSize = Buffer.byteLength(finalData, 'ascii')
+        const finalData = Buffer.from(JSON.stringify(parsedData))
+        const byteSize = finalData.length
         // Kinesis max payload size is 1MB
         // So we must ensure adding DD context won't go over that (512b is an estimate)
         if (byteSize >= 1048576) {

@@ -1,7 +1,12 @@
 'use strict'
 
 const { expect } = require('chai')
-const { AsyncResource, executionAsyncId } = require('async_hooks')
+const { inspect } = require('util')
+const {
+  AsyncResource,
+  executionAsyncId,
+  executionAsyncResource
+} = require('async_hooks')
 
 module.exports = factory => {
   let storage
@@ -117,6 +122,25 @@ module.exports = factory => {
         expect(storage.getStore()).to.equal(store)
 
         done()
+      })
+    })
+
+    it('should not log ddResourceStore contents', done => {
+      function getKeys (output) {
+        return output.split('\n').slice(1, -1).map(line => {
+          return line.split(':').map(v => v.trim())[0]
+        })
+      }
+
+      setImmediate(() => {
+        const withoutStore = getKeys(inspect(executionAsyncResource(), { depth: 0 }))
+        storage.run(store, () => {
+          setImmediate(() => {
+            const withStore = getKeys(inspect(executionAsyncResource(), { depth: 0 }))
+            expect(withStore).to.deep.equal(withoutStore)
+            done()
+          })
+        })
       })
     })
   })

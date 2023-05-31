@@ -1,11 +1,13 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 
 const enterChannel = channel('apm:koa:middleware:enter')
-const errorChannel = channel('apm:koa:middleware:error')
 const exitChannel = channel('apm:koa:middleware:exit')
+const errorChannel = channel('apm:koa:middleware:error')
+const nextChannel = channel('apm:koa:middleware:next')
+const finishChannel = channel('apm:koa:middleware:finish')
 const handleChannel = channel('apm:koa:request:handle')
 const routeChannel = channel('apm:koa:request:route')
 
@@ -85,56 +87,66 @@ function wrapMiddleware (fn, layer) {
   return function (ctx, next) {
     if (!ctx || !enterChannel.hasSubscribers) return fn.apply(this, arguments)
 
-    const middlewareResource = new AsyncResource('bound-anonymous-fn')
     const req = ctx.req
 
-    return middlewareResource.runInAsyncScope(() => {
-      enterChannel.publish({ req, name })
+    const path = layer && layer.path
+    const route = typeof path === 'string' && !path.endsWith('(.*)') && !path.endsWith('([^/]*)') && path
 
-      if (typeof next === 'function') {
-        arguments[1] = AsyncResource.bind(next)
+    enterChannel.publish({ req, name, route })
+
+    if (typeof next === 'function') {
+      arguments[1] = wrapNext(req, next)
+    }
+
+    try {
+      const result = fn.apply(this, arguments)
+
+      if (result && typeof result.then === 'function') {
+        return result.then(
+          result => {
+            fulfill(ctx)
+            return result
+          },
+          err => {
+            fulfill(ctx, err)
+            throw err
+          }
+        )
+      } else {
+        fulfill(ctx)
+        return result
       }
-
-      try {
-        const result = fn.apply(this, arguments)
-
-        if (result && typeof result.then === 'function') {
-          return result.then(
-            result => {
-              exit(ctx, layer)
-              return result
-            },
-            err => {
-              exit(ctx, layer, err)
-              throw err
-            }
-          )
-        } else {
-          exit(ctx, layer)
-          return result
-        }
-      } catch (e) {
-        exit(ctx, layer, e)
-        throw e
-      }
-    })
+    } catch (e) {
+      fulfill(ctx, e)
+      throw e
+    } finally {
+      exitChannel.publish({ req })
+    }
   }
 }
 
-function exit (ctx, layer, error) {
-  if (error) {
-    errorChannel.publish(error)
-  }
-
+function fulfill (ctx, error) {
   const req = ctx.req
-  const route = ctx.routePath || (layer && layer.path)
+  const route = ctx.routePath
+
+  if (error) {
+    errorChannel.publish({ req, error })
+  }
 
   // TODO: make sure that the parent class cannot override this in `enter`
   if (route) {
     routeChannel.publish({ req, route })
   }
 
-  exitChannel.publish(ctx)
+  finishChannel.publish({ req })
+}
+
+function wrapNext (req, next) {
+  return function () {
+    nextChannel.publish({ req })
+
+    return next.apply(this, arguments)
+  }
 }
 
 addHook({ name: 'koa', versions: ['>=2'] }, Koa => {

@@ -1,5 +1,8 @@
 'use strict'
+
+const request = require('./request')
 const log = require('../../log')
+const { safeJSONStringify } = require('./util')
 
 class Writer {
   constructor ({ url }) {
@@ -9,7 +12,10 @@ class Writer {
   flush (done = () => {}) {
     const count = this._encoder.count()
 
-    if (count > 0) {
+    if (!request.writable) {
+      this._encoder.reset()
+      done()
+    } else if (count > 0) {
       const payload = this._encoder.makePayload()
 
       this._sendPayload(payload, count, done)
@@ -18,14 +24,19 @@ class Writer {
     }
   }
 
-  append (spans) {
-    log.debug(() => `Encoding trace: ${JSON.stringify(spans)}`)
+  append (payload) {
+    if (!request.writable) {
+      log.debug(() => `Maximum number of active requests reached. Payload discarded: ${safeJSONStringify(payload)}`)
+      return
+    }
 
-    this._encode(spans)
+    log.debug(() => `Encoding payload: ${safeJSONStringify(payload)}`)
+
+    this._encode(payload)
   }
 
-  _encode (trace) {
-    this._encoder.encode(trace)
+  _encode (payload) {
+    this._encoder.encode(payload)
   }
 
   setUrl (url) {

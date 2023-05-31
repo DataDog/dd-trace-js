@@ -1,69 +1,101 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 
 const {
-  CI_APP_ORIGIN,
   TEST_SKIP_REASON,
-  ERROR_MESSAGE,
   TEST_STATUS,
-  TEST_CODE_OWNERS,
+  TEST_SOURCE_START,
   finishAllTraceSpans,
-  getTestEnvironmentMetadata,
   getTestSuitePath,
-  getCodeOwnersFileEntries,
-  getCodeOwnersForFilename,
-  getTestCommonTags
+  getTestSuiteCommonTags,
+  addIntelligentTestRunnerSpanTags
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
+const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 
-class CucumberPlugin extends Plugin {
-  static get name () {
+class CucumberPlugin extends CiPlugin {
+  static get id () {
     return 'cucumber'
   }
 
   constructor (...args) {
     super(...args)
 
-    const testEnvironmentMetadata = getTestEnvironmentMetadata('cucumber', this.config)
-    const sourceRoot = process.cwd()
-    const codeOwnersEntries = getCodeOwnersFileEntries(sourceRoot)
+    this.sourceRoot = process.cwd()
 
-    this.addSub('ci:cucumber:run:start', ({ pickleName, pickleUri }) => {
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const testSuite = getTestSuitePath(pickleUri, sourceRoot)
+    this.addSub('ci:cucumber:session:finish', ({ status, isSuitesSkipped, testCodeCoverageLinesTotal }) => {
+      const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
+      addIntelligentTestRunnerSpanTags(
+        this.testSessionSpan,
+        this.testModuleSpan,
+        { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled, testCodeCoverageLinesTotal }
+      )
 
-      const commonTags = getTestCommonTags(pickleName, testSuite, this.tracer._version)
+      this.testSessionSpan.setTag(TEST_STATUS, status)
+      this.testModuleSpan.setTag(TEST_STATUS, status)
+      this.testModuleSpan.finish()
+      this.testSessionSpan.finish()
+      finishAllTraceSpans(this.testSessionSpan)
 
-      const codeOwners = getCodeOwnersForFilename(testSuite, codeOwnersEntries)
-      if (codeOwners) {
-        commonTags[TEST_CODE_OWNERS] = codeOwners
-      }
+      this.itrConfig = null
+      this.tracer._exporter.flush()
+    })
 
-      const span = this.tracer.startSpan('cucumber.test', {
-        childOf,
+    this.addSub('ci:cucumber:test-suite:start', (testSuiteFullPath) => {
+      const testSuiteMetadata = getTestSuiteCommonTags(
+        this.command,
+        this.frameworkVersion,
+        getTestSuitePath(testSuiteFullPath, this.sourceRoot),
+        'cucumber'
+      )
+      this.testSuiteSpan = this.tracer.startSpan('cucumber.test_suite', {
+        childOf: this.testModuleSpan,
         tags: {
-          ...commonTags,
-          ...testEnvironmentMetadata
+          [COMPONENT]: this.constructor.id,
+          ...this.testEnvironmentMetadata,
+          ...testSuiteMetadata
         }
       })
-
-      span.context()._trace.origin = CI_APP_ORIGIN
-      this.enter(span, store)
     })
 
-    this.addSub('ci:cucumber:run:end', () => {
-      this.exit()
+    this.addSub('ci:cucumber:test-suite:finish', status => {
+      this.testSuiteSpan.setTag(TEST_STATUS, status)
+      this.testSuiteSpan.finish()
     })
 
-    this.addSub('ci:cucumber:run-step:start', ({ resource }) => {
+    this.addSub('ci:cucumber:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
+      if (!this.itrConfig || !this.itrConfig.isCodeCoverageEnabled) {
+        return
+      }
+      const relativeCoverageFiles = [...coverageFiles, suiteFile]
+        .map(filename => getTestSuitePath(filename, this.sourceRoot))
+
+      const formattedCoverage = {
+        sessionId: this.testSuiteSpan.context()._traceId,
+        suiteId: this.testSuiteSpan.context()._spanId,
+        files: relativeCoverageFiles
+      }
+
+      this.tracer._exporter.exportCoverage(formattedCoverage)
+    })
+
+    this.addSub('ci:cucumber:test:start', ({ testName, fullTestSuite, testSourceLine }) => {
+      const store = storage.getStore()
+      const testSuite = getTestSuitePath(fullTestSuite, this.sourceRoot)
+      const testSpan = this.startTestSpan(testName, testSuite, testSourceLine)
+
+      this.enter(testSpan, store)
+    })
+
+    this.addSub('ci:cucumber:test-step:start', ({ resource }) => {
       const store = storage.getStore()
       const childOf = store ? store.span : store
       const span = this.tracer.startSpan('cucumber.step', {
         childOf,
         tags: {
+          [COMPONENT]: this.constructor.id,
           'cucumber.step': resource,
           [RESOURCE_NAME]: resource
         }
@@ -71,11 +103,7 @@ class CucumberPlugin extends Plugin {
       this.enter(span, store)
     })
 
-    this.addSub('ci:cucumber:run-step:end', () => {
-      this.exit()
-    })
-
-    this.addSub('ci:cucumber:run:async-end', ({ isStep, status, skipReason, errorMessage }) => {
+    this.addSub('ci:cucumber:test:finish', ({ isStep, status, skipReason, errorMessage }) => {
       const span = storage.getStore().span
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
@@ -101,6 +129,15 @@ class CucumberPlugin extends Plugin {
         span.setTag('error', err)
       }
     })
+  }
+
+  startTestSpan (testName, testSuite, testSourceLine) {
+    return super.startTestSpan(
+      testName,
+      testSuite,
+      this.testSuiteSpan,
+      { [TEST_SOURCE_START]: testSourceLine }
+    )
   }
 }
 

@@ -1,4 +1,30 @@
 {
+  "aws-sdk": [
+    {
+      "name": "@aws-sdk/client-lambda",
+      "versions": [">=3"]
+    },
+    {
+      "name": "@aws-sdk/client-kinesis",
+      "versions": [">=3"]
+    },
+    {
+      "name": "@aws-sdk/client-s3",
+      "versions": [">=3"]
+    },
+    {
+      "name": "@aws-sdk/client-sns",
+      "versions": [">=3"]
+    },
+    {
+      "name": "@aws-sdk/client-sqs",
+      "versions": [">=3"]
+    },
+    {
+      "name": "@aws-sdk/node-http-handler",
+      "versions": [">=3"]
+    }
+  ],
   "cypress": [
     {
       "name": "cypress",
@@ -27,6 +53,12 @@
       "versions": [">=3"]
     }
   ],
+  "google-cloud-pubsub": [
+    {
+      "name": "google-gax",
+      "versions": ["3.5.7"]
+    }
+  ],
   "graphql": [
     {
       "name": "apollo-server-core",
@@ -41,6 +73,12 @@
     {
       "name": "@grpc/proto-loader",
       "versions": ["0.5.0"]
+    }
+  ],
+  "hapi": [
+    {
+      "name": "@hapi/boom",
+      "versions": ["9.1.4"]
     }
   ],
   "jest": [
@@ -59,6 +97,10 @@
     {
       "name": "jest-circus",
       "versions": [">=24.8.0"]
+    },
+    {
+      "name": "@jest/globals",
+      "versions": [">=26.5.0"]
     }
   ],
   "knex": [
@@ -79,6 +121,12 @@
     {
       "name": "ws",
       "versions": ["6.1.0"]
+    }
+  ],
+  "mariadb": [
+    {
+      "name": "mariadb",
+      "versions": ["2.5.6", "3.0.0"]
     }
   ],
   "mocha": [
@@ -128,7 +176,8 @@
   "pino": [
     {
       "name": "pino-pretty",
-      "dep": true
+      "dep": true,
+      "versions": ["8.0.0"]
     }
   ],
   "q": [

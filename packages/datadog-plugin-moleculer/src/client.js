@@ -1,60 +1,36 @@
 'use strict'
 
+const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { moleculerTags } = require('./util')
 
-function createWrapCall (tracer, config) {
-  return function wrapCall (call) {
-    return function callWithTrace (actionName, params, opts) {
-      const options = {
-        service: config.service,
-        resource: actionName,
-        tags: {
-          'span.kind': 'client'
-        }
-      }
+class MoleculerClientPlugin extends ClientPlugin {
+  static get id () { return 'moleculer' }
+  static get operation () { return 'call' }
 
-      opts = arguments[2] = opts || {}
-      opts.meta = opts.meta || {}
+  start ({ actionName, opts }) {
+    const span = this.startSpan('moleculer.call', {
+      service: this.config.service,
+      resource: actionName,
+      kind: 'client'
+    })
 
-      arguments.length = Math.max(3, arguments.length)
+    this.tracer.inject(span, 'text_map', opts.meta)
+  }
 
-      return tracer.trace('moleculer.call', options, () => {
-        const span = tracer.scope().active()
+  finish ({ broker, ctx }) {
+    const span = this.activeSpan
 
-        tracer.inject(span, 'text_map', opts.meta)
+    if (ctx) {
+      const endpoint = ctx.endpoint || {}
+      const node = endpoint.node || {}
 
-        const promise = call.apply(this, arguments)
+      this.addHost(node.hostname, node.port)
 
-        if (promise.ctx) {
-          const endpoint = promise.ctx.endpoint || {}
-          const node = endpoint.node || {}
-
-          span.addTags({
-            'out.host': node.hostname,
-            'out.port': node.port,
-            ...moleculerTags(this, promise.ctx, config)
-          })
-        }
-
-        return promise
-      })
+      span.addTags(moleculerTags(broker, ctx, this.config))
     }
+
+    span.finish()
   }
 }
 
-module.exports = [
-  {
-    name: 'moleculer',
-    versions: ['>=0.14'],
-    patch ({ ServiceBroker }, tracer, config) {
-      if (config.client === false) return
-
-      config = Object.assign({}, config, config.client)
-
-      this.wrap(ServiceBroker.prototype, 'call', createWrapCall(tracer, config))
-    },
-    unpatch ({ ServiceBroker }) {
-      this.unwrap(ServiceBroker.prototype, 'call')
-    }
-  }
-]
+module.exports = MoleculerClientPlugin

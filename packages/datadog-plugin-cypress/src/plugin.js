@@ -7,10 +7,24 @@ const {
   getTestParentSpan,
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
-  getTestCommonTags
+  getTestCommonTags,
+  getTestSessionCommonTags,
+  getTestModuleCommonTags,
+  getTestSuiteCommonTags,
+  TEST_SUITE_ID,
+  TEST_MODULE_ID,
+  TEST_SESSION_ID,
+  TEST_COMMAND,
+  TEST_MODULE,
+  TEST_SOURCE_START,
+  finishAllTraceSpans,
+  getCoveredFilenamesFromCoverage,
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 
-const { ORIGIN_KEY } = require('../../dd-trace/src/constants')
+const TEST_FRAMEWORK_NAME = 'cypress'
+
+const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 
 const CYPRESS_STATUS_TO_TEST_STATUS = {
   passed: 'pass',
@@ -30,21 +44,156 @@ function getTestSpanMetadata (tracer, testName, testSuite, cypressConfig) {
   }
 }
 
+function getCypressVersion (details) {
+  if (details && details.cypressVersion) {
+    return details.cypressVersion
+  }
+  if (details && details.config && details.config.version) {
+    return details.config.version
+  }
+  return ''
+}
+
+function getRootDir (details) {
+  if (details && details.config) {
+    return details.config.repoRoot || details.config.projectRoot || process.cwd()
+  }
+  return process.cwd()
+}
+
+function getCypressCommand (details) {
+  if (!details) {
+    return TEST_FRAMEWORK_NAME
+  }
+  return `${TEST_FRAMEWORK_NAME} ${details.specPattern || ''}`
+}
+
+function getSessionStatus (summary) {
+  if (summary.totalFailed !== undefined && summary.totalFailed > 0) {
+    return 'fail'
+  }
+  if (summary.totalSkipped !== undefined && summary.totalSkipped === summary.totalTests) {
+    return 'skip'
+  }
+  return 'pass'
+}
+
+function getSuiteStatus (suiteStats) {
+  if (suiteStats.failures !== undefined && suiteStats.failures > 0) {
+    return 'fail'
+  }
+  if (suiteStats.tests !== undefined && suiteStats.tests === suiteStats.pending) {
+    return 'skip'
+  }
+  return 'pass'
+}
+
 module.exports = (on, config) => {
   const tracer = require('../../dd-trace')
-  const testEnvironmentMetadata = getTestEnvironmentMetadata('cypress')
+  const testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
   const codeOwnersEntries = getCodeOwnersFileEntries()
 
   let activeSpan = null
-  on('after:run', () => {
+  let testSessionSpan = null
+  let testModuleSpan = null
+  let testSuiteSpan = null
+  let command = null
+  let frameworkVersion
+  let rootDir
+
+  on('before:run', (details) => {
+    const childOf = getTestParentSpan(tracer)
+
+    rootDir = getRootDir(details)
+    command = getCypressCommand(details)
+    frameworkVersion = getCypressVersion(details)
+
+    const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
+    const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
+
+    testSessionSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
+      childOf,
+      tags: {
+        [COMPONENT]: TEST_FRAMEWORK_NAME,
+        ...testEnvironmentMetadata,
+        ...testSessionSpanMetadata
+      }
+    })
+    testModuleSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
+      childOf: testSessionSpan,
+      tags: {
+        [COMPONENT]: TEST_FRAMEWORK_NAME,
+        ...testEnvironmentMetadata,
+        ...testModuleSpanMetadata
+      }
+    })
+  })
+
+  on('after:run', (suiteStats) => {
+    if (testSessionSpan && testModuleSpan) {
+      const testStatus = getSessionStatus(suiteStats)
+      testModuleSpan.setTag(TEST_STATUS, testStatus)
+      testSessionSpan.setTag(TEST_STATUS, testStatus)
+
+      testModuleSpan.finish()
+      testSessionSpan.finish()
+
+      finishAllTraceSpans(testSessionSpan)
+    }
+
     return new Promise(resolve => {
-      tracer._tracer._exporter._writer.flush(() => resolve(null))
+      if (tracer._tracer._exporter.flush) {
+        tracer._tracer._exporter.flush(() => {
+          resolve(null)
+        })
+      } else {
+        tracer._tracer._exporter._writer.flush(() => {
+          resolve(null)
+        })
+      }
     })
   })
   on('task', {
+    'dd:testSuiteStart': (suite) => {
+      if (testSuiteSpan) {
+        return null
+      }
+      const testSuiteSpanMetadata = getTestSuiteCommonTags(command, frameworkVersion, suite, TEST_FRAMEWORK_NAME)
+      testSuiteSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
+        childOf: testModuleSpan,
+        tags: {
+          [COMPONENT]: TEST_FRAMEWORK_NAME,
+          ...testEnvironmentMetadata,
+          ...testSuiteSpanMetadata
+        }
+      })
+      return null
+    },
+    'dd:testSuiteFinish': (stats) => {
+      if (testSuiteSpan) {
+        const status = getSuiteStatus(stats)
+        testSuiteSpan.setTag(TEST_STATUS, status)
+        testSuiteSpan.finish()
+        testSuiteSpan = null
+      }
+      return null
+    },
     'dd:beforeEach': (test) => {
       const { testName, testSuite } = test
+
+      const testSuiteTags = {
+        [TEST_COMMAND]: command,
+        [TEST_COMMAND]: command,
+        [TEST_MODULE]: TEST_FRAMEWORK_NAME
+      }
+      if (testSuiteSpan) {
+        testSuiteTags[TEST_SUITE_ID] = testSuiteSpan.context().toSpanId()
+      }
+      if (testSessionSpan && testModuleSpan) {
+        testSuiteTags[TEST_SESSION_ID] = testSessionSpan.context().toTraceId()
+        testSuiteTags[TEST_MODULE_ID] = testModuleSpan.context().toSpanId()
+      }
 
       const {
         childOf,
@@ -59,26 +208,44 @@ module.exports = (on, config) => {
       }
 
       if (!activeSpan) {
-        activeSpan = tracer.startSpan('cypress.test', {
+        activeSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
           childOf,
           tags: {
+            [COMPONENT]: TEST_FRAMEWORK_NAME,
             [ORIGIN_KEY]: CI_APP_ORIGIN,
             ...testSpanMetadata,
-            ...testEnvironmentMetadata
+            ...testEnvironmentMetadata,
+            ...testSuiteTags
           }
         })
       }
-      return activeSpan ? activeSpan._spanContext._traceId.toString(10) : null
+      return activeSpan ? activeSpan.context().toTraceId() : null
     },
-    'dd:afterEach': (test) => {
-      const { state, error, isRUMActive } = test
+    'dd:afterEach': ({ test, coverage }) => {
+      const { state, error, isRUMActive, testSourceLine } = test
       if (activeSpan) {
+        if (coverage && tracer._tracer._exporter.exportCoverage) {
+          const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
+          const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, rootDir))
+          const { _traceId, _spanId } = testSuiteSpan.context()
+          const formattedCoverage = {
+            sessionId: _traceId,
+            suiteId: _spanId,
+            testId: activeSpan.context()._spanId,
+            files: relativeCoverageFiles
+          }
+          tracer._tracer._exporter.exportCoverage(formattedCoverage)
+        }
+
         activeSpan.setTag(TEST_STATUS, CYPRESS_STATUS_TO_TEST_STATUS[state])
         if (error) {
           activeSpan.setTag('error', error)
         }
         if (isRUMActive) {
           activeSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
+        }
+        if (testSourceLine) {
+          activeSpan.setTag(TEST_SOURCE_START, testSourceLine)
         }
         activeSpan.finish()
       }

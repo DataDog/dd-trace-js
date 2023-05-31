@@ -2,13 +2,14 @@
 
 const {
   channel,
-  addHook
+  addHook,
+  AsyncResource
 } = require('./helpers/instrument')
 const kebabCase = require('lodash.kebabcase')
 const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:amqplib:command:start')
-const endCh = channel('apm:amqplib:command:end')
+const finishCh = channel('apm:amqplib:command:finish')
 const errorCh = channel('apm:amqplib:command:error')
 
 let methods = {}
@@ -40,17 +41,21 @@ function instrument (send, channel, args, method, fields, message) {
   if (!startCh.hasSubscribers) {
     return send.apply(channel, args)
   }
-  startCh.publish({ channel, method, fields, message })
 
-  try {
-    return send.apply(channel, args)
-  } catch (err) {
-    errorCh.publish(err)
+  const asyncResource = new AsyncResource('bound-anonymous-fn')
+  return asyncResource.runInAsyncScope(() => {
+    startCh.publish({ channel, method, fields, message })
 
-    throw err
-  } finally {
-    endCh.publish(undefined)
-  }
+    try {
+      return send.apply(channel, args)
+    } catch (err) {
+      errorCh.publish(err)
+
+      throw err
+    } finally {
+      finishCh.publish()
+    }
+  })
 }
 
 function isCamelCase (str) {

@@ -21,7 +21,7 @@ describe('Plugin', () => {
       })
 
       withExports('pino', version, ['default', 'pino'], '>=6.8.0', getExport => {
-        function setup (options) {
+        function setupTest (options = {}) {
           const pino = getExport()
 
           span = tracer.startSpan('test')
@@ -30,6 +30,14 @@ describe('Plugin', () => {
           stream._write = () => {}
 
           sinon.spy(stream, 'write')
+
+          if (semver.intersects(version, '>=8') && options.prettyPrint) {
+            delete options.prettyPrint // deprecated
+
+            const pretty = require(`../../../versions/pino-pretty@8.0.0`).get()
+
+            stream = pretty().pipe(stream)
+          }
 
           logger = pino && pino(options, stream)
         }
@@ -40,7 +48,7 @@ describe('Plugin', () => {
           })
 
           beforeEach(function () {
-            setup()
+            setupTest()
 
             if (!logger) {
               this.skip()
@@ -62,7 +70,7 @@ describe('Plugin', () => {
 
           if (semver.intersects(version, '>=5')) {
             it('should not alter the default behavior with pretty print', () => {
-              setup({ prettyPrint: true })
+              setupTest({ prettyPrint: true })
 
               tracer.scope().activate(span, () => {
                 logger.info('message')
@@ -85,7 +93,7 @@ describe('Plugin', () => {
           })
 
           beforeEach(function () {
-            setup()
+            setupTest()
 
             if (!logger) {
               this.skip()
@@ -141,14 +149,16 @@ describe('Plugin', () => {
             })
           })
 
-          it('should skip injection when there is no active span', () => {
+          it('should not inject trace_id or span_id without an active span', () => {
             logger.info('message')
 
             expect(stream.write).to.have.been.called
 
             const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-            expect(record).to.not.have.property('dd')
+            expect(record).to.have.property('dd')
+            expect(record.dd).to.not.have.property('trace_id')
+            expect(record.dd).to.not.have.property('span_id')
             expect(record).to.have.deep.property('msg', 'message')
           })
 
@@ -158,7 +168,7 @@ describe('Plugin', () => {
 
               sinon.spy(opts, 'mixin')
 
-              setup(opts)
+              setupTest(opts)
 
               tracer.scope().activate(span, () => {
                 logger.info('message')
@@ -184,7 +194,7 @@ describe('Plugin', () => {
           //       and we cannot control the version of pino-pretty internally required by pino
           if (semver.intersects(version, '>=5')) {
             it('should add the trace identifiers to logger instances with pretty print', () => {
-              setup({ prettyPrint: true })
+              setupTest({ prettyPrint: true })
 
               tracer.scope().activate(span, () => {
                 logger.info('message')

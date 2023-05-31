@@ -1,10 +1,12 @@
 'use strict'
 
+require('../../setup/tap')
+
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const tags = require('../../../../../ext/tags')
-const { incomingHttpRequestEnd } = require('../../../src/appsec/gateway/channels')
 const { USER_REJECT } = require('../../../../../ext/priority')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../../../dd-trace/src/constants')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -19,6 +21,8 @@ const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
+const HTTP_USERAGENT = tags.HTTP_USERAGENT
+const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 
 describe('plugins/util/web', () => {
   let web
@@ -74,6 +78,7 @@ describe('plugins/util/web', () => {
       expect(config.hooks).to.be.an('object')
       expect(config.hooks).to.have.property('request')
       expect(config.hooks.request).to.be.a('function')
+      expect(config).to.have.property('queryStringObfuscation', true)
     })
 
     it('should use the shared config if set', () => {
@@ -91,32 +96,46 @@ describe('plugins/util/web', () => {
       expect(config.hooks.request()).to.equal('test')
     })
 
-    it('should use the server config if set', () => {
-      const config = web.normalizeConfig({
-        server: {
-          headers: ['test'],
-          validateStatus: code => false,
-          hooks: {
-            request: () => 'test'
-          }
-        }
+    describe('queryStringObfuscation', () => {
+      it('should keep booleans as is', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: false
+        })
+
+        expect(config).to.have.property('queryStringObfuscation', false)
       })
 
-      expect(config.headers).to.include('test')
-      expect(config.validateStatus(200)).to.equal(false)
-      expect(config).to.have.property('hooks')
-      expect(config.hooks.request()).to.equal('test')
-    })
+      it('should change to false when passed empty string', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: ''
+        })
 
-    it('should prioritize the server config over the shared config', () => {
-      const config = web.normalizeConfig({
-        headers: ['foo'],
-        server: {
-          headers: ['bar']
-        }
+        expect(config).to.have.property('queryStringObfuscation', false)
       })
 
-      expect(config.headers).to.include('bar')
+      it('should change to true when passed ".*"', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: '.*'
+        })
+
+        expect(config).to.have.property('queryStringObfuscation', true)
+      })
+
+      it('should convert to regex when passed valid string', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: 'a*'
+        })
+
+        expect(config).to.have.deep.property('queryStringObfuscation', /a*/gi)
+      })
+
+      it('should default to true when passed a bad regex', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: '(?)'
+        })
+
+        expect(config).to.have.property('queryStringObfuscation', true)
+      })
     })
   })
 
@@ -131,15 +150,6 @@ describe('plugins/util/web', () => {
         web.instrument(tracer, config, req, res, 'test.request', span => {
           expect(span.context()._traceId.toString(10)).to.equal('123')
           expect(span.context()._parentId.toString(10)).to.equal('456')
-        })
-      })
-
-      it('should set the parent from the active context if any', () => {
-        tracer.trace('aws.lambda', parentSpan => {
-          web.instrument(tracer, config, req, res, 'test.request', span => {
-            expect(span.context()._traceId.toString(10)).to.equal(parentSpan.context()._traceId.toString(10))
-            expect(span.context()._parentId.toString(10)).to.equal(parentSpan.context()._spanId.toString(10))
-          })
         })
       })
 
@@ -160,6 +170,8 @@ describe('plugins/util/web', () => {
       it('should add request tags to the span', () => {
         req.method = 'GET'
         req.url = '/user/123'
+        req.headers['user-agent'] = 'curl'
+        req.headers['x-forwarded-for'] = '8.8.8.8'
         res.statusCode = '200'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
@@ -171,8 +183,69 @@ describe('plugins/util/web', () => {
             [SPAN_TYPE]: WEB,
             [HTTP_URL]: 'http://localhost/user/123',
             [HTTP_METHOD]: 'GET',
-            [SPAN_KIND]: SERVER
+            [SPAN_KIND]: SERVER,
+            [HTTP_USERAGENT]: 'curl'
           })
+        })
+      })
+
+      it('should add client ip tag to the span when enabled', () => {
+        req.headers['x-forwarded-for'] = '8.8.8.8'
+
+        config.clientIpEnabled = true
+
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
+          res.end()
+
+          expect(tags).to.include({
+            [HTTP_CLIENT_IP]: '8.8.8.8'
+          })
+        })
+      })
+
+      it('should not add client ip tag to the span when disabled', () => {
+        req.headers['x-forwarded-for'] = '8.8.8.8'
+
+        config.clientIpEnabled = false
+
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
+          res.end()
+
+          expect(tags).to.not.have.property(HTTP_CLIENT_IP)
+        })
+      })
+
+      it('should not replace client ip when it exists', () => {
+        req.headers['x-forwarded-for'] = '8.8.8.8'
+
+        config.clientIpEnabled = true
+
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
+          span.setTag(HTTP_CLIENT_IP, '1.1.1.1')
+
+          res.end()
+
+          expect(tags).to.include({
+            [HTTP_CLIENT_IP]: '1.1.1.1'
+          })
+        })
+      })
+
+      it('should not add client ip tag when no candidate header is present in request', () => {
+        config.clientIpEnabled = true
+
+        web.instrument(tracer, config, req, res, 'test.request', span => {
+          const tags = span.context()._tags
+
+          res.end()
+
+          expect(tags).to.not.have.property(HTTP_CLIENT_IP)
         })
       })
 
@@ -244,9 +317,13 @@ describe('plugins/util/web', () => {
         })
       })
 
-      it('should remove the query string from the URL', () => {
+      it('should obfuscate the query string from the URL', () => {
+        const config = web.normalizeConfig({
+          queryStringObfuscation: 'secret=.*?(&|$)'
+        })
+
         req.method = 'GET'
-        req.url = '/user/123?foo=bar'
+        req.url = '/user/123?secret=password&foo=bar'
         res.statusCode = '200'
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
@@ -255,7 +332,7 @@ describe('plugins/util/web', () => {
           res.end()
 
           expect(tags).to.include({
-            [HTTP_URL]: 'http://localhost/user/123'
+            [HTTP_URL]: 'http://localhost/user/123?<redacted>foo=bar'
           })
         })
       })
@@ -266,7 +343,8 @@ describe('plugins/util/web', () => {
           'x-datadog-parent-id',
           'x-datadog-sampled',
           'x-datadog-sampling-priority',
-          'x-datadog-trace-id'
+          'x-datadog-trace-id',
+          'x-datadog-tags'
         ].join(',')
 
         req.method = 'OPTIONS'
@@ -336,6 +414,8 @@ describe('plugins/util/web', () => {
 
       it('should support https', () => {
         req.url = '/user/123'
+        req.headers['user-agent'] = 'curl'
+        req.headers['x-forwarded-for'] = '8.8.8.8'
         req.socket = { encrypted: true }
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
@@ -347,7 +427,8 @@ describe('plugins/util/web', () => {
             [SPAN_TYPE]: WEB,
             [HTTP_URL]: 'https://localhost/user/123',
             [HTTP_METHOD]: 'GET',
-            [SPAN_KIND]: SERVER
+            [SPAN_KIND]: SERVER,
+            [HTTP_USERAGENT]: 'curl'
           })
         })
       })
@@ -359,7 +440,9 @@ describe('plugins/util/web', () => {
           ':scheme': 'https',
           ':authority': 'localhost',
           ':method': 'GET',
-          ':path': '/user/123'
+          ':path': '/user/123',
+          'user-agent': 'curl',
+          'x-forwarded-for': '8.8.8.8'
         }
         res.statusCode = '200'
 
@@ -372,7 +455,8 @@ describe('plugins/util/web', () => {
             [SPAN_TYPE]: WEB,
             [HTTP_URL]: 'https://localhost/user/123',
             [HTTP_METHOD]: 'GET',
-            [SPAN_KIND]: SERVER
+            [SPAN_KIND]: SERVER,
+            [HTTP_USERAGENT]: 'curl'
           })
         })
       })
@@ -520,22 +604,6 @@ describe('plugins/util/web', () => {
           expect(tags).to.have.property('resource.name', 'GET /custom/route')
         })
       })
-
-      it('should call diagnostics_channel', () => {
-        const spy = sinon.spy((data) => {
-          expect(data.req).to.equal(req)
-          expect(data.res).to.equal(res)
-        })
-
-        incomingHttpRequestEnd.subscribe(spy)
-
-        res.end()
-
-        incomingHttpRequestEnd.unsubscribe(spy)
-
-        expect(spy).to.have.been.calledOnce
-        expect(end).to.have.been.calledAfter(spy)
-      })
     })
   })
 
@@ -644,9 +712,9 @@ describe('plugins/util/web', () => {
         sinon.spy(span, 'finish')
         web.finish(req, error)
 
-        expect(tags['error.type']).to.equal(error.name)
-        expect(tags['error.msg']).to.equal(error.message)
-        expect(tags['error.stack']).to.equal(error.stack)
+        expect(tags[ERROR_TYPE]).to.equal(error.name)
+        expect(tags[ERROR_MESSAGE]).to.equal(error.message)
+        expect(tags[ERROR_STACK]).to.equal(error.stack)
 
         done()
       }
@@ -714,11 +782,11 @@ describe('plugins/util/web', () => {
       })
     })
 
-    it('should not override an existing error', () => {
+    it('should override an existing error', () => {
       const error = new Error('boom')
 
-      web.addError(req, error)
       web.addError(req, new Error('prrr'))
+      web.addError(req, error)
       web.addStatusError(req, 500)
 
       expect(tags).to.include({
@@ -818,6 +886,47 @@ describe('plugins/util/web', () => {
     it('should filter the url', () => {
       const filtered = config.filter('/_notokay')
       expect(filtered).to.equal(false)
+    })
+  })
+
+  describe('obfuscateQs', () => {
+    const url = 'http://perdu.com/path/'
+    const qs = '?data=secret'
+
+    let config
+
+    beforeEach(() => {
+      config = {
+        queryStringObfuscation: new RegExp('secret', 'gi')
+      }
+    })
+
+    it('should not obfuscate when passed false', () => {
+      config.queryStringObfuscation = false
+
+      const result = web.obfuscateQs(config, url + qs)
+
+      expect(result).to.equal(url + qs)
+    })
+
+    it('should not obfuscate when no querystring is found', () => {
+      const result = web.obfuscateQs(config, url)
+
+      expect(result).to.equal(url)
+    })
+
+    it('should remove the querystring if passed true', () => {
+      config.queryStringObfuscation = true
+
+      const result = web.obfuscateQs(config, url + qs)
+
+      expect(result).to.equal(url)
+    })
+
+    it('should obfuscate only the querystring part of the url', () => {
+      const result = web.obfuscateQs(config, url + 'secret/' + qs)
+
+      expect(result).to.equal(url + 'secret/?data=<redacted>')
     })
   })
 })

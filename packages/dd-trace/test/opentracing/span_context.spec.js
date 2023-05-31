@@ -1,12 +1,17 @@
 'use strict'
 
+require('../setup/tap')
+
+const { expect } = require('chai')
 const id = require('../../src/id')
 
 describe('SpanContext', () => {
   let SpanContext
+  let TraceState
 
   beforeEach(() => {
     SpanContext = require('../../src/opentracing/span_context')
+    TraceState = require('../../src/opentracing/propagation/tracestate')
   })
 
   it('should instantiate with the given properties', () => {
@@ -26,7 +31,9 @@ describe('SpanContext', () => {
         started: ['span1', 'span2'],
         finished: ['span1'],
         tags: { foo: 'bar' }
-      }
+      },
+      traceparent: '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01',
+      tracestate: TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
     }
     const spanContext = new SpanContext(props)
 
@@ -44,7 +51,9 @@ describe('SpanContext', () => {
         started: ['span1', 'span2'],
         finished: ['span1'],
         tags: { foo: 'bar' }
-      }
+      },
+      _traceparent: '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01',
+      _tracestate: TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
     })
   })
 
@@ -68,8 +77,22 @@ describe('SpanContext', () => {
         started: [],
         finished: [],
         tags: {}
-      }
+      },
+      _traceparent: undefined,
+      _tracestate: undefined
     })
+  })
+
+  it('should clone sampling object', () => {
+    const first = new SpanContext({
+      sampling: { priority: 1 }
+    })
+    const second = new SpanContext({
+      sampling: first.sampling
+    })
+    second._sampling.priority = 2
+
+    expect(first._sampling).to.have.property('priority', 1)
   })
 
   describe('toTraceId()', () => {
@@ -91,6 +114,39 @@ describe('SpanContext', () => {
       })
 
       expect(spanContext.toSpanId()).to.equal('456')
+    })
+  })
+
+  describe('toTraceparent()', () => {
+    it('should return the traceparent', () => {
+      const spanContext = new SpanContext({
+        traceId: id('123', 16),
+        spanId: id('456', 16)
+      })
+
+      expect(spanContext.toTraceparent()).to.equal('00-00000000000000000000000000000123-0000000000000456-00')
+    })
+
+    it('should return the traceparent with 128-bit trace ID from the tag', () => {
+      const spanContext = new SpanContext({
+        traceId: id('123', 16),
+        spanId: id('456', 16)
+      })
+
+      spanContext._trace.tags['_dd.p.tid'] = '0000000000000789'
+
+      expect(spanContext.toTraceparent()).to.equal('00-00000000000007890000000000000123-0000000000000456-00')
+    })
+
+    it('should return the traceparent with 128-bit trace ID from the traceparent', () => {
+      const spanContext = new SpanContext({
+        traceId: id('00000000000007890000000000000123', 16),
+        spanId: id('456', 16)
+      })
+
+      spanContext._trace.tags['_dd.p.tid'] = '0000000000000789'
+
+      expect(spanContext.toTraceparent()).to.equal('00-00000000000007890000000000000123-0000000000000456-00')
     })
   })
 })

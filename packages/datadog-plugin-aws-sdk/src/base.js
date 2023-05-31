@@ -1,13 +1,15 @@
 'use strict'
 
-const Tags = require('opentracing').Tags
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
+const { isTrue } = require('../../dd-trace/src/util')
 
 class BaseAwsSdkPlugin extends Plugin {
+  static get id () { return 'aws' }
+
   get serviceIdentifier () {
-    const id = this.constructor.name.toLowerCase()
+    const id = this.constructor.id.toLowerCase()
     Object.defineProperty(this, 'serviceIdentifier', {
       configurable: true,
       writable: true,
@@ -24,19 +26,20 @@ class BaseAwsSdkPlugin extends Plugin {
       request,
       operation,
       awsRegion,
-      awsService,
-      serviceIdentifier
+      awsService
     }) => {
       if (!this.isEnabled(request)) {
         return
       }
-      const serviceName = this.getServiceName(serviceIdentifier)
+      const serviceName = this.getServiceName()
       const childOf = this.tracer.scope().active()
       const tags = {
-        [Tags.SPAN_KIND]: 'client',
+        'span.kind': 'client',
         'service.name': serviceName,
         'aws.operation': operation,
         'aws.region': awsRegion,
+        'region': awsRegion,
+        'aws_service': awsService,
         'aws.service': awsService,
         'component': 'aws-sdk'
       }
@@ -51,6 +54,15 @@ class BaseAwsSdkPlugin extends Plugin {
       const store = storage.getStore()
 
       this.enter(span, store)
+    })
+
+    this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, region => {
+      const store = storage.getStore()
+      if (!store) return
+      const { span } = store
+      if (!span) return
+      span.setTag('aws.region', region)
+      span.setTag('region', region)
     })
 
     this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response }) => {
@@ -68,7 +80,9 @@ class BaseAwsSdkPlugin extends Plugin {
   }
 
   isEnabled (request) {
-    return true
+    const serviceId = this.serviceIdentifier.toUpperCase()
+    const envVarValue = process.env[`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`]
+    return envVarValue ? isTrue(envVarValue) : true
   }
 
   addResponseTags (span, response) {
@@ -110,10 +124,10 @@ class BaseAwsSdkPlugin extends Plugin {
   }
 
   // TODO: test splitByAwsService when the test suite is fixed
-  getServiceName (serviceIdentifier) {
+  getServiceName () {
     return this.config.service
       ? this.config.service
-      : `${this.tracer._service}-aws-${serviceIdentifier}`
+      : `${this.tracer._service}-aws-${this.serviceIdentifier}`
   }
 }
 

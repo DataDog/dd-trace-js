@@ -1,13 +1,20 @@
 'use strict'
 
-const Span = require('opentracing').Span
+require('./setup/tap')
+
+const Span = require('../src/opentracing/span')
 const { storage } = require('../../datadog-core')
 const Config = require('../src/config')
 const tags = require('../../../ext/tags')
+const { expect } = require('chai')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { DD_MAJOR } = require('../../../version')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
+
+const describeOrphanable = DD_MAJOR < 4 ? describe : describe.skip
 
 describe('Tracer', () => {
   let Tracer
@@ -127,9 +134,9 @@ describe('Tracer', () => {
       } catch (e) {
         expect(span.finish).to.have.been.called
         expect(tags).to.include({
-          'error.type': e.name,
-          'error.msg': e.message,
-          'error.stack': e.stack
+          [ERROR_TYPE]: e.name,
+          [ERROR_MESSAGE]: e.message,
+          [ERROR_STACK]: e.stack
         })
       }
     })
@@ -169,9 +176,9 @@ describe('Tracer', () => {
 
         expect(span.finish).to.have.been.called
         expect(tags).to.include({
-          'error.type': error.name,
-          'error.msg': error.message,
-          'error.stack': error.stack
+          [ERROR_TYPE]: error.name,
+          [ERROR_MESSAGE]: error.message,
+          [ERROR_STACK]: error.stack
         })
       })
     })
@@ -216,17 +223,31 @@ describe('Tracer', () => {
           .catch(e => {
             expect(span.finish).to.have.been.called
             expect(tags).to.include({
-              'error.type': e.name,
-              'error.msg': e.message,
-              'error.stack': e.stack
+              [ERROR_TYPE]: e.name,
+              [ERROR_MESSAGE]: e.message,
+              [ERROR_STACK]: e.stack
             })
             done()
           })
           .catch(done)
       })
+
+      it.skip('should not treat rejections as handled', done => {
+        const err = new Error('boom')
+
+        tracer
+          .trace('name', {}, () => {
+            return Promise.reject(err)
+          })
+
+        process.once('unhandledRejection', (received) => {
+          expect(received).to.equal(err)
+          done()
+        })
+      })
     })
 
-    describe('when there is no parent span', () => {
+    describeOrphanable('when there is no parent span', () => {
       it('should not trace if `orphanable: false`', () => {
         sinon.spy(tracer, 'startSpan')
 
@@ -252,7 +273,7 @@ describe('Tracer', () => {
       })
     })
 
-    describe('when there is a parent span', () => {
+    describeOrphanable('when there is a parent span', () => {
       it('should trace if `orphanable: false`', () => {
         tracer.scope().activate(tracer.startSpan('parent'), () => {
           sinon.spy(tracer, 'startSpan')
@@ -311,54 +332,6 @@ describe('Tracer', () => {
         const span = tracer.scope().active().context()
         expect(traceId).to.equal(span.toTraceId())
         expect(traceTime).to.equal(time.toString())
-      })
-    })
-  })
-
-  describe('setUser', () => {
-    it('should do nothing when passed invalid data', () => {
-      tracer.trace('http', {}, span => {
-        sinon.stub(span, 'setTag')
-
-        expect(tracer.setUser()).to.equal(tracer)
-        expect(tracer.setUser({})).to.equal(tracer)
-
-        expect(span.setTag).to.not.have.been.called
-      })
-    })
-
-    it('should do nothing when no active span is found', () => {
-      const result = tracer.setUser({ id: '123' })
-
-      expect(result).to.equal(tracer)
-    })
-
-    it('should do nothing when no top span is found', () => {
-      tracer.trace('http', {}, span => {
-        span.finish()
-
-        sinon.stub(span, 'setTag')
-
-        expect(tracer.setUser({ id: '123' })).to.equal(tracer)
-
-        expect(span.setTag).to.not.have.been.called
-      })
-    })
-
-    it('should add user tags to top span', () => {
-      tracer.trace('http', {}, span => {
-        sinon.stub(span, 'setTag')
-
-        expect(tracer.setUser({
-          id: '123',
-          email: 'a@b.c',
-          custom: 'hello'
-        })).to.equal(tracer)
-
-        expect(span.setTag).to.have.been.calledThrice
-        expect(span.setTag.firstCall).to.have.been.calledWithExactly('usr.id', '123')
-        expect(span.setTag.secondCall).to.have.been.calledWithExactly('usr.email', 'a@b.c')
-        expect(span.setTag.thirdCall).to.have.been.calledWithExactly('usr.custom', 'hello')
       })
     })
   })
@@ -473,7 +446,7 @@ describe('Tracer', () => {
       expect(tracer.trace).to.have.not.been.called
     })
 
-    describe('when there is no parent span', () => {
+    describeOrphanable('when there is no parent span', () => {
       it('should not trace if `orphanable: false`', () => {
         const fn = tracer.wrap('name', { orphanable: false }, () => {})
 
@@ -505,7 +478,7 @@ describe('Tracer', () => {
       })
     })
 
-    describe('when there is a parent span', () => {
+    describeOrphanable('when there is a parent span', () => {
       it('should trace if `orphanable: false`', () => {
         tracer.scope().activate(tracer.startSpan('parent'), () => {
           const fn = tracer.wrap('name', { orhpanable: false }, () => {})
@@ -540,20 +513,6 @@ describe('Tracer', () => {
 
           expect(tracer.trace).to.have.been.called
         })
-      })
-    })
-
-    describe('when the options object is a function returning a falsy value', () => {
-      it('should trace', () => {
-        const fn = tracer.wrap('name', () => false, () => {})
-
-        sinon.stub(tracer, 'trace').callsFake((_, options) => {
-          expect(options).to.equal(false)
-        })
-
-        fn()
-
-        expect(tracer.trace).to.have.been.called
       })
     })
   })

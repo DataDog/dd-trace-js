@@ -3,21 +3,27 @@
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage } = require('../../datadog-core')
 const web = require('../../dd-trace/src/plugins/util/web')
-const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/gateway/channels')
+const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-trace/src/appsec/channels')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class HttpServerPlugin extends Plugin {
-  static get name () {
+  static get id () {
     return 'http'
   }
 
   constructor (...args) {
     super(...args)
 
-    this.addSub('apm:http:server:request:start', ({ req, res }) => {
-      const store = storage.getStore()
-      const span = web.startSpan(this.tracer, this.config, req, res, 'http.request')
+    this._parentStore = undefined
 
-      this.enter(span, store)
+    this.addSub('apm:http:server:request:start', ({ req, res, abortController }) => {
+      const store = storage.getStore()
+      const span = web.startSpan(this.tracer, this.config, req, res, 'web.request')
+
+      span.setTag(COMPONENT, this.constructor.id)
+
+      this._parentStore = store
+      this.enter(span, { ...store, req, res })
 
       const context = web.getContext(req)
 
@@ -27,21 +33,18 @@ class HttpServerPlugin extends Plugin {
       }
 
       if (incomingHttpRequestStart.hasSubscribers) {
-        incomingHttpRequestStart.publish({ req, res })
+        incomingHttpRequestStart.publish({ req, res, abortController }) // TODO: no need to make a new object here
       }
     })
 
-    this.addSub('apm:http:server:request:end', () => {
-      this.exit()
+    this.addSub('apm:http:server:request:error', (error) => {
+      web.addError(error)
     })
 
-    this.addSub('apm:http:server:request:error', (error) => {
-      const span = storage.getStore().span
-      span.addTags({
-        'error.type': error.name,
-        'error.msg': error.message,
-        'error.stack': error.stack
-      })
+    this.addSub('apm:http:server:request:exit', ({ req }) => {
+      const span = this._parentStore && this._parentStore.span
+      this.enter(span, this._parentStore)
+      this._parentStore = undefined
     })
 
     this.addSub('apm:http:server:request:finish', ({ req }) => {
@@ -49,7 +52,11 @@ class HttpServerPlugin extends Plugin {
 
       if (!context || !context.res) return // Not created by a http.Server instance.
 
-      web.wrapRes(context, context.req, context.res, context.res.end)()
+      if (incomingHttpRequestEnd.hasSubscribers) {
+        incomingHttpRequestEnd.publish({ req, res: context.res })
+      }
+
+      web.finishAll(context)
     })
   }
 

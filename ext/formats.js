@@ -1,10 +1,8 @@
 'use strict'
 
-const opentracing = require('opentracing')
-
 module.exports = {
-  TEXT_MAP: opentracing.FORMAT_TEXT_MAP,
-  HTTP_HEADERS: opentracing.FORMAT_HTTP_HEADERS,
-  BINARY: opentracing.FORMAT_BINARY,
+  TEXT_MAP: 'text_map',
+  HTTP_HEADERS: 'http_headers',
+  BINARY: 'binary',
   LOG: 'log'
 }

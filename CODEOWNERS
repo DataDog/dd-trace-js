@@ -1,3 +1,3 @@
-* @DataDog/apm-js
+* @DataDog/dd-trace-js
 /packages/dd-trace/src/appsec/ @DataDog/appsec-js
-/packages/dd-trace/src/ci-visibility/ @DataDog/ci-app-tracers
+/packages/dd-trace/test/appsec/ @DataDog/appsec-js

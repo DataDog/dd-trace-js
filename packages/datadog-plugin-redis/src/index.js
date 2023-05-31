@@ -1,72 +1,29 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
+const CachePlugin = require('../../dd-trace/src/plugins/cache')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
-class RedisPlugin extends Plugin {
-  static get name () {
-    return 'redis'
-  }
+class RedisPlugin extends CachePlugin {
+  static get id () { return 'redis' }
+  static get system () { return 'redis' }
 
-  constructor (...args) {
-    super(...args)
+  start ({ db, command, args, connectionOptions = {}, connectionName }) {
+    const resource = command
+    const normalizedCommand = command.toUpperCase()
+    if (!this.config.filter(normalizedCommand)) return this.skip()
 
-    this.addSub(`apm:${this.constructor.name}:command:start`, (
-      { db, command, args, connectionOptions, connectionName }
-    ) => {
-      if (!this.config.filter(command)) {
-        return this.skip()
+    this.startSpan({
+      resource,
+      service: this.serviceName(this.config, this.system, connectionName),
+      type: 'redis',
+      meta: {
+        'db.type': 'redis',
+        'db.name': db || '0',
+        'redis.raw_command': formatCommand(normalizedCommand, args),
+        'out.host': connectionOptions.host,
+        [CLIENT_PORT_KEY]: connectionOptions.port
       }
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const span = this.tracer.startSpan('redis.command', {
-        childOf,
-        tags: {
-          'span.kind': 'client',
-          'resource.name': command,
-          'span.type': 'redis',
-          'db.type': 'redis',
-          'db.name': db || '0',
-          'redis.raw_command': formatCommand(command, args)
-        }
-      })
-
-      span.setTag('service.name', this.config.service || `${span.context()._tags['service.name']}-redis`)
-
-      analyticsSampler.sample(span, this.config.measured)
-
-      if (connectionOptions) {
-        span.addTags({
-          'out.host': connectionOptions.host,
-          'out.port': connectionOptions.port
-        })
-      }
-
-      if (this.config.splitByInstance && connectionName) {
-        const service = this.config.service
-          ? `${this.config.service}-${connectionName}`
-          : connectionName
-
-        span.setTag('service.name', service)
-      }
-
-      this.enter(span, store)
-    })
-
-    this.addSub(`apm:${this.constructor.name}:command:end`, () => {
-      this.exit()
-    })
-
-    this.addSub(`apm:${this.constructor.name}:command:error`, err => {
-      const span = storage.getStore().span
-      span.setTag('error', err)
-    })
-
-    this.addSub(`apm:${this.constructor.name}:command:async-end`, () => {
-      const span = storage.getStore().span
-      span.finish()
     })
   }
 
@@ -76,8 +33,6 @@ class RedisPlugin extends Plugin {
 }
 
 function formatCommand (command, args) {
-  command = command.toUpperCase()
-
   if (!args || command === 'AUTH') return command
 
   for (let i = 0, l = args.length; i < l; i++) {
@@ -110,11 +65,22 @@ function trim (str, maxlen) {
 }
 
 function normalizeConfig (config) {
+  if (config.allowlist) uppercaseAllEntries(config.allowlist)
+  if (config.whitelist) uppercaseAllEntries(config.whitelist)
+  if (config.blocklist) uppercaseAllEntries(config.blocklist)
+  if (config.blacklist) uppercaseAllEntries(config.blacklist)
+
   const filter = urlFilter.getFilter(config)
 
   return Object.assign({}, config, {
     filter
   })
+}
+
+function uppercaseAllEntries (entries) {
+  for (let i = 0; i < entries.length; i++) {
+    entries[i] = String(entries[i]).toUpperCase()
+  }
 }
 
 module.exports = RedisPlugin

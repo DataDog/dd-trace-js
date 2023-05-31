@@ -8,7 +8,12 @@ beforeEach(() => {
   })
 })
 
+before(() => {
+  cy.task('dd:testSuiteStart', Cypress.mocha.getRootSuite().file)
+})
+
 after(() => {
+  cy.task('dd:testSuiteFinish', Cypress.mocha.getRunner().stats)
   cy.window().then(win => {
     win.dispatchEvent(new Event('beforeunload'))
   })
@@ -24,9 +29,13 @@ afterEach(() => {
       state: currentTest.state,
       error: currentTest.err,
     }
+    try {
+      testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
+    } catch (e) {}
+
     if (win.DD_RUM) {
       testInfo.isRUMActive = true
     }
-    cy.task('dd:afterEach', testInfo)
+    cy.task('dd:afterEach', { test: testInfo, coverage: win.__coverage__ })
   })
 })

@@ -42,6 +42,6 @@ for (let parent = null, i = 0; i < 30; i++) {
 
 const encoder = new AgentEncoder(writer)
 
-for (let j = 0; j < 10000; j++) {
+for (let j = 0; j < 5000; j++) {
   encoder.encode(trace)
 }

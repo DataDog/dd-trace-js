@@ -1,9 +1,17 @@
 'use strict'
 
+require('../setup/tap')
+
 const { expect } = require('chai')
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const id = require('../../src/id')
+
+function randString (length) {
+  return Array.from({ length }, () => {
+    return String.fromCharCode(Math.floor(Math.random() * 256))
+  }).join('')
+}
 
 describe('encode', () => {
   let encoder
@@ -87,8 +95,11 @@ describe('encode', () => {
     expect(encoder.count()).to.equal(2)
   })
 
-  it('should flush when the payload size limit is reached', () => {
-    data[0].meta.foo = new Array(8 * 1024 * 1024).join('a')
+  it('should flush when the payload size limit is reached', function () {
+    // Make 8mb of data
+    for (let i = 0; i < 8 * 1024; i++) {
+      data[0].meta[`foo${i}`] = randString(1024)
+    }
 
     encoder.encode(data)
 
@@ -110,11 +121,66 @@ describe('encode', () => {
     expect(payload[4]).to.equal(0)
   })
 
-  it('should log adding an encoded trace to the buffer', () => {
+  it('should log adding an encoded trace to the buffer if enabled', () => {
+    encoder._debugEncoding = true
     encoder.encode(data)
 
     const message = logger.debug.firstCall.args[0]()
 
     expect(message).to.match(/^Adding encoded trace to buffer:(\s[a-f\d]{2})+$/)
+  })
+
+  it('should not log adding an encoded trace to the buffer by default', () => {
+    encoder.encode(data)
+
+    expect(logger.debug).to.not.have.been.called
+  })
+
+  it('should work when the buffer is resized', function () {
+    // big enough to trigger a resize
+    const dataToEncode = Array(15000).fill({
+      trace_id: id('1234abcd1234abcd'),
+      span_id: id('1234abcd1234abcd'),
+      parent_id: id('1234abcd1234abcd'),
+      name: 'bigger name than expected',
+      resource: 'test-r',
+      service: 'test-s',
+      type: 'foo',
+      error: 0,
+      meta: {
+        bar: 'baz'
+      },
+      metrics: {
+        example: 1,
+        moreExample: 2
+      },
+      start: 123,
+      duration: 456
+    })
+    encoder.encode(dataToEncode)
+
+    const buffer = encoder.makePayload()
+    const [decodedPayload] = msgpack.decode(buffer, { codec })
+    decodedPayload.forEach(decodedData => {
+      expect(decodedData).to.include({
+        name: 'bigger name than expected',
+        resource: 'test-r',
+        service: 'test-s',
+        type: 'foo',
+        error: 0
+      })
+      expect(decodedData.start.toNumber()).to.equal(123)
+      expect(decodedData.duration.toNumber()).to.equal(456)
+      expect(decodedData.meta).to.eql({
+        bar: 'baz'
+      })
+      expect(decodedData.metrics).to.eql({
+        example: 1,
+        moreExample: 2
+      })
+      expect(decodedData.trace_id.toString(16)).to.equal('1234abcd1234abcd')
+      expect(decodedData.span_id.toString(16)).to.equal('1234abcd1234abcd')
+      expect(decodedData.parent_id.toString(16)).to.equal('1234abcd1234abcd')
+    })
   })
 })

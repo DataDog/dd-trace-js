@@ -9,9 +9,18 @@ const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
 const SAMPLING_LIMIT_DECISION = constants.SAMPLING_LIMIT_DECISION
 const SAMPLING_AGENT_DECISION = constants.SAMPLING_AGENT_DECISION
+const SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM
+const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
+const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
+const SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN
 const MEASURED = tags.MEASURED
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
+const TOP_LEVEL_KEY = constants.TOP_LEVEL_KEY
+const PROCESS_ID = constants.PROCESS_ID
+const ERROR_MESSAGE = constants.ERROR_MESSAGE
+const ERROR_STACK = constants.ERROR_STACK
+const ERROR_TYPE = constants.ERROR_TYPE
 
 const map = {
   'service.name': 'service',
@@ -46,6 +55,13 @@ function formatSpan (span) {
   }
 }
 
+function setSingleSpanIngestionTags (span, options) {
+  if (!options) return
+  addTag({}, span.metrics, SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN)
+  addTag({}, span.metrics, SPAN_SAMPLING_RULE_RATE, options.sampleRate)
+  addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
+}
+
 function extractTags (trace, span) {
   const context = span.context()
   const origin = context._trace.origin
@@ -77,9 +93,9 @@ function extractTags (trace, span) {
           extractError(trace, tags[tag])
         }
         break
-      case 'error.type':
-      case 'error.msg':
-      case 'error.stack':
+      case ERROR_TYPE:
+      case ERROR_MESSAGE:
+      case ERROR_STACK:
         // HACK: remove when implemented in the backend
         if (context._name !== 'fs.operation') {
           trace.error = 1
@@ -91,10 +107,10 @@ function extractTags (trace, span) {
     }
   }
 
-  if (span.tracer()._service === tags['service.name']) {
-    addTag(trace.meta, trace.metrics, 'language', 'javascript')
-  }
+  setSingleSpanIngestionTags(trace, context._sampling.spanSampling)
 
+  addTag(trace.meta, trace.metrics, 'language', 'javascript')
+  addTag(trace.meta, trace.metrics, PROCESS_ID, process.pid)
   addTag(trace.meta, trace.metrics, SAMPLING_PRIORITY_KEY, priority)
   addTag(trace.meta, trace.metrics, ORIGIN_KEY, origin)
   addTag(trace.meta, trace.metrics, HOSTNAME_KEY, hostname)
@@ -110,6 +126,7 @@ function extractRootTags (trace, span) {
   addTag({}, trace.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
   addTag({}, trace.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
   addTag({}, trace.metrics, SAMPLING_AGENT_DECISION, context._trace[SAMPLING_AGENT_DECISION])
+  addTag({}, trace.metrics, TOP_LEVEL_KEY, 1)
 }
 
 function extractChunkTags (trace, span) {
@@ -129,9 +146,10 @@ function extractError (trace, error) {
   trace.error = 1
 
   if (isError(error)) {
-    addTag(trace.meta, trace.metrics, 'error.msg', error.message)
-    addTag(trace.meta, trace.metrics, 'error.type', error.name)
-    addTag(trace.meta, trace.metrics, 'error.stack', error.stack)
+    // AggregateError only has a code and no message.
+    addTag(trace.meta, trace.metrics, ERROR_MESSAGE, error.message || error.code)
+    addTag(trace.meta, trace.metrics, ERROR_TYPE, error.name)
+    addTag(trace.meta, trace.metrics, ERROR_STACK, error.stack)
   }
 }
 
@@ -158,7 +176,7 @@ function addTag (meta, metrics, key, value, nested) {
         metrics[key] = value.toString()
       } else if (!Array.isArray(value) && !nested) {
         for (const prop in value) {
-          if (!value.hasOwnProperty(prop)) continue
+          if (!hasOwn(value, prop)) continue
 
           addTag(meta, metrics, `${key}.${prop}`, value[prop], true)
         }
@@ -166,6 +184,10 @@ function addTag (meta, metrics, key, value, nested) {
 
       break
   }
+}
+
+function hasOwn (object, prop) {
+  return Object.prototype.hasOwnProperty.call(object, prop)
 }
 
 function isNodeBuffer (obj) {

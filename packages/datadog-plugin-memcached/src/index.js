@@ -1,62 +1,23 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
-const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
+const CachePlugin = require('../../dd-trace/src/plugins/cache')
 
-class MemcachedPlugin extends Plugin {
-  static get name () {
-    return 'memcached'
-  }
+class MemcachedPlugin extends CachePlugin {
+  static get id () { return 'memcached' }
 
-  constructor (...args) {
-    super(...args)
+  start ({ client, server, query }) {
+    const address = getAddress(client, server, query)
 
-    this.addSub('apm:memcached:command:start', () => {
-      const store = storage.getStore()
-      const childOf = store ? store.span : store
-      const span = this.tracer.startSpan('memcached.command', {
-        childOf,
-        tags: {
-          'span.kind': 'client',
-          'span.type': 'memcached',
-          'service.name': this.config.service || `${this.tracer._service}-memcached`
-        }
-      })
-
-      analyticsSampler.sample(span, this.config.measured)
-      this.enter(span, store)
-    })
-
-    this.addSub('apm:memcached:command:end', () => {
-      this.exit()
-    })
-
-    this.addSub('apm:memcached:command:start:with-args', ({ client, server, query }) => {
-      const span = storage.getStore().span
-      span.addTags({
-        'resource.name': query.type,
-        'memcached.command': query.command
-      })
-
-      const address = getAddress(client, server, query)
-
-      if (address) {
-        span.addTags({
-          'out.host': address[0],
-          'out.port': address[1]
-        })
+    this.startSpan({
+      service: this.serviceName(this.config, this.system),
+      resource: query.type,
+      type: 'memcached',
+      meta: {
+        'memcached.command': query.command,
+        'out.host': address[0],
+        [CLIENT_PORT_KEY]: address[1]
       }
-    })
-
-    this.addSub('apm:memcached:command:error', err => {
-      const span = storage.getStore().span
-      span.setTag('error', err)
-    })
-
-    this.addSub('apm:memcached:command:async-end', () => {
-      const span = storage.getStore().span
-      span.finish()
     })
   }
 }

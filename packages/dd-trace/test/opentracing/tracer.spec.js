@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/tap')
+
 const opentracing = require('opentracing')
 const os = require('os')
 const SpanContext = require('../../src/opentracing/span_context')
@@ -116,7 +118,8 @@ describe('Tracer', () => {
           'service.name': 'service'
         },
         startTime: fields.startTime,
-        hostname: undefined
+        hostname: undefined,
+        traceId128BitGenerationEnabled: undefined
       }, true)
 
       expect(span.addTags).to.have.been.calledWith({
@@ -172,7 +175,8 @@ describe('Tracer', () => {
           'service.name': 'service'
         },
         startTime: fields.startTime,
-        hostname: os.hostname()
+        hostname: os.hostname(),
+        traceId128BitGenerationEnabled: undefined
       })
 
       expect(testSpan).to.equal(span)
@@ -211,32 +215,6 @@ describe('Tracer', () => {
       })
     })
 
-    it('should ignore references that are not references', () => {
-      fields.references = [{}]
-
-      tracer = new Tracer(config)
-      tracer.startSpan('name', fields)
-
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
-        operationName: 'name',
-        parent: null
-      })
-    })
-
-    it('should ignore references to objects other than span contexts', () => {
-      fields.references = [
-        new Reference(opentracing.REFERENCE_CHILD_OF, {})
-      ]
-
-      tracer = new Tracer(config)
-      tracer.startSpan('name', fields)
-
-      expect(Span).to.have.been.calledWithMatch(tracer, processor, prioritySampler, {
-        operationName: 'name',
-        parent: null
-      })
-    })
-
     it('should merge default tracer tags with span tags', () => {
       config.tags = {
         'foo': 'tracer',
@@ -253,6 +231,25 @@ describe('Tracer', () => {
 
       expect(span.addTags).to.have.been.calledWith(config.tags)
       expect(span.addTags).to.have.been.calledWith(fields.tags)
+    })
+
+    it('should start a span with the trace ID generation configuration', () => {
+      config.traceId128BitGenerationEnabled = true
+      tracer = new Tracer(config)
+      const testSpan = tracer.startSpan('name', fields)
+
+      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
+        operationName: 'name',
+        parent: null,
+        tags: {
+          'service.name': 'service'
+        },
+        startTime: fields.startTime,
+        hostname: undefined,
+        traceId128BitGenerationEnabled: true
+      })
+
+      expect(testSpan).to.equal(span)
     })
   })
 

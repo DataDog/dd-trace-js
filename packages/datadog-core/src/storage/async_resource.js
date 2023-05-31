@@ -1,12 +1,34 @@
 'use strict'
 
 const { createHook, executionAsyncResource } = require('async_hooks')
+const { channel } = require('../../../diagnostics_channel')
+
+const beforeCh = channel('dd-trace:storage:before')
+const afterCh = channel('dd-trace:storage:after')
+
+let PrivateSymbol = Symbol
+function makePrivateSymbol () {
+  // eslint-disable-next-line no-new-func
+  PrivateSymbol = new Function('name', 'return %CreatePrivateSymbol(name)')
+}
+
+try {
+  makePrivateSymbol()
+} catch (e) {
+  try {
+    const v8 = require('v8')
+    v8.setFlagsFromString('--allow-natives-syntax')
+    makePrivateSymbol()
+    v8.setFlagsFromString('--no-allow-natives-syntax')
+  // eslint-disable-next-line no-empty
+  } catch (e) {}
+}
 
 class AsyncResourceStorage {
   constructor () {
-    this._ddResourceStore = Symbol('ddResourceStore')
+    this._ddResourceStore = PrivateSymbol('ddResourceStore')
     this._enabled = false
-    this._hook = this._createHook()
+    this._hook = createHook(this._createHook())
   }
 
   disable () {
@@ -48,9 +70,15 @@ class AsyncResourceStorage {
   }
 
   _createHook () {
-    return createHook({
-      init: this._init.bind(this)
-    })
+    return {
+      init: this._init.bind(this),
+      before () {
+        beforeCh.publish()
+      },
+      after () {
+        afterCh.publish()
+      }
+    }
   }
 
   _enable () {
@@ -69,7 +97,7 @@ class AsyncResourceStorage {
   }
 
   _executionAsyncResource () {
-    return executionAsyncResource()
+    return executionAsyncResource() || {}
   }
 }
 

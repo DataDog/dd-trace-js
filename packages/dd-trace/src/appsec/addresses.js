@@ -7,12 +7,13 @@ module.exports = {
   // TODO: 'server.request.trailers',
   HTTP_INCOMING_URL: 'server.request.uri.raw',
   HTTP_INCOMING_METHOD: 'server.request.method',
-  HTTP_INCOMING_ENDPOINT: 'server.request.framework_endpoint',
   HTTP_INCOMING_PARAMS: 'server.request.path_params',
   HTTP_INCOMING_COOKIES: 'server.request.cookies',
   HTTP_INCOMING_RESPONSE_CODE: 'server.response.status',
   HTTP_INCOMING_RESPONSE_HEADERS: 'server.response.headers.no_cookies',
   // TODO: 'server.response.trailers',
-  HTTP_INCOMING_REMOTE_IP: 'server.request.client_ip',
-  HTTP_INCOMING_REMOTE_PORT: 'server.request.client_port'
+
+  HTTP_CLIENT_IP: 'http.client_ip',
+
+  USER_ID: 'usr.id'
 }

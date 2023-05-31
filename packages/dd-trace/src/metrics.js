@@ -2,11 +2,13 @@
 
 // TODO: capture every second and flush every 10 seconds
 
+const { URL, format } = require('url')
 const v8 = require('v8')
 const os = require('os')
 const Client = require('./dogstatsd')
 const log = require('./log')
 const Histogram = require('./histogram')
+const { performance } = require('perf_hooks')
 
 const INTERVAL = 10 * 1000
 
@@ -19,6 +21,7 @@ let cpuUsage
 let gauges
 let counters
 let histograms
+let elu
 
 reset()
 
@@ -48,11 +51,23 @@ module.exports = {
       nativeMetrics = null
     }
 
-    client = new Client({
+    const clientConfig = {
       host: config.dogstatsd.hostname,
       port: config.dogstatsd.port,
       tags
-    })
+    }
+
+    if (config.url) {
+      clientConfig.metricsProxyUrl = config.url
+    } else if (config.port) {
+      clientConfig.metricsProxyUrl = new URL(format({
+        protocol: 'http:',
+        hostname: config.hostname || 'localhost',
+        port: config.port
+      }))
+    }
+
+    client = new Client(clientConfig)
 
     time = process.hrtime()
 
@@ -246,6 +261,21 @@ function captureHistograms () {
   })
 }
 
+/**
+ * Gathers and reports Event Loop Utilization (ELU) since last run
+ *
+ * ELU is a measure of how busy the event loop is, like running JavaScript or
+ * waiting on *Sync functions. The value is between 0 (idle) and 1 (exhausted).
+ *
+ * performance.eventLoopUtilization available in Node.js >= v14.10, >= v12.19, >= v16
+ */
+const captureELU = ('eventLoopUtilization' in performance) ? () => {
+  // if elu is undefined (first run) the measurement is from start of process
+  elu = performance.eventLoopUtilization(elu)
+
+  client.gauge('runtime.node.event_loop.utilization', elu.utilization)
+} : () => {}
+
 function captureCommonMetrics () {
   captureMemoryUsage()
   captureProcess()
@@ -253,6 +283,7 @@ function captureCommonMetrics () {
   captureGauges()
   captureCounters()
   captureHistograms()
+  captureELU()
 }
 
 function captureNativeMetrics () {

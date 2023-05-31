@@ -1,33 +1,33 @@
 'use strict'
 
-const methods = require('methods').concat('all')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
 
-const requestResources = new WeakMap()
+const parsingResources = new WeakMap()
 
-function wrapFastify (fastify) {
+function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
 
   return function fastifyWithTrace () {
     const app = fastify.apply(this, arguments)
 
-    if (!app) return app
+    if (!app || typeof app.addHook !== 'function') return app
 
-    if (typeof app.addHook === 'function') {
-      app.addHook('onRequest', onRequest)
-      app.addHook = wrapAddHook(app.addHook)
-      app.addHook('preHandler', preHandler)
+    app.addHook('onRequest', onRequest)
+    app.addHook('preHandler', preHandler)
+
+    if (hasParsingEvents) {
+      app.addHook('preParsing', preParsing)
+      app.addHook('preValidation', preValidation)
+    } else {
+      app.addHook('onRequest', preParsing)
+      app.addHook('preHandler', preValidation)
     }
 
-    methods.forEach(method => {
-      app[method] = wrapMethod(app[method])
-    })
-
-    app.route = wrapRoute(app.route)
+    app.addHook = wrapAddHook(app.addHook)
 
     return app
   }
@@ -41,118 +41,96 @@ function wrapAddHook (addHook) {
 
     arguments[arguments.length - 1] = shimmer.wrap(fn, function (request, reply, done) {
       const req = getReq(request)
-      const requestResource = requestResources.get(req)
 
-      if (!requestResource) return fn.apply(this, arguments)
+      try {
+        if (typeof done === 'function') {
+          done = arguments[arguments.length - 1]
 
-      return requestResource.runInAsyncScope(() => {
-        const hookResource = new AsyncResource('bound-anonymous-fn')
+          arguments[arguments.length - 1] = function (err) {
+            publishError(err, req)
 
-        try {
-          if (typeof done === 'function') {
-            done = arguments[arguments.length - 1]
+            if (name === 'onRequest' || name === 'preParsing') {
+              const parsingResource = new AsyncResource('bound-anonymous-fn')
 
-            arguments[arguments.length - 1] = hookResource.bind(function (err) {
-              errorChannel.publish(err)
-              return done.apply(this, arguments)
-            })
+              parsingResources.set(req, parsingResource)
 
-            return hookResource.bind(fn).apply(this, arguments)
-          } else {
-            const promise = hookResource.bind(fn).apply(this, arguments)
-
-            if (promise && typeof promise.catch === 'function') {
-              return promise.catch(err => {
-                errorChannel.publish(err)
-                throw err
+              return parsingResource.runInAsyncScope(() => {
+                return done.apply(this, arguments)
               })
+            } else {
+              return done.apply(this, arguments)
             }
-
-            return promise
           }
-        } catch (e) {
-          errorChannel.publish(e)
-          throw e
+
+          return fn.apply(this, arguments)
+        } else {
+          const promise = fn.apply(this, arguments)
+
+          if (promise && typeof promise.catch === 'function') {
+            return promise.catch(err => publishError(err, req))
+          }
+
+          return promise
         }
-      })
+      } catch (e) {
+        throw publishError(e, req)
+      }
     })
 
     return addHook.apply(this, arguments)
   }
 }
 
-function onRequest (request, reply, next) {
-  if (typeof next !== 'function') return
+function onRequest (request, reply, done) {
+  if (typeof done !== 'function') return
 
   const req = getReq(request)
   const res = getRes(reply)
 
-  requestResources.set(req, new AsyncResource('bound-anonymous-fn'))
   handleChannel.publish({ req, res })
 
-  return next()
+  return done()
 }
 
-function preHandler (request, reply, next) {
-  if (typeof next !== 'function') return
-  if (!reply || typeof reply.send !== 'function') return next()
+function preHandler (request, reply, done) {
+  if (typeof done !== 'function') return
+  if (!reply || typeof reply.send !== 'function') return done()
 
   const req = getReq(request)
 
-  reply.send = requestResources.get(req).bind(wrapSend(reply.send))
+  reply.send = wrapSend(reply.send, req)
 
-  next()
+  done()
 }
 
-function wrapSend (send) {
-  return function sendWithTrace (payload) {
-    if (payload instanceof Error) {
-      errorChannel.publish(payload)
+function preValidation (request, reply, done) {
+  const req = getReq(request)
+  const parsingResource = parsingResources.get(req)
+
+  if (!parsingResource) return done()
+
+  parsingResource.runInAsyncScope(() => done())
+}
+
+function preParsing (request, reply, payload, done) {
+  if (typeof done !== 'function') {
+    done = payload
+  }
+
+  const req = getReq(request)
+  const parsingResource = new AsyncResource('bound-anonymous-fn')
+
+  parsingResources.set(req, parsingResource)
+  parsingResource.runInAsyncScope(() => done())
+}
+
+function wrapSend (send, req) {
+  return function sendWithTrace (error) {
+    if (error instanceof Error) {
+      errorChannel.publish({ req, error })
     }
 
     return send.apply(this, arguments)
-  }
-}
-
-function wrapRoute (route) {
-  if (typeof route !== 'function') return route
-
-  return function routeWithTrace (opts) {
-    opts.handler = wrapHandler(opts.handler)
-
-    return route.apply(this, arguments)
-  }
-}
-
-function wrapMethod (method) {
-  if (typeof method !== 'function') return method
-
-  return function methodWithTrace (url, opts, handler) {
-    const lastIndex = arguments.length - 1
-
-    handler = arguments[lastIndex]
-
-    if (typeof handler === 'function') {
-      arguments[lastIndex] = wrapHandler(handler)
-    } else if (handler) {
-      arguments[lastIndex].handler = wrapHandler(handler.handler)
-    }
-
-    return method.apply(this, arguments)
-  }
-}
-
-function wrapHandler (handler) {
-  if (!handler || typeof handler !== 'function' || handler.name === 'handlerWithTrace') {
-    return handler
-  }
-
-  return function handlerWithTrace (request, reply) {
-    const req = getReq(request)
-
-    return requestResources.get(req).runInAsyncScope(() => {
-      return handler.apply(this, arguments)
-    })
   }
 }
 
@@ -164,16 +142,15 @@ function getRes (reply) {
   return reply && (reply.raw || reply.res || reply)
 }
 
-addHook({ name: 'fastify', versions: ['>=3.25.2'] }, fastify => {
-  const wrapped = shimmer.wrap(fastify, wrapFastify(fastify, false))
+function publishError (error, req) {
+  if (error) {
+    errorChannel.publish({ error, req })
+  }
 
-  wrapped.fastify = wrapped
-  wrapped.default = wrapped
+  return error
+}
 
-  return wrapped
-})
-
-addHook({ name: 'fastify', versions: ['3 - 3.25.1'] }, fastify => {
+addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
   const wrapped = shimmer.wrap(fastify, wrapFastify(fastify, true))
 
   wrapped.fastify = wrapped
@@ -182,6 +159,10 @@ addHook({ name: 'fastify', versions: ['3 - 3.25.1'] }, fastify => {
   return wrapped
 })
 
-addHook({ name: 'fastify', versions: ['1 - 2'] }, fastify => {
+addHook({ name: 'fastify', versions: ['2'] }, fastify => {
   return shimmer.wrap(fastify, wrapFastify(fastify, true))
+})
+
+addHook({ name: 'fastify', versions: ['1'] }, fastify => {
+  return shimmer.wrap(fastify, wrapFastify(fastify, false))
 })

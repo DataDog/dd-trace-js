@@ -1,6 +1,17 @@
 'use strict'
 
-const client = require('./client')
-const server = require('./server')
+const GrpcServerPlugin = require('./server')
+const GrpcClientPlugin = require('./client')
+const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
-module.exports = [].concat(client, server)
+class GrpcPlugin extends CompositePlugin {
+  static get id () { return 'grpc' }
+  static get plugins () {
+    return {
+      server: GrpcServerPlugin,
+      client: GrpcClientPlugin
+    }
+  }
+}
+
+module.exports = GrpcPlugin

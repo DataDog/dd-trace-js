@@ -2,6 +2,7 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const withTopologies = fn => {
   withVersions('mongodb-core', ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {
@@ -85,6 +86,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('db.name', `test.${collection}`)
                 expect(span.meta).to.have.property('out.host', 'localhost')
+                expect(span.meta).to.have.property('component', 'mongodb')
               })
               .then(done)
               .catch(done)
@@ -96,7 +98,7 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `planCacheListPlans test.${collection} {}`
+                const resource = `planCacheListPlans test.${collection}`
 
                 expect(span).to.have.property('resource', resource)
               })
@@ -109,37 +111,15 @@ describe('Plugin', () => {
             }, () => {})
           })
 
-          it('should sanitize the query', done => {
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                const query = '{"foo":"?","bar":{"baz":"?"}}'
-                const resource = `find test.${collection} ${query}`
-
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
-              })
-              .then(done)
-              .catch(done)
-
-            server.command(`test.${collection}`, {
-              find: `test.${collection}`,
-              query: {
-                foo: 1,
-                bar: {
-                  baz: [1, 2, 3]
-                }
-              }
-            }, () => {})
-          })
-
           it('should sanitize buffers as values and not as objects', done => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collection} {"_id":"?"}`
+                const resource = `find test.${collection}`
+                const query = `{"_id":"?"}`
 
                 expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
@@ -152,15 +132,18 @@ describe('Plugin', () => {
             }, () => {})
           })
 
-          it('should sanitize BSON as values and not as objects', done => {
+          it('should stringify BSON objects', done => {
             const BSON = require(`../../../versions/bson@4.0.0`).get()
+            const id = '123456781234567812345678'
 
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collection} {"_id":"?"}`
+                const resource = `find test.${collection}`
+                const query = `{"_id":"${id}"}`
 
                 expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
@@ -168,7 +151,7 @@ describe('Plugin', () => {
             server.command(`test.${collection}`, {
               find: `test.${collection}`,
               query: {
-                _id: new BSON.ObjectID('123456781234567812345678')
+                _id: new BSON.ObjectID(id)
               }
             }, () => {})
           })
@@ -177,9 +160,11 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collection} {"_id":"?"}`
+                const resource = `find test.${collection}`
+                const query = `{"_id":"1234"}`
 
                 expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
@@ -205,9 +190,10 @@ describe('Plugin', () => {
 
             agent
               .use(traces => {
-                expect(traces[0][0].meta).to.have.property('error.type', error.name)
-                expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-                expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+                expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(traces[0][0].meta).to.have.property('component', 'mongodb')
               })
               .then(done)
               .catch(done)
@@ -234,7 +220,7 @@ describe('Plugin', () => {
             Promise.all([
               agent
                 .use(traces => {
-                  expect(traces[0][0].resource).to.equal(`find test.${collection} {}`)
+                  expect(traces[0][0].resource).to.equal(`find test.${collection}`)
                 }),
               agent
                 .use(traces => {
@@ -263,9 +249,11 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `find test.${collection} {"foo":"?","bar":{"baz":"?"}}`
+                const resource = `find test.${collection}`
+                const query = `{"foo":1,"bar":{"baz":[1,2,3]}}`
 
                 expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
               })
               .then(done)
               .catch(done)
@@ -300,9 +288,10 @@ describe('Plugin', () => {
 
             agent
               .use(traces => {
-                expect(traces[0][0].meta).to.have.property('error.type', error.name)
-                expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-                expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+                expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+                expect(traces[0][0].meta).to.have.property('component', 'mongodb')
               })
               .then(done)
               .catch(done)

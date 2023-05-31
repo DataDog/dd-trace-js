@@ -2,6 +2,10 @@
 
 const log = require('./log')
 const format = require('./format')
+const SpanSampler = require('./span_sampler')
+const GitMetadataTagger = require('./git_metadata_tagger')
+
+const { SpanStatsProcessor } = require('./span_stats')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -11,6 +15,11 @@ class SpanProcessor {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
+    this._killAll = false
+
+    this._stats = new SpanStatsProcessor(config)
+    this._spanSampler = new SpanSampler(config.sampler)
+    this._gitMetadataTagger = new GitMetadataTagger(config)
   }
 
   process (span) {
@@ -21,12 +30,17 @@ class SpanProcessor {
     const { flushMinSpans } = this._config
     const { started, finished } = trace
 
+    if (trace.record === false) return
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this._prioritySampler.sample(spanContext)
+      this._spanSampler.sample(spanContext)
+      this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       for (const span of started) {
         if (span._duration !== undefined) {
-          formatted.push(format(span))
+          const formattedSpan = format(span)
+          this._stats.onSpanFinished(formattedSpan)
+          formatted.push(formattedSpan)
         } else {
           active.push(span)
         }
@@ -38,6 +52,18 @@ class SpanProcessor {
 
       this._erase(trace, active)
     }
+
+    if (this._killAll) {
+      started.map(startedSpan => {
+        if (!startedSpan._finished) {
+          startedSpan.finish()
+        }
+      })
+    }
+  }
+
+  killAll () {
+    this._killAll = true
   }
 
   _erase (trace, active) {

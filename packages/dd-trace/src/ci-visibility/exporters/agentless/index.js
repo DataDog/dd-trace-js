@@ -2,30 +2,39 @@
 
 const URL = require('url').URL
 const Writer = require('./writer')
-const Scheduler = require('../../../exporters/scheduler')
+const CoverageWriter = require('./coverage-writer')
+const CiVisibilityExporter = require('../ci-visibility-exporter')
+const log = require('../../../log')
 
-class AgentlessCiVisibilityExporter {
+class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
   constructor (config) {
-    const { flushInterval, tags, site, url } = config
+    super(config)
+    const { tags, site, url } = config
+    // we don't need to request /info because we are using agentless by configuration
+    this._isInitialized = true
+    this._resolveCanUseCiVisProtocol(true)
+
     this._url = url || new URL(`https://citestcycle-intake.${site}`)
     this._writer = new Writer({ url: this._url, tags })
 
-    if (flushInterval > 0) {
-      this._scheduler = new Scheduler(() => this._writer.flush(), flushInterval)
-    }
-    this._scheduler && this._scheduler.start()
+    this._coverageUrl = url || new URL(`https://citestcov-intake.${site}`)
+    this._coverageWriter = new CoverageWriter({ url: this._coverageUrl })
+
+    this._apiUrl = url || new URL(`https://api.${site}`)
   }
 
-  export (trace) {
-    this._writer.append(trace)
-
-    if (!this._scheduler) {
-      this._writer.flush()
+  setUrl (url, coverageUrl = url, apiUrl = url) {
+    this._setUrl(url, coverageUrl)
+    try {
+      apiUrl = new URL(apiUrl)
+      this._apiUrl = apiUrl
+    } catch (e) {
+      log.error(e)
     }
   }
 
-  flush () {
-    this._writer.flush()
+  _getApiUrl () {
+    return this._apiUrl
   }
 }
 

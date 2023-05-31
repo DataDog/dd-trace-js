@@ -1,4 +1,5 @@
 'use strict'
 const suiteTest = require('../../dd-trace/test/plugins/suite')
 
-suiteTest('amqplib', 'amqp-node/amqplib', 'latest')
+// TODO: restore use of latest branch when it gets a matching tag
+suiteTest('amqplib', 'amqp-node/amqplib', 'v0.9.0')

@@ -1,5 +1,7 @@
 'use strict'
 
+require('../../setup/tap')
+
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 
@@ -7,18 +9,20 @@ describe('LogPropagator', () => {
   let LogPropagator
   let propagator
   let log
+  let config
 
   beforeEach(() => {
-    LogPropagator = require('../../../src/opentracing/propagation/log')
-    propagator = new LogPropagator({
+    config = {
       service: 'test',
       env: 'dev',
       version: '1.0.0'
-    })
+    }
+    LogPropagator = require('../../../src/opentracing/propagation/log')
+    propagator = new LogPropagator(config)
     log = {
       dd: {
         trace_id: '123',
-        span_id: '18446744073709551160' // -456 casted to uint64
+        span_id: '456'
       }
     }
   })
@@ -28,14 +32,14 @@ describe('LogPropagator', () => {
       const carrier = {}
       const spanContext = new SpanContext({
         traceId: id('123', 10),
-        spanId: id('-456', 10)
+        spanId: id('456', 10)
       })
 
       propagator.inject(spanContext, carrier)
 
       expect(carrier).to.have.property('dd')
       expect(carrier.dd).to.have.property('trace_id', '123')
-      expect(carrier.dd).to.have.property('span_id', '18446744073709551160') // -456 casted to uint64
+      expect(carrier.dd).to.have.property('span_id', '456')
     })
 
     it('should inject the global context into the carrier', () => {
@@ -51,6 +55,44 @@ describe('LogPropagator', () => {
         }
       })
     })
+
+    it('should inject 128-bit trace IDs when enabled', () => {
+      config.traceId128BitLoggingEnabled = true
+
+      const carrier = {}
+      const traceId = id('1234567812345678')
+      const traceIdTag = '8765432187654321'
+      const spanContext = new SpanContext({
+        traceId,
+        spanId: id('456', 10)
+      })
+
+      spanContext._trace.tags['_dd.p.tid'] = traceIdTag
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.have.property('dd')
+      expect(carrier.dd).to.have.property('trace_id', '87654321876543211234567812345678')
+      expect(carrier.dd).to.have.property('span_id', '456')
+    })
+
+    it('should not inject 128-bit trace IDs when disabled', () => {
+      const carrier = {}
+      const traceId = id('123', 10)
+      const traceIdTag = '8765432187654321'
+      const spanContext = new SpanContext({
+        traceId,
+        spanId: id('456', 10)
+      })
+
+      spanContext._trace.tags['_dd.p.tid'] = traceIdTag
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier).to.have.property('dd')
+      expect(carrier.dd).to.have.property('trace_id', '123')
+      expect(carrier.dd).to.have.property('span_id', '456')
+    })
   })
 
   describe('extract', () => {
@@ -60,7 +102,20 @@ describe('LogPropagator', () => {
 
       expect(spanContext).to.deep.equal(new SpanContext({
         traceId: id('123', 10),
-        spanId: id('-456', 10)
+        spanId: id('456', 10)
+      }))
+    })
+
+    it('should convert signed IDs to unsigned', () => {
+      log.dd.trace_id = '-123'
+      log.dd.span_id = '-456'
+
+      const carrier = log
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.deep.equal(new SpanContext({
+        traceId: id('18446744073709551493', 10), // -123 casted to uint64
+        spanId: id('18446744073709551160', 10) // -456 casted to uint64
       }))
     })
 
@@ -69,6 +124,26 @@ describe('LogPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext).to.equal(null)
+    })
+
+    it('should extract 128-bit IDs', () => {
+      config.traceId128BitLoggingEnabled = true
+      log.dd.trace_id = '87654321876543211234567812345678'
+
+      const carrier = log
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext).to.deep.equal(new SpanContext({
+        traceId: id('1234567812345678', 16),
+        spanId: id('456', 10),
+        trace: {
+          started: [],
+          finished: [],
+          tags: {
+            '_dd.p.tid': '8765432187654321'
+          }
+        }
+      }))
     })
   })
 })

@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 describe('SpanProcessor', () => {
   let prioritySampler
   let processor
@@ -11,6 +13,8 @@ describe('SpanProcessor', () => {
   let tracer
   let format
   let config
+  let SpanSampler
+  let sample
 
   beforeEach(() => {
     tracer = {}
@@ -38,12 +42,21 @@ describe('SpanProcessor', () => {
       sample: sinon.stub()
     }
     config = {
-      flushMinSpans: 3
+      flushMinSpans: 3,
+      stats: {
+        enabled: false
+      }
     }
     format = sinon.stub().returns({ formatted: true })
 
+    sample = sinon.stub()
+    SpanSampler = sinon.stub().returns({
+      sample
+    })
+
     SpanProcessor = proxyquire('../src/span_processor', {
-      './format': format
+      './format': format,
+      './span_sampler': SpanSampler
     })
     processor = new SpanProcessor(exporter, prioritySampler, config)
   })
@@ -68,6 +81,15 @@ describe('SpanProcessor', () => {
   it('should skip traces with unfinished spans', () => {
     trace.started = [activeSpan, finishedSpan]
     trace.finished = [finishedSpan]
+    processor.process(finishedSpan)
+
+    expect(exporter.export).not.to.have.been.called
+  })
+
+  it('should skip unrecorded traces', () => {
+    trace.record = false
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
     processor.process(activeSpan)
 
     expect(exporter.export).not.to.have.been.called
@@ -86,5 +108,27 @@ describe('SpanProcessor', () => {
 
     expect(trace).to.have.deep.property('started', [activeSpan])
     expect(trace).to.have.deep.property('finished', [])
+  })
+
+  it('should configure span sampler conrrectly', () => {
+    const config = {
+      stats: { enabled: false },
+      sampler: {
+        sampleRate: 0,
+        spanSamplingRules: [
+          {
+            service: 'foo',
+            name: 'bar',
+            sampleRate: 123,
+            maxPerSecond: 456
+          }
+        ]
+      }
+    }
+
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    processor.process(finishedSpan)
+
+    expect(SpanSampler).to.have.been.calledWith(config.sampler)
   })
 })

@@ -2,7 +2,10 @@
 
 const fs = require('fs')
 
-const uuidSource = '[0-9a-f]{8}[-_][0-9a-f]{4}[-_][0-9a-f]{4}[-_][0-9a-f]{4}[-_][0-9a-f]{12}'
+// The second part is the PCF / Garden regexp. We currently assume no suffix($) to avoid matching pod UIDs
+// See https://github.com/DataDog/datadog-agent/blob/7.40.x/pkg/util/cgroups/reader.go#L50
+const uuidSource =
+'[0-9a-f]{8}[-_][0-9a-f]{4}[-_][0-9a-f]{4}[-_][0-9a-f]{4}[-_][0-9a-f]{12}|[0-9a-f]{8}(?:-[0-9a-f]{4}){4}$'
 const containerSource = '[0-9a-f]{64}'
 const taskSource = '[0-9a-f]{32}-\\d+'
 const entityReg = new RegExp(`.*(${uuidSource}|${containerSource}|${taskSource})(?:\\.scope)?$`, 'm')

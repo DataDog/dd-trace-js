@@ -1,14 +1,22 @@
 'use strict'
 
+const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
+const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
+
+const namingSchema = require('./naming')
+
+const modules = semver.satisfies(process.versions.node, '>=14')
+  ? ['@node-redis/client', '@redis/client']
+  : ['@node-redis/client']
 
 describe('Plugin', () => {
   let redis
   let client
 
   describe('redis', () => {
-    withVersions('redis', '@node-redis/client', version => {
+    withVersions('redis', modules, (version, moduleName) => {
       describe('without configuration', () => {
         before(() => {
           return agent.load('redis')
@@ -19,7 +27,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          redis = require(`../../../versions/@node-redis/client@${version}`).get()
+          redis = require(`../../../versions/${moduleName}@${version}`).get()
           client = redis.createClient()
 
           await client.connect()
@@ -33,14 +41,15 @@ describe('Plugin', () => {
         it('should do automatic instrumentation when using callbacks', async () => {
           const promise = agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'redis.command')
-              expect(traces[0][0]).to.have.property('service', 'test-redis')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'GET')
               expect(traces[0][0]).to.have.property('type', 'redis')
               expect(traces[0][0].meta).to.have.property('db.name', '0')
               expect(traces[0][0].meta).to.have.property('db.type', 'redis')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
+              expect(traces[0][0].meta).to.have.property('component', 'redis')
             })
 
           await client.get('foo')
@@ -51,9 +60,10 @@ describe('Plugin', () => {
           let error
 
           const promise = agent.use(traces => {
-            expect(traces[0][0].meta).to.have.property('error.type', error.name)
-            expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-            expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+            expect(traces[0][0].meta).to.have.property('component', 'redis')
+            // stack trace is not available in newer versions
           })
 
           try {
@@ -68,14 +78,15 @@ describe('Plugin', () => {
         it('should work with userland promises', async () => {
           const promise = agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'redis.command')
-              expect(traces[0][0]).to.have.property('service', 'test-redis')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'GET')
               expect(traces[0][0]).to.have.property('type', 'redis')
               expect(traces[0][0].meta).to.have.property('db.name', '0')
               expect(traces[0][0].meta).to.have.property('db.type', 'redis')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
+              expect(traces[0][0].meta).to.have.property('component', 'redis')
             })
 
           breakThen(Promise.prototype)
@@ -83,6 +94,12 @@ describe('Plugin', () => {
           await client.get('foo')
           await promise
         })
+
+        withNamingSchema(
+          async () => client.get('foo'),
+          () => namingSchema.outbound.opName,
+          () => namingSchema.outbound.serviceName
+        )
       })
 
       describe('with configuration', () => {
@@ -98,7 +115,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          redis = require(`../../../versions/@node-redis/client@${version}`).get()
+          redis = require(`../../../versions/${moduleName}@${version}`).get()
           client = redis.createClient()
 
           await client.connect()
@@ -123,6 +140,48 @@ describe('Plugin', () => {
           })
 
           await client.get('foo')
+          await promise
+        })
+
+        withNamingSchema(
+          async () => client.get('foo'),
+          () => namingSchema.outbound.opName,
+          () => 'custom'
+        )
+      })
+
+      describe('with blocklist', () => {
+        before(() => {
+          return agent.load('redis', {
+            blocklist: [
+              'Set', // this should block set and SET commands
+              'FOO'
+            ]
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          redis = require(`../../../versions/${moduleName}@${version}`).get()
+          client = redis.createClient()
+
+          await client.connect()
+        })
+
+        afterEach(async () => {
+          await client.quit()
+        })
+
+        it('should be able to filter commands on a case-insensitive basis', async () => {
+          const promise = agent.use(traces => {
+            expect(traces[0][0]).to.have.property('resource', 'GET')
+          })
+
+          await client.set('turtle', 'like')
+          await client.get('turtle')
           await promise
         })
       })

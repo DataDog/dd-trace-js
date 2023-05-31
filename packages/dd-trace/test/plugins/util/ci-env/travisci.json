@@ -424,8 +424,8 @@
       "DD_GIT_COMMIT_COMMITTER_EMAIL": "usersupplied-comitteremail",
       "DD_GIT_COMMIT_COMMITTER_NAME": "usersupplied-comittername",
       "DD_GIT_COMMIT_MESSAGE": "usersupplied-message",
-      "DD_GIT_COMMIT_SHA": "usersupplied-commit",
-      "DD_GIT_REPOSITORY_URL": "usersupplied-repo",
+      "DD_GIT_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "DD_GIT_REPOSITORY_URL": "git@github.com:DataDog/userrepo.git",
       "TRAVIS": "travisCI",
       "TRAVIS_BUILD_ID": "travis-pipeline-id",
       "TRAVIS_BUILD_NUMBER": "travis-pipeline-number",
@@ -450,8 +450,8 @@
       "git.commit.committer.email": "usersupplied-comitteremail",
       "git.commit.committer.name": "usersupplied-comittername",
       "git.commit.message": "usersupplied-message",
-      "git.commit.sha": "usersupplied-commit",
-      "git.repository_url": "usersupplied-repo"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "git@github.com:DataDog/userrepo.git"
     }
   ],
   [
@@ -463,8 +463,8 @@
       "DD_GIT_COMMIT_COMMITTER_EMAIL": "usersupplied-comitteremail",
       "DD_GIT_COMMIT_COMMITTER_NAME": "usersupplied-comittername",
       "DD_GIT_COMMIT_MESSAGE": "usersupplied-message",
-      "DD_GIT_COMMIT_SHA": "usersupplied-commit",
-      "DD_GIT_REPOSITORY_URL": "usersupplied-repo",
+      "DD_GIT_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "DD_GIT_REPOSITORY_URL": "git@github.com:DataDog/userrepo.git",
       "DD_GIT_TAG": "0.0.2",
       "TRAVIS": "travisCI",
       "TRAVIS_BUILD_ID": "travis-pipeline-id",
@@ -489,9 +489,37 @@
       "git.commit.committer.email": "usersupplied-comitteremail",
       "git.commit.committer.name": "usersupplied-comittername",
       "git.commit.message": "usersupplied-message",
-      "git.commit.sha": "usersupplied-commit",
-      "git.repository_url": "usersupplied-repo",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "git@github.com:DataDog/userrepo.git",
       "git.tag": "0.0.2"
+    }
+  ],
+  [
+    {
+      "TRAVIS": "travisCI",
+      "TRAVIS_BRANCH": "origin/tags/0.1.0",
+      "TRAVIS_BUILD_DIR": "/foo/bar",
+      "TRAVIS_BUILD_ID": "travis-pipeline-id",
+      "TRAVIS_BUILD_NUMBER": "travis-pipeline-number",
+      "TRAVIS_BUILD_WEB_URL": "travis-pipeline-url",
+      "TRAVIS_COMMIT": "travis-git-commit",
+      "TRAVIS_COMMIT_MESSAGE": "travis-commit-message",
+      "TRAVIS_JOB_WEB_URL": "travis-job-url",
+      "TRAVIS_REPO_SLUG": "user/repo",
+      "TRAVIS_TAG": "origin/tags/0.1.0"
+    },
+    {
+      "ci.job.url": "travis-job-url",
+      "ci.pipeline.id": "travis-pipeline-id",
+      "ci.pipeline.name": "user/repo",
+      "ci.pipeline.number": "travis-pipeline-number",
+      "ci.pipeline.url": "travis-pipeline-url",
+      "ci.provider.name": "travisci",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.message": "travis-commit-message",
+      "git.commit.sha": "travis-git-commit",
+      "git.repository_url": "https://github.com/user/repo.git",
+      "git.tag": "0.1.0"
     }
   ]
 ]

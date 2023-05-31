@@ -1,7 +1,7 @@
 version: "2"
 services:
   couchbase:
-    image: rishabhdev/couchbase-server-sandbox:latest
+    image: sabrenner/couchbase-server-sandbox:latest
     ports:
       - "127.0.0.1:8091-8095:8091-8095"
       - "127.0.0.1:11210:11210"
@@ -77,48 +77,50 @@ services:
     ports:
       - "127.0.0.1:9231:9231"
   google-cloud-pubsub:
-    image: knarz/pubsub-emulator
+    image: ridedott/pubsub-emulator
     ports:
-      - "127.0.0.1:8085:8085"
+      - "127.0.0.1:8081:8081"
   localstack:
-    image: localstack/localstack:0.11.2
-    ports:
-      - "127.0.0.1:4569:4569" # DynamoDB
-      - "127.0.0.1:4568:4568" # Kinesis
-      - "127.0.0.1:4572:4572" # S3
-      - "127.0.0.1:4576:4576" # SQS
-      - "127.0.0.1:4575:4575" # SNS
-      - "127.0.0.1:4580:4580" # Route53
-      - "127.0.0.1:4586:4586" # CloudWatch Logs
-      - "127.0.0.1:4577:4577" # Redshift
-    environment:
-      - LOCALSTACK_SERVICES=dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs
-      - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
-      - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
-      - FORCE_NONINTERACTIVE=true
-      - START_WEB=0
-      - EDGE_PORT=4565
-  serverless_localstack:
-    image: localstack/localstack:0.12.4
+    # TODO: Figure out why SNS doesn't work in >=1.2
+    # https://github.com/localstack/localstack/issues/7479
+    image: localstack/localstack:1.1.0
     ports:
       - "127.0.0.1:4566:4566" # Edge
     environment:
-      - LOCALSTACK_SERVICES=serverless
+      - LOCALSTACK_SERVICES=dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless
       - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
       - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+      - AWS_DEFAULT_REGION=us-east-1
       - FORCE_NONINTERACTIVE=true
       - START_WEB=0
       - LAMBDA_EXECUTOR=local
-      - DEBUG=true
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock"
-  zookeeper:
-    image: wurstmeister/zookeeper
   kafka:
-    image: wurstmeister/kafka
+    image: debezium/kafka:1.7
     ports:
       - "127.0.0.1:9092:9092"
+      - "127.0.0.1:9093:9093"
     environment:
-      KAFKA_ADVERTISED_HOST_NAME: 127.0.0.1
-      KAFKA_CREATE_TOPICS: "test-topic:1:1"
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      - CLUSTER_ID=5Yr1SIgYQz-b-dgRabWx4g
+      - NODE_ID=1
+      - CREATE_TOPICS="test-topic:1:1"
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://127.0.0.1:9092
+      - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
+  opensearch:
+    image: opensearchproject/opensearch:2
+    environment:
+      - plugins.security.disabled=true
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms128m -Xmx128m"
+    ports:
+      - "127.0.0.1:9201:9200"
+  openldap:
+    image: bitnami/openldap:latest
+    ports:
+      - '127.0.0.1:1389:1389'
+      - '127.0.0.1:1636:1636'
+    environment:
+      - LDAP_ADMIN_USERNAME=admin
+      - LDAP_ADMIN_PASSWORD=adminpassword
+      - LDAP_USERS=user01,user02
+      - LDAP_PASSWORDS=password1,password2

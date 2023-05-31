@@ -1,6 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const hostname = process.env.CI ? 'oracledb' : 'localhost'
 const config = {
@@ -37,6 +38,29 @@ describe('Plugin', () => {
             await connection.close()
           })
 
+          connectionTests(new URL('http://' + config.connectString))
+        })
+
+        describe('with connection and connect descriptor', () => {
+          before(async () => {
+            connection = await oracledb.getConnection({
+              ...config,
+              connectString: `
+                (DESCRIPTION=
+                  (ADDRESS=(PROTOCOL=TCP)(HOST=${hostname})(PORT=1521))
+                  (CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=xepdb1))
+                )
+              `
+            })
+          })
+          after(async () => {
+            await connection.close()
+          })
+
+          connectionTests()
+        })
+
+        function connectionTests (url) {
           it('should be instrumented for promise API', done => {
             agent.use(traces => {
               expect(traces[0][0]).to.have.property('name', 'oracle.query')
@@ -44,10 +68,12 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'select current_timestamp from dual')
-              expect(traces[0][0].meta).to.have.property('db.instance', 'xepdb1')
-              expect(traces[0][0].meta).to.have.property('db.hostname', hostname)
-              expect(traces[0][0].meta).to.have.property('db.port', '1521')
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
+              if (url) {
+                expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
+                expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
+                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
+              }
             }).then(done, done)
             connection.execute(dbQuery)
           })
@@ -68,10 +94,12 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'select current_timestamp from dual')
-              expect(traces[0][0].meta).to.have.property('db.instance', 'xepdb1')
-              expect(traces[0][0].meta).to.have.property('db.hostname', hostname)
-              expect(traces[0][0].meta).to.have.property('db.port', '1521')
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
+              if (url) {
+                expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
+                expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
+                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
+              }
             }).then(done, done)
 
             connection.execute(dbQuery, err => err && done(err))
@@ -100,20 +128,22 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'invalid')
-              expect(traces[0][0].meta).to.have.property('db.instance', 'xepdb1')
-              expect(traces[0][0].meta).to.have.property('db.hostname', hostname)
-              expect(traces[0][0].meta).to.have.property('db.port', '1521')
-              expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-              expect(traces[0][0].meta).to.have.property('error.type', error.name)
-              expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
+              if (url) {
+                expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
+                expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
+                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
+              }
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
             }).then(done, done)
 
             connection.execute('invalid', err => {
               error = err
             })
           })
-        })
+        }
 
         describe('with pool', () => {
           before(async () => {
@@ -125,6 +155,31 @@ describe('Plugin', () => {
             await pool.close()
           })
 
+          poolTests(new URL('http://' + config.connectString))
+        })
+
+        describe('with pool and connect descriptor', () => {
+          before(async () => {
+            pool = await oracledb.createPool({
+              ...config,
+              connectString: `
+                (DESCRIPTION=
+                  (ADDRESS=(PROTOCOL=TCP)(HOST=${hostname})(PORT=1521))
+                  (CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=xepdb1))
+                )
+              `
+            })
+            connection = await pool.getConnection()
+          })
+          after(async () => {
+            await connection.close()
+            await pool.close()
+          })
+
+          poolTests()
+        })
+
+        function poolTests (url) {
           it('should be instrumented correctly with correct tags', done => {
             agent.use(traces => {
               expect(traces[0][0]).to.have.property('name', 'oracle.query')
@@ -132,10 +187,12 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'select current_timestamp from dual')
-              expect(traces[0][0].meta).to.have.property('db.instance', 'xepdb1')
-              expect(traces[0][0].meta).to.have.property('db.hostname', hostname)
-              expect(traces[0][0].meta).to.have.property('db.port', '1521')
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
+              if (url) {
+                expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
+                expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
+                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
+              }
             }).then(done, done)
             connection.execute(dbQuery)
           })
@@ -155,13 +212,15 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('sql.query', 'invalid')
-              expect(traces[0][0].meta).to.have.property('db.instance', 'xepdb1')
-              expect(traces[0][0].meta).to.have.property('db.hostname', hostname)
-              expect(traces[0][0].meta).to.have.property('db.port', '1521')
-              expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-              expect(traces[0][0].meta).to.have.property('error.type', error.name)
-              expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+              expect(traces[0][0].meta).to.have.property('component', 'oracledb')
+              if (url) {
+                expect(traces[0][0].meta).to.have.property('db.instance', url.pathname.slice(1))
+                expect(traces[0][0].meta).to.have.property('db.hostname', url.hostname)
+                expect(traces[0][0].meta).to.have.property('network.destination.port', url.port)
+              }
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
             })
 
             connection.execute('invalid').catch(err => {
@@ -170,7 +229,7 @@ describe('Plugin', () => {
 
             return promise
           })
-        })
+        }
       })
     })
   })

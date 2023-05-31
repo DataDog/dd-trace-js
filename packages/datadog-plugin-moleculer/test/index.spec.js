@@ -4,7 +4,6 @@ const { expect } = require('chai')
 const getPort = require('get-port')
 const os = require('os')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 
 const sort = trace => trace.sort((a, b) => a.start.toNumber() - b.start.toNumber())
 
@@ -13,7 +12,7 @@ describe('Plugin', () => {
   let port
 
   describe('moleculer', () => {
-    withVersions(plugin, 'moleculer', version => {
+    withVersions('moleculer', 'moleculer', version => {
       const startBroker = async () => {
         const { ServiceBroker } = require(`../../../versions/moleculer@${version}`).get()
 
@@ -49,7 +48,7 @@ describe('Plugin', () => {
           before(() => agent.load('moleculer', { client: false }))
           before(() => startBroker())
           after(() => broker.stop())
-          after(() => agent.close())
+          after(() => agent.close({ ritmReset: false }))
 
           it('should do automatic instrumentation', done => {
             agent.use(traces => {
@@ -66,6 +65,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('moleculer.context.service', 'math')
               expect(spans[0].meta).to.have.property('moleculer.namespace', 'multi')
               expect(spans[0].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
+              expect(spans[0].meta).to.have.property('component', 'moleculer')
 
               expect(spans[1]).to.have.property('name', 'moleculer.action')
               expect(spans[1]).to.have.property('service', 'test')
@@ -78,6 +78,7 @@ describe('Plugin', () => {
               expect(spans[1].meta).to.have.property('moleculer.context.service', 'math')
               expect(spans[1].meta).to.have.property('moleculer.namespace', 'multi')
               expect(spans[1].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
+              expect(spans[1].meta).to.have.property('component', 'moleculer')
             }).then(done, done)
 
             broker.call('math.add', { a: 5, b: 3 }).catch(done)
@@ -93,7 +94,7 @@ describe('Plugin', () => {
           }))
           before(() => startBroker())
           after(() => broker.stop())
-          after(() => agent.close())
+          after(() => agent.close({ ritmReset: false }))
 
           it('should have the configured service name', done => {
             agent.use(traces => {
@@ -110,7 +111,7 @@ describe('Plugin', () => {
           before(() => agent.load('moleculer', { server: false }))
           before(() => startBroker())
           after(() => broker.stop())
-          after(() => agent.close())
+          after(() => agent.close({ ritmReset: false }))
 
           it('should do automatic instrumentation', done => {
             agent.use(traces => {
@@ -127,7 +128,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('moleculer.context.service', 'math')
               expect(spans[0].meta).to.have.property('moleculer.namespace', 'multi')
               expect(spans[0].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
-              expect(spans[0].metrics).to.have.property('out.port', port)
+              expect(spans[0].metrics).to.have.property('network.destination.port', port)
             }).then(done, done)
 
             broker.call('math.add', { a: 5, b: 3 }).catch(done)
@@ -143,7 +144,7 @@ describe('Plugin', () => {
           }))
           before(() => startBroker())
           after(() => broker.stop())
-          after(() => agent.close())
+          after(() => agent.close({ ritmReset: false }))
 
           it('should have the configured service name', done => {
             agent.use(traces => {
@@ -159,7 +160,7 @@ describe('Plugin', () => {
         before(() => agent.load('moleculer'))
         before(() => startBroker())
         after(() => broker.stop())
-        after(() => agent.close())
+        after(() => agent.close({ ritmReset: false }))
 
         it('should propagate context', async () => {
           let spanId
@@ -199,7 +200,8 @@ describe('Plugin', () => {
         before(() => startBroker())
 
         before(function () {
-          this.timeout(10000) // wait for discovery
+          const waitTimeout = 10000
+          this.timeout(waitTimeout) // wait for discovery
           const { ServiceBroker } = require(`../../../versions/moleculer@${version}`).get()
 
           clientBroker = new ServiceBroker({
@@ -218,12 +220,12 @@ describe('Plugin', () => {
           })
 
           return clientBroker.start()
-            .then(() => clientBroker.waitForServices('math'))
+            .then(() => clientBroker.waitForServices('math', waitTimeout))
         })
 
         after(() => clientBroker.stop())
         after(() => broker.stop())
-        after(() => agent.close())
+        after(() => agent.close({ ritmReset: false }))
 
         it('should propagate context', async () => {
           let spanId

@@ -2,6 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const semver = require('semver')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const MSSQL_USERNAME = 'sa'
 const MSSQL_PASSWORD = 'DD_HUNTER2'
@@ -70,6 +71,26 @@ describe('Plugin', () => {
         }
       })
 
+      describe('with tedious disabled', () => {
+        beforeEach(() => {
+          tracer.use('tedious', false)
+        })
+
+        afterEach(() => {
+          tracer.use('tedious', true)
+        })
+
+        it('should successfully finish a valid query', done => {
+          const query = 'SELECT 1 + 1 AS solution'
+
+          const request = new tds.Request(query, (err) => {
+            if (err) return done(err)
+            done()
+          })
+          connection.execSql(request)
+        })
+      })
+
       it('should run the Request callback in the parent context', done => {
         const span = tracer.startSpan('test')
 
@@ -112,7 +133,7 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('db.type', 'mssql')
             expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-            expect(traces[0][0].metrics).to.have.property('out.port', 1433)
+            expect(traces[0][0].metrics).to.have.property('network.destination.port', 1433)
           })
 
         const request = new tds.Request(query, (err) => {
@@ -242,9 +263,10 @@ describe('Plugin', () => {
 
         agent
           .use(traces => {
-            expect(traces[0][0].meta).to.have.property('error.type', error.name)
-            expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
-            expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+            expect(traces[0][0].meta).to.have.property('component', 'tedious')
           })
           .then(done)
           .catch(done)
@@ -263,9 +285,10 @@ describe('Plugin', () => {
         agent
           .use(traces => {
             expect(error.message).to.equal('Canceled.')
-            expect(traces[0][0].meta).to.have.property('error.type', error.name)
-            expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
-            expect(traces[0][0].meta).to.have.property('error.msg', error.message)
+            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+            expect(traces[0][0].meta).to.have.property('component', 'tedious')
           })
           .then(done)
           .catch(done)

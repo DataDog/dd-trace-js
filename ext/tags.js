@@ -19,7 +19,9 @@ const tags = {
   HTTP_STATUS_CODE: 'http.status_code',
   HTTP_ROUTE: 'http.route',
   HTTP_REQUEST_HEADERS: 'http.request.headers',
-  HTTP_RESPONSE_HEADERS: 'http.response.headers'
+  HTTP_RESPONSE_HEADERS: 'http.response.headers',
+  HTTP_USERAGENT: 'http.useragent',
+  HTTP_CLIENT_IP: 'http.client_ip'
 }
 
 // Deprecated

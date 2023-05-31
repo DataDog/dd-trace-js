@@ -1,153 +1,86 @@
 'use strict'
 
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const Tags = require('../../../ext/tags')
+const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { TEXT_MAP } = require('../../../ext/formats')
-const { ERROR } = require('../../../ext/tags')
-const kinds = require('./kinds')
-const { addMethodTags, addMetadataTags, getFilter } = require('./util')
+const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
 
-// https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
-const OK = 0
-const CANCELLED = 1
+class GrpcServerPlugin extends ServerPlugin {
+  static get id () { return 'grpc' }
+  static get operation () { return 'server:request' }
 
-function createWrapHandler (tracer, config, handler) {
-  const filter = getFilter(config, 'metadata')
+  constructor (...args) {
+    super(...args)
 
-  return function wrapHandler (func) {
-    const isValid = (server, args) => {
-      if (!server || !server.type) return false
-      if (!args[0]) return false
-      if (server.type !== 'unary' && !isEmitter(args[0])) return false
-      if (server.type === 'unary' && typeof args[1] !== 'function') return false
+    this.addTraceSub('update', ({ code }) => {
+      const span = this.activeSpan
 
-      return true
-    }
+      if (!span) return
 
-    return function funcWithTrace (call, callback) {
-      if (!isValid(this, arguments)) return func.apply(this, arguments)
+      this.addCode(span, code)
+    })
+  }
 
-      const metadata = call.metadata
-      const type = this.type
-      const isStream = type !== 'unary'
-      const scope = tracer.scope()
-      const childOf = extract(tracer, metadata)
-      const span = tracer.startSpan('grpc.request', {
-        childOf,
-        tags: {
-          [Tags.SPAN_KIND]: 'server',
-          'span.type': 'web',
-          'resource.name': handler,
-          'service.name': config.service || `${tracer._service}`,
-          'component': 'grpc'
-        }
-      })
-
-      analyticsSampler.sample(span, config.measured, true)
-      addMethodTags(span, handler, kinds[type])
-      addMetadataTags(span, metadata, filter, 'request')
-
-      scope.bind(call)
-
-      // Finish the span if the call was cancelled.
-      call.once('cancelled', () => {
-        span.setTag('grpc.status.code', CANCELLED)
-        span.finish()
-      })
-
-      if (isStream) {
-        wrapStream(span, call)
-      } else {
-        arguments[1] = wrapCallback(span, callback, filter, childOf)
+  start ({ name, metadata, type }) {
+    const metadataFilter = this.config.metadataFilter
+    const childOf = extract(this.tracer, metadata)
+    const method = getMethodMetadata(name, type)
+    const span = this.startSpan('grpc.server', {
+      childOf,
+      service: this.config.service,
+      resource: name,
+      kind: 'server',
+      type: 'web',
+      meta: {
+        'component': 'grpc',
+        'grpc.method.kind': method.kind,
+        'grpc.method.path': method.path,
+        'grpc.method.name': method.name,
+        'grpc.method.service': method.service,
+        'grpc.method.package': method.package
+      },
+      metrics: {
+        'grpc.status.code': 0
       }
+    })
 
-      return scope.bind(func, span).apply(this, arguments)
-    }
-  }
-}
-
-function createWrapRegister (tracer, config) {
-  config = config.server || config
-
-  return function wrapRegister (register) {
-    return function registerWithTrace (name, handler, serialize, deserialize, type) {
-      if (typeof handler === 'function') {
-        arguments[1] = createWrapHandler(tracer, config, name)(handler)
-      }
-
-      return register.apply(this, arguments)
-    }
-  }
-}
-
-function wrapStream (span, call, tracer) {
-  const emit = call.emit
-
-  if (call.call && call.call.sendStatus) {
-    call.call.sendStatus = wrapSendStatus(call.call.sendStatus, span)
+    addMetadataTags(span, metadata, metadataFilter, 'request')
   }
 
-  call.emit = function (eventName, ...args) {
-    switch (eventName) {
-      case 'error':
-        span.addTags({
-          [ERROR]: args[0] || 1,
-          'grpc.status.code': args[0] && args[0].code
-        })
+  error (error) {
+    const span = this.activeSpan
 
-        span.finish()
+    if (!span) return
 
-        break
-
-      // Finish the span of the response only if it was successful.
-      // Otherwise it'll be finished in the `error` listener.
-      case 'finish':
-        if (call.status) {
-          span.setTag('grpc.status.code', call.status.code)
-        }
-
-        if (!call.status || call.status.code === 0) {
-          span.finish()
-        }
-
-        break
-    }
-
-    return emit.apply(this, arguments)
+    this.addCode(span, error.code)
+    this.addError(error)
   }
-}
 
-function wrapCallback (span, callback, filter, childOf) {
-  const scope = span.tracer().scope()
+  finish ({ code, trailer } = {}) {
+    const span = this.activeSpan
 
-  return function (err, value, trailer, flags) {
-    if (err instanceof Error) {
-      if (err.code) {
-        span.setTag('grpc.status.code', err.code)
-      }
+    if (!span) return
 
-      span.setTag(ERROR, err)
-    } else {
-      span.setTag('grpc.status.code', OK)
-    }
+    const metadataFilter = this.config.metadataFilter
 
-    if (trailer && filter) {
-      addMetadataTags(span, trailer, filter, 'response')
+    this.addCode(span, code)
+
+    if (trailer && metadataFilter) {
+      addMetadataTags(span, trailer, metadataFilter, 'response')
     }
 
     span.finish()
-
-    if (callback) {
-      return scope.bind(callback, childOf).apply(this, arguments)
-    }
   }
-}
 
-function wrapSendStatus (sendStatus, span) {
-  return function sendStatusWithTrace (status) {
-    span.setTag('grpc.status.code', status.code)
+  configure (config) {
+    const metadataFilter = getFilter(config, 'metadata')
 
-    return sendStatus.apply(this, arguments)
+    return super.configure({ ...config, metadataFilter })
+  }
+
+  addCode (span, code) {
+    if (code !== undefined) {
+      span.setTag('grpc.status.code', code)
+    }
   }
 }
 
@@ -157,34 +90,4 @@ function extract (tracer, metadata) {
   return tracer.extract(TEXT_MAP, metadata.getMap())
 }
 
-function isEmitter (obj) {
-  return typeof obj.emit === 'function' && typeof obj.once === 'function'
-}
-
-module.exports = [
-  {
-    name: 'grpc',
-    versions: ['>=1.20.2'],
-    file: 'src/server.js',
-    patch (server, tracer, config) {
-      if (config.server === false) return
-      this.wrap(server.Server.prototype, 'register', createWrapRegister(tracer, config))
-    },
-    unpatch (server) {
-      this.unwrap(server.Server.prototype, 'register')
-    }
-  },
-  {
-    name: '@grpc/grpc-js',
-    versions: ['>=1'],
-    file: 'build/src/server.js',
-    patch (server, tracer, config) {
-      if (config.server === false) return
-
-      this.wrap(server.Server.prototype, 'register', createWrapRegister(tracer, config))
-    },
-    unpatch (server) {
-      this.unwrap(server.Server.prototype, 'register')
-    }
-  }
-]
+module.exports = GrpcServerPlugin

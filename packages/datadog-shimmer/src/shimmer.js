@@ -10,7 +10,11 @@ function copyProperties (original, wrapped) {
   const keys = Reflect.ownKeys(props)
 
   for (const key of keys) {
-    Object.defineProperty(wrapped, key, props[key])
+    try {
+      Object.defineProperty(wrapped, key, props[key])
+    } catch (e) {
+      // TODO: figure out how to handle this without a try/catch
+    }
   }
 }
 
@@ -33,28 +37,41 @@ function wrapFn (original, delegate) {
 
 function wrapMethod (target, name, wrapper) {
   assertMethod(target, name)
-  assertNotClass(target[name]) // TODO: support constructors of native classes
   assertFunction(wrapper)
 
   const original = target[name]
   const wrapped = wrapper(original)
   const descriptor = Object.getOwnPropertyDescriptor(target, name)
 
-  if (descriptor) {
-    unwrappers.set(wrapped, () => Object.defineProperty(target, name, descriptor))
-  } else { // no descriptor means original was on the prototype
-    unwrappers.set(wrapped, () => delete target[name])
+  const attributes = {
+    configurable: true,
+    ...descriptor
   }
 
-  Object.defineProperty(target, name, {
-    configurable: true,
-    writable: true,
-    enumerable: false,
-    ...descriptor,
-    value: wrapped
-  })
-
   copyProperties(original, wrapped)
+
+  if (descriptor) {
+    unwrappers.set(wrapped, () => Object.defineProperty(target, name, descriptor))
+
+    if (descriptor.get || descriptor.set) {
+      attributes.get = () => wrapped
+    } else {
+      attributes.value = wrapped
+    }
+
+    // TODO: create a single object for multiple wrapped methods
+    if (descriptor.configurable === false) {
+      return Object.create(target, {
+        [name]: attributes
+      })
+    }
+  } else { // no descriptor means original was on the prototype
+    unwrappers.set(wrapped, () => delete target[name])
+    attributes.value = wrapped
+    attributes.writable = true
+  }
+
+  Object.defineProperty(target, name, attributes)
 
   return target
 }

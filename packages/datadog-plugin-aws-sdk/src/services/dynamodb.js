@@ -3,6 +3,8 @@
 const BaseAwsSdkPlugin = require('../base')
 
 class DynamoDb extends BaseAwsSdkPlugin {
+  static get id () { return 'dynamodb' }
+
   generateTags (params, operation, response) {
     const tags = {}
 
@@ -10,7 +12,8 @@ class DynamoDb extends BaseAwsSdkPlugin {
       if (params.TableName) {
         Object.assign(tags, {
           'resource.name': `${operation} ${params.TableName}`,
-          'aws.dynamodb.table_name': params.TableName
+          'aws.dynamodb.table_name': params.TableName,
+          'tablename': params.TableName
         })
       }
 
@@ -25,7 +28,8 @@ class DynamoDb extends BaseAwsSdkPlugin {
             // also add span type to match serverless convention
             Object.assign(tags, {
               'resource.name': `${operation} ${tableName}`,
-              'aws.dynamodb.table_name': tableName
+              'aws.dynamodb.table_name': tableName,
+              'tablename': tableName
             })
           }
         }

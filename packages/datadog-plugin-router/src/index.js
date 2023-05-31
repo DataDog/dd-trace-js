@@ -4,41 +4,72 @@ const web = require('../../dd-trace/src/plugins/util/web')
 const WebPlugin = require('../../datadog-plugin-web/src')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { storage } = require('../../datadog-core')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class RouterPlugin extends WebPlugin {
-  static get name () {
+  static get id () {
     return 'router'
   }
 
   constructor (...args) {
     super(...args)
 
+    this._storeStack = []
     this._contexts = new WeakMap()
 
-    this.addSub(`apm:${this.constructor.name}:middleware:enter`, ({ req, name, route }) => {
-      const store = storage.getStore()
-      const context = this._createContext(req, route)
-      const span = this._getMiddlewareSpan(context, store, name)
+    this.addSub(`apm:${this.constructor.id}:middleware:enter`, ({ req, name, route }) => {
+      const childOf = this._getActive(req) || this._getStoreSpan()
 
+      if (!childOf) return
+
+      const span = this._getMiddlewareSpan(name, childOf)
+      const context = this._createContext(req, route, childOf)
+
+      if (childOf !== span) {
+        context.middleware.push(span)
+      }
+
+      const store = storage.getStore()
+      this._storeStack.push(store)
       this.enter(span, store)
 
       web.patch(req)
       web.setRoute(req, context.route)
     })
 
-    this.addSub(`apm:${this.constructor.name}:middleware:exit`, ({ req }) => {
+    this.addSub(`apm:${this.constructor.id}:middleware:next`, ({ req }) => {
       const context = this._contexts.get(req)
 
       if (!context) return
 
       context.stack.pop()
-
-      if (context.middleware.length > 0) {
-        context.middleware.pop().finish()
-      }
     })
 
-    this.addSub(`apm:${this.constructor.name}:middleware:error`, this.addError)
+    this.addSub(`apm:${this.constructor.id}:middleware:finish`, ({ req }) => {
+      const context = this._contexts.get(req)
+
+      if (!context || context.middleware.length === 0) return
+
+      context.middleware.pop().finish()
+    })
+
+    this.addSub(`apm:${this.constructor.id}:middleware:exit`, ({ req }) => {
+      const savedStore = this._storeStack.pop()
+      const span = savedStore && savedStore.span
+      this.enter(span, savedStore)
+    })
+
+    this.addSub(`apm:${this.constructor.id}:middleware:error`, ({ req, error }) => {
+      web.addError(req, error)
+
+      if (!this.config.middleware) return
+
+      const span = this._getActive(req)
+
+      if (!span) return
+
+      span.setTag('error', error)
+    })
 
     this.addSub(`apm:http:server:request:finish`, ({ req }) => {
       const context = this._contexts.get(req)
@@ -53,28 +84,40 @@ class RouterPlugin extends WebPlugin {
     })
   }
 
-  _getMiddlewareSpan (context, store, name) {
-    const childOf = store && store.span
+  _getActive (req) {
+    const context = this._contexts.get(req)
 
+    if (!context) return
+    if (context.middleware.length === 0) return context.span
+
+    return context.middleware[context.middleware.length - 1]
+  }
+
+  _getStoreSpan () {
+    const store = storage.getStore()
+
+    return store && store.span
+  }
+
+  _getMiddlewareSpan (name, childOf) {
     if (this.config.middleware === false) {
       return childOf
     }
 
-    const span = this.tracer.startSpan(`${this.constructor.name}.middleware`, {
+    const span = this.tracer.startSpan(`${this.constructor.id}.middleware`, {
       childOf,
       tags: {
+        [COMPONENT]: this.constructor.id,
         'resource.name': name || '<anonymous>'
       }
     })
-
-    context.middleware.push(span)
 
     analyticsSampler.sample(span, this.config.measured)
 
     return span
   }
 
-  _createContext (req, route) {
+  _createContext (req, route, span) {
     let context = this._contexts.get(req)
 
     if (!route || route === '/' || route === '*') {
@@ -92,6 +135,7 @@ class RouterPlugin extends WebPlugin {
       }
     } else {
       context = {
+        span,
         stack: [route],
         route,
         middleware: []

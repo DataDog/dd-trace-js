@@ -1,218 +1,76 @@
 'use strict'
 
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const Tags = require('../../../ext/tags')
+const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { TEXT_MAP } = require('../../../ext/formats')
-const { ERROR } = require('../../../ext/tags')
-const kinds = require('./kinds')
-const { addMethodTags, addMetadataTags, getFilter } = require('./util')
+const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
 
-const patched = new WeakSet()
-const instances = new WeakMap()
+class GrpcClientPlugin extends ClientPlugin {
+  static get id () { return 'grpc' }
+  static get operation () { return 'client:request' }
 
-function createWrapMakeRequest (tracer, config, methodKind) {
-  const filter = getFilter(config, 'metadata')
-
-  return function wrapMakeRequest (makeRequest) {
-    return function makeRequestWithTrace (path) {
-      const args = ensureMetadata(this, arguments, 4)
-
-      return callMethod(tracer, config, this, makeRequest, args, path, args[4], methodKind, filter)
-    }
-  }
-}
-
-function createWrapLoadPackageDefinition (tracer, config) {
-  return function wrapLoadPackageDefinition (loadPackageDefinition) {
-    return function loadPackageDefinitionWithTrace (packageDef) {
-      const result = loadPackageDefinition.apply(this, arguments)
-
-      if (!result) return result
-
-      wrapPackageDefinition(tracer, config, result)
-
-      return result
-    }
-  }
-}
-
-function createWrapMakeClientConstructor (tracer, config) {
-  return function wrapMakeClientConstructor (makeClientConstructor) {
-    return function makeClientConstructorWithTrace (methods) {
-      const ServiceClient = makeClientConstructor.apply(this, arguments)
-
-      wrapClientConstructor(tracer, config, ServiceClient, methods)
-
-      return ServiceClient
-    }
-  }
-}
-
-function wrapPackageDefinition (tracer, config, def) {
-  for (const name in def) {
-    if (def[name].format) continue
-    if (def[name].service && def[name].prototype) {
-      wrapClientConstructor(tracer, config, def[name], def[name].service)
-    } else {
-      wrapPackageDefinition(tracer, config, def[name])
-    }
-  }
-}
-
-function wrapClientConstructor (tracer, config, ServiceClient, methods) {
-  const proto = ServiceClient.prototype
-
-  if (typeof methods !== 'object' || 'format' in methods) return
-
-  Object.keys(methods)
-    .forEach(name => {
-      if (!methods[name]) return
-
-      const originalName = methods[name].originalName
-      const path = methods[name].path
-      const methodKind = getMethodKind(methods[name])
-
-      if (methods[name]) {
-        proto[name] = wrapMethod(tracer, config, proto[name], path, methodKind)
-      }
-
-      if (originalName) {
-        proto[originalName] = wrapMethod(tracer, config, proto[originalName], path, methodKind)
+  start ({ metadata, path, type }) {
+    const metadataFilter = this.config.metadataFilter
+    const method = getMethodMetadata(path, type)
+    const span = this.startSpan('grpc.client', {
+      service: this.config.service,
+      resource: path,
+      kind: 'client',
+      type: 'http',
+      meta: {
+        'component': 'grpc',
+        'grpc.method.kind': method.kind,
+        'grpc.method.path': method.path,
+        'grpc.method.name': method.name,
+        'grpc.method.service': method.service,
+        'grpc.method.package': method.package
+      },
+      metrics: {
+        'grpc.status.code': 0
       }
     })
-}
 
-function wrapMethod (tracer, config, method, path, methodKind) {
-  if (typeof method !== 'function' || patched.has(method)) {
-    return method
-  }
-
-  const filter = getFilter(config, 'metadata')
-
-  const methodWithTrace = function methodWithTrace () {
-    const args = ensureMetadata(this, arguments, 1)
-
-    return callMethod(tracer, config, this, method, args, path, args[1], methodKind, filter)
-  }
-
-  Object.assign(methodWithTrace, method)
-
-  patched.add(methodWithTrace)
-
-  return methodWithTrace
-}
-
-function wrapCallback (span, callback) {
-  const scope = span.tracer().scope()
-  const parent = scope.active()
-
-  return function (err) {
-    err && span.setTag(ERROR, err)
-
-    if (callback) {
-      return scope.bind(callback, parent).apply(this, arguments)
-    }
-  }
-}
-
-function wrapStream (span, call, filter) {
-  if (!call || typeof call.emit !== 'function') return
-
-  const emit = call.emit
-
-  call.emit = function (eventName, ...args) {
-    switch (eventName) {
-      case 'error':
-        span.setTag(ERROR, args[0] || 1)
-
-        break
-      case 'status':
-        if (args[0]) {
-          span.setTag('grpc.status.code', args[0].code)
-
-          addMetadataTags(span, args[0].metadata, filter, 'response')
-        }
-
-        span.finish()
-
-        break
-    }
-
-    return emit.apply(this, arguments)
-  }
-}
-
-function callMethod (tracer, config, client, method, args, path, metadata, methodKind, filter) {
-  const length = args.length
-  const callback = args[length - 1]
-  const scope = tracer.scope()
-  const span = startSpan(tracer, config, path, methodKind)
-
-  if (metadata) {
-    addMetadataTags(span, metadata, filter, 'request')
-    inject(tracer, span, metadata)
-  }
-
-  if (methodKind === kinds.unary || methodKind === kinds.client_stream) {
-    if (typeof callback === 'function') {
-      args[length - 1] = wrapCallback(span, callback)
-    } else {
-      args[length] = wrapCallback(span)
+    if (metadata) {
+      addMetadataTags(span, metadata, metadataFilter, 'request')
+      inject(this.tracer, span, metadata)
     }
   }
 
-  const call = scope.bind(method, span).apply(client, args)
+  error (error) {
+    const span = this.activeSpan
 
-  wrapStream(span, call, filter)
+    if (!span) return
 
-  return scope.bind(call)
-}
+    this.addCode(span, error.code)
+    this.addError(error)
+  }
 
-function startSpan (tracer, config, path, methodKind) {
-  const scope = tracer.scope()
-  const childOf = scope.active()
-  const span = tracer.startSpan('grpc.request', {
-    childOf,
-    tags: {
-      [Tags.SPAN_KIND]: 'client',
-      'span.type': 'http',
-      'resource.name': path,
-      'service.name': config.service || `${tracer._service}-grpc-client`,
-      'component': 'grpc'
+  finish ({ code, metadata }) {
+    const span = this.activeSpan
+
+    if (!span) return
+
+    const metadataFilter = this.config.metadataFilter
+
+    this.addCode(span, code)
+
+    if (metadata && metadataFilter) {
+      addMetadataTags(span, metadata, metadataFilter, 'response')
     }
-  })
 
-  analyticsSampler.sample(span, config.measured)
-  addMethodTags(span, path, methodKind)
-
-  return span
-}
-
-function ensureMetadata (client, args, index) {
-  const grpc = getGrpc(client)
-
-  if (!client || !grpc) return args
-
-  const meta = args[index]
-  const normalized = []
-
-  for (let i = 0; i < index; i++) {
-    normalized.push(args[i])
+    span.finish()
   }
 
-  if (!meta || !meta.constructor || meta.constructor.name !== 'Metadata') {
-    normalized.push(new grpc.Metadata())
+  configure (config) {
+    const metadataFilter = getFilter(config, 'metadata')
+
+    return super.configure({ ...config, metadataFilter })
   }
 
-  if (meta) {
-    normalized.push(meta)
+  addCode (span, code) {
+    if (code !== undefined) {
+      span.setTag('grpc.status.code', code)
+    }
   }
-
-  for (let i = index + 1; i < args.length; i++) {
-    normalized.push(args[i])
-  }
-
-  return normalized
 }
 
 function inject (tracer, span, metadata) {
@@ -227,100 +85,4 @@ function inject (tracer, span, metadata) {
   }
 }
 
-function getMethodKind (definition) {
-  if (definition.requestStream) {
-    if (definition.responseStream) {
-      return kinds.bidi
-    }
-
-    return kinds.client_stream
-  }
-
-  if (definition.responseStream) {
-    return kinds.server_stream
-  }
-
-  return kinds.unary
-}
-
-function getGrpc (client) {
-  let proto = client
-
-  do {
-    const instance = instances.get(proto)
-    if (instance) return instance
-  } while ((proto = Object.getPrototypeOf(proto)))
-}
-
-function patch (grpc, tracer, config) {
-  if (config.client === false) return
-
-  config = config.client || config
-
-  const proto = grpc.Client.prototype
-
-  instances.set(proto, grpc)
-
-  this.wrap(proto, 'makeBidiStreamRequest', createWrapMakeRequest(tracer, config, kinds.bidi))
-  this.wrap(proto, 'makeClientStreamRequest', createWrapMakeRequest(tracer, config, kinds.clientStream))
-  this.wrap(proto, 'makeServerStreamRequest', createWrapMakeRequest(tracer, config, kinds.serverStream))
-  this.wrap(proto, 'makeUnaryRequest', createWrapMakeRequest(tracer, config, kinds.unary))
-}
-
-function unpatch (grpc) {
-  const proto = grpc.Client.prototype
-
-  instances.delete(proto)
-
-  this.unwrap(proto, 'makeBidiStreamRequest')
-  this.unwrap(proto, 'makeClientStreamRequest')
-  this.unwrap(proto, 'makeServerStreamRequest')
-  this.unwrap(proto, 'makeUnaryRequest')
-}
-
-module.exports = [
-  {
-    name: 'grpc',
-    versions: ['>=1.20.2'],
-    patch,
-    unpatch
-  },
-  {
-    name: 'grpc',
-    versions: ['>=1.20.2'],
-    file: 'src/client.js',
-    patch (client, tracer, config) {
-      if (config.client === false) return
-
-      config = config.client || config
-
-      this.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor(tracer, config))
-    },
-    unpatch (client) {
-      this.unwrap(client, 'makeClientConstructor')
-    }
-  },
-  {
-    name: '@grpc/grpc-js',
-    versions: ['>=1.0.3'],
-    patch,
-    unpatch
-  },
-  {
-    name: '@grpc/grpc-js',
-    versions: ['>=1.0.3'],
-    file: 'build/src/make-client.js',
-    patch (client, tracer, config) {
-      if (config.client === false) return
-
-      config = config.client || config
-
-      this.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor(tracer, config))
-      this.wrap(client, 'loadPackageDefinition', createWrapLoadPackageDefinition(tracer, config))
-    },
-    unpatch (client) {
-      this.unwrap(client, 'makeClientConstructor')
-      this.unwrap(client, 'loadPackageDefinition')
-    }
-  }
-]
+module.exports = GrpcClientPlugin

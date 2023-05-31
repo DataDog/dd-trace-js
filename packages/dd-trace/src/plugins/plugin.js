@@ -1,6 +1,8 @@
 'use strict'
 
-const dc = require('diagnostics_channel')
+// TODO: move anything related to tracing to TracingPlugin instead
+
+const dc = require('../../../diagnostics_channel')
 const { storage } = require('../../../datadog-core')
 
 class Subscription {
@@ -27,7 +29,6 @@ module.exports = class Plugin {
   constructor (tracer) {
     this._subscriptions = []
     this._enabled = false
-    this._storeStack = []
     this._tracer = tracer
   }
 
@@ -37,19 +38,13 @@ module.exports = class Plugin {
 
   enter (span, store) {
     store = store || storage.getStore()
-    this._storeStack.push(store)
     storage.enterWith({ ...store, span })
   }
 
+  // TODO: Implement filters on resource name for all plugins.
   /** Prevents creation of spans here and for all async descendants. */
   skip () {
-    const store = storage.getStore()
-    this._storeStack.push(store)
     storage.enterWith({ noop: true })
-  }
-
-  exit () {
-    storage.enterWith(this._storeStack.pop())
   }
 
   addSub (channelName, handler) {
@@ -61,7 +56,9 @@ module.exports = class Plugin {
 
     if (!store || !store.span) return
 
-    store.span.setTag('error', error)
+    if (!store.span._spanContext._tags['error']) {
+      store.span.setTag('error', error || 1)
+    }
   }
 
   configure (config) {

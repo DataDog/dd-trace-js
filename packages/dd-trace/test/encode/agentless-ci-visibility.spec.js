@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/tap')
+
 const { expect } = require('chai')
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
@@ -8,7 +10,6 @@ const {
   MAX_META_KEY_LENGTH,
   MAX_META_VALUE_LENGTH,
   MAX_METRIC_KEY_LENGTH,
-  MAX_METRIC_VALUE_LENGTH,
   MAX_NAME_LENGTH,
   MAX_SERVICE_LENGTH,
   MAX_RESOURCE_NAME_LENGTH,
@@ -33,7 +34,7 @@ describe('agentless-ci-visibility-encode', () => {
       '../log': logger
     })
     writer = { flush: sinon.spy() }
-    encoder = new AgentlessCiVisibilityEncoder(writer)
+    encoder = new AgentlessCiVisibilityEncoder(writer, {})
 
     trace = [{
       trace_id: id('1234abcd1234abcd'),
@@ -178,7 +179,7 @@ describe('agentless-ci-visibility-encode', () => {
     expect(spanEvent.content.name).to.equal(DEFAULT_SPAN_NAME)
   })
 
-  it('should cut too long meta and metrics keys and values', () => {
+  it('should cut too long meta and metrics keys and meta values', () => {
     const tooLongKey = new Array(300).fill('a').join('')
     const tooLongValue = new Array(26000).fill('a').join('')
     const traceToTruncate = [{
@@ -190,7 +191,7 @@ describe('agentless-ci-visibility-encode', () => {
         [tooLongKey]: tooLongValue
       },
       metrics: {
-        [tooLongKey]: tooLongValue
+        [tooLongKey]: 15
       },
       start: 123,
       duration: 456,
@@ -208,7 +209,73 @@ describe('agentless-ci-visibility-encode', () => {
       [`${tooLongKey.slice(0, MAX_META_KEY_LENGTH)}...`]: `${tooLongValue.slice(0, MAX_META_VALUE_LENGTH)}...`
     })
     expect(spanEvent.content.metrics).to.eql({
-      [`${tooLongKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`]: `${tooLongValue.slice(0, MAX_METRIC_VALUE_LENGTH)}...`
+      [`${tooLongKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`]: 15
     })
+  })
+
+  it('should not encode events other than sessions and suites if the trace is a test session', () => {
+    const traceToFilter = [
+      {
+        trace_id: id('1234abcd1234abcd'),
+        span_id: id('1234abcd1234abcd'),
+        parent_id: id('1234abcd1234abcd'),
+        error: 0,
+        meta: {},
+        metrics: {},
+        start: 123,
+        duration: 456,
+        type: 'test_session_end',
+        name: '',
+        resource: '',
+        service: ''
+      },
+      {
+        trace_id: id('1234abcd1234abcd'),
+        span_id: id('1234abcd1234abcd'),
+        parent_id: id('1234abcd1234abcd'),
+        error: 0,
+        meta: {},
+        metrics: {},
+        start: 123,
+        duration: 456,
+        type: 'http',
+        name: '',
+        resource: '',
+        service: ''
+      }
+    ]
+
+    encoder.encode(traceToFilter)
+
+    const buffer = encoder.makePayload()
+    const decodedTrace = msgpack.decode(buffer, { codec })
+    expect(decodedTrace.events.length).to.equal(1)
+    expect(decodedTrace.events[0].type).to.equal('test_session_end')
+    expect(decodedTrace.events[0].content.type).to.eql('test_session_end')
+  })
+
+  it('does not crash if test_session_id is in meta but not test_module_id', () => {
+    const traceToTruncate = [{
+      trace_id: id('1234abcd1234abcd'),
+      span_id: id('1234abcd1234abcd'),
+      parent_id: id('1234abcd1234abcd'),
+      error: 0,
+      meta: {
+        test_session_id: '1234abcd1234abcd'
+      },
+      metrics: {},
+      start: 123,
+      duration: 456,
+      type: 'foo',
+      name: '',
+      resource: '',
+      service: ''
+    }]
+    encoder.encode(traceToTruncate)
+    const buffer = encoder.makePayload()
+    const decodedTrace = msgpack.decode(buffer, { codec })
+    const spanEvent = decodedTrace.events[0]
+    expect(spanEvent.type).to.equal('span')
+    expect(spanEvent.version.toNumber()).to.equal(1)
   })
 })

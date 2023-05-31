@@ -1,11 +1,12 @@
 'use strict'
 
-const Tags = require('opentracing').Tags
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')
 
 class Sqs extends BaseAwsSdkPlugin {
+  static get id () { return 'sqs' }
+
   constructor (...args) {
     super(...args)
     //
@@ -25,7 +26,7 @@ class Sqs extends BaseAwsSdkPlugin {
           tags: Object.assign(
             {},
             this.requestTags.get(request) || {},
-            { [Tags.SPAN_KIND]: 'server' }
+            { 'span.kind': 'server' }
           )
         }
         const span = plugin.tracer.startSpan('aws.response', options)
@@ -58,10 +59,16 @@ class Sqs extends BaseAwsSdkPlugin {
     const tags = {}
 
     if (!params || (!params.QueueName && !params.QueueUrl)) return tags
+    // 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue';
+    let queueName = params.QueueName
+    if (params.QueueUrl) {
+      queueName = params.QueueUrl.split('/')[params.QueueUrl.split('/').length - 1]
+    }
 
     Object.assign(tags, {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
-      'aws.sqs.queue_name': params.QueueName || params.QueueUrl
+      'aws.sqs.queue_name': params.QueueName || params.QueueUrl,
+      'queuename': queueName
     })
 
     switch (operation) {
@@ -79,24 +86,39 @@ class Sqs extends BaseAwsSdkPlugin {
   }
 
   responseExtract (params, operation, response) {
-    if (operation === 'receiveMessage') {
-      if (
-        (!params.MaxNumberOfMessages || params.MaxNumberOfMessages === 1) &&
-        response &&
-        response.Messages &&
-        response.Messages[0] &&
-        response.Messages[0].MessageAttributes &&
-        response.Messages[0].MessageAttributes._datadog &&
-        response.Messages[0].MessageAttributes._datadog.StringValue
-      ) {
-        const textMap = response.Messages[0].MessageAttributes._datadog.StringValue
-        try {
-          return this.tracer.extract('text_map', JSON.parse(textMap))
-        } catch (err) {
-          log.error(err)
-          return undefined
+    if (operation !== 'receiveMessage') return
+    if (params.MaxNumberOfMessages && params.MaxNumberOfMessages !== 1) return
+    if (!response || !response.Messages || !response.Messages[0]) return
+
+    let message = response.Messages[0]
+
+    if (message.Body) {
+      try {
+        const body = JSON.parse(message.Body)
+
+        // SNS to SQS
+        if (body.Type === 'Notification') {
+          message = body
         }
+      } catch (e) {
+        // SQS to SQS
       }
+    }
+
+    if (!message.MessageAttributes || !message.MessageAttributes._datadog) return
+
+    const datadogAttribute = message.MessageAttributes._datadog
+
+    try {
+      if (datadogAttribute.StringValue) {
+        const textMap = datadogAttribute.StringValue
+        return this.tracer.extract('text_map', JSON.parse(textMap))
+      } else if (datadogAttribute.Type === 'Binary') {
+        const buffer = Buffer.from(datadogAttribute.Value, 'base64')
+        return this.tracer.extract('text_map', JSON.parse(buffer))
+      }
+    } catch (e) {
+      log.error(e)
     }
   }
 

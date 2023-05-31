@@ -6,8 +6,8 @@ const getPort = require('get-port')
 const os = require('os')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
 const proxy = require('./proxy')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
   let Gateway
@@ -46,7 +46,7 @@ describe('Plugin', () => {
   }
 
   describe('microgateway-core', () => {
-    withVersions(plugin, 'microgateway-core', (version) => {
+    withVersions('microgateway-core', 'microgateway-core', (version) => {
       beforeEach(async () => {
         gatewayPort = await getPort()
         proxyPort = await getPort()
@@ -61,11 +61,11 @@ describe('Plugin', () => {
         before(() => {
           tracer = require('../../dd-trace')
 
-          return agent.load('microgateway-core')
+          return agent.load(['microgateway-core', 'http'], [{}, { client: false }])
         })
 
         after(() => {
-          return agent.close()
+          return agent.close({ ritmReset: false })
         })
 
         beforeEach(done => {
@@ -86,6 +86,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('http.url', `http://localhost:${gatewayPort}/v1/foo`)
               expect(spans[0].meta).to.have.property('http.method', 'GET')
               expect(spans[0].meta).to.have.property('http.status_code', '200')
+              expect(spans[0].meta).to.have.property('component', 'microgateway')
             })
             .then(done)
             .catch(done)
@@ -96,8 +97,7 @@ describe('Plugin', () => {
         it('should propagate context to plugins', done => {
           const onrequest = (req, res, options, cb) => {
             expect(tracer.scope().active()).to.not.be.null
-
-            tracer.scope().activate(null, () => cb())
+            cb()
           }
 
           const first = {
@@ -132,9 +132,10 @@ describe('Plugin', () => {
 
               expect(spans[0]).to.have.property('name', 'microgateway.request')
               expect(spans[0]).to.have.property('resource', 'GET /v1')
-              expect(spans[0].meta).to.have.property('error.type', error.name)
-              expect(spans[0].meta).to.have.property('error.msg', error.message)
-              expect(spans[0].meta).to.have.property('error.stack', error.stack)
+              expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
+              expect(spans[0].meta).to.have.property('component', 'microgateway')
             })
             .then(done)
             .catch(done)
@@ -160,9 +161,10 @@ describe('Plugin', () => {
 
               expect(spans[0]).to.have.property('name', 'microgateway.request')
               expect(spans[0]).to.have.property('resource', 'GET /v1')
-              expect(spans[0].meta).to.have.property('error.type', error.name)
-              expect(spans[0].meta).to.have.property('error.msg', error.message)
-              expect(spans[0].meta).to.have.property('error.stack', error.stack)
+              expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
+              expect(spans[0].meta).to.have.property('component', 'microgateway')
             })
             .then(done)
             .catch(done)

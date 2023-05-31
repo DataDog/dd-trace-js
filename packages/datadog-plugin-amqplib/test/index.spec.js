@@ -1,6 +1,9 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
+
+const namingSchema = require('./naming')
 
 describe('Plugin', () => {
   let tracer
@@ -54,13 +57,14 @@ describe('Plugin', () => {
               agent
                 .use(traces => {
                   const span = traces[0][0]
-                  expect(span).to.have.property('name', 'amqp.command')
-                  expect(span).to.have.property('service', 'test-amqp')
+                  expect(span).to.have.property('name', namingSchema.controlPlane.opName)
+                  expect(span).to.have.property('service', namingSchema.controlPlane.serviceName)
                   expect(span).to.have.property('resource', 'queue.declare test')
                   expect(span).to.not.have.property('type')
                   expect(span.meta).to.have.property('span.kind', 'client')
                   expect(span.meta).to.have.property('out.host', 'localhost')
-                  expect(span.metrics).to.have.property('out.port', 5672)
+                  expect(span.meta).to.have.property('component', 'amqplib')
+                  expect(span.metrics).to.have.property('network.destination.port', 5672)
                 }, 2)
                 .then(done)
                 .catch(done)
@@ -73,13 +77,14 @@ describe('Plugin', () => {
                 .use(traces => {
                   const span = traces[0][0]
 
-                  expect(span).to.have.property('name', 'amqp.command')
-                  expect(span).to.have.property('service', 'test-amqp')
+                  expect(span).to.have.property('name', namingSchema.controlPlane.opName)
+                  expect(span).to.have.property('service', namingSchema.controlPlane.serviceName)
                   expect(span).to.have.property('resource', 'queue.delete test')
                   expect(span).to.not.have.property('type')
                   expect(span.meta).to.have.property('span.kind', 'client')
                   expect(span.meta).to.have.property('out.host', 'localhost')
-                  expect(span.metrics).to.have.property('out.port', 5672)
+                  expect(span.meta).to.have.property('component', 'amqplib')
+                  expect(span.metrics).to.have.property('network.destination.port', 5672)
                 }, 3)
                 .then(done)
                 .catch(done)
@@ -96,9 +101,10 @@ describe('Plugin', () => {
                   const span = traces[0][0]
 
                   expect(span).to.have.property('error', 1)
-                  expect(span.meta).to.have.property('error.type', error.name)
-                  expect(span.meta).to.have.property('error.msg', error.message)
-                  expect(span.meta).to.have.property('error.stack', error.stack)
+                  expect(span.meta).to.have.property(ERROR_TYPE, error.name)
+                  expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
+                  expect(span.meta).to.have.property(ERROR_STACK, error.stack)
+                  expect(span.meta).to.have.property('component', 'amqplib')
                 }, 2)
                 .then(done)
                 .catch(done)
@@ -109,6 +115,12 @@ describe('Plugin', () => {
                 error = e
               }
             })
+
+            withNamingSchema(
+              () => channel.assertQueue('test', {}, () => {}),
+              () => namingSchema.controlPlane.opName,
+              () => namingSchema.controlPlane.serviceName
+            )
           })
 
           describe('when publishing messages', () => {
@@ -117,14 +129,15 @@ describe('Plugin', () => {
                 .use(traces => {
                   const span = traces[0][0]
 
-                  expect(span).to.have.property('name', 'amqp.command')
-                  expect(span).to.have.property('service', 'test-amqp')
+                  expect(span).to.have.property('name', namingSchema.send.opName)
+                  expect(span).to.have.property('service', namingSchema.send.serviceName)
                   expect(span).to.have.property('resource', 'basic.publish exchange routingKey')
                   expect(span).to.not.have.property('type')
                   expect(span.meta).to.have.property('out.host', 'localhost')
                   expect(span.meta).to.have.property('span.kind', 'producer')
                   expect(span.meta).to.have.property('amqp.routingKey', 'routingKey')
-                  expect(span.metrics).to.have.property('out.port', 5672)
+                  expect(span.meta).to.have.property('component', 'amqplib')
+                  expect(span.metrics).to.have.property('network.destination.port', 5672)
                 }, 3)
                 .then(done)
                 .catch(done)
@@ -141,9 +154,10 @@ describe('Plugin', () => {
                   const span = traces[0][0]
 
                   expect(span).to.have.property('error', 1)
-                  expect(span.meta).to.have.property('error.type', error.name)
-                  expect(span.meta).to.have.property('error.msg', error.message)
-                  expect(span.meta).to.have.property('error.stack', error.stack)
+                  expect(span.meta).to.have.property(ERROR_TYPE, error.name)
+                  expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
+                  expect(span.meta).to.have.property(ERROR_STACK, error.stack)
+                  expect(span.meta).to.have.property('component', 'amqplib')
                 }, 2)
                 .then(done)
                 .catch(done)
@@ -154,6 +168,15 @@ describe('Plugin', () => {
                 error = e
               }
             })
+
+            withNamingSchema(
+              () => {
+                channel.assertExchange('exchange', 'direct', {}, () => {})
+                channel.publish('exchange', 'routingKey', Buffer.from('content'))
+              },
+              () => namingSchema.send.opName,
+              () => namingSchema.send.serviceName
+            )
           })
 
           describe('when consuming messages', () => {
@@ -164,14 +187,13 @@ describe('Plugin', () => {
               agent
                 .use(traces => {
                   const span = traces[0][0]
-                  expect(span).to.have.property('name', 'amqp.command')
-                  expect(span).to.have.property('service', 'test-amqp')
+                  expect(span).to.have.property('name', namingSchema.receive.opName)
+                  expect(span).to.have.property('service', namingSchema.receive.serviceName)
                   expect(span).to.have.property('resource', `basic.deliver ${queue}`)
                   expect(span).to.have.property('type', 'worker')
-                  expect(span.meta).to.have.property('out.host', 'localhost')
                   expect(span.meta).to.have.property('span.kind', 'consumer')
                   expect(span.meta).to.have.property('amqp.consumerTag', consumerTag)
-                  expect(span.metrics).to.have.property('out.port', 5672)
+                  expect(span.meta).to.have.property('component', 'amqplib')
                 }, 5)
                 .then(done)
                 .catch(done)
@@ -231,6 +253,18 @@ describe('Plugin', () => {
                 })
               })
             })
+
+            withNamingSchema(
+              () => {
+                channel.assertQueue('', {}, (err, ok) => {
+                  if (err) return
+                  channel.sendToQueue(ok.queue, Buffer.from('content'))
+                  channel.consume(ok.queue, () => {}, {}, (err, ok) => {})
+                })
+              },
+              () => namingSchema.receive.opName,
+              () => namingSchema.receive.serviceName
+            )
           })
         })
 
@@ -255,7 +289,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load('amqplib', { service: 'test' })
+          return agent.load('amqplib', { service: 'test-custom-service' })
         })
 
         after(() => {
@@ -281,7 +315,7 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test')
+              expect(traces[0][0]).to.have.property('service', 'test-custom-service')
               expect(traces[0][0]).to.have.property('resource', 'queue.declare test')
             }, 2)
             .then(done)
@@ -289,6 +323,12 @@ describe('Plugin', () => {
 
           channel.assertQueue('test', {}, () => {})
         })
+
+        withNamingSchema(
+          () => channel.assertQueue('test', {}, () => {}),
+          () => namingSchema.controlPlane.opName,
+          () => 'test-custom-service'
+        )
       })
     })
   })

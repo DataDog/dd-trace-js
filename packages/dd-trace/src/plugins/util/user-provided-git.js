@@ -26,6 +26,19 @@ function removeEmptyValues (tags) {
   }, {})
 }
 
+function filterSensitiveInfoFromRepository (repositoryUrl) {
+  try {
+    if (repositoryUrl.startsWith('git@')) {
+      return repositoryUrl
+    }
+    const { protocol, hostname, pathname } = new URL(repositoryUrl)
+
+    return `${protocol}//${hostname}${pathname}`
+  } catch (e) {
+    return repositoryUrl
+  }
+}
+
 function getUserProviderGitMetadata () {
   const {
     DD_GIT_COMMIT_SHA,
@@ -41,23 +54,18 @@ function getUserProviderGitMetadata () {
     DD_GIT_COMMIT_AUTHOR_DATE
   } = process.env
 
-  let branch = normalizeRef(DD_GIT_BRANCH)
+  const branch = normalizeRef(DD_GIT_BRANCH)
   let tag = normalizeRef(DD_GIT_TAG)
 
-  if (DD_GIT_TAG) {
-    branch = undefined
-  }
-
-  // if DD_GIT_BRANCH is a tag, we associate its value to TAG instead of BRANCH
+  // if DD_GIT_BRANCH is a tag, we associate its value to TAG too
   if ((DD_GIT_BRANCH || '').includes('origin/tags') || (DD_GIT_BRANCH || '').includes('refs/heads/tags')) {
-    branch = undefined
     tag = normalizeRef(DD_GIT_BRANCH)
   }
 
   return removeEmptyValues({
     [GIT_COMMIT_SHA]: DD_GIT_COMMIT_SHA,
     [GIT_BRANCH]: branch,
-    [GIT_REPOSITORY_URL]: DD_GIT_REPOSITORY_URL,
+    [GIT_REPOSITORY_URL]: filterSensitiveInfoFromRepository(DD_GIT_REPOSITORY_URL),
     [GIT_TAG]: tag,
     [GIT_COMMIT_MESSAGE]: DD_GIT_COMMIT_MESSAGE,
     [GIT_COMMIT_COMMITTER_NAME]: DD_GIT_COMMIT_COMMITTER_NAME,

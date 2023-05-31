@@ -1,3 +1,3 @@
 # CODEOWNERS for testing purposes
-packages/dd-trace/test/plugins/util/* @datadog-apm-js
+packages/dd-trace/test/plugins/util/* @datadog-dd-trace-js
 packages/dd-trace/test/plugins/util/test.spec.js @datadog-ci-app

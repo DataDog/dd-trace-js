@@ -33,38 +33,38 @@ const READABLE_ACTION_NAMES = {
 
 addHook({ name: 'sharedb', versions: ['>=1'], file: 'lib/agent.js' }, Agent => {
   const startCh = channel('apm:sharedb:request:start')
-  const asyncEndCh = channel('apm:sharedb:request:async-end')
-  const endCh = channel('apm:sharedb:request:end')
+  const finishCh = channel('apm:sharedb:request:finish')
   const errorCh = channel('apm:sharedb:request:error')
 
   shimmer.wrap(Agent.prototype, '_handleMessage', origHandleMessageFn => function (request, callback) {
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
     const asyncResource = new AsyncResource('bound-anonymous-fn')
-    const action = request.a
 
+    const action = request.a
     const actionName = getReadableActionName(action)
 
-    startCh.publish({ actionName, request })
+    return asyncResource.runInAsyncScope(() => {
+      startCh.publish({ actionName, request })
 
-    callback = asyncResource.bind(callback)
+      callback = callbackResource.bind(callback)
 
-    arguments[1] = AsyncResource.bind(function (error, res) {
-      if (error) {
+      arguments[1] = asyncResource.bind(function (error, res) {
+        if (error) {
+          errorCh.publish(error)
+        }
+        finishCh.publish({ request, res })
+
+        return callback.apply(this, arguments)
+      })
+
+      try {
+        return origHandleMessageFn.apply(this, arguments)
+      } catch (error) {
         errorCh.publish(error)
+
+        throw error
       }
-      asyncEndCh.publish({ request, res })
-
-      return callback.apply(this, arguments)
     })
-
-    try {
-      return origHandleMessageFn.apply(this, arguments)
-    } catch (error) {
-      errorCh.publish(error)
-
-      throw error
-    } finally {
-      endCh.publish(undefined)
-    }
   })
   return Agent
 })

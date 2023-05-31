@@ -1,18 +1,29 @@
 'use strict'
 
+require('../setup/tap')
+
 const { expect } = require('chai')
 const os = require('os')
+const path = require('path')
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
+const CpuProfiler = require('../../src/profiling/profilers/cpu')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 
 describe('config', () => {
   let Config
+  let env
 
   beforeEach(() => {
     Config = require('../../src/profiling/config').Config
+    env = process.env
+    process.env = {}
+  })
+
+  afterEach(() => {
+    process.env = env
   })
 
   it('should have the correct defaults', () => {
@@ -47,7 +58,7 @@ describe('config', () => {
         error () { }
       },
       exporters: 'agent,file',
-      profilers: 'wall',
+      profilers: 'wall,cpu-experimental',
       url: 'http://localhost:1234/'
     }
 
@@ -68,8 +79,9 @@ describe('config', () => {
     expect(config.exporters[0]._url.toString()).to.equal(options.url)
     expect(config.exporters[1]).to.be.an.instanceof(FileExporter)
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(1)
+    expect(config.profilers.length).to.equal(2)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
+    expect(config.profilers[1]).to.be.an.instanceOf(CpuProfiler)
   })
 
   it('should filter out invalid profilers', () => {
@@ -119,5 +131,89 @@ describe('config', () => {
     const config = new Config({ env, service, version, tags })
 
     expect(config.tags).to.include({ env, service, version })
+  })
+
+  it('should support IPv6 hostname', () => {
+    const options = {
+      hostname: '::1'
+    }
+
+    const config = new Config(options)
+    const exporterUrl = config.exporters[0]._url.toString()
+    const expectedUrl = new URL('http://[::1]:8126').toString()
+
+    expect(exporterUrl).to.equal(expectedUrl)
+  })
+
+  it('should disable OOM heap profiler by default', () => {
+    const config = new Config()
+    expect(config.oomMonitoring).to.deep.equal({
+      enabled: false,
+      heapLimitExtensionSize: 0,
+      maxHeapExtensionCount: 0,
+      exportStrategies: [],
+      exportCommand: undefined
+    })
+  })
+
+  it('should support OOM heap profiler configuration', () => {
+    process.env = {
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: 'false'
+    }
+    const config = new Config({})
+
+    expect(config.oomMonitoring).to.deep.equal({
+      enabled: false,
+      heapLimitExtensionSize: 0,
+      maxHeapExtensionCount: 0,
+      exportStrategies: [],
+      exportCommand: undefined
+    })
+  })
+
+  it('should use process as default strategy for OOM heap profiler', () => {
+    process.env = {
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: 'true'
+    }
+    const config = new Config()
+
+    expect(config.oomMonitoring).to.deep.equal({
+      enabled: true,
+      heapLimitExtensionSize: 0,
+      maxHeapExtensionCount: 0,
+      exportStrategies: ['process'],
+      exportCommand: [
+        process.execPath,
+        path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
+        'http://localhost:8126/',
+        `host:${config.host},service:node,snapshot:on_oom`,
+        'space'
+      ]
+    })
+  })
+
+  it('should support OOM heap profiler configuration', () => {
+    process.env = {
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: '1',
+      DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '1000000',
+      DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '2',
+      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process,async,process'
+    }
+
+    const config = new Config({})
+
+    expect(config.oomMonitoring).to.deep.equal({
+      enabled: true,
+      heapLimitExtensionSize: 1000000,
+      maxHeapExtensionCount: 2,
+      exportStrategies: ['process', 'async'],
+      exportCommand: [
+        process.execPath,
+        path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
+        'http://localhost:8126/',
+        `host:${config.host},service:node,snapshot:on_oom`,
+        'space'
+      ]
+    })
   })
 })

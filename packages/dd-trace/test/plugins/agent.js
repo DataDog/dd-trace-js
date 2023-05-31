@@ -17,16 +17,46 @@ let listener = null
 let tracer = null
 let plugins = []
 
+function isMatchingTrace (spans, spanResourceMatch) {
+  if (!spanResourceMatch) {
+    return true
+  }
+  return !!spans.find(span => spanResourceMatch.test(span.resource))
+}
+
+function ciVisRequestHandler (request, response) {
+  response.status(200).send('OK')
+  handlers.forEach(({ handler, spanResourceMatch }) => {
+    const { events } = request.body
+    const spans = events.map(event => event.content)
+    if (isMatchingTrace(spans, spanResourceMatch)) {
+      handler(request.body, request)
+    }
+  })
+}
+
+const DEFAULT_AVAILABLE_ENDPOINTS = ['/evp_proxy/v2']
+
+let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
+
 module.exports = {
   // Load the plugin on the tracer with an optional config and start a mock agent.
-  load (pluginName, config, tracerConfig = {}) {
+  async load (pluginName, config, tracerConfig = {}) {
     tracer = require('../..')
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
     agent.use((req, res, next) => {
-      if (!req.body.length) return res.status(200).send()
-      req.body = msgpack.decode(req.body, { codec })
+      if (req.is('application/msgpack')) {
+        if (!req.body.length) return res.status(200).send()
+        req.body = msgpack.decode(req.body, { codec })
+      }
       next()
+    })
+
+    agent.get('/info', (req, res) => {
+      res.status(202).send({
+        endpoints: availableEndpoints
+      })
     })
 
     agent.put('/v0.5/traces', (req, res) => {
@@ -35,47 +65,94 @@ module.exports = {
 
     agent.put('/v0.4/traces', (req, res) => {
       res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
-      handlers.forEach(handler => handler(req.body))
-    })
-
-    return getPort().then(port => {
-      return new Promise((resolve, reject) => {
-        const server = this.server = http.createServer(agent)
-        const emit = server.emit
-
-        server.emit = function () {
-          storage.enterWith({ noop: true })
-          return emit.apply(this, arguments)
-        }
-
-        server.on('connection', socket => sockets.push(socket))
-
-        listener = server.listen(port, () => resolve())
-
-        pluginName = [].concat(pluginName)
-        plugins = pluginName
-        config = [].concat(config)
-
-        server.on('close', () => {
-          tracer._instrumenter.disable()
-          tracer = null
-        })
-
-        tracer.init(Object.assign({}, {
-          service: 'test',
-          port,
-          flushInterval: 0,
-          plugins: false
-        }, tracerConfig))
-
-        for (let i = 0, l = pluginName.length; i < l; i++) {
-          tracer.use(pluginName[i], config[i])
+      handlers.forEach(({ handler, spanResourceMatch }) => {
+        const trace = req.body
+        const spans = trace.flatMap(span => span)
+        if (isMatchingTrace(spans, spanResourceMatch)) {
+          handler(trace)
         }
       })
     })
+
+    // CI Visibility Agentless intake
+    agent.post('/api/v2/citestcycle', ciVisRequestHandler)
+
+    // EVP proxy endpoint
+    agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
+
+    const port = await getPort()
+
+    const server = this.server = http.createServer(agent)
+    const emit = server.emit
+
+    server.emit = function () {
+      storage.enterWith({ noop: true })
+      return emit.apply(this, arguments)
+    }
+
+    server.on('connection', socket => sockets.push(socket))
+
+    const promise = new Promise((resolve, reject) => {
+      listener = server.listen(port, () => resolve())
+    })
+
+    pluginName = [].concat(pluginName)
+    plugins = pluginName
+    config = [].concat(config)
+
+    server.on('close', () => {
+      tracer = null
+    })
+
+    tracer.init(Object.assign({}, {
+      service: 'test',
+      env: 'tester',
+      port,
+      flushInterval: 0,
+      plugins: false
+    }, tracerConfig))
+    tracer.setUrl(`http://127.0.0.1:${port}`)
+
+    for (let i = 0, l = pluginName.length; i < l; i++) {
+      tracer.use(pluginName[i], config[i])
+    }
+
+    return promise
   },
 
-  // Register a callback with expectations to be run on every agent call.
+  reload (pluginName, config) {
+    pluginName = [].concat(pluginName)
+    plugins = pluginName
+    config = [].concat(config)
+
+    for (let i = 0, l = pluginName.length; i < l; i++) {
+      tracer.use(pluginName[i], config[i])
+    }
+  },
+
+  // Register handler to be executed each agent call, multiple times
+  subscribe (handler) {
+    handlers.add({ handler })
+  },
+
+  // Remove a handler
+  unsubscribe (handler) {
+    handlers.delete(handler)
+  },
+
+  /**
+   * Register a callback with expectations to be run on every tracing payload sent to the agent.
+   * If the callback does not throw, the returned promise resolves. If it does,
+   * then the agent will wait for additional payloads up until the timeout
+   * (default 1000 ms) and if any of them succeed, the promise will resolve.
+   * Otherwise, it will reject.
+   *
+   * @param {(traces: Array<Array<object>>) => void} callback - A function that tests trace data as it's received.
+   * @param {Object} [options] - An options object
+   * @param {number} [options.timeoutMs=1000] - The timeout in ms.
+   * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
+   * @returns {Promise<void>} A promise resolving if expectations are met
+   */
   use (callback, options) {
     const deferred = {}
     const promise = new Promise((resolve, reject) => {
@@ -92,31 +169,28 @@ module.exports = {
     }, timeoutMs)
 
     let error
+    const handlerPayload = { handler, spanResourceMatch: options && options.spanResourceMatch }
 
-    const handler = function () {
+    function handler () {
       try {
         callback.apply(null, arguments)
-        handlers.delete(handler)
+        handlers.delete(handlerPayload)
         clearTimeout(timeout)
         deferred.resolve()
       } catch (e) {
-        error = error || e
+        if (options && options.rejectFirst) {
+          clearTimeout(timeout)
+          deferred.reject(e)
+        } else {
+          error = error || e
+        }
       }
     }
 
     handler.promise = promise
-    handlers.add(handler)
+    handlers.add(handlerPayload)
 
     return promise
-  },
-
-  // Return a promise that will resolve when all expectations have run.
-  promise () {
-    const promises = Array.from(handlers)
-      .map(handler => handler.promise.catch(e => e))
-
-    return Promise.all(promises)
-      .then(results => results.find(e => e instanceof Error))
   },
 
   // Unregister any outstanding expectation callbacks.
@@ -124,23 +198,9 @@ module.exports = {
     handlers.clear()
   },
 
-  // Wrap a callback so it will only be called when all expectations have run.
-  wrap (callback) {
-    return error => {
-      this.promise()
-        .then(err => callback(error || err))
-    }
-  },
-
-  // Return the current active span.
-  currentSpan () {
-    return tracer.scope().active()
-  },
-
   // Stop the mock agent, reset all expectations and wipe the require cache.
   close (opts = {}) {
-    const { ritmReset } = opts
-    this.wipe()
+    const { ritmReset, wipe } = opts
 
     listener.close()
     listener = null
@@ -148,14 +208,16 @@ module.exports = {
     sockets = []
     agent = null
     handlers.clear()
-    if (ritmReset !== false) {
-      ritm.reset()
-    }
-    delete require.cache[require.resolve('../..')]
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
-    delete global._ddtrace
+    if (ritmReset !== false) {
+      ritm.reset()
+    }
+    if (wipe) {
+      this.wipe()
+    }
+    this.setAvailableEndpoints(DEFAULT_AVAILABLE_ENDPOINTS)
 
     return new Promise((resolve, reject) => {
       this.server.on('close', () => {
@@ -166,8 +228,17 @@ module.exports = {
     })
   },
 
+  setAvailableEndpoints (newEndpoints) {
+    availableEndpoints = newEndpoints
+  },
+
   // Wipe the require cache.
   wipe () {
+    require('../..')._pluginManager.destroy()
+
+    delete require.cache[require.resolve('../..')]
+    delete global._ddtrace
+
     const basedir = path.join(__dirname, '..', '..', '..', '..', 'versions')
     const exceptions = ['/libpq/', '/grpc/', '/sqlite3/', '/couchbase/'] // wiping native modules results in errors
       .map(exception => new RegExp(exception))

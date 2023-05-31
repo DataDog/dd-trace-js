@@ -1,5 +1,7 @@
 'use strict'
 
+require('./setup/tap')
+
 const constants = require('../src/constants')
 const tags = require('../../../ext/tags')
 const id = require('../src/id')
@@ -11,6 +13,14 @@ const HOSTNAME_KEY = constants.HOSTNAME_KEY
 const SAMPLING_AGENT_DECISION = constants.SAMPLING_AGENT_DECISION
 const SAMPLING_LIMIT_DECISION = constants.SAMPLING_LIMIT_DECISION
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
+const SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM
+const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
+const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
+const SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN
+const PROCESS_ID = constants.PROCESS_ID
+const ERROR_MESSAGE = constants.ERROR_MESSAGE
+const ERROR_STACK = constants.ERROR_STACK
+const ERROR_TYPE = constants.ERROR_TYPE
 
 const spanId = id('0234567812345678')
 
@@ -118,6 +128,30 @@ describe('format', () => {
       )
     })
 
+    it('should always add single span ingestion tags from options if present', () => {
+      spanContext._sampling.spanSampling = {
+        maxPerSecond: 5,
+        sampleRate: 1.0
+      }
+      trace = format(span)
+
+      expect(trace.metrics).to.include({
+        [SPAN_SAMPLING_MECHANISM]: SAMPLING_MECHANISM_SPAN,
+        [SPAN_SAMPLING_MAX_PER_SECOND]: 5,
+        [SPAN_SAMPLING_RULE_RATE]: 1.0
+      })
+    })
+
+    it('should not add single span ingestion tags if options not present', () => {
+      trace = format(span)
+
+      expect(trace.metrics).to.not.have.keys(
+        SPAN_SAMPLING_MECHANISM,
+        SPAN_SAMPLING_MAX_PER_SECOND,
+        SPAN_SAMPLING_RULE_RATE
+      )
+    })
+
     it('should extract trace chunk tags', () => {
       spanContext._trace.tags = {
         chunk: 'test',
@@ -203,9 +237,9 @@ describe('format', () => {
       spanContext._tags['error'] = error
       trace = format(span)
 
-      expect(trace.meta['error.msg']).to.equal(error.message)
-      expect(trace.meta['error.type']).to.equal(error.name)
-      expect(trace.meta['error.stack']).to.equal(error.stack)
+      expect(trace.meta[ERROR_MESSAGE]).to.equal(error.message)
+      expect(trace.meta[ERROR_TYPE]).to.equal(error.name)
+      expect(trace.meta[ERROR_STACK]).to.equal(error.stack)
     })
 
     it('should skip error properties without a value', () => {
@@ -216,9 +250,9 @@ describe('format', () => {
       spanContext._tags['error'] = error
       trace = format(span)
 
-      expect(trace.meta['error.msg']).to.equal(error.message)
-      expect(trace.meta).to.not.have.property('error.type')
-      expect(trace.meta).to.not.have.property('error.stack')
+      expect(trace.meta[ERROR_MESSAGE]).to.equal(error.message)
+      expect(trace.meta).to.not.have.property(ERROR_TYPE)
+      expect(trace.meta).to.not.have.property(ERROR_STACK)
     })
 
     it('should extract the origin', () => {
@@ -229,20 +263,10 @@ describe('format', () => {
       expect(trace.meta[ORIGIN_KEY]).to.equal('synthetics')
     })
 
-    it('should add runtime tags', () => {
-      spanContext._tags['service.name'] = 'test'
-
+    it('should add the language tag for a basic span', () => {
       trace = format(span)
 
       expect(trace.meta['language']).to.equal('javascript')
-    })
-
-    it('should add runtime tags only for the root service', () => {
-      spanContext._tags['service.name'] = 'other'
-
-      trace = format(span)
-
-      expect(trace.meta).to.not.have.property('language')
     })
 
     describe('when there is an `error` tag ', () => {
@@ -272,9 +296,9 @@ describe('format', () => {
     })
 
     it('should set the error flag when there is an error-related tag', () => {
-      spanContext._tags['error.type'] = 'Error'
-      spanContext._tags['error.msg'] = 'boom'
-      spanContext._tags['error.stack'] = ''
+      spanContext._tags[ERROR_TYPE] = 'Error'
+      spanContext._tags[ERROR_MESSAGE] = 'boom'
+      spanContext._tags[ERROR_STACK] = ''
 
       trace = format(span)
 
@@ -282,9 +306,9 @@ describe('format', () => {
     })
 
     it('should not set the error flag for internal spans with error tags', () => {
-      spanContext._tags['error.type'] = 'Error'
-      spanContext._tags['error.msg'] = 'boom'
-      spanContext._tags['error.stack'] = ''
+      spanContext._tags[ERROR_TYPE] = 'Error'
+      spanContext._tags[ERROR_MESSAGE] = 'boom'
+      spanContext._tags[ERROR_STACK] = ''
       spanContext._name = 'fs.operation'
 
       trace = format(span)
@@ -384,6 +408,19 @@ describe('format', () => {
       spanContext._tags['span.kind'] = 'server'
       trace = format(span)
       expect(trace.metrics[MEASURED]).to.equal(0)
+    })
+
+    it('should possess a process_id tag', () => {
+      trace = format(span)
+      expect(trace.metrics[PROCESS_ID]).to.equal(process.pid)
+    })
+
+    it('should not crash on prototype-free tags objects when nesting', () => {
+      const tags = Object.create(null)
+      tags['nested'] = { foo: 'bar' }
+      spanContext._tags['nested'] = tags
+
+      format(span)
     })
   })
 })

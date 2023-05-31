@@ -2,13 +2,14 @@
 
 const uniq = require('lodash.uniq')
 const analyticsSampler = require('../../analytics_sampler')
-const FORMAT_HTTP_HEADERS = require('opentracing').FORMAT_HTTP_HEADERS
+const FORMAT_HTTP_HEADERS = 'http_headers'
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
-const { incomingHttpRequestEnd } = require('../../appsec/gateway/channels')
+const { extractIp } = require('./ip_extractor')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -23,6 +24,8 @@ const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
+const HTTP_USERAGENT = tags.HTTP_USERAGENT
+const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const MANUAL_DROP = tags.MANUAL_DROP
 
 const HTTP2_HEADER_AUTHORITY = ':authority'
@@ -35,21 +38,22 @@ const ends = new WeakMap()
 const web = {
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
-    config = config.server || config
-
     const headers = getHeadersToRecord(config)
     const validateStatus = getStatusValidator(config)
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
     const middleware = getMiddlewareSetting(config)
+    const queryStringObfuscation = getQsObfuscator(config)
 
-    return Object.assign({}, config, {
+    return {
+      ...config,
       headers,
       validateStatus,
       hooks,
       filter,
-      middleware
-    })
+      middleware,
+      queryStringObfuscation
+    }
   },
 
   setFramework (req, name, config) {
@@ -59,6 +63,7 @@ const web = {
     if (!span) return
 
     span.context()._name = `${name}.request`
+    span.context()._tags['component'] = name
 
     web.setConfig(req, config)
   },
@@ -105,7 +110,6 @@ const web = {
     const context = contexts.get(req)
     if (!context.instrumented) {
       this.wrapEnd(context)
-      this.wrapEvents(context)
       context.instrumented = true
     }
   },
@@ -187,9 +191,9 @@ const web = {
     if (span) {
       if (error) {
         span.addTags({
-          'error.type': error.name,
-          'error.msg': error.message,
-          'error.stack': error.stack
+          [ERROR_TYPE]: error.name,
+          [ERROR_MESSAGE]: error.message,
+          [ERROR_STACK]: error.stack
         })
       }
 
@@ -247,8 +251,7 @@ const web = {
 
   // Extract the parent span from the headers and start a new span as its child
   startChildSpan (tracer, name, headers) {
-    const childOf = tracer.scope().active() || tracer.extract(FORMAT_HTTP_HEADERS, headers)
-
+    const childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
     const span = tracer.startSpan(name, { childOf })
 
     return span
@@ -259,9 +262,9 @@ const web = {
     const context = contexts.get(req)
     const span = context.span
     const error = context.error
-    const hasMiddlewareError = span.context()._tags['error'] || span.context()._tags['error.msg']
+    const hasExistingError = span.context()._tags['error'] || span.context()._tags[ERROR_MESSAGE]
 
-    if (!hasMiddlewareError && !context.config.validateStatus(statusCode)) {
+    if (!hasExistingError && !context.config.validateStatus(statusCode)) {
       span.setTag(ERROR, error || true)
     }
   },
@@ -270,7 +273,10 @@ const web = {
   addError (req, error) {
     if (error instanceof Error) {
       const context = contexts.get(req)
-      context.error = context.error || error
+
+      if (context) {
+        context.error = error
+      }
     }
   },
 
@@ -298,6 +304,35 @@ const web = {
     context.span.finish()
     context.finished = true
   },
+
+  finishAll (context) {
+    for (const beforeEnd of context.beforeEnd) {
+      beforeEnd()
+    }
+
+    web.finishMiddleware(context)
+
+    web.finishSpan(context)
+  },
+
+  obfuscateQs (config, url) {
+    const { queryStringObfuscation } = config
+
+    if (queryStringObfuscation === false) return url
+
+    const i = url.indexOf('?')
+    if (i === -1) return url
+
+    const path = url.slice(0, i)
+    if (queryStringObfuscation === true) return path
+
+    let qs = url.slice(i + 1)
+
+    qs = qs.replace(queryStringObfuscation, '<redacted>')
+
+    return `${path}?${qs}`
+  },
+
   wrapWriteHead (context) {
     const { req, res } = context
     const writeHead = res.writeHead
@@ -318,21 +353,9 @@ const web = {
   },
   wrapRes (context, req, res, end) {
     return function () {
-      for (const beforeEnd of context.beforeEnd) {
-        beforeEnd()
-      }
+      web.finishAll(context)
 
-      web.finishMiddleware(context)
-
-      if (incomingHttpRequestEnd.hasSubscribers) {
-        incomingHttpRequestEnd.publish({ req, res })
-      }
-
-      const returnValue = end.apply(res, arguments)
-
-      web.finishSpan(context)
-
-      return returnValue
+      return end.apply(res, arguments)
     }
   },
   wrapEnd (context) {
@@ -354,12 +377,6 @@ const web = {
         ends.set(this, scope.bind(value, context.span))
       }
     })
-  },
-  wrapEvents (context) {
-    const scope = context.tracer.scope()
-    const res = context.res
-
-    scope.bind(res, context.span)
   }
 }
 
@@ -371,7 +388,8 @@ function addAllowHeaders (req, res, headers) {
     'x-datadog-parent-id',
     'x-datadog-sampled', // Deprecated, but still accept it in case it's sent.
     'x-datadog-sampling-priority',
-    'x-datadog-trace-id'
+    'x-datadog-trace-id',
+    'x-datadog-tags'
   ]
 
   for (const header of contextHeaders) {
@@ -405,15 +423,25 @@ function reactivate (req, fn) {
 }
 
 function addRequestTags (context) {
-  const { req, span } = context
+  const { req, span, config } = context
   const url = extractURL(req)
 
   span.addTags({
-    [HTTP_URL]: url.split('?')[0],
+    [HTTP_URL]: web.obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: WEB
+    [SPAN_TYPE]: WEB,
+    [HTTP_USERAGENT]: req.headers['user-agent']
   })
+
+  // if client ip has already been set by appsec, no need to run it again
+  if (config.clientIpEnabled && !span.context()._tags.hasOwnProperty(HTTP_CLIENT_IP)) {
+    const clientIp = extractIp(config, req)
+
+    if (clientIp) {
+      span.setTag(HTTP_CLIENT_IP, clientIp)
+    }
+  }
 
   addHeaders(context)
 }
@@ -514,6 +542,32 @@ function getMiddlewareSetting (config) {
     return config.middleware
   } else if (config && config.hasOwnProperty('middleware')) {
     log.error('Expected `middleware` to be a boolean.')
+  }
+
+  return true
+}
+
+function getQsObfuscator (config) {
+  const obfuscator = config.queryStringObfuscation
+
+  if (typeof obfuscator === 'boolean') {
+    return obfuscator
+  }
+
+  if (typeof obfuscator === 'string') {
+    if (obfuscator === '') return false // disable obfuscator
+
+    if (obfuscator === '.*') return true // optimize full redact
+
+    try {
+      return new RegExp(obfuscator, 'gi')
+    } catch (err) {
+      log.error(err)
+    }
+  }
+
+  if (config.hasOwnProperty('queryStringObfuscation')) {
+    log.error('Expected `queryStringObfuscation` to be a regex string or boolean.')
   }
 
   return true

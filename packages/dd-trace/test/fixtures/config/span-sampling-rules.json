@@ -1,0 +1,6 @@
+[
+  { "service": "mysql", "name": "mysql.query", "sample_rate": 0.0, "max_per_second": 1 },
+  { "service": "mysql", "sample_rate": 0.5 },
+  { "service": "mysql", "sample_rate": 1.0 },
+  { "sample_rate": 0.1 }
+]

@@ -3,6 +3,7 @@
 const { expect } = require('chai')
 const semver = require('semver')
 const { storage } = require('../../../datadog-core')
+const agent = require('../../../dd-trace/test/plugins/agent')
 
 module.exports = (name, factory, versionRange) => {
   describe('Instrumentation', () => {
@@ -11,6 +12,14 @@ module.exports = (name, factory, versionRange) => {
     describe(name, () => {
       withVersions(name, name, version => {
         if (versionRange && !semver.intersects(version, versionRange)) return
+
+        before(() => {
+          return agent.load(name)
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
 
         beforeEach(() => {
           const moduleExports = require(`../../../../versions/${name}@${version}`, {}).get()

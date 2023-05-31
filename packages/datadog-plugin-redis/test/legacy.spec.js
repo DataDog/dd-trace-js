@@ -1,8 +1,11 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
-describe('Plugin', () => {
+const namingSchema = require('./naming')
+
+describe('Legacy Plugin', () => {
   let redis
   let tracer
   let client
@@ -41,8 +44,8 @@ describe('Plugin', () => {
           client.on('error', done)
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'redis.command')
-              expect(traces[0][0]).to.have.property('service', 'test-redis')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'get')
               expect(traces[0][0]).to.have.property('type', 'redis')
               expect(traces[0][0].meta).to.have.property('db.name', '0')
@@ -50,7 +53,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('out.host', '127.0.0.1')
               expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
-              expect(traces[0][0].metrics).to.have.property('out.port', 6379)
+              expect(traces[0][0].meta).to.have.property('component', 'redis')
             })
             .then(done)
             .catch(done)
@@ -98,24 +101,48 @@ describe('Plugin', () => {
           client.stream.destroy()
         })
 
+        // TODO: This test is flakey. I've seen it affect 2.6.0, 2.5.3, 3.1.2, 0.12.0
+        // Increasing the test timeout does not help.
+        // Error will be set but span will not.
+        // agent.use is called a dozen times per test in legacy.spec but once per test in client.spec
         it('should handle errors', done => {
+          const assertError = () => {
+            if (!error || !span) return
+
+            try {
+              expect(span.meta).to.have.property(ERROR_TYPE, error.name)
+              expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(span.meta).to.have.property(ERROR_STACK, error.stack)
+              expect(span.meta).to.have.property('component', 'redis')
+              expect(span.metrics).to.have.property('network.destination.port', 6379)
+              done()
+            } catch (e) {
+              done(e)
+            }
+          }
+
           let error
+          let span
+
+          agent.use(traces => {
+            expect(traces[0][0]).to.have.property('resource', 'set')
+            span = traces[0][0]
+            assertError()
+          })
 
           client.on('error', done)
 
           client.set('foo', 123, 'bar', (err, res) => {
             error = err
+            assertError()
           })
-
-          agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.have.property('error.type', error.name)
-              expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-              expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
-            })
-            .then(done)
-            .catch(done)
         })
+
+        withNamingSchema(
+          () => client.get('foo', () => {}),
+          () => namingSchema.outbound.opName,
+          () => namingSchema.outbound.serviceName
+        )
       })
 
       describe('with configuration', () => {
@@ -158,6 +185,12 @@ describe('Plugin', () => {
 
           client.get('foo', () => {})
         })
+
+        withNamingSchema(
+          () => client.get('foo', () => {}),
+          () => namingSchema.outbound.opName,
+          () => 'custom'
+        )
       })
 
       describe('with legacy configuration', () => {

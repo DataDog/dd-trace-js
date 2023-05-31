@@ -1,16 +1,68 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.3.1"
+    "rules_version": "1.7.1"
   },
   "rules": [
+    {
+      "id": "blk-001-001",
+      "name": "Block IP Addresses",
+      "tags": {
+        "type": "block_ip",
+        "category": "security_response"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "http.client_ip"
+              }
+            ],
+            "data": "blocked_ips"
+          },
+          "operator": "ip_match"
+        }
+      ],
+      "transformers": [],
+      "on_match": [
+        "block"
+      ]
+    },
+    {
+      "id": "blk-001-002",
+      "name": "Block User Addresses",
+      "tags": {
+        "type": "block_user",
+        "category": "security_response"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "usr.id"
+              }
+            ],
+            "data": "blocked_users"
+          },
+          "operator": "exact_match"
+        }
+      ],
+      "transformers": [],
+      "on_match": [
+        "block"
+      ]
+    },
     {
       "id": "crs-913-110",
       "name": "Acunetix",
       "tags": {
-        "type": "security_scanner",
+        "type": "commercial_scanner",
         "crs_id": "913110",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "tool_name": "Acunetix",
+        "confidence": "0"
       },
       "conditions": [
         {
@@ -41,7 +93,8 @@
       "tags": {
         "type": "security_scanner",
         "crs_id": "913120",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -90,7 +143,8 @@
       "tags": {
         "type": "http_protocol_violation",
         "crs_id": "920260",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "0"
       },
       "conditions": [
         {
@@ -147,33 +201,6 @@
       ]
     },
     {
-      "id": "crs-921-140",
-      "name": "HTTP Header Injection Attack via headers",
-      "tags": {
-        "type": "http_protocol_violation",
-        "crs_id": "921140",
-        "category": "attack_attempt"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.headers.no_cookies"
-              }
-            ],
-            "regex": "[\\n\\r]",
-            "options": {
-              "case_sensitive": true,
-              "min_length": 1
-            }
-          },
-          "operator": "match_regex"
-        }
-      ],
-      "transformers": []
-    },
-    {
       "id": "crs-921-160",
       "name": "HTTP Header Injection Attack via payload (CR/LF and header-name detected)",
       "tags": {
@@ -192,7 +219,7 @@
                 "address": "server.request.path_params"
               }
             ],
-            "regex": "[\\n\\r]+(?:\\s|location|refresh|(?:set-)?cookie|(?:x-)?(?:forwarded-(?:for|host|server)|host|via|remote-ip|remote-addr|originating-IP))\\s*:",
+            "regex": "[\\n\\r]+(?:refresh|(?:set-)?cookie|(?:x-)?(?:forwarded-(?:for|host|server)|via|remote-ip|remote-addr|originating-IP))\\s*:",
             "options": {
               "case_sensitive": true,
               "min_length": 3
@@ -211,7 +238,8 @@
       "tags": {
         "type": "lfi",
         "crs_id": "930100",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -224,7 +252,7 @@
                 "address": "server.request.headers.no_cookies"
               }
             ],
-            "regex": "(?:\\x5c|(?:%(?:c(?:0%(?:[2aq]f|5c|9v)|1%(?:[19p]c|8s|af))|2(?:5(?:c(?:0%25af|1%259c)|2f|5c)|%46|f)|(?:(?:f(?:8%8)?0%8|e)0%80%a|bg%q)f|%3(?:2(?:%(?:%6|4)6|F)|5%%63)|u(?:221[56]|002f|EFC8|F025)|1u|5c)|0x(?:2f|5c)|/))(?:%(?:(?:f(?:(?:c%80|8)%8)?0%8|e)0%80%ae|2(?:(?:5(?:c0%25a|2))?e|%45)|u(?:(?:002|ff0)e|2024)|%32(?:%(?:%6|4)5|E)|c0(?:%[256aef]e|\\.))|\\.(?:%0[01]|\\?)?|\\?\\.?|0x2e){2}(?:\\x5c|(?:%(?:c(?:0%(?:[2aq]f|5c|9v)|1%(?:[19p]c|8s|af))|2(?:5(?:c(?:0%25af|1%259c)|2f|5c)|%46|f)|(?:(?:f(?:8%8)?0%8|e)0%80%a|bg%q)f|%3(?:2(?:%(?:%6|4)6|F)|5%%63)|u(?:221[56]|002f|EFC8|F025)|1u|5c)|0x(?:2f|5c)|/))",
+            "regex": "(?:%(?:c(?:0%(?:[2aq]f|5c|9v)|1%(?:[19p]c|8s|af))|2(?:5(?:c(?:0%25af|1%259c)|2f|5c)|%46|f)|(?:(?:f(?:8%8)?0%8|e)0%80%a|bg%q)f|%3(?:2(?:%(?:%6|4)6|F)|5%%63)|u(?:221[56]|002f|EFC8|F025)|1u|5c)|0x(?:2f|5c)|\\/|\\x5c)(?:%(?:(?:f(?:(?:c%80|8)%8)?0%8|e)0%80%ae|2(?:(?:5(?:c0%25a|2))?e|%45)|u(?:(?:002|ff0)e|2024)|%32(?:%(?:%6|4)5|E)|c0(?:%[256aef]e|\\.))|\\.(?:%0[01])?|0x2e){2,3}(?:%(?:c(?:0%(?:[2aq]f|5c|9v)|1%(?:[19p]c|8s|af))|2(?:5(?:c(?:0%25af|1%259c)|2f|5c)|%46|f)|(?:(?:f(?:8%8)?0%8|e)0%80%a|bg%q)f|%3(?:2(?:%(?:%6|4)6|F)|5%%63)|u(?:221[56]|002f|EFC8|F025)|1u|5c)|0x(?:2f|5c)|\\/|\\x5c)",
             "options": {
               "min_length": 4
             }
@@ -242,7 +270,8 @@
       "tags": {
         "type": "lfi",
         "crs_id": "930110",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -255,7 +284,7 @@
                 "address": "server.request.headers.no_cookies"
               }
             ],
-            "regex": "(?:(?:^|[\\\\/])\\.\\.[\\\\/]|[\\\\/]\\.\\.(?:[\\\\/]|$))",
+            "regex": "(?:(?:^|[\\x5c/])\\.{2,3}[\\x5c/]|[\\x5c/]\\.{2,3}(?:[\\x5c/]|$))",
             "options": {
               "case_sensitive": true,
               "min_length": 3
@@ -274,7 +303,8 @@
       "tags": {
         "type": "lfi",
         "crs_id": "930120",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -299,6 +329,8 @@
               "/.htpasswd",
               "/.addressbook",
               "/.aptitude/config",
+              ".aws/config",
+              ".aws/credentials",
               "/.bash_config",
               "/.bash_history",
               "/.bash_logout",
@@ -330,6 +362,7 @@
               "/.nano_history",
               "/.node_repl_history",
               "/.pearrc",
+              "/.pgpass",
               "/.php_history",
               "/.pinerc",
               ".pki/",
@@ -350,6 +383,8 @@
               ".ssh/id_rsa.pub",
               ".ssh/identity",
               ".ssh/identity.pub",
+              ".ssh/id_ecdsa",
+              ".ssh/id_ecdsa.pub",
               ".ssh/known_hosts",
               ".subversion/auth",
               ".subversion/config",
@@ -366,6 +401,225 @@
               "/.zshrc",
               "/.zsh_history",
               "/.nsconfig",
+              "data/elasticsearch",
+              "data/kafka",
+              "etc/ansible",
+              "etc/bind",
+              "etc/centos-release",
+              "etc/centos-release-upstream",
+              "etc/clam.d",
+              "etc/elasticsearch",
+              "etc/freshclam.conf",
+              "etc/gshadow",
+              "etc/gshadow-",
+              "etc/httpd",
+              "etc/kafka",
+              "etc/kibana",
+              "etc/logstash",
+              "etc/lvm",
+              "etc/mongod.conf",
+              "etc/my.cnf",
+              "etc/nuxeo.conf",
+              "etc/pki",
+              "etc/postfix",
+              "etc/scw-release",
+              "etc/subgid",
+              "etc/subgid-",
+              "etc/sudoers.d",
+              "etc/sysconfig",
+              "etc/system-release-cpe",
+              "opt/nuxeo",
+              "opt/tomcat",
+              "tmp/kafka-logs",
+              "usr/lib/rpm/rpm.log",
+              "var/data/elasticsearch",
+              "var/lib/elasticsearch",
+              "etc/.java",
+              "etc/acpi",
+              "etc/alsa",
+              "etc/alternatives",
+              "etc/apache2",
+              "etc/apm",
+              "etc/apparmor",
+              "etc/apparmor.d",
+              "etc/apport",
+              "etc/apt",
+              "etc/asciidoc",
+              "etc/avahi",
+              "etc/bash_completion.d",
+              "etc/binfmt.d",
+              "etc/bluetooth",
+              "etc/bonobo-activation",
+              "etc/brltty",
+              "etc/ca-certificates",
+              "etc/calendar",
+              "etc/chatscripts",
+              "etc/chromium-browser",
+              "etc/clamav",
+              "etc/cni",
+              "etc/console-setup",
+              "etc/coraza-waf",
+              "etc/cracklib",
+              "etc/cron.d",
+              "etc/cron.daily",
+              "etc/cron.hourly",
+              "etc/cron.monthly",
+              "etc/cron.weekly",
+              "etc/cups",
+              "etc/cups.save",
+              "etc/cupshelpers",
+              "etc/dbus-1",
+              "etc/dconf",
+              "etc/default",
+              "etc/depmod.d",
+              "etc/dhcp",
+              "etc/dictionaries-common",
+              "etc/dkms",
+              "etc/dnsmasq.d",
+              "etc/dockeretc/dpkg",
+              "etc/emacs",
+              "etc/environment.d",
+              "etc/fail2ban",
+              "etc/firebird",
+              "etc/firefox",
+              "etc/fonts",
+              "etc/fwupd",
+              "etc/gconf",
+              "etc/gdb",
+              "etc/gdm3",
+              "etc/geoclue",
+              "etc/ghostscript",
+              "etc/gimp",
+              "etc/glvnd",
+              "etc/gnome",
+              "etc/gnome-vfs-2.0",
+              "etc/gnucash",
+              "etc/gnustep",
+              "etc/groff",
+              "etc/grub.d",
+              "etc/gss",
+              "etc/gtk-2.0",
+              "etc/gtk-3.0",
+              "etc/hp",
+              "etc/ifplugd",
+              "etc/imagemagick-6",
+              "etc/init",
+              "etc/init.d",
+              "etc/initramfs-tools",
+              "etc/insserv.conf.d",
+              "etc/iproute2",
+              "etc/iptables",
+              "etc/java",
+              "etc/java-11-openjdk",
+              "etc/java-17-oracle",
+              "etc/java-8-openjdk",
+              "etc/kernel",
+              "etc/ld.so.conf.d",
+              "etc/ldap",
+              "etc/libblockdev",
+              "etc/libibverbs.d",
+              "etc/libnl-3",
+              "etc/libpaper.d",
+              "etc/libreoffice",
+              "etc/lighttpd",
+              "etc/logcheck",
+              "etc/logrotate.d",
+              "etc/lynx",
+              "etc/mail",
+              "etc/mc",
+              "etc/menu",
+              "etc/menu-methods",
+              "etc/modprobe.d",
+              "etc/modsecurity",
+              "etc/modules-load.d",
+              "etc/monit",
+              "etc/mono",
+              "etc/mplayer",
+              "etc/mpv",
+              "etc/muttrc.d",
+              "etc/mysql",
+              "etc/netplan",
+              "etc/network",
+              "etc/networkd-dispatcher",
+              "etc/networkmanager",
+              "etc/newt",
+              "etc/nghttpx",
+              "etc/nikto",
+              "etc/odbcdatasources",
+              "etc/openal",
+              "etc/openmpi",
+              "etc/opt",
+              "etc/osync",
+              "etc/packagekit",
+              "etc/pam.d",
+              "etc/pcmcia",
+              "etc/perl",
+              "etc/php",
+              "etc/pki",
+              "etc/pm",
+              "etc/polkit-1",
+              "etc/postfix",
+              "etc/ppp",
+              "etc/profile.d",
+              "etc/proftpd",
+              "etc/pulse",
+              "etc/python",
+              "etc/rc0.d",
+              "etc/rc1.d",
+              "etc/rc2.d",
+              "etc/rc3.d",
+              "etc/rc4.d",
+              "etc/rc5.d",
+              "etc/rc6.d",
+              "etc/rcs.d",
+              "etc/resolvconf",
+              "etc/rsyslog.d",
+              "etc/samba",
+              "etc/sane.d",
+              "etc/security",
+              "etc/selinux",
+              "etc/sensors.d",
+              "etc/sgml",
+              "etc/signon-ui",
+              "etc/skel",
+              "etc/snmp",
+              "etc/sound",
+              "etc/spamassassin",
+              "etc/speech-dispatcher",
+              "etc/ssh",
+              "etc/ssl",
+              "etc/sudoers.d",
+              "etc/sysctl.d",
+              "etc/sysstat",
+              "etc/systemd",
+              "etc/terminfo",
+              "etc/texmf",
+              "etc/thermald",
+              "etc/thnuclnt",
+              "etc/thunderbird",
+              "etc/timidity",
+              "etc/tmpfiles.d",
+              "etc/ubuntu-advantage",
+              "etc/udev",
+              "etc/udisks2",
+              "etc/ufw",
+              "etc/update-manager",
+              "etc/update-motd.d",
+              "etc/update-notifier",
+              "etc/upower",
+              "etc/urlview",
+              "etc/usb_modeswitch.d",
+              "etc/vim",
+              "etc/vmware",
+              "etc/vmware-installer",
+              "etc/vmware-vix",
+              "etc/vulkan",
+              "etc/w3m",
+              "etc/wireshark",
+              "etc/wpa_supplicant",
+              "etc/x11",
+              "etc/xdg",
+              "etc/xml",
               "etc/redis.conf",
               "etc/redis-sentinel.conf",
               "etc/php.ini",
@@ -417,10 +671,8 @@
               "usr/local/cpanel/logs/license_log",
               "usr/local/cpanel/logs/login_log",
               "var/cpanel/cpanel.config",
-              "var/log/sw-cp-server/error_log",
               "usr/local/psa/admin/logs/httpsd_access_log",
               "usr/local/psa/admin/logs/panel.log",
-              "var/log/sso/sso.log",
               "usr/local/psa/admin/conf/php.ini",
               "etc/sw-cp-server/applications.d/plesk.conf",
               "usr/local/psa/admin/conf/site_isolation_settings.ini",
@@ -428,16 +680,6 @@
               "etc/sw-cp-server/applications.d/00-sso-cpserver.conf",
               "etc/sso/sso_config.ini",
               "etc/mysql/conf.d/old_passwords.cnf",
-              "var/log/mysql/mysql-bin.log",
-              "var/log/mysql/mysql-bin.index",
-              "var/log/mysql/data/mysql-bin.index",
-              "var/log/mysql.log",
-              "var/log/mysql.err",
-              "var/log/mysqlderror.log",
-              "var/log/mysql/mysql.log",
-              "var/log/mysql/mysql-slow.log",
-              "var/log/mysql-bin.index",
-              "var/log/data/mysql-bin.index",
               "var/mysql.log",
               "var/mysql-bin.index",
               "var/data/mysql-bin.index",
@@ -474,21 +716,6 @@
               "mysql/my.cnf",
               "mysql/bin/my.ini",
               "var/postgresql/log/postgresql.log",
-              "var/log/postgresql/postgresql.log",
-              "var/log/postgres/pg_backup.log",
-              "var/log/postgres/postgres.log",
-              "var/log/postgresql.log",
-              "var/log/pgsql/pgsql.log",
-              "var/log/postgresql/postgresql-8.1-main.log",
-              "var/log/postgresql/postgresql-8.3-main.log",
-              "var/log/postgresql/postgresql-8.4-main.log",
-              "var/log/postgresql/postgresql-9.0-main.log",
-              "var/log/postgresql/postgresql-9.1-main.log",
-              "var/log/pgsql8.log",
-              "var/log/postgresql/postgres.log",
-              "var/log/pgsql_log",
-              "var/log/postgresql/main.log",
-              "var/log/cron/var/log/postgres.log",
               "usr/internet/pgsql/data/postmaster.log",
               "usr/local/pgsql/data/postgresql.log",
               "usr/local/pgsql/data/pg_log",
@@ -572,29 +799,21 @@
               "windows/system32/logfiles/msftpsvc2",
               "etc/logrotate.d/proftpd",
               "www/logs/proftpd.system.log",
-              "var/log/proftpd",
-              "var/log/proftpd/xferlog.legacy",
-              "var/log/proftpd.access_log",
-              "var/log/proftpd.xferlog",
               "etc/pam.d/proftpd",
               "etc/proftp.conf",
               "etc/protpd/proftpd.conf",
               "etc/vhcs2/proftpd/proftpd.conf",
               "etc/proftpd/modules.conf",
-              "var/log/vsftpd.log",
               "etc/vsftpd.chroot_list",
               "etc/logrotate.d/vsftpd.log",
               "etc/vsftpd/vsftpd.conf",
               "etc/vsftpd.conf",
               "etc/chrootusers",
-              "var/log/xferlog",
               "var/adm/log/xferlog",
               "etc/wu-ftpd/ftpaccess",
               "etc/wu-ftpd/ftphosts",
               "etc/wu-ftpd/ftpusers",
-              "var/log/pure-ftpd/pure-ftpd.log",
               "logs/pure-ftpd.log",
-              "var/log/pureftpd.log",
               "usr/sbin/pure-config.pl",
               "usr/etc/pure-ftpd.conf",
               "etc/pure-ftpd/pure-ftpd.conf",
@@ -620,30 +839,18 @@
               "usr/ports/contrib/pure-ftpd/pure-ftpd.conf",
               "usr/ports/contrib/pure-ftpd/pureftpd.pdb",
               "usr/ports/contrib/pure-ftpd/pureftpd.passwd",
-              "var/log/muddleftpd",
               "usr/sbin/mudlogd",
               "etc/muddleftpd/mudlog",
               "etc/muddleftpd.com",
               "etc/muddleftpd/mudlogd.conf",
               "etc/muddleftpd/muddleftpd.conf",
-              "var/log/muddleftpd.conf",
               "usr/sbin/mudpasswd",
               "etc/muddleftpd/muddleftpd.passwd",
               "etc/muddleftpd/passwd",
-              "var/log/ftp-proxy/ftp-proxy.log",
-              "var/log/ftp-proxy",
-              "var/log/ftplog",
               "etc/logrotate.d/ftp",
               "etc/ftpchroot",
               "etc/ftphosts",
               "etc/ftpusers",
-              "var/log/exim_mainlog",
-              "var/log/exim/mainlog",
-              "var/log/maillog",
-              "var/log/exim_paniclog",
-              "var/log/exim/paniclog",
-              "var/log/exim/rejectlog",
-              "var/log/exim_rejectlog",
               "winnt/system32/logfiles/smtpsvc",
               "winnt/system32/logfiles/smtpsvc1",
               "winnt/system32/logfiles/smtpsvc2",
@@ -716,7 +923,6 @@
               "library/webserver/documents/default.htm",
               "library/webserver/documents/index.php",
               "library/webserver/documents/default.php",
-              "var/log/webmin/miniserv.log",
               "usr/local/etc/webmin/miniserv.conf",
               "etc/webmin/miniserv.conf",
               "usr/local/etc/webmin/miniserv.users",
@@ -729,8 +935,6 @@
               "windows/system32/logfiles/w3svc1/inetsvn1.log",
               "windows/system32/logfiles/w3svc2/inetsvn1.log",
               "windows/system32/logfiles/w3svc3/inetsvn1.log",
-              "var/log/httpd/access_log",
-              "var/log/httpd/error_log",
               "apache/logs/error.log",
               "apache/logs/access.log",
               "apache2/logs/error.log",
@@ -753,20 +957,6 @@
               "var/www/logs/access.log",
               "var/www/logs/error_log",
               "var/www/logs/error.log",
-              "var/log/httpd/access.log",
-              "var/log/httpd/error.log",
-              "var/log/apache/access_log",
-              "var/log/apache/access.log",
-              "var/log/apache/error_log",
-              "var/log/apache/error.log",
-              "var/log/apache2/access_log",
-              "var/log/apache2/access.log",
-              "var/log/apache2/error_log",
-              "var/log/apache2/error.log",
-              "var/log/access_log",
-              "var/log/access.log",
-              "var/log/error_log",
-              "var/log/error.log",
               "opt/lampp/logs/access_log",
               "opt/lampp/logs/error_log",
               "opt/xampp/logs/access_log",
@@ -905,7 +1095,6 @@
               "usr/share/tomcat6/conf/context.xml",
               "usr/share/tomcat6/conf/workers.properties",
               "usr/share/tomcat6/conf/logging.properties",
-              "var/log/tomcat6/catalina.out",
               "var/cpanel/tomcat.options",
               "usr/local/jakarta/tomcat/logs/catalina.out",
               "usr/local/jakarta/tomcat/logs/catalina.err",
@@ -986,23 +1175,14 @@
               "program files/[jboss]/server/default/log/boot.log",
               "[jboss]/server/default/log/server.log",
               "[jboss]/server/default/log/boot.log",
-              "var/log/lighttpd.error.log",
-              "var/log/lighttpd.access.log",
               "var/lighttpd.log",
               "var/logs/access.log",
-              "var/log/lighttpd/",
-              "var/log/lighttpd/error.log",
-              "var/log/lighttpd/access.www.log",
-              "var/log/lighttpd/error.www.log",
-              "var/log/lighttpd/access.log",
               "usr/local/apache2/logs/lighttpd.error.log",
               "usr/local/apache2/logs/lighttpd.log",
               "usr/local/apache/logs/lighttpd.error.log",
               "usr/local/apache/logs/lighttpd.log",
               "usr/local/lighttpd/log/lighttpd.error.log",
               "usr/local/lighttpd/log/access.log",
-              "var/log/lighttpd/{domain}/access.log",
-              "var/log/lighttpd/{domain}/error.log",
               "usr/home/user/var/log/lighttpd.error.log",
               "usr/home/user/var/log/apache.log",
               "home/user/lighttpd/lighttpd.conf",
@@ -1012,12 +1192,6 @@
               "usr/local/lighttpd/conf/lighttpd.conf",
               "usr/local/etc/lighttpd.conf.new",
               "var/www/.lighttpdpassword",
-              "var/log/nginx/access_log",
-              "var/log/nginx/error_log",
-              "var/log/nginx/access.log",
-              "var/log/nginx/error.log",
-              "var/log/nginx.access_log",
-              "var/log/nginx.error_log",
               "logs/access_log",
               "logs/error_log",
               "etc/nginx/nginx.conf",
@@ -1033,12 +1207,6 @@
               "usr/local/logs/access.log",
               "usr/local/samba/lib/log.user",
               "usr/local/logs/samba.log",
-              "var/log/samba/log.smbd",
-              "var/log/samba/log.nmbd",
-              "var/log/samba.log",
-              "var/log/samba.log1",
-              "var/log/samba.log2",
-              "var/log/log.smb",
               "etc/samba/netlogon",
               "etc/smbpasswd",
               "etc/smb.conf",
@@ -1067,10 +1235,6 @@
               "etc/wicd/manager-settings.conf",
               "etc/wicd/wired-settings.conf",
               "etc/wicd/wireless-settings.conf",
-              "var/log/ipfw.log",
-              "var/log/ipfw",
-              "var/log/ipfw/ipfw.log",
-              "var/log/ipfw.today",
               "etc/ipfw.rules",
               "etc/ipfw.conf",
               "etc/firewall.rules",
@@ -1089,33 +1253,6 @@
               "etc/bluetooth/main.conf",
               "etc/bluetooth/network.conf",
               "etc/bluetooth/rfcomm.conf",
-              "proc/self/environ",
-              "proc/self/mounts",
-              "proc/self/stat",
-              "proc/self/status",
-              "proc/self/cmdline",
-              "proc/self/fd/0",
-              "proc/self/fd/1",
-              "proc/self/fd/2",
-              "proc/self/fd/3",
-              "proc/self/fd/4",
-              "proc/self/fd/5",
-              "proc/self/fd/6",
-              "proc/self/fd/7",
-              "proc/self/fd/8",
-              "proc/self/fd/9",
-              "proc/self/fd/10",
-              "proc/self/fd/11",
-              "proc/self/fd/12",
-              "proc/self/fd/13",
-              "proc/self/fd/14",
-              "proc/self/fd/15",
-              "proc/version",
-              "proc/devices",
-              "proc/cpuinfo",
-              "proc/meminfo",
-              "proc/net/tcp",
-              "proc/net/udp",
               "etc/bash_completion.d/debconf",
               "root/.bash_logout",
               "root/.bash_history",
@@ -1153,39 +1290,12 @@
               "var/adm/aculog",
               "var/adm/vold.log",
               "var/adm/log/asppp.log",
-              "var/log/poplog",
-              "var/log/authlog",
               "var/lp/logs/lpsched",
               "var/lp/logs/lpnet",
               "var/lp/logs/requests",
               "var/cron/log",
               "var/saf/_log",
               "var/saf/port/log",
-              "var/log/news.all",
-              "var/log/news/news.all",
-              "var/log/news/news.crit",
-              "var/log/news/news.err",
-              "var/log/news/news.notice",
-              "var/log/news/suck.err",
-              "var/log/news/suck.notice",
-              "var/log/messages",
-              "var/log/messages.1",
-              "var/log/user.log",
-              "var/log/user.log.1",
-              "var/log/auth.log",
-              "var/log/pm-powersave.log",
-              "var/log/xorg.0.log",
-              "var/log/daemon.log",
-              "var/log/daemon.log.1",
-              "var/log/kern.log",
-              "var/log/kern.log.1",
-              "var/log/mail.err",
-              "var/log/mail.info",
-              "var/log/mail.warn",
-              "var/log/ufw.log",
-              "var/log/boot.log",
-              "var/log/syslog",
-              "var/log/syslog.1",
               "tmp/access.log",
               "etc/sensors.conf",
               "etc/sensors3.conf",
@@ -1242,16 +1352,11 @@
               "etc/timezone",
               "etc/modules",
               "etc/passwd",
-              "etc/passwd~",
-              "etc/passwd-",
               "etc/shadow",
-              "etc/shadow~",
-              "etc/shadow-",
               "etc/fstab",
               "etc/motd",
               "etc/hosts",
               "etc/group",
-              "etc/group-",
               "etc/alias",
               "etc/crontab",
               "etc/crypttab",
@@ -1271,6 +1376,8 @@
               "etc/sudoers",
               "etc/sysconfig/network-scripts/ifcfg-eth0",
               "etc/redhat-release",
+              "etc/scw-release",
+              "etc/system-release-cpe",
               "etc/debian_version",
               "etc/fedora-release",
               "etc/mandrake-release",
@@ -1287,11 +1394,7 @@
               "root/.ksh_history",
               "root/.xauthority",
               "usr/lib/security/mkuser.default",
-              "var/log/squirrelmail.log",
-              "var/log/apache2/squirrelmail.log",
-              "var/log/apache2/squirrelmail.err.log",
               "var/lib/squirrelmail/prefs/squirrelmail.log",
-              "var/log/mail.log",
               "etc/squirrelmail/apache.conf",
               "etc/squirrelmail/config_local.php",
               "etc/squirrelmail/default_pref",
@@ -1345,6 +1448,134 @@
               "etc/vmware-tools/config",
               "etc/vmware-tools/tpvmlp.conf",
               "etc/vmware-tools/vmware-tools-libraries.conf",
+              "var/log",
+              "var/log/sw-cp-server/error_log",
+              "var/log/sso/sso.log",
+              "var/log/dpkg.log",
+              "var/log/btmp",
+              "var/log/utmp",
+              "var/log/wtmp",
+              "var/log/mysql/mysql-bin.log",
+              "var/log/mysql/mysql-bin.index",
+              "var/log/mysql/data/mysql-bin.index",
+              "var/log/mysql.log",
+              "var/log/mysql.err",
+              "var/log/mysqlderror.log",
+              "var/log/mysql/mysql.log",
+              "var/log/mysql/mysql-slow.log",
+              "var/log/mysql-bin.index",
+              "var/log/data/mysql-bin.index",
+              "var/log/postgresql/postgresql.log",
+              "var/log/postgres/pg_backup.log",
+              "var/log/postgres/postgres.log",
+              "var/log/postgresql.log",
+              "var/log/pgsql/pgsql.log",
+              "var/log/postgresql/postgresql-8.1-main.log",
+              "var/log/postgresql/postgresql-8.3-main.log",
+              "var/log/postgresql/postgresql-8.4-main.log",
+              "var/log/postgresql/postgresql-9.0-main.log",
+              "var/log/postgresql/postgresql-9.1-main.log",
+              "var/log/pgsql8.log",
+              "var/log/postgresql/postgres.log",
+              "var/log/pgsql_log",
+              "var/log/postgresql/main.log",
+              "var/log/cron",
+              "var/log/postgres.log",
+              "var/log/proftpd",
+              "var/log/proftpd/xferlog.legacy",
+              "var/log/proftpd.access_log",
+              "var/log/proftpd.xferlog",
+              "var/log/vsftpd.log",
+              "var/log/xferlog",
+              "var/log/pure-ftpd/pure-ftpd.log",
+              "var/log/pureftpd.log",
+              "var/log/muddleftpd",
+              "var/log/muddleftpd.conf",
+              "var/log/ftp-proxy/ftp-proxy.log",
+              "var/log/ftp-proxy",
+              "var/log/ftplog",
+              "var/log/exim_mainlog",
+              "var/log/exim/mainlog",
+              "var/log/maillog",
+              "var/log/exim_paniclog",
+              "var/log/exim/paniclog",
+              "var/log/exim/rejectlog",
+              "var/log/exim_rejectlog",
+              "var/log/webmin/miniserv.log",
+              "var/log/httpd/access_log",
+              "var/log/httpd/error_log",
+              "var/log/httpd/access.log",
+              "var/log/httpd/error.log",
+              "var/log/apache/access_log",
+              "var/log/apache/access.log",
+              "var/log/apache/error_log",
+              "var/log/apache/error.log",
+              "var/log/apache2/access_log",
+              "var/log/apache2/access.log",
+              "var/log/apache2/error_log",
+              "var/log/apache2/error.log",
+              "var/log/access_log",
+              "var/log/access.log",
+              "var/log/error_log",
+              "var/log/error.log",
+              "var/log/tomcat6/catalina.out",
+              "var/log/lighttpd.error.log",
+              "var/log/lighttpd.access.log",
+              "var/logs/access.log",
+              "var/log/lighttpd/",
+              "var/log/lighttpd/error.log",
+              "var/log/lighttpd/access.www.log",
+              "var/log/lighttpd/error.www.log",
+              "var/log/lighttpd/access.log",
+              "var/log/lighttpd/{domain}/access.log",
+              "var/log/lighttpd/{domain}/error.log",
+              "var/log/nginx/access_log",
+              "var/log/nginx/error_log",
+              "var/log/nginx/access.log",
+              "var/log/nginx/error.log",
+              "var/log/nginx.access_log",
+              "var/log/nginx.error_log",
+              "var/log/samba/log.smbd",
+              "var/log/samba/log.nmbd",
+              "var/log/samba.log",
+              "var/log/samba.log1",
+              "var/log/samba.log2",
+              "var/log/log.smb",
+              "var/log/ipfw.log",
+              "var/log/ipfw",
+              "var/log/ipfw/ipfw.log",
+              "var/log/ipfw.today",
+              "var/log/poplog",
+              "var/log/authlog",
+              "var/log/news.all",
+              "var/log/news/news.all",
+              "var/log/news/news.crit",
+              "var/log/news/news.err",
+              "var/log/news/news.notice",
+              "var/log/news/suck.err",
+              "var/log/news/suck.notice",
+              "var/log/messages",
+              "var/log/messages.1",
+              "var/log/user.log",
+              "var/log/user.log.1",
+              "var/log/auth.log",
+              "var/log/pm-powersave.log",
+              "var/log/xorg.0.log",
+              "var/log/daemon.log",
+              "var/log/daemon.log.1",
+              "var/log/kern.log",
+              "var/log/kern.log.1",
+              "var/log/mail.err",
+              "var/log/mail.info",
+              "var/log/mail.warn",
+              "var/log/ufw.log",
+              "var/log/boot.log",
+              "var/log/syslog",
+              "var/log/syslog.1",
+              "var/log/squirrelmail.log",
+              "var/log/apache2/squirrelmail.log",
+              "var/log/apache2/squirrelmail.err.log",
+              "var/log/mail.log",
               "var/log/vmware/hostd.log",
               "var/log/vmware/hostd-1.log",
               "/wp-config.php",
@@ -1369,8 +1600,8 @@
               "/web.config",
               "includes/config.php",
               "includes/configure.php",
-              "config.inc.php",
-              "localsettings.php",
+              "/config.inc.php",
+              "/localsettings.php",
               "inc/config.php",
               "typo3conf/localconf.php",
               "config/app.php",
@@ -1397,7 +1628,122 @@
               "/ormconfig.json",
               "/tsconfig.json",
               "/webpack.config.js",
-              "/yarn.lock"
+              "/yarn.lock",
+              "proc/0",
+              "proc/1",
+              "proc/2",
+              "proc/3",
+              "proc/4",
+              "proc/5",
+              "proc/6",
+              "proc/7",
+              "proc/8",
+              "proc/9",
+              "proc/acpi",
+              "proc/asound",
+              "proc/bootconfig",
+              "proc/buddyinfo",
+              "proc/bus",
+              "proc/cgroups",
+              "proc/cmdline",
+              "proc/config.gz",
+              "proc/consoles",
+              "proc/cpuinfo",
+              "proc/crypto",
+              "proc/devices",
+              "proc/diskstats",
+              "proc/dma",
+              "proc/docker",
+              "proc/driver",
+              "proc/dynamic_debug",
+              "proc/execdomains",
+              "proc/fb",
+              "proc/filesystems",
+              "proc/fs",
+              "proc/interrupts",
+              "proc/iomem",
+              "proc/ioports",
+              "proc/ipmi",
+              "proc/irq",
+              "proc/kallsyms",
+              "proc/kcore",
+              "proc/keys",
+              "proc/keys",
+              "proc/key-users",
+              "proc/kmsg",
+              "proc/kpagecgroup",
+              "proc/kpagecount",
+              "proc/kpageflags",
+              "proc/latency_stats",
+              "proc/loadavg",
+              "proc/locks",
+              "proc/mdstat",
+              "proc/meminfo",
+              "proc/misc",
+              "proc/modules",
+              "proc/mounts",
+              "proc/mpt",
+              "proc/mtd",
+              "proc/mtrr",
+              "proc/net",
+              "proc/net/tcp",
+              "proc/net/udp",
+              "proc/pagetypeinfo",
+              "proc/partitions",
+              "proc/pressure",
+              "proc/sched_debug",
+              "proc/schedstat",
+              "proc/scsi",
+              "proc/self",
+              "proc/self/cmdline",
+              "proc/self/environ",
+              "proc/self/fd/0",
+              "proc/self/fd/1",
+              "proc/self/fd/10",
+              "proc/self/fd/11",
+              "proc/self/fd/12",
+              "proc/self/fd/13",
+              "proc/self/fd/14",
+              "proc/self/fd/15",
+              "proc/self/fd/2",
+              "proc/self/fd/3",
+              "proc/self/fd/4",
+              "proc/self/fd/5",
+              "proc/self/fd/6",
+              "proc/self/fd/7",
+              "proc/self/fd/8",
+              "proc/self/fd/9",
+              "proc/self/mounts",
+              "proc/self/stat",
+              "proc/self/status",
+              "proc/slabinfo",
+              "proc/softirqs",
+              "proc/stat",
+              "proc/swaps",
+              "proc/sys",
+              "proc/sysrq-trigger",
+              "proc/sysvipc",
+              "proc/thread-self",
+              "proc/timer_list",
+              "proc/timer_stats",
+              "proc/tty",
+              "proc/uptime",
+              "proc/version",
+              "proc/version_signature",
+              "proc/vmallocinfo",
+              "proc/vmstat",
+              "proc/zoneinfo",
+              "sys/block",
+              "sys/bus",
+              "sys/class",
+              "sys/dev",
+              "sys/devices",
+              "sys/firmware",
+              "sys/fs",
+              "sys/hypervisor",
+              "sys/kernel",
+              "sys/module",
+              "sys/power"
             ]
           },
           "operator": "phrase_match"
@@ -1414,7 +1760,8 @@
       "tags": {
         "type": "rfi",
         "crs_id": "931110",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -1456,7 +1803,7 @@
                 "address": "server.request.path_params"
               }
             ],
-            "regex": "^(?i:file|ftps?|https?).*?\\?+$",
+            "regex": "^(?i:file|ftps?)://.*?\\?+$",
             "options": {
               "case_sensitive": true,
               "min_length": 4
@@ -1473,7 +1820,8 @@
       "tags": {
         "type": "command_injection",
         "crs_id": "932160",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -1511,25 +1859,6 @@
               "$ostype",
               "$path",
               "$pwd",
-              "bin/bash",
-              "bin/cat",
-              "bin/csh",
-              "bin/dash",
-              "bin/du",
-              "bin/echo",
-              "bin/grep",
-              "bin/less",
-              "bin/ls",
-              "bin/mknod",
-              "bin/more",
-              "bin/nc",
-              "bin/ps",
-              "bin/rbash",
-              "bin/sh",
-              "bin/sleep",
-              "bin/su",
-              "bin/tcsh",
-              "bin/uname",
               "dev/fd/",
               "dev/null",
               "dev/stderr",
@@ -1538,76 +1867,445 @@
               "dev/tcp/",
               "dev/udp/",
               "dev/zero",
-              "etc/group",
               "etc/master.passwd",
-              "etc/passwd",
               "etc/pwd.db",
-              "etc/shadow",
               "etc/shells",
               "etc/spwd.db",
               "proc/self/",
-              "usr/bin/awk",
-              "usr/bin/base64",
-              "usr/bin/cat",
-              "usr/bin/cc",
-              "usr/bin/clang",
-              "usr/bin/clang++",
-              "usr/bin/curl",
-              "usr/bin/diff",
-              "usr/bin/env",
-              "usr/bin/fetch",
-              "usr/bin/file",
-              "usr/bin/find",
-              "usr/bin/ftp",
-              "usr/bin/gawk",
-              "usr/bin/gcc",
-              "usr/bin/head",
-              "usr/bin/hexdump",
-              "usr/bin/id",
-              "usr/bin/less",
-              "usr/bin/ln",
-              "usr/bin/mkfifo",
-              "usr/bin/more",
-              "usr/bin/nc",
-              "usr/bin/ncat",
-              "usr/bin/nice",
-              "usr/bin/nmap",
-              "usr/bin/perl",
-              "usr/bin/php",
-              "usr/bin/php5",
-              "usr/bin/php7",
-              "usr/bin/php-cgi",
-              "usr/bin/printf",
-              "usr/bin/psed",
-              "usr/bin/python",
-              "usr/bin/python2",
-              "usr/bin/python3",
-              "usr/bin/ruby",
-              "usr/bin/sed",
-              "usr/bin/socat",
-              "usr/bin/tail",
-              "usr/bin/tee",
-              "usr/bin/telnet",
-              "usr/bin/top",
-              "usr/bin/uname",
-              "usr/bin/wget",
-              "usr/bin/who",
-              "usr/bin/whoami",
-              "usr/bin/xargs",
-              "usr/bin/xxd",
-              "usr/bin/yes",
-              "usr/local/bin/bash",
-              "usr/local/bin/curl",
-              "usr/local/bin/ncat",
-              "usr/local/bin/nmap",
-              "usr/local/bin/perl",
-              "usr/local/bin/php",
-              "usr/local/bin/python",
-              "usr/local/bin/python2",
-              "usr/local/bin/python3",
-              "usr/local/bin/rbash",
-              "usr/local/bin/ruby",
-              "usr/local/bin/wget"
+              "bin/7z",
+              "bin/7za",
+              "bin/7zr",
+              "bin/ab",
+              "bin/agetty",
+              "bin/ansible-playbook",
+              "bin/apt",
+              "bin/apt-get",
+              "bin/ar",
+              "bin/aria2c",
+              "bin/arj",
+              "bin/arp",
+              "bin/as",
+              "bin/ascii-xfr",
+              "bin/ascii85",
+              "bin/ash",
+              "bin/aspell",
+              "bin/at",
+              "bin/atobm",
+              "bin/awk",
+              "bin/base32",
+              "bin/base64",
+              "bin/basenc",
+              "bin/bash",
+              "bin/bpftrace",
+              "bin/bridge",
+              "bin/bundler",
+              "bin/bunzip2",
+              "bin/busctl",
+              "bin/busybox",
+              "bin/byebug",
+              "bin/bzcat",
+              "bin/bzcmp",
+              "bin/bzdiff",
+              "bin/bzegrep",
+              "bin/bzexe",
+              "bin/bzfgrep",
+              "bin/bzgrep",
+              "bin/bzip2",
+              "bin/bzip2recover",
+              "bin/bzless",
+              "bin/bzmore",
+              "bin/bzz",
+              "bin/c89",
+              "bin/c99",
+              "bin/cancel",
+              "bin/capsh",
+              "bin/cat",
+              "bin/cc",
+              "bin/certbot",
+              "bin/check_by_ssh",
+              "bin/check_cups",
+              "bin/check_log",
+              "bin/check_memory",
+              "bin/check_raid",
+              "bin/check_ssl_cert",
+              "bin/check_statusfile",
+              "bin/chmod",
+              "bin/choom",
+              "bin/chown",
+              "bin/chroot",
+              "bin/clang",
+              "bin/clang++",
+              "bin/cmp",
+              "bin/cobc",
+              "bin/column",
+              "bin/comm",
+              "bin/composer",
+              "bin/core_perl/zipdetails",
+              "bin/cowsay",
+              "bin/cowthink",
+              "bin/cp",
+              "bin/cpan",
+              "bin/cpio",
+              "bin/cpulimit",
+              "bin/crash",
+              "bin/crontab",
+              "bin/csh",
+              "bin/csplit",
+              "bin/csvtool",
+              "bin/cupsfilter",
+              "bin/curl",
+              "bin/cut",
+              "bin/dash",
+              "bin/date",
+              "bin/dd",
+              "bin/dev/fd/",
+              "bin/dev/null",
+              "bin/dev/stderr",
+              "bin/dev/stdin",
+              "bin/dev/stdout",
+              "bin/dev/tcp/",
+              "bin/dev/udp/",
+              "bin/dev/zero",
+              "bin/dialog",
+              "bin/diff",
+              "bin/dig",
+              "bin/dmesg",
+              "bin/dmidecode",
+              "bin/dmsetup",
+              "bin/dnf",
+              "bin/docker",
+              "bin/dosbox",
+              "bin/dpkg",
+              "bin/du",
+              "bin/dvips",
+              "bin/easy_install",
+              "bin/eb",
+              "bin/echo",
+              "bin/ed",
+              "bin/efax",
+              "bin/emacs",
+              "bin/env",
+              "bin/eqn",
+              "bin/es",
+              "bin/esh",
+              "bin/etc/group",
+              "bin/etc/master.passwd",
+              "bin/etc/passwd",
+              "bin/etc/pwd.db",
+              "bin/etc/shadow",
+              "bin/etc/shells",
+              "bin/etc/spwd.db",
+              "bin/ex",
+              "bin/exiftool",
+              "bin/expand",
+              "bin/expect",
+              "bin/expr",
+              "bin/facter",
+              "bin/fetch",
+              "bin/file",
+              "bin/find",
+              "bin/finger",
+              "bin/fish",
+              "bin/flock",
+              "bin/fmt",
+              "bin/fold",
+              "bin/fping",
+              "bin/ftp",
+              "bin/gawk",
+              "bin/gcc",
+              "bin/gcore",
+              "bin/gdb",
+              "bin/gem",
+              "bin/genie",
+              "bin/genisoimage",
+              "bin/ghc",
+              "bin/ghci",
+              "bin/gimp",
+              "bin/ginsh",
+              "bin/git",
+              "bin/grc",
+              "bin/grep",
+              "bin/gtester",
+              "bin/gunzip",
+              "bin/gzexe",
+              "bin/gzip",
+              "bin/hd",
+              "bin/head",
+              "bin/hexdump",
+              "bin/highlight",
+              "bin/hping3",
+              "bin/iconv",
+              "bin/id",
+              "bin/iftop",
+              "bin/install",
+              "bin/ionice",
+              "bin/ip",
+              "bin/irb",
+              "bin/ispell",
+              "bin/jjs",
+              "bin/join",
+              "bin/journalctl",
+              "bin/jq",
+              "bin/jrunscript",
+              "bin/knife",
+              "bin/ksh",
+              "bin/ksshell",
+              "bin/latex",
+              "bin/ld",
+              "bin/ldconfig",
+              "bin/less",
+              "bin/lftp",
+              "bin/ln",
+              "bin/loginctl",
+              "bin/logsave",
+              "bin/look",
+              "bin/lp",
+              "bin/ls",
+              "bin/ltrace",
+              "bin/lua",
+              "bin/lualatex",
+              "bin/luatex",
+              "bin/lwp-download",
+              "bin/lwp-request",
+              "bin/lz",
+              "bin/lz4",
+              "bin/lz4c",
+              "bin/lz4cat",
+              "bin/lzcat",
+              "bin/lzcmp",
+              "bin/lzdiff",
+              "bin/lzegrep",
+              "bin/lzfgrep",
+              "bin/lzgrep",
+              "bin/lzless",
+              "bin/lzma",
+              "bin/lzmadec",
+              "bin/lzmainfo",
+              "bin/lzmore",
+              "bin/mail",
+              "bin/make",
+              "bin/man",
+              "bin/mawk",
+              "bin/mkfifo",
+              "bin/mknod",
+              "bin/more",
+              "bin/mosquitto",
+              "bin/mount",
+              "bin/msgattrib",
+              "bin/msgcat",
+              "bin/msgconv",
+              "bin/msgfilter",
+              "bin/msgmerge",
+              "bin/msguniq",
+              "bin/mtr",
+              "bin/mv",
+              "bin/mysql",
+              "bin/nano",
+              "bin/nasm",
+              "bin/nawk",
+              "bin/nc",
+              "bin/ncat",
+              "bin/neofetch",
+              "bin/nice",
+              "bin/nl",
+              "bin/nm",
+              "bin/nmap",
+              "bin/node",
+              "bin/nohup",
+              "bin/npm",
+              "bin/nroff",
+              "bin/nsenter",
+              "bin/octave",
+              "bin/od",
+              "bin/openssl",
+              "bin/openvpn",
+              "bin/openvt",
+              "bin/opkg",
+              "bin/paste",
+              "bin/pax",
+              "bin/pdb",
+              "bin/pdflatex",
+              "bin/pdftex",
+              "bin/pdksh",
+              "bin/perf",
+              "bin/perl",
+              "bin/pg",
+              "bin/php",
+              "bin/php-cgi",
+              "bin/php5",
+              "bin/php7",
+              "bin/pic",
+              "bin/pico",
+              "bin/pidstat",
+              "bin/pigz",
+              "bin/pip",
+              "bin/pkexec",
+              "bin/pkg",
+              "bin/pr",
+              "bin/printf",
+              "bin/proc/self/",
+              "bin/pry",
+              "bin/ps",
+              "bin/psed",
+              "bin/psftp",
+              "bin/psql",
+              "bin/ptx",
+              "bin/puppet",
+              "bin/pxz",
+              "bin/python",
+              "bin/python2",
+              "bin/python3",
+              "bin/rake",
+              "bin/rbash",
+              "bin/rc",
+              "bin/readelf",
+              "bin/red",
+              "bin/redcarpet",
+              "bin/restic",
+              "bin/rev",
+              "bin/rlogin",
+              "bin/rlwrap",
+              "bin/rpm",
+              "bin/rpmquery",
+              "bin/rsync",
+              "bin/ruby",
+              "bin/run-mailcap",
+              "bin/run-parts",
+              "bin/rview",
+              "bin/rvim",
+              "bin/sash",
+              "bin/sbin/capsh",
+              "bin/sbin/logsave",
+              "bin/sbin/service",
+              "bin/sbin/start-stop-daemon",
+              "bin/scp",
+              "bin/screen",
+              "bin/script",
+              "bin/sed",
+              "bin/service",
+              "bin/setarch",
+              "bin/sftp",
+              "bin/sg",
+              "bin/sh",
+              "bin/shuf",
+              "bin/sleep",
+              "bin/slsh",
+              "bin/smbclient",
+              "bin/snap",
+              "bin/socat",
+              "bin/soelim",
+              "bin/sort",
+              "bin/split",
+              "bin/sqlite3",
+              "bin/ss",
+              "bin/ssh",
+              "bin/ssh-keygen",
+              "bin/ssh-keyscan",
+              "bin/sshpass",
+              "bin/start-stop-daemon",
+              "bin/stdbuf",
+              "bin/strace",
+              "bin/strings",
+              "bin/su",
+              "bin/sysctl",
+              "bin/systemctl",
+              "bin/systemd-resolve",
+              "bin/tac",
+              "bin/tail",
+              "bin/tar",
+              "bin/task",
+              "bin/taskset",
+              "bin/tbl",
+              "bin/tclsh",
+              "bin/tcpdump",
+              "bin/tcsh",
+              "bin/tee",
+              "bin/telnet",
+              "bin/tex",
+              "bin/tftp",
+              "bin/tic",
+              "bin/time",
+              "bin/timedatectl",
+              "bin/timeout",
+              "bin/tmux",
+              "bin/top",
+              "bin/troff",
+              "bin/tshark",
+              "bin/ul",
+              "bin/uname",
+              "bin/uncompress",
+              "bin/unexpand",
+              "bin/uniq",
+              "bin/unlz4",
+              "bin/unlzma",
+              "bin/unpigz",
+              "bin/unrar",
+              "bin/unshare",
+              "bin/unxz",
+              "bin/unzip",
+              "bin/unzstd",
+              "bin/update-alternatives",
+              "bin/uudecode",
+              "bin/uuencode",
+              "bin/valgrind",
+              "bin/vi",
+              "bin/view",
+              "bin/vigr",
+              "bin/vim",
+              "bin/vimdiff",
+              "bin/vipw",
+              "bin/virsh",
+              "bin/volatility",
+              "bin/wall",
+              "bin/watch",
+              "bin/wc",
+              "bin/wget",
+              "bin/whiptail",
+              "bin/who",
+              "bin/whoami",
+              "bin/whois",
+              "bin/wireshark",
+              "bin/wish",
+              "bin/xargs",
+              "bin/xelatex",
+              "bin/xetex",
+              "bin/xmodmap",
+              "bin/xmore",
+              "bin/xpad",
+              "bin/xxd",
+              "bin/xz",
+              "bin/xzcat",
+              "bin/xzcmp",
+              "bin/xzdec",
+              "bin/xzdiff",
+              "bin/xzegrep",
+              "bin/xzfgrep",
+              "bin/xzgrep",
+              "bin/xzless",
+              "bin/xzmore",
+              "bin/yarn",
+              "bin/yelp",
+              "bin/yes",
+              "bin/yum",
+              "bin/zathura",
+              "bin/zip",
+              "bin/zipcloak",
+              "bin/zipcmp",
+              "bin/zipdetails",
+              "bin/zipgrep",
+              "bin/zipinfo",
+              "bin/zipmerge",
+              "bin/zipnote",
+              "bin/zipsplit",
+              "bin/ziptool",
+              "bin/zsh",
+              "bin/zsoelim",
+              "bin/zstd",
+              "bin/zstdcat",
+              "bin/zstdgrep",
+              "bin/zstdless",
+              "bin/zstdmt",
+              "bin/zypper"
             ]
           },
           "operator": "phrase_match"
@@ -1623,7 +2321,8 @@
       "tags": {
         "type": "command_injection",
         "crs_id": "932171",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -1662,7 +2361,8 @@
       "tags": {
         "type": "command_injection",
         "crs_id": "932180",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -1720,7 +2420,8 @@
       "tags": {
         "type": "unrestricted_file_upload",
         "crs_id": "933111",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -1770,7 +2471,8 @@
       "tags": {
         "type": "php_code_injection",
         "crs_id": "933130",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -1791,14 +2493,6 @@
             ],
             "list": [
               "$globals",
-              "$http_cookie_vars",
-              "$http_env_vars",
-              "$http_get_vars",
-              "$http_post_files",
-              "$http_post_vars",
-              "$http_raw_post_data",
-              "$http_request_vars",
-              "$http_server_vars",
               "$_cookie",
               "$_env",
               "$_files",
@@ -1808,7 +2502,17 @@
               "$_server",
               "$_session",
               "$argc",
-              "$argv"
+              "$argv",
+              "$http_\\u200bresponse_\\u200bheader",
+              "$php_\\u200berrormsg",
+              "$http_cookie_vars",
+              "$http_env_vars",
+              "$http_get_vars",
+              "$http_post_files",
+              "$http_post_vars",
+              "$http_raw_post_data",
+              "$http_request_vars",
+              "$http_server_vars"
             ]
           },
           "operator": "phrase_match"
@@ -1860,7 +2564,8 @@
       "tags": {
         "type": "php_code_injection",
         "crs_id": "933140",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -1895,7 +2600,8 @@
       "tags": {
         "type": "php_code_injection",
         "crs_id": "933150",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -1993,8 +2699,9 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "\\b(?:s(?:e(?:t(?:_(?:e(?:xception|rror)_handler|magic_quotes_runtime|include_path)|defaultstub)|ssion_s(?:et_save_handler|tart))|qlite_(?:(?:(?:unbuffered|single|array)_)?query|create_(?:aggregate|function)|p?open|exec)|tr(?:eam_(?:context_create|socket_client)|ipc?slashes|rev)|implexml_load_(?:string|file)|ocket_c(?:onnect|reate)|h(?:ow_sourc|a1_fil)e|pl_autoload_register|ystem)|p(?:r(?:eg_(?:replace(?:_callback(?:_array)?)?|match(?:_all)?|split)|oc_(?:(?:terminat|clos|nic)e|get_status|open)|int_r)|o(?:six_(?:get(?:(?:e[gu]|g)id|login|pwnam)|mk(?:fifo|nod)|ttyname|kill)|pen)|hp(?:_(?:strip_whitespac|unam)e|version|info)|g_(?:(?:execut|prepar)e|connect|query)|a(?:rse_(?:ini_file|str)|ssthru)|utenv)|r(?:unkit_(?:function_(?:re(?:defin|nam)e|copy|add)|method_(?:re(?:defin|nam)e|copy|add)|constant_(?:redefine|add))|e(?:(?:gister_(?:shutdown|tick)|name)_function|ad(?:(?:gz)?file|_exif_data|dir))|awurl(?:de|en)code)|i(?:mage(?:createfrom(?:(?:jpe|pn)g|x[bp]m|wbmp|gif)|(?:jpe|pn)g|g(?:d2?|if)|2?wbmp|xbm)|s_(?:(?:(?:execut|write?|read)ab|fi)le|dir)|ni_(?:get(?:_all)?|set)|terator_apply|ptcembed)|g(?:et(?:_(?:c(?:urrent_use|fg_va)r|meta_tags)|my(?:[gpu]id|inode)|(?:lastmo|cw)d|imagesize|env)|z(?:(?:(?:defla|wri)t|encod|fil)e|compress|open|read)|lob)|a(?:rray_(?:u(?:intersect(?:_u?assoc)?|diff(?:_u?assoc)?)|intersect_u(?:assoc|key)|diff_u(?:assoc|key)|filter|reduce|map)|ssert(?:_options)?)|h(?:tml(?:specialchars(?:_decode)?|_entity_decode|entities)|(?:ash(?:_(?:update|hmac))?|ighlight)_file|e(?:ader_register_callback|x2bin))|f(?:i(?:le(?:(?:[acm]tim|inod)e|(?:_exist|perm)s|group)?|nfo_open)|tp_(?:nb_(?:ge|pu)|connec|ge|pu)t|(?:unction_exis|pu)ts|write|open)|o(?:b_(?:get_(?:c(?:ontents|lean)|flush)|end_(?:clean|flush)|clean|flush|start)|dbc_(?:result(?:_all)?|exec(?:ute)?|connect)|pendir)|m(?:b_(?:ereg(?:_(?:replace(?:_callback)?|match)|i(?:_replace)?)?|parse_str)|(?:ove_uploaded|d5)_file|ethod_exists|ysql_query|kdir)|e(?:x(?:if_(?:t(?:humbnail|agname)|imagetype|read_data)|ec)|scapeshell(?:arg|cmd)|rror_reporting|val)|c(?:url_(?:file_create|exec|init)|onvert_uuencode|reate_function|hr)|u(?:n(?:serialize|pack)|rl(?:de|en)code|[ak]?sort)|(?:json_(?:de|en)cod|debug_backtrac|tmpfil)e|b(?:(?:son_(?:de|en)|ase64_en)code|zopen)|var_dump)(?:\\s|/\\*.*\\*/|//.*|#.*)*\\(.*\\)",
+            "regex": "\\b(?:s(?:e(?:t(?:_(?:e(?:xception|rror)_handler|magic_quotes_runtime|include_path)|defaultstub)|ssion_s(?:et_save_handler|tart))|qlite_(?:(?:(?:unbuffered|single|array)_)?query|create_(?:aggregate|function)|p?open|exec)|tr(?:eam_(?:context_create|socket_client)|ipc?slashes|rev)|implexml_load_(?:string|file)|ocket_c(?:onnect|reate)|h(?:ow_sourc|a1_fil)e|pl_autoload_register|ystem)|p(?:r(?:eg_(?:replace(?:_callback(?:_array)?)?|match(?:_all)?|split)|oc_(?:(?:terminat|clos|nic)e|get_status|open)|int_r)|o(?:six_(?:get(?:(?:e[gu]|g)id|login|pwnam)|mk(?:fifo|nod)|ttyname|kill)|pen)|hp(?:_(?:strip_whitespac|unam)e|version|info)|g_(?:(?:execut|prepar)e|connect|query)|a(?:rse_(?:ini_file|str)|ssthru)|utenv)|r(?:unkit_(?:function_(?:re(?:defin|nam)e|copy|add)|method_(?:re(?:defin|nam)e|copy|add)|constant_(?:redefine|add))|e(?:(?:gister_(?:shutdown|tick)|name)_function|ad(?:(?:gz)?file|_exif_data|dir))|awurl(?:de|en)code)|i(?:mage(?:createfrom(?:(?:jpe|pn)g|x[bp]m|wbmp|gif)|(?:jpe|pn)g|g(?:d2?|if)|2?wbmp|xbm)|s_(?:(?:(?:execut|write?|read)ab|fi)le|dir)|ni_(?:get(?:_all)?|set)|terator_apply|ptcembed)|g(?:et(?:_(?:c(?:urrent_use|fg_va)r|meta_tags)|my(?:[gpu]id|inode)|(?:lastmo|cw)d|imagesize|env)|z(?:(?:(?:defla|wri)t|encod|fil)e|compress|open|read)|lob)|a(?:rray_(?:u(?:intersect(?:_u?assoc)?|diff(?:_u?assoc)?)|intersect_u(?:assoc|key)|diff_u(?:assoc|key)|filter|reduce|map)|ssert(?:_options)?|tob)|h(?:tml(?:specialchars(?:_decode)?|_entity_decode|entities)|(?:ash(?:_(?:update|hmac))?|ighlight)_file|e(?:ader_register_callback|x2bin))|f(?:i(?:le(?:(?:[acm]tim|inod)e|(?:_exist|perm)s|group)?|nfo_open)|tp_(?:nb_(?:ge|pu)|connec|ge|pu)t|(?:unction_exis|pu)ts|write|open)|o(?:b_(?:get_(?:c(?:ontents|lean)|flush)|end_(?:clean|flush)|clean|flush|start)|dbc_(?:result(?:_all)?|exec(?:ute)?|connect)|pendir)|m(?:b_(?:ereg(?:_(?:replace(?:_callback)?|match)|i(?:_replace)?)?|parse_str)|(?:ove_uploaded|d5)_file|ethod_exists|ysql_query|kdir)|e(?:x(?:if_(?:t(?:humbnail|agname)|imagetype|read_data)|ec)|scapeshell(?:arg|cmd)|rror_reporting|val)|c(?:url_(?:file_create|exec|init)|onvert_uuencode|reate_function|hr)|u(?:n(?:serialize|pack)|rl(?:de|en)code|[ak]?sort)|b(?:(?:son_(?:de|en)|ase64_en)code|zopen|toa)|(?:json_(?:de|en)cod|debug_backtrac|tmpfil)e|var_dump)(?:\\s|/\\*.*\\*/|//.*|#.*|\\\"|')*\\((?:(?:\\s|/\\*.*\\*/|//.*|#.*)*(?:\\$\\w+|[A-Z\\d]\\w*|\\w+\\(.*\\)|\\\\?\"(?:[^\"]|\\\\\"|\"\"|\"\\+\")*\\\\?\"|\\\\?'(?:[^']|''|'\\+')*\\\\?')(?:\\s|/\\*.*\\*/|//.*|#.*)*(?:(?:::|\\.|->)(?:\\s|/\\*.*\\*/|//.*|#.*)*\\w+(?:\\(.*\\))?)?,)*(?:(?:\\s|/\\*.*\\*/|//.*|#.*)*(?:\\$\\w+|[A-Z\\d]\\w*|\\w+\\(.*\\)|\\\\?\"(?:[^\"]|\\\\\"|\"\"|\"\\+\")*\\\\?\"|\\\\?'(?:[^']|''|'\\+')*\\\\?')(?:\\s|/\\*.*\\*/|//.*|#.*)*(?:(?:::|\\.|->)(?:\\s|/\\*.*\\*/|//.*|#.*)*\\w+(?:\\(.*\\))?)?)?\\)",
             "options": {
+              "case_sensitive": true,
               "min_length": 5
             }
           },
@@ -2009,7 +2716,8 @@
       "tags": {
         "type": "php_code_injection",
         "crs_id": "933170",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2067,7 +2775,7 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "(?i:zlib|glob|phar|ssh2|rar|ogg|expect|zip)://",
+            "regex": "(?:(?:bzip|ssh)2|z(?:lib|ip)|(?:ph|r)ar|expect|glob|ogg)://",
             "options": {
               "case_sensitive": true,
               "min_length": 6
@@ -2082,7 +2790,7 @@
     },
     {
       "id": "crs-934-100",
-      "name": "Node.js Injection Attack",
+      "name": "Node.js Injection Attack 1/2",
       "tags": {
         "type": "js_code_injection",
         "crs_id": "934100",
@@ -2105,10 +2813,10 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "(?:(?:_(?:\\$\\$ND_FUNC\\$\\$_|_js_function)|(?:new\\s+Function|\\beval)\\s*\\(|String\\s*\\.\\s*fromCharCode|function\\s*\\(\\s*\\)\\s*{|this\\.constructor)|module\\.exports\\s*=)",
+            "regex": "\\b(?:(?:l(?:(?:utimes|chmod)(?:Sync)?|(?:stat|ink)Sync)|w(?:rite(?:(?:File|v)(?:Sync)?|Sync)|atchFile)|u(?:n(?:watchFile|linkSync)|times(?:Sync)?)|s(?:(?:ymlink|tat)Sync|pawn(?:File|Sync))|ex(?:ec(?:File(?:Sync)?|Sync)|istsSync)|a(?:ppendFile|ccess)(?:Sync)?|(?:Caveat|Inode)s|open(?:dir)?Sync|new\\s+Function|Availability|\\beval)\\s*\\(|m(?:ain(?:Module\\s*(?:\\W*\\s*(?:constructor|require)|\\[)|\\s*(?:\\W*\\s*(?:constructor|require)|\\[))|kd(?:temp(?:Sync)?|irSync)\\s*\\(|odule\\.exports\\s*=)|c(?:(?:(?:h(?:mod|own)|lose)Sync|reate(?:Write|Read)Stream|p(?:Sync)?)\\s*\\(|o(?:nstructor\\s*(?:\\W*\\s*_load|\\[)|pyFile(?:Sync)?\\s*\\())|f(?:(?:(?:s(?:(?:yncS)?|tatS)|datas(?:yncS)?)ync|ch(?:mod|own)(?:Sync)?)\\s*\\(|u(?:nction\\s*\\(\\s*\\)\\s*{|times(?:Sync)?\\s*\\())|r(?:e(?:(?:ad(?:(?:File|link|dir)?Sync|v(?:Sync)?)|nameSync)\\s*\\(|quire\\s*(?:\\W*\\s*main|\\[))|m(?:Sync)?\\s*\\()|process\\s*(?:\\W*\\s*(?:mainModule|binding)|\\[)|t(?:his\\.constructor|runcateSync\\s*\\()|_(?:\\$\\$ND_FUNC\\$\\$_|_js_function)|global\\s*(?:\\W*\\s*process|\\[)|String\\s*\\.\\s*fromCharCode|binding\\s*\\[)",
             "options": {
               "case_sensitive": true,
-              "min_length": 5
+              "min_length": 3
             }
           },
           "operator": "match_regex"
@@ -2117,29 +2825,18 @@
       "transformers": []
     },
     {
-      "id": "crs-941-100",
-      "name": "XSS Attack Detected via libinjection",
+      "id": "crs-934-101",
+      "name": "Node.js Injection Attack 2/2",
       "tags": {
-        "type": "xss",
-        "crs_id": "941100",
-        "category": "attack_attempt"
+        "type": "js_code_injection",
+        "crs_id": "934101",
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
           "parameters": {
             "inputs": [
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "user-agent"
-                ]
-              },
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "referer"
-                ]
-              },
               {
                 "address": "server.request.query"
               },
@@ -2152,14 +2849,17 @@
               {
                 "address": "grpc.server.request.message"
               }
-            ]
+            ],
+            "regex": "\\b(?:w(?:atch|rite)|(?:spaw|ope)n|exists|close|fork|read)\\s*\\(",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 5
+            }
           },
-          "operator": "is_xss"
+          "operator": "match_regex"
         }
       ],
-      "transformers": [
-        "removeNulls"
-      ]
+      "transformers": []
     },
     {
       "id": "crs-941-110",
@@ -2167,7 +2867,8 @@
       "tags": {
         "type": "xss",
         "crs_id": "941110",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2207,7 +2908,8 @@
         }
       ],
       "transformers": [
-        "removeNulls"
+        "removeNulls",
+        "urlDecodeUni"
       ]
     },
     {
@@ -2216,7 +2918,8 @@
       "tags": {
         "type": "xss",
         "crs_id": "941120",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2247,7 +2950,7 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "[\\s\\\"'`;\\/0-9=\\x0B\\x09\\x0C\\x3B\\x2C\\x28\\x3B]on[a-zA-Z]{3,25}[\\s\\x0B\\x09\\x0C\\x3B\\x2C\\x28\\x3B]*?=[^=]",
+            "regex": "[\\s\\\"'`;\\/0-9=\\x0B\\x09\\x0C\\x3B\\x2C\\x28\\x3B]on(?:d(?:r(?:ag(?:en(?:ter|d)|leave|start|over)?|op)|urationchange|blclick)|s(?:e(?:ek(?:ing|ed)|arch|lect)|u(?:spend|bmit)|talled|croll|how)|m(?:ouse(?:(?:lea|mo)ve|o(?:ver|ut)|enter|down|up)|essage)|p(?:a(?:ge(?:hide|show)|(?:st|us)e)|lay(?:ing)?|rogress)|c(?:anplay(?:through)?|o(?:ntextmenu|py)|hange|lick|ut)|a(?:nimation(?:iteration|start|end)|(?:fterprin|bor)t)|t(?:o(?:uch(?:cancel|start|move|end)|ggle)|imeupdate)|f(?:ullscreen(?:change|error)|ocus(?:out|in)?)|(?:(?:volume|hash)chang|o(?:ff|n)lin)e|b(?:efore(?:unload|print)|lur)|load(?:ed(?:meta)?data|start)?|r(?:es(?:ize|et)|atechange)|key(?:press|down|up)|w(?:aiting|heel)|in(?:valid|put)|e(?:nded|rror)|unload)[\\s\\x0B\\x09\\x0C\\x3B\\x2C\\x28\\x3B]*?=[^=]",
             "options": {
               "min_length": 8
             }
@@ -2256,7 +2959,8 @@
         }
       ],
       "transformers": [
-        "removeNulls"
+        "removeNulls",
+        "urlDecodeUni"
       ]
     },
     {
@@ -2265,7 +2969,8 @@
       "tags": {
         "type": "xss",
         "crs_id": "941140",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2305,7 +3010,56 @@
         }
       ],
       "transformers": [
-        "removeNulls"
+        "removeNulls",
+        "urlDecodeUni"
+      ]
+    },
+    {
+      "id": "crs-941-170",
+      "name": "NoScript XSS InjectionChecker: Attribute Injection",
+      "tags": {
+        "type": "xss",
+        "crs_id": "941170",
+        "category": "attack_attempt",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "referer"
+                ]
+              },
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              }
+            ],
+            "regex": "(?:\\W|^)(?:javascript:(?:[\\s\\S]+[=\\x5c\\(\\[\\.<]|[\\s\\S]*?(?:\\bname\\b|\\x5c[ux]\\d)))|@\\W*?i\\W*?m\\W*?p\\W*?o\\W*?r\\W*?t\\W*?(?:/\\*[\\s\\S]*?)?(?:[\\\"']|\\W*?u\\W*?r\\W*?l[\\s\\S]*?\\()|[^-]*?-\\W*?m\\W*?o\\W*?z\\W*?-\\W*?b\\W*?i\\W*?n\\W*?d\\W*?i\\W*?n\\W*?g[^:]*?:\\W*?u\\W*?r\\W*?l[\\s\\S]*?\\(",
+            "options": {
+              "min_length": 6
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "removeNulls",
+        "urlDecodeUni"
       ]
     },
     {
@@ -2339,8 +3093,7 @@
               ".parentnode",
               ".innerhtml",
               "window.location",
-              "-moz-binding",
-              "<![cdata["
+              "-moz-binding"
             ]
           },
           "operator": "phrase_match"
@@ -2357,7 +3110,8 @@
       "tags": {
         "type": "xss",
         "crs_id": "941200",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2395,7 +3149,8 @@
       "tags": {
         "type": "xss",
         "crs_id": "941210",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2414,7 +3169,7 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "(?i:(?:j|&#x?0*(?:74|4A|106|6A);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:a|&#x?0*(?:65|41|97|61);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:v|&#x?0*(?:86|56|118|76);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:a|&#x?0*(?:65|41|97|61);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:s|&#x?0*(?:83|53|115|73);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:c|&#x?0*(?:67|43|99|63);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:r|&#x?0*(?:82|52|114|72);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:i|&#x?0*(?:73|49|105|69);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:p|&#x?0*(?:80|50|112|70);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:t|&#x?0*(?:84|54|116|74);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?::|&(?:#x?0*(?:58|3A);?|colon;)).)",
+            "regex": "(?i:(?:j|&#x?0*(?:74|4A|106|6A);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:a|&#x?0*(?:65|41|97|61);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:v|&#x?0*(?:86|56|118|76);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:a|&#x?0*(?:65|41|97|61);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:s|&#x?0*(?:83|53|115|73);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:c|&#x?0*(?:67|43|99|63);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:r|&#x?0*(?:82|52|114|72);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:i|&#x?0*(?:73|49|105|69);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:p|&#x?0*(?:80|50|112|70);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:t|&#x?0*(?:84|54|116|74);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?::|&(?:#x?0*(?:58|3A);?|colon;)).)",
             "options": {
               "case_sensitive": true,
               "min_length": 12
@@ -2433,7 +3188,8 @@
       "tags": {
         "type": "xss",
         "crs_id": "941220",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2471,7 +3227,8 @@
       "tags": {
         "type": "xss",
         "crs_id": "941230",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2508,7 +3265,8 @@
       "tags": {
         "type": "xss",
         "crs_id": "941240",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2584,7 +3342,8 @@
       "tags": {
         "type": "xss",
         "crs_id": "941280",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2621,7 +3380,8 @@
       "tags": {
         "type": "xss",
         "crs_id": "941290",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2658,7 +3418,8 @@
       "tags": {
         "type": "xss",
         "crs_id": "941300",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2695,7 +3456,8 @@
       "tags": {
         "type": "xss",
         "crs_id": "941350",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2762,6 +3524,43 @@
       "transformers": []
     },
     {
+      "id": "crs-941-390",
+      "name": "Javascript method detected",
+      "tags": {
+        "type": "xss",
+        "crs_id": "941390",
+        "category": "attack_attempt",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "\\b(?i:eval|settimeout|setinterval|new\\s+Function|alert|prompt)[\\s+]*\\([^\\)]",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 5
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "crs-942-100",
       "name": "SQL Injection Attack Detected via libinjection",
       "tags": {
@@ -2800,7 +3599,8 @@
       "tags": {
         "type": "sql_injection",
         "crs_id": "942160",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2831,47 +3631,13 @@
       "transformers": []
     },
     {
-      "id": "crs-942-190",
-      "name": "Detects MSSQL code execution and information gathering attempts",
-      "tags": {
-        "type": "sql_injection",
-        "crs_id": "942190",
-        "category": "attack_attempt"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.query"
-              },
-              {
-                "address": "server.request.body"
-              },
-              {
-                "address": "server.request.path_params"
-              },
-              {
-                "address": "grpc.server.request.message"
-              }
-            ],
-            "regex": "(?:\\b(?:(?:c(?:onnection_id|urrent_user)|database)\\s*?\\([^\\)]*?|u(?:nion(?:[\\w(?:\\s]*?select| select @)|ser\\s*?\\([^\\)]*?)|s(?:chema\\s*?\\([^\\)]*?|elect.*?\\w?user\\()|into[\\s+]+(?:dump|out)file\\s*?[\\\"'`]|from\\W+information_schema\\W|exec(?:ute)?\\s+master\\.)|[\\\"'`](?:;?\\s*?(?:union\\b\\s*?(?:(?:distin|sele)ct|all)|having|select)\\b\\s*?[^\\s]|\\s*?!\\s*?[\\\"'`\\w])|\\s*?exec(?:ute)?.*?\\Wxp_cmdshell|\\Wiif\\s*?\\()",
-            "options": {
-              "min_length": 3
-            }
-          },
-          "operator": "match_regex"
-        }
-      ],
-      "transformers": []
-    },
-    {
       "id": "crs-942-240",
       "name": "Detects MySQL charset switch and MSSQL DoS attempts",
       "tags": {
         "type": "sql_injection",
         "crs_id": "942240",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -2977,7 +3743,8 @@
       "tags": {
         "type": "sql_injection",
         "crs_id": "942280",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -3031,10 +3798,10 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "(?i:(?:\\[\\$(?:ne|eq|lte?|gte?|n?in|mod|all|size|exists|type|slice|x?or|div|like|between|and)\\]))",
+            "regex": "(?i:(?:\\[?\\$(?:(?:s(?:lic|iz)|wher)e|e(?:lemMatch|xists|q)|n(?:o[rt]|in?|e)|l(?:ike|te?)|t(?:ext|ype)|a(?:ll|nd)|jsonSchema|between|regex|x?or|div|mod)\\]?)\\b)",
             "options": {
               "case_sensitive": true,
-              "min_length": 5
+              "min_length": 3
             }
           },
           "operator": "match_regex"
@@ -3069,7 +3836,7 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "(?:^[\\W\\d]+\\s*?(?:alter\\s*(?:a(?:(?:pplication\\s*rol|ggregat)e|s(?:ymmetric\\s*ke|sembl)y|u(?:thorization|dit)|vailability\\s*group)|c(?:r(?:yptographic\\s*provider|edential)|o(?:l(?:latio|um)|nversio)n|ertificate|luster)|s(?:e(?:rv(?:ice|er)|curity|quence|ssion|arch)|y(?:mmetric\\s*key|nonym)|togroup|chema)|m(?:a(?:s(?:ter\\s*key|k)|terialized)|e(?:ssage\\s*type|thod)|odule)|l(?:o(?:g(?:file\\s*group|in)|ckdown)|a(?:ngua|r)ge|ibrary)|t(?:(?:abl(?:espac)?|yp)e|r(?:igger|usted)|hreshold|ext)|p(?:a(?:rtition|ckage)|ro(?:cedur|fil)e|ermission)|d(?:i(?:mension|skgroup)|atabase|efault|omain)|r(?:o(?:l(?:lback|e)|ute)|e(?:sourc|mot)e)|f(?:u(?:lltext|nction)|lashback|oreign)|e(?:xte(?:nsion|rnal)|(?:ndpoi|ve)nt)|in(?:dex(?:type)?|memory|stance)|b(?:roker\\s*priority|ufferpool)|x(?:ml\\s*schema|srobject)|w(?:ork(?:load)?|rapper)|hi(?:erarchy|stogram)|o(?:perator|utline)|(?:nicknam|queu)e|us(?:age|er)|group|java|view)\\b|(?:(?:(?:trunc|cre)at|renam)e|d(?:e(?:lete|sc)|rop)|(?:inser|selec)t|load)\\s+\\w+|u(?:nion\\s*(?:(?:distin|sele)ct|all)\\b|pdate\\s+\\w+))|\\b(?:(?:(?:(?:trunc|cre|upd)at|renam)e|(?:inser|selec)t|de(?:lete|sc)|alter|load)\\s+(?:group_concat|load_file|char)\\b\\s*\\(?|end\\s*?\\);)|[\\\"'`\\w]\\s+as\\b\\s*[\\\"'`\\w]+\\s*\\bfrom|[\\s(?:]load_file\\s*?\\(|[\\\"'`]\\s+regexp\\W)",
+            "regex": "(?:^[\\W\\d]+\\s*?(?:alter\\s*(?:a(?:(?:pplication\\s*rol|ggregat)e|s(?:ymmetric\\s*ke|sembl)y|u(?:thorization|dit)|vailability\\s*group)|c(?:r(?:yptographic\\s*provider|edential)|o(?:l(?:latio|um)|nversio)n|ertificate|luster)|s(?:e(?:rv(?:ice|er)|curity|quence|ssion|arch)|y(?:mmetric\\s*key|nonym)|togroup|chema)|m(?:a(?:s(?:ter\\s*key|k)|terialized)|e(?:ssage\\s*type|thod)|odule)|l(?:o(?:g(?:file\\s*group|in)|ckdown)|a(?:ngua|r)ge|ibrary)|t(?:(?:abl(?:espac)?|yp)e|r(?:igger|usted)|hreshold|ext)|p(?:a(?:rtition|ckage)|ro(?:cedur|fil)e|ermission)|d(?:i(?:mension|skgroup)|atabase|efault|omain)|r(?:o(?:l(?:lback|e)|ute)|e(?:sourc|mot)e)|f(?:u(?:lltext|nction)|lashback|oreign)|e(?:xte(?:nsion|rnal)|(?:ndpoi|ve)nt)|in(?:dex(?:type)?|memory|stance)|b(?:roker\\s*priority|ufferpool)|x(?:ml\\s*schema|srobject)|w(?:ork(?:load)?|rapper)|hi(?:erarchy|stogram)|o(?:perator|utline)|(?:nicknam|queu)e|us(?:age|er)|group|java|view)|union\\s*(?:(?:distin|sele)ct|all))\\b|\\b(?:(?:(?:trunc|cre|upd)at|renam)e|(?:inser|selec)t|de(?:lete|sc)|alter|load)\\s+(?:group_concat|load_file|char)\\b\\s*\\(?|[\\s(]load_file\\s*?\\(|[\\\"'`]\\s+regexp\\W)",
             "options": {
               "min_length": 5
             }
@@ -3121,7 +3888,8 @@
       "tags": {
         "type": "http_protocol_violation",
         "crs_id": "943100",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -3154,7 +3922,8 @@
       "tags": {
         "type": "java_code_injection",
         "crs_id": "944100",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -3317,9 +4086,7 @@
               "java.lang.number",
               "java.lang.object",
               "java.lang.process",
-              "java.lang.processbuilder",
               "java.lang.reflect",
-              "java.lang.runtime",
               "java.lang.string",
               "java.lang.stringbuilder",
               "java.lang.system",
@@ -3337,6 +4104,46 @@
       "transformers": [
         "lowercase"
       ]
+    },
+    {
+      "id": "crs-944-260",
+      "name": "Remote Command Execution: Malicious class-loading payload",
+      "tags": {
+        "type": "java_code_injection",
+        "crs_id": "944260",
+        "category": "attack_attempt",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "(?:class\\.module\\.classLoader\\.resources\\.context\\.parent\\.pipeline|springframework\\.context\\.support\\.FileSystemXmlApplicationContext)",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 58
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
     },
     {
       "id": "dog-000-001",
@@ -3384,6 +4191,9 @@
           "parameters": {
             "inputs": [
               {
+                "address": "server.request.uri.raw"
+              },
+              {
                 "address": "server.request.query"
               },
               {
@@ -3396,7 +4206,7 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "[#%$]{[^}]+[^\\w\\s][^}]+}",
+            "regex": "[#%$]{(?:[^}]+[^\\w\\s}\\-_][^}]+|\\d+-\\d+)}",
             "options": {
               "case_sensitive": true
             }
@@ -3410,7 +4220,8 @@
       "name": "OGNL - Detect OGNL exploitation primitives",
       "tags": {
         "type": "java_code_injection",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -3447,7 +4258,8 @@
       "name": "Spring4Shell - Attempts to exploit the Spring4shell vulnerability",
       "tags": {
         "type": "exploit_detection",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -3470,11 +4282,468 @@
       ]
     },
     {
+      "id": "dog-000-005",
+      "name": "Node.js: Prototype pollution through __proto__",
+      "tags": {
+        "type": "js_code_injection",
+        "category": "attack_attempt",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              }
+            ],
+            "regex": "^__proto__$"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "keys_only"
+      ]
+    },
+    {
+      "id": "dog-000-006",
+      "name": "Node.js: Prototype pollution through constructor.prototype",
+      "tags": {
+        "type": "js_code_injection",
+        "category": "attack_attempt",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              }
+            ],
+            "regex": "^constructor$"
+          },
+          "operator": "match_regex"
+        },
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              }
+            ],
+            "regex": "^prototype$"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "keys_only"
+      ]
+    },
+    {
+      "id": "dog-000-007",
+      "name": "Server side template injection: Velocity & Freemarker",
+      "tags": {
+        "type": "java_code_injection",
+        "category": "attack_attempt",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "#(?:set|foreach|macro|parse|if)\\(.*\\)|<#assign.*>"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-913-001",
+      "name": "BurpCollaborator OOB domain",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "BurpCollaborator",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "\\b(?:burpcollaborator\\.net|oastify\\.com)\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-913-002",
+      "name": "Qualys OOB domain",
+      "tags": {
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "Qualys",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "\\bqualysperiscope\\.com\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-913-003",
+      "name": "Probely OOB domain",
+      "tags": {
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "Probely",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "\\bprbly\\.win\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-913-004",
+      "name": "Known malicious out-of-band interaction domain",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "\\b(?:webhook\\.site|\\.canarytokens\\.com|vii\\.one|act1on3\\.ru|gdsburp\\.com)\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-913-005",
+      "name": "Known suspicious out-of-band interaction domain",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "\\b(?:\\.ngrok\\.io|requestbin\\.com|requestbin\\.net)\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-913-006",
+      "name": "Rapid7 OOB domain",
+      "tags": {
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "Rapid7",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "\\bappspidered\\.rapid7\\."
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-913-007",
+      "name": "Interact.sh OOB domain",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "interact.sh",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "\\b(?:interact\\.sh|oast\\.(?:pro|live|site|online|fun|me))\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-931-001",
+      "name": "RFI: URL Payload to well known RFI target",
+      "tags": {
+        "type": "rfi",
+        "category": "attack_attempt",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              }
+            ],
+            "regex": "^(?i:file|ftps?|https?).*/rfiinc\\.txt\\?+$",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 17
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-934-001",
+      "name": "XXE - XML file loads external entity",
+      "tags": {
+        "type": "xxe",
+        "category": "attack_attempt",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "(?:<\\?xml[^>]*>.*)<!ENTITY[^>]+SYSTEM\\s+[^>]+>",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 24
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-942-001",
+      "name": "Blind XSS callback domains",
+      "tags": {
+        "type": "xss",
+        "category": "attack_attempt",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "https?:\\/\\/(?:.*\\.)?(?:bxss\\.in|xss\\.ht|js\\.rip)",
+            "options": {
+              "case_sensitive": false
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "nfd-000-001",
       "name": "Detect common directory discovery scans",
       "tags": {
         "type": "security_scanner",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -3708,7 +4977,8 @@
       "name": "Detect failed attempt to fetch readme files",
       "tags": {
         "type": "security_scanner",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -3747,7 +5017,8 @@
       "name": "Detect failed attempt to fetch Java EE resource files",
       "tags": {
         "type": "security_scanner",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -3786,7 +5057,8 @@
       "name": "Detect failed attempt to fetch code files",
       "tags": {
         "type": "security_scanner",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -3825,7 +5097,8 @@
       "name": "Detect failed attempt to fetch source code archives",
       "tags": {
         "type": "security_scanner",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -3864,7 +5137,8 @@
       "name": "Detect failed attempt to fetch sensitive files",
       "tags": {
         "type": "security_scanner",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -3903,7 +5177,8 @@
       "name": "Detect failed attempt to fetch archives",
       "tags": {
         "type": "security_scanner",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -3942,7 +5217,8 @@
       "name": "Detect failed attempt to trigger incorrect application behavior",
       "tags": {
         "type": "security_scanner",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -3981,7 +5257,8 @@
       "name": "Detect failed attempt to leak the structure of the application",
       "tags": {
         "type": "security_scanner",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4020,7 +5297,8 @@
       "name": "SSRF: Try to access the credential manager of the main cloud services",
       "tags": {
         "type": "ssrf",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4088,41 +5366,12 @@
       ]
     },
     {
-      "id": "sqr-000-007",
-      "name": "NoSQL: Detect common exploitation strategy",
-      "tags": {
-        "type": "nosql_injection",
-        "category": "attack_attempt"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.query"
-              },
-              {
-                "address": "server.request.body"
-              },
-              {
-                "address": "server.request.path_params"
-              }
-            ],
-            "regex": "^\\$(eq|ne|(l|g)te?|n?in|not|(n|x|)or|and|regex|where|expr|exists)$"
-          },
-          "operator": "match_regex"
-        }
-      ],
-      "transformers": [
-        "keys_only"
-      ]
-    },
-    {
       "id": "sqr-000-008",
       "name": "Windows: Detect attempts to exfiltrate .ini files",
       "tags": {
         "type": "command_injection",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4156,7 +5405,8 @@
       "name": "Linux: Detect attempts to exfiltrate passwd files",
       "tags": {
         "type": "command_injection",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4190,7 +5440,8 @@
       "name": "Windows: Detect attempts to timeout a shell",
       "tags": {
         "type": "command_injection",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4224,7 +5475,8 @@
       "name": "SSRF: Try to access internal OMI service (CVE-2021-38647)",
       "tags": {
         "type": "ssrf",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4258,7 +5510,8 @@
       "name": "SSRF: Detect SSRF attempt on internal service",
       "tags": {
         "type": "ssrf",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "0"
       },
       "conditions": [
         {
@@ -4277,7 +5530,7 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "^(jar:)?(http|https):\\/\\/([0-9oq]{1,5}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|[0-9]{1,10}|localhost)(:[0-9]{1,5})?(\\/.*|)$"
+            "regex": "^(jar:)?(http|https):\\/\\/([0-9oq]{1,5}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|[0-9]{1,10})(:[0-9]{1,5})?(\\/[^:@]*)?$"
           },
           "operator": "match_regex"
         }
@@ -4291,7 +5544,8 @@
       "name": "SSRF: Detect SSRF attempts using IPv6 or octal/hexdecimal obfuscation",
       "tags": {
         "type": "ssrf",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "0"
       },
       "conditions": [
         {
@@ -4310,7 +5564,7 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "^(jar:)?(http|https):\\/\\/((\\[)?[:0-9a-f\\.x]{2,}(\\])?)(:[0-9]{1,5})?(\\/.*)?$"
+            "regex": "^(jar:)?(http|https):\\/\\/((\\[)?[:0-9a-f\\.x]{2,}(\\])?)(:[0-9]{1,5})?(\\/[^:@]*)?$"
           },
           "operator": "match_regex"
         }
@@ -4324,7 +5578,8 @@
       "name": "SSRF: Detect SSRF domain redirection bypass",
       "tags": {
         "type": "ssrf",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4346,21 +5601,20 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "^(http|https):\\/\\/(.*burpcollaborator\\.net|localtest\\.me|mail\\.ebc\\.apple\\.com|bugbounty\\.dod\\.network|.*\\.[nx]ip\\.io)"
+            "regex": "(http|https):\\/\\/(?:.*\\.)?(?:burpcollaborator\\.net|localtest\\.me|mail\\.ebc\\.apple\\.com|bugbounty\\.dod\\.network|.*\\.[nx]ip\\.io|oastify\\.com|oast\\.(?:pro|live|site|online|fun|me)|sslip\\.io|requestbin\\.com|requestbin\\.net|hookbin\\.com|webhook\\.site|canarytokens\\.com|interact\\.sh|ngrok\\.io|bugbounty\\.click|prbly\\.win|qualysperiscope\\.com|vii.one|act1on3.ru)"
           },
           "operator": "match_regex"
         }
       ],
-      "transformers": [
-        "lowercase"
-      ]
+      "transformers": []
     },
     {
       "id": "sqr-000-015",
       "name": "SSRF: Detect SSRF attempt using non HTTP protocol",
       "tags": {
         "type": "ssrf",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "0"
       },
       "conditions": [
         {
@@ -4396,7 +5650,8 @@
       "name": "Log4shell: Attempt to exploit log4j CVE-2021-44228",
       "tags": {
         "type": "exploit_detection",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4426,14 +5681,18 @@
           "operator": "match_regex"
         }
       ],
-      "transformers": []
+      "transformers": [
+        "unicode_normalize"
+      ]
     },
     {
       "id": "ua0-600-0xx",
       "name": "Joomla exploitation tool",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Joomla exploitation tool",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4457,8 +5716,10 @@
       "id": "ua0-600-10x",
       "name": "Nessus",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Nessus",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4482,8 +5743,10 @@
       "id": "ua0-600-12x",
       "name": "Arachni",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Arachni",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4507,8 +5770,10 @@
       "id": "ua0-600-13x",
       "name": "Jorgee",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Jorgee",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4532,8 +5797,10 @@
       "id": "ua0-600-14x",
       "name": "Probely",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "Probely",
+        "confidence": "0"
       },
       "conditions": [
         {
@@ -4557,8 +5824,10 @@
       "id": "ua0-600-15x",
       "name": "Metis",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Metis",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4582,8 +5851,10 @@
       "id": "ua0-600-16x",
       "name": "SQL power injector",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "SQLPowerInjector",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4607,8 +5878,10 @@
       "id": "ua0-600-18x",
       "name": "N-Stealth",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "N-Stealth",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4632,8 +5905,10 @@
       "id": "ua0-600-19x",
       "name": "Brutus",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Brutus",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4658,7 +5933,8 @@
       "name": "Shellshock exploitation tool",
       "tags": {
         "type": "security_scanner",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4682,8 +5958,10 @@
       "id": "ua0-600-20x",
       "name": "Netsparker",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "Netsparker",
+        "confidence": "0"
       },
       "conditions": [
         {
@@ -4696,7 +5974,7 @@
                 ]
               }
             ],
-            "regex": "(?i)(<script>netsparker\\(0x0|ns:netsparker.*=vuln)"
+            "regex": "\\bnetsparker\\b"
           },
           "operator": "match_regex"
         }
@@ -4707,8 +5985,10 @@
       "id": "ua0-600-22x",
       "name": "JAASCois",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "JAASCois",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4729,61 +6009,13 @@
       "transformers": []
     },
     {
-      "id": "ua0-600-23x",
-      "name": "PMAFind",
-      "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "user-agent"
-                ]
-              }
-            ],
-            "regex": "(?i)\\bpmafind\\b"
-          },
-          "operator": "match_regex"
-        }
-      ],
-      "transformers": []
-    },
-    {
-      "id": "ua0-600-25x",
-      "name": "Webtrends",
-      "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "user-agent"
-                ]
-              }
-            ],
-            "regex": "webtrends security analyzer"
-          },
-          "operator": "match_regex"
-        }
-      ],
-      "transformers": []
-    },
-    {
       "id": "ua0-600-26x",
       "name": "Nsauditor",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Nsauditor",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4807,8 +6039,10 @@
       "id": "ua0-600-27x",
       "name": "Paros",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Paros",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4832,8 +6066,10 @@
       "id": "ua0-600-28x",
       "name": "DirBuster",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "DirBuster",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4857,8 +6093,10 @@
       "id": "ua0-600-29x",
       "name": "Pangolin",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Pangolin",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4882,8 +6120,10 @@
       "id": "ua0-600-2xx",
       "name": "Qualys",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "Qualys",
+        "confidence": "0"
       },
       "conditions": [
         {
@@ -4907,8 +6147,10 @@
       "id": "ua0-600-30x",
       "name": "SQLNinja",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "SQLNinja",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4932,8 +6174,10 @@
       "id": "ua0-600-31x",
       "name": "Nikto",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Nikto",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -4954,36 +6198,13 @@
       "transformers": []
     },
     {
-      "id": "ua0-600-32x",
-      "name": "WebInspect",
-      "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "user-agent"
-                ]
-              }
-            ],
-            "regex": "(?i)\\bwebinspect\\b"
-          },
-          "operator": "match_regex"
-        }
-      ],
-      "transformers": []
-    },
-    {
       "id": "ua0-600-33x",
       "name": "BlackWidow",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "BlackWidow",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5007,8 +6228,10 @@
       "id": "ua0-600-34x",
       "name": "Grendel-Scan",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Grendel-Scan",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5032,8 +6255,10 @@
       "id": "ua0-600-35x",
       "name": "Havij",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Havij",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5057,8 +6282,10 @@
       "id": "ua0-600-36x",
       "name": "w3af",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "w3af",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5082,8 +6309,10 @@
       "id": "ua0-600-37x",
       "name": "Nmap",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Nmap",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5107,8 +6336,10 @@
       "id": "ua0-600-39x",
       "name": "Nessus Scripted",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Nessus",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5121,7 +6352,7 @@
                 ]
               }
             ],
-            "regex": "(?i)^'?[a-z0-9]+\\.nasl'?$"
+            "regex": "(?i)^'?[a-z0-9_]+\\.nasl'?$"
           },
           "operator": "match_regex"
         }
@@ -5132,8 +6363,10 @@
       "id": "ua0-600-3xx",
       "name": "Evil Scanner",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "EvilScanner",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5157,8 +6390,10 @@
       "id": "ua0-600-40x",
       "name": "WebFuck",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "WebFuck",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5182,8 +6417,10 @@
       "id": "ua0-600-42x",
       "name": "OpenVAS",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "OpenVAS",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5207,8 +6444,10 @@
       "id": "ua0-600-43x",
       "name": "Spider-Pig",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Spider-Pig",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5232,8 +6471,10 @@
       "id": "ua0-600-44x",
       "name": "Zgrab",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Zgrab",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5257,8 +6498,10 @@
       "id": "ua0-600-45x",
       "name": "Zmeu",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Zmeu",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5279,36 +6522,13 @@
       "transformers": []
     },
     {
-      "id": "ua0-600-46x",
-      "name": "Crowdstrike",
-      "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.headers.no_cookies",
-                "key_path": [
-                  "user-agent"
-                ]
-              }
-            ],
-            "regex": "(?i)\\bcrowdstrike\\b"
-          },
-          "operator": "match_regex"
-        }
-      ],
-      "transformers": []
-    },
-    {
       "id": "ua0-600-47x",
       "name": "GoogleSecurityScanner",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "GoogleSecurityScanner",
+        "confidence": "0"
       },
       "conditions": [
         {
@@ -5332,8 +6552,10 @@
       "id": "ua0-600-48x",
       "name": "Commix",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Commix",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5357,8 +6579,10 @@
       "id": "ua0-600-49x",
       "name": "Gobuster",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Gobuster",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5382,8 +6606,10 @@
       "id": "ua0-600-4xx",
       "name": "CGIchk",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "CGIchk",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5407,8 +6633,10 @@
       "id": "ua0-600-51x",
       "name": "FFUF",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "FFUF",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5432,8 +6660,10 @@
       "id": "ua0-600-52x",
       "name": "Nuclei",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Nuclei",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5457,8 +6687,10 @@
       "id": "ua0-600-53x",
       "name": "Tsunami",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Tsunami",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5482,8 +6714,10 @@
       "id": "ua0-600-54x",
       "name": "Nimbostratus",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Nimbostratus",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5508,7 +6742,9 @@
       "name": "Datadog test scanner: user-agent",
       "tags": {
         "type": "security_scanner",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "tool_name": "Datadog Canary Test",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5527,7 +6763,124 @@
                 ]
               }
             ],
-            "regex": "^dd-test-scanner-log$"
+            "regex": "^dd-test-scanner-log(?:$|/|\\s)"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "ua0-600-56x",
+      "name": "Datadog test scanner - blocking version: user-agent",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Datadog Canary Test",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              },
+              {
+                "address": "grpc.server.request.metadata",
+                "key_path": [
+                  "dd-canary"
+                ]
+              }
+            ],
+            "regex": "^dd-test-scanner-log-block(?:$|/|\\s)"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [],
+      "on_match": [
+        "block"
+      ]
+    },
+    {
+      "id": "ua0-600-57x",
+      "name": "AlertLogic",
+      "tags": {
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "AlertLogic",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bAlertLogic-MDR-"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "ua0-600-58x",
+      "name": "wfuzz",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "wfuzz",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bwfuzz\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "ua0-600-59x",
+      "name": "Detectify",
+      "tags": {
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "Detectify",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "\\bdetectify\\b"
           },
           "operator": "match_regex"
         }
@@ -5538,8 +6891,10 @@
       "id": "ua0-600-5xx",
       "name": "Blind SQL Injection Brute Forcer",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "BSQLBF",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5560,11 +6915,93 @@
       "transformers": []
     },
     {
+      "id": "ua0-600-60x",
+      "name": "masscan",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "masscan",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "^masscan/"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "ua0-600-61x",
+      "name": "WPScan",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "WPScan",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "^wpscan\\b"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "ua0-600-62x",
+      "name": "Aon pentesting services",
+      "tags": {
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "Aon",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "^Aon/"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "ua0-600-6xx",
-      "name": "Suspicious user agent",
+      "name": "Stealthy scanner",
       "tags": {
         "type": "security_scanner",
-        "category": "attack_attempt"
+        "category": "attack_attempt",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5588,8 +7025,10 @@
       "id": "ua0-600-7xx",
       "name": "SQLmap",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "SQLmap",
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5613,8 +7052,10 @@
       "id": "ua0-600-9xx",
       "name": "Skipfish",
       "tags": {
-        "type": "security_scanner",
-        "category": "attack_attempt"
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "tool_name": "Skipfish",
+        "confidence": "1"
       },
       "conditions": [
         {

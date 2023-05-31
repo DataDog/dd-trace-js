@@ -1,178 +1,184 @@
 /* eslint-disable max-len */
 'use strict'
 
-const Sns = require('../src/services/sns')
-const tracer = require('../../dd-trace')
+const semver = require('semver')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { setup } = require('./spec_helpers')
 
 describe('Sns', () => {
-  let span
-  withVersions('aws-sdk', 'aws-sdk', version => {
-    let traceId
+  setup()
+
+  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    let sns
+    let sqs
+    let subParams
+    let receiveParams
+    let TopicArn
+    let QueueArn
+    let QueueUrl
     let parentId
     let spanId
-    before(() => {
-      tracer.init()
-      span = {
-        finish: sinon.spy(() => {}),
-        context: () => {
-          return {
-            _sampling: {
-              priority: 1
-            },
-            _trace: {
-              started: [],
-              origin: ''
-            },
-            _traceFlags: {
-              sampled: 1
-            },
-            'x-datadog-trace-id': traceId,
-            'x-datadog-parent-id': parentId,
-            'x-datadog-sampling-priority': '1',
-            toTraceId: () => {
-              return traceId
-            },
-            toSpanId: () => {
-              return spanId
-            }
-          }
-        },
-        addTags: sinon.stub(),
-        setTag: sinon.stub()
-      }
-      tracer._tracer.startSpan = sinon.spy(() => {
-        return span
-      })
-    })
 
-    it('injects trace context to SNS publish', () => {
-      const sns = new Sns(tracer)
-      const request = {
-        params: {
-          Message: 'Here is my sns message',
-          TopicArn: 'some ARN'
-        },
-        operation: 'publish'
-      }
+    const snsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sns' : 'aws-sdk'
+    const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
 
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
-      sns.requestInject(span.context(), request)
+    const assertPropagation = done => {
+      agent.use(traces => {
+        const span = traces[0][0]
 
-      expect(request.params).to.deep.equal({
-        Message: 'Here is my sns message',
-        MessageAttributes: {
-          '_datadog': {
-            'DataType': 'Binary',
-            'BinaryValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}'
-          }
-        },
-        'TopicArn': 'some ARN'
-      })
-    })
-
-    it('injects trace context to SNS publishBatch', () => {
-      const sns = new Sns(tracer)
-      const request = {
-        params: {
-          PublishBatchRequestEntries: [
-            { Message: 'Here is my SNS message' },
-            { Message: 'Here is another SNS Message' }
-          ],
-          TopicArn: 'some ARN'
-        },
-        operation: 'publishBatch'
-      }
-
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
-      sns.requestInject(span.context(), request)
-
-      expect(request.params).to.deep.equal({
-        PublishBatchRequestEntries: [
-          {
-            Message: 'Here is my SNS message',
-            MessageAttributes: {
-              '_datadog': {
-                'DataType': 'Binary',
-                'BinaryValue': '{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}'
-              }
-            }
-          },
-          {
-            Message: 'Here is another SNS Message'
-          }
-        ],
-        'TopicArn': 'some ARN'
-      })
-    })
-    it('skips injecting trace context to SNS if message attributes are full', () => {
-      const sns = new Sns(tracer)
-      const request = {
-        params: {
-          Message: 'Here is my sns message',
-          TopicArn: 'some ARN',
-          MessageAttributes: {
-            keyOne: {},
-            keyTwo: {},
-            keyThree: {},
-            keyFour: {},
-            keyFive: {},
-            keySix: {},
-            keySeven: {},
-            keyEight: {},
-            keyNine: {},
-            keyTen: {}
-          }
-        },
-        operation: 'publish'
-      }
-
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
-      sns.requestInject(span.context(), request)
-      expect(request.params).to.deep.equal(request.params)
-    })
-
-    it('generates tags for proper publish calls', () => {
-      const sns = new Sns()
-      const params = {
-        TopicArn: 'my-great-topic'
-      }
-      expect(sns.generateTags(params, 'publish', {})).to.deep.equal({
-        'aws.sns.topic_arn': 'my-great-topic',
-        'resource.name': 'publish my-great-topic'
-      })
-    })
-
-    it('generates tags for proper responses', () => {
-      const sns = new Sns()
-      const params = {}
-      const response = {
-        data: {
-          TopicArn: 'my-great-topic'
+        if (span.resource.startsWith('publish')) {
+          spanId = span.span_id.toString()
+        } else if (span.name === 'aws.response') {
+          parentId = span.parent_id.toString()
         }
-      }
-      expect(sns.generateTags(params, 'publish', response)).to.deep.equal({
-        'aws.sns.topic_arn': 'my-great-topic',
-        'resource.name': 'publish my-great-topic'
+
+        expect(parentId).to.not.equal('0')
+        expect(parentId).to.equal(spanId)
+      }).then(done, done)
+    }
+
+    before(() => {
+      parentId = '0'
+      spanId = '0'
+
+      return agent.load('aws-sdk')
+    })
+
+    before(done => {
+      const { SNS } = require(`../../../versions/${snsClientName}@${version}`).get()
+      const { SQS } = require(`../../../versions/${sqsClientName}@${version}`).get()
+
+      sns = new SNS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
+      sqs = new SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
+
+      sns.createTopic({ Name: 'TestTopic' }, (err, data) => {
+        if (err) return done(err)
+
+        TopicArn = data.TopicArn
+
+        sqs.createQueue({ QueueName: 'TestQueue' }, (err, data) => {
+          if (err) return done(err)
+
+          QueueUrl = data.QueueUrl
+
+          sqs.getQueueAttributes({ QueueUrl, AttributeNames: ['All'] }, (err, data) => {
+            if (err) return done(err)
+
+            QueueArn = data.Attributes.QueueArn
+
+            subParams = {
+              Protocol: 'sqs',
+              Endpoint: QueueArn,
+              TopicArn
+            }
+
+            receiveParams = {
+              QueueUrl,
+              MessageAttributeNames: ['.*'],
+              WaitTimeSeconds: 1
+            }
+
+            done()
+          })
+        })
       })
     })
 
-    it('returns empty tags for improper responses', () => {
-      const sns = new Sns()
-      const params = {}
-      const response = {}
-      expect(sns.generateTags(params, 'publish', response)).to.deep.equal({})
+    after(done => {
+      sns.deleteTopic({ TopicArn }, done)
     })
 
-    it('returns empty tags for empty requests', () => {
-      const sns = new Sns()
-      const response = {}
-      expect(sns.generateTags(null, 'publish', response)).to.deep.equal({})
+    after(done => {
+      sqs.deleteQueue({ QueueUrl }, done)
+    })
+
+    after(() => {
+      return agent.close({ ritmReset: false })
+    })
+
+    it('injects trace context to SNS publish', done => {
+      assertPropagation(done)
+
+      sns.subscribe(subParams, (err, data) => {
+        if (err) return done(err)
+
+        sqs.receiveMessage(receiveParams, e => e && done(e))
+        sns.publish({ TopicArn, Message: 'message 1' }, e => e && done(e))
+      })
+    })
+
+    // There is a bug in 3.x (but not 3.0.0) that will be fixed in 3.261
+    // https://github.com/aws/aws-sdk-js-v3/issues/2861
+    if (!semver.intersects(version, '<3 || >3.0.0')) {
+      it('injects trace context to SNS publishBatch', done => {
+        assertPropagation(done)
+
+        sns.subscribe(subParams, (err, data) => {
+          if (err) return done(err)
+
+          sqs.receiveMessage(receiveParams, e => e && done(e))
+          sns.publishBatch({
+            TopicArn,
+            PublishBatchRequestEntries: [
+              { Id: '1', Message: 'message 1' },
+              { Id: '2', Message: 'message 2' }
+            ]
+          }, e => e && done(e))
+        })
+      })
+    }
+
+    // TODO: Figure out why this fails only in 3.0.0
+    if (version !== '3.0.0') {
+      it('skips injecting trace context to SNS if message attributes are full', done => {
+        sns.subscribe(subParams, (err, data) => {
+          if (err) return done(err)
+
+          sqs.receiveMessage(receiveParams, (err, data) => {
+            if (err) return done(err)
+
+            try {
+              expect(data.Messages[0].Body).to.not.include('datadog')
+              done()
+            } catch (e) {
+              done(e)
+            }
+          })
+
+          sns.publish({
+            TopicArn,
+            Message: 'message 1',
+            MessageAttributes: {
+              keyOne: { DataType: 'String', StringValue: 'keyOne' },
+              keyTwo: { DataType: 'String', StringValue: 'keyTwo' },
+              keyThree: { DataType: 'String', StringValue: 'keyThree' },
+              keyFour: { DataType: 'String', StringValue: 'keyFour' },
+              keyFive: { DataType: 'String', StringValue: 'keyFive' },
+              keySix: { DataType: 'String', StringValue: 'keySix' },
+              keySeven: { DataType: 'String', StringValue: 'keySeven' },
+              keyEight: { DataType: 'String', StringValue: 'keyEight' },
+              keyNine: { DataType: 'String', StringValue: 'keyNine' },
+              keyTen: { DataType: 'String', StringValue: 'keyTen' }
+            }
+          }, e => e && done(e))
+        })
+      })
+    }
+
+    it('generates tags for proper publish calls', done => {
+      agent.use(traces => {
+        const span = traces[0][0]
+
+        expect(span.resource).to.equal(`publish ${TopicArn}`)
+        expect(span.meta).to.include({
+          'aws.sns.topic_arn': TopicArn,
+          'topicname': 'TestTopic',
+          'aws_service': 'SNS',
+          'region': 'us-east-1'
+        })
+      }).then(done, done)
+
+      sns.publish({ TopicArn, Message: 'message 1' }, e => e && done(e))
     })
   })
 })

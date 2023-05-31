@@ -3,6 +3,7 @@
 const path = require('path')
 const Module = require('module')
 const parse = require('module-details-from-path')
+const dc = require('../../diagnostics_channel')
 
 const origRequire = Module.prototype.require
 
@@ -14,6 +15,8 @@ let moduleHooks = Object.create(null)
 let cache = Object.create(null)
 let patching = Object.create(null)
 let patchedRequire = null
+const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
+const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
 
 function Hook (modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)
@@ -51,7 +54,6 @@ function Hook (modules, options, onrequire) {
     const filename = Module._resolveFilename(request, this)
     const core = filename.indexOf(path.sep) === -1
     let name, basedir, hooks
-
     // return known patched modules immediately
     if (cache[filename]) {
       // require.cache was potentially altered externally
@@ -65,14 +67,26 @@ function Hook (modules, options, onrequire) {
     // Check if this module has a patcher in-progress already.
     // Otherwise, mark this module as patching in-progress.
     const patched = patching[filename]
-    if (!patched) {
+    if (patched) {
+      // If it's already patched, just return it as-is.
+      return origRequire.apply(this, arguments)
+    } else {
       patching[filename] = true
     }
 
-    const exports = origRequire.apply(this, arguments)
+    const payload = {
+      filename,
+      request
+    }
 
-    // If it's already patched, just return it as-is.
-    if (patched) return exports
+    if (moduleLoadStartChannel.hasSubscribers) {
+      moduleLoadStartChannel.publish(payload)
+    }
+    const exports = origRequire.apply(this, arguments)
+    payload.module = exports
+    if (moduleLoadEndChannel.hasSubscribers) {
+      moduleLoadEndChannel.publish(payload)
+    }
 
     // The module has already been loaded,
     // so the patching mark can be cleaned up.
@@ -83,7 +97,13 @@ function Hook (modules, options, onrequire) {
       if (!hooks) return exports // abort if module name isn't on whitelist
       name = filename
     } else {
-      const stat = parse(filename)
+      const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+      const hasLambdaHandler = process.env.DD_LAMBDA_HANDLER !== undefined
+      const segments = filename.split(path.sep)
+      const filenameFromNodeModule = segments.lastIndexOf('node_modules') !== -1
+      // decide how to assign the stat
+      // first case will only happen when patching an AWS Lambda Handler
+      const stat = inAWSLambda && hasLambdaHandler && !filenameFromNodeModule ? { name: filename } : parse(filename)
       if (!stat) return exports // abort if filename could not be parsed
       name = stat.name
       basedir = stat.basedir

@@ -1,4 +1,5 @@
-const { getFormattedJestTestParameters } = require('../src/util')
+const path = require('path')
+const { getFormattedJestTestParameters, getJestSuitesToRun } = require('../src/util')
 
 describe('getFormattedJestTestParameters', () => {
   it('returns formatted parameters for arrays', () => {
@@ -16,5 +17,59 @@ describe('getFormattedJestTestParameters', () => {
     expect(resultEmptyArray).to.eql(undefined)
     expect(resultUndefined).to.eql(undefined)
     expect(resultObject).to.eql(undefined)
+  })
+})
+
+describe('getJestSuitesToRun', () => {
+  it('returns filtered suites', () => {
+    const skippableSuites = [
+      'src/unit.spec.js',
+      'src/integration.spec.js'
+    ]
+    const tests = [
+      { path: '/workspace/dd-trace-js/src/unit.spec.js' },
+      { path: '/workspace/dd-trace-js/src/integration.spec.js' },
+      { path: '/workspace/dd-trace-js/src/e2e.spec.js' }
+    ]
+    const rootDir = '/workspace/dd-trace-js'
+
+    const filteredSuites = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    expect(filteredSuites).to.eql([{ path: '/workspace/dd-trace-js/src/e2e.spec.js' }])
+  })
+
+  it('returns filtered suites when paths are windows like', () => {
+    const skippableSuites = [
+      'src/unit.spec.js',
+      'src/integration.spec.js'
+    ]
+    const tests = [
+      { path: `C:${path.sep}temp${path.sep}dd-trace-js${path.sep}src${path.sep}unit.spec.js` },
+      { path: `C:${path.sep}temp${path.sep}dd-trace-js${path.sep}src${path.sep}integration.spec.js` },
+      { path: `C:${path.sep}temp${path.sep}dd-trace-js${path.sep}src${path.sep}e2e.spec.js` }
+    ]
+    const rootDir = `C:${path.sep}temp${path.sep}dd-trace-js`
+
+    const filteredSuites = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    expect(filteredSuites).to.eql([
+      { path: `C:${path.sep}temp${path.sep}dd-trace-js${path.sep}src${path.sep}e2e.spec.js` }
+    ])
+  })
+
+  it('returns filtered suites when paths are relative', () => {
+    const skippableSuites = [
+      '../../src/unit.spec.js',
+      '../../src/integration.spec.js'
+    ]
+    const tests = [
+      { path: '/workspace/dd-trace-js/src/unit.spec.js' },
+      { path: '/workspace/dd-trace-js/src/integration.spec.js' },
+      { path: '/workspace/dd-trace-js/src/e2e.spec.js' }
+    ]
+    const rootDir = '/workspace/dd-trace-js/config/root-config'
+
+    const filteredSuites = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    expect(filteredSuites).to.eql([
+      { path: '/workspace/dd-trace-js/src/e2e.spec.js' }
+    ])
   })
 })

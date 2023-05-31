@@ -2,6 +2,9 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+
+const namingSchema = require('./naming')
 
 describe('Plugin', () => {
   let Memcached
@@ -27,14 +30,15 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'memcached.command')
-              expect(traces[0][0]).to.have.property('service', 'test-memcached')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'get')
               expect(traces[0][0]).to.have.property('type', 'memcached')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-              expect(traces[0][0].meta).to.have.property('out.port', '11211')
+              expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
               expect(traces[0][0].meta).to.have.property('memcached.command', 'get test')
+              expect(traces[0][0].meta).to.have.property('component', 'memcached')
             })
             .then(done)
             .catch(done)
@@ -68,9 +72,10 @@ describe('Plugin', () => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0].meta).to.have.property('error.type', error.name)
-              expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-              expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+              expect(traces[0][0].meta).to.have.property('component', 'memcached')
             })
             .then(done)
             .catch(done)
@@ -86,7 +91,8 @@ describe('Plugin', () => {
           agent
             .use(traces => {
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-              expect(traces[0][0].meta).to.have.property('out.port', '11211')
+              expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
+              expect(traces[0][0].meta).to.have.property('component', 'memcached')
             })
             .then(done)
             .catch(done)
@@ -103,7 +109,8 @@ describe('Plugin', () => {
           agent
             .use(traces => {
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-              expect(traces[0][0].meta).to.have.property('out.port', '11211')
+              expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
+              expect(traces[0][0].meta).to.have.property('component', 'memcached')
             })
             .then(done)
             .catch(done)
@@ -126,7 +133,8 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-                expect(traces[0][0].meta).to.have.property('out.port', '11211')
+                expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
+                expect(traces[0][0].meta).to.have.property('component', 'memcached')
               })
               .then(done)
               .catch(done)
@@ -135,6 +143,12 @@ describe('Plugin', () => {
             done()
           }
         })
+
+        withNamingSchema(
+          done => memcached.get('test', err => err && done(err)),
+          () => namingSchema.outbound.opName,
+          () => namingSchema.outbound.serviceName
+        )
       })
 
       describe('with configuration', () => {

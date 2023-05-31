@@ -6,6 +6,8 @@ const Scope = require('./scope')
 const { storage } = require('../../datadog-core')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { DD_MAJOR } = require('../../../version')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -25,7 +27,7 @@ class DatadogTracer extends Tracer {
       childOf: this.scope().active()
     }, options)
 
-    if (!options.childOf && options.orphanable === false) {
+    if (!options.childOf && options.orphanable === false && DD_MAJOR < 4) {
       return fn(null, () => {})
     }
 
@@ -44,11 +46,15 @@ class DatadogTracer extends Tracer {
       const result = this.scope().activate(span, () => fn(span))
 
       if (result && typeof result.then === 'function') {
-        result.then(
-          () => span.finish(),
+        return result.then(
+          value => {
+            span.finish()
+            return value
+          },
           err => {
             addError(span, err)
             span.finish()
+            throw err
           }
         )
       } else {
@@ -76,7 +82,7 @@ class DatadogTracer extends Tracer {
         optionsObj = optionsObj.apply(this, arguments)
       }
 
-      if (optionsObj && optionsObj.orphanable === false && !tracer.scope().active()) {
+      if (optionsObj && optionsObj.orphanable === false && !tracer.scope().active() && DD_MAJOR < 4) {
         return fn.apply(this, arguments)
       }
 
@@ -107,10 +113,6 @@ class DatadogTracer extends Tracer {
     return this._scope
   }
 
-  currentSpan () {
-    return this.scope().active()
-  }
-
   getRumData () {
     if (!this._enableGetRumData) {
       return ''
@@ -122,30 +124,14 @@ class DatadogTracer extends Tracer {
 <meta name="dd-trace-id" content="${traceId}" />\
 <meta name="dd-trace-time" content="${traceTime}" />`
   }
-
-  setUser (user) {
-    if (!user || !user.id) return this
-
-    const span = this.scope().active()
-    if (!span) return this
-
-    const rootSpan = span._spanContext._trace.started[0]
-    if (!rootSpan) return this
-
-    for (const k of Object.keys(user)) {
-      rootSpan.setTag(`usr.${k}`, '' + user[k])
-    }
-
-    return this
-  }
 }
 
 function addError (span, error) {
   if (isError(error)) {
     span.addTags({
-      'error.type': error.name,
-      'error.msg': error.message,
-      'error.stack': error.stack
+      [ERROR_TYPE]: error.name,
+      [ERROR_MESSAGE]: error.message,
+      [ERROR_STACK]: error.stack
     })
   }
 }

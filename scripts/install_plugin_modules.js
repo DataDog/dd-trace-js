@@ -1,21 +1,24 @@
 'use strict'
 
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const crypto = require('crypto')
 const semver = require('semver')
 const proxyquire = require('proxyquire')
 const exec = require('./helpers/exec')
 const childProcess = require('child_process')
-const plugins = require('../packages/dd-trace/src/plugins')
-const Plugin = require('../packages/dd-trace/src/plugins/plugin')
 const externals = require('../packages/dd-trace/test/plugins/externals')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
+const excludeList = os.arch() === 'arm64' ? ['couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const versionLists = {}
 const deps = {}
+const names = []
+const filter = process.env.hasOwnProperty('PLUGINS') && process.env.PLUGINS.split('|')
+
 Object.keys(externals).forEach(external => externals[external].forEach(thing => {
   if (thing.dep) {
     if (!deps[external]) {
@@ -29,7 +32,10 @@ fs.readdirSync(path.join(__dirname, '../packages/datadog-instrumentations/src'))
   .filter(file => file.endsWith('js'))
   .forEach(file => {
     file = file.replace('.js', '')
-    plugins[file] = { name: file, prototype: Object.create(Plugin.prototype) }
+
+    if (!filter || filter.includes(file)) {
+      names.push(file)
+    }
   })
 
 run()
@@ -38,39 +44,25 @@ async function run () {
   assertFolder()
   await assertVersions()
   assertWorkspace()
+  // Some native addon packages rely on libraries that are not supported on ARM64
+  excludeList.forEach(pkg => delete workspaces[pkg])
   install()
 }
 
 async function assertVersions () {
-  let filter = []
-  let names = Object.keys(plugins)
-
-  if (process.env.hasOwnProperty('PLUGINS')) {
-    filter = process.env.PLUGINS.split('|')
-    names = names.filter(name => ~filter.indexOf(name))
-  }
-
   const internals = names
     .map(key => {
-      const plugin = plugins[key]
-      if (plugin.prototype instanceof Plugin) {
-        const instrumentations = []
-        const instrument = {
-          addHook (instrumentation) {
-            instrumentations.push(instrumentation)
-          }
-        }
-        const instPath = path.join(
-          __dirname,
-          `../packages/datadog-instrumentations/src/${plugin.name}.js`
-        )
-        proxyquire.noPreserveCache()(instPath, {
-          './helpers/instrument': instrument
-        })
-        return instrumentations
-      } else {
-        return plugin
+      const instrumentations = []
+      const name = key
+
+      try {
+        loadInstFile(`${name}/server.js`, instrumentations)
+        loadInstFile(`${name}/client.js`, instrumentations)
+      } catch (e) {
+        loadInstFile(`${name}.js`, instrumentations)
       }
+
+      return instrumentations
     })
     .reduce((prev, next) => prev.concat(next), [])
 
@@ -81,15 +73,13 @@ async function assertVersions () {
   const externalNames = Object.keys(externals).filter(name => ~names.indexOf(name))
   for (const name of externalNames) {
     for (const inst of [].concat(externals[name])) {
-      if (!inst.dep) {
-        await assertInstrumentation(inst, true)
-      }
+      await assertInstrumentation(inst, true)
     }
   }
 }
 
 async function assertInstrumentation (instrumentation, external) {
-  const versions = [].concat(instrumentation.versions)
+  const versions = [].concat(instrumentation.versions || [])
   for (const version of versions) {
     if (version) {
       await assertModules(instrumentation.name, semver.coerce(version).version, external)
@@ -99,6 +89,8 @@ async function assertInstrumentation (instrumentation, external) {
 }
 
 async function assertModules (name, version, external) {
+  const range = process.env.RANGE
+  if (range && !semver.subset(version, range)) return
   addFolder(name)
   addFolder(name, version)
   assertFolder(name)
@@ -211,7 +203,7 @@ function install () {
 
 function addFolder (name, version) {
   const basename = [name, version].filter(val => val).join('@')
-  workspaces.add(basename)
+  if (!excludeList.includes(name)) workspaces.add(basename)
 }
 
 function folder (name, version) {
@@ -229,4 +221,19 @@ function sha1 (str) {
   const shasum = crypto.createHash('sha1')
   shasum.update(str)
   return shasum.digest('hex')
+}
+
+function loadInstFile (file, instrumentations) {
+  const instrument = {
+    addHook (instrumentation) {
+      instrumentations.push(instrumentation)
+    }
+  }
+
+  const instPath = path.join(__dirname, `../packages/datadog-instrumentations/src/${file}`)
+
+  proxyquire.noPreserveCache()(instPath, {
+    './helpers/instrument': instrument,
+    '../helpers/instrument': instrument
+  })
 }

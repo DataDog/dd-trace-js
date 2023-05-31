@@ -1,83 +1,167 @@
 'use strict'
 
+// TODO: Add test with slow or unresponsive agent.
+// TODO: Add telemetry for things like dropped requests, errors, etc.
+
+const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
-const log = require('../../log')
+const { parse: urlParse } = require('url')
 const docker = require('./docker')
+const { httpAgent, httpsAgent } = require('./agents')
 const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
 
-const httpAgent = new http.Agent({ keepAlive: true })
-const httpsAgent = new https.Agent({ keepAlive: true })
+const maxActiveRequests = 8
 const containerId = docker.id()
 
-function request (data, options, keepAlive, callback) {
+let activeRequests = 0
+
+// TODO: Replace with `url.urlToHttpOptions` when supported by all versions
+function urlToOptions (url) {
+  const agent = url.agent || http.globalAgent
+  const options = {
+    protocol: url.protocol || agent.protocol,
+    hostname: typeof url.hostname === 'string' && url.hostname.startsWith('[')
+      ? url.hostname.slice(1, -1)
+      : url.hostname ||
+      url.host ||
+      'localhost',
+    hash: url.hash,
+    search: url.search,
+    pathname: url.pathname,
+    path: `${url.pathname || ''}${url.search || ''}`,
+    href: url.href
+  }
+  if (url.port !== '') {
+    options.port = Number(url.port)
+  }
+  if (url.username || url.password) {
+    options.auth = `${url.username}:${url.password}`
+  }
+  return options
+}
+
+function fromUrlString (url) {
+  return typeof urlToHttpOptions === 'function'
+    ? urlToOptions(new URL(url))
+    : urlParse(url)
+}
+
+function request (data, options, callback) {
   if (!options.headers) {
     options.headers = {}
   }
+
+  if (options.url) {
+    const url = typeof options.url === 'object' ? urlToOptions(options.url) : fromUrlString(options.url)
+    if (url.protocol === 'unix:') {
+      options.socketPath = url.pathname
+    } else {
+      if (!options.path) options.path = url.path
+      options.protocol = url.protocol
+      options.hostname = url.hostname // for IPv6 this should be '::1' and not '[::1]'
+      options.port = url.port
+    }
+  }
+
+  const isReadable = data instanceof Readable
+
+  // The timeout should be kept low to avoid excessive queueing.
+  const timeout = options.timeout || 2000
   const isSecure = options.protocol === 'https:'
   const client = isSecure ? https : http
   const dataArray = [].concat(data)
-  options.headers['Content-Length'] = byteLength(dataArray)
+
+  if (!isReadable) {
+    options.headers['Content-Length'] = byteLength(dataArray)
+  }
 
   if (containerId) {
     options.headers['Datadog-Container-ID'] = containerId
   }
 
-  if (keepAlive) {
-    options.agent = isSecure ? httpsAgent : httpAgent
-  }
+  options.agent = isSecure ? httpsAgent : httpAgent
 
-  const firstRequest = retriableRequest(options, client, callback)
-  dataArray.forEach(buffer => firstRequest.write(buffer))
-
-  // The first request will be retried
-  const firstRequestErrorHandler = () => {
-    log.debug('Retrying request to the intake')
-    const retriedReq = retriableRequest(options, client, callback)
-    dataArray.forEach(buffer => retriedReq.write(buffer))
-    // The retried request will fail normally
-    retriedReq.on('error', e => callback(new Error(`Network error trying to reach the intake: ${e.message}`)))
-    retriedReq.end()
-  }
-
-  firstRequest.on('error', firstRequestErrorHandler)
-  firstRequest.end()
-
-  return firstRequest
-}
-
-function retriableRequest (options, client, callback) {
-  const store = storage.getStore()
-
-  storage.enterWith({ noop: true })
-
-  const timeout = options.timeout || 15000
-
-  const request = client.request(options, res => {
+  const onResponse = res => {
     let responseData = ''
 
     res.setTimeout(timeout)
 
     res.on('data', chunk => { responseData += chunk })
     res.on('end', () => {
+      activeRequests--
+
       if (res.statusCode >= 200 && res.statusCode <= 299) {
         callback(null, responseData, res.statusCode)
       } else {
-        const error = new Error(`Error from the endpoint: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}`)
+        let errorMessage = ''
+        try {
+          const fullUrl = new URL(
+            options.path,
+            options.url || options.hostname || `http://localhost:${options.port}`
+          ).href
+          errorMessage = `Error from ${fullUrl}: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}.`
+        } catch (e) {
+          // ignore error
+        }
+        if (responseData) {
+          errorMessage += ` Response from the endpoint: "${responseData}"`
+        }
+        const error = new Error(errorMessage)
         error.status = res.statusCode
 
         callback(error, null, res.statusCode)
       }
     })
-  })
-  request.setTimeout(timeout, request.abort)
-  storage.enterWith(store)
+  }
 
-  return request
+  const makeRequest = onError => {
+    if (!request.writable) {
+      log.debug('Maximum number of active requests reached: payload is discarded.')
+      return callback(null)
+    }
+
+    activeRequests++
+
+    const store = storage.getStore()
+
+    storage.enterWith({ noop: true })
+
+    const req = client.request(options, onResponse)
+
+    req.once('error', err => {
+      activeRequests--
+      onError(err)
+    })
+
+    req.setTimeout(timeout, req.abort)
+
+    if (isReadable) {
+      data.pipe(req) // TODO: Validate whether this is actually retriable.
+    } else {
+      dataArray.forEach(buffer => req.write(buffer))
+      req.end()
+    }
+
+    storage.enterWith(store)
+  }
+
+  // TODO: Figure out why setTimeout is needed to avoid losing the async context
+  // in the retry request before socket.connect() is called.
+  // TODO: Test that this doesn't trace itself on retry when the diagnostics
+  // channel events are available in the agent exporter.
+  makeRequest(() => setTimeout(() => makeRequest(callback)))
 }
 
 function byteLength (data) {
   return data.length > 0 ? data.reduce((prev, next) => prev + next.length, 0) : 0
 }
+
+Object.defineProperty(request, 'writable', {
+  get () {
+    return activeRequests < maxActiveRequests
+  }
+})
 
 module.exports = request

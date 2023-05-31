@@ -4,7 +4,11 @@ const axios = require('axios')
 const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const plugin = require('../src')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+
+const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
+  ? '<17 || >18'
+  : ''
 
 describe('Plugin', () => {
   let tracer
@@ -15,7 +19,7 @@ describe('Plugin', () => {
   let reply
 
   describe('hapi', () => {
-    withVersions(plugin, ['hapi', '@hapi/hapi'], (version, module) => {
+    withVersions('hapi', ['hapi', '@hapi/hapi'], versionRange, (version, module) => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         handler = (request, h, body) => h.response ? h.response(body) : h(body)
@@ -31,11 +35,11 @@ describe('Plugin', () => {
       })
 
       after(() => {
-        return agent.close()
+        return agent.close({ ritmReset: false })
       })
 
       before(() => {
-        return agent.load('hapi')
+        return agent.load(['hapi', 'http'], [{}, { client: false }])
           .then(() => {
             Hapi = require(`../../../versions/${module}@${version}`).get()
           })
@@ -100,6 +104,7 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
             expect(traces[0][0].meta).to.have.property('http.method', 'GET')
             expect(traces[0][0].meta).to.have.property('http.status_code')
+            expect(traces[0][0].meta).to.have.property('component', 'hapi')
             expect(Number(traces[0][0].meta['http.status_code'])).to.be.within(200, 299)
           })
           .then(done)
@@ -302,9 +307,39 @@ describe('Plugin', () => {
         agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('error', 1)
-            expect(traces[0][0].meta).to.have.property('error.type', error.name)
-            expect(traces[0][0].meta).to.have.property('error.msg', error.message)
-            expect(traces[0][0].meta).to.have.property('error.stack', error.stack)
+            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+            expect(traces[0][0].meta).to.have.property('component', 'hapi')
+          })
+          .then(done)
+          .catch(done)
+
+        axios
+          .get(`http://localhost:${port}/user/123`)
+          .catch(() => {})
+      })
+
+      it('should handle boom client errors', done => {
+        const Boom = require('../../../versions/@hapi/boom@9.1.4').get()
+        const error = Boom.badRequest()
+
+        server.route({
+          method: 'GET',
+          path: '/user/{id}',
+          handler: async (request, h) => {
+            if (typeof h === 'function') {
+              h(error)
+            } else {
+              throw error
+            }
+          }
+        })
+
+        agent
+          .use(traces => {
+            expect(traces[0][0]).to.have.property('error', 0)
+            expect(traces[0][0].meta).to.have.property('component', 'hapi')
           })
           .then(done)
           .catch(done)
