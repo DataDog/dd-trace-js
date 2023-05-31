@@ -156,6 +156,8 @@ function isMoreSpecificThan (routeA, routeB) {
 }
 
 function routeIsRegex (route) {
+  // console.log('ROUTE', typeof route, route)
+  // return route instanceof RegExp
   return route.startsWith('(/') && route.endsWith('/)')
 }
 

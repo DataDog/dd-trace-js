@@ -708,9 +708,16 @@ describe('Plugin', () => {
         it('should not lose the current path when route handler preceeded by a longer middleware resource', done => {
           const app = express()
 
-          app.use(/\/foo\/(bar|baz|bez)/, (req, res, next) => {
-            next()
-          })
+          try {
+            app.use(/\/foo\/(bar|baz|bez)/, (req, res, next) => {
+              next()
+            })
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
+            this.skip && this.skip() // mocha allows dynamic skipping, tap does not
+            return done()
+          }
 
           app.get('/foo/bar', (req, res) => {
             res.status(200).send('')
