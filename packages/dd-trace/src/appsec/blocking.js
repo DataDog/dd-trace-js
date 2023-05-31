@@ -76,7 +76,8 @@ function block (req, res, rootSpan, abortController) {
     return
   }
 
-  if (blockingConfiguration && blockingConfiguration.type === 'redirect_request' && blockingConfiguration.parameters.location) {
+  if (blockingConfiguration && blockingConfiguration.type === 'redirect_request' &&
+      blockingConfiguration.parameters.location) {
     blockWithRedirect(res, rootSpan, abortController)
   } else {
     blockWithContent(req, res, rootSpan, abortController)

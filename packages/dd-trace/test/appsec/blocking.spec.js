@@ -162,7 +162,8 @@ describe('blocking', () => {
       expect(res.statusCode).to.be.equal(401)
     })
 
-    it('should block with default json template and custom status when type is forced to json and accept is html', () => {
+    it('should block with default json template and custom status ' +
+        'when type is forced to json and accept is html', () => {
       updateBlockingConfiguration({
         id: 'block',
         type: 'block_request',
@@ -180,7 +181,8 @@ describe('blocking', () => {
       expect(res.statusCode).to.be.equal(401)
     })
 
-    it('should block with default html template and custom status when type is forced to html and accept is html', () => {
+    it('should block with default html template and custom status ' +
+        'when type is forced to html and accept is html', () => {
       updateBlockingConfiguration({
         id: 'block',
         type: 'block_request',
@@ -215,7 +217,8 @@ describe('blocking', () => {
       expect(res.statusCode).to.be.equal(401)
     })
 
-    it('should block with default json template and custom status when type is forced to json and accept is not defined', () => {
+    it('should block with default json template and custom status ' +
+        'when type is forced to json and accept is not defined', () => {
       updateBlockingConfiguration({
         id: 'block',
         type: 'block_request',
@@ -232,7 +235,8 @@ describe('blocking', () => {
       expect(res.statusCode).to.be.equal(401)
     })
 
-    it('should block with default html template and custom status when type is forced to html and accept is not defined', () => {
+    it('should block with default html template and custom status ' +
+        'when type is forced to html and accept is not defined', () => {
       updateBlockingConfiguration({
         id: 'block',
         type: 'block_request',
