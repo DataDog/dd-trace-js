@@ -206,15 +206,6 @@ versions.forEach((version) => {
         const packfileRequestPromise = receiver
           .payloadReceived(({ url }) => url.endsWith('/api/v2/git/repository/packfile'))
 
-        Promise.all([
-          searchCommitsRequestPromise,
-          packfileRequestPromise
-        ]).then(([searchCommitRequest, packfileRequest]) => {
-          assert.propertyVal(searchCommitRequest.headers, 'dd-api-key', '1')
-          assert.propertyVal(packfileRequest.headers, 'dd-api-key', '1')
-          done()
-        }).catch(done)
-
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
           ...restEnvVars
@@ -231,6 +222,16 @@ versions.forEach((version) => {
             stdio: 'pipe'
           }
         )
+        childProcess.on('exit', () => {
+          Promise.all([
+            searchCommitsRequestPromise,
+            packfileRequestPromise
+          ]).then(([searchCommitRequest, packfileRequest]) => {
+            assert.propertyVal(searchCommitRequest.headers, 'dd-api-key', '1')
+            assert.propertyVal(packfileRequest.headers, 'dd-api-key', '1')
+            done()
+          }).catch(done)
+        })
       })
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({

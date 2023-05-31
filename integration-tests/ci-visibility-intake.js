@@ -161,12 +161,13 @@ class FakeCiVisIntake extends FakeAgent {
     })
   }
 
-  async stop () {
-    await super.stop()
+  stop () {
     settings = DEFAULT_SETTINGS
     suitesToSkip = DEFAULT_SUITES_TO_SKIP
     gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
     infoResponse = DEFAULT_INFO_RESPONSE
+    this.removeAllListeners()
+    return super.stop()
   }
 
   // Similar to gatherPayloads but resolves if enough payloads have been gathered
