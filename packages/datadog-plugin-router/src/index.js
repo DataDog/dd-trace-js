@@ -148,15 +148,15 @@ class RouterPlugin extends WebPlugin {
   }
 }
 
-function isMoreSpecificThan(routeA, routeB) {
+function isMoreSpecificThan (routeA, routeB) {
   if (!routeIsRegex(routeA) && routeIsRegex(routeB)) {
-    return true;
+    return true
   }
-  return routeA.length > routeB.length;
+  return routeA.length > routeB.length
 }
 
-function routeIsRegex(route) {
-  return route.startsWith('(/') && route.endsWith('/)');
+function routeIsRegex (route) {
+  return route.startsWith('(/') && route.endsWith('/)')
 }
 
 module.exports = RouterPlugin
