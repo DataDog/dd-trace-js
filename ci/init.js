@@ -45,10 +45,11 @@ if (isJestWorker) {
 if (shouldInit) {
   tracer.init(options)
   tracer.use('fs', false)
-  // to fake that we're loading a "manual" library, which triggers the creation of the ManualPlugin
-  // since there's no library to instrument here, we'd have to find a workaround
-  const instrumentationLoad = channel('dd-trace:instrumentation:load')
-  instrumentationLoad.publish({ name: 'manual' })
+  if (isTrue(process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED)) {
+    // To fake that we're loading a "manual" library, which triggers the instantiation of ManualPlugin
+    const instrumentationLoad = channel('dd-trace:instrumentation:load')
+    instrumentationLoad.publish({ name: 'manual' })
+  }
 }
 
 module.exports = tracer
