@@ -17,4 +17,3 @@ runs:
     #     -e PORT=9126 \
     #     ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
     - run: docker-compose up -d testagent
-      shell: bash
