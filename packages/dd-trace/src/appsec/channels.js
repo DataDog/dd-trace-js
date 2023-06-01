@@ -7,5 +7,6 @@ module.exports = {
   incomingHttpRequestStart: dc.channel('dd-trace:incomingHttpRequestStart'),
   incomingHttpRequestEnd: dc.channel('dd-trace:incomingHttpRequestEnd'),
   bodyParser: dc.channel('datadog:body-parser:read:finish'),
+  passportVerify: dc.channel('datadog:passport:verify:finish'),
   queryParser: dc.channel('datadog:query:read:finish')
 }

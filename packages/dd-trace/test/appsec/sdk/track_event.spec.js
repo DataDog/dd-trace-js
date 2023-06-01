@@ -76,13 +76,15 @@ describe('track_event', () => {
 
         expect(log.warn).to.not.have.been.called
         expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-          'appsec.events.users.login.success.track': 'true',
-          'appsec.events.users.login.success.metakey1': 'metaValue1',
-          'appsec.events.users.login.success.metakey2': 'metaValue2',
-          'appsec.events.users.login.success.metakey3': 'metaValue3',
-          'manual.keep': 'true'
-        })
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+          {
+            'appsec.events.users.login.success.track': 'true',
+            'manual.keep': 'true',
+            '_dd.appsec.events.users.login.success.sdk': 'true',
+            'appsec.events.users.login.success.metakey1': 'metaValue1',
+            'appsec.events.users.login.success.metakey2': 'metaValue2',
+            'appsec.events.users.login.success.metakey3': 'metaValue3'
+          })
       })
 
       it('should call setUser and addTags without metadata', () => {
@@ -94,7 +96,8 @@ describe('track_event', () => {
         expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.success.track': 'true',
-          'manual.keep': 'true'
+          'manual.keep': 'true',
+          '_dd.appsec.events.users.login.success.sdk': 'true'
         })
       })
     })
@@ -131,12 +134,13 @@ describe('track_event', () => {
         expect(setUserTags).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.failure.track': 'true',
+          'manual.keep': 'true',
+          '_dd.appsec.events.users.login.failure.sdk': 'true',
           'appsec.events.users.login.failure.usr.id': 'user_id',
           'appsec.events.users.login.failure.usr.exists': 'true',
           'appsec.events.users.login.failure.metakey1': 'metaValue1',
           'appsec.events.users.login.failure.metakey2': 'metaValue2',
-          'appsec.events.users.login.failure.metakey3': 'metaValue3',
-          'manual.keep': 'true'
+          'appsec.events.users.login.failure.metakey3': 'metaValue3'
         })
       })
 
@@ -149,12 +153,13 @@ describe('track_event', () => {
         expect(setUserTags).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.failure.track': 'true',
+          'manual.keep': 'true',
+          '_dd.appsec.events.users.login.failure.sdk': 'true',
           'appsec.events.users.login.failure.usr.id': 'user_id',
           'appsec.events.users.login.failure.usr.exists': 'false',
           'appsec.events.users.login.failure.metakey1': 'metaValue1',
           'appsec.events.users.login.failure.metakey2': 'metaValue2',
-          'appsec.events.users.login.failure.metakey3': 'metaValue3',
-          'manual.keep': 'true'
+          'appsec.events.users.login.failure.metakey3': 'metaValue3'
         })
       })
 
@@ -165,9 +170,10 @@ describe('track_event', () => {
         expect(setUserTags).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.users.login.failure.track': 'true',
+          'manual.keep': 'true',
+          '_dd.appsec.events.users.login.failure.sdk': 'true',
           'appsec.events.users.login.failure.usr.id': 'user_id',
-          'appsec.events.users.login.failure.usr.exists': 'true',
-          'manual.keep': 'true'
+          'appsec.events.users.login.failure.usr.exists': 'true'
         })
       })
     })
@@ -200,9 +206,10 @@ describe('track_event', () => {
         expect(setUserTags).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.custom_event.track': 'true',
+          'manual.keep': 'true',
+          '_dd.appsec.events.custom_event.sdk': 'true',
           'appsec.events.custom_event.metaKey1': 'metaValue1',
-          'appsec.events.custom_event.metakey2': 'metaValue2',
-          'manual.keep': 'true'
+          'appsec.events.custom_event.metakey2': 'metaValue2'
         })
       })
 
@@ -213,7 +220,8 @@ describe('track_event', () => {
         expect(setUserTags).to.not.have.been.called
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.custom_event.track': 'true',
-          'manual.keep': 'true'
+          'manual.keep': 'true',
+          '_dd.appsec.events.custom_event.sdk': 'true'
         })
       })
     })

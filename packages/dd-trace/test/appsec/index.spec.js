@@ -9,7 +9,8 @@ const {
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   bodyParser,
-  queryParser
+  queryParser,
+  passportVerify
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
@@ -17,12 +18,14 @@ const Config = require('../../src/config')
 const axios = require('axios')
 const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
+const { storage } = require('../../../datadog-core')
 
 describe('AppSec Index', () => {
   let config
   let AppSec
   let web
   let blocking
+  let passport
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -36,7 +39,11 @@ describe('AppSec Index', () => {
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
         blockedTemplateHtml: blockedTemplate.html,
-        blockedTemplateJson: blockedTemplate.json
+        blockedTemplateJson: blockedTemplate.json,
+        eventTracking: {
+          enabled: true,
+          mode: 'safe'
+        }
       }
     }
 
@@ -48,9 +55,14 @@ describe('AppSec Index', () => {
       setTemplates: sinon.stub()
     }
 
+    passport = {
+      passportTrackEvent: sinon.stub()
+    }
+
     AppSec = proxyquire('../../src/appsec', {
       '../plugins/util/web': web,
-      './blocking': blocking
+      './blocking': blocking,
+      './passport': passport
     })
 
     sinon.stub(waf, 'init').callThrough()
@@ -97,11 +109,13 @@ describe('AppSec Index', () => {
     it('should subscribe to blockable channels', () => {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
+      expect(passportVerify.hasSubscribers).to.be.false
 
       AppSec.enable(config)
 
       expect(bodyParser.hasSubscribers).to.be.true
       expect(queryParser.hasSubscribers).to.be.true
+      expect(passportVerify.hasSubscribers).to.be.true
     })
   })
 
@@ -142,6 +156,7 @@ describe('AppSec Index', () => {
 
       expect(bodyParser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
+      expect(passportVerify.hasSubscribers).to.be.false
     })
   })
 
@@ -333,7 +348,7 @@ describe('AppSec Index', () => {
     })
   })
 
-  describe('checkRequestData', () => {
+  describe('Channel handlers', () => {
     let abortController, req, res, rootSpan
 
     beforeEach(() => {
@@ -446,6 +461,41 @@ describe('AppSec Index', () => {
         })
         expect(abortController.abort).to.have.been.called
         expect(res.end).to.have.been.called
+      })
+    })
+
+    describe('onPassportVerify', () => {
+      it('Should call passportTrackEvent', () => {
+        const credentials = { type: 'local', username: 'test' }
+        const passportUser = { id: '1234', username: 'Test' }
+        const passportErr = {}
+        const passportInfo = {}
+
+        sinon.stub(storage, 'getStore').returns({ req: {} })
+
+        passportVerify.publish({ credentials, passportUser, passportErr, passportInfo })
+
+        expect(passport.passportTrackEvent).to.have.been.calledOnceWithExactly(
+          credentials,
+          passportUser,
+          passportErr,
+          passportInfo,
+          rootSpan,
+          config.appsec.eventTracking.mode)
+      })
+
+      it('Should call log if no rootSpan is found', () => {
+        const credentials = { type: 'local', username: 'test' }
+        const passportUser = { id: '1234', username: 'Test' }
+        const passportErr = {}
+        const passportInfo = {}
+
+        sinon.stub(storage, 'getStore').returns(undefined)
+        sinon.stub(log, 'warn')
+
+        passportVerify.publish({ credentials, passportUser, passportErr, passportInfo })
+
+        expect(log.warn).to.have.been.calledOnceWithExactly('No rootSpan found in onPassportVerifySafe')
       })
     })
   })
