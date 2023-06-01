@@ -13,7 +13,7 @@ describe('track_event', () => {
     let rootSpan
     let getRootSpan
     let setUserTags
-    let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent
+    let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent, trackEvent
 
     beforeEach(() => {
       log = {
@@ -28,7 +28,7 @@ describe('track_event', () => {
 
       setUserTags = sinon.stub()
 
-      const trackEvent = proxyquire('../../../src/appsec/sdk/track_event', {
+      const trackEvents = proxyquire('../../../src/appsec/sdk/track_event', {
         '../../log': log,
         './utils': {
           getRootSpan
@@ -38,9 +38,10 @@ describe('track_event', () => {
         }
       })
 
-      trackUserLoginSuccessEvent = trackEvent.trackUserLoginSuccessEvent
-      trackUserLoginFailureEvent = trackEvent.trackUserLoginFailureEvent
-      trackCustomEvent = trackEvent.trackCustomEvent
+      trackUserLoginSuccessEvent = trackEvents.trackUserLoginSuccessEvent
+      trackUserLoginFailureEvent = trackEvents.trackUserLoginFailureEvent
+      trackCustomEvent = trackEvents.trackCustomEvent
+      trackEvent = trackEvents.trackEvent
     })
 
     describe('trackUserLoginSuccessEvent', () => {
@@ -222,6 +223,30 @@ describe('track_event', () => {
           'appsec.events.custom_event.track': 'true',
           'manual.keep': 'true',
           '_dd.appsec.events.custom_event.sdk': 'true'
+        })
+      })
+    })
+
+    describe('trackEvent', () => {
+      it('should call addTags with safe mode', () => {
+        trackEvent('event', { metaKey1: 'metaValue1', metakey2: 'metaValue2' }, 'trackEvent', rootSpan, 'safe')
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
+          'appsec.events.event.track': 'true',
+          'manual.keep': 'true',
+          '_dd.appsec.events.event.auto.mode': 'safe',
+          'appsec.events.event.metaKey1': 'metaValue1',
+          'appsec.events.event.metakey2': 'metaValue2'
+        })
+      })
+
+      it('should call addTags with extended mode', () => {
+        trackEvent('event', { metaKey1: 'metaValue1', metakey2: 'metaValue2' }, 'trackEvent', rootSpan, 'extended')
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
+          'appsec.events.event.track': 'true',
+          'manual.keep': 'true',
+          '_dd.appsec.events.event.auto.mode': 'extended',
+          'appsec.events.event.metaKey1': 'metaValue1',
+          'appsec.events.event.metakey2': 'metaValue2'
         })
       })
     })

@@ -4,7 +4,7 @@ const proxyquire = require('proxyquire')
 
 describe('Passport', () => {
   const rootSpan = {
-    context: () => {}
+    context: () => { return {} }
   }
   const loginLocal = { type: 'local', username: 'test' }
   const userUuid = {
@@ -145,6 +145,55 @@ describe('Passport', () => {
       passportModule.passportTrackEvent(loginLocal, userUuid, undefined, undefined, rootSpan, 'extended')
       expect(setUser.setUserTags).not.to.have.been.called
       expect(events.trackEvent).not.to.have.been.called
+    })
+
+    it('should report login success with the _id field', () => {
+      const user = {
+        _id: '591dc126-8431-4d0f-9509-b23318d3dce4',
+        email: 'testUser@test.com',
+        username: 'Test User'
+      }
+
+      rootSpan.context = () => { return {} }
+
+      passportModule.passportTrackEvent(loginLocal, user, undefined, undefined, rootSpan, 'extended')
+      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly(user._id, rootSpan)
+      expect(events.trackEvent).to.have.been.calledOnceWithExactly(
+        'users.login.success',
+        {
+          'usr.id': user._id,
+          'usr.email': user.email,
+          'usr.username': user.username,
+          'usr.login': loginLocal.username
+        },
+        'passportTrackEvent',
+        rootSpan,
+        'extended'
+      )
+    })
+
+    it('should report login success with the username field passport name', () => {
+      const user = {
+        email: 'testUser@test.com',
+        name: 'Test User'
+      }
+
+      rootSpan.context = () => { return {} }
+
+      passportModule.passportTrackEvent(loginLocal, user, undefined, undefined, rootSpan, 'extended')
+      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly(loginLocal.username, rootSpan)
+      expect(events.trackEvent).to.have.been.calledOnceWithExactly(
+        'users.login.success',
+        {
+          'usr.id': loginLocal.username,
+          'usr.email': user.email,
+          'usr.username': user.name,
+          'usr.login': loginLocal.username
+        },
+        'passportTrackEvent',
+        rootSpan,
+        'extended'
+      )
     })
   })
 })

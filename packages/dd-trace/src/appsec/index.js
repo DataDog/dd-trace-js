@@ -42,8 +42,6 @@ function enable (_config) {
 
     if (_config.appsec.eventTracking.enabled) {
       passportVerify.subscribe(onPassportVerify)
-    } else {
-      log.debug('Undefined eventTracking mode')
     }
 
     isEnabled = true
