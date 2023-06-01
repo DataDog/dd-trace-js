@@ -455,7 +455,7 @@ testFrameworks.forEach(({
         receiver.assertPayloadReceived(() => {
           const error = new Error('it should not report code coverage')
           done(error)
-        }, ({ url }) => url === '/api/v2/citestcov')
+        }, ({ url }) => url === '/api/v2/citestcov').catch(() => {})
 
         receiver.assertPayloadReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'dd-api-key', '1')
@@ -774,7 +774,7 @@ testFrameworks.forEach(({
         receiver.assertPayloadReceived(() => {
           const error = new Error('it should not report code coverage')
           done(error)
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcov')
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcov').catch(() => {})
 
         receiver.assertPayloadReceived(({ headers, payload }) => {
           assert.notProperty(headers, 'dd-api-key')
