@@ -15,7 +15,7 @@ describe('Insecure cookie vulnerability', () => {
   })
 
   after(() => {
-    fs.rmSync(setCookieFunctionsPath)
+    fs.unlinkSync(setCookieFunctionsPath)
   })
 
   withVersions('express', 'express', version => {
