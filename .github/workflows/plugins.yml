@@ -334,7 +334,7 @@ jobs:
       PLUGINS: dns
     steps:
       - uses: actions/checkout@v2
-      - uses: ./.github/actions/start-testagent
+      - uses: ./.github/actions/start_testagent
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/16
