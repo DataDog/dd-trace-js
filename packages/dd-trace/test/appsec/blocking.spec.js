@@ -16,7 +16,7 @@ describe('blocking', () => {
   }
 
   let log
-  let block, setTemplates
+  let block, setTemplates, updateBlockingConfiguration
   let req, res, rootSpan
 
   beforeEach(() => {
@@ -31,6 +31,7 @@ describe('blocking', () => {
 
     block = blocking.block
     setTemplates = blocking.setTemplates
+    updateBlockingConfiguration = blocking.updateBlockingConfiguration
 
     req = {
       headers: {}
@@ -38,8 +39,10 @@ describe('blocking', () => {
 
     res = {
       setHeader: sinon.stub(),
+      writeHead: sinon.stub(),
       end: sinon.stub()
     }
+    res.writeHead.returns(res)
 
     rootSpan = {
       addTags: sinon.stub()
@@ -130,6 +133,143 @@ describe('blocking', () => {
       block(req, res, rootSpan)
 
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+    })
+  })
+
+  describe('block with custom actions', () => {
+    const config = {
+      appsec: {
+        blockedTemplateHtml: undefined,
+        blockedTemplateJson: undefined
+      }
+    }
+
+    it('should block with default html template and custom status', () => {
+      updateBlockingConfiguration({
+        id: 'block',
+        type: 'block_request',
+        parameters: {
+          status_code: 401,
+          type: 'auto'
+        }
+      })
+      req.headers.accept = 'text/html'
+      setTemplates(config)
+
+      block(req, res, rootSpan)
+
+      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
+      expect(res.statusCode).to.be.equal(401)
+    })
+
+    it('should block with default json template and custom status ' +
+        'when type is forced to json and accept is html', () => {
+      updateBlockingConfiguration({
+        id: 'block',
+        type: 'block_request',
+        parameters: {
+          status_code: 401,
+          type: 'json'
+        }
+      })
+      req.headers.accept = 'text/html'
+      setTemplates(config)
+
+      block(req, res, rootSpan)
+
+      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+      expect(res.statusCode).to.be.equal(401)
+    })
+
+    it('should block with default html template and custom status ' +
+        'when type is forced to html and accept is html', () => {
+      updateBlockingConfiguration({
+        id: 'block',
+        type: 'block_request',
+        parameters: {
+          status_code: 401,
+          type: 'html'
+        }
+      })
+      req.headers.accept = 'text/html'
+      setTemplates(config)
+
+      block(req, res, rootSpan)
+
+      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
+      expect(res.statusCode).to.be.equal(401)
+    })
+
+    it('should block with default json template and custom status', () => {
+      updateBlockingConfiguration({
+        id: 'block',
+        type: 'block_request',
+        parameters: {
+          status_code: 401,
+          type: 'auto'
+        }
+      })
+      setTemplates(config)
+
+      block(req, res, rootSpan)
+
+      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+      expect(res.statusCode).to.be.equal(401)
+    })
+
+    it('should block with default json template and custom status ' +
+        'when type is forced to json and accept is not defined', () => {
+      updateBlockingConfiguration({
+        id: 'block',
+        type: 'block_request',
+        parameters: {
+          status_code: 401,
+          type: 'json'
+        }
+      })
+      setTemplates(config)
+
+      block(req, res, rootSpan)
+
+      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+      expect(res.statusCode).to.be.equal(401)
+    })
+
+    it('should block with default html template and custom status ' +
+        'when type is forced to html and accept is not defined', () => {
+      updateBlockingConfiguration({
+        id: 'block',
+        type: 'block_request',
+        parameters: {
+          status_code: 401,
+          type: 'html'
+        }
+      })
+      setTemplates(config)
+
+      block(req, res, rootSpan)
+
+      expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
+      expect(res.statusCode).to.be.equal(401)
+    })
+
+    it('should block with custom redirect', () => {
+      updateBlockingConfiguration({
+        id: 'block',
+        type: 'redirect_request',
+        parameters: {
+          status_code: 301,
+          location: '/you-have-been-blocked'
+        }
+      })
+      setTemplates(config)
+
+      block(req, res, rootSpan)
+
+      expect(res.writeHead).to.have.been.calledOnceWithExactly(301, {
+        'Location': '/you-have-been-blocked'
+      })
+      expect(res.end).to.have.been.calledOnce
     })
   })
 })
