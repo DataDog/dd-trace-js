@@ -1,7 +1,6 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const log = require('../../src/log')
 const waf = require('../../src/appsec/waf')
 const RuleManager = require('../../src/appsec/rule_manager')
 const appsec = require('../../src/appsec')
@@ -26,6 +25,7 @@ describe('AppSec Index', () => {
   let web
   let blocking
   let passport
+  let log
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -59,7 +59,14 @@ describe('AppSec Index', () => {
       passportTrackEvent: sinon.stub()
     }
 
+    log = {
+      debug: sinon.stub(),
+      warn: sinon.stub(),
+      error: sinon.stub()
+    }
+
     AppSec = proxyquire('../../src/appsec', {
+      '../log': log,
       '../plugins/util/web': web,
       './blocking': blocking,
       './passport': passport
@@ -91,7 +98,7 @@ describe('AppSec Index', () => {
     })
 
     it('should log when enable fails', () => {
-      sinon.stub(log, 'error')
+      // sinon.stub(log, 'error')
       RuleManager.applyRules.restore()
 
       const err = new Error('Invalid Rules')
@@ -467,19 +474,19 @@ describe('AppSec Index', () => {
     describe('onPassportVerify', () => {
       it('Should call passportTrackEvent', () => {
         const credentials = { type: 'local', username: 'test' }
-        const passportUser = { id: '1234', username: 'Test' }
-        const passportErr = {}
-        const passportInfo = {}
+        const user = { id: '1234', username: 'Test' }
+        const err = {}
+        const info = {}
 
         sinon.stub(storage, 'getStore').returns({ req: {} })
 
-        passportVerify.publish({ credentials, passportUser, passportErr, passportInfo })
+        passportVerify.publish({ credentials, user, err, info })
 
         expect(passport.passportTrackEvent).to.have.been.calledOnceWithExactly(
           credentials,
-          passportUser,
-          passportErr,
-          passportInfo,
+          user,
+          err,
+          info,
           rootSpan,
           config.appsec.eventTracking.mode)
       })
@@ -491,7 +498,6 @@ describe('AppSec Index', () => {
         const passportInfo = {}
 
         sinon.stub(storage, 'getStore').returns(undefined)
-        sinon.stub(log, 'warn')
 
         passportVerify.publish({ credentials, passportUser, passportErr, passportInfo })
 
