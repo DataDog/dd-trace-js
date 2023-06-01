@@ -124,3 +124,13 @@ services:
       - LDAP_ADMIN_PASSWORD=adminpassword
       - LDAP_USERS=user01,user02
       - LDAP_PASSWORDS=password1,password2
+
+  testagent:
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+    ports:
+        - "127.0.0.1:9126:9126"
+    environment:
+        - LOG_LEVEL=DEBUG
+        - TRACE_LANGUAGE=javascript
+        - DISABLED_CHECKS=trace_content_length
+        - PORT=9126

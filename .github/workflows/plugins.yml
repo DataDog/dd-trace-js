@@ -18,6 +18,7 @@ env:
 
 # TODO: upstream jobs
 
+
 jobs:
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
@@ -34,6 +35,7 @@ jobs:
       SERVICES: qpid
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -42,6 +44,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   amqplib:
@@ -56,6 +60,7 @@ jobs:
       SERVICES: rabbitmq
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -64,6 +69,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   aws-sdk:
@@ -86,12 +93,15 @@ jobs:
       SERVICES: localstack
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   axios:
@@ -100,12 +110,15 @@ jobs:
       PLUGINS: axios
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:upstream
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   bluebird:
@@ -114,6 +127,7 @@ jobs:
       PLUGINS: bluebird
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -121,6 +135,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
+      - if: always()
+        uses: ./.github/actions/testagent/logs
 
   bunyan:
     runs-on: ubuntu-latest
@@ -128,6 +144,7 @@ jobs:
       PLUGINS: bunyan
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -136,6 +153,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   cassandra:
@@ -152,12 +171,15 @@ jobs:
       SERVICES: cassandra
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   # couchbase:
@@ -185,6 +207,7 @@ jobs:
       PLUGINS: connect
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -193,6 +216,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   cucumber:
@@ -201,10 +226,13 @@ jobs:
       PLUGINS: cucumber
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   # TODO: fix performance issues and test more Node versions
@@ -214,9 +242,12 @@ jobs:
       PLUGINS: cypress
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   dns:
@@ -225,6 +256,7 @@ jobs:
       PLUGINS: dns
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/12
@@ -237,6 +269,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   elasticsearch:
@@ -253,26 +287,32 @@ jobs:
       SERVICES: elasticsearch
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   express:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: express|body-parser
+      PLUGINS: express
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   fastify:
@@ -281,6 +321,7 @@ jobs:
       PLUGINS: fastify
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
@@ -305,6 +346,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   generic-pool:
@@ -313,12 +356,15 @@ jobs:
       PLUGINS: generic-pool
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   google-cloud-pubsub:
@@ -333,12 +379,15 @@ jobs:
       SERVICES: gpubsub
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   graphql:
@@ -347,6 +396,7 @@ jobs:
       PLUGINS: graphql
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -355,6 +405,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   # The grpc version ranges we support only support up to Node 12.
@@ -364,10 +416,13 @@ jobs:
       PLUGINS: grpc
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   # The hapi version ranges we support only support up to Node 12.
@@ -377,10 +432,13 @@ jobs:
       PLUGINS: hapi
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   http:
@@ -389,6 +447,7 @@ jobs:
       PLUGINS: http
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/12
@@ -401,6 +460,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   http2:
@@ -409,6 +470,7 @@ jobs:
       PLUGINS: http2
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/12
@@ -421,6 +483,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   # TODO: fix performance issues and test more Node versions
@@ -430,9 +494,12 @@ jobs:
       PLUGINS: jest
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   kafkajs:
@@ -455,12 +522,15 @@ jobs:
       SERVICES: kafka
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   knex:
@@ -469,12 +539,15 @@ jobs:
       PLUGINS: knex
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   koa:
@@ -483,6 +556,7 @@ jobs:
       PLUGINS: koa
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -491,6 +565,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   limitd-client:
@@ -509,12 +585,15 @@ jobs:
       SERVICES: limitd
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   memcached:
@@ -529,12 +608,15 @@ jobs:
       SERVICES: memcached
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   microgateway-core:
@@ -543,12 +625,15 @@ jobs:
       PLUGINS: microgateway-core
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   mocha:
@@ -557,6 +642,7 @@ jobs:
       PLUGINS: mocha
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -564,6 +650,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
+      - if: always()
+        uses: ./.github/actions/testagent/logs
 
   moleculer:
     runs-on: ubuntu-latest
@@ -571,12 +659,15 @@ jobs:
       PLUGINS: moleculer
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   mongodb-core:
@@ -591,12 +682,15 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   mongoose:
@@ -611,10 +705,13 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   mysql:
@@ -632,12 +729,15 @@ jobs:
       SERVICES: mysql
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/14
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   net:
@@ -646,6 +746,7 @@ jobs:
       PLUGINS: net
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/12
@@ -658,6 +759,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   # TODO: fix performance issues and test more Node versions
@@ -675,11 +778,15 @@ jobs:
       RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
       - run: yarn install
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   opensearch:
@@ -697,12 +804,15 @@ jobs:
       SERVICES: opensearch
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   # TODO: Install the Oracle client on the host and test Node >=14.
@@ -720,11 +830,15 @@ jobs:
     env:
       PLUGINS: oracledb
       SERVICES: oracledb
+      DD_TEST_AGENT_URL: http://testagent:9126
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - run: yarn test:plugins:ci
+      - run: yarn install --ignore-engine
+      - run: yarn services
+      - run: yarn test:plugins
+      - uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   paperplane:
@@ -733,12 +847,15 @@ jobs:
       PLUGINS: paperplane
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/12
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/14
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   # TODO: re-enable upstream tests if it ever stops being flaky
@@ -748,11 +865,14 @@ jobs:
       PLUGINS: pino
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       # - run: yarn test:plugins:upstream
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   # The pg version range we support doesn't work beyond Node 12.
@@ -771,10 +891,13 @@ jobs:
       SERVICES: postgres
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   promise:
@@ -783,6 +906,7 @@ jobs:
       PLUGINS: promise
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
@@ -791,6 +915,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   promise-js:
@@ -799,12 +925,15 @@ jobs:
       PLUGINS: promise-js
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   q:
@@ -813,12 +942,15 @@ jobs:
       PLUGINS: q
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   redis:
@@ -833,12 +965,15 @@ jobs:
       SERVICES: redis
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   restify:
@@ -847,12 +982,15 @@ jobs:
       PLUGINS: restify
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   router:
@@ -861,12 +999,15 @@ jobs:
       PLUGINS: router
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   sharedb:
@@ -875,12 +1016,15 @@ jobs:
       PLUGINS: sharedb
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   tedious:
@@ -899,6 +1043,7 @@ jobs:
       SERVICES: mssql
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/16
@@ -907,6 +1052,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   when:
@@ -915,12 +1062,15 @@ jobs:
       PLUGINS: when
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   winston:
@@ -929,9 +1079,12 @@ jobs:
       PLUGINS: winston
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
