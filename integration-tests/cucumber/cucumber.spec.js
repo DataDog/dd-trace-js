@@ -317,7 +317,7 @@ versions.forEach(version => {
             receiver.assertPayloadReceived(() => {
               const error = new Error('it should not report code coverage')
               done(error)
-            }, ({ url }) => url.endsWith('/api/v2/citestcov'))
+            }, ({ url }) => url.endsWith('/api/v2/citestcov')).catch(() => {})
 
             receiver.assertPayloadReceived(({ payload }) => {
               const eventTypes = payload.events.map(event => event.type)
