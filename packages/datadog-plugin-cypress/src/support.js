@@ -1,10 +1,13 @@
 /* eslint-disable */
-beforeEach(() => {
+beforeEach(function () {
   cy.task('dd:beforeEach', {
     testName: Cypress.mocha.getRunner().suite.ctx.currentTest.fullTitle(),
     testSuite: Cypress.mocha.getRootSuite().file
-  }).then(traceId => {
+  }).then(({ traceId, shouldSkip }) => {
     Cypress.env('traceId', traceId)
+    if (shouldSkip) {
+      this.skip()
+    }
   })
 })
 
