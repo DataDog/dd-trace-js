@@ -1,0 +1,8 @@
+name: "Get APM Test Agent Logs"
+description: "Get the APM Test Agent logs from the test run."
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v2
+    - run: docker-compose logs testagent
+      shell: bash
