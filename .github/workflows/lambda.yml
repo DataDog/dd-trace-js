@@ -14,18 +14,9 @@ concurrency:
 jobs:
   ubuntu:
     runs-on: ubuntu-latest
-    services:
-      testagent:
-        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
-        ports:
-          - "127.0.0.1:9126:9126"
-        env:
-          LOG_LEVEL: DEBUG
-          TRACE_LANGUAGE: javascript
-          DISABLED_CHECKS: trace_content_length
-          PORT: 9126
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/16
@@ -35,5 +26,5 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:lambda:ci
       - if: always()
-        run: docker logs ${{ job.services.testagent.id }} # Display the log output of the testagent container
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
