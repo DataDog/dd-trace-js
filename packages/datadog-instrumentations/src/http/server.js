@@ -11,6 +11,7 @@ const startServerCh = channel('apm:http:server:request:start')
 const exitServerCh = channel('apm:http:server:request:exit')
 const errorServerCh = channel('apm:http:server:request:error')
 const finishServerCh = channel('apm:http:server:request:finish')
+const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finish')
 
 const requestFinishedSet = new WeakSet()
 
@@ -58,6 +59,9 @@ function wrapEmit (emit) {
           // TODO: should this always return true ?
           return this.listenerCount(eventName) > 0
         }
+        if (finishSetHeaderCh.hasSubscribers) {
+          wrapSetHeader(res)
+        }
         return emit.apply(this, arguments)
       } catch (err) {
         errorServerCh.publish(err)
@@ -69,4 +73,14 @@ function wrapEmit (emit) {
     }
     return emit.apply(this, arguments)
   }
+}
+
+function wrapSetHeader (res) {
+  shimmer.wrap(res, 'setHeader', setHeader => {
+    return function (name, value) {
+      const setHeaderResult = setHeader.apply(this, arguments)
+      finishSetHeaderCh.publish({ name, value, res })
+      return setHeaderResult
+    }
+  })
 }
