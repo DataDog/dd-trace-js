@@ -1,0 +1,19 @@
+name: "Start the APM Test Agent"
+description: "Starts the APM Test Agent image with environment."
+# outputs:
+#   container_id:
+#     description: "Container ID of TestAgent"
+#     value: ${{ jobs.start_testagent.outputs.container_id }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v2
+    # - run: docker run -d \
+    #     --name testagent \
+    #     -p 127.0.0.1:9126:9126 \
+    #     -e LOG_LEVEL=DEBUG \
+    #     -e TRACE_LANGUAGE=javascript \
+    #     -e DISABLED_CHECKS=trace_content_length \
+    #     -e PORT=9126 \
+    #     ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+    - run: docker-compose up -d testagent
