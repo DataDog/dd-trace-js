@@ -161,12 +161,13 @@ class FakeCiVisIntake extends FakeAgent {
     })
   }
 
-  async stop () {
-    await super.stop()
+  stop () {
     settings = DEFAULT_SETTINGS
     suitesToSkip = DEFAULT_SUITES_TO_SKIP
     gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
     infoResponse = DEFAULT_INFO_RESPONSE
+    this.removeAllListeners()
+    return super.stop()
   }
 
   // Similar to gatherPayloads but resolves if enough payloads have been gathered
@@ -230,7 +231,7 @@ class FakeCiVisIntake extends FakeAgent {
       }, timeout || 15000)
       const messageHandler = (message) => {
         if (!payloadMatch || payloadMatch(message)) {
-          clearInterval(timeoutId)
+          clearTimeout(timeoutId)
           resolve(message)
           this.off('message', messageHandler)
         }
