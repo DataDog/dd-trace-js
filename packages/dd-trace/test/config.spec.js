@@ -709,7 +709,11 @@ describe('Config', () => {
       obfuscatorKeyRegex: '.*',
       obfuscatorValueRegex: '.*',
       blockedTemplateHtml: undefined,
-      blockedTemplateJson: undefined
+      blockedTemplateJson: undefined,
+      eventTracking: {
+        enabled: true,
+        mode: 'safe'
+      }
     })
   })
 
