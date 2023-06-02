@@ -31,16 +31,19 @@ function wrapQuery (query) {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     const processId = this.processID
 
-    let pgQuery = arguments[0] && typeof arguments[0] === 'object' ? arguments[0] : { text: arguments[0] }
+    const pgQuery = arguments[0] && typeof arguments[0] === 'object' ? arguments[0] : { text: arguments[0] }
+
+    // shallow clone the existing query to swap out .text field
+    let newQuery = { ...pgQuery }
 
     return asyncResource.runInAsyncScope(() => {
       startCh.publish({
         params: this.connectionParameters,
-        query: pgQuery,
+        query: newQuery,
         processId
       })
 
-      arguments[0] = pgQuery
+      arguments[0] = newQuery
 
       const finish = asyncResource.bind(function (error) {
         if (error) {
@@ -53,24 +56,24 @@ function wrapQuery (query) {
       const queryQueue = this.queryQueue || this._queryQueue
       const activeQuery = this.activeQuery || this._activeQuery
 
-      pgQuery = queryQueue[queryQueue.length - 1] || activeQuery
+      newQuery = queryQueue[queryQueue.length - 1] || activeQuery
 
-      if (!pgQuery) {
+      if (!newQuery) {
         return retval
       }
 
-      if (pgQuery.callback) {
-        const originalCallback = callbackResource.bind(pgQuery.callback)
-        pgQuery.callback = function (err, res) {
+      if (newQuery.callback) {
+        const originalCallback = callbackResource.bind(newQuery.callback)
+        newQuery.callback = function (err, res) {
           finish(err)
           return originalCallback.apply(this, arguments)
         }
-      } else if (pgQuery.once) {
-        pgQuery
+      } else if (newQuery.once) {
+        newQuery
           .once('error', finish)
           .once('end', () => finish())
       } else {
-        pgQuery.then(() => finish(), finish)
+        newQuery.then(() => finish(), finish)
       }
 
       try {
