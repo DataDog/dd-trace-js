@@ -822,8 +822,20 @@ describe('Config', () => {
 
     expect(config.telemetry).to.not.be.undefined
     expect(config.telemetry.enabled).to.be.true
+    expect(config.telemetry.heartbeatInterval).to.eq(60000)
     expect(config.telemetry.logCollection).to.be.false
     expect(config.telemetry.debug).to.be.false
+  })
+
+  it('should set DD_TELEMETRY_HEARTBEAT_INTERVAL', () => {
+    const origTelemetryHeartbeatIntervalValue = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
+    process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL = '42'
+
+    const config = new Config()
+
+    expect(config.telemetry.heartbeatInterval).to.eq(42000)
+
+    process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL = origTelemetryHeartbeatIntervalValue
   })
 
   it('should not set DD_TRACE_TELEMETRY_ENABLED', () => {
@@ -859,15 +871,15 @@ describe('Config', () => {
     process.env.DD_IAST_ENABLED = origIastEnabledValue
   })
 
-  it('should set DD_TELEMETRY_DEBUG_ENABLED', () => {
-    const origTelemetryDebugValue = process.env.DD_TELEMETRY_DEBUG_ENABLED
-    process.env.DD_TELEMETRY_DEBUG_ENABLED = 'true'
+  it('should set DD_TELEMETRY_DEBUG', () => {
+    const origTelemetryDebugValue = process.env.DD_TELEMETRY_DEBUG
+    process.env.DD_TELEMETRY_DEBUG = 'true'
 
     const config = new Config()
 
     expect(config.telemetry.debug).to.be.true
 
-    process.env.DD_TELEMETRY_DEBUG_ENABLED = origTelemetryDebugValue
+    process.env.DD_TELEMETRY_DEBUG = origTelemetryDebugValue
   })
 
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
