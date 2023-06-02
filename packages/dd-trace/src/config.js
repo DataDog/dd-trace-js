@@ -216,8 +216,11 @@ class Config {
       process.env.DD_TRACE_TELEMETRY_ENABLED,
       !inServerlessEnvironment
     )
-    const DD_TELEMETRY_DEBUG_ENABLED = coalesce(
-      process.env.DD_TELEMETRY_DEBUG_ENABLED,
+    const DD_TELEMETRY_HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
+      ? parseInt(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000
+      : 60000
+    const DD_TELEMETRY_DEBUG = coalesce(
+      process.env.DD_TELEMETRY_DEBUG,
       false
     )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
@@ -513,8 +516,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     // Disabled for CI Visibility's agentless
     this.telemetry = {
       enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
+      heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
-      debug: isTrue(DD_TELEMETRY_DEBUG_ENABLED)
+      debug: isTrue(DD_TELEMETRY_DEBUG)
     }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
