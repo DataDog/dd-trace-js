@@ -31,9 +31,7 @@ class NativeWallProfiler {
   }
 
   resetStack () {
-    this._currentSpan = undefined
     this._currentLabels = undefined
-    this._spanStack = []
     this._labelStack = []
   }
 
@@ -64,16 +62,6 @@ class NativeWallProfiler {
     }
   }
 
-  markAsSampled (span) {
-    // NOTE: there's no guarantee these tags will be applied to the span as it
-    // is possible it'll be sent to the agent by the time we get to execute
-    // this code.
-    if (span && this._labelsCaptured()) {
-      span.setTag('sampled', 'yes')
-      span.setTag('manual.keep', true)
-    }
-  }
-
   setLabels (labels) {
     this._currentLabels = labels
     this._setLabels(labels)
@@ -82,16 +70,7 @@ class NativeWallProfiler {
   _enter () {
     if (!this._setLabels) return
 
-    const lastSpan = this._currentSpan
-    this.markAsSampled(lastSpan)
-    // NOTE: We stack nulls/undefineds *except* at the bottom of the
-    // stack, since pop() on an empty stack "synthesizes" those anyway.
-    if (lastSpan || this._spanStack.length > 0) {
-      this._spanStack.push(lastSpan)
-    }
-
     const currentSpan = getActiveSpan() || null
-    this._currentSpan = currentSpan
 
     const activeCtx = currentSpan ? currentSpan.context() : null
 
@@ -108,8 +87,6 @@ class NativeWallProfiler {
   _exit () {
     if (!this._setLabels) return
 
-    this.markAsSampled(this._currentSpan)
-    this._currentSpan = this._spanStack.pop()
     this.setLabels(this._labelStack.pop())
   }
 
