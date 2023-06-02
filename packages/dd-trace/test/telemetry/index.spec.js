@@ -88,10 +88,6 @@ describe('telemetry', () => {
   it('should send app-started', () => {
     return testSeq(1, 'app-started', payload => {
       expect(payload).to.deep.include({
-        integrations: [
-          { name: 'foo2', enabled: true, auto_enabled: true },
-          { name: 'bar2', enabled: false, auto_enabled: true }
-        ],
         dependencies: []
       }).and.to.have.property('configuration').that.include.members([
         { name: 'telemetry.enabled', value: true },
@@ -220,7 +216,7 @@ async function testSeq (seqId, reqType, validatePayload) {
   expect(req.url).to.equal(`/telemetry/proxy/api/v2/apmtelemetry`)
   expect(req.headers).to.include({
     'content-type': 'application/json',
-    'dd-telemetry-api-version': 'v1',
+    'dd-telemetry-api-version': 'v2',
     'dd-telemetry-request-type': reqType
   })
   const osName = os.type()
@@ -246,7 +242,7 @@ async function testSeq (seqId, reqType, validatePayload) {
     }
   }
   expect(req.body).to.deep.include({
-    api_version: 'v1',
+    api_version: 'v2',
     request_type: reqType,
     runtime_id: '1a2b3c',
     seq_id: seqId,

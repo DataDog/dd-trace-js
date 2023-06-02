@@ -32,10 +32,16 @@ function sendData (config, application, host, reqType, payload = {}) {
       'dd-telemetry-request-type': reqType
     }
   }
-  const namingSchemaVer = tracerConfig.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+
+  let namingSchemaVer = tracerConfig.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+  if (namingSchemaVer) {
+    namingSchemaVer = parseInt(namingSchemaVer.charAt(1))
+  } else {
+    namingSchemaVer = 0
+  }
   const data = JSON.stringify({
     api_version: 'v2',
-    naming_schema_version: parseInt(namingSchemaVer.charAt(1)) || 0,
+    naming_schema_version: namingSchemaVer,
     request_type: reqType,
     tracer_time: Math.floor(Date.now() / 1000),
     runtime_id: config.tags['runtime-id'],
