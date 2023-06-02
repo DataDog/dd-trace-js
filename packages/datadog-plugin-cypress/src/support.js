@@ -1,3 +1,19 @@
+function getTestsInFile (mochaSuite) {
+  const tests = []
+
+  function getTestsInSuite (suite) {
+    suite.tests.forEach(test => {
+      tests.push(test)
+    })
+    suite.suites.forEach(suite => {
+      getTestsInSuite(suite)
+    })
+  }
+  getTestsInSuite(mochaSuite)
+
+  return tests
+}
+
 /* eslint-disable */
 beforeEach(function () {
   cy.task('dd:beforeEach', {
@@ -16,7 +32,14 @@ before(() => {
 })
 
 after(() => {
-  cy.task('dd:testSuiteFinish', Cypress.mocha.getRunner().stats)
+  const tests = getTestsInFile(Cypress.mocha._mocha.suite).map(test => ({
+    name: test.fullTitle(),
+    err: test.err,
+    state: test.state,
+    suite: test.invocationDetails.relativeFile
+  }))
+  debugger
+  cy.task('dd:testSuiteFinish', { stats: Cypress.mocha.getRunner().stats, tests })
   cy.window().then(win => {
     win.dispatchEvent(new Event('beforeunload'))
   })

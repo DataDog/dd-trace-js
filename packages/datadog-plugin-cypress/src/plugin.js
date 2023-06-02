@@ -133,6 +133,8 @@ module.exports = (on, config) => {
     'git.branch': branch
   } = testEnvironmentMetadata
 
+  const finishedTestsByFile = {}
+
   const testConfiguration = {
     repositoryUrl,
     sha,
@@ -157,6 +159,13 @@ module.exports = (on, config) => {
   let isSuitesSkippingEnabled = false
   let isCodeCoverageEnabled = false
   let testsToSkip = []
+
+  on('after:spec', (spec, stats) => {
+    const status = getSuiteStatus(stats.stats)
+    testSuiteSpan.setTag(TEST_STATUS, status)
+    testSuiteSpan.finish()
+    testSuiteSpan = null
+  })
 
   on('before:run', (details) => {
     return getItrConfig(tracer, testConfiguration).then(({ err, itrConfig }) => {
@@ -254,12 +263,65 @@ module.exports = (on, config) => {
       })
       return null
     },
-    'dd:testSuiteFinish': (stats) => {
+    'dd:testSuiteFinish': ({ stats, tests }) => {
+      // console.log('suite finish!', stats)
+      // console.log('tests', tests)
+      // console.log('finishedTestsByFile', finishedTestsByFile)
       if (testSuiteSpan) {
-        const status = getSuiteStatus(stats)
-        testSuiteSpan.setTag(TEST_STATUS, status)
-        testSuiteSpan.finish()
-        testSuiteSpan = null
+        // look in finishedTestsByFile if any value of `tests` isn't there and create a "skipped" test
+        // also, bubble up test error to test suite
+        const skippedTests = tests.filter(({ name, suite }) => {
+          const listOfFinishedTests = finishedTestsByFile[suite]
+          return !listOfFinishedTests || !listOfFinishedTests.includes(name)
+        })
+
+        // TODO: extract repeated code
+
+        // TODO: attempt to get the last error from a test so that it bubbles to the test suite
+        // -> this does not look possible.
+        // we can use after:spec though!
+        skippedTests.forEach((skippedTest) => {
+          const testSuiteTags = {
+            [TEST_COMMAND]: command,
+            [TEST_COMMAND]: command,
+            [TEST_MODULE]: TEST_FRAMEWORK_NAME
+          }
+          if (testSuiteSpan) {
+            testSuiteTags[TEST_SUITE_ID] = testSuiteSpan.context().toSpanId()
+          }
+          if (testSessionSpan && testModuleSpan) {
+            testSuiteTags[TEST_SESSION_ID] = testSessionSpan.context().toTraceId()
+            testSuiteTags[TEST_MODULE_ID] = testModuleSpan.context().toSpanId()
+          }
+          const {
+            childOf,
+            resource,
+            ...testSpanMetadata
+          } = getTestSpanMetadata(tracer, skippedTest.name, skippedTest.suite, config)
+
+          const codeOwners = getCodeOwnersForFilename(skippedTest.suite, codeOwnersEntries)
+
+          if (codeOwners) {
+            testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
+          }
+          const skippedTestSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
+            childOf,
+            tags: {
+              [COMPONENT]: TEST_FRAMEWORK_NAME,
+              [ORIGIN_KEY]: CI_APP_ORIGIN,
+              ...testSpanMetadata,
+              ...testEnvironmentMetadata,
+              ...testSuiteTags
+            }
+          })
+
+          skippedTestSpan.setTag(TEST_STATUS, 'skip')
+          skippedTestSpan.finish()
+        })
+        // const status = getSuiteStatus(stats)
+        // testSuiteSpan.setTag(TEST_STATUS, status)
+        // testSuiteSpan.finish()
+        // testSuiteSpan = null
       }
       return null
     },
@@ -312,7 +374,7 @@ module.exports = (on, config) => {
       return activeSpan ? { traceId: activeSpan.context().toTraceId() } : {}
     },
     'dd:afterEach': ({ test, coverage }) => {
-      const { state, error, isRUMActive, testSourceLine } = test
+      const { state, error, isRUMActive, testSourceLine, testSuite, testName } = test
       if (activeSpan) {
         if (coverage && tracer._tracer._exporter.exportCoverage && isCodeCoverageEnabled) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -336,6 +398,11 @@ module.exports = (on, config) => {
         }
         if (testSourceLine) {
           activeSpan.setTag(TEST_SOURCE_START, testSourceLine)
+        }
+        if (finishedTestsByFile[testSuite]) {
+          finishedTestsByFile[testSuite].push(testName)
+        } else {
+          finishedTestsByFile[testSuite] = [testName]
         }
         activeSpan.finish()
       }
