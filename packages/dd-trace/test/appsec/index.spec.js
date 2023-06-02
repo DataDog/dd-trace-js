@@ -98,7 +98,6 @@ describe('AppSec Index', () => {
     })
 
     it('should log when enable fails', () => {
-      // sinon.stub(log, 'error')
       RuleManager.applyRules.restore()
 
       const err = new Error('Invalid Rules')
@@ -485,8 +484,6 @@ describe('AppSec Index', () => {
         expect(passport.passportTrackEvent).to.have.been.calledOnceWithExactly(
           credentials,
           user,
-          err,
-          info,
           rootSpan,
           config.appsec.eventTracking.mode)
       })

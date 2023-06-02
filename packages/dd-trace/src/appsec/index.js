@@ -146,7 +146,7 @@ function onRequestQueryParsed ({ req, res, abortController }) {
   handleResults(results, req, res, rootSpan, abortController)
 }
 
-function onPassportVerify ({ credentials, user, err, info }) {
+function onPassportVerify ({ credentials, user }) {
   const store = storage.getStore()
   const rootSpan = store && store.req && web.root(store.req)
 
@@ -155,7 +155,7 @@ function onPassportVerify ({ credentials, user, err, info }) {
     return
   }
 
-  passportTrackEvent(credentials, user, err, info, rootSpan, config.appsec.eventTracking.mode)
+  passportTrackEvent(credentials, user, rootSpan, config.appsec.eventTracking.mode)
 }
 
 function handleResults (actions, req, res, rootSpan, abortController) {

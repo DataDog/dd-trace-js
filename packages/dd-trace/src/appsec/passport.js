@@ -7,18 +7,14 @@ const { setUserTags } = require('./sdk/set_user')
 const UUID_PATTERN = '^[0-9A-F]{8}-[0-9A-F]{4}-[1-5][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$'
 const regexUsername = new RegExp(UUID_PATTERN, 'i')
 
-const SDK_EVENT_PATTERN = '_dd\\.appsec\\.events\\.[\\W\\w+]+\\.sdk'
-const regexSdkEvent = new RegExp(SDK_EVENT_PATTERN, 'i')
+const SDK_USER_EVENT_PATTERN = '_dd\\.appsec\\.events\\.users\\.[\\W\\w+]+\\.sdk'
+const regexSdkEvent = new RegExp(SDK_USER_EVENT_PATTERN, 'i')
 
 function isSdkCalled (tags) {
   let called = false
 
   if (tags && typeof tags === 'object') {
-    Object.entries(tags).forEach(([key, value]) => {
-      if (regexSdkEvent.test(key) && value === 'true') {
-        called = true
-      }
-    })
+    called = Object.entries(tags).some(([key, value]) => regexSdkEvent.test(key) && value === 'true')
   }
 
   return called
@@ -41,8 +37,6 @@ function parseUser (login, passportUser, mode) {
       user['usr.id'] = passportUser.id
     } else if (passportUser._id) {
       user['usr.id'] = passportUser._id
-    } else {
-      user['usr.id'] = login
     }
 
     if (mode === 'safe') {
@@ -70,7 +64,7 @@ function parseUser (login, passportUser, mode) {
   return user
 }
 
-function passportTrackEvent (credentials, passportUser, passportErr, passportInfo, rootSpan, mode) {
+function passportTrackEvent (credentials, passportUser, rootSpan, mode) {
   const tags = rootSpan && rootSpan.context() && rootSpan.context()._tags
 
   if (isSdkCalled(tags)) {
@@ -86,10 +80,12 @@ function passportTrackEvent (credentials, passportUser, passportErr, passportInf
 
   if (passportUser) {
     // If a passportUser object is published then the login succeded
-    setUserTags(user['usr.id'], rootSpan)
+    // TODO : test
+    setUserTags({ id: user['usr.id'] }, rootSpan)
+    // Prevent 'usr.id' from being reported again in the metadata
+    delete user['usr.id']
     trackEvent('users.login.success', user, 'passportTrackEvent', rootSpan, mode)
   } else {
-    // TODO: handle err and info?
     trackEvent('users.login.failure', user, 'passportTrackEvent', rootSpan, mode)
   }
 }

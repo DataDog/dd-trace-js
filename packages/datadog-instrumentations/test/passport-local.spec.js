@@ -85,9 +85,7 @@ withVersions('passport-local', 'passport-local', version => {
       expect(subscriberStub).to.be.calledOnceWithExactly(
         {
           credentials: { type: 'local', username: 'test', password: '1234' },
-          user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
-          err: null,
-          info: undefined
+          user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' }
         }
       )
     })
@@ -100,9 +98,7 @@ withVersions('passport-local', 'passport-local', version => {
       expect(subscriberStub).to.be.calledOnceWithExactly(
         {
           credentials: { type: 'local', username: 'test', password: '1' },
-          user: false,
-          err: null,
-          info: undefined
+          user: false
         }
       )
     })

@@ -36,7 +36,7 @@ describe('Passport', () => {
 
   describe('passportTrackEvent', () => {
     it('should call log when credentials is undefined', () => {
-      passportModule.passportTrackEvent(undefined, undefined, undefined, undefined, undefined, 'safe')
+      passportModule.passportTrackEvent(undefined, undefined, undefined, 'safe')
 
       expect(log.warn).to.have.been.calledOnceWithExactly('No username found in authentication instrumentation')
     })
@@ -44,7 +44,7 @@ describe('Passport', () => {
     it('should call log when type is not known', () => {
       const credentials = { type: 'unknown', username: 'test' }
 
-      passportModule.passportTrackEvent(credentials, undefined, undefined, undefined, undefined, 'safe')
+      passportModule.passportTrackEvent(credentials, undefined, undefined, 'safe')
 
       expect(log.warn).to.have.been.calledOnceWithExactly('No username found in authentication instrumentation')
     })
@@ -52,13 +52,13 @@ describe('Passport', () => {
     it('should call log when type is known but username not present', () => {
       const credentials = { type: 'unknown' }
 
-      passportModule.passportTrackEvent(credentials, undefined, undefined, undefined, undefined, 'safe')
+      passportModule.passportTrackEvent(credentials, undefined, undefined, 'safe')
 
       expect(log.warn).to.have.been.calledOnceWithExactly('No username found in authentication instrumentation')
     })
 
     it('should report login failure when passportUser is not present', () => {
-      passportModule.passportTrackEvent(loginLocal, undefined, undefined, undefined, undefined, 'safe')
+      passportModule.passportTrackEvent(loginLocal, undefined, undefined, 'safe')
 
       expect(setUser.setUserTags).not.to.have.been.called
       expect(events.trackEvent).to.have.been.calledOnceWithExactly(
@@ -71,12 +71,12 @@ describe('Passport', () => {
     })
 
     it('should report login success when passportUser is present', () => {
-      passportModule.passportTrackEvent(loginLocal, userUuid, undefined, undefined, rootSpan, 'safe')
+      passportModule.passportTrackEvent(loginLocal, userUuid, rootSpan, 'safe')
 
-      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly(userUuid.id, rootSpan)
+      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly({ id: userUuid.id }, rootSpan)
       expect(events.trackEvent).to.have.been.calledOnceWithExactly(
         'users.login.success',
-        { 'usr.id': userUuid.id },
+        {},
         'passportTrackEvent',
         rootSpan,
         'safe'
@@ -87,12 +87,12 @@ describe('Passport', () => {
       const user = userUuid
 
       user.id = 'publicName'
-      passportModule.passportTrackEvent(loginLocal, user, undefined, undefined, rootSpan, 'safe')
+      passportModule.passportTrackEvent(loginLocal, user, rootSpan, 'safe')
 
-      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly('', rootSpan)
+      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly({ id: '' }, rootSpan)
       expect(events.trackEvent).to.have.been.calledOnceWithExactly(
         'users.login.success',
-        { 'usr.id': '' },
+        {},
         'passportTrackEvent',
         rootSpan,
         'safe'
@@ -103,12 +103,11 @@ describe('Passport', () => {
       const user = userUuid
 
       user.id = 'publicName'
-      passportModule.passportTrackEvent(loginLocal, user, undefined, undefined, rootSpan, 'extended')
-      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly(user.id, rootSpan)
+      passportModule.passportTrackEvent(loginLocal, user, rootSpan, 'extended')
+      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly({ id: user.id }, rootSpan)
       expect(events.trackEvent).to.have.been.calledOnceWithExactly(
         'users.login.success',
         {
-          'usr.id': user.id,
           'usr.email': user.email,
           'usr.username': user.username,
           'usr.login': loginLocal.username
@@ -119,7 +118,7 @@ describe('Passport', () => {
       )
     })
 
-    it('should not call trackEvent in safe mode if sdk track event functions are already called', () => {
+    it('should not call trackEvent in safe mode if sdk user event functions are already called', () => {
       rootSpan.context = () => {
         return {
           _tags: {
@@ -128,12 +127,12 @@ describe('Passport', () => {
         }
       }
 
-      passportModule.passportTrackEvent(loginLocal, userUuid, undefined, undefined, rootSpan, 'safe')
+      passportModule.passportTrackEvent(loginLocal, userUuid, rootSpan, 'safe')
       expect(setUser.setUserTags).not.to.have.been.called
       expect(events.trackEvent).not.to.have.been.called
     })
 
-    it('should not call trackEvent in extended mode if sdk track event functions are already called', () => {
+    it('should not call trackEvent in extended mode if sdk user event functions are already called', () => {
       rootSpan.context = () => {
         return {
           _tags: {
@@ -142,7 +141,44 @@ describe('Passport', () => {
         }
       }
 
-      passportModule.passportTrackEvent(loginLocal, userUuid, undefined, undefined, rootSpan, 'extended')
+      passportModule.passportTrackEvent(loginLocal, userUuid, rootSpan, 'extended')
+      expect(setUser.setUserTags).not.to.have.been.called
+      expect(events.trackEvent).not.to.have.been.called
+    })
+
+    it('should call trackEvent in extended mode if sdk custom event function is already called', () => {
+      rootSpan.context = () => {
+        return {
+          _tags: {
+            '_dd.appsec.events.custom.event.sdk': 'true'
+          }
+        }
+      }
+
+      passportModule.passportTrackEvent(loginLocal, userUuid, rootSpan, 'extended')
+      expect(events.trackEvent).to.have.been.calledOnceWithExactly(
+        'users.login.success',
+        {
+          'usr.email': userUuid.email,
+          'usr.username': userUuid.username,
+          'usr.login': loginLocal.username
+        },
+        'passportTrackEvent',
+        rootSpan,
+        'extended'
+      )
+    })
+
+    it('should call trackEvent in extended mode if sdk dy called', () => {
+      rootSpan.context = () => {
+        return {
+          _tags: {
+            '_dd.appsec.events.users.login.success.sdk': 'true'
+          }
+        }
+      }
+
+      passportModule.passportTrackEvent(loginLocal, userUuid, rootSpan, 'extended')
       expect(setUser.setUserTags).not.to.have.been.called
       expect(events.trackEvent).not.to.have.been.called
     })
@@ -156,12 +192,11 @@ describe('Passport', () => {
 
       rootSpan.context = () => { return {} }
 
-      passportModule.passportTrackEvent(loginLocal, user, undefined, undefined, rootSpan, 'extended')
-      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly(user._id, rootSpan)
+      passportModule.passportTrackEvent(loginLocal, user, rootSpan, 'extended')
+      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly({ id: user._id }, rootSpan)
       expect(events.trackEvent).to.have.been.calledOnceWithExactly(
         'users.login.success',
         {
-          'usr.id': user._id,
           'usr.email': user.email,
           'usr.username': user.username,
           'usr.login': loginLocal.username
@@ -180,12 +215,11 @@ describe('Passport', () => {
 
       rootSpan.context = () => { return {} }
 
-      passportModule.passportTrackEvent(loginLocal, user, undefined, undefined, rootSpan, 'extended')
-      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly(loginLocal.username, rootSpan)
+      passportModule.passportTrackEvent(loginLocal, user, rootSpan, 'extended')
+      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly({ id: loginLocal.username }, rootSpan)
       expect(events.trackEvent).to.have.been.calledOnceWithExactly(
         'users.login.success',
         {
-          'usr.id': loginLocal.username,
           'usr.email': user.email,
           'usr.username': user.name,
           'usr.login': loginLocal.username
