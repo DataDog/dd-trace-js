@@ -1,4 +1,5 @@
 const request = require('../exporters/common/request')
+const tracerConfig = require('../config')
 let seqId = 0
 
 function getPayload (payload) {
@@ -27,12 +28,14 @@ function sendData (config, application, host, reqType, payload = {}) {
     path: '/telemetry/proxy/api/v2/apmtelemetry',
     headers: {
       'content-type': 'application/json',
-      'dd-telemetry-api-version': 'v1',
+      'dd-telemetry-api-version': 'v2',
       'dd-telemetry-request-type': reqType
     }
   }
+  const namingSchemaVer = tracerConfig.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
   const data = JSON.stringify({
-    api_version: 'v1',
+    api_version: 'v2',
+    naming_schema_version: parseInt(namingSchemaVer.charAt(1)) || 0,
     request_type: reqType,
     tracer_time: Math.floor(Date.now() / 1000),
     runtime_id: config.tags['runtime-id'],
