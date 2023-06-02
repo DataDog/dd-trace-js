@@ -116,6 +116,8 @@ describe('telemetry', () => {
     return testSeq(3, 'app-integrations-change', payload => {
       expect(payload).to.deep.equal({
         integrations: [
+          { name: 'foo2', enabled: true, auto_enabled: true },
+          { name: 'bar2', enabled: false, auto_enabled: true },
           { name: 'baz2', enabled: true, auto_enabled: true }
         ]
       })
