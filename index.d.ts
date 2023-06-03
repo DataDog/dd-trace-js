@@ -1161,7 +1161,19 @@ declare namespace plugins {
      * the key/value pairs to record. For example, using
      * `variables => variables` would record all variables.
      */
-    variables?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
+    variables?:
+      | string[]
+      | ((
+          variables: { [key: string]: any },
+          info: {
+            span?: Span;
+            args?: ExecutionArgs;
+            operation?: {
+              name: string;
+              operation: "query" | "mutation" | "subscription";
+            };
+          }
+        ) => { [key: string]: any });
 
     /**
      * Whether to collapse list items into a single element. (i.e. single
