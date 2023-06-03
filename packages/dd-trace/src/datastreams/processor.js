@@ -1,17 +1,17 @@
 const os = require('os')
 const pkg = require('../../../../package.json')
-const Uint64 = require('int64-buffer').Uint64BE
+const Uint64 = require('int64-buffer').Uint64LE
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 
 const { DataStreamsWriter } = require('./writer')
+const { computePathwayHash } = require('./pathway')
+const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
-    console.log("hash is ", hash)
-    console.log("parent hash is ", parentHash)
     this.hash = new Uint64(hash)
     this.parentHash = new Uint64(parentHash)
     this.edgeTags = edgeTags
@@ -40,9 +40,8 @@ class StatsPoint {
 class StatsBucket extends Map {
   forCheckpoint (checkpoint) {
     const key = checkpoint.hash
-    // also include parentHash, edgeTags in ddsketch
     if (!this.has(key)) {
-      this.set(key, new StatsPoint(aggKey)) // StatsPoint
+      this.set(key, new StatsPoint(checkpoint.hash, checkpoint.parentHash, checkpoint.edgeTags)) // StatsPoint
     }
 
     return this.get(key)
@@ -80,17 +79,15 @@ class DataStreamsProcessor {
     this.env = env
     this.tags = tags || {}
     this.service = this.tags.service || 'unnamed-nodejs-service'
-    console.log('TAG', this.tags)
     this.sequence = 0
 
     if (this.enabled) {
-      this.timer = setInterval(this.onInterval.bind(this), 10000) // TODO[piochelepiotr] Update to 10s
+      this.timer = setInterval(this.onInterval.bind(this), 10000)
       this.timer.unref()
     }
   }
 
   onInterval () {
-    console.log('serializing buckets')
     const serialized = this._serializeBuckets()
     if (!serialized) return
     const payload = {
@@ -105,14 +102,63 @@ class DataStreamsProcessor {
 
   recordCheckpoint (checkpoint) {
     if (!this.enabled) return
-    console.log('setting checkpoint', checkpoint)
-
     const bucketTime = Math.round(checkpoint.currentTimestamp - (checkpoint.currentTimestamp % this.bucketSizeNs))
-    console.log('bucketTime', bucketTime)
-
     this.buckets.forTime(bucketTime)
       .forCheckpoint(checkpoint)
       .addLatencies(checkpoint)
+  }
+
+  setCheckpoint (edgeTags, ctx = null) {
+    if (!this.enabled) return {}
+    const nowNs = Date.now() * 1e6
+    const direction = edgeTags.find(t => t.startsWith('direction:'))
+    let pathwayStartNs = nowNs
+    let edgeStartNs = nowNs
+    let parentHash = ENTRY_PARENT_HASH
+    let closestOppositeDirectionHash = ENTRY_PARENT_HASH
+    let closestOppositeDirectionEdgeStart = nowNs
+    if (ctx != null) {
+      pathwayStartNs = ctx.pathwayStartNs
+      edgeStartNs = ctx.edgeStartNs
+      parentHash = ctx.hash
+      closestOppositeDirectionHash = ctx.closestOppositeDirectionHash || ENTRY_PARENT_HASH
+      closestOppositeDirectionEdgeStart = ctx.closestOppositeDirectionEdgeStart || nowNs
+      if (direction === ctx.previousDirection) {
+        parentHash = ctx.closestOppositeDirectionHash
+        if (parentHash === ENTRY_PARENT_HASH) {
+          // if the closest hash from opposite direction is the entry hash, that means
+          // we produce in a loop, without consuming
+          // in that case, we don't want the pathway to be longer and longer, but we want to restart a new pathway.
+          edgeStartNs = nowNs
+          pathwayStartNs = nowNs
+        } else {
+          edgeStartNs = ctx.closestOppositeDirectionEdgeStart
+        }
+      } else {
+        closestOppositeDirectionHash = parentHash
+        closestOppositeDirectionEdgeStart = edgeStartNs
+      }
+    }
+    const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
+    const edgeLatencyNs = nowNs - edgeStartNs
+    const pathwayLatencyNs = nowNs - pathwayStartNs
+    const checkpoint = {
+      currentTimestamp: nowNs,
+      parentHash: parentHash,
+      hash: hash,
+      edgeTags: edgeTags,
+      edgeLatencyNs: edgeLatencyNs,
+      pathwayLatencyNs: pathwayLatencyNs
+    }
+    this.recordCheckpoint(checkpoint)
+    return {
+      hash: hash,
+      edgeStartNs: edgeStartNs,
+      pathwayStartNs: pathwayStartNs,
+      previousDirection: direction,
+      closestOppositeDirectionHash: closestOppositeDirectionHash,
+      closestOppositeDirectionEdgeStart: closestOppositeDirectionEdgeStart,
+    }
   }
 
   _serializeBuckets () {
@@ -139,9 +185,8 @@ class DataStreamsProcessor {
 }
 
 module.exports = {
-  LatencyStatsProcessor: DataStreamsProcessor,
-  AggKey,
-  AggStats: StatsPoint,
-  SpanBuckets: StatsBucket,
+  DataStreamsProcessor: DataStreamsProcessor,
+  StatsPoint: StatsPoint,
+  StatsBucket: StatsBucket,
   TimeBuckets
 }

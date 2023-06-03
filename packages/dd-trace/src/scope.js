@@ -34,6 +34,15 @@ class Scope {
     }
   }
 
+  getDataStreamsContext () {
+    const store = storage.getStore()
+    return (store && store.dataStreamsContext) || null
+  }
+
+  setDataStreamsContext (dataStreamsContext) {
+    storage.enterWith({ ...(storage.getStore()), dataStreamsContext })
+  }
+
   bind (fn, span) {
     if (typeof fn !== 'function') return fn
 

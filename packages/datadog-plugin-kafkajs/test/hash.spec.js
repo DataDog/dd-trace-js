@@ -1,6 +1,6 @@
 'use strict'
 
-const { getConnectionHash, getPathwayHash, encodePathwayContext, decodePathwayContext } = require('../src/hash')
+const { getConnectionHash, computePathwayHash, encodePathwayContext, decodePathwayContext } = require('../src/hash')
 const { expect } = require('chai')
 
 describe('hashing', () => {
@@ -20,7 +20,7 @@ describe('hashing', () => {
       const parentHash = Buffer.from('0000000000000000', 'hex')
       const currentHash = Buffer.from('c223f2fa96760cba', 'hex')
       const expectedHash = Buffer.from('e073ca23a5577149', 'hex') // TODO
-      const hash = getPathwayHash(parentHash, currentHash)
+      const hash = computePathwayHash(parentHash, currentHash)
       expect(hash.length).to.equal(expectedHash.length)
       for (let i = 0; i < expectedHash.length; i++) {
         expect(hash[i]).to.equal(expectedHash[i])

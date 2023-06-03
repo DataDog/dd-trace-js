@@ -3,112 +3,78 @@
 require('../setup/tap')
 
 const { hostname } = require('os')
+const Uint64 = require('int64-buffer').Uint64LE
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
-
-const { decodePathwayContext } = require('../../../datadog-plugin-kafkajs/src/hash')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
 const pkg = require('../../../../package.json')
+const { StatsPoint, StatsBucket, TimeBuckets, DataStreamsProcessor } = require('../../src/datastreams/processor')
 const DEFAULT_TIMESTAMP = Number(new Date('2023-04-20T16:20:00.000Z'))
-const DEFAULT_LATENCY = 100
-const DEFAULT_PATHWAY_CTX = Buffer.from('e073ca23a5577149a0a8879de561a0a8879de561', 'hex')
+const DEFAULT_LATENCY = 100000000
 const DEFAULT_PARENT_HASH = Buffer.from('e858292fd15a41e4', 'hex')
 const ANOTHER_PARENT_HASH = Buffer.from('e858292fd15a4100', 'hex')
-const DEFAULT_CURRENT_HASH = decodePathwayContext(DEFAULT_PATHWAY_CTX)[0]
+const DEFAULT_CURRENT_HASH = Buffer.from('e858212fd11a41e5', 'hex')
+const ANOTHER_CURRENT_HASH = Buffer.from('e851212fd11a21e9', 'hex')
+
+const writer = {
+  flush: sinon.stub()
+}
 
 const mockCheckpoint = {
   currentTimestamp: DEFAULT_TIMESTAMP,
-  metrics: {
-    'parent_hash': DEFAULT_PARENT_HASH,
-    'edge_tags': { 'service': 'service-name', 'env': 'env-name', 'topic': 'test-topic' },
-    'dd-pathway-ctx': DEFAULT_PATHWAY_CTX,
-    'edge_latency': DEFAULT_LATENCY,
-    'pathway_latency': DEFAULT_LATENCY
-  }
+  hash: DEFAULT_CURRENT_HASH,
+  parentHash: DEFAULT_PARENT_HASH,
+  edgeTags: ['service:service-name', 'env:env-name', 'topic:test-topic'],
+  edgeLatencyNs: DEFAULT_LATENCY,
+  pathwayLatencyNs: DEFAULT_LATENCY
 }
 
 const anotherMockCheckpoint = {
   currentTimestamp: DEFAULT_TIMESTAMP,
-  metrics: {
-    'parent_hash': ANOTHER_PARENT_HASH,
-    'edge_tags': { 'service': 'service-name', 'env': 'env-name', 'topic': 'test-topic' },
-    'dd-pathway-ctx': DEFAULT_PATHWAY_CTX,
-    'edge_latency': DEFAULT_LATENCY,
-    'pathway_latency': DEFAULT_LATENCY
-  }
+  hash: ANOTHER_CURRENT_HASH, // todo: different hash
+  parentHash: ANOTHER_PARENT_HASH,
+  edgeTags: ['service:service-name', 'env:env-name', 'topic:test-topic'],
+  edgeLatencyNs: DEFAULT_LATENCY,
+  pathwayLatencyNs: DEFAULT_LATENCY
 }
 
-const exporter = {
-  export: sinon.stub()
-}
-
-const LatencyStatsExporter = sinon.stub().returns(exporter)
-
-const {
-  AggStats,
-  AggKey,
-  SpanBuckets,
-  TimeBuckets,
-  LatencyStatsProcessor
-} = proxyquire('../src/datastreams/latency_stats', {
-  '../exporters/latency-stats': {
-    LatencyStatsExporter
-  }
-})
-
-describe('AggKey', () => {
-  it('should make aggregation key for a checkpoint', () => {
-    const key = new AggKey(mockCheckpoint)
-    expect(key.toString()).to.equal(`${DEFAULT_CURRENT_HASH.toString()},${DEFAULT_PARENT_HASH.toString()}`)
-  })
-})
-
-describe('AggStats', () => {
-  it('should record a checkpoint', () => {
-    const aggKey = new AggKey(mockCheckpoint)
-    const aggStats = new AggStats(aggKey)
-    aggStats.record(mockCheckpoint)
-
+describe('StatsPoint', () => {
+  it('should add latencies', () => {
+    const aggStats = new StatsPoint(mockCheckpoint.hash, mockCheckpoint.parentHash, mockCheckpoint.edgeTags)
+    aggStats.addLatencies(mockCheckpoint)
     const edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     const pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
-    edgeLatency.accept(DEFAULT_LATENCY)
-    pathwayLatency.accept(DEFAULT_LATENCY)
+    edgeLatency.accept(DEFAULT_LATENCY/1e9)
+    pathwayLatency.accept(DEFAULT_LATENCY/1e9)
 
-    const aggStatsJSON = aggStats.toJSON()
-
-    expect(aggStatsJSON.Hash.length).to.equal(DEFAULT_CURRENT_HASH.length)
-    for (let i = 0; i < DEFAULT_CURRENT_HASH.length; i++) {
-      expect(aggStatsJSON.Hash[i]).to.equal(DEFAULT_CURRENT_HASH[i])
-    }
-    expect(aggStatsJSON.ParentHash.length).to.equal(DEFAULT_PARENT_HASH.length)
-    for (let i = 0; i < DEFAULT_PARENT_HASH.length; i++) {
-      expect(aggStatsJSON.ParentHash[i]).to.equal(DEFAULT_PARENT_HASH[i])
-    }
-    expect(aggStatsJSON.EdgeTags).to.deep.equal(aggKey.edgeTags)
-    expect(aggStatsJSON.EdgeLatency).to.deep.equal(edgeLatency.toProto())
-    expect(aggStatsJSON.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
+    const encoded = aggStats.encode()
+    expect(encoded.Hash.toString()).to.equal(new Uint64(DEFAULT_CURRENT_HASH).toString())
+    expect(encoded.ParentHash.toString()).to.equal(new Uint64(DEFAULT_PARENT_HASH).toString())
+    expect(encoded.EdgeTags).to.deep.equal(aggStats.edgeTags)
+    expect(encoded.EdgeLatency).to.deep.equal(edgeLatency.toProto())
+    expect(encoded.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
   })
 })
 
-describe('SpanBuckets', () => {
-  const buckets = new SpanBuckets()
+describe('StatsBucket', () => {
+  const buckets = new StatsBucket()
 
   it('should start empty', () => {
     expect(buckets.size).to.equal(0)
   })
 
-  it('should add a new entry when no matching agg key is found', () => {
+  it('should add a new entry when no matching key is found', () => {
     const bucket = buckets.forCheckpoint(mockCheckpoint)
-    expect(bucket).to.be.an.instanceOf(AggStats)
+    expect(bucket).to.be.an.instanceOf(StatsPoint)
     expect(buckets.size).to.equal(1)
     const [key, value] = Array.from(buckets.entries())[0]
-    expect(key).to.equal((new AggKey(mockCheckpoint)).toString())
-    expect(value).to.be.instanceOf(AggStats)
+    expect(key.toString()).to.equal(mockCheckpoint.hash.toString())
+    expect(value).to.be.instanceOf(StatsPoint)
   })
 
-  it('should not add a new entry if matching agg key is found', () => {
+  it('should not add a new entry if matching key is found', () => {
     buckets.forCheckpoint(mockCheckpoint)
     expect(buckets.size).to.equal(1)
   })
@@ -125,11 +91,11 @@ describe('TimeBuckets', () => {
     expect(buckets.size).to.equal(0)
     const bucket = buckets.forTime(12345)
     expect(buckets.size).to.equal(1)
-    expect(bucket).to.be.an.instanceOf(SpanBuckets)
+    expect(bucket).to.be.an.instanceOf(StatsBucket)
   })
 })
 
-describe('LatencyStatsProcessor', () => {
+describe('DataStreamsProcessor', () => {
   let edgeLatency
   let pathwayLatency
   let processor
@@ -145,7 +111,7 @@ describe('LatencyStatsProcessor', () => {
   }
 
   it('should construct', () => {
-    processor = new LatencyStatsProcessor(config)
+    processor = new DataStreamsProcessor(config)
     clearTimeout(processor.timer)
 
     expect(LatencyStatsExporter).to.be.calledWith({

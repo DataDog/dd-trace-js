@@ -7,7 +7,6 @@ const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 
 function makeRequest (data, url, cb) {
-  console.log("sending payload", data)
   const options = {
     path: '/v0.1/pipeline_stats',
     method: 'POST',
@@ -45,13 +44,9 @@ class DataStreamsWriter {
       log.debug(() => `Maximum number of active requests reached. Payload discarded: ${JSON.stringify(payload)}`)
       return
     }
-    console.log("payload is ", payload)
-    console.log("_________________________")
-    console.log("encoded is ", msgpack.encode(payload, { codec }))
     const encoded = pako.gzip(msgpack.encode(payload, { codec }), { level: 1 })
     makeRequest(encoded, this._url, (err, res) => {
       log.debug(`Response from the intake: ${res}`)
-      console.log("response is ", res)
       if (err) {
         log.error(err)
       }
