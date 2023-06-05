@@ -244,11 +244,18 @@ module.exports = (on, config) => {
     })
   })
   on('after:spec', (spec, { tests: cypressTests, stats }) => {
-    const finishedTests = finishedTestsByFile[spec.relative]
+    const finishedTests = finishedTestsByFile[spec.relative] || []
 
-    // Get tests that didn't go through `dd:afterEach` and create a skipped test span for each of them
+    // Get tests that didn't go through `dd:afterEach` and haven't been skipped by ITR
+    // and create a skipped test span for each of them
     cypressTests.filter(({ title }) => {
-      return !finishedTests || !finishedTests.find(({ testName }) => title.join(' ') === testName)
+      const cypressTestName = title.join(' ')
+      const isSkippedByItr = testsToSkip.find(test =>
+        cypressTestName === test.name && spec.relative === test.suite
+      )
+      const isTestFinished = finishedTests.find(({ testName }) => cypressTestName === testName)
+
+      return !isSkippedByItr && !isTestFinished
     }).forEach(({ title }) => {
       const skippedTestSpan = getTestSpan(title.join(' '), spec.relative)
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
@@ -278,7 +285,10 @@ module.exports = (on, config) => {
 
     const status = getSuiteStatus(stats)
     testSuiteSpan.setTag(TEST_STATUS, status)
-    testSuiteSpan.setTag('error', latestError)
+
+    if (latestError) {
+      testSuiteSpan.setTag('error', latestError)
+    }
     testSuiteSpan.finish()
     testSuiteSpan = null
   })
