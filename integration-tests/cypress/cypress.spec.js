@@ -24,6 +24,7 @@ const {
   TEST_ITR_TESTS_SKIPPED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { NODE_MAJOR } = require('../../version')
+const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 // TODO: remove when 2.x support is removed.
 // This is done because from cypress@>11.2.0 node 12 is not supported
@@ -55,6 +56,70 @@ versions.forEach((version) => {
     afterEach(async () => {
       childProcess.kill()
       await receiver.stop()
+    })
+
+    it('catches errors in hooks', (done) => {
+      receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        // test level hooks
+        const testHookSuite = events.find(
+          event => event.content.resource === 'test_suite.cypress/e2e/hook-test-error.cy.js'
+        )
+        const passedTest = events.find(
+          event => event.content.resource === 'cypress/e2e/hook-test-error.cy.js.context passes'
+        )
+        const failedTest = events.find(
+          event => event.content.resource === 'cypress/e2e/hook-test-error.cy.js.context passes too'
+        )
+        const skippedTest = events.find(
+          event => event.content.resource ===
+            'cypress/e2e/hook-test-error.cy.js.context does not run because earlier afterEach fails'
+        )
+        assert.equal(passedTest.content.meta[TEST_STATUS], 'pass')
+        assert.equal(failedTest.content.meta[TEST_STATUS], 'fail')
+        assert.include(failedTest.content.meta[ERROR_MESSAGE], 'error in after each')
+        assert.equal(skippedTest.content.meta[TEST_STATUS], 'skip')
+        assert.equal(testHookSuite.content.meta[TEST_STATUS], 'fail')
+        assert.include(testHookSuite.content.meta[ERROR_MESSAGE], 'error in after each')
+
+        // describe level hooks
+        const describeHookSuite = events.find(
+          event => event.content.resource === 'test_suite.cypress/e2e/hook-describe-error.cy.js'
+        )
+        const passedTestDescribe = events.find(
+          event => event.content.resource === 'cypress/e2e/hook-describe-error.cy.js.after passes'
+        )
+        const failedTestDescribe = events.find(
+          event => event.content.resource === 'cypress/e2e/hook-describe-error.cy.js.after will be marked as failed'
+        )
+        const skippedTestDescribe = events.find(
+          event => event.content.resource === 'cypress/e2e/hook-describe-error.cy.js.before passes'
+        )
+        assert.equal(passedTestDescribe.content.meta[TEST_STATUS], 'pass')
+        assert.equal(failedTestDescribe.content.meta[TEST_STATUS], 'fail')
+        assert.include(failedTestDescribe.content.meta[ERROR_MESSAGE], 'error in after')
+        assert.equal(skippedTestDescribe.content.meta[TEST_STATUS], 'skip')
+        assert.equal(describeHookSuite.content.meta[TEST_STATUS], 'fail')
+        assert.include(describeHookSuite.content.meta[ERROR_MESSAGE], 'error in after')
+      }).then(() => done()).catch(done)
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+          },
+          stdio: 'pipe'
+        }
+      )
     })
 
     it('can run and report tests', (done) => {
@@ -322,6 +387,8 @@ versions.forEach((version) => {
             stdio: 'pipe'
           }
         )
+        // childProcess.stdout.pipe(process.stdout)
+        // childProcess.stderr.pipe(process.stderr)
       })
       it('does not skip tests if test skipping is disabled by the API', (done) => {
         receiver.setSettings({
