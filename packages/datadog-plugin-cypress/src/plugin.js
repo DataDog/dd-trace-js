@@ -160,13 +160,6 @@ module.exports = (on, config) => {
   let isCodeCoverageEnabled = false
   let testsToSkip = []
 
-  on('after:spec', (spec, stats) => {
-    const status = getSuiteStatus(stats.stats)
-    testSuiteSpan.setTag(TEST_STATUS, status)
-    testSuiteSpan.finish()
-    testSuiteSpan = null
-  })
-
   on('before:run', (details) => {
     return getItrConfig(tracer, testConfiguration).then(({ err, itrConfig }) => {
       if (err) {
@@ -211,6 +204,31 @@ module.exports = (on, config) => {
         return details
       })
     })
+  })
+  on('after:spec', (spec, stats) => {
+    const finishedTests = finishedTestsByFile[spec.relative]
+    let latestError
+
+    finishedTests.forEach(finishedTest => {
+      const cypressTest = stats.tests.find(test => {
+        return test.title.join(' ') === finishedTest.testName
+      })
+      if (cypressTest && cypressTest.displayError) {
+        latestError = new Error(cypressTest.displayError)
+      }
+      if (cypressTest && cypressTest.state !== finishedTest.state) {
+        // update test status
+        finishedTest.activeSpan.setTag(TEST_STATUS, CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state])
+        finishedTest.activeSpan.setTag('error', latestError)
+      }
+      finishedTest.activeSpan.finish(finishedTest.finishTime)
+    })
+
+    const status = getSuiteStatus(stats.stats)
+    testSuiteSpan.setTag(TEST_STATUS, status)
+    testSuiteSpan.setTag('error', latestError)
+    testSuiteSpan.finish()
+    testSuiteSpan = null
   })
 
   on('after:run', (suiteStats) => {
@@ -272,7 +290,7 @@ module.exports = (on, config) => {
         // also, bubble up test error to test suite
         const skippedTests = tests.filter(({ name, suite }) => {
           const listOfFinishedTests = finishedTestsByFile[suite]
-          return !listOfFinishedTests || !listOfFinishedTests.includes(name)
+          return !listOfFinishedTests || !listOfFinishedTests.find(({ testName }) => testName === name)
         })
 
         // TODO: extract repeated code
@@ -318,10 +336,6 @@ module.exports = (on, config) => {
           skippedTestSpan.setTag(TEST_STATUS, 'skip')
           skippedTestSpan.finish()
         })
-        // const status = getSuiteStatus(stats)
-        // testSuiteSpan.setTag(TEST_STATUS, status)
-        // testSuiteSpan.finish()
-        // testSuiteSpan = null
       }
       return null
     },
@@ -400,11 +414,11 @@ module.exports = (on, config) => {
           activeSpan.setTag(TEST_SOURCE_START, testSourceLine)
         }
         if (finishedTestsByFile[testSuite]) {
-          finishedTestsByFile[testSuite].push(testName)
+          finishedTestsByFile[testSuite].push({ testName, state, finishTime: activeSpan._getTime(), activeSpan })
         } else {
-          finishedTestsByFile[testSuite] = [testName]
+          finishedTestsByFile[testSuite] = [{ testName, state, finishTime: activeSpan._getTime(), activeSpan }]
         }
-        activeSpan.finish()
+        // spans now finish at after:spec
       }
       activeSpan = null
       return null
