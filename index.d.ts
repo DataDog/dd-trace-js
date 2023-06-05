@@ -1168,9 +1168,9 @@ declare namespace plugins {
           info: {
             span?: Span;
             args?: ExecutionArgs;
-            operation?: {
-              name: string;
-              operation: "query" | "mutation" | "subscription";
+            operation: {
+              name?: string;
+              type?: "query" | "mutation" | "subscription";
             };
           }
         ) => { [key: string]: any });
