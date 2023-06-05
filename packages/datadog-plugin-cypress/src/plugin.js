@@ -160,6 +160,44 @@ module.exports = (on, config) => {
   let isCodeCoverageEnabled = false
   let testsToSkip = []
 
+  function getTestSpan (testName, testSuite) {
+    const testSuiteTags = {
+      [TEST_COMMAND]: command,
+      [TEST_COMMAND]: command,
+      [TEST_MODULE]: TEST_FRAMEWORK_NAME
+    }
+    if (testSuiteSpan) {
+      testSuiteTags[TEST_SUITE_ID] = testSuiteSpan.context().toSpanId()
+    }
+    if (testSessionSpan && testModuleSpan) {
+      testSuiteTags[TEST_SESSION_ID] = testSessionSpan.context().toTraceId()
+      testSuiteTags[TEST_MODULE_ID] = testModuleSpan.context().toSpanId()
+    }
+
+    const {
+      childOf,
+      resource,
+      ...testSpanMetadata
+    } = getTestSpanMetadata(tracer, testName, testSuite, config)
+
+    const codeOwners = getCodeOwnersForFilename(testSuite, codeOwnersEntries)
+
+    if (codeOwners) {
+      testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
+    }
+
+    return tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
+      childOf,
+      tags: {
+        [COMPONENT]: TEST_FRAMEWORK_NAME,
+        [ORIGIN_KEY]: CI_APP_ORIGIN,
+        ...testSpanMetadata,
+        ...testEnvironmentMetadata,
+        ...testSuiteTags
+      }
+    })
+  }
+
   on('before:run', (details) => {
     return getItrConfig(tracer, testConfiguration).then(({ err, itrConfig }) => {
       if (err) {
@@ -205,26 +243,40 @@ module.exports = (on, config) => {
       })
     })
   })
-  on('after:spec', (spec, stats) => {
+  on('after:spec', (spec, { tests: cypressTests, stats }) => {
     const finishedTests = finishedTestsByFile[spec.relative]
-    let latestError
 
-    finishedTests.forEach(finishedTest => {
-      const cypressTest = stats.tests.find(test => {
-        return test.title.join(' ') === finishedTest.testName
-      })
-      if (cypressTest && cypressTest.displayError) {
+    // Get tests that didn't go through `dd:afterEach` and create a skipped test span for each of them
+    cypressTests.filter(({ title }) => {
+      return !finishedTests || !finishedTests.find(({ testName }) => title.join(' ') === testName)
+    }).forEach(({ title }) => {
+      const skippedTestSpan = getTestSpan(title.join(' '), spec.relative)
+      skippedTestSpan.setTag(TEST_STATUS, 'skip')
+      skippedTestSpan.finish()
+    })
+
+    // Make sure that reported test statuses are the same as Cypress reports.
+    // This is not always the case, such as when an `after` hook fails:
+    // Cypress will report the last run test as failed, but we don't know that yet at `dd:afterEach`
+    let latestError
+    finishedTests.forEach((finishedTest) => {
+      const cypressTest = cypressTests.find(test => test.title.join(' ') === finishedTest.testName)
+      if (!cypressTest) {
+        return
+      }
+      if (cypressTest.displayError) {
         latestError = new Error(cypressTest.displayError)
       }
-      if (cypressTest && cypressTest.state !== finishedTest.state) {
-        // update test status
-        finishedTest.activeSpan.setTag(TEST_STATUS, CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state])
+      const cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
+      // update test status
+      if (cypressTestStatus !== finishedTest.testStatus) {
+        finishedTest.activeSpan.setTag(TEST_STATUS, cypressTestStatus)
         finishedTest.activeSpan.setTag('error', latestError)
       }
       finishedTest.activeSpan.finish(finishedTest.finishTime)
     })
 
-    const status = getSuiteStatus(stats.stats)
+    const status = getSuiteStatus(stats)
     testSuiteSpan.setTag(TEST_STATUS, status)
     testSuiteSpan.setTag('error', latestError)
     testSuiteSpan.finish()
@@ -281,64 +333,6 @@ module.exports = (on, config) => {
       })
       return null
     },
-    'dd:testSuiteFinish': ({ stats, tests }) => {
-      // console.log('suite finish!', stats)
-      // console.log('tests', tests)
-      // console.log('finishedTestsByFile', finishedTestsByFile)
-      if (testSuiteSpan) {
-        // look in finishedTestsByFile if any value of `tests` isn't there and create a "skipped" test
-        // also, bubble up test error to test suite
-        const skippedTests = tests.filter(({ name, suite }) => {
-          const listOfFinishedTests = finishedTestsByFile[suite]
-          return !listOfFinishedTests || !listOfFinishedTests.find(({ testName }) => testName === name)
-        })
-
-        // TODO: extract repeated code
-
-        // TODO: attempt to get the last error from a test so that it bubbles to the test suite
-        // -> this does not look possible.
-        // we can use after:spec though!
-        skippedTests.forEach((skippedTest) => {
-          const testSuiteTags = {
-            [TEST_COMMAND]: command,
-            [TEST_COMMAND]: command,
-            [TEST_MODULE]: TEST_FRAMEWORK_NAME
-          }
-          if (testSuiteSpan) {
-            testSuiteTags[TEST_SUITE_ID] = testSuiteSpan.context().toSpanId()
-          }
-          if (testSessionSpan && testModuleSpan) {
-            testSuiteTags[TEST_SESSION_ID] = testSessionSpan.context().toTraceId()
-            testSuiteTags[TEST_MODULE_ID] = testModuleSpan.context().toSpanId()
-          }
-          const {
-            childOf,
-            resource,
-            ...testSpanMetadata
-          } = getTestSpanMetadata(tracer, skippedTest.name, skippedTest.suite, config)
-
-          const codeOwners = getCodeOwnersForFilename(skippedTest.suite, codeOwnersEntries)
-
-          if (codeOwners) {
-            testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
-          }
-          const skippedTestSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
-            childOf,
-            tags: {
-              [COMPONENT]: TEST_FRAMEWORK_NAME,
-              [ORIGIN_KEY]: CI_APP_ORIGIN,
-              ...testSpanMetadata,
-              ...testEnvironmentMetadata,
-              ...testSuiteTags
-            }
-          })
-
-          skippedTestSpan.setTag(TEST_STATUS, 'skip')
-          skippedTestSpan.finish()
-        })
-      }
-      return null
-    },
     'dd:beforeEach': (test) => {
       const { testName, testSuite } = test
       // skip test
@@ -348,43 +342,10 @@ module.exports = (on, config) => {
         return { shouldSkip: true }
       }
 
-      const testSuiteTags = {
-        [TEST_COMMAND]: command,
-        [TEST_COMMAND]: command,
-        [TEST_MODULE]: TEST_FRAMEWORK_NAME
-      }
-      if (testSuiteSpan) {
-        testSuiteTags[TEST_SUITE_ID] = testSuiteSpan.context().toSpanId()
-      }
-      if (testSessionSpan && testModuleSpan) {
-        testSuiteTags[TEST_SESSION_ID] = testSessionSpan.context().toTraceId()
-        testSuiteTags[TEST_MODULE_ID] = testModuleSpan.context().toSpanId()
-      }
-
-      const {
-        childOf,
-        resource,
-        ...testSpanMetadata
-      } = getTestSpanMetadata(tracer, testName, testSuite, config)
-
-      const codeOwners = getCodeOwnersForFilename(testSuite, codeOwnersEntries)
-
-      if (codeOwners) {
-        testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
-      }
-
       if (!activeSpan) {
-        activeSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
-          childOf,
-          tags: {
-            [COMPONENT]: TEST_FRAMEWORK_NAME,
-            [ORIGIN_KEY]: CI_APP_ORIGIN,
-            ...testSpanMetadata,
-            ...testEnvironmentMetadata,
-            ...testSuiteTags
-          }
-        })
+        activeSpan = getTestSpan(testName, testSuite)
       }
+
       return activeSpan ? { traceId: activeSpan.context().toTraceId() } : {}
     },
     'dd:afterEach': ({ test, coverage }) => {
@@ -402,8 +363,9 @@ module.exports = (on, config) => {
           }
           tracer._tracer._exporter.exportCoverage(formattedCoverage)
         }
+        const testStatus = CYPRESS_STATUS_TO_TEST_STATUS[state]
+        activeSpan.setTag(TEST_STATUS, testStatus)
 
-        activeSpan.setTag(TEST_STATUS, CYPRESS_STATUS_TO_TEST_STATUS[state])
         if (error) {
           activeSpan.setTag('error', error)
         }
@@ -413,12 +375,18 @@ module.exports = (on, config) => {
         if (testSourceLine) {
           activeSpan.setTag(TEST_SOURCE_START, testSourceLine)
         }
-        if (finishedTestsByFile[testSuite]) {
-          finishedTestsByFile[testSuite].push({ testName, state, finishTime: activeSpan._getTime(), activeSpan })
-        } else {
-          finishedTestsByFile[testSuite] = [{ testName, state, finishTime: activeSpan._getTime(), activeSpan }]
+        const finishedTest = {
+          testName,
+          testStatus,
+          finishTime: activeSpan._getTime(), // we store the finish time here
+          activeSpan
         }
-        // spans now finish at after:spec
+        if (finishedTestsByFile[testSuite]) {
+          finishedTestsByFile[testSuite].push(finishedTest)
+        } else {
+          finishedTestsByFile[testSuite] = [finishedTest]
+        }
+        // test spans are finished at after:spec
       }
       activeSpan = null
       return null
