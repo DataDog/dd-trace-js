@@ -54,7 +54,6 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
 }
 
 function appStarted () {
-  console.log(config)
   return {
     dependencies: [],
     configuration: flatten(config),
