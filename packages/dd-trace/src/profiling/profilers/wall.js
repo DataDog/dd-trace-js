@@ -18,8 +18,10 @@ function getActiveSpan () {
 class NativeWallProfiler {
   constructor (options = {}) {
     this.type = 'wall'
+    // input as micros, passed on as micros
     this._samplingInterval = options.samplingInterval || 1e6 / 99 // 99hz
-    this._flushInterval = options.flushInterval || 60 * 1000 // 60 seconds
+    // input as millis, passed on as micros
+    this._flushInterval = options.flushInterval * 1000 || 60 * 1e6 // 60 seconds
     this._hotspots = options.hotspots
     this._mapper = undefined
     this._pprof = undefined
