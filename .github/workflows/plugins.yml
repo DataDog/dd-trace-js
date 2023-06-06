@@ -807,13 +807,14 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/testagent/start
+        name: Start Test Agent
       - uses: ./.github/actions/node/setup
       - run: yarn install --ignore-engine
       - run: yarn services
       - run: yarn test:plugins
       - uses: ./.github/actions/testagent/logs
         with:
-          container-id: ${{ steps.<step_name>.outputs.CONTAINER_ID }}"
+          container-id: ${{ steps.start_test_agent.outputs.CONTAINER_ID }}"
       - uses: codecov/codecov-action@v2
 
   paperplane:
