@@ -564,7 +564,7 @@ export declare interface TracerOptions {
        */
       enabled?: boolean,
       /**
-       * Constrols the automated user event tracking mode
+       * Controls the automated user event tracking mode
        * @default 'safe'
        */
       mode?: string
