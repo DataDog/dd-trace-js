@@ -278,10 +278,10 @@ module.exports = (on, config) => {
       const cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
       // update test status
       if (cypressTestStatus !== finishedTest.testStatus) {
-        finishedTest.activeSpan.setTag(TEST_STATUS, cypressTestStatus)
-        finishedTest.activeSpan.setTag('error', latestError)
+        finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
+        finishedTest.testSpan.setTag('error', latestError)
       }
-      finishedTest.activeSpan.finish(finishedTest.finishTime)
+      finishedTest.testSpan.finish(finishedTest.finishTime)
     })
 
     if (testSuiteSpan) {
@@ -392,7 +392,7 @@ module.exports = (on, config) => {
           testName,
           testStatus,
           finishTime: activeSpan._getTime(), // we store the finish time here
-          activeSpan
+          testSpan: activeSpan
         }
         if (finishedTestsByFile[testSuite]) {
           finishedTestsByFile[testSuite].push(finishedTest)
