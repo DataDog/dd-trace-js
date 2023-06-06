@@ -105,7 +105,11 @@ tracer.init({
     obfuscatorKeyRegex: '.*',
     obfuscatorValueRegex: '.*',
     blockedTemplateHtml: './blocked.html',
-    blockedTemplateJson: './blocked.json'
+    blockedTemplateJson: './blocked.json',
+    eventTracking: {
+      enabled: true,
+      mode: 'safe'
+    }
   }
 });
 

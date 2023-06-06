@@ -553,6 +553,22 @@ export declare interface TracerOptions {
      * Specifies a path to a custom blocking template json file.
      */
     blockedTemplateJson?: string,
+
+    /**
+     * Controls the automated user event tracking configuration
+     */
+    eventTracking?: {
+      /**
+       * Whether to enable automated user event tracking.
+       * @default true
+       */
+      enabled?: boolean,
+      /**
+       * Constrols the automated user event tracking mode
+       * @default 'safe'
+       */
+      mode?: string
+    }
   };
 
   /**

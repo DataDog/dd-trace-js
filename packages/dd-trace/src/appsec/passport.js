@@ -32,7 +32,7 @@ function parseUser (login, passportUser, mode) {
   }
 
   if (passportUser) {
-  // Guess id
+    // Guess id
     if (passportUser.id) {
       user['usr.id'] = passportUser.id
     } else if (passportUser._id) {
@@ -80,7 +80,6 @@ function passportTrackEvent (credentials, passportUser, rootSpan, mode) {
 
   if (passportUser) {
     // If a passportUser object is published then the login succeded
-    // TODO : test
     setUserTags({ id: user['usr.id'] }, rootSpan)
     // Prevent 'usr.id' from being reported again in the metadata
     delete user['usr.id']
