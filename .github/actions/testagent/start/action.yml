@@ -4,12 +4,5 @@ runs:
   using: composite
   steps:
     - uses: actions/checkout@v2
-    - run: |
-        if command -v docker-compose &> /dev/null
-        then
-          docker-compose up -d testagent
-        else
-          CONTAINER_ID=$(docker run -d -p 127.0.0.1:9126:9126 --env LOG_LEVEL=DEBUG --env TRACE_LANGUAGE=javascript --env DISABLED_CHECKS=trace_content_length --env PORT=9126 ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest)
-          echo "::set-output name=CONTAINER_ID::$CONTAINER_ID"
-        fi
+    - run: docker-compose up -d testagent
       shell: bash
