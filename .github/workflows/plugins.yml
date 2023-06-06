@@ -1248,3 +1248,59 @@ jobs:
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
+
+  all-passed:
+    runs-on: ubuntu-latest
+    needs:
+      - amqp10 # TODO: move rhea to its own job
+      - amqplib
+      - aws-sdk
+      - axios
+      - bluebird
+      - bunyan
+      - cassandra
+      - connect
+      - cucumber
+      - cypress
+      - dns
+      - elasticsearch
+      - express
+      - fastify
+      - generic-pool
+      - google-cloud-pubsub
+      - graphql
+      - grpc
+      - hapi
+      - http
+      - http2
+      - jest
+      - kafkajs
+      - knex
+      - koa
+      - limitd-client
+      - memcached
+      - microgateway-core
+      - mocha
+      - moleculer
+      - mongodb-core
+      - mongoose
+      - mysql
+      - net
+      - next
+      - opensearch
+      - oracledb
+      - paperplane
+      - pino
+      - postgres
+      - promise
+      - promise-js
+      - q
+      - redis
+      - restify
+      - router
+      - sharedb
+      - tedious
+      - when
+      - winston
+    steps:
+      - run: exit 0
