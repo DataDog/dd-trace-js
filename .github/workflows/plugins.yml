@@ -827,18 +827,25 @@ jobs:
         ports:
           - 1521:1521
           - 5500:5500
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        env: 
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
+        ports:
+          - 9126:9126
     env:
       PLUGINS: oracledb
       SERVICES: oracledb
       DD_TEST_AGENT_URL: http://testagent:9126
     steps:
       - uses: actions/checkout@v2
-      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install --ignore-engine
       - run: yarn services
       - run: yarn test:plugins
-      - uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
   paperplane:
