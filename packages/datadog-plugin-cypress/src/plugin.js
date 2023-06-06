@@ -243,7 +243,8 @@ module.exports = (on, config) => {
       })
     })
   })
-  on('after:spec', (spec, { tests: cypressTests, stats }) => {
+  on('after:spec', (spec, { tests, stats }) => {
+    const cypressTests = tests || []
     const finishedTests = finishedTestsByFile[spec.relative] || []
 
     // Get tests that didn't go through `dd:afterEach` and haven't been skipped by ITR
@@ -283,14 +284,16 @@ module.exports = (on, config) => {
       finishedTest.activeSpan.finish(finishedTest.finishTime)
     })
 
-    const status = getSuiteStatus(stats)
-    testSuiteSpan.setTag(TEST_STATUS, status)
+    if (testSuiteSpan) {
+      const status = getSuiteStatus(stats)
+      testSuiteSpan.setTag(TEST_STATUS, status)
 
-    if (latestError) {
-      testSuiteSpan.setTag('error', latestError)
+      if (latestError) {
+        testSuiteSpan.setTag('error', latestError)
+      }
+      testSuiteSpan.finish()
+      testSuiteSpan = null
     }
-    testSuiteSpan.finish()
-    testSuiteSpan = null
   })
 
   on('after:run', (suiteStats) => {

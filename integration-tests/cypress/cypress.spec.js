@@ -67,14 +67,14 @@ versions.forEach((version) => {
           event => event.content.resource === 'test_suite.cypress/e2e/hook-test-error.cy.js'
         )
         const passedTest = events.find(
-          event => event.content.resource === 'cypress/e2e/hook-test-error.cy.js.context passes'
+          event => event.content.resource === 'cypress/e2e/hook-test-error.cy.js.hook-test-error tests passes'
         )
         const failedTest = events.find(
-          event => event.content.resource === 'cypress/e2e/hook-test-error.cy.js.context passes too'
+          event => event.content.resource === 'cypress/e2e/hook-test-error.cy.js.hook-test-error tests passes too'
         )
         const skippedTest = events.find(
           event => event.content.resource ===
-            'cypress/e2e/hook-test-error.cy.js.context does not run because earlier afterEach fails'
+            'cypress/e2e/hook-test-error.cy.js.hook-test-error tests does not run because earlier afterEach fails'
         )
         assert.equal(passedTest.content.meta[TEST_STATUS], 'pass')
         assert.equal(failedTest.content.meta[TEST_STATUS], 'fail')
@@ -102,7 +102,7 @@ versions.forEach((version) => {
         assert.equal(skippedTestDescribe.content.meta[TEST_STATUS], 'skip')
         assert.equal(describeHookSuite.content.meta[TEST_STATUS], 'fail')
         assert.include(describeHookSuite.content.meta[ERROR_MESSAGE], 'error in after')
-      }).then(() => done()).catch(done)
+      }, 25000).then(() => done()).catch(done)
 
       const {
         NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -224,8 +224,6 @@ versions.forEach((version) => {
     })
 
     it('can report code coverage if it is available', (done) => {
-      const commandSuffix = version === '6.7.0' ? '--config-file cypress-config.json' : ''
-
       const {
         NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
         ...restEnvVars
@@ -313,7 +311,7 @@ versions.forEach((version) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const eventTypes = events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
-        }).then(() => done()).catch(done)
+        }, 25000).then(() => done()).catch(done)
 
         const {
           NODE_OPTIONS,
@@ -340,36 +338,32 @@ versions.forEach((version) => {
             suite: 'cypress/e2e/other.cy.js'
           }
         }])
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const eventTypes = events.map(event => event.type)
 
+            const skippedTest = events.find(event =>
+              event.content.resource === 'cypress/e2e/other.cy.js.context passes'
+            )
+            assert.notExists(skippedTest)
+            assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
+            assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+            assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+            const testModule = events.find(event => event.type === 'test_module_end').content
+            assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'true')
+            assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+            assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          }, 25000)
         const skippableRequestPromise = receiver
           .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
-        const eventsRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcycle'))
-
-        Promise.all([
-          skippableRequestPromise,
-          eventsRequestPromise
-        ]).then(([skippableRequest, eventsRequest]) => {
-          assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
-          assert.propertyVal(skippableRequest.headers, 'dd-application-key', '1')
-
-          const eventTypes = eventsRequest.payload.events.map(event => event.type)
-
-          const skippedTest = eventsRequest.payload.events.find(event =>
-            event.content.resource === 'cypress/e2e/other.cy.js.context passes'
-          )
-          assert.notExists(skippedTest)
-          assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
-
-          const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
-          assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
-          assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
-          assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
-          const testModule = eventsRequest.payload.events.find(event => event.type === 'test_module_end').content
-          assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'true')
-          assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
-          assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
-          done()
-        }).catch(done)
+          .then(skippableRequest => {
+            assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
+            assert.propertyVal(skippableRequest.headers, 'dd-application-key', '1')
+          })
 
         const {
           NODE_OPTIONS,
@@ -387,8 +381,11 @@ versions.forEach((version) => {
             stdio: 'pipe'
           }
         )
-        // childProcess.stdout.pipe(process.stdout)
-        // childProcess.stderr.pipe(process.stderr)
+        childProcess.on('exit', () => {
+          Promise.all([eventsPromise, skippableRequestPromise]).then(() => {
+            done()
+          }).catch(done)
+        })
       })
       it('does not skip tests if test skipping is disabled by the API', (done) => {
         receiver.setSettings({
@@ -415,7 +412,7 @@ versions.forEach((version) => {
             event.content.resource === 'cypress/e2e/other.cy.js.context passes'
           )
           assert.exists(notSkippedTest)
-        }).then(() => done()).catch(done)
+        }, 25000).then(() => done()).catch(done)
 
         const {
           NODE_OPTIONS,
