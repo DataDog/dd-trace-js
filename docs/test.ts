@@ -107,7 +107,6 @@ tracer.init({
     blockedTemplateHtml: './blocked.html',
     blockedTemplateJson: './blocked.json',
     eventTracking: {
-      enabled: true,
       mode: 'safe'
     }
   }
