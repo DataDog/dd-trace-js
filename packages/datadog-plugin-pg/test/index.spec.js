@@ -566,6 +566,30 @@ describe('Plugin', () => {
           })
           queryText = client.queryQueue[0].text
         })
+
+        it('should not fail when using query object with getters', done => {
+          let queryText = ''
+
+          const query = {
+            name: 'pgSelectQuery',
+            get text () { return 'SELECT $1::text as message' }
+          }
+
+          agent.use(traces => {
+            expect(queryText).to.equal(
+              `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0'` +
+              `*/ SELECT $1::text as message`)
+          }).then(done, done)
+
+          client.query(query, ['Hello world!'], (err) => {
+            if (err) return done(err)
+
+            client.end((err) => {
+              if (err) return done(err)
+            })
+          })
+          queryText = client.queryQueue[0].text
+        })
       })
     })
   })
