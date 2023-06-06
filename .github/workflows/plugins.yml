@@ -812,6 +812,8 @@ jobs:
       - run: yarn services
       - run: yarn test:plugins
       - uses: ./.github/actions/testagent/logs
+        with:
+          container-id: ${{ steps.<step_name>.outputs.CONTAINER_ID }}"
       - uses: codecov/codecov-action@v2
 
   paperplane:
