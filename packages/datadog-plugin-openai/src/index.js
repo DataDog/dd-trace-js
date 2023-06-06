@@ -44,28 +44,25 @@ class OpenApiPlugin extends TracingPlugin {
       }
     })
 
-    // The remaining tags are added one at a time
-    const tags = {}
+    const tags = {} // The remaining tags are added one at a time
 
-    // TODO: This handles String, [String], but not [Number], [[Number]]
     // createChatCompletion, createCompletion, createImage, createImageEdit, createTranscription, createTranslation
     if ('prompt' in payload) {
       const prompt = payload.prompt
-      if (Array.isArray(prompt)) {
-        for (const i = 0; i < prompt.length; i++) {
-          tags[`openai.request.prompt.${i}`] = prompt[i]
+      if (typeof prompt === 'string' || (Array.isArray(prompt) && typeof prompt[0] === 'number')) {
+        // This is a single prompt, either String or [Number]
+        tags[`openai.request.prompt`] = normalizeStringOrTokenArray(prompt)
+      } else if (Array.isArray(prompt)) {
+        // This is multiple prompts, either [String] or [[Number]]
+        for (let i = 0; i < prompt.length; i++) {
+          tags[`openai.request.prompt.${i}`] = normalizeStringOrTokenArray(prompt[i])
         }
-      } else {
-        tags[`openai.request.prompt`] = prompt
       }
     }
 
     // createEdit, createEmbedding, createModeration
     if ('input' in payload) {
-      // It's intentional that the array be truncated arbitrarily, e.g. "[999, 888, 77..."
-      tags[`openai.request.input`] = truncateText(Array.isArray(payload.input) ?
-        `[${payload.input.join(', ')}]` : // "[1, 2, 999]"
-        payload.input)
+      tags[`openai.request.input`] = normalizeStringOrTokenArray(payload.input)
     }
 
     // createChatCompletion, createCompletion
@@ -540,6 +537,24 @@ function normalizeRequestPayload(methodName, args) {
 
   // Remaining OpenAI methods take a single object argument
   return args[0]
+}
+
+/**
+ * Converts an array of tokens to a string
+ * If input is already a string it's returned
+ * In either case the value is truncated
+
+ * It's intentional that the array be truncated arbitrarily, e.g. "[999, 888, 77..."
+
+ * "foo" -> "foo"
+ * [1,2,3] -> "[1, 2, 3]"
+ */
+function normalizeStringOrTokenArray(input) {
+  return truncateText(
+    Array.isArray(input) ?
+      `[${input.join(', ')}]` : // "[1, 2, 999]"
+      input // "foo"
+  )
 }
 
 module.exports = OpenApiPlugin

@@ -1316,7 +1316,7 @@ describe('Plugin', () => {
         describe('createImage()', () => {
           let scope
 
-          before(() => {
+          beforeEach(() => {
             scope = nock('https://api.openai.com:443')
             .post('/v1/images/generations')
             .reply(200, {
@@ -1336,12 +1336,12 @@ describe('Plugin', () => {
             ])
           })
 
-          after(() => {
+          afterEach(() => {
             nock.removeInterceptor(scope)
             scope.done()
           })
 
-          it('makes a successful call', async () => {
+          it('makes a successful call using a string prompt', async () => {
             const checkTraces = agent
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
@@ -1365,6 +1365,68 @@ describe('Plugin', () => {
 
             const result = await openai.createImage({
               prompt: "A datadog wearing headphones",
+              n: 1,
+              size: "256x256",
+              response_format: "url",
+              user: "hunter2"
+            })
+
+            expect(result.data.data[0].url.startsWith('https://')).to.be.true
+
+            await checkTraces
+          })
+
+          it('makes a successful call using an array of tokens prompt', async () => {
+            const checkTraces = agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.have.property('openai.request.prompt', '[999, 888, 777, 666, 555]')
+              })
+
+            const result = await openai.createImage({
+              prompt: [999, 888, 777, 666, 555],
+              n: 1,
+              size: "256x256",
+              response_format: "url",
+              user: "hunter2"
+            })
+
+            expect(result.data.data[0].url.startsWith('https://')).to.be.true
+
+            await checkTraces
+          })
+
+          it('makes a successful call using an array of string prompts', async () => {
+            const checkTraces = agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.have.property('openai.request.prompt.0', 'foo')
+                expect(traces[0][0].meta).to.have.property('openai.request.prompt.1', 'bar')
+              })
+
+            const result = await openai.createImage({
+              prompt: ["foo", "bar"],
+              n: 1,
+              size: "256x256",
+              response_format: "url",
+              user: "hunter2"
+            })
+
+            expect(result.data.data[0].url.startsWith('https://')).to.be.true
+
+            await checkTraces
+          })
+
+          it('makes a successful call using an array of tokens prompts', async () => {
+            const checkTraces = agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.have.property('openai.request.prompt.0', '[111, 222, 333]')
+                expect(traces[0][0].meta).to.have.property('openai.request.prompt.1', '[444, 555, 666]')
+              })
+
+            const result = await openai.createImage({
+              prompt: [
+                [111, 222, 333],
+                [444, 555, 666]
+              ],
               n: 1,
               size: "256x256",
               response_format: "url",
