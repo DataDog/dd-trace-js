@@ -70,7 +70,8 @@ versions.forEach((version) => {
           event => event.content.resource === 'cypress/e2e/hook-test-error.cy.js.hook-test-error tests passes'
         )
         const failedTest = events.find(
-          event => event.content.resource === 'cypress/e2e/hook-test-error.cy.js.hook-test-error tests passes too'
+          event => event.content.resource ===
+            'cypress/e2e/hook-test-error.cy.js.hook-test-error tests will fail because afterEach fails'
         )
         const skippedTest = events.find(
           event => event.content.resource ===
@@ -78,10 +79,10 @@ versions.forEach((version) => {
         )
         assert.equal(passedTest.content.meta[TEST_STATUS], 'pass')
         assert.equal(failedTest.content.meta[TEST_STATUS], 'fail')
-        assert.include(failedTest.content.meta[ERROR_MESSAGE], 'error in after each')
+        assert.include(failedTest.content.meta[ERROR_MESSAGE], 'error in after each hook')
         assert.equal(skippedTest.content.meta[TEST_STATUS], 'skip')
         assert.equal(testHookSuite.content.meta[TEST_STATUS], 'fail')
-        assert.include(testHookSuite.content.meta[ERROR_MESSAGE], 'error in after each')
+        assert.include(testHookSuite.content.meta[ERROR_MESSAGE], 'error in after each hook')
 
         // describe level hooks
         const describeHookSuite = events.find(
@@ -94,14 +95,14 @@ versions.forEach((version) => {
           event => event.content.resource === 'cypress/e2e/hook-describe-error.cy.js.after will be marked as failed'
         )
         const skippedTestDescribe = events.find(
-          event => event.content.resource === 'cypress/e2e/hook-describe-error.cy.js.before passes'
+          event => event.content.resource === 'cypress/e2e/hook-describe-error.cy.js.before will be skipped'
         )
         assert.equal(passedTestDescribe.content.meta[TEST_STATUS], 'pass')
         assert.equal(failedTestDescribe.content.meta[TEST_STATUS], 'fail')
-        assert.include(failedTestDescribe.content.meta[ERROR_MESSAGE], 'error in after')
+        assert.include(failedTestDescribe.content.meta[ERROR_MESSAGE], 'error in after hook')
         assert.equal(skippedTestDescribe.content.meta[TEST_STATUS], 'skip')
         assert.equal(describeHookSuite.content.meta[TEST_STATUS], 'fail')
-        assert.include(describeHookSuite.content.meta[ERROR_MESSAGE], 'error in after')
+        assert.include(describeHookSuite.content.meta[ERROR_MESSAGE], 'error in after hook')
       }, 25000).then(() => done()).catch(done)
 
       const {
