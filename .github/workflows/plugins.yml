@@ -15,6 +15,7 @@ env:
   SLACK_REPORT_ENABLE: ${{ github.event.schedule }} # value is empty for non-nightly jobs
   SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
   SLACK_MOREINFO: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  TEST_AGENT_IMAGE: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
 
 # TODO: upstream jobs
 
@@ -801,14 +802,14 @@ jobs:
           - 1521:1521
           - 5500:5500
       testagent:
-        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        image: ${{ env.TEST_AGENT_IMAGE }}
         env: 
           LOG_LEVEL: DEBUG
           TRACE_LANGUAGE: javascript
           DISABLED_CHECKS: trace_content_length
           PORT: 9126
         ports:
-          - "127.0.0.1:9126:9126"
+          - 9126:9126
     env:
       PLUGINS: oracledb
       SERVICES: oracledb
