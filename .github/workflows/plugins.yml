@@ -15,7 +15,6 @@ env:
   SLACK_REPORT_ENABLE: ${{ github.event.schedule }} # value is empty for non-nightly jobs
   SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
   SLACK_MOREINFO: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-  TEST_AGENT_IMAGE: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
 
 # TODO: upstream jobs
 
@@ -802,7 +801,7 @@ jobs:
           - 1521:1521
           - 5500:5500
       testagent:
-        image: ${{ env.TEST_AGENT_IMAGE }}
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
         env: 
           LOG_LEVEL: DEBUG
           TRACE_LANGUAGE: javascript
