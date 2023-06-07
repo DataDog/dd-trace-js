@@ -2,16 +2,20 @@
 
 const { expect } = require('chai')
 const semver = require('semver')
-const agent = require('../../dd-trace/test/plugins/agent')
 const nock = require('nock')
 const fs = require('fs')
+const sinon = require('sinon')
+
+const agent = require('../../dd-trace/test/plugins/agent')
+const DogStatsDClient = require('../../dd-trace/src/dogstatsd')
 
 describe('Plugin', () => {
   let openai
+  let metricStub
+  let clock
 
   describe('openai', () => {
     withVersions('openai', 'openai', version => {
-
       beforeEach(() => {
         require('../../dd-trace')
       })
@@ -25,6 +29,7 @@ describe('Plugin', () => {
       })
 
       beforeEach(() => {
+        clock = sinon.useFakeTimers()
         const { Configuration, OpenAIApi } = require(`../../../versions/openai@${version}`).get()
 
         const configuration = new Configuration({
@@ -32,6 +37,13 @@ describe('Plugin', () => {
         })
 
         openai = new OpenAIApi(configuration)
+
+        metricStub = sinon.stub(DogStatsDClient.prototype, '_add')
+      })
+
+      afterEach(() => {
+        clock.restore()
+        sinon.restore()
       })
 
       describe('createCompletion()', () => {
@@ -61,6 +73,13 @@ describe('Plugin', () => {
             'openai-organization', 'kill-9',
             'openai-processing-ms', '442',
             'openai-version', '2020-10-01',
+            'x-ratelimit-limit-requests', '3000',
+            'x-ratelimit-limit-tokens', '250000',
+            'x-ratelimit-remaining-requests', '2999',
+            'x-ratelimit-remaining-tokens', '249984',
+            'x-ratelimit-reset-requests', '20ms',
+            'x-ratelimit-reset-tokens', '3ms',
+            'x-request-id', '7df89d8afe7bf24dc04e2c4dd4962d7f'
           ])
         })
 
@@ -129,6 +148,26 @@ describe('Plugin', () => {
           expect(result.data.id).to.eql('cmpl-7GWDlQbOrAYGmeFZtoRdOEjDXDexM')
 
           await checkTraces
+
+          clock.tick(10_000)
+
+          const expectedTags = [
+            'org:kill-9',
+            'endpoint:/v1/completions',
+            'model:text-davinci-002',
+            'error:0'
+          ]
+
+          expect(metricStub).to.have.been.calledWith('openai.request.duration', 0, 'd', expectedTags)
+          expect(metricStub).to.have.been.calledWith('openai.tokens.prompt', 3, 'd', expectedTags)
+          expect(metricStub).to.have.been.calledWith('openai.tokens.completion', 16, 'd', expectedTags)
+          expect(metricStub).to.have.been.calledWith('openai.tokens.total', 19, 'd', expectedTags)
+
+          expect(metricStub).to.have.been.calledWith('openai.ratelimit.requests', 3000, 'g', expectedTags)
+          expect(metricStub).to.have.been.calledWith('openai.ratelimit.tokens', 250000, 'g', expectedTags)
+          expect(metricStub).to.have.been.calledWith('openai.ratelimit.remaining.requests', 2999, 'g', expectedTags)
+          expect(metricStub).to.have.been.calledWith('openai.ratelimit.remaining.tokens', 249984, 'g', expectedTags)
+
         })
       })
 
@@ -278,7 +317,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/models')
 
               expect(traces[0][0].metrics).to.have.property('openai.response.count', 2)
-              // NOte that node doesn't accept a user value
+              // Note that node doesn't accept a user value
             })
 
           const result = await openai.listModels()
@@ -394,6 +433,11 @@ describe('Plugin', () => {
               'openai-organization', 'kill-9',
               'openai-processing-ms', '920',
               'openai-version', '2020-10-01',
+              'x-ratelimit-limit-requests', '20',
+              'x-ratelimit-remaining-requests', '19',
+              'x-ratelimit-reset-requests', '3s',
+              'x-request-id', 'aa28029fd9758334bcead67af867e8fc',
+
             ])
         })
 
@@ -440,7 +484,19 @@ describe('Plugin', () => {
 
           expect(result.data.choices[0].text).to.eql('What day of the week is it, Bob?\n')
 
+          clock.tick(10_000)
+
           await checkTraces
+
+          const expectedTags = [
+            'org:kill-9',
+            'endpoint:/v1/edits',
+            'model:text-davinci-edit:001',
+            'error:0'
+          ]
+
+          expect(metricStub).to.be.calledWith('openai.ratelimit.requests', 20, 'g', expectedTags)
+          expect(metricStub).to.be.calledWith('openai.ratelimit.remaining.requests', 19, 'g', expectedTags)
         })
       })
 

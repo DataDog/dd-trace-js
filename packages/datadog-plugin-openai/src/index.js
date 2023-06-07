@@ -1,15 +1,38 @@
 'use strict'
 
 const Path = require('path')
-const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-// TODO: environment variable DD_OPENAI_SPAN_CHAR_LIMIT
-const MAX_TEXT_LEN = 128 // + '...' = 131 bytes
+const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const DogStatsDClient = require('../../dd-trace/src/dogstatsd.js')
+
+let MAX_TEXT_LEN = 128
 
 class OpenApiPlugin extends TracingPlugin {
   static get id () { return 'openai' }
   static get operation () { return 'request' }
   static get system () { return 'openai' }
+
+  constructor(...args) {
+    super(...args)
+
+    // TODO: Lazy load this only if the application is using the openai package
+    this.metrics = new DogStatsDClient({
+      host: this._tracerConfig.dogstatsd.hostname,
+      port: this._tracerConfig.dogstatsd.port,
+      tags: [
+        `service:${this._tracerConfig.tags.service}`,
+        `env:${this._tracerConfig.tags.env}`,
+        `version:${this._tracerConfig.tags.version}`
+      ]
+    })
+
+    this.interval = setInterval(() => {
+      this.metrics.flush()
+    }, 10_000).unref()
+
+    // hoist the max length env var to avoid making all of these functions a class method
+    MAX_TEXT_LEN = this._tracerConfig.openaiSpanCharLimit
+  }
 
   start ({ methodName, args, basePath, apiKey }) {
     const payload = normalizeRequestPayload(methodName, args)
@@ -122,8 +145,10 @@ class OpenApiPlugin extends TracingPlugin {
 
     body = coerceResponseBody(body, methodName)
 
+    const endpoint = lookupOperationEndpoint(methodName, path)
+
     const tags = {
-      'openai.request.endpoint': lookupOperationEndpoint(methodName, path),
+      'openai.request.endpoint': endpoint,
       'openai.request.method': method,
 
       'openai.organization.id': body.organization_id, // only available in fine-tunes endpoints
@@ -142,6 +167,53 @@ class OpenApiPlugin extends TracingPlugin {
     responseTagExtractionByMethod(methodName, tags, body)
     span.addTags(tags)
     super.finish()
+
+    this.sendMetrics(headers, body, endpoint, span._duration, false)
+  }
+
+  error(...args) {
+    super.error(...args)
+    // TODO: We don't know the endpoint here and may not have a body or headers
+    // this.sendMetrics(headers, body, endpoint, span._duration, true)
+  }
+
+  sendMetrics(headers, body, endpoint, duration, error) {
+    const tags = [
+      `org:${headers['openai-organization']}`,
+      `endpoint:${endpoint}`, // just "/v1/models", no method
+      `model:${headers['openai-model']}`,
+      `error:${error ? '1' : '0'}`
+    ]
+
+    this.metrics.distribution('openai.request.duration', duration * 1000, tags) // measured in nanoseconds
+
+    if (error) {
+      this.metrics.increment('openai.request.error', 1, tags)
+    }
+
+    if (body && ('usage' in body)) {
+      const promptTokens = body.usage.prompt_tokens
+      const completionTokens = body.usage.completion_tokens
+      this.metrics.distribution('openai.tokens.prompt', promptTokens, tags)
+      this.metrics.distribution('openai.tokens.completion', completionTokens, tags)
+      this.metrics.distribution('openai.tokens.total', promptTokens + completionTokens, tags)
+    }
+
+    if ('x-ratelimit-limit-requests' in headers) {
+      this.metrics.gauge('openai.ratelimit.requests', Number(headers['x-ratelimit-limit-requests']), tags)
+    }
+
+    if ('x-ratelimit-remaining-requests' in headers) {
+      this.metrics.gauge('openai.ratelimit.remaining.requests', Number(headers['x-ratelimit-remaining-requests']), tags)
+    }
+
+    if ('x-ratelimit-limit-tokens' in headers) {
+      this.metrics.gauge('openai.ratelimit.tokens', Number(headers['x-ratelimit-limit-tokens']), tags)
+    }
+
+    if ('x-ratelimit-remaining-tokens' in headers) {
+      this.metrics.gauge('openai.ratelimit.remaining.tokens', Number(headers['x-ratelimit-remaining-tokens']), tags)
+    }
   }
 }
 

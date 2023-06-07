@@ -230,6 +230,9 @@ class Config {
     const DD_TELEMETRY_HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
       ? parseInt(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000
       : 60000
+    const DD_OPENAI_SPAN_CHAR_LIMIT = process.env.DD_OPENAI_SPAN_CHAR_LIMIT
+      ? parseInt(process.env.DD_OPENAI_SPAN_CHAR_LIMIT)
+      : 128
     const DD_TELEMETRY_DEBUG = coalesce(
       process.env.DD_TELEMETRY_DEBUG,
       false
@@ -566,6 +569,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
 
     this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
+
+    this.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
 
     if (this.gitMetadataEnabled) {
       this.repositoryUrl = coalesce(
