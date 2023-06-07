@@ -1,8 +1,10 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
+const { storage } = require('../../datadog-core')
 
 const {
   TEST_STATUS,
-  finishAllTraceSpans
+  finishAllTraceSpans,
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 
 class ManualPlugin extends CiPlugin {
@@ -11,15 +13,25 @@ class ManualPlugin extends CiPlugin {
   }
   constructor (...args) {
     super(...args)
-    let activeTestSpan
+    this.sourceRoot = process.cwd()
 
-    this.addSub('ci:manual:test:start', ({ testName, testSuite }) => {
-      activeTestSpan = this.startTestSpan(testName, testSuite)
+    this.addSub('dd-trace:ci:manual:test:start', ({ testName, testSuite }) => {
+      const store = storage.getStore()
+      const testSuiteRelative = getTestSuitePath(testSuite, this.sourceRoot)
+      const testSpan = this.startTestSpan(testName, testSuiteRelative)
+      this.enter(testSpan, store)
     })
-    this.addSub('ci:manual:test:finish', ({ status }) => {
-      activeTestSpan.setTag(TEST_STATUS, status)
-      activeTestSpan.finish()
-      finishAllTraceSpans(activeTestSpan)
+    this.addSub('dd-trace:ci:manual:test:finish', ({ status, error }) => {
+      const store = storage.getStore()
+      if (store && store.span) {
+        const testSpan = store.span
+        testSpan.setTag(TEST_STATUS, status)
+        if (error) {
+          testSpan.setTag('error', error)
+        }
+        testSpan.finish()
+        finishAllTraceSpans(testSpan)
+      }
     })
   }
 }

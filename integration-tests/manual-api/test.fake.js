@@ -1,20 +1,25 @@
 /* eslint-disable */
 const { channel } = require('diagnostics_channel')
+const tracer = require('dd-trace')
 
-const testStartCh = channel('ci:manual:test:start')
-const testFinishCh = channel('ci:manual:test:finish')
+const testStartCh = channel('dd-trace:ci:manual:test:start')
+const testFinishCh = channel('dd-trace:ci:manual:test:finish')
+const rootDir = process.cwd()
+const testSuite = __dirname
 
 describe('can run tests', () => {
   beforeEach((testName) => {
-    testStartCh.publish({ testName, testSuite: 'test.fake.js' })
+    testStartCh.publish({ testName, testSuite, rootDir })
   })
-  afterEach((testName) => {
-    testFinishCh.publish({ testName, status: 'pass' })
+  afterEach((status, error) => {
+    testFinishCh.publish({ status, error })
   })
-  test('first', () => {
-    console.log('run first test')
+  test('first test will pass', () => {
+    const testSpan = tracer.scope().active()
+    testSpan.setTag('test.custom.tag', 'custom.value')
+    assert.equal(1, 1)
   })
-  test('second', () => {
-    console.log('run second test')
+  test('second test will fail', () => {
+    assert.equal(1, 2)
   })
 })

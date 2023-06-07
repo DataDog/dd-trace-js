@@ -22,3 +22,10 @@ global.describe = describe
 global.test = test
 global.beforeEach = beforeEach
 global.afterEach = afterEach
+global.assert = {
+  equal: (a, b) => {
+    if (a !== b) {
+      throw new Error(`${a} is not equal to ${b}`)
+    }
+  }
+}

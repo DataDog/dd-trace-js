@@ -40,21 +40,23 @@ describe('manual-api', () => {
   })
 
   it('can use the manual api', (done) => {
-    receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+    const receiverPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
       const events = payloads.flatMap(({ payload }) => payload.events)
 
       const testEvents = events.filter(event => event.type === 'test')
       assert.includeMembers(testEvents.map(test => test.content.resource), [
-        'test.fake.js.first',
-        'test.fake.js.second'
+        'manual-api.first test will pass',
+        'manual-api.second test will fail'
       ])
 
       assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
         'pass',
-        'pass'
+        'fail'
       ])
-      done()
-    })
+
+      const passedTest = testEvents.find(test => test.content.resource === 'manual-api.first test will pass')
+      assert.propertyVal(passedTest.content.meta, 'test.custom.tag', 'custom.value')
+    }).catch(done)
 
     childProcess = exec(
       'node --require ./manual-api/setup-fake-test-framework.js ' +
@@ -65,12 +67,15 @@ describe('manual-api', () => {
         stdio: 'pipe'
       }
     )
+    childProcess.on('exit', () => {
+      receiverPromise.then(() => done())
+    })
   })
   it('does not report spans if DD_CIVISIBILITY_MANUAL_API_ENABLED is not set', (done) => {
     receiver.assertPayloadReceived(() => {
       const error = new Error('should not report spans')
       done(error)
-    }, ({ url }) => url === '/api/v2/citestcycle')
+    }, ({ url }) => url === '/api/v2/citestcycle').catch(() => {})
 
     childProcess = exec(
       'node --require ./manual-api/setup-fake-test-framework.js ' +
