@@ -10,7 +10,6 @@ const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
 const pkg = require('../../../../package.json')
-const { StatsPoint, StatsBucket, TimeBuckets, DataStreamsProcessor } = require('../../src/datastreams/processor')
 const DEFAULT_TIMESTAMP = Number(new Date('2023-04-20T16:20:00.000Z'))
 const DEFAULT_LATENCY = 100000000
 const DEFAULT_PARENT_HASH = Buffer.from('e858292fd15a41e4', 'hex')
@@ -21,6 +20,10 @@ const ANOTHER_CURRENT_HASH = Buffer.from('e851212fd11a21e9', 'hex')
 const writer = {
   flush: sinon.stub()
 }
+const DataStreamsWriter = sinon.stub().returns(writer)
+const { StatsPoint, StatsBucket, TimeBuckets, DataStreamsProcessor } = proxyquire('../src/datastreams/processor', {
+  './writer': { DataStreamsWriter }
+})
 
 const mockCheckpoint = {
   currentTimestamp: DEFAULT_TIMESTAMP,
@@ -99,7 +102,6 @@ describe('DataStreamsProcessor', () => {
   let edgeLatency
   let pathwayLatency
   let processor
-  let checkpoint
 
   const config = {
     dsmEnabled: true,
@@ -114,11 +116,10 @@ describe('DataStreamsProcessor', () => {
     processor = new DataStreamsProcessor(config)
     clearTimeout(processor.timer)
 
-    expect(LatencyStatsExporter).to.be.calledWith({
+    expect(DataStreamsWriter).to.be.calledWith({
       hostname: config.hostname,
       port: config.port,
-      url: config.url,
-      tags: config.tags
+      url: config.url
     })
     expect(processor.buckets).to.be.instanceOf(TimeBuckets)
     expect(processor.hostname).to.equal(hostname())
@@ -133,46 +134,38 @@ describe('DataStreamsProcessor', () => {
     expect(processor.buckets.size).to.equal(1)
 
     const timeBucket = processor.buckets.values().next().value
-    expect(timeBucket).to.be.instanceOf(SpanBuckets)
+    expect(timeBucket).to.be.instanceOf(StatsBucket)
     expect(timeBucket.size).to.equal(1)
 
     const checkpointBucket = timeBucket.forCheckpoint(mockCheckpoint)
     expect(timeBucket.size).to.equal(1)
-    expect(checkpointBucket).to.be.instanceOf(AggStats)
+    expect(checkpointBucket).to.be.instanceOf(StatsPoint)
 
     edgeLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
     pathwayLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
-    edgeLatency.accept(mockCheckpoint.metrics.edge_latency)
-    pathwayLatency.accept(mockCheckpoint.metrics.pathway_latency)
+    edgeLatency.accept(mockCheckpoint.edgeLatencyNs / 1e9)
+    pathwayLatency.accept(mockCheckpoint.pathwayLatencyNs / 1e9)
 
-    checkpoint = checkpointBucket.toJSON()
-
-    expect(checkpoint.Hash.length).to.equal(DEFAULT_CURRENT_HASH.length)
-    for (let i = 0; i < DEFAULT_CURRENT_HASH.length; i++) {
-      expect(checkpoint.Hash[i]).to.equal(DEFAULT_CURRENT_HASH[i])
-    }
-    expect(checkpoint.ParentHash.length).to.equal(DEFAULT_PARENT_HASH.length)
-    for (let i = 0; i < DEFAULT_PARENT_HASH.length; i++) {
-      expect(checkpoint.ParentHash[i]).to.equal(DEFAULT_PARENT_HASH[i])
-    }
-    expect(checkpoint.EdgeTags).to.deep.equal(mockCheckpoint.metrics.edge_tags)
-    expect(checkpoint.EdgeLatency).to.deep.equal(edgeLatency.toProto())
-    expect(checkpoint.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
+    const encoded = checkpointBucket.encode()
+    expect(encoded.Hash.toString()).to.equal(new Uint64(DEFAULT_CURRENT_HASH).toString())
+    expect(encoded.ParentHash.toString()).to.equal(new Uint64(DEFAULT_PARENT_HASH).toString())
+    expect(encoded.EdgeTags).to.deep.equal(mockCheckpoint.edgeTags)
+    expect(encoded.EdgeLatency).to.deep.equal(edgeLatency.toProto())
+    expect(encoded.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
   })
 
   it('should export on interval', () => {
     processor.onInterval()
-    expect(exporter.export).to.be.calledWith({
+    expect(writer.flush).to.be.calledWith({
       Env: 'test',
-      Service: undefined,
-      PrimaryTag: { tag: 'some tag' },
+      Service: 'unnamed-nodejs-service',
       Stats: [{
-        Start: 1680000000000,
-        Duration: 10000000000,
+        Start: new Uint64(1680000000000),
+        Duration: new Uint64(10000000000),
         Stats: [{
-          Hash: checkpoint.Hash,
-          ParentHash: checkpoint.ParentHash,
-          EdgeTags: mockCheckpoint.metrics.edge_tags,
+          Hash: new Uint64(DEFAULT_CURRENT_HASH),
+          ParentHash: new Uint64(DEFAULT_PARENT_HASH),
+          EdgeTags: mockCheckpoint.edgeTags,
           EdgeLatency: edgeLatency.toProto(),
           PathwayLatency: pathwayLatency.toProto()
         }]

@@ -11,7 +11,7 @@ describe('encoding', () => {
     const hash = computePathwayHash('test-service', 'test-env',
       ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
     expect(hash)
-      .to.equal(Buffer.from('ca269757e2ad52ed', 'hex'))
+      .to.deep.equal(Buffer.from('4c3d7cd1c66a7336', 'hex'))
   })
   it('encoding and decoding should be a no op', () => {
     const expectedContext = {

@@ -11,7 +11,6 @@ function fnvHash (checkpointString) {
 
 function computeHash (service, env, edgeTags, parentHash) {
   const currentHash = fnvHash(`${service}${env}` + edgeTags.join(''))
-  console.log("currentHash: ", currentHash)
   const buf = Buffer.concat([ currentHash, parentHash ], 16)
   return fnvHash(buf.toString())
 }
@@ -21,15 +20,20 @@ function encodePathwayContext (dataStreamsContext) {
 }
 
 function decodePathwayContext (pathwayContext) {
-  if (pathwayContext == null) {
+  if (pathwayContext == null || pathwayContext.length() < 8) {
     return null
   }
-  // todo[piochelepiotr] check against all possible errors
   // hash and parent hash are in LE
   const pathwayHash = pathwayContext.subarray(0, 8)
   const encodedTimestamps = pathwayContext.subarray(8)
   const [pathwayStartMs, encodedTimeSincePrev] = decodeVarint(encodedTimestamps)
+  if (pathwayStartMs === undefined) {
+    return null
+  }
   const [edgeStartMs] = decodeVarint(encodedTimeSincePrev)
+  if (edgeStartMs === undefined) {
+    return null
+  }
   return { hash: pathwayHash, pathwayStartNs: pathwayStartMs * 1e6, edgeStartNs: edgeStartMs * 1e6 }
 }
 
