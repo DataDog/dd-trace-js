@@ -112,6 +112,8 @@ export declare interface Tracer extends opentracing.Tracer {
 
   /**
    * Links an authenticated user to the current trace.
+   * @deprecated Use `tracer.appsec.setUser()` instead.
+   * @hidden
    * @param {User} user Properties of the authenticated user. Accepts custom fields.
    * @returns {Tracer} The Tracer instance for chaining.
    */
@@ -584,7 +586,7 @@ export declare interface TracerOptions {
 }
 
 /**
- * User object that can be passed to `tracer.setUser()`.
+ * User object that can be passed to `tracer.appsec.setUser()`.
  */
 export declare interface User {
   /**
@@ -634,7 +636,7 @@ export declare interface Appsec {
    *
    * @beta This method is in beta and could change in future versions.
    */
-  trackUserLoginSuccessEvent(user: User, metadata?: { [key: string]: string }): void
+  trackUserLoginSuccessEvent (user: User, metadata?: { [key: string]: string }): void
 
   /**
    * Links a failed login event to the current trace.
@@ -644,7 +646,7 @@ export declare interface Appsec {
    *
    * @beta This method is in beta and could change in future versions.
    */
-  trackUserLoginFailureEvent(userId: string, exists: boolean, metadata?: { [key: string]: string }): void
+  trackUserLoginFailureEvent (userId: string, exists: boolean, metadata?: { [key: string]: string }): void
 
   /**
    * Links a custom event to the current trace.
@@ -653,7 +655,7 @@ export declare interface Appsec {
    *
    * @beta This method is in beta and could change in future versions.
    */
-  trackCustomEvent(eventName: string, metadata?: { [key: string]: string }): void
+  trackCustomEvent (eventName: string, metadata?: { [key: string]: string }): void
 
   /**
    * Checks if the passed user should be blocked according to AppSec rules.
@@ -663,7 +665,7 @@ export declare interface Appsec {
    *
    * @beta This method is in beta and could change in the future
    */
-  isUserBlocked(user: User): boolean
+  isUserBlocked (user: User): boolean
 
   /**
    * Sends a "blocked" template response based on the request accept header and ends the response.
@@ -674,7 +676,7 @@ export declare interface Appsec {
    *
    * @beta This method is in beta and could change in the future
    */
-  blockRequest(req?: IncomingMessage, res?: OutgoingMessage): boolean
+  blockRequest (req?: IncomingMessage, res?: OutgoingMessage): boolean
 
   /**
    * Links an authenticated user to the current trace.
@@ -682,7 +684,7 @@ export declare interface Appsec {
    *
    * @beta This method is in beta and could change in the future
    */
-  setUser(user: User): void
+  setUser (user: User): void
 }
 
 /** @hidden */
