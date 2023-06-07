@@ -1,7 +1,8 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const {
   TEST_STATUS,
-  finishAllTraceSpans
+  finishAllTraceSpans,
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 const { storage } = require('../../datadog-core')
 
@@ -11,10 +12,12 @@ class ManualPlugin extends CiPlugin {
   }
   constructor (...args) {
     super(...args)
+    this.sourceRoot = process.cwd()
 
     this.addSub('dd-trace:ci:manual:test:start', ({ testName, testSuite }) => {
       const store = storage.getStore()
-      const testSpan = this.startTestSpan(testName, testSuite)
+      const testSuiteRelative = getTestSuitePath(testSuite, this.sourceRoot)
+      const testSpan = this.startTestSpan(testName, testSuiteRelative)
       this.enter(testSpan, store)
     })
     this.addSub('dd-trace:ci:manual:test:finish', ({ status, error }) => {
