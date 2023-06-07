@@ -1,11 +1,10 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
-const { storage } = require('../../datadog-core')
-
 const {
   TEST_STATUS,
   finishAllTraceSpans,
   getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
+const { storage } = require('../../datadog-core')
 
 class ManualPlugin extends CiPlugin {
   static get id () {
