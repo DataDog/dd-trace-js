@@ -29,6 +29,7 @@ package:
   stage: deploy
   variables:
     PRODUCT_NAME: auto_inject-node
+    PACKAGE_FILTER: js # product name is "node" but package name ends "js"
 
 deploy_to_reliability_env:
   stage: deploy
