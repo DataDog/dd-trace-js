@@ -45,17 +45,26 @@ describe('manual-api', () => {
 
       const testEvents = events.filter(event => event.type === 'test')
       assert.includeMembers(testEvents.map(test => test.content.resource), [
-        'manual-api.first test will pass',
-        'manual-api.second test will fail'
+        'manual-api/test.fake.js.second test will fail',
+        'manual-api/test.fake.js.first test will pass',
+        'manual-api/test.fake.js.async test will pass',
+        'manual-api/test.fake.js.integration test'
       ])
 
       assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
         'pass',
+        'pass',
+        'pass',
         'fail'
       ])
 
-      const passedTest = testEvents.find(test => test.content.resource === 'manual-api.first test will pass')
+      const passedTest = testEvents.find(
+        test => test.content.resource === 'manual-api/test.fake.js.first test will pass'
+      )
       assert.propertyVal(passedTest.content.meta, 'test.custom.tag', 'custom.value')
+
+      const customSpan = events.find(event => event.type === 'span')
+      assert.propertyVal(customSpan.content, 'resource', 'custom.span')
     }).catch(done)
 
     childProcess = exec(
@@ -71,7 +80,7 @@ describe('manual-api', () => {
       receiverPromise.then(() => done())
     })
   })
-  it('does not report spans if DD_CIVISIBILITY_MANUAL_API_ENABLED is not set', (done) => {
+  it('does not report test spans if DD_CIVISIBILITY_MANUAL_API_ENABLED is not set', (done) => {
     receiver.assertPayloadReceived(() => {
       const error = new Error('should not report spans')
       done(error)
