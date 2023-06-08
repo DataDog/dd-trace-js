@@ -7,7 +7,9 @@ const { TracerProvider } = tracer
 const provider = new TracerProvider()
 provider.register()
 
-const otelTracer = provider.getTracer(
+const ot = require('@opentelemetry/api')
+
+const otelTracer = ot.trace.getTracer(
   'my-service-tracer'
 )
 
