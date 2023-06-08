@@ -44,6 +44,8 @@ class DatadogSpan {
     this._spanContext._tags = tags
     this._spanContext._hostname = hostname
 
+    this._spanContext._trace.started.push(this)
+
     this._startTime = fields.startTime || this._getTime()
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
@@ -147,8 +149,14 @@ class DatadogSpan {
 
   _createContext (parent, fields) {
     let spanContext
+    let startTime
 
-    if (parent) {
+    if (fields.context) {
+      spanContext = fields.context
+      if (!spanContext._trace.startTime) {
+        startTime = dateNow()
+      }
+    } else if (parent) {
       spanContext = new SpanContext({
         traceId: parent._traceId,
         spanId: id(),
@@ -160,11 +168,11 @@ class DatadogSpan {
       })
 
       if (!spanContext._trace.startTime) {
-        spanContext._trace.startTime = dateNow()
+        startTime = dateNow()
       }
     } else {
       const spanId = id()
-      const startTime = dateNow()
+      startTime = dateNow()
       spanContext = new SpanContext({
         traceId: spanId,
         spanId
@@ -178,8 +186,10 @@ class DatadogSpan {
       }
     }
 
-    spanContext._trace.started.push(this)
     spanContext._trace.ticks = spanContext._trace.ticks || now()
+    if (startTime) {
+      spanContext._trace.startTime = startTime
+    }
 
     return spanContext
   }
