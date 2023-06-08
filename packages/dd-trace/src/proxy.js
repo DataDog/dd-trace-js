@@ -76,6 +76,10 @@ class Tracer extends NoopProxy {
     this._pluginManager.configurePlugin(...arguments)
     return this
   }
+
+  get TracerProvider () {
+    return require('./opentelemetry/tracer_provider')
+  }
 }
 
 module.exports = Tracer
