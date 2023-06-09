@@ -21,9 +21,13 @@ const disabledPlugins = new Set(
   DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())
 )
 
-// TODO actually ... should we be looking at envrionment variables this deep down in the code?
+// TODO actually ... should we be looking at environment variables this deep down in the code?
 
-const pluginClasses = {}
+// `ManualPlugin` is not lazy loaded because it's not instrumenting any specific library.
+// Its purpose is to allow users to create test spans for frameworks we don't support.
+const pluginClasses = {
+  'manual': plugins.manual
+}
 
 loadChannel.subscribe(({ name }) => {
   const Plugin = plugins[name]
@@ -128,7 +132,8 @@ module.exports = class PluginManager {
       serviceMapping,
       queryStringObfuscation,
       site,
-      url
+      url,
+      isManualApiEnabled
     } = this._tracerConfig
 
     const sharedConfig = {}
@@ -140,6 +145,8 @@ module.exports = class PluginManager {
     if (queryStringObfuscation !== undefined) {
       sharedConfig.queryStringObfuscation = queryStringObfuscation
     }
+
+    sharedConfig.isManualApiEnabled = isManualApiEnabled
 
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]

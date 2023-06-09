@@ -2,9 +2,7 @@
 const tracer = require('../packages/dd-trace')
 const { ORIGIN_KEY } = require('../packages/dd-trace/src/constants')
 const { isTrue } = require('../packages/dd-trace/src/util')
-const { channel } = require('../packages/diagnostics_channel')
 
-const instrumentationLoadChannel = channel('dd-trace:instrumentation:load')
 const isJestWorker = !!process.env.JEST_WORKER_ID
 
 const options = {
@@ -46,10 +44,6 @@ if (isJestWorker) {
 if (shouldInit) {
   tracer.init(options)
   tracer.use('fs', false)
-  if (isTrue(process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED)) {
-    // To fake that we're loading a "manual" library, which triggers the instantiation of ManualPlugin
-    instrumentationLoadChannel.publish({ name: 'manual' })
-  }
 }
 
 module.exports = tracer

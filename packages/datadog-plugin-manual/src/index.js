@@ -33,6 +33,14 @@ class ManualPlugin extends CiPlugin {
       }
     })
   }
+
+  configure (config) {
+    if (!config.isManualApiEnabled) {
+      super.configure({ enabled: false })
+    } else {
+      super.configure(config)
+    }
+  }
 }
 
 module.exports = ManualPlugin
