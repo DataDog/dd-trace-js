@@ -119,14 +119,16 @@ function beforeEachIastTest () {
 function endResponse (res, appResult) {
   if (appResult && typeof appResult.then === 'function') {
     appResult.then(() => {
-      res.writeHead(200)
+      if (!res.headersSent) {
+        res.writeHead(200)
+      }
       res.end()
     })
   } else {
     if (!res.headersSent) {
       res.writeHead(200)
-      res.end()
     }
+    res.end()
   }
 }
 
