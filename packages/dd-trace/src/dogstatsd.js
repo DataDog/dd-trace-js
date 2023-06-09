@@ -8,6 +8,9 @@ const log = require('./log')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
+const TYPE_COUNTER = 'c'
+const TYPE_GAUGE = 'g'
+
 class Client {
   constructor (options) {
     options = options || {}
@@ -32,11 +35,11 @@ class Client {
   }
 
   gauge (stat, value, tags) {
-    this._add(stat, value, 'g', tags)
+    this._add(stat, value, TYPE_GAUGE, tags)
   }
 
   increment (stat, value, tags) {
-    this._add(stat, value, 'c', tags)
+    this._add(stat, value, TYPE_COUNTER, tags)
   }
 
   flush () {

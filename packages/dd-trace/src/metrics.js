@@ -7,7 +7,7 @@ const v8 = require('v8')
 const os = require('os')
 const Client = require('./dogstatsd')
 const log = require('./log')
-const Histogram = require('./histogram')
+const Histogram = require('./histogram') // MOVE
 const { performance } = require('perf_hooks')
 
 const INTERVAL = 10 * 1000
@@ -18,9 +18,9 @@ let interval
 let client
 let time
 let cpuUsage
-let gauges
-let counters
-let histograms
+let gauges // MOVE {"stat": Map<"tag", Set>}
+let counters // MOVE {"stat": Map<"tag", Set>}
+let histograms // MOVE {"stat": Map<"tag", Histogram>}
 let elu
 
 reset()
@@ -112,11 +112,11 @@ module.exports = {
     return { finish: () => {} }
   },
 
-  boolean (name, value, tag) {
+  boolean (name, value, tag) { // MOVE
     this.gauge(name, value ? 1 : 0, tag)
   },
 
-  histogram (name, value, tag) {
+  histogram (name, value, tag) { // MOVE
     if (!client) return
 
     histograms[name] = histograms[name] || new Map()
@@ -128,7 +128,7 @@ module.exports = {
     histograms[name].get(tag).record(value)
   },
 
-  count (name, count, tag, monotonic = false) {
+  count (name, count, tag, monotonic = false) { // MOVE
     if (!client) return
     if (typeof tag === 'boolean') {
       monotonic = tag
@@ -144,30 +144,30 @@ module.exports = {
     map[name].set(tag, value + count)
   },
 
-  gauge (name, value, tag) {
+  gauge (name, value, tag) { // MOVE
     if (!client) return
 
     gauges[name] = gauges[name] || new Map()
     gauges[name].set(tag, value)
   },
 
-  increment (name, tag, monotonic) {
+  increment (name, tag, monotonic) { // MOVE
     this.count(name, 1, tag, monotonic)
   },
 
-  decrement (name, tag) {
+  decrement (name, tag) { // MOVE
     this.count(name, -1, tag)
   }
 }
 
-function reset () {
+function reset () { // REBUILD
   interval = null
   client = null
   time = null
   cpuUsage = null
-  gauges = {}
-  counters = {}
-  histograms = {}
+  gauges = {} // MOVE
+  counters = {} // MOVE
+  histograms = {} // MOVE
   nativeMetrics = null
 }
 
@@ -234,7 +234,7 @@ function captureHeapSpace () {
   }
 }
 
-function captureGauges () {
+function captureGauges () { // MOVE
   Object.keys(gauges).forEach(name => {
     gauges[name].forEach((value, tag) => {
       client.gauge(name, value, tag && [tag])
@@ -242,7 +242,7 @@ function captureGauges () {
   })
 }
 
-function captureCounters () {
+function captureCounters () { // MOVE
   Object.keys(counters).forEach(name => {
     counters[name].forEach((value, tag) => {
       client.increment(name, value, tag && [tag])
@@ -252,7 +252,7 @@ function captureCounters () {
   counters = {}
 }
 
-function captureHistograms () {
+function captureHistograms () { // MOVE
   Object.keys(histograms).forEach(name => {
     histograms[name].forEach((stats, tag) => {
       histogram(name, stats, tag && [tag])
@@ -322,7 +322,7 @@ function captureNativeMetrics () {
   }
 }
 
-function histogram (name, stats, tags) {
+function histogram (name, stats, tags) { // MOVE
   tags = [].concat(tags)
 
   client.gauge(`${name}.min`, stats.min, tags)
