@@ -106,7 +106,6 @@ class NativeWallProfiler {
     this._stop()
     this._stop = undefined
     this._setLabels = undefined
-    this._labelsCaptured = undefined
     if (this._hotspots) {
       beforeCh.unsubscribe(this._enter)
       afterCh.unsubscribe(this._exit)
@@ -118,16 +117,14 @@ class NativeWallProfiler {
 
   _record () {
     if (this._hotspots) {
-      const { stop, setLabels, labelsCaptured } = this._pprof.time.startWithLabels(
+      const { stop, setLabels } = this._pprof.time.startWithLabels(
         this._samplingInterval, this._flushInterval, null, this._mapper, false)
       this._stop = stop
       this._setLabels = setLabels
-      this._labelsCaptured = labelsCaptured
     } else {
       this._stop = this._pprof.time.start(
         this._samplingInterval, null, this._mapper, false)
       this._setLabels = undefined
-      this._labelsCaptured = undefined
     }
   }
 }
