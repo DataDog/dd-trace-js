@@ -3,6 +3,8 @@
 const InjectionAnalyzer = require('./injection-analyzer')
 const { UNVALIDATED_REDIRECT } = require('../vulnerabilities')
 const { getNodeModulesPaths } = require('../path-line')
+const { getRanges } = require('../taint-tracking/operations')
+const { HTTP_REQUEST_HEADER_VALUE } = require('../taint-tracking/origin-types')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('express/lib/response.js')
 
@@ -24,6 +26,18 @@ class UnvalidatedRedirectAnalyzer extends InjectionAnalyzer {
 
   isLocationHeader (name) {
     return name && name.trim().toLowerCase() === 'location'
+  }
+
+  _isVulnerable (value, iastContext) {
+    if (!value) return false
+
+    const ranges = getRanges(iastContext, value)
+    return !this._isRefererHeader(ranges)
+  }
+
+  _isRefererHeader (ranges) {
+    return ranges && ranges.every(range => range.iinfo.type === HTTP_REQUEST_HEADER_VALUE &&
+      range.iinfo.parameterName && range.iinfo.parameterName.toLowerCase() === 'referer')
   }
 
   _getExcludedPaths () {
