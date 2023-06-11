@@ -252,6 +252,27 @@ describe('Plugin', () => {
             })
         })
 
+        it('should handle custom errors', async () => {
+          const client = await buildClient({
+            getUnary: (_, callback) => {
+              const metadata = new grpc.Metadata()
+
+              metadata.set('extra', 'information')
+
+              callback({ message: 'foobar', code: grpc.status.NOT_FOUND }, {}, metadata)
+            }
+          })
+
+          client.getUnary({ first: 'foobar' }, () => {})
+
+          return agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'foobar')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
+            })
+        })
+
         it('should handle stream errors', async () => {
           let error = null
 
