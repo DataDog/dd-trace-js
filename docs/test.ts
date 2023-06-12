@@ -1,3 +1,4 @@
+import { performance } from 'perf_hooks'
 import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope, User } from '..';
 import { opentelemetry } from '..';
 import { formats, kinds, priority, tags, types } from '../ext';
