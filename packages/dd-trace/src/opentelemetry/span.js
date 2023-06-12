@@ -2,11 +2,10 @@
 
 const api = require('@opentelemetry/api')
 
-const {
-  getTimeOrigin,
-  otperformance,
-  timeInputToHrTime
-} = require('@opentelemetry/core')
+const { performance } = require('perf_hooks')
+const { timeOrigin } = performance
+
+const { timeInputToHrTime } = require('@opentelemetry/core')
 
 const tracer = require('../../')
 const DatadogSpan = require('../opentracing/span')
@@ -31,7 +30,7 @@ class Span {
   ) {
     const { _tracer } = tracer
 
-    const hrStartTime = timeInputToHrTime(timeInput || (otperformance.now() + getTimeOrigin()))
+    const hrStartTime = timeInputToHrTime(timeInput || (performance.now() + timeOrigin))
     const startTime = hrTimeToMilliseconds(hrStartTime)
 
     this._ddSpan = new DatadogSpan(_tracer, _tracer._processor, _tracer._prioritySampler, {
@@ -121,7 +120,7 @@ class Span {
       return
     }
 
-    const hrEndTime = timeInputToHrTime(timeInput || (otperformance.now() + getTimeOrigin()))
+    const hrEndTime = timeInputToHrTime(timeInput || (performance.now() + timeOrigin))
     const endTime = hrTimeToMilliseconds(hrEndTime)
 
     this._ddSpan.finish(endTime)
