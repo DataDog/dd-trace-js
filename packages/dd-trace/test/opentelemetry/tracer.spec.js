@@ -9,7 +9,7 @@ require('../../').init()
 const { performance } = require('perf_hooks')
 
 const api = require('@opentelemetry/api')
-const { hrTime, millisToHrTime } = require('@opentelemetry/core')
+const { hrTime, timeInputToHrTime } = require('@opentelemetry/core')
 
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
@@ -109,7 +109,7 @@ describe('OTel Tracer', () => {
       // performance.now()
       [perfnow, hrTime(perfnow)],
       // Date.now()
-      [datenow, millisToHrTime(datenow)]
+      [datenow, timeInputToHrTime(datenow)]
     ]
 
     for (const [input, output] of checks) {
