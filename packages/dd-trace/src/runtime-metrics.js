@@ -112,9 +112,12 @@ module.exports = {
     return { finish: () => {} }
   },
 
-  boolean (name, value, tag) { // MOVE
-    this.gauge(name, value ? 1 : 0, tag)
+  boolean() {
+    return client.boolean(...arguments)
   },
+  // boolean (name, value, tag) { // MOVE
+    // this.gauge(name, value ? 1 : 0, tag)
+  // },
 
   histogram (name, value, tag) { // MOVE
     if (!client) return

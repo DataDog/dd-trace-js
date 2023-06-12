@@ -34,6 +34,10 @@ class Client {
     this._udp6 = this._socket('udp6')
   }
 
+  boolean (stat, value, tags) {
+    this.gauge(stat, value ? 1 : 0, tags)
+  }
+
   gauge (stat, value, tags) {
     this._add(stat, value, TYPE_GAUGE, tags)
   }
