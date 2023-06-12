@@ -20,7 +20,7 @@ function encodePathwayContext (dataStreamsContext) {
 }
 
 function decodePathwayContext (pathwayContext) {
-  if (pathwayContext == null || pathwayContext.length() < 8) {
+  if (pathwayContext == null || pathwayContext.length < 8) {
     return null
   }
   // hash and parent hash are in LE
