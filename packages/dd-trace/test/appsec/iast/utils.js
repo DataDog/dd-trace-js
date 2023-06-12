@@ -85,6 +85,7 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability) {
     agent
       .use(traces => {
         expect(traces[0][0].meta['_dd.iast.json']).to.include(`"${vulnerability}"`)
+        expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
       })
       .then(done)
       .catch(done)
@@ -152,6 +153,7 @@ function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb,
   }
   agent
     .use(traces => {
+      expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
       expect(traces[0][0].meta).to.have.property('_dd.iast.json')
       const vulnerabilitiesTrace = JSON.parse(traces[0][0].meta['_dd.iast.json'])
       expect(vulnerabilitiesTrace).to.not.be.null
