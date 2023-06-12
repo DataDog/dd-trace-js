@@ -10,6 +10,7 @@ const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
 const TYPE_COUNTER = 'c'
 const TYPE_GAUGE = 'g'
+const TYPE_DISTRIBUTION = 'd'
 
 class Client {
   constructor (options) {
@@ -44,6 +45,10 @@ class Client {
 
   increment (stat, value, tags) {
     this._add(stat, value, TYPE_COUNTER, tags)
+  }
+
+  distribution (stat, value, tags) {
+    this._add(stat, value, TYPE_DISTRIBUTION, tags)
   }
 
   flush () {
