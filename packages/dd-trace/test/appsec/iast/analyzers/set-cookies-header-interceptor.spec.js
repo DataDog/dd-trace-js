@@ -76,7 +76,6 @@ describe('Test IntermediateCookiesAnalyzer', () => {
       cookieString: 'key2=value2; Secure',
       location: undefined
     }, 'datadog:iast:set-cookie')
-
   })
 
   it('should reuse the location filled in setCookie callback', () => {
