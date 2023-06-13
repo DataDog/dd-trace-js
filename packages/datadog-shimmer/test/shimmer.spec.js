@@ -137,7 +137,7 @@ describe('shimmer', () => {
 
       shimmer.wrap(obj, 'count', () => () => {})
 
-      expect(obj.count).to.have.property(name, 'count')
+      expect(obj.count).to.have.property('name', 'count')
     })
 
     it('should inherit from the original prototype', () => {
@@ -314,7 +314,7 @@ describe('shimmer', () => {
 
       const wrapped = shimmer.wrap(count, () => {})
 
-      expect(wrapped).to.have.property(name, 'count')
+      expect(wrapped).to.have.property('name', 'count')
     })
 
     it('should inherit from the original prototype', () => {
