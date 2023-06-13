@@ -46,29 +46,51 @@ describe('Service naming', () => {
         sinon.assert.calledWith(versions.v0.getServiceName, 'messaging', 'producer', 'redis', 'test-service', extra)
       })
 
-      it('Should set the service to DD_SERVICE when `DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED` is set to true and using `v0` schema', () => {
-        singleton.configure({ spanAttributeSchema: 'v0', traceRemoveIntegrationServiceNamesEnabled: true, service: 'test-service'})
+      it('Should use DD_SERVICE when using `v0` schema & `DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED`', () => {
+        singleton.configure({
+          spanAttributeSchema: 'v0',
+          traceRemoveIntegrationServiceNamesEnabled: true,
+          service: 'test-service'
+        })
 
-        const service_name = singleton.serviceName('messaging', 'producer', 'redis', extra)
+        const serviceName = singleton.serviceName('messaging', 'producer', 'redis', extra)
         expect(singleton.version).to.be.equal('v0')
-        expect(service_name).to.be.equal('test-service')
+        expect(serviceName).to.be.equal('test-service')
         expect(versions.v0.getServiceName).to.not.have.been.called
       })
 
-      it('Should not set the service to DD_SERVICE when `DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED` is unset and using `v0` schema', () => {
+      it('Should not use DD_SERVICE with schema=`v0` & `DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED` unset', () => {
         singleton.serviceName('messaging', 'producer', 'redis', extra)
         expect(singleton.version).to.be.equal('v0')
-        sinon.assert.calledWith(versions.v0.getServiceName, 'messaging', 'producer', 'redis', 'test-service', extra)
+        sinon.assert.calledWith(
+          versions.v0.getServiceName,
+          'messaging',
+          'producer',
+          'redis',
+          'test-service',
+          extra
+        )
       })
 
       it('Should not set the service to DD_SERVICE when using `v1` schema', () => {
         versions.v1 = { getOpName: sinon.spy(), getServiceName: sinon.spy() }
-        singleton.configure({ spanAttributeSchema: 'v1', traceRemoveIntegrationServiceNamesEnabled: true, service: 'test-service'})
+        singleton.configure({
+          spanAttributeSchema: 'v1',
+          traceRemoveIntegrationServiceNamesEnabled: true,
+          service: 'test-service'
+        })
         singleton.schemas = versions
 
         singleton.serviceName('messaging', 'producer', 'redis', extra)
         expect(singleton.version).to.be.equal('v1')
-        sinon.assert.calledWith(versions.v1.getServiceName, 'messaging', 'producer', 'redis', 'test-service', extra)
+        sinon.assert.calledWith(
+          versions.v1.getServiceName,
+          'messaging',
+          'producer',
+          'redis',
+          'test-service',
+          extra
+        )
       })
     })
   })
