@@ -59,7 +59,7 @@ describe('Service naming', () => {
         expect(versions.v0.getServiceName).to.not.have.been.called
       })
 
-      it('Should not use DD_SERVICE with schema=`v0` & `DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED` unset', () => {
+      it('Should not use DD_SERVICE with schema=v0 & DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED unset', () => {
         singleton.serviceName('messaging', 'producer', 'redis', extra)
         expect(singleton.version).to.be.equal('v0')
         sinon.assert.calledWith(
