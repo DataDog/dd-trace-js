@@ -32,10 +32,14 @@ class CookieAnalyzer extends Analyzer {
     if (value && value.location) {
       return true
     }
-    return super._checkOCE(context)
+    return super._checkOCE(context, value)
   }
 
-  _getLocation (value, context) {
+  _getLocation (value) {
+    if (!value) {
+      return super._getLocation()
+    }
+
     if (value.location) {
       return value.location
     }
