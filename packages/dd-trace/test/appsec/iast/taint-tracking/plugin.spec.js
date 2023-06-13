@@ -118,7 +118,7 @@ describe('IAST Taint tracking plugin', () => {
       }
 
       taintTrackingPlugin._taintTrackingHandler(originType, objToBeTainted, propertyToBeTainted)
-      expect(taintTrackingOperations.taintObject).to.not.be.called
+      expect(taintTrackingOperations.taintObject).not.to.be.called
     })
 
     it('Should taint request parameter when qs event is published', () => {
