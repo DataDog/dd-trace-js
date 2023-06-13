@@ -19,6 +19,9 @@ class SchemaManager {
   }
 
   serviceName (type, kind, plugin, ...serviceNameArgs) {
+    if (this.config.traceRemoveIntegrationServiceNamesEnabled && this.version === "v0") {
+      return this.config.service
+    }
     return this.schema.getServiceName(type, kind, plugin, this.config.service, ...serviceNameArgs)
   }
 
