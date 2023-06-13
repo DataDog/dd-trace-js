@@ -68,7 +68,7 @@ module.exports = class PluginManager {
 
     if (!Plugin) return
     if (!this._pluginsByName[name]) {
-      this._pluginsByName[name] = new Plugin(this._tracer)
+      this._pluginsByName[name] = new Plugin(this._tracer, this._tracerConfig)
     }
     if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
 
@@ -76,6 +76,7 @@ module.exports = class PluginManager {
       enabled: this._tracerConfig.plugins !== false
     }
 
+    // extracts predetermined configuration from tracer and combines it with plugin-specific config
     this._pluginsByName[name].configure({
       ...this._getSharedConfig(name),
       ...pluginConfig
@@ -127,8 +128,7 @@ module.exports = class PluginManager {
       serviceMapping,
       queryStringObfuscation,
       site,
-      url,
-      dbmPropagationMode
+      url
     } = this._tracerConfig
 
     const sharedConfig = {}
@@ -140,8 +140,6 @@ module.exports = class PluginManager {
     if (queryStringObfuscation !== undefined) {
       sharedConfig.queryStringObfuscation = queryStringObfuscation
     }
-
-    sharedConfig.dbmPropagationMode = dbmPropagationMode
 
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
