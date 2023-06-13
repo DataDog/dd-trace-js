@@ -335,6 +335,18 @@ opentracing.initGlobalTracer(tracer)</code></pre>
 					<li><code>resource.name</code>: The resource name to be used for this span. The operation name will be used if this is not provided.</li>
 					<li><code>span.type</code>: The span type to be used for this span. Will fallback to <code>custom</code> if not provided.</li>
 				</ul>
+				<h2 id="opentelemetry-api">OpenTelemetry Compatibility</h2>
+				<p>This library is OpenTelemetry compliant. Use the <a href="https://opentelemetry.io/docs/instrumentation/js/">OpenTelemetry API</a> and the Datadog Tracer (dd-trace) library to measure execution times for specific pieces of code. In the following example, a Datadog TracerProvider is registered with @opentelemetry/api:</p>
+				<pre><code class="language-javascript"><span class="hljs-keyword">const</span> tracer = <span class="hljs-built_in">require</span>(<span class="hljs-string">&#x27;dd-trace&#x27;</span>).init()
+
+<span class="hljs-keyword">const</span> tracerProvider = <span class="hljs-keyword">new</span> tracer.TracerProvider()
+tracerProvider.register()</code></pre>
+				<p>The following attributes are available to override Datadog specific options:</p>
+				<ul>
+					<li><code>service.name</code>: The service name to be used for this span. The service name from the tracer will be used if this is not provided.</li>
+					<li><code>resource.name</code>: The resource name to be used for this span. The operation name will be used if this is not provided.</li>
+					<li><code>span.type</code>: The span type to be used for this span. Will fallback to <code>custom</code> if not provided.</li>
+				</ul>
 				<h2 id="advanced-configuration">Advanced Configuration</h2>
 				<h3 id="tracer-settings">Tracer settings</h3>
 				<p>Options can be configured as a parameter to the <a href="./interfaces/tracer.html#init">init()</a> method or as environment variables. These are documented over on <a href="https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs">Configuring the NodeJS Tracing Library</a>.</p>
@@ -399,6 +411,9 @@ tracer.use(<span class="hljs-string">&#x27;express&#x27;</span>, {
 				<ul>
 					<li class="globals  ">
 						<a href="globals.html"><em>Globals</em></a>
+					</li>
+					<li class=" tsd-kind-namespace">
+						<a href="modules/opentelemetry.html">opentelemetry</a>
 					</li>
 					<li class=" tsd-kind-namespace">
 						<a href="modules/plugins.html">plugins</a>
