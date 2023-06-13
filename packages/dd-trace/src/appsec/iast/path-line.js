@@ -5,6 +5,7 @@ const process = require('process')
 const { calculateDDBasePath } = require('../../util')
 const pathLine = {
   getFirstNonDDPathAndLine,
+  getNodeModulesPaths,
   getFirstNonDDPathAndLineFromCallsites, // Exported only for test purposes
   calculateDDBasePath, // Exported only for test purposes
   ddBasePath: calculateDDBasePath(__dirname) // Only for test purposes
@@ -83,4 +84,16 @@ function isExcluded (callsite, externallyExcludedPaths) {
 function getFirstNonDDPathAndLine (externallyExcludedPaths) {
   return getFirstNonDDPathAndLineFromCallsites(getCallSiteInfo(), externallyExcludedPaths)
 }
+
+function getNodeModulesPaths (...paths) {
+  const nodeModulesPaths = []
+
+  paths.forEach(p => {
+    const pathParts = p.split('/')
+    nodeModulesPaths.push(path.join('node_modules', ...pathParts))
+  })
+
+  return nodeModulesPaths
+}
+
 module.exports = pathLine
