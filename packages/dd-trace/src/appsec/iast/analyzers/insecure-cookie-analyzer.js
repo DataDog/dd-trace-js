@@ -2,8 +2,9 @@
 
 const Analyzer = require('./vulnerability-analyzer')
 const { INSECURE_COOKIE } = require('../vulnerabilities')
+const { getNodeModulesPaths } = require('../path-line')
 
-const EXCLUDED_PATHS = ['node_modules/express/lib/response.js', 'node_modules\\express\\lib\\response.js']
+const EXCLUDED_PATHS = getNodeModulesPaths('express/lib/response.js')
 
 class InsecureCookieAnalyzer extends Analyzer {
   constructor () {
