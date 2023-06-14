@@ -33,6 +33,13 @@ const { getGitMetadata } = proxyquire('../../../src/plugins/util/git',
   }
 )
 
+function getFakeDirectory () {
+  if (os.platform() === 'win32') {
+    return `C:${path.sep}tmp`
+  }
+  return '/tmp'
+}
+
 describe('git', () => {
   afterEach(() => {
     sanitizedExecStub.reset()
@@ -172,7 +179,7 @@ describe('generatePackFilesForCommits', () => {
   let tmpdirStub
   beforeEach(() => {
     sinon.stub(Math, 'random').returns('0.1234')
-    tmpdirStub = sinon.stub(os, 'tmpdir').returns(`${path.sep}tmp`)
+    tmpdirStub = sinon.stub(os, 'tmpdir').returns(getFakeDirectory())
     sinon.stub(process, 'cwd').returns('cwd')
   })
   afterEach(() => {
