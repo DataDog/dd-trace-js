@@ -12,7 +12,10 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
   mssql:
-    image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
+  # A working MSSQL server is not available on ARM.
+  # This image provides _most_ of sqlserver functionalities, but
+  # does not support stored procedures (corresponding tests will fail)
+    image: mcr.microsoft.com/mssql/azure-sql-edge
     environment:
       - "ACCEPT_EULA=Y"
       - "SA_PASSWORD=DD_HUNTER2"
