@@ -4,6 +4,7 @@ require('../../setup/tap')
 
 const { execSync } = require('child_process')
 const os = require('os')
+const fs = require('fs')
 const path = require('path')
 
 const { GIT_REV_LIST_MAX_BUFFER } = require('../../../src/plugins/util/git')
@@ -32,6 +33,13 @@ const { getGitMetadata } = proxyquire('../../../src/plugins/util/git',
     }
   }
 )
+
+function getFakeDirectory () {
+  if (os.platform() === 'win32') {
+    return `C:${path.sep}tmp`
+  }
+  return '/tmp'
+}
 
 describe('git', () => {
   afterEach(() => {
@@ -169,11 +177,13 @@ describe('getCommitsToUpload', () => {
 })
 
 describe('generatePackFilesForCommits', () => {
-  let tmpdirStub
+  let tmpdirStub, statSyncStub
+  const fakeDirectory = getFakeDirectory()
   beforeEach(() => {
     sinon.stub(Math, 'random').returns('0.1234')
-    tmpdirStub = sinon.stub(os, 'tmpdir').returns('/tmp')
+    tmpdirStub = sinon.stub(os, 'tmpdir').returns(fakeDirectory)
     sinon.stub(process, 'cwd').returns('cwd')
+    statSyncStub = sinon.stub(fs, 'statSync').returns({ isDirectory: () => true })
   })
   afterEach(() => {
     sinon.restore()
@@ -189,7 +199,7 @@ describe('generatePackFilesForCommits', () => {
       }
     )
 
-    const temporaryPath = path.join('/tmp', '1234')
+    const temporaryPath = path.join(fakeDirectory, '1234')
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
     expect(packFilesToUpload).to.eql([`${temporaryPath}-commitSHA.pack`])
   })
@@ -213,6 +223,7 @@ describe('generatePackFilesForCommits', () => {
 
   it('does not work if tmpdir does not return a folder', () => {
     tmpdirStub.restore()
+    statSyncStub.restore()
     sinon.stub(os, 'tmpdir').returns('; echo hey')
     const execFileSyncSpy = sinon.stub().onCall(0).throws().onCall(1).returns(['commitSHA'])
 
