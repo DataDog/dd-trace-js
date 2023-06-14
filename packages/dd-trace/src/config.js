@@ -296,7 +296,7 @@ class Config {
       process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     )
     const DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = coalesce(
-      process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,
+      isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED),
       false
     )
     const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
