@@ -12,6 +12,7 @@ const {
   removeTransaction,
   taintTrackingPlugin
 } = require('./taint-tracking')
+const { IAST_ENABLED_TAG_KEY } = require('./tags')
 
 const telemetryLogs = require('./telemetry/logs')
 
