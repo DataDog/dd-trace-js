@@ -178,9 +178,10 @@ describe('getCommitsToUpload', () => {
 
 describe('generatePackFilesForCommits', () => {
   let tmpdirStub
+  const fakeDirectory = getFakeDirectory()
   beforeEach(() => {
     sinon.stub(Math, 'random').returns('0.1234')
-    tmpdirStub = sinon.stub(os, 'tmpdir').returns(getFakeDirectory())
+    tmpdirStub = sinon.stub(os, 'tmpdir').returns(fakeDirectory)
     sinon.stub(process, 'cwd').returns('cwd')
     sinon.stub(fs, 'statSync').returns({ isDirectory: () => true })
   })
@@ -198,7 +199,7 @@ describe('generatePackFilesForCommits', () => {
       }
     )
 
-    const temporaryPath = path.join('/tmp', '1234')
+    const temporaryPath = path.join(fakeDirectory, '1234')
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
     expect(packFilesToUpload).to.eql([`${temporaryPath}-commitSHA.pack`])
   })
