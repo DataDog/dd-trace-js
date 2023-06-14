@@ -23,7 +23,6 @@ const {
 const GIT_REV_LIST_MAX_BUFFER = 8 * 1024 * 1024 // 8MB
 
 function isDirectory (path) {
-  console.log('isDirectory', path)
   try {
     const stats = fs.statSync(path)
     return stats.isDirectory()
@@ -90,7 +89,6 @@ function generatePackFilesForCommits (commitsToUpload) {
   const tmpFolder = os.tmpdir()
 
   if (!isDirectory(tmpFolder)) {
-    console.log('not directory!!', tmpFolder)
     log.error(new Error('Provided path to generate packfiles is not a directory'))
     return []
   }

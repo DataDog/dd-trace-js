@@ -1,6 +1,6 @@
 'use strict'
 
-// require('../../setup/tap')
+require('../../setup/tap')
 
 const { execSync } = require('child_process')
 const os = require('os')
@@ -188,7 +188,7 @@ describe('generatePackFilesForCommits', () => {
   afterEach(() => {
     sinon.restore()
   })
-  it.only('creates pack files in temporary path', () => {
+  it('creates pack files in temporary path', () => {
     const execFileSyncSpy = sinon.stub().returns(['commitSHA'])
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
@@ -204,7 +204,7 @@ describe('generatePackFilesForCommits', () => {
     expect(packFilesToUpload).to.eql([`${temporaryPath}-commitSHA.pack`])
   })
 
-  it.only('creates pack files in cwd if the temporary path fails', () => {
+  it('creates pack files in cwd if the temporary path fails', () => {
     const execFileSyncSpy = sinon.stub().onCall(0).throws().onCall(1).returns(['commitSHA'])
 
     const cwdPath = path.join('cwd', '1234')
