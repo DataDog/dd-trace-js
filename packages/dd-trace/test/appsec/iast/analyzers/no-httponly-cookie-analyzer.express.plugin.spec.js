@@ -23,7 +23,7 @@ describe('no HttpOnly cookie vulnerability', () => {
       (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
         testThatRequestHasVulnerability((req, res) => {
           setCookieFunctions.insecureWithResCookieMethod('insecure', 'cookie', res)
-        }, 'NO_HTTP_ONLY_COOKIE', {
+        }, 'NO_HTTPONLY_COOKIE', {
           occurrences: 1,
           location: {
             path: setCookieFunctionsFilename,
@@ -34,7 +34,7 @@ describe('no HttpOnly cookie vulnerability', () => {
         testThatRequestHasVulnerability((req, res) => {
           setCookieFunctions.insecureWithResCookieMethod('insecure', 'cookie', res)
           setCookieFunctions.insecureWithResCookieMethod('insecure2', 'cookie2', res)
-        }, 'NO_HTTP_ONLY_COOKIE', {
+        }, 'NO_HTTPONLY_COOKIE', {
           occurrences: 2,
           location: {
             path: setCookieFunctionsFilename,
@@ -44,7 +44,7 @@ describe('no HttpOnly cookie vulnerability', () => {
 
         testThatRequestHasVulnerability((req, res) => {
           setCookieFunctions.insecureWithResHeaderMethod('insecure', 'cookie', res)
-        }, 'NO_HTTP_ONLY_COOKIE', {
+        }, 'NO_HTTPONLY_COOKIE', {
           occurrences: 1,
           location: {
             path: setCookieFunctionsFilename,
@@ -54,7 +54,7 @@ describe('no HttpOnly cookie vulnerability', () => {
 
         testThatRequestHasVulnerability((req, res) => {
           setCookieFunctions.insecureWithResHeaderMethodWithArray('insecure', 'cookie', 'insecure2', 'cookie2', res)
-        }, 'NO_HTTP_ONLY_COOKIE', {
+        }, 'NO_HTTPONLY_COOKIE', {
           occurrences: 2,
           location: {
             path: setCookieFunctionsFilename,
@@ -67,7 +67,7 @@ describe('no HttpOnly cookie vulnerability', () => {
           res.clearCookie('deleteinsecure')
           res.header('set-cookie', 'other=secure; Secure; HttpOnly')
           res.header('set-cookie', ['other=safe; HttpOnly', 'more=safe2; Secure; HttpOnly'])
-        }, 'NO_HTTP_ONLY_COOKIE')
+        }, 'NO_HTTPONLY_COOKIE')
       })
   })
 })

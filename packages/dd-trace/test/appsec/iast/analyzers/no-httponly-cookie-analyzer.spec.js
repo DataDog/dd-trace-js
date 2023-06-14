@@ -2,12 +2,12 @@
 
 const { prepareTestServerForIast } = require('../utils')
 const Analyzer = require('../../../../src/appsec/iast/analyzers/vulnerability-analyzer')
-const { NO_HTTP_ONLY_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
+const { NO_HTTPONLY_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
 const analyzer = new Analyzer()
 
 describe('no HttpOnly cookie analyzer', () => {
   it('Expected vulnerability identifier', () => {
-    expect(NO_HTTP_ONLY_COOKIE).to.be.equals('NO_HTTP_ONLY_COOKIE')
+    expect(NO_HTTPONLY_COOKIE).to.be.equals('NO_HTTPONLY_COOKIE')
   })
 
   // In these test, even when we are having multiple vulnerabilities, all the vulnerabilities
@@ -22,37 +22,37 @@ describe('no HttpOnly cookie analyzer', () => {
     (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', 'key=value')
-      }, NO_HTTP_ONLY_COOKIE, 1, function (vulnerabilities) {
+      }, NO_HTTPONLY_COOKIE, 1, function (vulnerabilities) {
         expect(vulnerabilities[0].evidence.value).to.be.equals('key')
-        expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('NO_HTTP_ONLY_COOKIE:key'))
+        expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('NO_HTTPONLY_COOKIE:key'))
       })
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', ['key=value'])
-      }, NO_HTTP_ONLY_COOKIE, 1)
+      }, NO_HTTPONLY_COOKIE, 1)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', ['key=value', 'key2=value2'])
-      }, NO_HTTP_ONLY_COOKIE, 2)
+      }, NO_HTTPONLY_COOKIE, 2)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', ['key=value', 'key2=value2; Secure'])
-      }, NO_HTTP_ONLY_COOKIE, 2)
+      }, NO_HTTPONLY_COOKIE, 2)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', ['key=value', 'key2=value2; HttpOnly'])
-      }, NO_HTTP_ONLY_COOKIE, 1)
+      }, NO_HTTPONLY_COOKIE, 1)
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', ['key=value; HttpOnly', 'key2=value2; Secure'])
-      }, NO_HTTP_ONLY_COOKIE, 1)
+      }, NO_HTTPONLY_COOKIE, 1)
 
       testThatRequestHasNoVulnerability((req, res) => {
         res.setHeader('set-cookie', 'key=value; HttpOnly')
-      }, NO_HTTP_ONLY_COOKIE)
+      }, NO_HTTPONLY_COOKIE)
 
       testThatRequestHasNoVulnerability((req, res) => {
         res.setHeader('set-cookie', 'key=')
-      }, NO_HTTP_ONLY_COOKIE)
+      }, NO_HTTPONLY_COOKIE)
     }, iastConfig)
 })
