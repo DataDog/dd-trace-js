@@ -4,6 +4,7 @@
 
 const { execSync } = require('child_process')
 const os = require('os')
+const fs = require('fs')
 const path = require('path')
 
 const { GIT_REV_LIST_MAX_BUFFER } = require('../../../src/plugins/util/git')
@@ -181,6 +182,7 @@ describe('generatePackFilesForCommits', () => {
     sinon.stub(Math, 'random').returns('0.1234')
     tmpdirStub = sinon.stub(os, 'tmpdir').returns(getFakeDirectory())
     sinon.stub(process, 'cwd').returns('cwd')
+    sinon.stub(fs, 'statSync').returns({ isDirectory: () => true })
   })
   afterEach(() => {
     sinon.restore()
