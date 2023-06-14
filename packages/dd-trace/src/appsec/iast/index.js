@@ -6,7 +6,7 @@ const overheadController = require('./overhead-controller')
 const dc = require('../../../../diagnostics_channel')
 const iastContextFunctions = require('./iast-context')
 const { enableTaintTracking, disableTaintTracking, createTransaction, removeTransaction } = require('./taint-tracking')
-const { IAST_ENABLED_TAG_KEY } = require('./constants.js')
+const { IAST_ENABLED_TAG_KEY } = require('./tags')
 
 const telemetryLogs = require('./telemetry/logs')
 
