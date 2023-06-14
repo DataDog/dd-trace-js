@@ -26,7 +26,11 @@ const storage = {
       opName: () => 'memcached.command',
       serviceName: (service, config, system) => config.service || fromSystem(service, system)
     },
-    redis: redisConfig
+    redis: redisConfig,
+    tedious: {
+      opName: () => 'tedious.request',
+      serviceName: (service, config, system) => config.service || fromSystem(service, system)
+    }
   }
 }
 
