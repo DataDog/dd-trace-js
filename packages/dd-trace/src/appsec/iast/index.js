@@ -6,9 +6,9 @@ const overheadController = require('./overhead-controller')
 const dc = require('../../../../diagnostics_channel')
 const iastContextFunctions = require('./iast-context')
 const { enableTaintTracking, disableTaintTracking, createTransaction, removeTransaction } = require('./taint-tracking')
+const { IAST_ENABLED_TAG_KEY } = require('./tags')
 
 const telemetryLogs = require('./telemetry/logs')
-const IAST_ENABLED_TAG_KEY = '_dd.iast.enabled'
 
 // TODO Change to `apm:http:server:request:[start|close]` when the subscription
 //  order of the callbacks can be enforce

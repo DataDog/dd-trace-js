@@ -7,6 +7,7 @@ const { contains, intersects, remove } = require('./range-utils')
 const CommandSensitiveAnalyzer = require('./sensitive-analyzers/command-sensitive-analyzer')
 const LdapSensitiveAnalyzer = require('./sensitive-analyzers/ldap-sensitive-analyzer')
 const SqlSensitiveAnalyzer = require('./sensitive-analyzers/sql-sensitive-analyzer')
+const UrlSensitiveAnalyzer = require('./sensitive-analyzers/url-sensitive-analyzer')
 
 // eslint-disable-next-line max-len
 const DEFAULT_IAST_REDACTION_NAME_PATTERN = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)'
@@ -22,6 +23,9 @@ class SensitiveHandler {
     this._sensitiveAnalyzers.set(vulnerabilities.COMMAND_INJECTION, new CommandSensitiveAnalyzer())
     this._sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, new LdapSensitiveAnalyzer())
     this._sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, new SqlSensitiveAnalyzer())
+    const urlSensitiveAnalyzer = new UrlSensitiveAnalyzer()
+    this._sensitiveAnalyzers.set(vulnerabilities.SSRF, urlSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.UNVALIDATED_REDIRECT, urlSensitiveAnalyzer)
   }
 
   isSensibleName (name) {

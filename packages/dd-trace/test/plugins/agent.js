@@ -35,6 +35,88 @@ function ciVisRequestHandler (request, response) {
   })
 }
 
+function addEnvironmentVariablesToHeaders (headers) {
+  // get all environment variables that start with "DD_"
+  const ddEnvVars = Object.entries(process.env)
+    .filter(([key]) => key.startsWith('DD_'))
+    .map(([key, value]) => `${key}=${value}`)
+
+  // add the DD environment variables to the header if any exist
+  // to send with trace to final agent destination
+  if (ddEnvVars.length > 0) {
+    headers['X-Datadog-Trace-Env-Variables'] = ddEnvVars.join(',')
+  }
+}
+
+function handleTraceRequest (req, res, sendToTestAgent) {
+  // handles the received trace request and sends trace to Test Agent if bool enabled.
+  if (sendToTestAgent) {
+    const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
+
+    // remove incorrect headers
+    delete req.headers['host']
+    delete req.headers['content-type']
+    delete req.headers['content-length']
+
+    // add current environment variables to trace headers
+    addEnvironmentVariablesToHeaders(req.headers)
+
+    const testAgentReq = http.request(
+      `${testAgentUrl}/v0.4/traces`, {
+        method: 'PUT',
+        headers: {
+          ...req.headers,
+          'X-Datadog-Agent-Proxy-Disabled': 'True',
+          'Content-Type': 'application/json'
+        }
+      })
+
+    testAgentReq.on('response', testAgentRes => {
+      if (testAgentRes.statusCode !== 200) {
+        // handle request failures from the Test Agent here
+        let body = ''
+        testAgentRes.on('data', chunk => {
+          body += chunk
+        })
+        testAgentRes.on('end', () => {
+          res.status(400).send(body)
+        })
+      }
+    })
+    testAgentReq.write(JSON.stringify(req.body))
+    testAgentReq.end()
+  }
+
+  res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
+  handlers.forEach(({ handler, spanResourceMatch }) => {
+    const trace = req.body
+    const spans = trace.flatMap(span => span)
+    if (isMatchingTrace(spans, spanResourceMatch)) {
+      handler(trace)
+    }
+  })
+}
+
+function checkAgentStatus () {
+  const agentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
+
+  return new Promise((resolve, reject) => {
+    const request = http.request(`${agentUrl}/info`, { method: 'GET' }, response => {
+      if (response.statusCode === 200) {
+        resolve(true)
+      } else {
+        resolve(false)
+      }
+    })
+
+    request.on('error', error => {
+      reject(error)
+    })
+
+    request.end()
+  })
+}
+
 const DEFAULT_AVAILABLE_ENDPOINTS = ['/evp_proxy/v2']
 
 let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
@@ -53,6 +135,14 @@ module.exports = {
       next()
     })
 
+    let useTestAgent
+
+    try {
+      useTestAgent = await checkAgentStatus()
+    } catch (error) {
+      useTestAgent = false
+    }
+
     agent.get('/info', (req, res) => {
       res.status(202).send({
         endpoints: availableEndpoints
@@ -64,14 +154,7 @@ module.exports = {
     })
 
     agent.put('/v0.4/traces', (req, res) => {
-      res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
-      handlers.forEach(({ handler, spanResourceMatch }) => {
-        const trace = req.body
-        const spans = trace.flatMap(span => span)
-        if (isMatchingTrace(spans, spanResourceMatch)) {
-          handler(trace)
-        }
-      })
+      handleTraceRequest(req, res, useTestAgent)
     })
 
     // CI Visibility Agentless intake
@@ -111,6 +194,7 @@ module.exports = {
       flushInterval: 0,
       plugins: false
     }, tracerConfig))
+
     tracer.setUrl(`http://127.0.0.1:${port}`)
 
     for (let i = 0, l = pluginName.length; i < l; i++) {

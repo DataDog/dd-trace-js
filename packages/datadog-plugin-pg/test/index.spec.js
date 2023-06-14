@@ -271,6 +271,7 @@ describe('Plugin', () => {
           })
         })
       })
+
       describe('with DBM propagation enabled with service using plugin configurations', () => {
         before(() => {
           return agent.load('pg', [{ dbmPropagationMode: 'service', service: () => 'serviced' }])
@@ -318,6 +319,7 @@ describe('Plugin', () => {
             }
           }
         })
+
         it('trace query resource should not be changed when propagation is enabled', done => {
           agent.use(traces => {
             expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
@@ -331,8 +333,10 @@ describe('Plugin', () => {
           })
         })
       })
+
       describe('DBM propagation should handle special characters', () => {
         let clientDBM
+
         before(() => {
           return agent.load('pg', [{ dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' }])
         })
@@ -340,6 +344,7 @@ describe('Plugin', () => {
         after(() => {
           return agent.close({ ritmReset: false })
         })
+
         beforeEach(done => {
           pg = require(`../../../versions/pg@${version}`).get()
 
@@ -352,6 +357,7 @@ describe('Plugin', () => {
 
           clientDBM.connect(err => done(err))
         })
+
         it('DBM propagation should handle special characters', done => {
           clientDBM.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
             if (err) return done(err)
@@ -373,15 +379,18 @@ describe('Plugin', () => {
           }
         })
       })
+
       describe('with DBM propagation enabled with full using tracer configurations', () => {
         const tracer = require('../../dd-trace')
         let seenTraceParent
         let seenTraceId
         let seenSpanId
         let originalWrite
+
         before(() => {
           return agent.load('pg')
         })
+
         beforeEach(done => {
           pg = require(`../../../versions/pg@${version}`).get()
 
@@ -409,9 +418,11 @@ describe('Plugin', () => {
             return originalWrite.apply(this, arguments)
           }
         })
+
         afterEach(() => {
           net.Socket.prototype.write = originalWrite
         })
+
         it('query text should contain traceparent', done => {
           agent.use(traces => {
             const traceId = traces[0][0].trace_id.toString(16).padStart(32, '0')
@@ -428,6 +439,7 @@ describe('Plugin', () => {
             })
           })
         })
+
         it('query should inject _dd.dbm_trace_injected into span', done => {
           agent.use(traces => {
             expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
@@ -442,6 +454,7 @@ describe('Plugin', () => {
             })
           })
         })
+
         it('service should default to tracer service name', done => {
           tracer
           agent.use(traces => {
@@ -458,12 +471,14 @@ describe('Plugin', () => {
           })
         })
       })
+
       describe('DBM propagation enabled with full should handle query config objects', () => {
         const tracer = require('../../dd-trace')
 
         before(() => {
           return agent.load('pg')
         })
+
         beforeEach(done => {
           pg = require(`../../../versions/pg@${version}`).get()
 
@@ -484,10 +499,11 @@ describe('Plugin', () => {
 
         it('query config objects should be handled', done => {
           let queryText = ''
+
           const query = {
-            name: 'pgSelectQuery',
             text: 'SELECT $1::text as message'
           }
+
           agent.use(traces => {
             const traceId = traces[0][0].trace_id.toString(16).padStart(32, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
@@ -496,6 +512,7 @@ describe('Plugin', () => {
               `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0',` +
               `traceparent='00-${traceId}-${spanId}-00'*/ SELECT $1::text as message`)
           }).then(done, done)
+
           client.query(query, ['Hello world!'], (err) => {
             if (err) return done(err)
 
@@ -505,11 +522,13 @@ describe('Plugin', () => {
           })
           queryText = client.queryQueue[0].text
         })
+
         it('query config object should persist when comment is injected', done => {
           const query = {
             name: 'pgSelectQuery',
             text: 'SELECT $1::text as message'
           }
+
           client.query(query, ['Hello world!'], (err) => {
             if (err) return done(err)
 
@@ -517,10 +536,59 @@ describe('Plugin', () => {
               if (err) return done(err)
             })
           })
+
           agent.use(traces => {
             expect(query).to.have.property(
               'name', 'pgSelectQuery')
           }).then(done, done)
+        })
+
+        it('falls back to service with prepared statements', done => {
+          let queryText = ''
+
+          const query = {
+            name: 'pgSelectQuery',
+            text: 'SELECT $1::text as message'
+          }
+
+          agent.use(traces => {
+            expect(queryText).to.equal(
+              `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0'` +
+              `*/ SELECT $1::text as message`)
+          }).then(done, done)
+
+          client.query(query, ['Hello world!'], (err) => {
+            if (err) return done(err)
+
+            client.end((err) => {
+              if (err) return done(err)
+            })
+          })
+          queryText = client.queryQueue[0].text
+        })
+
+        it('should not fail when using query object with getters', done => {
+          let queryText = ''
+
+          const query = {
+            name: 'pgSelectQuery',
+            get text () { return 'SELECT $1::text as message' }
+          }
+
+          agent.use(traces => {
+            expect(queryText).to.equal(
+              `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0'` +
+              `*/ SELECT $1::text as message`)
+          }).then(done, done)
+
+          client.query(query, ['Hello world!'], (err) => {
+            if (err) return done(err)
+
+            client.end((err) => {
+              if (err) return done(err)
+            })
+          })
+          queryText = client.queryQueue[0].text
         })
       })
     })
