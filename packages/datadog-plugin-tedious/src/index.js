@@ -9,8 +9,8 @@ class TediousPlugin extends DatabasePlugin {
   static get system () { return 'mssql' }
 
   start ({ queryOrProcedure, connectionConfig }) {
-    this.startSpan('tedious.request', {
-      service: this.config.service,
+    this.startSpan(this.operationName(), {
+      service: this.serviceName(this.config, this.system),
       resource: queryOrProcedure,
       type: 'sql',
       kind: 'client',
