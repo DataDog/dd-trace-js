@@ -27,7 +27,11 @@ const storage = {
     },
     mysql: mySQLNaming,
     mysql2: mySQLNaming,
-    redis: redisNaming
+    redis: redisNaming,
+    tedious: {
+      opName: () => 'mssql.query',
+      serviceName: configWithFallback
+    }
   }
 }
 

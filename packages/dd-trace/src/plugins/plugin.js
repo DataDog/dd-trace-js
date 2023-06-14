@@ -26,10 +26,12 @@ class Subscription {
 }
 
 module.exports = class Plugin {
-  constructor (tracer) {
+  constructor (tracer, tracerConfig) {
     this._subscriptions = []
     this._enabled = false
     this._tracer = tracer
+    this.config = {} // plugin-specific configuration, unset until .configure() is called
+    this._tracerConfig = tracerConfig // global tracer configuration
   }
 
   get tracer () {

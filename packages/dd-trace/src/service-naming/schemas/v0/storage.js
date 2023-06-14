@@ -45,7 +45,11 @@ const storage = {
       opName: () => 'mysql.query',
       serviceName: mysqlServiceName
     },
-    redis: redisConfig
+    redis: redisConfig,
+    tedious: {
+      opName: () => 'tedious.request',
+      serviceName: (service, config, system) => config.service || fromSystem(service, system)
+    }
   }
 }
 

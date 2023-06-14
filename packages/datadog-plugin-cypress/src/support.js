@@ -16,9 +16,10 @@ before(() => {
 })
 
 after(() => {
-  cy.task('dd:testSuiteFinish', Cypress.mocha.getRunner().stats)
   cy.window().then(win => {
-    win.dispatchEvent(new Event('beforeunload'))
+    if (win.DD_RUM) {
+      win.dispatchEvent(new Event('beforeunload'))
+    }
   })
 })
 
