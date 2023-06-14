@@ -132,6 +132,14 @@ describe('shimmer', () => {
       expect(obj.count).to.have.length(3)
     })
 
+    it('should preserve the original function name', () => {
+      const obj = { count (a, b, c) {} }
+
+      shimmer.wrap(obj, 'count', () => () => {})
+
+      expect(obj.count).to.have.property('name', 'count')
+    })
+
     it('should inherit from the original prototype', () => {
       const obj = { count: () => {} }
 
@@ -299,6 +307,14 @@ describe('shimmer', () => {
       const wrapped = shimmer.wrap(count, () => {})
 
       expect(wrapped).to.have.length(3)
+    })
+
+    it('should preserve the original function name', () => {
+      const count = function count (a, b, c) {}
+
+      const wrapped = shimmer.wrap(count, () => {})
+
+      expect(wrapped).to.have.property('name', 'count')
     })
 
     it('should inherit from the original prototype', () => {
