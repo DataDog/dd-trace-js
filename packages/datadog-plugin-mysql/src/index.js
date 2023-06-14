@@ -8,9 +8,8 @@ class MySQLPlugin extends DatabasePlugin {
   static get system () { return 'mysql' }
 
   start (payload) {
-    const service = getServiceName(this.config, payload.conf)
-
-    this.startSpan(`${this.system}.query`, {
+    const service = this.serviceName(this.config, payload.conf, this.system)
+    this.startSpan(this.operationName(), {
       service,
       resource: payload.sql,
       type: 'sql',
@@ -25,14 +24,6 @@ class MySQLPlugin extends DatabasePlugin {
     })
     payload.sql = this.injectDbmQuery(payload.sql, service)
   }
-}
-
-function getServiceName (config, dbConfig) {
-  if (typeof config.service === 'function') {
-    return config.service(dbConfig)
-  }
-
-  return config.service
 }
 
 module.exports = MySQLPlugin
