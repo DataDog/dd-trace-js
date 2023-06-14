@@ -177,13 +177,13 @@ describe('getCommitsToUpload', () => {
 })
 
 describe('generatePackFilesForCommits', () => {
-  let tmpdirStub
+  let tmpdirStub, statSyncStub
   const fakeDirectory = getFakeDirectory()
   beforeEach(() => {
     sinon.stub(Math, 'random').returns('0.1234')
     tmpdirStub = sinon.stub(os, 'tmpdir').returns(fakeDirectory)
     sinon.stub(process, 'cwd').returns('cwd')
-    sinon.stub(fs, 'statSync').returns({ isDirectory: () => true })
+    statSyncStub = sinon.stub(fs, 'statSync').returns({ isDirectory: () => true })
   })
   afterEach(() => {
     sinon.restore()
@@ -223,6 +223,7 @@ describe('generatePackFilesForCommits', () => {
 
   it('does not work if tmpdir does not return a folder', () => {
     tmpdirStub.restore()
+    statSyncStub.restore()
     sinon.stub(os, 'tmpdir').returns('; echo hey')
     const execFileSyncSpy = sinon.stub().onCall(0).throws().onCall(1).returns(['commitSHA'])
 
