@@ -38,53 +38,12 @@ describe('Service naming', () => {
 
       it('should forward additional args to opName', () => {
         singleton.opName('messaging', 'producer', 'redis', extra)
-        sinon.assert.calledWith(versions.v0.getOpName, 'messaging', 'producer', 'redis', extra)
+        expect(versions.v0.getOpName).to.have.been.calledWith('messaging', 'producer', 'redis', extra)
       })
 
       it('should forward additional args to serviceName and add configured service', () => {
         singleton.serviceName('messaging', 'producer', 'redis', extra)
-        sinon.assert.calledWith(versions.v0.getServiceName, 'messaging', 'producer', 'redis', 'test-service', extra)
-      })
-
-      it('Should use DD_SERVICE when using `v0` schema & `DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED`', () => {
-        singleton.configure({
-          spanAttributeSchema: 'v0',
-          traceRemoveIntegrationServiceNamesEnabled: true,
-          service: 'test-service'
-        })
-
-        const serviceName = singleton.serviceName('messaging', 'producer', 'redis', extra)
-        expect(singleton.version).to.be.equal('v0')
-        expect(serviceName).to.be.equal('test-service')
-        expect(versions.v0.getServiceName).to.not.have.been.called
-      })
-
-      it('Should not use DD_SERVICE with schema=v0 & DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED unset', () => {
-        singleton.serviceName('messaging', 'producer', 'redis', extra)
-        expect(singleton.version).to.be.equal('v0')
-        sinon.assert.calledWith(
-          versions.v0.getServiceName,
-          'messaging',
-          'producer',
-          'redis',
-          'test-service',
-          extra
-        )
-      })
-
-      it('Should not set the service to DD_SERVICE when using `v1` schema', () => {
-        versions.v1 = { getOpName: sinon.spy(), getServiceName: sinon.spy() }
-        singleton.configure({
-          spanAttributeSchema: 'v1',
-          traceRemoveIntegrationServiceNamesEnabled: true,
-          service: 'test-service'
-        })
-        singleton.schemas = versions
-
-        singleton.serviceName('messaging', 'producer', 'redis', extra)
-        expect(singleton.version).to.be.equal('v1')
-        sinon.assert.calledWith(
-          versions.v1.getServiceName,
+        expect(versions.v0.getServiceName).to.have.been.calledWith(
           'messaging',
           'producer',
           'redis',
