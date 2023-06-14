@@ -109,7 +109,7 @@ function wrapStream (call, requestResource, onCancel) {
 function wrapCallback (callback, call, requestResource, parentResource, onCancel) {
   return function (err, value, trailer, flags) {
     requestResource.runInAsyncScope(() => {
-      if (err instanceof Error) {
+      if (err) {
         errorChannel.publish(err)
         finishChannel.publish(err)
       } else {
