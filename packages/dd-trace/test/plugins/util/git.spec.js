@@ -68,12 +68,12 @@ describe('git', () => {
       }
     )
     expect(metadata[GIT_REPOSITORY_URL]).not.to.equal('ciRepositoryUrl')
-    expect(sanitizedExecStub).to.have.been.calledWith('git ls-remote --get-url', { stdio: 'pipe' })
-    expect(sanitizedExecStub).to.have.been.calledWith('git show -s --format=%an,%ae,%aI,%cn,%ce,%cI', { stdio: 'pipe' })
-    expect(sanitizedExecStub).not.to.have.been.calledWith('git show -s --format=%s', { stdio: 'pipe' })
-    expect(sanitizedExecStub).not.to.have.been.calledWith('git rev-parse HEAD', { stdio: 'pipe' })
-    expect(sanitizedExecStub).not.to.have.been.calledWith('git rev-parse --abbrev-ref HEAD', { stdio: 'pipe' })
-    expect(sanitizedExecStub).not.to.have.been.calledWith('git rev-parse --show-toplevel', { stdio: 'pipe' })
+    expect(sanitizedExecStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
+    expect(sanitizedExecStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
+    expect(sanitizedExecStub).not.to.have.been.calledWith('git', ['show', '-s', '--format=%s'])
+    expect(sanitizedExecStub).not.to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
+    expect(sanitizedExecStub).not.to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
+    expect(sanitizedExecStub).not.to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
   })
   it('does not crash if git is not available', () => {
     sanitizedExecStub.returns('')
@@ -121,12 +121,12 @@ describe('git', () => {
       [GIT_COMMIT_COMMITTER_NAME]: 'git committer',
       [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
     })
-    expect(sanitizedExecStub).to.have.been.calledWith('git ls-remote --get-url', { stdio: 'pipe' })
-    expect(sanitizedExecStub).to.have.been.calledWith('git show -s --format=%s', { stdio: 'pipe' })
-    expect(sanitizedExecStub).to.have.been.calledWith('git show -s --format=%an,%ae,%aI,%cn,%ce,%cI', { stdio: 'pipe' })
-    expect(sanitizedExecStub).to.have.been.calledWith('git rev-parse HEAD', { stdio: 'pipe' })
-    expect(sanitizedExecStub).to.have.been.calledWith('git rev-parse --abbrev-ref HEAD', { stdio: 'pipe' })
-    expect(sanitizedExecStub).to.have.been.calledWith('git rev-parse --show-toplevel', { stdio: 'pipe' })
+    expect(sanitizedExecStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
+    expect(sanitizedExecStub).to.have.been.calledWith('git', ['show', '-s', '--format=%s'])
+    expect(sanitizedExecStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
+    expect(sanitizedExecStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
+    expect(sanitizedExecStub).to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
+    expect(sanitizedExecStub).to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
   })
 })
 
@@ -155,7 +155,7 @@ describe('getCommitsToUpload', () => {
     const { getCommitsToUpload } = proxyquire('../../../src/plugins/util/git',
       {
         'child_process': {
-          'execSync': (_, ...rest) => execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, ...rest)
+          'execFileSync': (_, ...rest) => execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, ...rest)
         },
         '../../log': {
           error: logErrorSpy
@@ -169,44 +169,61 @@ describe('getCommitsToUpload', () => {
 })
 
 describe('generatePackFilesForCommits', () => {
+  let tmpdirStub
   beforeEach(() => {
     sinon.stub(Math, 'random').returns('0.1234')
-    sinon.stub(os, 'tmpdir').returns('tmp')
+    tmpdirStub = sinon.stub(os, 'tmpdir').returns('/tmp')
     sinon.stub(process, 'cwd').returns('cwd')
   })
   afterEach(() => {
     sinon.restore()
   })
   it('creates pack files in temporary path', () => {
-    const execSyncSpy = sinon.stub().returns(['commitSHA'])
+    const execFileSyncSpy = sinon.stub().returns(['commitSHA'])
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
         'child_process': {
-          'execSync': execSyncSpy
+          'execFileSync': execFileSyncSpy
         }
       }
     )
 
-    const temporaryPath = path.join('tmp', '1234')
+    const temporaryPath = path.join('/tmp', '1234')
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
     expect(packFilesToUpload).to.eql([`${temporaryPath}-commitSHA.pack`])
   })
 
   it('creates pack files in cwd if the temporary path fails', () => {
-    const execSyncSpy = sinon.stub().onCall(0).throws().onCall(1).returns(['commitSHA'])
+    const execFileSyncSpy = sinon.stub().onCall(0).throws().onCall(1).returns(['commitSHA'])
 
     const cwdPath = path.join('cwd', '1234')
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
         'child_process': {
-          'execSync': execSyncSpy
+          'execFileSync': execFileSyncSpy
         }
       }
     )
 
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
     expect(packFilesToUpload).to.eql([`${cwdPath}-commitSHA.pack`])
+  })
+
+  it('does not work if tmpdir does not return a folder', () => {
+    tmpdirStub.restore()
+    sinon.stub(os, 'tmpdir').returns('; echo hey')
+    const execFileSyncSpy = sinon.stub().onCall(0).throws().onCall(1).returns(['commitSHA'])
+
+    const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
+      {
+        'child_process': {
+          'execFileSync': execFileSyncSpy
+        }
+      }
+    )
+    const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
+    expect(packFilesToUpload).to.eql([])
   })
 })
