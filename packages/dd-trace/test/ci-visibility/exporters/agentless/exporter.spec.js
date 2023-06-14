@@ -14,7 +14,7 @@ describe('CI Visibility Agentless Exporter', () => {
 
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
-    sinon.stub(cp, 'execSync').returns('false')
+    sinon.stub(cp, 'execFileSync').returns('false')
     nock.cleanAll()
   })
   afterEach(() => {
