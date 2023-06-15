@@ -101,17 +101,19 @@ function copyFileToTmp (src) {
   return dest
 }
 
-function beforeEachIastTest () {
+function beforeEachIastTest (iastConfig) {
+  iastConfig = iastConfig || {
+    enabled: true,
+    requestSampling: 100,
+    maxConcurrentRequests: 100,
+    maxContextOperations: 100
+  }
+
   beforeEach(() => {
     vulnerabilityReporter.clearCache()
     iast.enable(new Config({
       experimental: {
-        iast: {
-          enabled: true,
-          requestSampling: 100,
-          maxConcurrentRequests: 100,
-          maxContextOperations: 100
-        }
+        iast: iastConfig
       }
     }))
   })
@@ -196,7 +198,7 @@ function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb,
   axios.get(`http://localhost:${config.port}/`).catch(done)
 }
 
-function prepareTestServerForIast (description, tests) {
+function prepareTestServerForIast (description, tests, iastConfig) {
   describe(description, () => {
     const config = {}
     let http
@@ -229,7 +231,7 @@ function prepareTestServerForIast (description, tests) {
         .listen(config.port, 'localhost', () => done())
     })
 
-    beforeEachIastTest()
+    beforeEachIastTest(iastConfig)
 
     afterEach(() => {
       iast.disable()
