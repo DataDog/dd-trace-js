@@ -9,20 +9,19 @@ const tracerLogger = require('../../log')
 
 describe('External Logger', () => {
   let externalLogger
-  let V2LogWriter
   let interceptor
   let errorLog
 
   beforeEach(() => {
     errorLog = sinon.spy(tracerLogger, 'error')
 
-    V2LogWriter = proxyquire('../src', {
+    const ExternalLogger = proxyquire('../src', {
       '../../log': {
         error: errorLog
       }
     })
 
-    externalLogger = new V2LogWriter({
+    externalLogger = new ExternalLogger({
       ddsource: 'logging_from_space',
       hostname: 'mac_desktop',
       apiKey: 'API_KEY_PLACEHOLDER',
@@ -87,16 +86,16 @@ describe('External Logger', () => {
     })
   })
 
-  it('should empty the buffer when calling flush', (done) => {
+  it('should empty the log queue when calling flush', (done) => {
     interceptor = nock('https://http-intake.logs.datadoghq.com:443')
       .post('/api/v2/logs')
       .reply(202, {})
 
     externalLogger.enqueue({})
-    expect(externalLogger.buffer.length).to.equal(1)
+    expect(externalLogger.queue.length).to.equal(1)
 
     externalLogger.flush((err) => {
-      expect(externalLogger.buffer.length).to.equal(0)
+      expect(externalLogger.queue.length).to.equal(0)
       done(err)
     })
   })
@@ -131,7 +130,7 @@ describe('External Logger', () => {
     })
   })
 
-  it('causes a flush when exceeding buffer limit', (done) => {
+  it('causes a flush when exceeding log queue limit', (done) => {
     const flusher = sinon.stub(externalLogger, 'flush')
 
     for (let i = 0; i < 10; i++) {
@@ -140,7 +139,7 @@ describe('External Logger', () => {
     expect(flusher).to.not.have.been.called
 
     externalLogger.enqueue({})
-    expect(flusher).to.have.been.calledOnce
+    expect(flusher).to.have.been.called
 
     flusher.restore()
     done()

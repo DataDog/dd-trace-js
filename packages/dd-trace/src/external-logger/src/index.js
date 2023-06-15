@@ -2,7 +2,7 @@ const tracerLogger = require('../../log')// path to require tracer logger
 
 const https = require('https')
 
-class V2LogWriter {
+class ExternalLogger {
   // Note: these attribute names match the corresponding entry in the JSON payload.
   constructor ({ ddsource, hostname, service, apiKey, site = 'datadoghq.com', interval = 10000, timeout = 2000, limit = 1000 }) {
     this.ddsource = ddsource
@@ -10,8 +10,8 @@ class V2LogWriter {
     this.service = service
     this.interval = interval
     this.timeout = timeout
-    this.buffer = []
-    this.bufferLimit = limit
+    this.queue = []
+    this.limit = limit
     this.endpoint = '/api/v2/logs'
     this.site = site
     this.intake = `http-intake.logs.${this.site}`
@@ -36,7 +36,7 @@ class V2LogWriter {
 
   // Parses and enqueues a log
   log (log, span, tags) {
-    const logTags = V2LogWriter.tagString(tags)
+    const logTags = ExternalLogger.tagString(tags)
 
     if (span) {
       log['dd.trace_id'] = String(span.trace_id)
@@ -57,10 +57,10 @@ class V2LogWriter {
 
   // Enqueues a raw, non-formatted log object
   enqueue (log) {
-    if (this.buffer.length >= this.bufferLimit) {
+    if (this.queue.length >= this.limit) {
       this.flush()
     }
-    this.buffer.push(log)
+    this.queue.push(log)
   }
 
   shutdown () {
@@ -74,14 +74,14 @@ class V2LogWriter {
     let numLogs
     let encodedLogs
 
-    if (!this.buffer.length) {
+    if (!this.queue.length) {
       cb()
       return
     }
 
     try {
-      logs = this.buffer
-      this.buffer = []
+      logs = this.queue
+      this.queue = []
 
       numLogs = logs.length
       encodedLogs = JSON.stringify(logs)
@@ -118,4 +118,4 @@ class V2LogWriter {
   }
 }
 
-module.exports = V2LogWriter
+module.exports = ExternalLogger
