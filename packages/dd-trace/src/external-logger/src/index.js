@@ -38,13 +38,16 @@ class V2LogWriter {
     return tagArray.join(',')
   }
 
+  // Parses and enqueues a log
   log (log, span, tags) {
     const logTags = this.tagString(tags)
+
     if (span) {
-      log['dd.trace_id'] = span.trace_id + ''
-      log['dd.span_id'] = span.span_id + ''
+      log['dd.trace_id'] = String(span.trace_id)
+      log['dd.span_id'] = String(span.span_id)
     }
-    const toLog = {
+
+    const payload = {
       ...log,
       'timestamp': Date.now(),
       'hostname': log.hostname || this.hostname,
@@ -53,9 +56,10 @@ class V2LogWriter {
       'ddtags': logTags || undefined
     }
 
-    return toLog
+    this.enqueue(payload)
   }
 
+  // Enqueues a raw, non-formatted log object
   enqueue (log) {
     if (this.buffer.length >= this.buffer_limit) {
       this.flush()

@@ -9,11 +9,18 @@ const tracerLogger = require('../../log')
 
 describe('External Logger', () => {
   let externalLogger
+  let V2LogWriter
   let interceptor
   let errorLog
 
   beforeEach(() => {
-    const V2LogWriter = require('../src')
+    errorLog = sinon.spy(tracerLogger, 'error')
+
+    V2LogWriter = proxyquire('../src', {
+      '../../log': {
+        error: errorLog
+      }
+    })
 
     externalLogger = new V2LogWriter({
       ddsource: 'logging_from_space',
@@ -22,8 +29,6 @@ describe('External Logger', () => {
       interval: 10000,
       timeout: 5000
     })
-
-    errorLog = sinon.spy(tracerLogger, 'error')
   })
 
   afterEach(() => {
@@ -39,9 +44,7 @@ describe('External Logger', () => {
       .post('/api/v2/logs')
       .reply((_uri, req, cb) => {
         request = req
-        cb(null, [202, '{}', {
-          'Content-Type': 'application/json'
-        }])
+        cb(null, [202, '{}', { 'Content-Type': 'application/json' }])
       })
 
     const span = {
@@ -54,7 +57,7 @@ describe('External Logger', () => {
       version: '1.2.3',
       service: 'external'
     }
-    const log = externalLogger.log({
+    externalLogger.log({
       message: 'oh no, something is up',
       custom: 'field',
       attribute: 'funky',
@@ -62,7 +65,6 @@ describe('External Logger', () => {
       level: 'info'
     }, span, tags)
 
-    externalLogger.enqueue(log)
     externalLogger.flush((err) => {
       try {
         expect(request[0]).to.have.property('message', 'oh no, something is up')
@@ -99,25 +101,12 @@ describe('External Logger', () => {
   })
 
   it('tracer logger should handle error response codes from Logs API', (done) => {
-
-    const V2LogWriter = proxyquire('../src', {
-      '../../log': {
-        error: errorLog
-      }
-    })
-
-    const logger = new V2LogWriter({
-      ddsource: 'logging_from_space',
-      hostname: 'mac_desktop',
-      apiKey: 'API_KEY_PLACEHOLDER',
-      interval: 5000
-    })
     interceptor = nock('https://http-intake.logs.datadoghq.com:443')
       .post('/api/v2/logs')
       .reply(400, {})
 
-    logger.enqueue({})
-    logger.flush((err) => {
+    externalLogger.enqueue({})
+    externalLogger.flush((err) => {
       expect(err).to.be.true
       expect(errorLog.getCall(0).args[0]).to.be.equal(
         'failed to send 1 logs, received response code 400'
@@ -126,26 +115,13 @@ describe('External Logger', () => {
     })
   })
 
-  it('tracer logger should handle client side error', (done) => {
-    const V2LogWriter = proxyquire('../src', {
-      '../../log': {
-        error: errorLog
-      }
-    })
-
-    const logger = new V2LogWriter({
-      ddsource: 'logging_from_space',
-      hostname: 'mac_desktop',
-      apiKey: 'API_KEY_PLACEHOLDER',
-      interval: 5000
-    })
-
+  it('tracer logger should handle simulated network error', (done) => {
     interceptor = nock('https://http-intake.logs.datadoghq.com:443')
       .post('/api/v2/logs')
       .replyWithError('missing API key')
 
-    logger.enqueue({})
-    logger.flush((err) => {
+    externalLogger.enqueue({})
+    externalLogger.flush((err) => {
       expect(err).to.be.an.instanceOf(Error)
       expect(errorLog.getCall(0).args[0]).to.be.equal(
         'failed to send 1 log(s), with error missing API key'
