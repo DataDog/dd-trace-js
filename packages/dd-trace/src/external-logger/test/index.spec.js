@@ -27,7 +27,8 @@ describe('External Logger', () => {
       hostname: 'mac_desktop',
       apiKey: 'API_KEY_PLACEHOLDER',
       interval: 10000,
-      timeout: 5000
+      timeout: 5000,
+      limit: 10
     })
   })
 
@@ -128,5 +129,20 @@ describe('External Logger', () => {
       )
       done()
     })
+  })
+
+  it('causes a flush when exceeding buffer limit', (done) => {
+    const flusher = sinon.stub(externalLogger, 'flush')
+
+    for (let i = 0; i < 10; i++) {
+      externalLogger.enqueue({})
+    }
+    expect(flusher).to.not.have.been.called
+
+    externalLogger.enqueue({})
+    expect(flusher).to.have.been.calledOnce
+
+    flusher.restore()
+    done()
   })
 })

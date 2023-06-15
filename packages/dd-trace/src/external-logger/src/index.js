@@ -4,14 +4,14 @@ const https = require('https')
 
 class V2LogWriter {
   // Note: these attribute names match the corresponding entry in the JSON payload.
-  constructor ({ ddsource, hostname, service, apiKey, site = 'datadoghq.com', interval = 10000, timeout = 2000 }) {
+  constructor ({ ddsource, hostname, service, apiKey, site = 'datadoghq.com', interval = 10000, timeout = 2000, limit = 1000 }) {
     this.ddsource = ddsource
     this.hostname = hostname
     this.service = service
     this.interval = interval
     this.timeout = timeout
     this.buffer = []
-    this.buffer_limit = 1000
+    this.bufferLimit = limit
     this.endpoint = '/api/v2/logs'
     this.site = site
     this.intake = `http-intake.logs.${this.site}`
@@ -26,11 +26,7 @@ class V2LogWriter {
     tracerLogger.debug(`started log writer to https://${this.intake}${this.endpoint}`)
   }
 
-  start () {
-    this.timer()
-  }
-
-  tagString (tags) {
+  static tagString (tags) {
     const tagArray = []
     for (const key in tags) {
       tagArray.push(key + ':' + tags[key])
@@ -40,7 +36,7 @@ class V2LogWriter {
 
   // Parses and enqueues a log
   log (log, span, tags) {
-    const logTags = this.tagString(tags)
+    const logTags = V2LogWriter.tagString(tags)
 
     if (span) {
       log['dd.trace_id'] = String(span.trace_id)
@@ -61,7 +57,7 @@ class V2LogWriter {
 
   // Enqueues a raw, non-formatted log object
   enqueue (log) {
-    if (this.buffer.length >= this.buffer_limit) {
+    if (this.buffer.length >= this.bufferLimit) {
       this.flush()
     }
     this.buffer.push(log)
