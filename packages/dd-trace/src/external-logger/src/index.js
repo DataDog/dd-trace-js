@@ -68,12 +68,14 @@ class V2LogWriter {
     this.flush()
   }
 
-  flush () {
+  // Flushes logs with optional callback for when the call is complete
+  flush (cb = () => {}) {
     let logs
     let numLogs
     let encodedLogs
 
     if (!this.buffer.length) {
+      cb()
       return
     }
 
@@ -85,6 +87,7 @@ class V2LogWriter {
       encodedLogs = JSON.stringify(logs)
     } catch (error) {
       tracerLogger.error(`failed to encode ${numLogs} logs`)
+      cb(error)
       return
     }
 
@@ -100,8 +103,9 @@ class V2LogWriter {
     const req = https.request(options, (res) => {
       tracerLogger.info(`statusCode: ${res.statusCode}`)
     })
-    req.on('error', (e) => {
+    req.once('error', (e) => {
       tracerLogger.error(`failed to send ${numLogs} log(s), with error ${e.message}`)
+      cb(e)
     })
     req.write(encodedLogs)
     req.end()
@@ -109,6 +113,7 @@ class V2LogWriter {
       if (res.statusCode >= 400) {
         tracerLogger.error(`failed to send ${numLogs} logs, received response code ${res.statusCode}`)
       }
+      cb(res.statusCode >= 400)
     })
   }
 }
