@@ -8,11 +8,13 @@ const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const DogStatsDClient = require('../../dd-trace/src/dogstatsd')
+const ExternalLogger = require('../../dd-trace/src/external-logger/src')
 
 describe('Plugin', () => {
   let openai
-  let metricStub
   let clock
+  let metricStub
+  let externalLoggerStub
 
   describe('openai', () => {
     withVersions('openai', 'openai', version => {
@@ -39,6 +41,7 @@ describe('Plugin', () => {
         openai = new OpenAIApi(configuration)
 
         metricStub = sinon.stub(DogStatsDClient.prototype, '_add')
+        externalLoggerStub = sinon.stub(ExternalLogger.prototype, 'log')
       })
 
       afterEach(() => {
@@ -168,6 +171,19 @@ describe('Plugin', () => {
           expect(metricStub).to.have.been.calledWith('openai.ratelimit.remaining.requests', 2999, 'g', expectedTags)
           expect(metricStub).to.have.been.calledWith('openai.ratelimit.remaining.tokens', 249984, 'g', expectedTags)
 
+          expect(externalLoggerStub).to.have.been.calledWith({
+            status: 'info',
+            message: 'sampled createCompletion',
+            prompt: 'Hello, ',
+            choices: [
+              {
+                text: 'FOO BAR BAZ',
+                index: 0,
+                logprobs: null,
+                finish_reason: 'length'
+              }
+            ]
+          })
         })
       })
 
@@ -233,6 +249,12 @@ describe('Plugin', () => {
           })
 
           expect(result.data.model).to.eql('text-embedding-ada-002-v2')
+
+          expect(externalLoggerStub).to.have.been.calledWith({
+            status: 'info',
+            message: 'sampled createEmbedding',
+            input: 'Cat?'
+          })
 
           await checkTraces
         })
@@ -497,6 +519,17 @@ describe('Plugin', () => {
 
           expect(metricStub).to.be.calledWith('openai.ratelimit.requests', 20, 'g', expectedTags)
           expect(metricStub).to.be.calledWith('openai.ratelimit.remaining.requests', 19, 'g', expectedTags)
+
+          expect(externalLoggerStub).to.have.been.calledWith({
+            status: 'info',
+            message: 'sampled createEdit',
+            input: 'What day of the wek is it?',
+            instruction: 'Fix the spelling mistakes',
+            choices: [{
+              text: 'What day of the week is it, Bob?\n',
+              index: 0
+            }]
+          })
         })
       })
 
@@ -1363,6 +1396,12 @@ describe('Plugin', () => {
 
             expect(result.data.results[0].flagged).to.eql(true)
 
+            expect(externalLoggerStub).to.have.been.calledWith({
+              status: 'info',
+              message: 'sampled createModeration',
+              input: 'I want to harm the robots'
+            })
+
             await checkTraces
           })
         })
@@ -1429,6 +1468,12 @@ describe('Plugin', () => {
 
             expect(result.data.data[0].url.startsWith('https://')).to.be.true
 
+            expect(externalLoggerStub).to.have.been.calledWith({
+              status: 'info',
+              message: 'sampled createImage',
+              prompt: 'A datadog wearing headphones'
+            })
+
             await checkTraces
           })
 
@@ -1447,6 +1492,12 @@ describe('Plugin', () => {
             })
 
             expect(result.data.data[0].url.startsWith('https://')).to.be.true
+
+            expect(externalLoggerStub).to.have.been.calledWith({
+              status: 'info',
+              message: 'sampled createImage',
+              prompt: [ 999, 888, 777, 666, 555 ]
+            })
 
             await checkTraces
           })
@@ -1467,6 +1518,12 @@ describe('Plugin', () => {
             })
 
             expect(result.data.data[0].url.startsWith('https://')).to.be.true
+
+            expect(externalLoggerStub).to.have.been.calledWith({
+              status: 'info',
+              message: 'sampled createImage',
+              prompt: [ 'foo', 'bar' ]
+            })
 
             await checkTraces
           })
@@ -1490,6 +1547,12 @@ describe('Plugin', () => {
             })
 
             expect(result.data.data[0].url.startsWith('https://')).to.be.true
+
+            expect(externalLoggerStub).to.have.been.calledWith({
+              status: 'info',
+              message: 'sampled createImage',
+              prompt: [ [ 111, 222, 333 ], [ 444, 555, 666 ] ]
+            })
 
             await checkTraces
           })
@@ -1535,7 +1598,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/images/edits')
 
                 expect(traces[0][0].meta).to.have.property('openai.request.mask', 'hal.png')
-                expect(traces[0][0].meta).to.have.property('openai.request.image', 'hal.png')
+                expect(traces[0][0].meta).to.have.property('openai.request.image', 'hal.png') // using same image for both to reduce repo size
                 expect(traces[0][0].meta).to.have.property('openai.request.prompt', 'Change all red to blue')
                 expect(traces[0][0].meta).to.have.property('openai.request.response_format', 'url')
                 expect(traces[0][0].meta).to.have.property('openai.request.size', '256x256')
@@ -1558,6 +1621,14 @@ describe('Plugin', () => {
             )
 
             expect(result.data.data[0].url.startsWith('https://')).to.be.true
+
+            expect(externalLoggerStub).to.have.been.calledWith({
+              status: 'info',
+              message: 'sampled createImageEdit',
+              prompt: 'Change all red to blue',
+              file: 'hal.png',
+              mask: 'hal.png'
+            })
 
             await checkTraces
           })
@@ -1616,6 +1687,12 @@ describe('Plugin', () => {
             const result = await openai.createImageVariation(fs.createReadStream(__dirname + '/hal.png'), 1, '256x256', 'url', 'hunter2')
 
             expect(result.data.data[0].url.startsWith('https://')).to.be.true
+
+            expect(externalLoggerStub).to.have.been.calledWith({
+              status: 'info',
+              message: 'sampled createImageVariation',
+              file: 'hal.png'
+            })
 
             await checkTraces
           })
@@ -1743,6 +1820,33 @@ describe('Plugin', () => {
             expect(result.data.choices[0].message.content).to.eql('In that case, it\'s best to avoid peanut')
             expect(result.data.choices[0].finish_reason).to.eql('length')
 
+            expect(externalLoggerStub).to.have.been.calledWith({
+              status: 'info',
+              message: 'sampled createChatCompletion',
+              messages: [
+                {
+                  role: 'user',
+                  content: 'Peanut Butter or Jelly?',
+                  name: 'hunter2'
+                },
+                {
+                  role: 'assistant',
+                  content: 'Are you allergic to peanuts?',
+                  name: 'hal'
+                },
+                { role: 'user', content: 'Deathly allergic!', name: 'hunter2' }
+              ],
+              choices: [{
+                message: {
+                  role: "assistant",
+                  content: "In that case, it's best to avoid peanut",
+                  name: "hunter2"
+                },
+                finish_reason: 'length',
+                index: 0
+              }]
+            })
+
             await checkTraces
           })
         })
@@ -1822,6 +1926,13 @@ describe('Plugin', () => {
 
             expect(result.data.text).to.eql('Hello, friend.')
 
+            expect(externalLoggerStub).to.have.been.calledWith({
+              status: 'info',
+              message: 'sampled createTranscription',
+              prompt: 'what does this say',
+              file: 'hello-friend.m4a'
+            })
+
             await checkTraces
           })
         })
@@ -1898,6 +2009,13 @@ describe('Plugin', () => {
             )
 
             expect(result.data.text).to.eql('Guten Tag!')
+
+            expect(externalLoggerStub).to.have.been.calledWith({
+              status: 'info',
+              message: 'sampled createTranslation',
+              prompt: 'greeting',
+              file: 'guten-tag.m4a'
+            })
 
             await checkTraces
           })
