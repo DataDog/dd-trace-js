@@ -4,7 +4,7 @@ const https = require('https')
 
 class V2LogWriter {
   // Note: these attribute names match the corresponding entry in the JSON payload.
-  constructor ({ ddsource, hostname, service, site, apiKey, interval, timeout }) {
+  constructor ({ ddsource, hostname, service, apiKey, site = 'datadoghq.com', interval = 10000, timeout = 2000 }) {
     this.ddsource = ddsource
     this.hostname = hostname
     this.service = service
@@ -13,7 +13,7 @@ class V2LogWriter {
     this.buffer = []
     this.buffer_limit = 1000
     this.endpoint = '/api/v2/logs'
-    this.site = site || 'datadoghq.com'
+    this.site = site
     this.intake = `http-intake.logs.${this.site}`
     this.headers = {
       'DD-API-KEY': apiKey,
@@ -21,7 +21,7 @@ class V2LogWriter {
     }
     this.timer = setInterval(() => {
       this.flush()
-    }, this.interval)
+    }, this.interval).unref()
 
     tracerLogger.debug(`started log writer to https://${this.intake}${this.endpoint}`)
   }
@@ -31,11 +31,11 @@ class V2LogWriter {
   }
 
   tagString (tags) {
-    let tagStr = ''
+    const tagArray = []
     for (const key in tags) {
-      tagStr += key + ':' + tags[key] + ','
+      tagArray.push(key + ':' + tags[key])
     }
-    return tagStr
+    return tagArray.join(',')
   }
 
   log (log, span, tags) {
@@ -93,20 +93,21 @@ class V2LogWriter {
       port: 443,
       path: this.endpoint,
       method: 'POST',
-      headers: this.headers
+      headers: this.headers,
+      timeout: this.timeout
     }
 
     const req = https.request(options, (res) => {
       tracerLogger.info(`statusCode: ${res.statusCode}`)
     })
     req.on('error', (e) => {
-      tracerLogger.error(`failed to send ${numLogs} with error ${e.message}`)
+      tracerLogger.error(`failed to send ${numLogs} log(s), with error ${e.message}`)
     })
     req.write(encodedLogs)
     req.end()
     req.once('response', (res) => {
-      if (res.statusCode >= 300) {
-        tracerLogger.error(`failed to send ${numLogs} logs received response code ${res.statusCode}`)
+      if (res.statusCode >= 400) {
+        tracerLogger.error(`failed to send ${numLogs} logs, received response code ${res.statusCode}`)
       }
     })
   }
