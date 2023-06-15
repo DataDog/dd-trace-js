@@ -107,7 +107,7 @@ describe('External Logger', () => {
 
     externalLogger.enqueue({})
     externalLogger.flush((err) => {
-      expect(err).to.be.true
+      expect(err).to.be.an.instanceOf(Error)
       expect(errorLog.getCall(0).args[0]).to.be.equal(
         'failed to send 1 logs, received response code 400'
       )

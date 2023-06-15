@@ -77,7 +77,7 @@ class ExternalLogger {
     let encodedLogs
 
     if (!this.queue.length) {
-      cb()
+      setImmediate(() => cb())
       return
     }
 
@@ -89,7 +89,7 @@ class ExternalLogger {
       encodedLogs = JSON.stringify(logs)
     } catch (error) {
       tracerLogger.error(`failed to encode ${numLogs} logs`)
-      cb(error)
+      setImmediate(() => cb(error))
       return
     }
 
@@ -113,9 +113,12 @@ class ExternalLogger {
     req.end()
     req.once('response', (res) => {
       if (res.statusCode >= 400) {
-        tracerLogger.error(`failed to send ${numLogs} logs, received response code ${res.statusCode}`)
+        const error = new Error(`failed to send ${numLogs} logs, received response code ${res.statusCode}`)
+        tracerLogger.error(error.message)
+        cb(error)
+        return
       }
-      cb(res.statusCode >= 400)
+      cb()
     })
   }
 }
