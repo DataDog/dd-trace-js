@@ -1,14 +1,14 @@
-const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
+const CiPlugin = require('../../plugins/ci_plugin')
 const {
   TEST_STATUS,
   finishAllTraceSpans,
   getTestSuitePath
-} = require('../../dd-trace/src/plugins/util/test')
-const { storage } = require('../../datadog-core')
+} = require('../../plugins/util/test')
+const { storage } = require('../../../../datadog-core')
 
-class ManualPlugin extends CiPlugin {
+class TestApiManualPlugin extends CiPlugin {
   static get id () {
-    return 'manual'
+    return 'test-api-manual'
   }
   constructor (...args) {
     super(...args)
@@ -33,14 +33,6 @@ class ManualPlugin extends CiPlugin {
       }
     })
   }
-
-  configure (config) {
-    if (!config.isManualApiEnabled) {
-      super.configure({ enabled: false })
-    } else {
-      super.configure(config)
-    }
-  }
 }
 
-module.exports = ManualPlugin
+module.exports = TestApiManualPlugin

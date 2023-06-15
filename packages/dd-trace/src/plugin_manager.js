@@ -23,11 +23,7 @@ const disabledPlugins = new Set(
 
 // TODO actually ... should we be looking at environment variables this deep down in the code?
 
-// `ManualPlugin` is not lazy loaded because it's not instrumenting any specific library.
-// Its purpose is to allow users to create test spans for frameworks we don't support.
-const pluginClasses = {
-  'manual': plugins.manual
-}
+const pluginClasses = {}
 
 loadChannel.subscribe(({ name }) => {
   const Plugin = plugins[name]

@@ -9,6 +9,7 @@ const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
+const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
 
 class Tracer extends NoopProxy {
   constructor () {
@@ -64,6 +65,11 @@ class Tracer extends NoopProxy {
         this._pluginManager.configure(config)
         setStartupLogPluginManager(this._pluginManager)
         telemetry.start(config, this._pluginManager)
+
+        if (config.isManualApiEnabled) {
+          this._testApiManualPlugin = new TestApiManualPlugin(this)
+          this._testApiManualPlugin.configure({ ...config, enabled: true })
+        }
       }
     } catch (e) {
       log.error(e)

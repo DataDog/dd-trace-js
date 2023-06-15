@@ -15,7 +15,7 @@ const {
   TEST_STATUS
 } = require('../packages/dd-trace/src/plugins/util/test')
 
-describe('manual-api', () => {
+describe('test-api-manual', () => {
   let sandbox, cwd, receiver, childProcess, webAppPort
   before(async () => {
     sandbox = await createSandbox([], true)
