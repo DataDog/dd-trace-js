@@ -23,5 +23,6 @@ module.exports = {
   },
   setMaxTransactions: setMaxTransactions,
   createTransaction: createTransaction,
-  removeTransaction: removeTransaction
+  removeTransaction: removeTransaction,
+  taintTrackingPlugin
 }
