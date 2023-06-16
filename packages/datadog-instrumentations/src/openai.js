@@ -25,7 +25,7 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0'] }, exports 
         methodName,
         args: arguments,
         basePath: this.basePath,
-        apiKey: this.configuration.apiKey,
+        apiKey: this.configuration.apiKey
       })
 
       try {

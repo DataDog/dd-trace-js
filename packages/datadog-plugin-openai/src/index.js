@@ -1,6 +1,6 @@
 'use strict'
 
-const Path = require('path')
+const path = require('path')
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const DogStatsDClient = require('../../dd-trace/src/dogstatsd')
@@ -16,7 +16,7 @@ class OpenApiPlugin extends TracingPlugin {
   static get operation () { return 'request' }
   static get system () { return 'openai' }
 
-  constructor(...args) {
+  constructor (...args) {
     super(...args)
 
     // TODO: Lazy load this only if the application is using the openai package
@@ -165,7 +165,6 @@ class OpenApiPlugin extends TracingPlugin {
     body = coerceResponseBody(body, methodName)
 
     const fullStore = storage.getStore()
-    if (!fullStore.openai) console.error("DID NOT FIND store.openai") // TODO: Don't commit
     const store = fullStore.openai
 
     const endpoint = lookupOperationEndpoint(methodName, path)
@@ -184,7 +183,7 @@ class OpenApiPlugin extends TracingPlugin {
       // The OpenAI API appears to use both created and created_at in different places
       // Here we're conciously choosing to surface this inconsistency instead of normalizing
       'openai.response.created': body.created,
-      'openai.response.created_at': body.created_at, 
+      'openai.response.created_at': body.created_at
     }
 
     responseDataExtractionByMethod(methodName, tags, body, store)
@@ -195,14 +194,14 @@ class OpenApiPlugin extends TracingPlugin {
     this.sendMetrics(headers, body, endpoint, span._duration, false)
   }
 
-  error(...args) {
+  error (...args) {
     super.error(...args)
     // TODO: We don't know the endpoint here and may not have a body or headers
     // this.sendMetrics(headers, body, endpoint, span._duration, true)
     // this.sendLog(methodName, span, tags, store, true)
   }
 
-  sendMetrics(headers, body, endpoint, duration, error) {
+  sendMetrics (headers, body, endpoint, duration, error) {
     const tags = [
       `org:${headers['openai-organization']}`,
       `endpoint:${endpoint}`, // just "/v1/models", no method
@@ -241,7 +240,7 @@ class OpenApiPlugin extends TracingPlugin {
     }
   }
 
-  sendLog(methodName, span, tags, store, error) {
+  sendLog (methodName, span, tags, store, error) {
     if (!Object.keys(store).length) return
 
     const log = {
@@ -254,17 +253,17 @@ class OpenApiPlugin extends TracingPlugin {
   }
 }
 
-function createEditRequestExtraction(tags, payload, store) {
+function createEditRequestExtraction (tags, payload, store) {
   const instruction = payload.instruction
   tags['openai.request.instruction'] = instruction
   store.instruction = instruction
 }
 
-function retrieveModelRequestExtraction(tags, payload) {
+function retrieveModelRequestExtraction (tags, payload) {
   tags['openai.request.id'] = payload.id
 }
 
-function createChatCompletionRequestExtraction(tags, payload, store) {
+function createChatCompletionRequestExtraction (tags, payload, store) {
   store.messages = payload.messages
   for (let i = 0; i < payload.messages.length; i++) {
     const message = payload.messages[i]
@@ -275,17 +274,17 @@ function createChatCompletionRequestExtraction(tags, payload, store) {
   }
 }
 
-function commonCreateImageRequestExtraction(tags, payload, store) {
+function commonCreateImageRequestExtraction (tags, payload, store) {
   // createImageEdit, createImageVariation
   if (payload.file && typeof payload.file === 'object' && payload.file.path) {
-    const file = Path.basename(payload.file.path)
+    const file = path.basename(payload.file.path)
     tags['openai.request.image'] = file
     store.file = file
   }
 
   // createImageEdit
   if (payload.mask && typeof payload.mask === 'object' && payload.mask.path) {
-    const mask = Path.basename(payload.mask.path)
+    const mask = path.basename(payload.mask.path)
     tags['openai.request.mask'] = mask
     store.mask = mask
   }
@@ -295,15 +294,15 @@ function commonCreateImageRequestExtraction(tags, payload, store) {
   tags['openai.request.language'] = payload.language
 }
 
-function responseDataExtractionByMethod(methodName, tags, body, store) {
+function responseDataExtractionByMethod (methodName, tags, body, store) {
   switch (methodName) {
-    case "createModeration":
+    case 'createModeration':
       createModerationResponseExtraction(tags, body)
       break
 
-    case "createCompletion":
-    case "createChatCompletion":
-    case "createEdit":
+    case 'createCompletion':
+    case 'createChatCompletion':
+    case 'createEdit':
       commonCreateResponseExtraction(tags, body, store)
       break
 
@@ -357,7 +356,7 @@ function responseDataExtractionByMethod(methodName, tags, body, store) {
   }
 }
 
-function retrieveModelResponseExtraction(tags, body) {
+function retrieveModelResponseExtraction (tags, body) {
   tags['openai.response.owned_by'] = body.owned_by
   tags['openai.response.parent'] = body.parent
   tags['openai.response.root'] = body.root
@@ -375,16 +374,16 @@ function retrieveModelResponseExtraction(tags, body) {
   tags['openai.response.permission.is_blocking'] = body.permission[0].is_blocking
 }
 
-function commonLookupFineTuneRequestExtraction(tags, body) {
+function commonLookupFineTuneRequestExtraction (tags, body) {
   tags['openai.request.fine_tune_id'] = body.fine_tune_id
   tags['openai.request.stream'] = !!body.stream // listFineTuneEvents
 }
 
-function listModelsResponseExtraction(tags, body) {
+function listModelsResponseExtraction (tags, body) {
   tags['openai.response.count'] = body.data.length
 }
 
-function commonImageResponseExtraction(tags, body) {
+function commonImageResponseExtraction (tags, body) {
   tags['openai.response.images_count'] = body.data.length
 
   for (let i = 0; i < body.data.length; i++) {
@@ -395,14 +394,14 @@ function commonImageResponseExtraction(tags, body) {
   }
 }
 
-function createAudioResponseExtraction(tags, body) {
+function createAudioResponseExtraction (tags, body) {
   tags['openai.response.text'] = body.text
   tags['openai.response.language'] = body.language
   tags['openai.response.duration'] = body.duration
   tags['openai.response.segments_count'] = body.segments.length
 }
 
-function createFineTuneRequestExtraction(tags, body) {
+function createFineTuneRequestExtraction (tags, body) {
   tags['openai.request.training_file'] = body.training_file
   tags['openai.request.validation_file'] = body.validation_file
   tags['openai.request.n_epochs'] = body.n_epochs
@@ -415,7 +414,7 @@ function createFineTuneRequestExtraction(tags, body) {
   tags['openai.request.classification_betas_count'] = body.classification_betas.length
 }
 
-function commonFineTuneResponseExtraction(tags, body) {
+function commonFineTuneResponseExtraction (tags, body) {
   tags['openai.response.events_count'] = body.events.length
   tags['openai.response.fine_tuned_model'] = body.fine_tuned_model
   tags['openai.response.hyperparams.n_epochs'] = body.hyperparams.n_epochs
@@ -430,37 +429,37 @@ function commonFineTuneResponseExtraction(tags, body) {
 }
 
 // the OpenAI package appears to stream the content download then provide it all as a singular string
-function downloadFileResponseExtraction(tags, body) {
+function downloadFileResponseExtraction (tags, body) {
   tags['openai.response.total_bytes'] = body.file.length
 }
 
-function deleteFileResponseExtraction(tags, body) {
+function deleteFileResponseExtraction (tags, body) {
   tags['openai.response.id'] = body.id
 }
 
-function commonCreateAudioRequestExtraction(tags, body, store) {
+function commonCreateAudioRequestExtraction (tags, body, store) {
   tags['openai.request.response_format'] = body.response_format
   tags['openai.request.language'] = body.language
 
   if (body.file && typeof body.file === 'object' && body.file.path) {
-    const filename = Path.basename(body.file.path)
+    const filename = path.basename(body.file.path)
     tags['openai.request.filename'] = filename
     store.file = filename
   }
 }
 
-function commonFileRequestExtraction(tags, body) {
+function commonFileRequestExtraction (tags, body) {
   tags['openai.request.purpose'] = body.purpose
 
   // User can provider either exact file contents or a file read stream
   // With the stream we extract the filepath
   // This is a best effort attempt to extract the filename during the request
   if (body.file && typeof body.file === 'object' && body.file.path) {
-    tags['openai.request.filename'] = Path.basename(body.file.path)
+    tags['openai.request.filename'] = path.basename(body.file.path)
   }
 }
 
-function createRetrieveFileResponseExtraction(tags, body) {
+function createRetrieveFileResponseExtraction (tags, body) {
   tags['openai.response.filename'] = body.filename
   tags['openai.response.purpose'] = body.purpose
   tags['openai.response.bytes'] = body.bytes
@@ -468,7 +467,7 @@ function createRetrieveFileResponseExtraction(tags, body) {
   tags['openai.response.status_details'] = body.status_details
 }
 
-function createEmbeddingResponseExtraction(tags, body) {
+function createEmbeddingResponseExtraction (tags, body) {
   usageExtraction(tags, body)
 
   tags['openai.response.embeddings_count'] = body.data.length
@@ -477,12 +476,12 @@ function createEmbeddingResponseExtraction(tags, body) {
   }
 }
 
-function commonListCountResponseExtraction(tags, body) {
+function commonListCountResponseExtraction (tags, body) {
   tags['openai.response.count'] = body.data.length
 }
 
 // TODO: Is there ever more than one entry in body.results?
-function createModerationResponseExtraction(tags, body) {
+function createModerationResponseExtraction (tags, body) {
   tags['openai.response.id'] = body.id
   // tags[`openai.response.model`] = body.model // redundant, already extracted globally
   tags['openai.response.flagged'] = body.results[0].flagged
@@ -497,7 +496,7 @@ function createModerationResponseExtraction(tags, body) {
 }
 
 // createCompletion, createChatCompletion, createEdit
-function commonCreateResponseExtraction(tags, body, store) {
+function commonCreateResponseExtraction (tags, body, store) {
   usageExtraction(tags, body)
 
   tags['openai.response.choices_count'] = body.choices.length
@@ -521,7 +520,7 @@ function commonCreateResponseExtraction(tags, body, store) {
 }
 
 // createCompletion, createChatCompletion, createEdit, createEmbedding
-function usageExtraction(tags, body) {
+function usageExtraction (tags, body) {
   tags['openai.response.usage.prompt_tokens'] = body.usage.prompt_tokens
   tags['openai.response.usage.completion_tokens'] = body.usage.completion_tokens
   tags['openai.response.usage.total_tokens'] = body.usage.total_tokens
@@ -549,7 +548,7 @@ function truncateText (text) {
 }
 
 // The server almost always responds with JSON
-function coerceResponseBody(body, methodName) {
+function coerceResponseBody (body, methodName) {
   switch (methodName) {
     case 'downloadFile':
       return { file: body }
@@ -559,7 +558,7 @@ function coerceResponseBody(body, methodName) {
 }
 
 // This method is used to replace a dynamic URL segment with an asterisk
-function lookupOperationEndpoint(operationId, url) {
+function lookupOperationEndpoint (operationId, url) {
   switch (operationId) {
     case 'deleteModel':
     case 'retrieveModel':
@@ -590,7 +589,7 @@ function lookupOperationEndpoint(operationId, url) {
  * a single object argument. The remaining ones take individual arguments. This function
  * turns the individual arguments into an object to make extracting properties consistent.
  */
-function normalizeRequestPayload(methodName, args) {
+function normalizeRequestPayload (methodName, args) {
   switch (methodName) {
     case 'listModels':
     case 'listFiles':
@@ -669,11 +668,11 @@ function normalizeRequestPayload(methodName, args) {
  * "foo" -> "foo"
  * [1,2,3] -> "[1, 2, 3]"
  */
-function normalizeStringOrTokenArray(input) {
+function normalizeStringOrTokenArray (input) {
   return truncateText(
-    Array.isArray(input) ?
-      `[${input.join(', ')}]` : // "[1, 2, 999]"
-      input // "foo"
+    Array.isArray(input)
+      ? `[${input.join(', ')}]` // "[1, 2, 999]"
+      : input // "foo"
   )
 }
 
