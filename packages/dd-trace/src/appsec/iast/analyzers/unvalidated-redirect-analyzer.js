@@ -32,7 +32,7 @@ class UnvalidatedRedirectAnalyzer extends InjectionAnalyzer {
     if (!value) return false
 
     const ranges = getRanges(iastContext, value)
-    return !this._isRefererHeader(ranges)
+    return ranges && ranges.length > 0 && !this._isRefererHeader(ranges)
   }
 
   _isRefererHeader (ranges) {
