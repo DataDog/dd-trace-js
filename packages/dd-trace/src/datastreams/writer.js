@@ -2,8 +2,8 @@ const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')
 const { URL, format } = require('url')
-const pako = require('pako')
 const msgpack = require('msgpack-lite')
+const zlib = require('zlib')
 const codec = msgpack.createCodec({ int64: true })
 
 function makeRequest (data, url, cb) {
@@ -44,12 +44,19 @@ class DataStreamsWriter {
       log.debug(() => `Maximum number of active requests reached. Payload discarded: ${JSON.stringify(payload)}`)
       return
     }
-    const encoded = pako.gzip(msgpack.encode(payload, { codec }), { level: 1 })
-    makeRequest(encoded, this._url, (err, res) => {
-      log.debug(`Response from the intake: ${res}`)
+    const encodedPayload = msgpack.encode(payload, { codec })
+
+    zlib.gzip(encodedPayload, { level: 1 }, (err, compressedData) => {
       if (err) {
         log.error(err)
+        return
       }
+      makeRequest(compressedData, this._url, (err, res) => {
+        log.debug(`Response from the intake: ${res}`)
+        if (err) {
+          log.error(err)
+        }
+      })
     })
   }
 }
