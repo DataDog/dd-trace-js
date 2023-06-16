@@ -30,6 +30,10 @@ class Tracer extends NoopProxy {
         remoteConfig.enable(config)
       }
 
+      if (config.isGCPFunction) {
+        require('./serverless').maybeStartServerlessMiniAgent()
+      }
+
       if (config.profiling.enabled) {
         // do not stop tracer initialization if the profiler fails to be imported
         try {
@@ -71,6 +75,10 @@ class Tracer extends NoopProxy {
   use () {
     this._pluginManager.configurePlugin(...arguments)
     return this
+  }
+
+  get TracerProvider () {
+    return require('./opentelemetry/tracer_provider')
   }
 }
 

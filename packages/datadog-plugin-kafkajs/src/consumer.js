@@ -14,7 +14,6 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       childOf,
       service: this.config.service || `${service}-kafka`,
       resource: topic,
-      kind: 'consumer',
       type: 'worker',
       meta: {
         'component': 'kafkajs',
@@ -42,6 +41,8 @@ function extract (tracer, bufferMap) {
   const textMap = {}
 
   for (const key of Object.keys(bufferMap)) {
+    if (bufferMap[key] === null || bufferMap[key] === undefined) continue
+
     textMap[key] = bufferMap[key].toString()
   }
 

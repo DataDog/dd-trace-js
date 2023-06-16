@@ -11,6 +11,8 @@ const DEFAULT_PATHWAY_HASH = Buffer.from('e858292fd15a41e4', 'hex')
 const DEFAULT_PATHWAY_CTX = Buffer.from('e073ca23a5577149a0a8879de561a0a8879de561', 'hex')
 const DEFAULT_TIMESTAMP = Number(new Date('2023-04-20T16:20:00.000Z'))
 
+const namingSchema = require('./naming')
+
 describe('Plugin', () => {
   describe('kafkajs', function () {
     this.timeout(10000) // TODO: remove when new internal trace has landed
@@ -37,8 +39,8 @@ describe('Plugin', () => {
           it('should be instrumented', async () => {
             const messages = [{ key: 'producer1', value: 'test2' }]
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: 'kafka.produce',
-              service: 'test-kafka',
+              name: namingSchema.send.opName,
+              service: namingSchema.send.serviceName,
               meta: {
                 'span.kind': 'producer',
                 'component': 'kafkajs'
@@ -58,7 +60,7 @@ describe('Plugin', () => {
 
           it('should be instrumented w/ error', async () => {
             const producer = kafka.producer()
-            const resourceName = 'kafka.produce'
+            const resourceName = namingSchema.send.opName
 
             let error
 
@@ -67,7 +69,7 @@ describe('Plugin', () => {
 
               expect(span).to.include({
                 name: resourceName,
-                service: 'test-kafka',
+                service: namingSchema.send.serviceName,
                 resource: resourceName,
                 error: 1
               })
@@ -92,6 +94,12 @@ describe('Plugin', () => {
               return expectedSpanPromise
             }
           })
+
+          withNamingSchema(
+            async () => sendMessages(kafka, testTopic, messages),
+            () => namingSchema.send.opName,
+            () => namingSchema.send.serviceName
+          )
         })
 
         describe('producer data stream monitoring', () => {
@@ -167,11 +175,12 @@ describe('Plugin', () => {
           afterEach(async () => {
             await consumer.disconnect()
           })
+
           it('should be instrumented', async () => {
             const messages = [{ key: 'consumer1', value: 'test2' }]
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: 'kafka.consume',
-              service: 'test-kafka',
+              name: namingSchema.receive.opName,
+              service: namingSchema.receive.serviceName,
               meta: {
                 'span.kind': 'consumer',
                 'component': 'kafkajs'
@@ -188,6 +197,7 @@ describe('Plugin', () => {
 
             return expectedSpanPromise
           })
+
           it('should run the consumer in the context of the consumer span', done => {
             const messages = [{ key: 'consumer2', value: 'test2' }]
             const firstSpan = tracer.scope().active()
@@ -195,7 +205,7 @@ describe('Plugin', () => {
               const currentSpan = tracer.scope().active()
               try {
                 expect(currentSpan).to.not.equal(firstSpan)
-                expect(currentSpan.context()._name).to.equal('kafka.consume')
+                expect(currentSpan.context()._name).to.equal(namingSchema.receive.opName)
                 done()
               } catch (e) {
                 done(e)
@@ -214,8 +224,8 @@ describe('Plugin', () => {
             const messages = [{ key: 'consumer3', value: 'test2' }]
             const fakeError = new Error('Oh No!')
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: 'kafka.consume',
-              service: 'test-kafka',
+              name: namingSchema.receive.opName,
+              service: namingSchema.receive.serviceName,
               meta: {
                 [ERROR_TYPE]: fakeError.name,
                 [ERROR_MESSAGE]: fakeError.message,
@@ -264,6 +274,15 @@ describe('Plugin', () => {
               .then(() => sendMessages(kafka, testTopic, messages))
               .catch(done)
           })
+
+          withNamingSchema(
+            async () => {
+              await consumer.run({ eachMessage: () => {} })
+              await sendMessages(kafka, testTopic, messages)
+            },
+            () => namingSchema.send.opName,
+            () => namingSchema.send.serviceName
+          )
         })
 
         describe('consumer data stream monitoring', () => {

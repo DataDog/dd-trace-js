@@ -171,12 +171,33 @@ describe('config', () => {
     })
   })
 
+  it('should use process as default strategy for OOM heap profiler', () => {
+    process.env = {
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: 'true'
+    }
+    const config = new Config()
+
+    expect(config.oomMonitoring).to.deep.equal({
+      enabled: true,
+      heapLimitExtensionSize: 0,
+      maxHeapExtensionCount: 0,
+      exportStrategies: ['process'],
+      exportCommand: [
+        process.execPath,
+        path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
+        'http://localhost:8126/',
+        `host:${config.host},service:node,snapshot:on_oom`,
+        'space'
+      ]
+    })
+  })
+
   it('should support OOM heap profiler configuration', () => {
     process.env = {
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: '1',
       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '1000000',
       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '2',
-      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process,interrupt,async,interrupt'
+      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process,async,process'
     }
 
     const config = new Config({})
@@ -185,7 +206,7 @@ describe('config', () => {
       enabled: true,
       heapLimitExtensionSize: 1000000,
       maxHeapExtensionCount: 2,
-      exportStrategies: ['process', 'interrupt', 'async'],
+      exportStrategies: ['process', 'async'],
       exportCommand: [
         process.execPath,
         path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),

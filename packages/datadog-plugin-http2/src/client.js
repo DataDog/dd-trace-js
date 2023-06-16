@@ -1,7 +1,7 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
 const URL = require('url').URL
 const log = require('../../dd-trace/src/log')
@@ -24,53 +24,13 @@ const HTTP2_HEADER_PATH = ':path'
 const HTTP2_HEADER_STATUS = ':status'
 const HTTP2_METHOD_GET = 'GET'
 
-class Http2ClientPlugin extends Plugin {
+class Http2ClientPlugin extends ClientPlugin {
   static get id () {
     return 'http2'
   }
 
   constructor (...args) {
     super(...args)
-
-    this.addSub('apm:http2:client:request:start', ({ authority, options, headers = {} }) => {
-      const sessionDetails = extractSessionDetails(authority, options)
-      const path = headers[HTTP2_HEADER_PATH] || '/'
-      const pathname = path.split(/[?#]/)[0]
-      const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
-      const uri = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${pathname}`
-      const allowed = this.config.filter(uri)
-
-      const store = storage.getStore()
-      const childOf = store && allowed ? store.span : null
-      const span = this.tracer.startSpan('http.request', {
-        childOf,
-        tags: {
-          [COMPONENT]: this.constructor.id,
-          [CLIENT_PORT_KEY]: parseInt(sessionDetails.port),
-          [SPAN_KIND]: CLIENT,
-          'service.name': getServiceName(this.tracer, this.config, sessionDetails),
-          'resource.name': method,
-          'span.type': 'http',
-          'http.method': method,
-          'http.url': uri
-        }
-      })
-
-      // TODO: Figure out a better way to do this for any span.
-      if (!allowed) {
-        span._spanContext._trace.record = false
-      }
-
-      addHeaderTags(span, headers, HTTP_REQUEST_HEADERS, this.config)
-
-      if (!hasAmazonSignature(headers, path)) {
-        this.tracer.inject(span, HTTP_HEADERS, headers)
-      }
-
-      analyticsSampler.sample(span, this.config.measured)
-
-      this.enter(span, store)
-    })
 
     this.addSub('apm:http2:client:response', (headers) => {
       const span = storage.getStore().span
@@ -84,14 +44,58 @@ class Http2ClientPlugin extends Plugin {
 
       addHeaderTags(span, headers, HTTP_RESPONSE_HEADERS, this.config)
     })
+  }
 
-    this.addSub('apm:http2:client:request:finish', () => {
-      const span = storage.getStore().span
+  addTraceSub (eventName, handler) {
+    this.addSub(`apm:${this.constructor.id}:client:${this.operation}:${eventName}`, handler)
+  }
 
-      span.finish()
+  start ({ authority, options, headers = {} }) {
+    const sessionDetails = extractSessionDetails(authority, options)
+    const path = headers[HTTP2_HEADER_PATH] || '/'
+    const pathname = path.split(/[?#]/)[0]
+    const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
+    const uri = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${pathname}`
+    const allowed = this.config.filter(uri)
+
+    const store = storage.getStore()
+    const childOf = store && allowed ? store.span : null
+    const span = this.startSpan('http.request', {
+      childOf,
+      meta: {
+        [COMPONENT]: this.constructor.id,
+        [SPAN_KIND]: CLIENT,
+        'service.name': getServiceName(this.tracer, this.config, sessionDetails),
+        'resource.name': method,
+        'span.type': 'http',
+        'http.method': method,
+        'http.url': uri,
+        'out.host': sessionDetails.host
+      },
+      metrics: {
+        [CLIENT_PORT_KEY]: parseInt(sessionDetails.port)
+      }
     })
 
-    this.addSub('apm:http2:client:request:error', this.addError)
+    // TODO: Figure out a better way to do this for any span.
+    if (!allowed) {
+      span._spanContext._trace.record = false
+    }
+
+    addHeaderTags(span, headers, HTTP_REQUEST_HEADERS, this.config)
+
+    if (!hasAmazonSignature(headers, path)) {
+      this.tracer.inject(span, HTTP_HEADERS, headers)
+    }
+
+    analyticsSampler.sample(span, this.config.measured)
+
+    this.enter(span, store)
+  }
+
+  finish () {
+    const span = storage.getStore().span
+    span.finish()
   }
 
   configure (config) {

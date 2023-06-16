@@ -169,7 +169,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
             callArgs[vulnerableIndex] = newTaintedString(iastCtx, callArgs[vulnerableIndex], 'param', 'Request')
           }
           return fn(callArgs)
-        }, 'PATH_TRAVERSAL')
+        }, 'PATH_TRAVERSAL', { occurrences: 1 })
       })
       describe('no vulnerable', () => {
         testThatRequestHasNoVulnerability(function () {
@@ -186,24 +186,30 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
       desc += `with vulnerabile index ${vulnerableIndex}`
     }
     describe(desc, () => {
+      const fsSyncWayMethodPath = path.join(os.tmpdir(), 'fs-sync-way-method.js')
+      const fsAsyncWayMethodPath = path.join(os.tmpdir(), 'fs-async-way-method.js')
+      const fsPromiseWayMethodPath = path.join(os.tmpdir(), 'fs-promise-way-method.js')
+
+      before(() => {
+        fs.copyFileSync(path.join(__dirname, 'resources', 'fs-sync-way-method.js'), fsSyncWayMethodPath)
+        fs.copyFileSync(path.join(__dirname, 'resources', 'fs-async-way-method.js'), fsAsyncWayMethodPath)
+        fs.copyFileSync(path.join(__dirname, 'resources', 'fs-promise-way-method.js'), fsPromiseWayMethodPath)
+      })
+
+      after(() => {
+        fs.unlinkSync(fsSyncWayMethodPath)
+        fs.unlinkSync(fsAsyncWayMethodPath)
+        fs.unlinkSync(fsPromiseWayMethodPath)
+      })
+
       runFsMethodTest(`test fs.${methodName}Sync method`, vulnerableIndex, (args) => {
-        const method = `${methodName}Sync`
-        try {
-          const res = fs[method](...args)
-          cb(res)
-        } catch (e) {
-          cb(null)
-        }
+        require(fsSyncWayMethodPath)(methodName, args, cb)
       }, ...args)
       runFsMethodTest(`test fs.${methodName} method`, vulnerableIndex, (args) => {
-        return new Promise((resolve, reject) => {
-          fs[methodName](...args, (err, res) => {
-            resolve(cb(res))
-          })
-        })
+        return require(fsAsyncWayMethodPath)(methodName, args, cb)
       }, ...args)
       runFsMethodTest(`test fs.promises.${methodName} method`, vulnerableIndex, (args) => {
-        return fs.promises[methodName](...args).then(cb).catch(cb)
+        return require(fsPromiseWayMethodPath)(methodName, args, cb)
       }, ...args)
     })
   }

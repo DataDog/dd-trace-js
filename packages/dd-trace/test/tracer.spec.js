@@ -8,10 +8,13 @@ const Config = require('../src/config')
 const tags = require('../../../ext/tags')
 const { expect } = require('chai')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { DD_MAJOR } = require('../../../version')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
+
+const describeOrphanable = DD_MAJOR < 4 ? describe : describe.skip
 
 describe('Tracer', () => {
   let Tracer
@@ -244,7 +247,7 @@ describe('Tracer', () => {
       })
     })
 
-    describe('when there is no parent span', () => {
+    describeOrphanable('when there is no parent span', () => {
       it('should not trace if `orphanable: false`', () => {
         sinon.spy(tracer, 'startSpan')
 
@@ -270,7 +273,7 @@ describe('Tracer', () => {
       })
     })
 
-    describe('when there is a parent span', () => {
+    describeOrphanable('when there is a parent span', () => {
       it('should trace if `orphanable: false`', () => {
         tracer.scope().activate(tracer.startSpan('parent'), () => {
           sinon.spy(tracer, 'startSpan')
@@ -443,7 +446,7 @@ describe('Tracer', () => {
       expect(tracer.trace).to.have.not.been.called
     })
 
-    describe('when there is no parent span', () => {
+    describeOrphanable('when there is no parent span', () => {
       it('should not trace if `orphanable: false`', () => {
         const fn = tracer.wrap('name', { orphanable: false }, () => {})
 
@@ -475,7 +478,7 @@ describe('Tracer', () => {
       })
     })
 
-    describe('when there is a parent span', () => {
+    describeOrphanable('when there is a parent span', () => {
       it('should trace if `orphanable: false`', () => {
         tracer.scope().activate(tracer.startSpan('parent'), () => {
           const fn = tracer.wrap('name', { orhpanable: false }, () => {})
@@ -510,20 +513,6 @@ describe('Tracer', () => {
 
           expect(tracer.trace).to.have.been.called
         })
-      })
-    })
-
-    describe('when the options object is a function returning a falsy value', () => {
-      it('should trace', () => {
-        const fn = tracer.wrap('name', () => false, () => {})
-
-        sinon.stub(tracer, 'trace').callsFake((_, options) => {
-          expect(options).to.equal(false)
-        })
-
-        fn()
-
-        expect(tracer.trace).to.have.been.called
       })
     })
   })

@@ -41,6 +41,9 @@ function enableWafUpdate (appsecConfig) {
     // TODO: we should have a different capability for rule override
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
 
     rc.on('ASM_DATA', noop)
     rc.on('ASM_DD', noop)
@@ -58,6 +61,9 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSIONS, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
 
     rc.off('ASM_DATA', noop)
     rc.off('ASM_DD', noop)

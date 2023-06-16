@@ -45,7 +45,7 @@ describe('Plugin', () => {
             Code: { ZipFile },
             Handler: 'handler.handle',
             Role: 'arn:aws:iam::123456:role/test',
-            Runtime: 'nodejs14.x'
+            Runtime: 'nodejs16.x'
           }, (err, res) => {
             if (err) return done(err)
 
@@ -70,7 +70,11 @@ describe('Plugin', () => {
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
             expect(span.resource.startsWith('invoke')).to.equal(true)
-
+            expect(span.meta).to.include({
+              'functionname': 'ironmaiden',
+              'aws_service': 'Lambda',
+              'region': 'us-east-1'
+            })
             const parentId = span.span_id.toString()
             const traceId = span.trace_id.toString()
             expect(spanContext.toTraceId()).to.equal(traceId)

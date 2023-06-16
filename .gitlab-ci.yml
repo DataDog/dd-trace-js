@@ -1,16 +1,42 @@
 stages:
+  - package
   - deploy
   - benchmarks
   - benchmarks-pr-comment
 
-include: ".gitlab/benchmarks.yml"
+include:
+  - remote: https://gitlab-templates.ddbuild.io/apm/packaging.yml
+  - local: ".gitlab/benchmarks.yml"
+
+variables:
+  JS_PACKAGE_VERSION:
+    description: "Version to build for .deb and .rpm. Must be already published in NPM"
 
 .common: &common
   tags: [ "runner:main", "size:large" ]
 
+package:
+  extends: .package
+  rules:
+  - if: $JS_PACKAGE_VERSION
+    when: on_success
+  - if: '$CI_COMMIT_TAG =~ /^v.*/'
+    when: on_success
+  script:
+    - ../.gitlab/build-deb-rpm.sh
+
+.release-package:
+  stage: deploy
+  variables:
+    PRODUCT_NAME: auto_inject-node
+
 deploy_to_reliability_env:
   stage: deploy
-  when: on_success
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: on_success
+    - when: manual
+      allow_failure: true
   trigger:
     project: DataDog/apm-reliability/datadog-reliability-env
   variables:
@@ -18,13 +44,10 @@ deploy_to_reliability_env:
     UPSTREAM_PROJECT_ID: $CI_PROJECT_ID
     UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
     UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA
-    FORCE_TRIGGER: $FORCE_TRIGGER
 
 deploy_to_docker_registries:
   stage: deploy
   rules:
-    - if: '$POPULATE_CACHE'
-      when: never
     - if: '$CI_COMMIT_TAG =~ /^v.*/'
       when: on_success
     - when: manual
@@ -43,8 +66,6 @@ deploy_to_docker_registries:
 deploy_latest_to_docker_registries:
   stage: deploy
   rules:
-    - if: '$POPULATE_CACHE'
-      when: never
     - if: '$CI_COMMIT_TAG =~ /^v.*/'
       when: on_success
     - when: manual

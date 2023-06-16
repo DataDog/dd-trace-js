@@ -20,7 +20,9 @@ const {
   CI_STAGE_NAME,
   CI_ENV_VARS,
   GIT_COMMIT_COMMITTER_NAME,
-  GIT_COMMIT_COMMITTER_EMAIL
+  GIT_COMMIT_COMMITTER_EMAIL,
+  CI_NODE_LABELS,
+  CI_NODE_NAME
 } = require('./tags')
 
 // Receives a string with the form 'John Doe <john.doe@gmail.com>'
@@ -108,7 +110,9 @@ module.exports = {
         GIT_COMMIT: JENKINS_GIT_COMMIT,
         GIT_URL: JENKINS_GIT_REPOSITORY_URL,
         GIT_URL_1: JENKINS_GIT_REPOSITORY_URL_1,
-        DD_CUSTOM_TRACE_ID
+        DD_CUSTOM_TRACE_ID,
+        NODE_NAME,
+        NODE_LABELS
       } = env
 
       tags = {
@@ -119,7 +123,18 @@ module.exports = {
         [GIT_COMMIT_SHA]: JENKINS_GIT_COMMIT,
         [GIT_REPOSITORY_URL]: JENKINS_GIT_REPOSITORY_URL || JENKINS_GIT_REPOSITORY_URL_1,
         [CI_WORKSPACE_PATH]: WORKSPACE,
-        [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID })
+        [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID }),
+        [CI_NODE_NAME]: NODE_NAME
+      }
+
+      if (NODE_LABELS) {
+        let nodeLabels
+        try {
+          nodeLabels = JSON.stringify(NODE_LABELS.split(' '))
+          tags[CI_NODE_LABELS] = nodeLabels
+        } catch (e) {
+          // ignore errors
+        }
       }
 
       const isTag = JENKINS_GIT_BRANCH && JENKINS_GIT_BRANCH.includes('tags/')
@@ -159,7 +174,9 @@ module.exports = {
         CI_COMMIT_TIMESTAMP,
         CI_COMMIT_AUTHOR,
         CI_PROJECT_URL: GITLAB_PROJECT_URL,
-        CI_JOB_ID: GITLAB_CI_JOB_ID
+        CI_JOB_ID: GITLAB_CI_JOB_ID,
+        CI_RUNNER_ID,
+        CI_RUNNER_TAGS
       } = env
 
       const { name, email } = parseEmailAndName(CI_COMMIT_AUTHOR)
@@ -175,7 +192,7 @@ module.exports = {
         [GIT_TAG]: CI_COMMIT_TAG,
         [GIT_BRANCH]: CI_COMMIT_REF_NAME,
         [CI_WORKSPACE_PATH]: CI_PROJECT_DIR,
-        [CI_PIPELINE_URL]: GITLAB_PIPELINE_URL && GITLAB_PIPELINE_URL.replace('/-/pipelines/', '/pipelines/'),
+        [CI_PIPELINE_URL]: GITLAB_PIPELINE_URL,
         [CI_STAGE_NAME]: CI_JOB_STAGE,
         [CI_JOB_NAME]: GITLAB_CI_JOB_NAME,
         [GIT_COMMIT_MESSAGE]: CI_COMMIT_MESSAGE,
@@ -186,7 +203,9 @@ module.exports = {
           CI_PROJECT_URL: GITLAB_PROJECT_URL,
           CI_PIPELINE_ID: GITLAB_PIPELINE_ID,
           CI_JOB_ID: GITLAB_CI_JOB_ID
-        })
+        }),
+        [CI_NODE_LABELS]: CI_RUNNER_TAGS,
+        [CI_NODE_NAME]: CI_RUNNER_ID
       }
     }
 
@@ -448,8 +467,16 @@ module.exports = {
         BUILDKITE_BUILD_CHECKOUT_PATH,
         BUILDKITE_BUILD_AUTHOR,
         BUILDKITE_BUILD_AUTHOR_EMAIL,
-        BUILDKITE_MESSAGE
+        BUILDKITE_MESSAGE,
+        BUILDKITE_AGENT_ID
       } = env
+
+      const extraTags = Object.keys(env).filter(envVar =>
+        envVar.startsWith('BUILDKITE_AGENT_META_DATA_')
+      ).map((metadataKey) => {
+        const key = metadataKey.replace('BUILDKITE_AGENT_META_DATA_', '').toLowerCase()
+        return `${key}:${env[metadataKey]}`
+      })
 
       tags = {
         [CI_PROVIDER_NAME]: 'buildkite',
@@ -469,7 +496,9 @@ module.exports = {
         [CI_ENV_VARS]: JSON.stringify({
           BUILDKITE_BUILD_ID,
           BUILDKITE_JOB_ID
-        })
+        }),
+        [CI_NODE_NAME]: BUILDKITE_AGENT_ID,
+        [CI_NODE_LABELS]: JSON.stringify(extraTags)
       }
     }
 
@@ -544,6 +573,32 @@ module.exports = {
           DATADOG_BUILD_ID
         })
       }
+    }
+
+    if (env.CF_BUILD_ID) {
+      const {
+        CF_BUILD_ID,
+        CF_PIPELINE_NAME,
+        CF_BUILD_URL,
+        CF_STEP_NAME,
+        CF_BRANCH
+      } = env
+      tags = {
+        [CI_PROVIDER_NAME]: 'codefresh',
+        [CI_PIPELINE_ID]: CF_BUILD_ID,
+        [CI_PIPELINE_NAME]: CF_PIPELINE_NAME,
+        [CI_PIPELINE_URL]: CF_BUILD_URL,
+        [CI_JOB_NAME]: CF_STEP_NAME,
+        [CI_ENV_VARS]: JSON.stringify({
+          CF_BUILD_ID
+        })
+      }
+
+      const isTag = CF_BRANCH && CF_BRANCH.includes('tags/')
+      const refKey = isTag ? GIT_TAG : GIT_BRANCH
+      const ref = normalizeRef(CF_BRANCH)
+
+      tags[refKey] = ref
     }
 
     normalizeTag(tags, CI_WORKSPACE_PATH, resolveTilde)

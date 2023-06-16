@@ -2,6 +2,7 @@
 
 const waf = require('./waf')
 const { ACKNOWLEDGED, ERROR } = require('./remote_config/apply_states')
+const blocking = require('./blocking')
 
 let defaultRules
 
@@ -9,11 +10,17 @@ let appliedRulesData = new Map()
 let appliedRulesetId
 let appliedRulesOverride = new Map()
 let appliedExclusions = new Map()
+let appliedCustomRules = new Map()
+let appliedActions = new Map()
 
 function applyRules (rules, config) {
   defaultRules = rules
 
   waf.init(rules, config)
+
+  if (rules.actions) {
+    blocking.updateBlockingConfiguration(rules.actions.find(action => action.id === 'block'))
+  }
 }
 
 function updateWafFromRC ({ toUnapply, toApply, toModify }) {
@@ -24,6 +31,8 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   let newRulesetId
   const newRulesOverride = new SpyMap(appliedRulesOverride)
   const newExclusions = new SpyMap(appliedExclusions)
+  const newCustomRules = new SpyMap(appliedCustomRules)
+  const newActions = new SpyMap(appliedActions)
 
   for (const item of toUnapply) {
     const { product, id } = item
@@ -33,11 +42,12 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     } else if (product === 'ASM_DD') {
       if (appliedRulesetId === id) {
         newRuleset = defaultRules
-        newRulesetId = null
       }
     } else if (product === 'ASM') {
       newRulesOverride.delete(id)
       newExclusions.delete(id)
+      newCustomRules.delete(id)
+      newActions.delete(id)
     }
   }
 
@@ -51,7 +61,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
 
       batch.add(item)
     } else if (product === 'ASM_DD') {
-      if (appliedRulesetId && appliedRulesetId !== id) {
+      if (appliedRulesetId && appliedRulesetId !== id && newRuleset !== defaultRules) {
         item.apply_state = ERROR
         item.apply_error = 'Multiple ruleset received in ASM_DD'
       } else {
@@ -65,22 +75,41 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
         batch.add(item)
       }
     } else if (product === 'ASM') {
+      let batchConfiguration = false
       if (file && file.rules_override && file.rules_override.length) {
+        batchConfiguration = true
         newRulesOverride.set(id, file.rules_override)
       }
 
       if (file && file.exclusions && file.exclusions.length) {
+        batchConfiguration = true
         newExclusions.set(id, file.exclusions)
       }
 
-      batch.add(item)
+      if (file && file.custom_rules && file.custom_rules.length) {
+        batchConfiguration = true
+        newCustomRules.set(id, file.custom_rules)
+      }
+
+      if (file && file.actions && file.actions.length) {
+        newActions.set(id, file.actions)
+      }
+
+      // "actions" data is managed by tracer and not by waf
+      if (batchConfiguration) {
+        batch.add(item)
+      }
     }
   }
 
   let newApplyState = ACKNOWLEDGED
   let newApplyError
 
-  if (newRulesData.modified || newRuleset || newRulesOverride.modified || newExclusions.modified) {
+  if (newRulesData.modified ||
+    newRuleset ||
+    newRulesOverride.modified ||
+    newExclusions.modified ||
+    newCustomRules.modified) {
     const payload = newRuleset || {}
 
     if (newRulesData.modified) {
@@ -91,6 +120,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     }
     if (newExclusions.modified) {
       payload.exclusions = concatArrays(newExclusions)
+    }
+    if (newCustomRules.modified) {
+      payload.custom_rules = concatArrays(newCustomRules)
     }
 
     try {
@@ -108,6 +140,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       if (newExclusions.modified) {
         appliedExclusions = newExclusions
       }
+      if (newCustomRules.modified) {
+        appliedCustomRules = newCustomRules
+      }
     } catch (err) {
       newApplyState = ERROR
       newApplyError = err.toString()
@@ -117,6 +152,11 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   for (const config of batch) {
     config.apply_state = newApplyState
     if (newApplyError) config.apply_error = newApplyError
+  }
+
+  if (newActions.modified) {
+    blocking.updateBlockingConfiguration(concatArrays(newActions).find(action => action.id === 'block'))
+    appliedActions = newActions
   }
 }
 
@@ -199,13 +239,16 @@ function copyRulesData (rulesData) {
 
 function clearAllRules () {
   waf.destroy()
+  blocking.updateBlockingConfiguration(undefined)
 
-  defaultRules = null
+  defaultRules = undefined
 
   appliedRulesData.clear()
-  appliedRulesetId = null
+  appliedRulesetId = undefined
   appliedRulesOverride.clear()
   appliedExclusions.clear()
+  appliedCustomRules.clear()
+  appliedActions.clear()
 }
 
 module.exports = {

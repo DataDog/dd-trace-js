@@ -1,4 +1,5 @@
 'use strict'
+
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -6,8 +7,16 @@ const {
   getCoveredFilenamesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
-  getTestLineStart
+  getTestLineStart,
+  getTestSuitePath,
+  getTestParametersString
 } = require('../../dd-trace/src/plugins/util/test')
+const {
+  getFormattedJestTestParameters,
+  getJestTestName,
+  getJestSuitesToRun
+} = require('../../datadog-plugin-jest/src/util')
+const { DD_MAJOR } = require('../../../version')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -33,13 +42,6 @@ const jestItrConfigurationCh = channel('ci:jest:itr-configuration')
 let skippableSuites = []
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
-
-const {
-  getTestSuitePath,
-  getTestParametersString
-} = require('../../dd-trace/src/plugins/util/test')
-
-const { getFormattedJestTestParameters, getJestTestName } = require('../../datadog-plugin-jest/src/util')
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -426,10 +428,7 @@ addHook({
     const testPaths = await getTestPaths.apply(this, arguments)
     const { tests } = testPaths
 
-    const filteredTests = tests.filter(({ path: testPath }) => {
-      const relativePath = testPath.replace(`${rootDir}/`, '')
-      return !skippableSuites.includes(relativePath)
-    })
+    const filteredTests = getJestSuitesToRun(skippableSuites, tests, rootDir)
 
     skippableSuites = []
 
@@ -451,6 +450,7 @@ addHook({
 }, jestConfigSyncWrapper)
 
 function jasmineAsyncInstallWraper (jasmineAsyncInstallExport, jestVersion) {
+  log.warn('jest-jasmine2 support is removed from dd-trace@v4. Consider changing to jest-circus as `testRunner`.')
   return function (globalConfig, globalInput) {
     globalInput._ddtrace = global._ddtrace
     shimmer.wrap(globalInput.jasmine.Spec.prototype, 'execute', execute => function (onComplete) {
@@ -480,11 +480,13 @@ function jasmineAsyncInstallWraper (jasmineAsyncInstallExport, jestVersion) {
   }
 }
 
-addHook({
-  name: 'jest-jasmine2',
-  versions: ['>=24.8.0'],
-  file: 'build/jasmineAsyncInstall.js'
-}, jasmineAsyncInstallWraper)
+if (DD_MAJOR < 4) {
+  addHook({
+    name: 'jest-jasmine2',
+    versions: ['>=24.8.0'],
+    file: 'build/jasmineAsyncInstall.js'
+  }, jasmineAsyncInstallWraper)
+}
 
 addHook({
   name: 'jest-worker',

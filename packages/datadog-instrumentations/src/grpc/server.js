@@ -4,6 +4,8 @@ const types = require('./types')
 const { channel, addHook, AsyncResource } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
+const nodeMajor = parseInt(process.versions.node.split('.')[0])
+
 const startChannel = channel('apm:grpc:server:request:start')
 const errorChannel = channel('apm:grpc:server:request:error')
 const updateChannel = channel('apm:grpc:server:request:update')
@@ -107,7 +109,7 @@ function wrapStream (call, requestResource, onCancel) {
 function wrapCallback (callback, call, requestResource, parentResource, onCancel) {
   return function (err, value, trailer, flags) {
     requestResource.runInAsyncScope(() => {
-      if (err instanceof Error) {
+      if (err) {
         errorChannel.publish(err)
         finishChannel.publish(err)
       } else {
@@ -139,11 +141,13 @@ function isEmitter (obj) {
   return typeof obj.emit === 'function' && typeof obj.once === 'function'
 }
 
-addHook({ name: 'grpc', versions: ['>=1.24.3'], file: 'src/server.js' }, server => {
-  shimmer.wrap(server.Server.prototype, 'register', wrapRegister)
+if (nodeMajor <= 14) {
+  addHook({ name: 'grpc', versions: ['>=1.24.3'], file: 'src/server.js' }, server => {
+    shimmer.wrap(server.Server.prototype, 'register', wrapRegister)
 
-  return server
-})
+    return server
+  })
+}
 
 addHook({ name: '@grpc/grpc-js', versions: ['>=1.0.3'], file: 'build/src/server.js' }, server => {
   shimmer.wrap(server.Server.prototype, 'register', wrapRegister)

@@ -20,10 +20,12 @@ describe('sql-injection-analyzer', () => {
   })
 
   it('should subscribe to mysql, mysql2 and pg start query channel', () => {
-    expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(3)
+    expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(5)
     expect(sqlInjectionAnalyzer._subscriptions[0]._channel.name).to.equals('apm:mysql:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[1]._channel.name).to.equals('apm:mysql2:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[2]._channel.name).to.equals('apm:pg:query:start')
+    expect(sqlInjectionAnalyzer._subscriptions[3]._channel.name).to.equals('datadog:sequelize:query:start')
+    expect(sqlInjectionAnalyzer._subscriptions[4]._channel.name).to.equals('datadog:sequelize:query:finish')
   })
 
   it('should not detect vulnerability when no query', () => {
@@ -42,6 +44,7 @@ describe('sql-injection-analyzer', () => {
   })
 
   it('should report "SQL_INJECTION" vulnerability', () => {
+    const dialect = 'DIALECT'
     const addVulnerability = sinon.stub()
     const iastContext = {
       rootSpan: {
@@ -58,8 +61,7 @@ describe('sql-injection-analyzer', () => {
       '../iast-context': {
         getIastContext: () => iastContext
       },
-      '../overhead-controller': { hasQuota: () => true },
-      '../vulnerability-reporter': { addVulnerability }
+      '../overhead-controller': { hasQuota: () => true }
     })
     const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
       '../taint-tracking/operations': TaintTrackingMock,
@@ -67,10 +69,18 @@ describe('sql-injection-analyzer', () => {
     })
     const proxiedSqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer',
       {
-        './injection-analyzer': InjectionAnalyzer
+        './injection-analyzer': InjectionAnalyzer,
+        '../taint-tracking/operations': TaintTrackingMock,
+        '../iast-context': {
+          getIastContext: () => iastContext
+        },
+        '../vulnerability-reporter': { addVulnerability }
       })
-    proxiedSqlInjectionAnalyzer.analyze(TAINTED_QUERY)
+    proxiedSqlInjectionAnalyzer.analyze(TAINTED_QUERY, dialect)
     expect(addVulnerability).to.have.been.calledOnce
-    expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'SQL_INJECTION' })
+    expect(addVulnerability).to.have.been.calledWithMatch({}, {
+      type: 'SQL_INJECTION',
+      evidence: { dialect: dialect }
+    })
   })
 })

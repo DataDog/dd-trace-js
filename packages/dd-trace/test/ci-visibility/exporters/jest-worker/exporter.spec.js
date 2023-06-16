@@ -28,8 +28,8 @@ describe('CI Visibility Jest Worker Exporter', () => {
     expect(send).to.have.been.calledWith([JEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
   })
   it('can export coverages', () => {
-    const coverage = { traceId: '1', spanId: '1', files: ['test.js'] }
-    const coverageSecond = { traceId: '2', spanId: '2', files: ['test2.js'] }
+    const coverage = { sessionId: '1', suiteId: '1', files: ['test.js'] }
+    const coverageSecond = { sessionId: '2', suiteId: '2', files: ['test2.js'] }
     const jestWorkerExporter = new JestWorkerCiVisibilityExporter()
     jestWorkerExporter.exportCoverage(coverage)
     jestWorkerExporter.exportCoverage(coverageSecond)

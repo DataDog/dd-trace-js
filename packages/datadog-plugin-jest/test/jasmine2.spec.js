@@ -1,7 +1,6 @@
 'use strict'
 const fs = require('fs')
 const path = require('path')
-
 const nock = require('nock')
 
 const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -21,8 +20,11 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 
 const { version: ddTraceVersion } = require('../../../package.json')
+const { DD_MAJOR } = require('../../../version')
 
-describe('Plugin', function () {
+const describeFunction = DD_MAJOR < 4 ? describe : describe.skip
+
+describeFunction('Plugin', function () {
   this.retries(2)
   let jestExecutable
 

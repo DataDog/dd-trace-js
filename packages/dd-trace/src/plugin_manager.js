@@ -4,6 +4,7 @@ const { channel } = require('../../diagnostics_channel')
 const { isFalse } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
+const Nomenclature = require('./service-naming')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
@@ -67,7 +68,7 @@ module.exports = class PluginManager {
 
     if (!Plugin) return
     if (!this._pluginsByName[name]) {
-      this._pluginsByName[name] = new Plugin(this._tracer)
+      this._pluginsByName[name] = new Plugin(this._tracer, this._tracerConfig)
     }
     if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
 
@@ -75,6 +76,7 @@ module.exports = class PluginManager {
       enabled: this._tracerConfig.plugins !== false
     }
 
+    // extracts predetermined configuration from tracer and combines it with plugin-specific config
     this._pluginsByName[name].configure({
       ...this._getSharedConfig(name),
       ...pluginConfig
@@ -96,6 +98,7 @@ module.exports = class PluginManager {
   // like instrumenter.enable()
   configure (config = {}) {
     this._tracerConfig = config
+    Nomenclature.configure(config)
 
     for (const name in pluginClasses) {
       this.loadPlugin(name)
@@ -126,7 +129,6 @@ module.exports = class PluginManager {
       queryStringObfuscation,
       site,
       url,
-      dbmPropagationMode,
       dsmEnabled
     } = this._tracerConfig
 
@@ -140,7 +142,6 @@ module.exports = class PluginManager {
       sharedConfig.queryStringObfuscation = queryStringObfuscation
     }
 
-    sharedConfig.dbmPropagationMode = dbmPropagationMode
     sharedConfig.dsmEnabled = dsmEnabled
 
     if (serviceMapping && serviceMapping[name]) {

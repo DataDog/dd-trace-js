@@ -14,7 +14,7 @@ describe('CI Visibility Agentless Exporter', () => {
 
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
-    sinon.stub(cp, 'execSync').returns('false')
+    sinon.stub(cp, 'execFileSync').returns('false')
     nock.cleanAll()
   })
   afterEach(() => {
@@ -169,7 +169,7 @@ describe('CI Visibility Agentless Exporter', () => {
       const site = 'd4tad0g.com'
       const agentlessExporter = new AgentlessCiVisibilityExporter({ site, tags: {} })
       expect(agentlessExporter._url.href).to.equal(`https://citestcycle-intake.${site}/`)
-      expect(agentlessExporter._coverageUrl.href).to.equal(`https://event-platform-intake.${site}/`)
+      expect(agentlessExporter._coverageUrl.href).to.equal(`https://citestcov-intake.${site}/`)
     })
   })
 })

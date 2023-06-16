@@ -29,7 +29,7 @@ describe('CI Visibility Coverage Writer', () => {
 
     url = {
       protocol: 'https:',
-      hostname: 'event-platform-intake.datadog.com'
+      hostname: 'citestcov-intake.datadog.com'
     }
 
     log = {
@@ -50,7 +50,7 @@ describe('CI Visibility Coverage Writer', () => {
 
   describe('append', () => {
     it('should encode a coverage payload', () => {
-      const input = { traceId: id('1'), spanId: id('2'), files: ['file.js'] }
+      const input = { sessionId: id('1'), suiteId: id('2'), files: ['file.js'] }
       coverageWriter.append(input)
 
       expect(encoder.encode).to.have.been.calledWith(input)

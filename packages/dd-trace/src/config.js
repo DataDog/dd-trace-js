@@ -2,13 +2,15 @@
 
 const fs = require('fs')
 const os = require('os')
+const uuid = require('crypto-randomuuid')
 const URL = require('url').URL
 const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
-const uuid = require('crypto-randomuuid')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
+const { getGitMetadataFromGitProperties } = require('./git_properties')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -32,6 +34,22 @@ function safeJsonParse (input) {
   } catch (err) {
     return undefined
   }
+}
+
+const namingVersions = ['v0', 'v1']
+const defaultNamingVersion = 'v0'
+
+function validateNamingVersion (versionString) {
+  if (!versionString) {
+    return defaultNamingVersion
+  }
+  if (!namingVersions.includes(versionString)) {
+    log.warn(
+      `Unexpected input for config.spanAttributeSchema, picked default ${defaultNamingVersion}`
+    )
+    return defaultNamingVersion
+  }
+  return versionString
 }
 
 // Shallow clone with property name remapping
@@ -164,6 +182,8 @@ class Config {
       process.env.DD_SERVICE_NAME ||
       this.tags.service ||
       process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      process.env.FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
+      process.env.K_SERVICE || // Google Cloud Function Name set by newer runtimes
       pkg.name ||
       'node'
     const DD_SERVICE_MAPPING = coalesce(
@@ -188,12 +208,35 @@ class Config {
       process.env.DD_TRACE_STARTUP_LOGS,
       false
     )
+
+    const DD_OPENAI_LOGS_ENABLED = coalesce(
+      options.openAiLogsEnabled,
+      process.env.DD_OPENAI_LOGS_ENABLED,
+      false
+    )
+
+    const DD_API_KEY = coalesce(
+      process.env.DATADOG_API_KEY,
+      process.env.DD_API_KEY
+    )
+
+    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+
+    const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
+    const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
+    const isGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
+
+    const inServerlessEnvironment = inAWSLambda || isGCPFunction
+
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED,
-      !process.env.AWS_LAMBDA_FUNCTION_NAME
+      !inServerlessEnvironment
     )
-    const DD_TELEMETRY_DEBUG_ENABLED = coalesce(
-      process.env.DD_TELEMETRY_DEBUG_ENABLED,
+    const DD_TELEMETRY_HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
+      ? parseInt(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000
+      : 60000
+    const DD_TELEMETRY_DEBUG = coalesce(
+      process.env.DD_TELEMETRY_DEBUG,
       false
     )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
@@ -265,7 +308,9 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       false
     )
-
+    const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
+      process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+    )
     const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
       process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       '512'
@@ -274,7 +319,7 @@ class Config {
     const DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
       options.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
-      false
+      isGCPFunction
     )
 
     const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
@@ -341,12 +386,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
     )
 
-    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
-
     const remoteConfigOptions = options.remoteConfig || {}
     const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
       process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
-      !inAWSLambda
+      !inServerlessEnvironment
     )
     const DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = coalesce(
       parseInt(remoteConfigOptions.pollInterval),
@@ -393,8 +436,19 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       true
     )
 
+    const DD_IAST_REDACTION_ENABLED = coalesce(
+      iastOptions && iastOptions.redactionEnabled,
+      !isFalse(process.env.DD_IAST_REDACTION_ENABLED),
+      true
+    )
+
     const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
+      true
+    )
+
+    const DD_TRACE_GIT_METADATA_ENABLED = coalesce(
+      process.env.DD_TRACE_GIT_METADATA_ENABLED,
       true
     )
 
@@ -429,11 +483,13 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       })
     }
 
-    const defaultFlushInterval = inAWSLambda ? 0 : 2000
+    const defaultFlushInterval = inServerlessEnvironment ? 0 : 2000
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
     this.dsmEnabled = isTrue(DD_DATA_STREAMS_ENABLED)
+    this.openAiLogsEnabled = DD_OPENAI_LOGS_ENABLED
+    this.apiKey = DD_API_KEY
     this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
@@ -473,13 +529,15 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
       exporters: DD_PROFILING_EXPORTERS
     }
+    this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
     this.telemetry = {
       enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
+      heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
-      debug: isTrue(DD_TELEMETRY_DEBUG_ENABLED)
+      debug: isTrue(DD_TELEMETRY_DEBUG)
     }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
@@ -503,7 +561,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       requestSampling: DD_IAST_REQUEST_SAMPLING,
       maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
-      deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED
+      deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
+      redactionEnabled: DD_IAST_REDACTION_ENABLED
     }
 
     this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
@@ -512,12 +571,47 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.isGitUploadEnabled = this.isCiVisibility &&
       (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
 
+    this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
+
+    if (this.gitMetadataEnabled) {
+      this.repositoryUrl = coalesce(
+        process.env.DD_GIT_REPOSITORY_URL,
+        this.tags[GIT_REPOSITORY_URL]
+      )
+      this.commitSHA = coalesce(
+        process.env.DD_GIT_COMMIT_SHA,
+        this.tags[GIT_COMMIT_SHA]
+      )
+      if (!this.repositoryUrl || !this.commitSHA) {
+        const DD_GIT_PROPERTIES_FILE = coalesce(
+          process.env.DD_GIT_PROPERTIES_FILE,
+          `${process.cwd()}/git.properties`
+        )
+        let gitPropertiesString
+        try {
+          gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
+        } catch (e) {
+          // Only log error if the user has set a git.properties path
+          if (process.env.DD_GIT_PROPERTIES_FILE) {
+            log.error(e)
+          }
+        }
+        if (gitPropertiesString) {
+          const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
+          this.commitSHA = this.commitSHA || commitSHA
+          this.repositoryUrl = this.repositoryUrl || repositoryUrl
+        }
+      }
+    }
+
     this.stats = {
       enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
     }
 
     this.traceId128BitGenerationEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
+
+    this.isGCPFunction = isGCPFunction
 
     tagger.add(this.tags, {
       service: this.service,

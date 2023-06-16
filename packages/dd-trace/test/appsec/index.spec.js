@@ -5,7 +5,12 @@ const log = require('../../src/log')
 const waf = require('../../src/appsec/waf')
 const RuleManager = require('../../src/appsec/rule_manager')
 const appsec = require('../../src/appsec')
-const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../src/appsec/channels')
+const {
+  incomingHttpRequestStart,
+  incomingHttpRequestEnd,
+  bodyParser,
+  queryParser
+} = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
 const Config = require('../../src/config')
@@ -57,6 +62,7 @@ describe('AppSec Index', () => {
 
   afterEach(() => {
     sinon.restore()
+    AppSec.disable()
   })
 
   describe('enable', () => {
@@ -86,6 +92,16 @@ describe('AppSec Index', () => {
       expect(log.error.secondCall).to.have.been.calledWithExactly(err)
       expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
       expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
+    })
+
+    it('should subscribe to blockable channels', () => {
+      expect(bodyParser.hasSubscribers).to.be.false
+      expect(queryParser.hasSubscribers).to.be.false
+
+      AppSec.enable(config)
+
+      expect(bodyParser.hasSubscribers).to.be.true
+      expect(queryParser.hasSubscribers).to.be.true
     })
   })
 
@@ -117,6 +133,15 @@ describe('AppSec Index', () => {
       expect(AppSec.disable).to.not.throw()
 
       expect(RuleManager.clearAllRules).to.have.been.calledOnce
+    })
+
+    it('should unsubscribe to blockable channels', () => {
+      AppSec.enable(config)
+
+      AppSec.disable()
+
+      expect(bodyParser.hasSubscribers).to.be.false
+      expect(queryParser.hasSubscribers).to.be.false
     })
   })
 
@@ -156,9 +181,12 @@ describe('AppSec Index', () => {
         '_dd.runtime_family': 'nodejs',
         'http.client_ip': '127.0.0.1'
       })
-      expect(waf.run).to.have.been.calledOnceWith({
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+        'server.request.method': 'POST',
         'http.client_ip': '127.0.0.1'
-      })
+      }, req)
     })
   })
 
@@ -203,18 +231,10 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': {
-          'user-agent': 'Arachni',
-          'host': 'localhost'
-        },
-        'server.request.method': 'POST',
         'server.response.status': 201,
-        'server.response.headers.no_cookies': {
-          'content-type': 'application/json',
-          'content-lenght': 42
-        }
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
       }, req)
+
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
 
@@ -252,17 +272,8 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': {
-          'user-agent': 'Arachni',
-          'host': 'localhost'
-        },
-        'server.request.method': 'POST',
         'server.response.status': 201,
-        'server.response.headers.no_cookies': {
-          'content-type': 'application/json',
-          'content-lenght': 42
-        }
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
       }, req)
 
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
@@ -312,23 +323,130 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': {
-          'user-agent': 'Arachni',
-          'host': 'localhost'
-        },
-        'server.request.method': 'POST',
         'server.response.status': 201,
-        'server.response.headers.no_cookies': {
-          'content-type': 'application/json',
-          'content-lenght': 42
-        },
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
         'server.request.body': { a: '1' },
-        'server.request.query': { b: '2' },
         'server.request.path_params': { c: '3' },
         'server.request.cookies': { d: ['4'], e: ['5'] }
       }, req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+    })
+  })
+
+  describe('checkRequestData', () => {
+    let abortController, req, res, rootSpan
+
+    beforeEach(() => {
+      rootSpan = {
+        addTags: sinon.stub()
+      }
+      web.root.returns(rootSpan)
+
+      abortController = { abort: sinon.stub() }
+
+      req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        setHeader: sinon.stub(),
+        end: sinon.stub()
+      }
+
+      AppSec.enable(config)
+      AppSec.incomingHttpStartTranslator({ req, res })
+    })
+
+    afterEach(() => {
+      AppSec.disable()
+    })
+
+    describe('onRequestBodyParsed', () => {
+      it('Should not block without body', () => {
+        sinon.stub(waf, 'run')
+
+        bodyParser.publish({ req, res, abortController })
+
+        expect(waf.run).not.to.have.been.called
+        expect(abortController.abort).not.to.have.been.called
+        expect(res.end).not.to.have.been.called
+      })
+
+      it('Should not block with body by default', () => {
+        req.body = { key: 'value' }
+        sinon.stub(waf, 'run')
+
+        bodyParser.publish({ req, res, abortController })
+
+        expect(waf.run).to.have.been.calledOnceWith({
+          'server.request.body': { key: 'value' }
+        })
+        expect(abortController.abort).not.to.have.been.called
+        expect(res.end).not.to.have.been.called
+      })
+
+      it('Should block when it is detected as attack', () => {
+        req.body = { key: 'value' }
+        sinon.stub(waf, 'run').returns(['block'])
+
+        bodyParser.publish({ req, res, abortController })
+
+        expect(waf.run).to.have.been.calledOnceWith({
+          'server.request.body': { key: 'value' }
+        })
+        expect(abortController.abort).to.have.been.called
+        expect(res.end).to.have.been.called
+      })
+    })
+
+    describe('onRequestQueryParsed', () => {
+      it('Should not block without query', () => {
+        sinon.stub(waf, 'run')
+
+        queryParser.publish({ req, res, abortController })
+
+        expect(waf.run).not.to.have.been.called
+        expect(abortController.abort).not.to.have.been.called
+        expect(res.end).not.to.have.been.called
+      })
+
+      it('Should not block with query by default', () => {
+        req.query = { key: 'value' }
+        sinon.stub(waf, 'run')
+
+        queryParser.publish({ req, res, abortController })
+
+        expect(waf.run).to.have.been.calledOnceWith({
+          'server.request.query': { key: 'value' }
+        })
+        expect(abortController.abort).not.to.have.been.called
+        expect(res.end).not.to.have.been.called
+      })
+
+      it('Should block when it is detected as attack', () => {
+        req.query = { key: 'value' }
+        sinon.stub(waf, 'run').returns(['block'])
+
+        queryParser.publish({ req, res, abortController })
+
+        expect(waf.run).to.have.been.calledOnceWith({
+          'server.request.query': { key: 'value' }
+        })
+        expect(abortController.abort).to.have.been.called
+        expect(res.end).to.have.been.called
+      })
     })
   })
 })
@@ -351,6 +469,8 @@ describe('IP blocking', () => {
     id: '1',
     file: ruleData
   }]
+  const htmlDefaultContent = blockedTemplate.html
+  const jsonDefaultContent = JSON.parse(blockedTemplate.json)
 
   let http, appListener, port
   before(() => {
@@ -372,16 +492,24 @@ describe('IP blocking', () => {
     appListener = server
       .listen(port, 'localhost', () => done())
   })
+
   beforeEach(() => {
     appsec.enable(new Config({
       appsec: {
         enabled: true
       }
     }))
+
     RuleManager.updateWafFromRC({ toUnapply: [], toApply: [], toModify })
   })
+
   afterEach(() => {
     appsec.disable()
+  })
+
+  after(() => {
+    appListener && appListener.close()
+    return agent.close({ ritmReset: false })
   })
 
   describe('do not block the request', () => {
@@ -390,11 +518,6 @@ describe('IP blocking', () => {
         expect(res.status).to.be.equal(200)
       })
     })
-  })
-
-  after(() => {
-    appListener && appListener.close()
-    return agent.close({ ritmReset: false })
   })
   const ipHeaderList = [
     'x-forwarded-for',
@@ -421,9 +544,6 @@ describe('IP blocking', () => {
     })
 
     describe(`block - ip in header ${ipHeader}`, () => {
-      const htmlDefaultContent = blockedTemplate.html
-      const jsonDefaultContent = JSON.parse(blockedTemplate.json)
-
       it('should block the request with JSON content if no headers', async () => {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
@@ -456,6 +576,111 @@ describe('IP blocking', () => {
         }).catch((err) => {
           expect(err.response.status).to.be.equal(403)
           expect(err.response.data).to.be.equal(htmlDefaultContent)
+        })
+      })
+    })
+  })
+
+  describe('Custom actions', () => {
+    describe('Default content with custom status', () => {
+      const toModifyCustomActions = [{
+        product: 'ASM',
+        id: 'custom-actions',
+        file: {
+          actions: [
+            {
+              id: 'block',
+              type: 'block_request',
+              parameters: {
+                status_code: 500,
+                type: 'auto'
+              }
+            }
+          ]
+        }
+      }]
+
+      beforeEach(() => {
+        RuleManager.updateWafFromRC({
+          toUnapply: [],
+          toApply: [],
+          toModify: [...toModify, ...toModifyCustomActions]
+        })
+      })
+
+      afterEach(() => {
+        RuleManager.clearAllRules()
+      })
+
+      it('Should block with custom status code and JSON content', () => {
+        return axios.get(`http://localhost:${port}/`, {
+          headers: {
+            'x-forwarded-for': invalidIp
+          }
+        }).then(() => {
+          throw new Error('Not expected')
+        }).catch((err) => {
+          expect(err.response.status).to.be.equal(500)
+          expect(err.response.data).to.deep.equal(jsonDefaultContent)
+        })
+      })
+
+      it('Should block with custom status code and HTML content', () => {
+        return axios.get(`http://localhost:${port}/`, {
+          headers: {
+            'x-forwarded-for': invalidIp,
+            'Accept': 'text/html'
+          }
+        }).then(() => {
+          throw new Error('Not expected')
+        }).catch((err) => {
+          expect(err.response.status).to.be.equal(500)
+          expect(err.response.data).to.deep.equal(htmlDefaultContent)
+        })
+      })
+    })
+
+    describe('Redirect on error', () => {
+      const toModifyCustomActions = [{
+        product: 'ASM',
+        id: 'custom-actions',
+        file: {
+          actions: [
+            {
+              id: 'block',
+              type: 'redirect_request',
+              parameters: {
+                status_code: 301,
+                location: '/error'
+              }
+            }
+          ]
+        }
+      }]
+
+      beforeEach(() => {
+        RuleManager.updateWafFromRC({
+          toUnapply: [],
+          toApply: [],
+          toModify: [...toModify, ...toModifyCustomActions]
+        })
+      })
+
+      afterEach(() => {
+        RuleManager.clearAllRules()
+      })
+
+      it('Should block with redirect', () => {
+        return axios.get(`http://localhost:${port}/`, {
+          headers: {
+            'x-forwarded-for': invalidIp
+          },
+          maxRedirects: 0
+        }).then(() => {
+          throw new Error('Not resolve expected')
+        }).catch((err) => {
+          expect(err.response.status).to.be.equal(301)
+          expect(err.response.headers.location).to.be.equal('/error')
         })
       })
     })

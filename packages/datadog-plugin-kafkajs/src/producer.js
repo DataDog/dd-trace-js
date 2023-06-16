@@ -8,6 +8,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
   static get operation () { return 'produce' }
 
   start ({ topic, messages }) {
+
     let pathwayCtx
     if (this.config.dsmEnabled) {
       const dataStreamsContext = this.tracer
@@ -17,7 +18,6 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     const span = this.startSpan('kafka.produce', {
       service: this.config.service || `${this.tracer._service}-kafka`,
       resource: topic,
-      kind: 'producer',
       meta: {
         'component': 'kafkajs',
         'kafka.topic': topic
