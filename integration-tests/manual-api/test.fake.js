@@ -4,6 +4,7 @@ const tracer = require('dd-trace')
 
 const testStartCh = channel('dd-trace:ci:manual:test:start')
 const testFinishCh = channel('dd-trace:ci:manual:test:finish')
+const testAddTagsCh = channel('dd-trace:ci:manual:test:addTags')
 const testSuite = __filename
 
 describe('can run tests', () => {
@@ -14,8 +15,7 @@ describe('can run tests', () => {
     testFinishCh.publish({ status, error })
   })
   test('first test will pass', () => {
-    const testSpan = tracer.scope().active()
-    testSpan.setTag('test.custom.tag', 'custom.value')
+    testAddTagsCh.publish({ 'test.custom.tag': 'custom.value' })
     assert.equal(1, 1)
   })
   test('second test will fail', () => {

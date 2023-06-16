@@ -22,14 +22,21 @@ class TestApiManualPlugin extends CiPlugin {
     })
     this.addSub('dd-trace:ci:manual:test:finish', ({ status, error }) => {
       const store = storage.getStore()
-      if (store && store.span) {
-        const testSpan = store.span
+      const testSpan = store && store.span
+      if (testSpan) {
         testSpan.setTag(TEST_STATUS, status)
         if (error) {
           testSpan.setTag('error', error)
         }
         testSpan.finish()
         finishAllTraceSpans(testSpan)
+      }
+    })
+    this.addSub('dd-trace:ci:manual:test:addTags', (tags) => {
+      const store = storage.getStore()
+      const testSpan = store && store.span
+      if (testSpan) {
+        testSpan.addTags(tags)
       }
     })
   }
