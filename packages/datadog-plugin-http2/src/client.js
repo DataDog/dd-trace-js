@@ -93,11 +93,6 @@ class Http2ClientPlugin extends ClientPlugin {
     this.enter(span, store)
   }
 
-  finish () {
-    const span = storage.getStore().span
-    span.finish()
-  }
-
   configure (config) {
     return super.configure(normalizeConfig(config))
   }
