@@ -38,7 +38,7 @@ describe('unvalidated-redirect-analyzer', () => {
     },
 
     getRanges: (iastContext, value) => {
-      if (value === NOT_TAINTED_LOCATION) return []
+      if (value === NOT_TAINTED_LOCATION) return null
 
       if (value === TAINTED_HEADER_REFERER_ONLY) {
         return [REFERER_RANGE]
@@ -52,6 +52,7 @@ describe('unvalidated-redirect-analyzer', () => {
 
   let report
   beforeEach(() => {
+    sinon.stub(overheadController, 'hasQuota').returns(1)
     report = sinon.stub(unvalidatedRedirectAnalyzer, '_report')
   })
 
@@ -91,24 +92,18 @@ describe('unvalidated-redirect-analyzer', () => {
   })
 
   it('should report Location header with tainted string value', () => {
-    sinon.stub(overheadController, 'hasQuota').returns(1)
-
     unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_LOCATION)
 
     expect(report).to.be.called
   })
 
   it('should not report if tainted origin is referer header exclusively', () => {
-    sinon.stub(overheadController, 'hasQuota').returns(1)
-
     unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_HEADER_REFERER_ONLY)
 
     expect(report).to.not.be.called
   })
 
   it('should report if tainted origin contains referer header among others', () => {
-    sinon.stub(overheadController, 'hasQuota').returns(1)
-
     unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_HEADER_REFERER_AMONG_OTHERS)
 
     expect(report).to.be.called
