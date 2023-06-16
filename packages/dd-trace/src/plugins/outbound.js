@@ -56,13 +56,18 @@ class OutboundPlugin extends TracingPlugin {
 
   startSpan (name, options) {
     const span = super.startSpan(name, options)
+    return span
+  }
+
+  finish () {
+    const span = this.activeSpan
     if (this.tracer._computePeerService) {
       const peerData = this.getPeerService(span.context()._tags)
       if (peerData) {
         span.addTags(peerData)
       }
     }
-    return span
+    super.finish(...arguments)
   }
 
   connect (url) {
