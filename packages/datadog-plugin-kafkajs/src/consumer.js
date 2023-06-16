@@ -1,9 +1,6 @@
 'use strict'
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const Hash = require('./hash')
-
-const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
 class KafkajsConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'kafkajs' }
@@ -30,35 +27,10 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
     }
 
     if (this.config.dsmEnabled) {
-      const currentTimestamp = Date.now()
-      const env = this.tracer._env
-      const checkpointString = getCheckpointString(service, env, groupId, topic, partition)
-      let parentHash
-      let originTimestamp
-      let prevTimestamp
-
-      const prevPathwayCtx = message.headers['dd-pathway-ctx']
-      if (prevPathwayCtx) {
-        [parentHash, originTimestamp, prevTimestamp] = Hash.decodePathwayContext(prevPathwayCtx)
-      } else {
-        parentHash = ENTRY_PARENT_HASH
-        originTimestamp = currentTimestamp
-        prevTimestamp = currentTimestamp
-      }
-      const pathwayHash = Hash.getPathwayHash(checkpointString, parentHash)
-      const edgeLatency = currentTimestamp - prevTimestamp
-      const pathwayLatency = currentTimestamp - originTimestamp
-      const pathwayCtx = Hash.encodePathwayContext(pathwayHash, originTimestamp, currentTimestamp)
-
-      header.metrics['parent_hash'] = parentHash
-      header.metrics['edge_tags'] = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
-      header.metrics['edge_latency'] = edgeLatency
-      header.metrics['pathway_latency'] = pathwayLatency
-      header.metrics['dd-pathway-ctx'] = pathwayCtx
+      this.tracer.decodeDataStreamsContext(message.headers['dd-pathway-ctx'])
+      this.tracer
+        .setCheckpoint(['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka'])
     }
-
-    this.config.latencyStatsProcessor.recordCheckpoint(header)
-
     this.startSpan('kafka.consume', header)
   }
 }
@@ -74,10 +46,6 @@ function extract (tracer, bufferMap) {
   }
 
   return tracer.extract('text_map', textMap)
-}
-
-function getCheckpointString (service, env, groupId, topic, partition) {
-  return `${service}${env}direction:ingroup:${groupId}partition:${partition}topic:${topic}type:kafka`
 }
 
 module.exports = KafkajsConsumerPlugin

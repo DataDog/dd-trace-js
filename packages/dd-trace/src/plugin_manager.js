@@ -4,7 +4,6 @@ const { channel } = require('../../diagnostics_channel')
 const { isFalse } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
-const { LatencyStatsProcessor } = require('./datastreams/latency_stats')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
@@ -71,9 +70,6 @@ module.exports = class PluginManager {
       this._pluginsByName[name] = new Plugin(this._tracer)
     }
     if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
-
-    // TODO: move this somewhere else?
-    if (name === 'kafkajs') this._latencyProcessor = new LatencyStatsProcessor(this._tracerConfig)
 
     const pluginConfig = this._configsByName[name] || {
       enabled: this._tracerConfig.plugins !== false
@@ -153,8 +149,6 @@ module.exports = class PluginManager {
 
     sharedConfig.site = site
     sharedConfig.url = url
-    // TODO: pass this to kafkajs plugin another way
-    sharedConfig.latencyStatsProcessor = this._latencyProcessor
 
     return sharedConfig
   }
