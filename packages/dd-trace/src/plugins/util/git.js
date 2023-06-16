@@ -36,12 +36,8 @@ function isShallowRepository () {
 }
 
 function unshallowRepository () {
-  try {
-    sanitizedExec('git', ['config', 'remote.origin.partialclonefilter', '"blob:none"'])
-    sanitizedExec('git', ['fetch', '--shallow-since="1 month ago"', '--update-shallow', '--refetch'])
-  } catch (err) {
-    log.error(err)
-  }
+  sanitizedExec('git', ['config', 'remote.origin.partialclonefilter', '"blob:none"'])
+  sanitizedExec('git', ['fetch', '--shallow-since="1 month ago"', '--update-shallow', '--refetch'])
 }
 
 function getRepositoryUrl () {
@@ -55,7 +51,7 @@ function getLatestCommits () {
       .split('\n')
       .filter(commit => commit)
   } catch (err) {
-    log.error(err)
+    log.error(`Get latest commits failed: ${err.message}`)
     return []
   }
 }
@@ -80,7 +76,7 @@ function getCommitsToUpload (commitsToExclude) {
       .split('\n')
       .filter(commit => commit)
   } catch (err) {
-    log.error(err)
+    log.error(`Get commits to upload failed: ${err.message}`)
     return []
   }
 }
