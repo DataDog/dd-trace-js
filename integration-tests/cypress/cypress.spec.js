@@ -260,7 +260,7 @@ versions.forEach((version) => {
           .map(file => file.filename)
 
         assert.includeMembers(fileNames, Object.keys(coverageFixture))
-      }, 20000).then(() => done()).catch(done)
+      }, 20000)
 
       childProcess = exec(
         `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
