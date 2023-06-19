@@ -59,6 +59,23 @@ describe('CI Visibility Exporter', () => {
       ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       ciVisibilityExporter.sendGitMetadata()
     })
+    it('should use the input repository URL', (done) => {
+      nock(`http://localhost:${port}`)
+        .post('/api/v2/git/repository/search_commits')
+        .reply(200, function () {
+          const { meta: { repository_url: repositoryUrl } } = JSON.parse(this.req.requestBodyBuffers.toString())
+          expect(repositoryUrl).to.equal('https://custom-git@datadog.com')
+          done()
+        })
+        .post('/api/v2/git/repository/packfile')
+        .reply(202, '')
+
+      const url = new URL(`http://localhost:${port}`)
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
+
+      ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      ciVisibilityExporter.sendGitMetadata('https://custom-git@datadog.com')
+    })
   })
 
   describe('getItrConfiguration', () => {
