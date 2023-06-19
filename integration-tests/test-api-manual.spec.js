@@ -45,10 +45,10 @@ describe('test-api-manual', () => {
 
       const testEvents = events.filter(event => event.type === 'test')
       assert.includeMembers(testEvents.map(test => test.content.resource), [
-        'manual-api/test.fake.js.second test will fail',
-        'manual-api/test.fake.js.first test will pass',
-        'manual-api/test.fake.js.async test will pass',
-        'manual-api/test.fake.js.integration test'
+        'ci-visibility/test-api-manual/test.fake.js.second test will fail',
+        'ci-visibility/test-api-manual/test.fake.js.first test will pass',
+        'ci-visibility/test-api-manual/test.fake.js.async test will pass',
+        'ci-visibility/test-api-manual/test.fake.js.integration test'
       ])
 
       assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
@@ -59,7 +59,7 @@ describe('test-api-manual', () => {
       ])
 
       const passedTest = testEvents.find(
-        test => test.content.resource === 'manual-api/test.fake.js.first test will pass'
+        test => test.content.resource === 'ci-visibility/test-api-manual/test.fake.js.first test will pass'
       )
       assert.propertyVal(passedTest.content.meta, 'test.custom.tag', 'custom.value')
 
@@ -68,8 +68,8 @@ describe('test-api-manual', () => {
     }).catch(done)
 
     childProcess = exec(
-      'node --require ./manual-api/setup-fake-test-framework.js ' +
-      '--require ./manual-api/test.fake.js ./manual-api/run-fake-test-framework',
+      'node --require ./ci-visibility/test-api-manual/setup-fake-test-framework.js ' +
+      '--require ./ci-visibility/test-api-manual/test.fake.js ./ci-visibility/test-api-manual/run-fake-test-framework',
       {
         cwd,
         env: { ...getCiVisAgentlessConfig(receiver.port), DD_CIVISIBILITY_MANUAL_API_ENABLED: '1' },
@@ -87,8 +87,8 @@ describe('test-api-manual', () => {
     }, ({ url }) => url === '/api/v2/citestcycle').catch(() => {})
 
     childProcess = exec(
-      'node --require ./manual-api/setup-fake-test-framework.js ' +
-      '--require ./manual-api/test.fake.js ./manual-api/run-fake-test-framework',
+      'node --require ./ci-visibility/test-api-manual/setup-fake-test-framework.js ' +
+      '--require ./ci-visibility/test-api-manual/test.fake.js ./ci-visibility/test-api-manual/run-fake-test-framework',
       {
         cwd,
         env: getCiVisAgentlessConfig(receiver.port),
