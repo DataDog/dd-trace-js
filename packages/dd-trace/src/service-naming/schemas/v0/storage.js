@@ -19,11 +19,13 @@ function mysqlServiceName (service, config, dbConfig, system) {
   return config.service || fromSystem(service, system)
 }
 
-function pgServiceName (service, config, params) {
-  if (typeof config.service === 'function') {
-    return config.service(params)
+function withSuffixFunction (suffix) {
+  return (service, config, params) => {
+    if (typeof config.service === 'function') {
+      return config.service(params)
+    }
+    return config.service || `${service}-${suffix}`
   }
-  return config.service || `${service}-postgres`
 }
 
 const redisConfig = {
@@ -68,9 +70,13 @@ const storage = {
       opName: () => 'opensearch.query',
       serviceName: (service, config) => config.service || `${service}-opensearch`
     },
+    oracledb: {
+      opName: () => 'oracle.query',
+      serviceName: withSuffixFunction('oracle')
+    },
     pg: {
       opName: () => 'pg.query',
-      serviceName: pgServiceName
+      serviceName: withSuffixFunction('postgres')
     },
     redis: redisConfig,
     tedious: {

@@ -50,6 +50,10 @@ const storage = {
       opName: () => 'opensearch.query',
       serviceName: configWithFallback
     },
+    oracledb: {
+      opName: () => 'oracle.query',
+      serviceName: withFunction
+    },
     pg: {
       opName: () => 'postgresql.query',
       serviceName: withFunction

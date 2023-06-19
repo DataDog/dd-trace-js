@@ -9,10 +9,10 @@ class OracledbPlugin extends DatabasePlugin {
   static get system () { return 'oracle' }
 
   start ({ query, connAttrs }) {
-    const service = getServiceName(this.config, connAttrs)
+    const service = this.serviceName(this.config, connAttrs)
     const url = getUrl(connAttrs.connectString)
 
-    this.startSpan('oracle.query', {
+    this.startSpan(this.operationName(), {
       service,
       resource: query,
       type: 'sql',
@@ -25,14 +25,6 @@ class OracledbPlugin extends DatabasePlugin {
       }
     })
   }
-}
-
-function getServiceName (config, connAttrs) {
-  if (typeof config.service === 'function') {
-    return config.service(connAttrs)
-  }
-
-  return config.service
 }
 
 // TODO: Avoid creating an error since it's a heavy operation.
