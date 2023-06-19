@@ -5,7 +5,7 @@ on:
   push:
     branches: [master]
   schedule:
-    - cron: '0 4 * * *'
+    - cron: "0 4 * * *"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -35,7 +35,7 @@ jobs:
     strategy:
       matrix:
         version: [16, latest]
-        framework: [cucumber, cypress, playwright]
+        framework: [cucumber, playwright]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -45,6 +45,24 @@ jobs:
         with:
           node-version: ${{ matrix.version }}
       - run: yarn test:integration:${{ matrix.framework }}
+
+  integration-cypress:
+    strategy:
+      matrix:
+        version: [16, latest]
+        # 6.7.0 is the minimum version we support
+        cypress-version: [6.7.0, latest]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.version }}
+      - run: yarn test:integration:cypress
+        env:
+          CYPRESS_VERSION: ${{ matrix.cypress-version }}
 
   lint:
     runs-on: ubuntu-latest
