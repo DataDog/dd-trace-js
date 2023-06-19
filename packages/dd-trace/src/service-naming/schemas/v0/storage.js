@@ -32,6 +32,10 @@ const storage = {
       opName: () => 'cassandra.query',
       serviceName: (service, config, system) => config.service || fromSystem(service, system)
     },
+    elasticsearch: {
+      opName: () => 'elasticsearch.query',
+      serviceName: (service, config) => config.service || `${service}-elasticsearch`
+    },
     ioredis: redisConfig,
     mariadb: {
       opName: () => 'mariadb.query',
@@ -48,6 +52,10 @@ const storage = {
     mysql2: {
       opName: () => 'mysql.query',
       serviceName: mysqlServiceName
+    },
+    opensearch: {
+      opName: () => 'opensearch.query',
+      serviceName: (service, config) => config.service || `${service}-opensearch`
     },
     redis: redisConfig,
     tedious: {

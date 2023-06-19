@@ -20,6 +20,10 @@ const storage = {
       opName: () => 'cassandra.query',
       serviceName: configWithFallback
     },
+    elasticsearch: {
+      opName: () => 'elasticsearch.query',
+      serviceName: configWithFallback
+    },
     ioredis: redisNaming,
     mariadb: {
       opName: () => 'mariadb.query',
@@ -31,6 +35,10 @@ const storage = {
     },
     mysql: mySQLNaming,
     mysql2: mySQLNaming,
+    opensearch: {
+      opName: () => 'opensearch.query',
+      serviceName: configWithFallback
+    },
     redis: redisNaming,
     tedious: {
       opName: () => 'mssql.query',
