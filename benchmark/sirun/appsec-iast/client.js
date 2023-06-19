@@ -19,7 +19,7 @@ function request (opts) {
   })
 }
 
-const path = `/?param=value`
+const path = '/?param=value'
 const opts = {
   headers: {
     accept: 'text/html'
