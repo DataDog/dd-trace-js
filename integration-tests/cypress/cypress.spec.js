@@ -59,51 +59,52 @@ versions.forEach((version) => {
     })
 
     it('catches errors in hooks', (done) => {
-      receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-        const events = payloads.flatMap(({ payload }) => payload.events)
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
 
-        // test level hooks
-        const testHookSuite = events.find(
-          event => event.content.resource === 'test_suite.cypress/e2e/hook-test-error.cy.js'
-        )
-        const passedTest = events.find(
-          event => event.content.resource === 'cypress/e2e/hook-test-error.cy.js.hook-test-error tests passes'
-        )
-        const failedTest = events.find(
-          event => event.content.resource ===
-            'cypress/e2e/hook-test-error.cy.js.hook-test-error tests will fail because afterEach fails'
-        )
-        const skippedTest = events.find(
-          event => event.content.resource ===
-            'cypress/e2e/hook-test-error.cy.js.hook-test-error tests does not run because earlier afterEach fails'
-        )
-        assert.equal(passedTest.content.meta[TEST_STATUS], 'pass')
-        assert.equal(failedTest.content.meta[TEST_STATUS], 'fail')
-        assert.include(failedTest.content.meta[ERROR_MESSAGE], 'error in after each hook')
-        assert.equal(skippedTest.content.meta[TEST_STATUS], 'skip')
-        assert.equal(testHookSuite.content.meta[TEST_STATUS], 'fail')
-        assert.include(testHookSuite.content.meta[ERROR_MESSAGE], 'error in after each hook')
+          // test level hooks
+          const testHookSuite = events.find(
+            event => event.content.resource === 'test_suite.cypress/e2e/hook-test-error.cy.js'
+          )
+          const passedTest = events.find(
+            event => event.content.resource === 'cypress/e2e/hook-test-error.cy.js.hook-test-error tests passes'
+          )
+          const failedTest = events.find(
+            event => event.content.resource ===
+              'cypress/e2e/hook-test-error.cy.js.hook-test-error tests will fail because afterEach fails'
+          )
+          const skippedTest = events.find(
+            event => event.content.resource ===
+              'cypress/e2e/hook-test-error.cy.js.hook-test-error tests does not run because earlier afterEach fails'
+          )
+          assert.equal(passedTest.content.meta[TEST_STATUS], 'pass')
+          assert.equal(failedTest.content.meta[TEST_STATUS], 'fail')
+          assert.include(failedTest.content.meta[ERROR_MESSAGE], 'error in after each hook')
+          assert.equal(skippedTest.content.meta[TEST_STATUS], 'skip')
+          assert.equal(testHookSuite.content.meta[TEST_STATUS], 'fail')
+          assert.include(testHookSuite.content.meta[ERROR_MESSAGE], 'error in after each hook')
 
-        // describe level hooks
-        const describeHookSuite = events.find(
-          event => event.content.resource === 'test_suite.cypress/e2e/hook-describe-error.cy.js'
-        )
-        const passedTestDescribe = events.find(
-          event => event.content.resource === 'cypress/e2e/hook-describe-error.cy.js.after passes'
-        )
-        const failedTestDescribe = events.find(
-          event => event.content.resource === 'cypress/e2e/hook-describe-error.cy.js.after will be marked as failed'
-        )
-        const skippedTestDescribe = events.find(
-          event => event.content.resource === 'cypress/e2e/hook-describe-error.cy.js.before will be skipped'
-        )
-        assert.equal(passedTestDescribe.content.meta[TEST_STATUS], 'pass')
-        assert.equal(failedTestDescribe.content.meta[TEST_STATUS], 'fail')
-        assert.include(failedTestDescribe.content.meta[ERROR_MESSAGE], 'error in after hook')
-        assert.equal(skippedTestDescribe.content.meta[TEST_STATUS], 'skip')
-        assert.equal(describeHookSuite.content.meta[TEST_STATUS], 'fail')
-        assert.include(describeHookSuite.content.meta[ERROR_MESSAGE], 'error in after hook')
-      }, 25000).then(() => done()).catch(done)
+          // describe level hooks
+          const describeHookSuite = events.find(
+            event => event.content.resource === 'test_suite.cypress/e2e/hook-describe-error.cy.js'
+          )
+          const passedTestDescribe = events.find(
+            event => event.content.resource === 'cypress/e2e/hook-describe-error.cy.js.after passes'
+          )
+          const failedTestDescribe = events.find(
+            event => event.content.resource === 'cypress/e2e/hook-describe-error.cy.js.after will be marked as failed'
+          )
+          const skippedTestDescribe = events.find(
+            event => event.content.resource === 'cypress/e2e/hook-describe-error.cy.js.before will be skipped'
+          )
+          assert.equal(passedTestDescribe.content.meta[TEST_STATUS], 'pass')
+          assert.equal(failedTestDescribe.content.meta[TEST_STATUS], 'fail')
+          assert.include(failedTestDescribe.content.meta[ERROR_MESSAGE], 'error in after hook')
+          assert.equal(skippedTestDescribe.content.meta[TEST_STATUS], 'skip')
+          assert.equal(describeHookSuite.content.meta[TEST_STATUS], 'fail')
+          assert.include(describeHookSuite.content.meta[ERROR_MESSAGE], 'error in after hook')
+        }, 25000)
 
       const {
         NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -121,90 +122,96 @@ versions.forEach((version) => {
           stdio: 'pipe'
         }
       )
+      childProcess.on('exit', () => {
+        receiverPromise.then(() => {
+          done()
+        }).catch(done)
+      })
     })
 
     it('can run and report tests', (done) => {
-      receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-        const events = payloads.flatMap(({ payload }) => payload.events)
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
 
-        const testSessionEvent = events.find(event => event.type === 'test_session_end')
-        const testModuleEvent = events.find(event => event.type === 'test_module_end')
-        const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
-        const testEvents = events.filter(event => event.type === 'test')
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+          const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+          const testEvents = events.filter(event => event.type === 'test')
 
-        const { content: testSessionEventContent } = testSessionEvent
-        const { content: testModuleEventContent } = testModuleEvent
+          const { content: testSessionEventContent } = testSessionEvent
+          const { content: testModuleEventContent } = testModuleEvent
 
-        assert.exists(testSessionEventContent.test_session_id)
-        assert.exists(testSessionEventContent.meta[TEST_COMMAND])
-        assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
-        assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
-        assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
+          assert.exists(testSessionEventContent.test_session_id)
+          assert.exists(testSessionEventContent.meta[TEST_COMMAND])
+          assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
+          assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
+          assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
-        assert.exists(testModuleEventContent.test_session_id)
-        assert.exists(testModuleEventContent.test_module_id)
-        assert.exists(testModuleEventContent.meta[TEST_COMMAND])
-        assert.exists(testModuleEventContent.meta[TEST_MODULE])
-        assert.equal(testModuleEventContent.resource.startsWith('test_module.'), true)
-        assert.equal(testModuleEventContent.meta[TEST_STATUS], 'fail')
-        assert.equal(
-          testModuleEventContent.test_session_id.toString(10),
-          testSessionEventContent.test_session_id.toString(10)
-        )
-        assert.exists(testModuleEventContent.meta[TEST_FRAMEWORK_VERSION])
+          assert.exists(testModuleEventContent.test_session_id)
+          assert.exists(testModuleEventContent.test_module_id)
+          assert.exists(testModuleEventContent.meta[TEST_COMMAND])
+          assert.exists(testModuleEventContent.meta[TEST_MODULE])
+          assert.equal(testModuleEventContent.resource.startsWith('test_module.'), true)
+          assert.equal(testModuleEventContent.meta[TEST_STATUS], 'fail')
+          assert.equal(
+            testModuleEventContent.test_session_id.toString(10),
+            testSessionEventContent.test_session_id.toString(10)
+          )
+          assert.exists(testModuleEventContent.meta[TEST_FRAMEWORK_VERSION])
 
-        assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
-          'test_suite.cypress/e2e/other.cy.js',
-          'test_suite.cypress/e2e/spec.cy.js'
-        ])
+          assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
+            'test_suite.cypress/e2e/other.cy.js',
+            'test_suite.cypress/e2e/spec.cy.js'
+          ])
 
-        assert.includeMembers(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
-          'pass',
-          'fail'
-        ])
+          assert.includeMembers(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
+            'pass',
+            'fail'
+          ])
 
-        testSuiteEvents.forEach(({
-          content: {
-            meta,
-            test_suite_id: testSuiteId,
-            test_module_id: testModuleId,
-            test_session_id: testSessionId
-          }
-        }) => {
-          assert.exists(meta[TEST_COMMAND])
-          assert.exists(meta[TEST_MODULE])
-          assert.exists(testSuiteId)
-          assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
-          assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
-        })
+          testSuiteEvents.forEach(({
+            content: {
+              meta,
+              test_suite_id: testSuiteId,
+              test_module_id: testModuleId,
+              test_session_id: testSessionId
+            }
+          }) => {
+            assert.exists(meta[TEST_COMMAND])
+            assert.exists(meta[TEST_MODULE])
+            assert.exists(testSuiteId)
+            assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
+            assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+          })
 
-        assert.includeMembers(testEvents.map(test => test.content.resource), [
-          'cypress/e2e/other.cy.js.context passes',
-          'cypress/e2e/spec.cy.js.context passes',
-          'cypress/e2e/spec.cy.js.other context fails'
-        ])
+          assert.includeMembers(testEvents.map(test => test.content.resource), [
+            'cypress/e2e/other.cy.js.context passes',
+            'cypress/e2e/spec.cy.js.context passes',
+            'cypress/e2e/spec.cy.js.other context fails'
+          ])
 
-        assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
-          'pass',
-          'pass',
-          'fail'
-        ])
+          assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
+            'pass',
+            'pass',
+            'fail'
+          ])
 
-        testEvents.forEach(({
-          content: {
-            meta,
-            test_suite_id: testSuiteId,
-            test_module_id: testModuleId,
-            test_session_id: testSessionId
-          }
-        }) => {
-          assert.exists(meta[TEST_COMMAND])
-          assert.exists(meta[TEST_MODULE])
-          assert.exists(testSuiteId)
-          assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
-          assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
-        })
-      }, 25000).then(() => done()).catch(done)
+          testEvents.forEach(({
+            content: {
+              meta,
+              test_suite_id: testSuiteId,
+              test_module_id: testModuleId,
+              test_session_id: testSessionId
+            }
+          }) => {
+            assert.exists(meta[TEST_COMMAND])
+            assert.exists(meta[TEST_MODULE])
+            assert.exists(testSuiteId)
+            assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
+            assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+          })
+        }, 25000)
 
       const {
         NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -222,6 +229,12 @@ versions.forEach((version) => {
           stdio: 'pipe'
         }
       )
+
+      childProcess.on('exit', () => {
+        receiverPromise.then(() => {
+          done()
+        }).catch(done)
+      })
     })
 
     it('can report code coverage if it is available', (done) => {
@@ -230,7 +243,7 @@ versions.forEach((version) => {
         ...restEnvVars
       } = getCiVisAgentlessConfig(receiver.port)
 
-      receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcov', payloads => {
+      const receiverPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcov', payloads => {
         const [{ payload: coveragePayloads }] = payloads
         const coverages = coveragePayloads.map(coverage => coverage.content)
           .flatMap(content => content.coverages)
@@ -260,6 +273,12 @@ versions.forEach((version) => {
           stdio: 'pipe'
         }
       )
+
+      childProcess.on('exit', () => {
+        receiverPromise.then(() => {
+          done()
+        }).catch(done)
+      })
     })
 
     context('intelligent test runner', () => {
@@ -308,11 +327,12 @@ versions.forEach((version) => {
           done(error)
         }, ({ url }) => url.endsWith('/api/v2/citestcov')).catch(() => {})
 
-        receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const eventTypes = events.map(event => event.type)
-          assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
-        }, 25000).then(() => done()).catch(done)
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const eventTypes = events.map(event => event.type)
+            assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+          }, 25000)
 
         const {
           NODE_OPTIONS,
@@ -330,6 +350,12 @@ versions.forEach((version) => {
             stdio: 'pipe'
           }
         )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
       })
       it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
         receiver.setSuitesToSkip([{
@@ -359,6 +385,7 @@ versions.forEach((version) => {
             assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
             assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
           }, 25000)
+
         const skippableRequestPromise = receiver
           .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
           .then(skippableRequest => {
@@ -407,13 +434,14 @@ versions.forEach((version) => {
           done(error)
         }, ({ url }) => url.endsWith('/api/v2/ci/tests/skippable')).catch(() => {})
 
-        receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const notSkippedTest = events.find(event =>
-            event.content.resource === 'cypress/e2e/other.cy.js.context passes'
-          )
-          assert.exists(notSkippedTest)
-        }, 25000).then(() => done()).catch(done)
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const notSkippedTest = events.find(event =>
+              event.content.resource === 'cypress/e2e/other.cy.js.context passes'
+            )
+            assert.exists(notSkippedTest)
+          }, 25000)
 
         const {
           NODE_OPTIONS,
@@ -431,6 +459,12 @@ versions.forEach((version) => {
             stdio: 'pipe'
           }
         )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
       })
     })
   })
