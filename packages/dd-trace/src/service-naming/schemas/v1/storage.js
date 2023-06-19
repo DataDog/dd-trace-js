@@ -14,6 +14,13 @@ const mySQLNaming = {
   serviceName: identityService
 }
 
+function withFunction (service, config, params) {
+  if (typeof config.service === 'function') {
+    return config.service(params)
+  }
+  return configWithFallback(service, config)
+}
+
 const storage = {
   client: {
     'cassandra-driver': {
@@ -42,6 +49,10 @@ const storage = {
     opensearch: {
       opName: () => 'opensearch.query',
       serviceName: configWithFallback
+    },
+    pg: {
+      opName: () => 'postgresql.query',
+      serviceName: withFunction
     },
     redis: redisNaming,
     tedious: {
