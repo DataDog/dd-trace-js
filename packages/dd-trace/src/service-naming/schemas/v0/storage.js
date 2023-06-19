@@ -45,6 +45,10 @@ const storage = {
       opName: () => 'memcached.command',
       serviceName: (service, config, system) => config.service || fromSystem(service, system)
     },
+    'mongodb-core': {
+      opName: () => 'mongodb.query',
+      serviceName: (service, config) => config.service || `${service}-mongodb`
+    },
     mysql: {
       opName: () => 'mysql.query',
       serviceName: mysqlServiceName

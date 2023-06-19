@@ -33,6 +33,10 @@ const storage = {
       opName: () => 'memcached.command',
       serviceName: configWithFallback
     },
+    'mongodb-core': {
+      opName: () => 'mongodb.query',
+      serviceName: configWithFallback
+    },
     mysql: mySQLNaming,
     mysql2: mySQLNaming,
     opensearch: {
