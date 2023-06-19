@@ -62,7 +62,7 @@ jobs:
           node-version: ${{ matrix.version }}
       - run: yarn test:integration:cypress
         env:
-          CYPRESS_VERSION: ${{ matrix.framework-version }}
+          CYPRESS_VERSION: ${{ matrix.cypress-version }}
 
   lint:
     runs-on: ubuntu-latest
