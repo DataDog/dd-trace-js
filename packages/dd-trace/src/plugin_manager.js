@@ -26,7 +26,7 @@ const disabledPlugins = new Set(
 const pluginClasses = {}
 
 loadChannel.subscribe(({ name }) => {
-  maybeEnable(name, plugins[name])
+  maybeEnable(plugins[name])
 })
 
 // Globals
