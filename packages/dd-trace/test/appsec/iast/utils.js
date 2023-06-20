@@ -146,7 +146,7 @@ function checkNoVulnerabilityInRequest (vulnerability, config, done) {
     .catch(done)
   axios.get(`http://localhost:${config.port}/`).catch(done)
 }
-function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb, config, done) {
+function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb, makeRequest, config, done) {
   let location
   let occurrences = occurrencesAndLocation
   if (typeof occurrencesAndLocation === 'object') {
@@ -195,7 +195,11 @@ function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb,
     })
     .then(done)
     .catch(done)
-  axios.get(`http://localhost:${config.port}/`).catch(done)
+  if (makeRequest) {
+    makeRequest(done)
+  } else {
+    axios.get(`http://localhost:${config.port}/`).catch(done)
+  }
 }
 
 function prepareTestServerForIast (description, tests, iastConfig) {
@@ -247,7 +251,7 @@ function prepareTestServerForIast (description, tests, iastConfig) {
       it(`should have ${vulnerability} vulnerability`, function (done) {
         this.timeout(5000)
         app = fn
-        checkVulnerabilityInRequest(vulnerability, occurrences, cb, config, done)
+        checkVulnerabilityInRequest(vulnerability, occurrences, cb, undefined, config, done)
       })
     }
 
@@ -278,7 +282,10 @@ function prepareTestServerForIastInExpress (description, expressVersion, tests) 
 
     before((done) => {
       const express = require(`../../../../../versions/express@${expressVersion}`).get()
+      const bodyParser = require(`../../../../../versions/body-parser`).get()
       const expressApp = express()
+      expressApp.use(bodyParser.json())
+
       expressApp.all('/', listener)
       getPort().then(newPort => {
         config.port = newPort
@@ -300,11 +307,11 @@ function prepareTestServerForIastInExpress (description, expressVersion, tests) 
       return agent.close({ ritmReset: false })
     })
 
-    function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb) {
+    function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb, makeRequest) {
       it(`should have ${vulnerability} vulnerability`, function (done) {
         this.timeout(5000)
         app = fn
-        checkVulnerabilityInRequest(vulnerability, occurrences, cb, config, done)
+        checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done)
       })
     }
 
