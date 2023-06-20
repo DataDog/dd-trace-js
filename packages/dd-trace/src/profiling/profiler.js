@@ -43,6 +43,13 @@ class Profiler extends EventEmitter {
     let mapper
     try {
       mapper = await maybeSourceMap(config.sourceMap)
+      if (mapper) {
+        this._logger.debug(() => {
+          return mapper.infoMap.size === 0
+            ? 'Found no source maps'
+            : `Found source-maps for following files: [${Array.from(mapper.infoMap.keys()).join(', ')}]`
+        })
+      }
     } catch (err) {
       this._logger.error(err)
     }
