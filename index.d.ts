@@ -749,6 +749,7 @@ interface Plugins {
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
   "fastify": plugins.fastify;
+  "fetch": plugins.fetch;
   "generic-pool": plugins.generic_pool;
   "google-cloud-pubsub": plugins.google_cloud_pubsub;
   "graphql": plugins.graphql;
@@ -1091,6 +1092,12 @@ declare namespace plugins {
    * [fastify](https://www.fastify.io/) module.
    */
   interface fastify extends HttpServer {}
+
+  /**
+   * This plugin automatically instruments the
+   * [fetch](https://nodejs.org/api/globals.html#fetch) global.
+   */
+  interface fetch extends HttpClient {}
 
   /**
    * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
