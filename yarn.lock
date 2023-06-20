@@ -409,16 +409,16 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/pprof@^2.2.1":
-  version "2.2.1"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-2.2.1.tgz#405e39f354beeb0f53ffa248e03ea64b2e8d5549"
-  integrity sha512-kPxN9ADjajUEU1zRtVqLT/q5AP8Ge7S1R1UkpUlKOzNgBznFXmNzhTtQqGhB8ew6LPssfIQTDVd/rBIcJvuMOw==
+"@datadog/pprof@^2.2.2":
+  version "2.2.2"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-2.2.2.tgz#5cc8aa2c198bb594bc8ecd85c94adbfac6e75563"
+  integrity sha512-6FVmgQoYvHVnpnAzfTHRIONJQprEJ6PdrfA3Kn4dfVEXZMH42PBRLSNWe4qoi5AKmr4SoIc6Ay7VAlHb/cDNjA==
   dependencies:
     delay "^5.0.0"
     node-gyp-build "^3.9.0"
     p-limit "^3.1.0"
     pify "^5.0.0"
-    pprof-format "^2.0.6"
+    pprof-format "^2.0.7"
     source-map "^0.7.3"
     split "^1.0.1"
 
@@ -3629,7 +3629,7 @@ platform@^1.3.3:
   resolved "https://registry.yarnpkg.com/platform/-/platform-1.3.6.tgz#48b4ce983164b209c2d45a107adb31f473a6e7a7"
   integrity sha512-fnWVljUchTro6RiCFvCXBbNhJc2NijN7oIQxbwsyL0buWJPG85v81ehlHI9fXrJsMNgTofEoWIQeClKpgxFLrg==
 
-pprof-format@^2.0.6, pprof-format@^2.0.7:
+pprof-format@^2.0.7:
   version "2.0.7"
   resolved "https://registry.yarnpkg.com/pprof-format/-/pprof-format-2.0.7.tgz#526e4361f8b37d16b2ec4bb0696b5292de5046a4"
   integrity sha512-1qWaGAzwMpaXJP9opRa23nPnt2Egi7RMNoNBptEE/XwHbcn4fC2b/4U4bKc5arkGkIh2ZabpF2bEb+c5GNHEKA==
