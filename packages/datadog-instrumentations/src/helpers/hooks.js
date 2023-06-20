@@ -14,6 +14,7 @@ module.exports = {
   '@koa/router': () => require('../koa'),
   '@node-redis/client': () => require('../redis'),
   '@opensearch-project/opensearch': () => require('../opensearch'),
+  '@opentelemetry/sdk-trace-node': () => require('../otel-sdk-trace'),
   '@redis/client': () => require('../redis'),
   'amqp10': () => require('../amqp10'),
   'amqplib': () => require('../amqplib'),
