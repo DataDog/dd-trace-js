@@ -1,63 +1,67 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { incomingHttpRequestStart, incomingHttpRequestEnd } = require('../../dd-trace/src/appsec/channels')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
-class HttpServerPlugin extends Plugin {
+class HttpServerPlugin extends ServerPlugin {
   static get id () {
     return 'http'
   }
 
   constructor (...args) {
     super(...args)
-
     this._parentStore = undefined
+    this.addTraceSub('exit', message => this.exit(message))
+  }
 
-    this.addSub('apm:http:server:request:start', ({ req, res, abortController }) => {
-      const store = storage.getStore()
-      const span = web.startSpan(this.tracer, this.config, req, res, 'web.request')
+  addTraceSub (eventName, handler) {
+    this.addSub(`apm:${this.constructor.id}:server:${this.operation}:${eventName}`, handler)
+  }
 
-      span.setTag(COMPONENT, this.constructor.id)
+  start ({ req, res, abortController }) {
+    const store = storage.getStore()
+    const span = web.startSpan(this.tracer, this.config, req, res, 'web.request')
 
-      this._parentStore = store
-      this.enter(span, { ...store, req, res })
+    span.setTag(COMPONENT, this.constructor.id)
 
-      const context = web.getContext(req)
+    this._parentStore = store
+    this.enter(span, { ...store, req, res })
 
-      if (!context.instrumented) {
-        context.res.writeHead = web.wrapWriteHead(context)
-        context.instrumented = true
-      }
+    const context = web.getContext(req)
 
-      if (incomingHttpRequestStart.hasSubscribers) {
-        incomingHttpRequestStart.publish({ req, res, abortController }) // TODO: no need to make a new object here
-      }
-    })
+    if (!context.instrumented) {
+      context.res.writeHead = web.wrapWriteHead(context)
+      context.instrumented = true
+    }
 
-    this.addSub('apm:http:server:request:error', (error) => {
-      web.addError(error)
-    })
+    if (incomingHttpRequestStart.hasSubscribers) {
+      incomingHttpRequestStart.publish({ req, res, abortController }) // TODO: no need to make a new object here
+    }
+  }
 
-    this.addSub('apm:http:server:request:exit', ({ req }) => {
-      const span = this._parentStore && this._parentStore.span
-      this.enter(span, this._parentStore)
-      this._parentStore = undefined
-    })
+  error (error) {
+    web.addError(error)
+  }
 
-    this.addSub('apm:http:server:request:finish', ({ req }) => {
-      const context = web.getContext(req)
+  finish ({ req }) {
+    const context = web.getContext(req)
 
-      if (!context || !context.res) return // Not created by a http.Server instance.
+    if (!context || !context.res) return // Not created by a http.Server instance.
 
-      if (incomingHttpRequestEnd.hasSubscribers) {
-        incomingHttpRequestEnd.publish({ req, res: context.res })
-      }
+    if (incomingHttpRequestEnd.hasSubscribers) {
+      incomingHttpRequestEnd.publish({ req, res: context.res })
+    }
 
-      web.finishAll(context)
-    })
+    web.finishAll(context)
+  }
+
+  exit ({ req }) {
+    const span = this._parentStore && this._parentStore.span
+    this.enter(span, this._parentStore)
+    this._parentStore = undefined
   }
 
   configure (config) {
