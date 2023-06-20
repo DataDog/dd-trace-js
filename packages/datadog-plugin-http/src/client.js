@@ -31,7 +31,7 @@ class HttpClientPlugin extends ClientPlugin {
     const protocol = options.protocol || agent.protocol || 'http:'
     const hostname = options.hostname || options.host || 'localhost'
     const host = options.port ? `${hostname}:${options.port}` : hostname
-    const pathname = options.pathname || options.path
+    const pathname = options.path || options.pathname
     const path = pathname ? pathname.split(/[?#]/)[0] : '/'
     const uri = `${protocol}//${host}${path}`
 
@@ -110,10 +110,14 @@ class HttpClientPlugin extends ClientPlugin {
 }
 
 function addResponseHeaders (res, span, config) {
-  const headers = new Map(res.headers)
+  if (!res.headers) return
+
+  const headers = typeof res.headers.entries === 'function'
+    ? Object.fromEntries(res.headers.entries())
+    : res.headers
 
   config.headers.forEach(key => {
-    const value = headers.get(key)
+    const value = headers[key]
 
     if (value) {
       span.setTag(`${HTTP_RESPONSE_HEADERS}.${key}`, value)
@@ -122,10 +126,12 @@ function addResponseHeaders (res, span, config) {
 }
 
 function addRequestHeaders (req, span, config) {
-  const headers = new Map(req.headers || req.getHeaders())
+  const headers = req.headers && typeof req.headers.entries === 'function'
+    ? Object.fromEntries(req.headers.entries())
+    : req.headers || req.getHeaders()
 
   config.headers.forEach(key => {
-    const value = headers.get(key)
+    const value = headers[key]
 
     if (value) {
       span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, Array.isArray(value) ? value.toString() : value)
