@@ -27,6 +27,8 @@ function wrapFetch (fetch, Request) {
       .then(
         res => {
           finishChannel.publish({ req, res })
+
+          return res
         },
         err => {
           if (err.name !== 'AbortError') {

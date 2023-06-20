@@ -125,6 +125,23 @@ describe('Plugin', () => {
         })
       })
 
+      it('should return the response', done => {
+        const app = express()
+        app.get('/user', (req, res) => {
+          res.status(200).send()
+        })
+        getPort().then(port => {
+          appListener = server(app, port, () => {
+            fetch(new globalThis.Request(`http://localhost:${port}/user`))
+              .then(res => {
+                expect(res).to.have.property('status', 200)
+                done()
+              })
+              .catch(done)
+          })
+        })
+      })
+
       it('should remove the query string from the URL', done => {
         const app = express()
 
