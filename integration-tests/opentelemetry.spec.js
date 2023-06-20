@@ -45,7 +45,12 @@ describe('opentelemetry', () => {
   const timeout = 5000
 
   before(async () => {
-    sandbox = await createSandbox()
+    sandbox = await createSandbox([
+      '@opentelemetry/api',
+      '@opentelemetry/sdk-node',
+      // Needed because sdk-node doesn't start a tracer without an exporter
+      '@opentelemetry/exporter-jaeger'
+    ])
     cwd = sandbox.folder
     agent = await new FakeAgent().start()
   })
@@ -100,6 +105,25 @@ describe('opentelemetry', () => {
       const [webSpan, otelSpan, ddSpan] = trace
       assert.strictEqual(otelSpan.parent_id.toString(), webSpan.span_id.toString())
       assert.strictEqual(ddSpan.parent_id.toString(), otelSpan.span_id.toString())
+    })
+  })
+
+  it('should auto-instrument @opentelemetry/sdk-node', async () => {
+    proc = fork(join(cwd, 'opentelemetry/env-var.js'), {
+      cwd,
+      env: {
+        DD_TRACE_AGENT_PORT: agent.port
+      }
+    })
+    return check(agent, proc, timeout, ({ payload }) => {
+      // Should have a single trace with a single span
+      assert.strictEqual(payload.length, 1)
+      const [trace] = payload
+      assert.strictEqual(trace.length, 1)
+      const [span] = trace
+
+      // Should be the expected otel span
+      assert.strictEqual(span.name, 'otel-sub')
     })
   })
 })
