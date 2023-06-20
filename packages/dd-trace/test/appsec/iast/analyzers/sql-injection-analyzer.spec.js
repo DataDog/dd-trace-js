@@ -2,6 +2,9 @@
 
 const proxyquire = require('proxyquire')
 
+const iastLog = require('../../../../src/appsec/iast/iast-log')
+const dc = require('../../../../../diagnostics_channel')
+
 describe('sql-injection-analyzer', () => {
   const NOT_TAINTED_QUERY = 'no vulnerable query'
   const TAINTED_QUERY = 'vulnerable query'
@@ -17,6 +20,10 @@ describe('sql-injection-analyzer', () => {
   })
   const sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
     './injection-analyzer': InjectionAnalyzer
+  })
+
+  afterEach(() => {
+    sinon.restore()
   })
 
   it('should subscribe to mysql, mysql2 and pg start query channel', () => {
@@ -82,5 +89,13 @@ describe('sql-injection-analyzer', () => {
       type: 'SQL_INJECTION',
       evidence: { dialect: dialect }
     })
+  })
+
+  it('should not report an error when context is not initialized', () => {
+    sinon.stub(iastLog, 'errorAndPublish')
+    sqlInjectionAnalyzer.configure(true)
+    dc.channel('datadog:sequelize:query:finish').publish()
+    sqlInjectionAnalyzer.configure(false)
+    expect(iastLog.errorAndPublish).not.to.be.called
   })
 })
