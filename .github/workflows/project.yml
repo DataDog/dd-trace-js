@@ -78,3 +78,21 @@ jobs:
       - run: yarn install
       - run: yarn type:test
       - run: yarn type:doc
+
+  injection-image-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+      - name: Log in to the Container registry
+        uses: docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: npm pack for injection image
+        run: |
+          npm pack dd-trace@dev
+      - uses: ./.github/actions/injection
+        with:
+          init-image-version: dev
