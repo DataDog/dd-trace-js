@@ -7,8 +7,9 @@ const DogStatsDClient = require('../../dd-trace/src/dogstatsd')
 const ExternalLogger = require('../../dd-trace/src/external-logger/src')
 const { storage } = require('../../datadog-core')
 
-const INTERVAL = 10 * 1000
+const FLUSH_INTERVAL = 10 * 1000
 
+// TODO: In the future we should refactor config.js to make it requirable
 let MAX_TEXT_LEN = 128
 
 class OpenApiPlugin extends TracingPlugin {
@@ -19,7 +20,6 @@ class OpenApiPlugin extends TracingPlugin {
   constructor (...args) {
     super(...args)
 
-    // TODO: Lazy load this only if the application is using the openai package
     this.metrics = new DogStatsDClient({
       host: this._tracerConfig.dogstatsd.hostname,
       port: this._tracerConfig.dogstatsd.port,
@@ -35,12 +35,12 @@ class OpenApiPlugin extends TracingPlugin {
       hostname: this._tracerConfig.hostname,
       service: this._tracerConfig.service,
       apiKey: this._tracerConfig.apiKey,
-      interval: INTERVAL
+      interval: FLUSH_INTERVAL
     })
 
     this.interval = setInterval(() => {
       this.metrics.flush()
-    }, INTERVAL).unref()
+    }, FLUSH_INTERVAL).unref()
 
     // hoist the max length env var to avoid making all of these functions a class method
     MAX_TEXT_LEN = this._tracerConfig.openaiSpanCharLimit
@@ -102,9 +102,9 @@ class OpenApiPlugin extends TracingPlugin {
 
     // createEdit, createEmbedding, createModeration
     if ('input' in payload) {
-      const input = normalizeStringOrTokenArray(payload.input)
-      tags[`openai.request.input`] = input
-      store.input = input
+      const normalized = normalizeStringOrTokenArray(payload.input, false)
+      tags[`openai.request.input`] = truncateText(normalized)
+      store.input = normalized
     }
 
     // createChatCompletion, createCompletion
@@ -668,12 +668,11 @@ function normalizeRequestPayload (methodName, args) {
  * "foo" -> "foo"
  * [1,2,3] -> "[1, 2, 3]"
  */
-function normalizeStringOrTokenArray (input) {
-  return truncateText(
-    Array.isArray(input)
-      ? `[${input.join(', ')}]` // "[1, 2, 999]"
-      : input // "foo"
-  )
+function normalizeStringOrTokenArray (input, truncate = true) {
+  const normalized = Array.isArray(input)
+    ? `[${input.join(', ')}]` // "[1, 2, 999]"
+    : input // "foo"
+  return truncate ? truncateText(normalized) : normalized
 }
 
 module.exports = OpenApiPlugin

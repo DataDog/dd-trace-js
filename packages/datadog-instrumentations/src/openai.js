@@ -14,7 +14,6 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0'] }, exports 
   const methodNames = Object.getOwnPropertyNames(exports.OpenAIApi.prototype)
   methodNames.shift() // remove leading 'constructor' method
 
-  // TODO: shimmer.massWrap doesn't provide method name?
   for (const methodName of methodNames) {
     shimmer.wrap(exports.OpenAIApi.prototype, methodName, fn => async function () {
       if (!startCh.hasSubscribers) {
