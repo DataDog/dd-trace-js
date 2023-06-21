@@ -12,9 +12,9 @@ function wrapVerifiedAndPublish (username, password, verified) {
       passportVerifyChannel.publish({ credentials, user })
       return verified.apply(this, arguments)
     })
-  } else {
-    return verified
   }
+
+  return verified
 }
 
 function wrapVerify (verify, passReq) {
