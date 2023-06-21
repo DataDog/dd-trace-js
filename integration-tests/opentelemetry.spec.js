@@ -4,6 +4,7 @@ const { FakeAgent, createSandbox } = require('./helpers')
 const { fork } = require('child_process')
 const { join } = require('path')
 const { assert } = require('chai')
+const { satisfies } = require('semver')
 
 function check (agent, proc, timeout, onMessage = () => { }) {
   return Promise.all([
@@ -45,12 +46,15 @@ describe('opentelemetry', () => {
   const timeout = 5000
 
   before(async () => {
-    sandbox = await createSandbox([
-      '@opentelemetry/api',
-      '@opentelemetry/sdk-node',
+    const dependencies = [
+      '@opentelemetry/api'
+    ]
+    if (satisfies(process.version.slice(1), '>=14')) {
+      dependencies.push('@opentelemetry/sdk-node')
       // Needed because sdk-node doesn't start a tracer without an exporter
-      '@opentelemetry/exporter-jaeger'
-    ])
+      dependencies.push('@opentelemetry/exporter-jaeger')
+    }
+    sandbox = await createSandbox(dependencies)
     cwd = sandbox.folder
     agent = await new FakeAgent().start()
   })
@@ -108,22 +112,24 @@ describe('opentelemetry', () => {
     })
   })
 
-  it('should auto-instrument @opentelemetry/sdk-node', async () => {
-    proc = fork(join(cwd, 'opentelemetry/env-var.js'), {
-      cwd,
-      env: {
-        DD_TRACE_AGENT_PORT: agent.port
-      }
-    })
-    return check(agent, proc, timeout, ({ payload }) => {
-      // Should have a single trace with a single span
-      assert.strictEqual(payload.length, 1)
-      const [trace] = payload
-      assert.strictEqual(trace.length, 1)
-      const [span] = trace
+  if (satisfies(process.version.slice(1), '>=14')) {
+    it('should auto-instrument @opentelemetry/sdk-node', async () => {
+      proc = fork(join(cwd, 'opentelemetry/env-var.js'), {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: agent.port
+        }
+      })
+      return check(agent, proc, timeout, ({ payload }) => {
+        // Should have a single trace with a single span
+        assert.strictEqual(payload.length, 1)
+        const [trace] = payload
+        assert.strictEqual(trace.length, 1)
+        const [span] = trace
 
-      // Should be the expected otel span
-      assert.strictEqual(span.name, 'otel-sub')
+        // Should be the expected otel span
+        assert.strictEqual(span.name, 'otel-sub')
+      })
     })
-  })
+  }
 })
