@@ -26,8 +26,13 @@ const disabledPlugins = new Set(
 const pluginClasses = {}
 
 loadChannel.subscribe(({ name }) => {
-  const Plugin = plugins[name]
+  maybeEnable(plugins[name])
+})
 
+// Globals
+maybeEnable(require('../../datadog-plugin-fetch/src'))
+
+function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
     const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
@@ -42,7 +47,7 @@ loadChannel.subscribe(({ name }) => {
       pluginClasses[Plugin.id] = Plugin
     }
   }
-})
+}
 
 // TODO this must always be a singleton.
 module.exports = class PluginManager {
