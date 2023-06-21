@@ -25,7 +25,8 @@ jobs:
       - run: npm publish --tag dev
       - run: |
           git tag --force dev
-          git push --force origin dev
+          git push origin :refs/tags/dev
+          git push origin --tags
 
   injection-image-publish:
     runs-on: ubuntu-latest
