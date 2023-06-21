@@ -80,3 +80,16 @@ deploy_latest_to_docker_registries:
     IMG_SIGNING: "false"
     RETRY_COUNT: 5
     RETRY_DELAY: 300
+
+deploy_dev_to_docker_registries:
+  stage: deploy
+  trigger:
+    project: DataDog/public-images
+    branch: main
+    strategy: depend
+  variables:
+    IMG_SOURCES: ghcr.io/datadog/dd-trace-js/dd-lib-js-init:dev
+    IMG_DESTINATIONS: dd-lib-js-init:dev
+    IMG_SIGNING: "false"
+    RETRY_COUNT: 5
+    RETRY_DELAY: 300
