@@ -152,8 +152,11 @@ function uploadPackFile ({ url, isEvpProxy, packFileToUpload, repositoryUrl, hea
 /**
  * This function uploads git metadata to CI Visibility's backend.
 */
-function sendGitMetadata (url, isEvpProxy, callback) {
-  const repositoryUrl = getRepositoryUrl()
+function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
+  let repositoryUrl = configRepositoryUrl
+  if (!repositoryUrl) {
+    repositoryUrl = getRepositoryUrl()
+  }
 
   if (!repositoryUrl) {
     return callback(new Error('Repository URL is empty'))
