@@ -81,9 +81,9 @@ function extractContext (args) {
  *
  * @param {*} lambdaHandler a Lambda handler function.
  */
-exports.datadog = function datadog (lambdaHandler) {
-  return (...args) => {
-    const patched = lambdaHandler.apply(this, args)
+exports.datadog = function datadog(lambdaHandler) {
+  return async (...args) => {
+    const patched = await lambdaHandler.apply(this, args)
 
     try {
       const context = extractContext(args)
