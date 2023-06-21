@@ -21,9 +21,17 @@ function isSdkCalled (tags) {
 }
 
 function getLogin (credentials) {
-  if (credentials && credentials.type === 'local') {
-    return credentials.username
+  const type = credentials && credentials.type
+  let login
+  if (type === 'local') {
+    login = credentials.username
+  } else if (type === 'http') {
+    login = credentials.username
+  } else {
+    login = undefined
   }
+
+  return login
 }
 
 function parseUser (login, passportUser, mode) {
@@ -41,7 +49,7 @@ function parseUser (login, passportUser, mode) {
 
     if (mode === 'safe') {
       if (!regexUsername.test(user['usr.id'])) {
-        user['usr.id'] = ''
+        user['usr.id'] = ' '
       }
     } else {
       if (login) {
