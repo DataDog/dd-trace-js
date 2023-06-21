@@ -11,5 +11,6 @@ module.exports = {
   'SSRF': require('./ssrf-analyzer'),
   'UNVALIDATED_REDIRECT_ANALYZER': require('./unvalidated-redirect-analyzer'),
   'WEAK_CIPHER_ANALYZER': require('./weak-cipher-analyzer'),
-  'WEAK_HASH_ANALYZER': require('./weak-hash-analyzer')
+  'WEAK_HASH_ANALYZER': require('./weak-hash-analyzer'),
+  'XCONTENTTYPE_HEADER_MISSING': require('./xcontenttype-header-missing-analyzer')
 }
