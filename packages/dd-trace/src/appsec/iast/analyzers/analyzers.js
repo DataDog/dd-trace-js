@@ -2,6 +2,7 @@
 
 module.exports = {
   'COMMAND_INJECTION_ANALYZER': require('./command-injection-analyzer'),
+  'HSTS_HEADER_MISSING_ANALYZER': require('./hsts-header-missing-analyzer'),
   'INSECURE_COOKIE_ANALYZER': require('./insecure-cookie-analyzer'),
   'LDAP_ANALYZER': require('./ldap-injection-analyzer'),
   'NO_HTTPONLY_COOKIE_ANALYZER': require('./no-httponly-cookie-analyzer'),
