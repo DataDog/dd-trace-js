@@ -8,7 +8,7 @@ const passportVerifyChannel = channel('datadog:passport:verify:finish')
 function wrapVerifiedAndPublish (username, password, verified) {
   if (passportVerifyChannel.hasSubscribers) {
     return shimmer.wrap(verified, function (err, user, info) {
-      const credentials = { type: 'http', username: username, password: password }
+      const credentials = { type: 'http', username, password }
       passportVerifyChannel.publish({ credentials, user })
       return verified.call(this, err, user, info)
     })
