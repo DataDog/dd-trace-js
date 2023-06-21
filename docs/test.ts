@@ -248,6 +248,8 @@ tracer.use('express');
 tracer.use('express', httpServerOptions);
 tracer.use('fastify');
 tracer.use('fastify', httpServerOptions);
+tracer.use('fetch');
+tracer.use('fetch', httpClientOptions);
 tracer.use('fs');
 tracer.use('generic-pool');
 tracer.use('google-cloud-pubsub');
