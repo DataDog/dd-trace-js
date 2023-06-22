@@ -3,11 +3,8 @@
 const path = require('path')
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const DogStatsDClient = require('../../dd-trace/src/dogstatsd')
-const ExternalLogger = require('../../dd-trace/src/external-logger/src')
 const { storage } = require('../../datadog-core')
-
-const FLUSH_INTERVAL = 10 * 1000
+const services = require('./services')
 
 // TODO: In the future we should refactor config.js to make it requirable
 let MAX_TEXT_LEN = 128
@@ -20,30 +17,20 @@ class OpenApiPlugin extends TracingPlugin {
   constructor (...args) {
     super(...args)
 
-    this.metrics = new DogStatsDClient({
-      host: this._tracerConfig.dogstatsd.hostname,
-      port: this._tracerConfig.dogstatsd.port,
-      tags: [
-        `service:${this._tracerConfig.tags.service}`,
-        `env:${this._tracerConfig.tags.env}`,
-        `version:${this._tracerConfig.tags.version}`
-      ]
-    })
-
-    this.logger = new ExternalLogger({
-      ddsource: 'openai',
-      hostname: this._tracerConfig.hostname,
-      service: this._tracerConfig.service,
-      apiKey: this._tracerConfig.apiKey,
-      interval: FLUSH_INTERVAL
-    })
-
-    this.interval = setInterval(() => {
-      this.metrics.flush()
-    }, FLUSH_INTERVAL).unref()
+    const { metrics, logger } = services.init(this._tracerConfig)
+    this.metrics = metrics
+    this.logger = logger
 
     // hoist the max length env var to avoid making all of these functions a class method
     MAX_TEXT_LEN = this._tracerConfig.openaiSpanCharLimit
+  }
+
+  configure(config) {
+    if (config.enabled === false) {
+      services.shutdown()
+    }
+
+    super.configure(config)
   }
 
   start ({ methodName, args, basePath, apiKey }) {
