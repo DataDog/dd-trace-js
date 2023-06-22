@@ -191,29 +191,36 @@ class OpenApiPlugin extends TracingPlugin {
 
     super.finish()
     this.sendLog(methodName, span, tags, store, false)
-    this.sendMetrics(headers, body, endpoint, span._duration, false)
+    this.sendMetrics(headers, body, endpoint, span._duration)
   }
 
   error (...args) {
     super.error(...args)
-    // TODO: We don't know the endpoint here and may not have a body or headers
-    // this.sendMetrics(headers, body, endpoint, span._duration, true)
-    // this.sendLog(methodName, span, tags, store, true)
+
+    const span = this.activeSpan
+    const methodName = span._spanContext._tags['resource.name']
+
+    const fullStore = storage.getStore()
+    const store = fullStore.openai
+
+    // We don't know most information about the request when it fails
+
+    const tags = [`error:1`]
+    this.metrics.distribution('openai.request.duration', span._duration * 1000, tags)
+    this.metrics.increment('openai.request.error', 1, tags)
+
+    this.sendLog(methodName, span, {}, store, true)
   }
 
-  sendMetrics (headers, body, endpoint, duration, error) {
+  sendMetrics (headers, body, endpoint, duration) {
     const tags = [
       `org:${headers['openai-organization']}`,
       `endpoint:${endpoint}`, // just "/v1/models", no method
       `model:${headers['openai-model']}`,
-      `error:${error ? '1' : '0'}`
+      `error:0`
     ]
 
-    this.metrics.distribution('openai.request.duration', duration * 1000, tags) // measured in nanoseconds
-
-    if (error) {
-      this.metrics.increment('openai.request.error', 1, tags)
-    }
+    this.metrics.distribution('openai.request.duration', duration * 1000, tags)
 
     if (body && ('usage' in body)) {
       const promptTokens = body.usage.prompt_tokens
@@ -241,6 +248,7 @@ class OpenApiPlugin extends TracingPlugin {
   }
 
   sendLog (methodName, span, tags, store, error) {
+    if (!this._tracerConfig.apiKey) return
     if (!Object.keys(store).length) return
 
     const log = {
