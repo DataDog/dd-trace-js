@@ -52,7 +52,7 @@ class MissingHeaderAnalyzer extends Analyzer {
   _isResponseHtml (res) {
     const contentType = res.getHeader('content-type')
     return contentType && HTML_CONTENT_TYPES.some(htmlContentType => {
-      return htmlContentType === contentType || contentType.indexOf(htmlContentType + ';') === 0
+      return htmlContentType === contentType || contentType.startsWith(htmlContentType + ';')
     })
   }
 }
