@@ -4,6 +4,7 @@ const { expect } = require('chai')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const namingSchema = require('./naming')
 
 describe('Plugin', () => {
   let tracer
@@ -174,6 +175,20 @@ describe('Plugin', () => {
         after(() => {
           return agent.close({ ritmReset: false })
         })
+
+        withNamingSchema(
+          done => {
+            const source = `query MyQuery { hello(name: "world") }`
+            const variableValues = { who: 'world' }
+            graphql.graphql({ schema, source, variableValues }).catch(done)
+          },
+          () => namingSchema.server.opName,
+          () => namingSchema.server.serviceName,
+          (traces) => {
+            const spans = sort(traces[0])
+            return spans[0]
+          }
+        )
 
         it('should instrument parsing', done => {
           const source = `query MyQuery { hello(name: "world") }`
