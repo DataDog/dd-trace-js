@@ -8,7 +8,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
   static get operation () { return 'produce' }
 
   start ({ topic, messages }) {
-
+    // TODO: extract this block to the base class when we support more queue products
     let pathwayCtx
     if (this.config.dsmEnabled) {
       const dataStreamsContext = this.tracer
@@ -26,7 +26,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
         'kafka.batch_size': messages.length
       }
     })
-
+    // TODO: extract this block to the base class when we support more queue products
     for (const message of messages) {
       if (typeof message === 'object') {
         if (this.config.dsmEnabled) message.headers['dd-pathway-ctx'] = pathwayCtx

@@ -52,6 +52,7 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
 
 function appStarted () {
   return {
+    integrations: getIntegrations(),
     configuration: flatten(config),
     additional_payload: []
   }

@@ -3,6 +3,7 @@
 // this inconsistency is ok because hashes do not need to be consistent across services
 const fnv = require('fnv-plus')
 const { encodeVarint, decodeVarint } = require('./encoding')
+const cache = require('lru-cache')
 
 function fnvHash (checkpointString) {
   const hash = fnv.hash(checkpointString, 64)
@@ -10,13 +11,23 @@ function fnvHash (checkpointString) {
 }
 
 function computeHash (service, env, edgeTags, parentHash) {
+  const key = `${service}${env}` + edgeTags.join('') + parentHash.toString()
+  if (cache.has(key)) {
+    return cache.get(key)
+  }
   const currentHash = fnvHash(`${service}${env}` + edgeTags.join(''))
   const buf = Buffer.concat([ currentHash, parentHash ], 16)
-  return fnvHash(buf.toString())
+  const val = fnvHash(buf.toString())
+  cache.set(key, val)
+  return val
 }
 
 function encodePathwayContext (dataStreamsContext) {
-  return Buffer.concat([ dataStreamsContext.hash, Buffer.from(encodeVarint(Math.round(dataStreamsContext.pathwayStartNs / 1e6))), Buffer.from(encodeVarint(Math.round(dataStreamsContext.edgeStartNs / 1e6))) ], 20)
+  return Buffer.concat([
+    dataStreamsContext.hash,
+    Buffer.from(encodeVarint(Math.round(dataStreamsContext.pathwayStartNs / 1e6))),
+    Buffer.from(encodeVarint(Math.round(dataStreamsContext.edgeStartNs / 1e6)))
+  ], 20)
 }
 
 function decodePathwayContext (pathwayContext) {
