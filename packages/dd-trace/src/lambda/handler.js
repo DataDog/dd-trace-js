@@ -82,13 +82,10 @@ function extractContext (args) {
  * @param {*} lambdaHandler a Lambda handler function.
  */
 exports.datadog = function datadog (lambdaHandler) {
-  return async (...args) => {
+  return (...args) => {
     const context = extractContext(args)
 
     checkTimeout(context)
-    const patched = await lambdaHandler.apply(this, args)
-    clearTimeout(__lambdaTimeout)
-
-    return patched
+    return lambdaHandler.apply(this, args).then((res) => { clearTimeout(__lambdaTimeout); return res })
   }
 }
