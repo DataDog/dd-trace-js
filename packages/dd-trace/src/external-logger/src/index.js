@@ -7,6 +7,8 @@ class ExternalLogger {
   constructor ({
     ddsource, hostname, service, apiKey, site = 'datadoghq.com', interval = 10000, timeout = 2000, limit = 1000
   }) {
+    this.enabled = !!apiKey
+
     this.ddsource = ddsource
     this.hostname = hostname
     this.service = service
@@ -38,6 +40,8 @@ class ExternalLogger {
 
   // Parses and enqueues a log
   log (log, span, tags) {
+    if (!this.enabled) return
+
     const logTags = ExternalLogger.tagString(tags)
 
     if (span) {

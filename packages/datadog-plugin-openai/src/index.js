@@ -248,7 +248,6 @@ class OpenApiPlugin extends TracingPlugin {
   }
 
   sendLog (methodName, span, tags, store, error) {
-    if (!this._tracerConfig.apiKey) return
     if (!Object.keys(store).length) return
 
     const log = {
