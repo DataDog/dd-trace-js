@@ -5,6 +5,7 @@ const path = require('path')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { storage } = require('../../datadog-core')
 const services = require('./services')
+const Sampler = require('../../dd-trace/src/sampler')
 
 // TODO: In the future we should refactor config.js to make it requirable
 let MAX_TEXT_LEN = 128
@@ -21,11 +22,13 @@ class OpenApiPlugin extends TracingPlugin {
     this.metrics = metrics
     this.logger = logger
 
+    this.sampler = new Sampler(0.1) // default 10% log sampling
+
     // hoist the max length env var to avoid making all of these functions a class method
     MAX_TEXT_LEN = this._tracerConfig.openaiSpanCharLimit
   }
 
-  configure(config) {
+  configure (config) {
     if (config.enabled === false) {
       services.shutdown()
     }
@@ -236,6 +239,7 @@ class OpenApiPlugin extends TracingPlugin {
 
   sendLog (methodName, span, tags, store, error) {
     if (!Object.keys(store).length) return
+    if (!this.sampler.isSampled()) return
 
     const log = {
       status: error ? 'error' : 'info',

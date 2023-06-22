@@ -1,3 +1,5 @@
+'use strict'
+
 const DogStatsDClient = require('../../dd-trace/src/dogstatsd')
 const ExternalLogger = require('../../dd-trace/src/external-logger/src')
 

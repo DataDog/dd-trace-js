@@ -10,6 +10,7 @@ const sinon = require('sinon')
 const agent = require('../../dd-trace/test/plugins/agent')
 const DogStatsDClient = require('../../dd-trace/src/dogstatsd')
 const ExternalLogger = require('../../dd-trace/src/external-logger/src')
+const Sampler = require('../../dd-trace/src/sampler')
 
 describe('Plugin', () => {
   let openai
@@ -43,6 +44,7 @@ describe('Plugin', () => {
 
         metricStub = sinon.stub(DogStatsDClient.prototype, '_add')
         externalLoggerStub = sinon.stub(ExternalLogger.prototype, 'log')
+        sinon.stub(Sampler.prototype, 'isSampled').returns(true)
       })
 
       afterEach(() => {
