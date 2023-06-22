@@ -33,11 +33,11 @@ function createWrapRequest (authority, options) {
       const ctx = { headers, authority, options }
 
       return startChannel.runStores(ctx, () => {
-        const req = request.apply(this, arguments)
-
-        shimmer.wrap(req, 'emit', createWrapEmit(ctx))
-
         try {
+          const req = request.apply(this, arguments)
+
+          shimmer.wrap(req, 'emit', createWrapEmit(ctx))
+
           return req
         } catch (e) {
           ctx.error = e
