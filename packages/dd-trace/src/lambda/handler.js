@@ -83,17 +83,11 @@ function extractContext (args) {
  */
 exports.datadog = function datadog(lambdaHandler) {
   return async (...args) => {
-    let patched
-
     const context = extractContext(args)
 
     checkTimeout(context)
-    patched = await lambdaHandler.apply(this, args)
-
-    if (patched) {
-      // clear the timeout as soon as a result is returned
-      patched.then(_ => clearTimeout(__lambdaTimeout))
-    }
+    const patched = await lambdaHandler.apply(this, args)
+    clearTimeout(__lambdaTimeout)
 
     return patched
   }
