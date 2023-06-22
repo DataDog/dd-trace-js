@@ -15,7 +15,7 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0'] }, exports 
   methodNames.shift() // remove leading 'constructor' method
 
   for (const methodName of methodNames) {
-    shimmer.wrap(exports.OpenAIApi.prototype, methodName, fn => async function () {
+    shimmer.wrap(exports.OpenAIApi.prototype, methodName, fn => function () {
       if (!startCh.hasSubscribers) {
         return fn.apply(this, arguments)
       }
@@ -27,22 +27,22 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0'] }, exports 
         apiKey: this.configuration.apiKey
       })
 
-      try {
-        const response = await fn.apply(this, arguments)
+      return fn.apply(this, arguments)
+        .then((response) => {
+          finishCh.publish({
+            headers: response.headers,
+            body: response.data,
+            path: response.request.path,
+            method: response.request.method
+          })
 
-        finishCh.publish({
-          headers: response.headers,
-          body: response.data,
-          path: response.request.path,
-          method: response.request.method
+          return response
         })
+        .catch((err) => {
+          errorCh.publish({ err })
 
-        return response
-      } catch (err) {
-        errorCh.publish({ err })
-
-        throw err
-      }
+          throw err
+        })
     })
   }
 
