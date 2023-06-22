@@ -16,7 +16,7 @@ describe('xcontenttype header missing analyzer', () => {
         res.setHeader('content-type', 'text/html')
         res.end('<html><body><h1>Test</h1></body></html>')
       }, XCONTENTTYPE_HEADER_MISSING, 1, function (vulnerabilities) {
-        expect(vulnerabilities[0].evidence.value).to.be.undefined
+        expect(vulnerabilities[0].evidence).to.be.undefined
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('XCONTENTTYPE_HEADER_MISSING:mocha'))
       })
 
@@ -24,7 +24,7 @@ describe('xcontenttype header missing analyzer', () => {
         res.setHeader('content-type', 'text/html;charset=utf-8')
         res.end('<html><body><h1>Test</h1></body></html>')
       }, XCONTENTTYPE_HEADER_MISSING, 1, function (vulnerabilities) {
-        expect(vulnerabilities[0].evidence.value).to.be.undefined
+        expect(vulnerabilities[0].evidence).to.be.undefined
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('XCONTENTTYPE_HEADER_MISSING:mocha'))
       })
 
@@ -32,7 +32,7 @@ describe('xcontenttype header missing analyzer', () => {
         res.setHeader('content-type', 'application/xhtml+xml')
         res.end('<html><body><h1>Test</h1></body></html>')
       }, XCONTENTTYPE_HEADER_MISSING, 1, function (vulnerabilities) {
-        expect(vulnerabilities[0].evidence.value).to.be.undefined
+        expect(vulnerabilities[0].evidence).to.be.undefined
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('XCONTENTTYPE_HEADER_MISSING:mocha'))
       })
 
