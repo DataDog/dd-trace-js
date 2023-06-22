@@ -48,9 +48,20 @@ const swappedArgsHandler = async (event, _, context) => {
   return response
 }
 
+const errorHandler = async (_event, _context) => {
+  class CustomError extends Error {
+    constructor (message) {
+      super(message)
+      Object.defineProperty(this, 'name', { value: 'CustomError' })
+    }
+  }
+  throw new CustomError('my error')
+}
+
 module.exports = {
   finishSpansEarlyTimeoutHandler,
   handler,
   swappedArgsHandler,
-  timeoutHandler
+  timeoutHandler,
+  errorHandler
 }
