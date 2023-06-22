@@ -98,6 +98,40 @@ describe('lambda', () => {
       await checkTraces
     })
 
+    it('does wrap handler causing unhandled promise rejections', async () => {
+      // Set the desired handler to patch
+      process.env.DD_LAMBDA_HANDLER = 'handler.handler'
+      // Load the agent and re-register hook for patching.
+      await loadAgent()
+
+      const _context = {
+        getRemainingTimeInMillis: () => 150
+      }
+      const _event = {}
+
+      // Mock `datadog-lambda` handler resolve and import.
+      const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
+      const app = require(_handlerPath)
+      datadog = require('./fixtures/datadog-lambda')
+
+      // Run the function.
+      try {
+        await datadog(app.errorHandler)(_event, _context)
+      } catch (e) {
+        expect(e.name).to.equal('CustomError')
+      }
+
+      // Expect traces to be correct.
+      const checkTraces = agent.use((_traces) => {
+        const traces = _traces[0]
+        expect(traces).lengthOf(1)
+        traces.forEach((trace) => {
+          expect(trace.error).to.equal(1)
+        })
+      })
+      await checkTraces
+    })
+
     it('correctly patch handler where context is the third argument', async () => {
       process.env.DD_LAMBDA_HANDLER = 'handler.swappedArgsHandler'
 
