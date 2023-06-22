@@ -14,12 +14,6 @@ const IGNORED_RESPONSE_STATUS_LIST = [SC_MOVED_PERMANENTLY, SC_MOVED_TEMPORARILY
   SC_TEMPORARY_REDIRECT, SC_NOT_FOUND, SC_GONE, SC_INTERNAL_SERVER_ERROR]
 const HTML_CONTENT_TYPES = ['text/html', 'application/xhtml+xml']
 
-function isResponseHtml (res) {
-  const contentType = res.getHeader('content-type')
-  return contentType && HTML_CONTENT_TYPES.some(htmlContentType => {
-    return htmlContentType === contentType || contentType.indexOf(htmlContentType + ';') === 0
-  })
-}
 class MissingHeaderAnalyzer extends Analyzer {
   constructor (type, headerName) {
     super(type)
@@ -45,7 +39,7 @@ class MissingHeaderAnalyzer extends Analyzer {
   }
 
   _isVulnerable ({ req, res }, context) {
-    if (!IGNORED_RESPONSE_STATUS_LIST.includes(res.statusCode) && isResponseHtml(res)) {
+    if (!IGNORED_RESPONSE_STATUS_LIST.includes(res.statusCode) && this._isResponseHtml(res)) {
       return this._validateRequestAndResponse(req, res)
     }
     return false
@@ -53,6 +47,13 @@ class MissingHeaderAnalyzer extends Analyzer {
 
   _validateRequestAndResponse (req, res) {
     return false
+  }
+
+  _isResponseHtml (res) {
+    const contentType = res.getHeader('content-type')
+    return contentType && HTML_CONTENT_TYPES.some(htmlContentType => {
+      return htmlContentType === contentType || contentType.indexOf(htmlContentType + ';') === 0
+    })
   }
 }
 
