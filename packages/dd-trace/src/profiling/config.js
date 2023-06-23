@@ -27,6 +27,7 @@ class Config {
       DD_TRACE_AGENT_URL,
       DD_AGENT_HOST,
       DD_TRACE_AGENT_PORT,
+      DD_PROFILING_DEBUG_SOURCE_MAPS,
       DD_PROFILING_UPLOAD_TIMEOUT,
       DD_PROFILING_SOURCE_MAP,
       DD_PROFILING_UPLOAD_PERIOD,
@@ -70,6 +71,7 @@ class Config {
     this.flushInterval = flushInterval
     this.uploadTimeout = uploadTimeout
     this.sourceMap = sourceMap
+    this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
     this.endpointCollection = endpointCollection
     this.pprofPrefix = pprofPrefix
 
