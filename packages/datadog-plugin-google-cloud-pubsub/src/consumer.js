@@ -32,7 +32,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       span.setTag('pubsub.ack', 1)
     }
 
-    span.finish()
+    super.finish()
   }
 }
 

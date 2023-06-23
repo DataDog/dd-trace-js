@@ -87,7 +87,7 @@ class HttpClientPlugin extends ClientPlugin {
     addRequestHeaders(req, span, this.config)
 
     this.config.hooks.request(span, req, res)
-    span.finish()
+    super.finish()
   }
 
   error (err) {

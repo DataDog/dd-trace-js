@@ -57,7 +57,7 @@ class GrpcClientPlugin extends ClientPlugin {
       addMetadataTags(span, metadata, metadataFilter, 'response')
     }
 
-    span.finish()
+    super.finish()
   }
 
   configure (config) {
