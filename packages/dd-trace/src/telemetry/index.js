@@ -5,6 +5,7 @@ const dc = require('../../../diagnostics_channel')
 const os = require('os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
+const { errorChannel } = require('./channels')
 
 const HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
   ? Number(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000
@@ -20,6 +21,13 @@ let application
 let host
 let interval
 const sentIntegrations = new Set()
+
+const startupErrors = []
+// check if error is an object (use error.message) or a string
+const errorAppender = (error) => {
+  startupErrors.push(error)
+}
+errorChannel.subscribe(errorAppender)
 
 function getIntegrations () {
   const newIntegrations = []
@@ -54,11 +62,15 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
 }
 
 function appStarted () {
-  return {
+  const payload = {
     dependencies: [],
     configuration: flatten(config),
-    additional_payload: []
+    additional_payload: [],
+    error: startupErrors.join('\n')
   }
+  // clear error array
+  // unsubscribe
+  return payload
 }
 
 function onBeforeExit () {
@@ -120,6 +132,7 @@ function start (aConfig, thePluginManager) {
   host = createHostObject()
   dependencies.start(config, application, host)
   sendData(config, application, host, 'app-started', appStarted())
+
   interval = setInterval(() => {
     sendData(config, application, host, 'app-heartbeat')
   }, HEARTBEAT_INTERVAL)
