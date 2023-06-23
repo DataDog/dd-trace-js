@@ -167,6 +167,16 @@
       "dep": true
     }
   ],
+   "passport-http": [
+     {
+       "name": "passport-http",
+       "versions": ["0.3.0"]
+     },
+     {
+       "name": "passport",
+       "versions": [">=0.4.1"]
+     }
+   ],
    "passport-local": [
     {
       "name": "passport-local",

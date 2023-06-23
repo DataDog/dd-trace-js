@@ -8,7 +8,7 @@ const passportVerifyChannel = channel('datadog:passport:verify:finish')
 function wrapVerifiedAndPublish (username, password, verified) {
   if (passportVerifyChannel.hasSubscribers) {
     return shimmer.wrap(verified, function (err, user, info) {
-      const credentials = { type: 'local', username, password }
+      const credentials = { type: 'local', username }
       passportVerifyChannel.publish({ credentials, user })
       return verified.apply(this, arguments)
     })
@@ -40,7 +40,7 @@ addHook({
     if (typeof arguments[0] === 'function') {
       arguments[0] = wrapVerify(arguments[0], false)
     } else {
-      arguments[1] = wrapVerify(arguments[1], (arguments[0] && arguments[0].passReqToCallback) || false)
+      arguments[1] = wrapVerify(arguments[1], (arguments[0] && arguments[0].passReqToCallback))
     }
     return Strategy.apply(this, arguments)
   })
