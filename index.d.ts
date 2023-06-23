@@ -1469,6 +1469,20 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
+   * [openai](https://platform.openai.com/docs/api-reference?lang=node.js) module.
+   *
+   * Note that for logs to work you'll need to set the `DD_API_KEY` environment variable.
+   * You'll also need to adjust any firewall settings to allow the tracer to communicate
+   * with `http-intake.logs.datadoghq.com`.
+   *
+   * Note that for metrics to work you'll need to enable
+   * [DogStatsD](https://docs.datadoghq.com/developers/dogstatsd/?tab=hostagent#setup)
+   * in the agent.
+   */
+  interface openai extends Instrumentation {}
+
+  /**
+   * This plugin automatically instruments the
    * [opensearch](https://github.com/opensearch-project/opensearch-js) module.
    */
   interface opensearch extends elasticsearch {}
