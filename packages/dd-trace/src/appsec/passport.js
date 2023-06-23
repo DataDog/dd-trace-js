@@ -47,11 +47,7 @@ function parseUser (login, passportUser, mode) {
       user['usr.id'] = passportUser._id
     }
 
-    if (mode === 'safe') {
-      if (!regexUsername.test(user['usr.id'])) {
-        user['usr.id'] = ' '
-      }
-    } else {
+    if (mode === 'extended') {
       if (login) {
         user['usr.login'] = login
       }
@@ -66,6 +62,13 @@ function parseUser (login, passportUser, mode) {
       } else if (passportUser.name) {
         user['usr.username'] = passportUser.name
       }
+    }
+  }
+
+  if (mode === 'safe') {
+    // Remove PII in safe mode
+    if (!regexUsername.test(user['usr.id'])) {
+      user['usr.id'] = ' '
     }
   }
 
@@ -88,9 +91,15 @@ function passportTrackEvent (credentials, passportUser, rootSpan, mode) {
 
   if (passportUser) {
     // If a passportUser object is published then the login succeded
-    setUserTags({ id: user['usr.id'] }, rootSpan)
-    // Prevent 'usr.id' from being reported again in the metadata
-    delete user['usr.id']
+    let userTags = {}
+    Object.entries(user).some((entry) => {
+      let attr = entry[0].split('.')[1]
+      userTags[attr] = entry[1]
+      // Prevent attributes from beint sent under 'users.login.success' prefix
+      delete user[entry[0]]
+    })
+
+    setUserTags(userTags, rootSpan)
     trackEvent('users.login.success', user, 'passportTrackEvent', rootSpan, mode)
   } else {
     trackEvent('users.login.failure', user, 'passportTrackEvent', rootSpan, mode)
