@@ -91,7 +91,8 @@ class TracingPlugin extends Plugin {
         'span.type': type,
         ...meta,
         ...metrics
-      }
+      },
+      integrationName: type
     })
 
     analyticsSampler.sample(span, this.config.measured)
