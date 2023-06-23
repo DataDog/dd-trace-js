@@ -6,6 +6,7 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { storage } = require('../../datadog-core')
 const services = require('./services')
 const Sampler = require('../../dd-trace/src/sampler')
+const { MEASURED } = require('../../../ext/tags')
 
 // TODO: In the future we should refactor config.js to make it requirable
 let MAX_TEXT_LEN = 128
@@ -45,6 +46,7 @@ class OpenApiPlugin extends TracingPlugin {
       type: 'openai',
       kind: 'client',
       meta: {
+        [MEASURED]: 1,
         // Data that is always available with a request
         'openai.user.api_key': truncateApiKey(apiKey),
         'openai.api_base': basePath,
