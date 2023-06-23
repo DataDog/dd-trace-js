@@ -3,6 +3,7 @@
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
+const namingSchema = require('./naming')
 
 describe('Plugin', () => {
   let elasticsearch
@@ -57,6 +58,8 @@ describe('Plugin', () => {
         it('should set the correct tags', done => {
           agent
             .use(traces => {
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('db.type', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
@@ -90,6 +93,8 @@ describe('Plugin', () => {
         it('should set the correct tags on msearch', done => {
           agent
             .use(traces => {
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('db.type', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
@@ -143,7 +148,8 @@ describe('Plugin', () => {
             it('should do automatic instrumentation', done => {
               agent
                 .use(traces => {
-                  expect(traces[0][0]).to.have.property('service', 'test-elasticsearch')
+                  expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+                  expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
                   expect(traces[0][0]).to.have.property('resource', 'HEAD /')
                   expect(traces[0][0]).to.have.property('type', 'elasticsearch')
                 })
@@ -206,7 +212,8 @@ describe('Plugin', () => {
           it('should do automatic instrumentation', done => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('service', 'test-elasticsearch')
+                expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+                expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', 'HEAD /')
                 expect(traces[0][0]).to.have.property('type', 'elasticsearch')
               })
@@ -276,6 +283,15 @@ describe('Plugin', () => {
 
             client.ping().catch(done)
           })
+
+          withNamingSchema(
+            () => client.search(
+              { index: 'logstash-2000.01.01', body: {} },
+              hasCallbackSupport ? () => {} : undefined
+            ),
+            () => namingSchema.outbound.opName,
+            () => namingSchema.outbound.serviceName
+          )
         })
       })
 
@@ -284,7 +300,7 @@ describe('Plugin', () => {
 
         before(() => {
           return agent.load('elasticsearch', {
-            service: 'test',
+            service: 'custom',
             hooks: { query: (span, params) => {
               span.addTags({ 'elasticsearch.params': 'foo', 'elasticsearch.method': params.method })
             } }
@@ -316,7 +332,8 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', 'custom')
               expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('elasticsearch.params', 'foo')
               expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
@@ -330,6 +347,15 @@ describe('Plugin', () => {
             client.ping().catch(done)
           }
         })
+
+        withNamingSchema(
+          () => client.search(
+            { index: 'logstash-2000.01.01', body: {} },
+            hasCallbackSupport ? () => {} : undefined
+          ),
+          () => namingSchema.outbound.opName,
+          () => 'custom'
+        )
       })
     })
   })
