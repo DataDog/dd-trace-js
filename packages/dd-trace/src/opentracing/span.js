@@ -23,7 +23,7 @@ const {
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
-const otelEnabled = !!process.env.DD_TRACE_OTEL_ENABLED
+const OTEL_ENABLED = !!process.env.DD_TRACE_OTEL_ENABLED
 
 const integrationCounters = {
   span_created: {},
@@ -39,7 +39,7 @@ function getIntegrationCounter (event, integration) {
 
   const counter = tracerMetrics.count(event, [
     `integration_name:${integration.toLowerCase()}`,
-    `otel_enabled:${otelEnabled}`
+    `otel_enabled:${OTEL_ENABLED}`
   ])
 
   integrationCounters[event][integration] = counter
