@@ -53,6 +53,13 @@ describe('Plugin', () => {
           })
 
           describe('when sending commands', () => {
+            withPeerService(
+              () => tracer,
+              () => channel.assertQueue('test', {}, () => {}),
+              'localhost',
+              'out.host'
+            )
+
             it('should do automatic instrumentation for immediate commands', done => {
               agent
                 .use(traces => {
@@ -124,6 +131,13 @@ describe('Plugin', () => {
           })
 
           describe('when publishing messages', () => {
+            withPeerService(
+              () => tracer,
+              () => channel.assertQueue('test', {}, () => {}),
+              'localhost',
+              'out.host'
+            )
+
             it('should do automatic instrumentation', done => {
               agent
                 .use(traces => {

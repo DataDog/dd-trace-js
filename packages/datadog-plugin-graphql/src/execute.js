@@ -32,7 +32,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
   finish ({ res, args }) {
     const span = this.activeSpan
     this.config.hooks.execute(span, args, res)
-    span.finish()
+    super.finish()
   }
 }
 
