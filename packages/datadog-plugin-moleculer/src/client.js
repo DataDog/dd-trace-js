@@ -29,7 +29,7 @@ class MoleculerClientPlugin extends ClientPlugin {
       span.addTags(moleculerTags(broker, ctx, this.config))
     }
 
-    span.finish()
+    super.finish()
   }
 }
 

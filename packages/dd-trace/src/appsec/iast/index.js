@@ -5,10 +5,16 @@ const { storage } = require('../../../../datadog-core')
 const overheadController = require('./overhead-controller')
 const dc = require('../../../../diagnostics_channel')
 const iastContextFunctions = require('./iast-context')
-const { enableTaintTracking, disableTaintTracking, createTransaction, removeTransaction } = require('./taint-tracking')
+const {
+  enableTaintTracking,
+  disableTaintTracking,
+  createTransaction,
+  removeTransaction,
+  taintTrackingPlugin
+} = require('./taint-tracking')
+const { IAST_ENABLED_TAG_KEY } = require('./tags')
 
 const telemetryLogs = require('./telemetry/logs')
-const IAST_ENABLED_TAG_KEY = '_dd.iast.enabled'
 
 // TODO Change to `apm:http:server:request:[start|close]` when the subscription
 //  order of the callbacks can be enforce
@@ -48,6 +54,7 @@ function onIncomingHttpRequestStart (data) {
           const iastContext = iastContextFunctions.saveIastContext(store, topContext, { rootSpan, req: data.req })
           createTransaction(rootSpan.context().toSpanId(), iastContext)
           overheadController.initializeRequestContext(iastContext)
+          taintTrackingPlugin.taintHeaders(data.req.headers, iastContext)
         }
         if (rootSpan.addTags) {
           rootSpan.addTags({

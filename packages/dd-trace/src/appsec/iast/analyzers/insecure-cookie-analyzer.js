@@ -1,30 +1,11 @@
 'use strict'
 
-const Analyzer = require('./vulnerability-analyzer')
 const { INSECURE_COOKIE } = require('../vulnerabilities')
+const CookieAnalyzer = require('./cookie-analyzer')
 
-const EXCLUDED_PATHS = ['node_modules/express/lib/response.js', 'node_modules\\express\\lib\\response.js']
-
-class InsecureCookieAnalyzer extends Analyzer {
+class InsecureCookieAnalyzer extends CookieAnalyzer {
   constructor () {
-    super(INSECURE_COOKIE)
-    this.addSub('datadog:iast:set-cookie', (cookieInfo) => this.analyze(cookieInfo))
-  }
-
-  _isVulnerable ({ cookieProperties, cookieValue }) {
-    return cookieValue && !(cookieProperties && cookieProperties.map(x => x.toLowerCase().trim()).includes('secure'))
-  }
-
-  _getEvidence ({ cookieName }) {
-    return { value: cookieName }
-  }
-
-  _createHashSource (type, evidence, location) {
-    return `${type}:${evidence.value}`
-  }
-
-  _getExcludedPaths () {
-    return EXCLUDED_PATHS
+    super(INSECURE_COOKIE, 'secure')
   }
 }
 

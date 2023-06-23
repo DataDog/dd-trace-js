@@ -6,9 +6,9 @@ const { getRanges } = require('../taint-tracking/operations')
 const { storage } = require('../../../../../datadog-core')
 const { getIastContext } = require('../iast-context')
 const { addVulnerability } = require('../vulnerability-reporter')
+const { getNodeModulesPaths } = require('../path-line')
 
-const EXCLUDED_PATHS = ['node_modules/mysql2', 'node_modules/sequelize', 'node_modules\\mysql2',
-  'node_modules\\sequelize']
+const EXCLUDED_PATHS = getNodeModulesPaths('mysql2', 'sequelize')
 
 class SqlInjectionAnalyzer extends InjectionAnalyzer {
   constructor () {
@@ -28,7 +28,7 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
 
     this.addSub('datadog:sequelize:query:finish', () => {
       const store = storage.getStore()
-      if (store.sequelizeParentStore) {
+      if (store && store.sequelizeParentStore) {
         storage.enterWith(store.sequelizeParentStore)
       }
     })

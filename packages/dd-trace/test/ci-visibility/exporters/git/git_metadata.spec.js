@@ -73,7 +73,7 @@ describe('git_metadata', () => {
       .reply(204)
 
     isShallowRepositoryStub.returns(true)
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(unshallowRepositoryStub).to.have.been.called
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
@@ -88,7 +88,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
@@ -104,7 +104,7 @@ describe('git_metadata', () => {
 
     getCommitsToUploadStub.returns([])
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err).to.be.null
       // to check that it is not called
       expect(scope.isDone()).to.be.false
@@ -120,7 +120,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       // eslint-disable-next-line
       expect(err.message).to.contain('Error fetching commits to exclude: Error from https://api.test.com/api/v2/git/repository/search_commits: 404 Not Found. Response from the endpoint: "Not found SHA"')
       // to check that it is not called
@@ -137,7 +137,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err.message).to.contain("Can't parse commits to exclude response: Invalid commit type response")
       // to check that it is not called
       expect(scope.isDone()).to.be.false
@@ -153,7 +153,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err.message).to.contain("Can't parse commits to exclude response: Invalid commit format")
       // to check that it is not called
       expect(scope.isDone()).to.be.false
@@ -169,7 +169,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(502)
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err.message).to.contain('Could not upload packfiles: status code 502')
       expect(scope.isDone()).to.be.true
       done()
@@ -196,7 +196,7 @@ describe('git_metadata', () => {
       secondTemporaryPackFile
     ])
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
@@ -215,7 +215,7 @@ describe('git_metadata', () => {
       'not there either'
     ])
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err.message).to.contain('Could not read "not-there"')
       expect(scope.isDone()).to.be.false
       done()
@@ -231,7 +231,7 @@ describe('git_metadata', () => {
 
     generatePackFilesForCommitsStub.returns([])
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err.message).to.contain('Failed to generate packfiles')
       expect(scope.isDone()).to.be.false
       done()
@@ -247,7 +247,7 @@ describe('git_metadata', () => {
 
     getRepositoryUrlStub.returns('')
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err.message).to.contain('Repository URL is empty')
       expect(scope.isDone()).to.be.false
       done()
@@ -265,7 +265,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
@@ -282,9 +282,35 @@ describe('git_metadata', () => {
         done()
       })
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), true, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), true, '', (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
+    })
+  })
+
+  it('should use the input repository url and not call getRepositoryUrl', (done) => {
+    let resolvePromise
+    const requestPromise = new Promise(resolve => {
+      resolvePromise = resolve
+    })
+    const scope = nock('https://api.test.com')
+      .post('/evp_proxy/v2/api/v2/git/repository/search_commits')
+      .reply(200, function () {
+        const { meta: { repository_url: repositoryUrl } } = JSON.parse(this.req.requestBodyBuffers.toString())
+        resolvePromise(repositoryUrl)
+        return JSON.stringify({ data: [] })
+      })
+      .post('/evp_proxy/v2/api/v2/git/repository/packfile')
+      .reply(204)
+
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), true, 'https://custom-git@datadog.com', (err) => {
+      expect(err).to.be.null
+      expect(scope.isDone()).to.be.true
+      requestPromise.then((repositoryUrl) => {
+        expect(getRepositoryUrlStub).not.to.have.been.called
+        expect(repositoryUrl).to.equal('https://custom-git@datadog.com')
+        done()
+      })
     })
   })
 })

@@ -31,7 +31,8 @@ describe('Test IntermediateCookiesAnalyzer', () => {
       cookieName: 'key',
       cookieValue: 'value',
       cookieProperties: ['Secure', 'HttpOnly'],
-      cookieString: 'key=value; Secure; HttpOnly'
+      cookieString: 'key=value; Secure; HttpOnly',
+      location: undefined
     }, 'datadog:iast:set-cookie')
   })
 
@@ -64,14 +65,39 @@ describe('Test IntermediateCookiesAnalyzer', () => {
       cookieName: 'key1',
       cookieValue: 'value1',
       cookieProperties: [],
-      cookieString: 'key1=value1'
+      cookieString: 'key1=value1',
+      location: undefined
     }, 'datadog:iast:set-cookie')
 
     expect(setCookieCallback.secondCall).to.have.been.calledWithExactly({
       cookieName: 'key2',
       cookieValue: 'value2',
       cookieProperties: ['Secure'],
-      cookieString: 'key2=value2; Secure'
+      cookieString: 'key2=value2; Secure',
+      location: undefined
     }, 'datadog:iast:set-cookie')
+  })
+
+  it('should reuse the location filled in setCookie callback', () => {
+    let i = 0
+    const location = { path: 'test.js', line: 12 }
+    setCookieCallback.callsFake(function (event) {
+      if (i === 0) {
+        expect(event.location).to.be.undefined
+        event.location = location
+        i++
+      } else {
+        expect(event.location).to.be.equal(location)
+      }
+    })
+
+    const res = {}
+    setHeaderChannel.publish({
+      name: 'set-cookie',
+      value: ['key1=value1', 'key2=value2'],
+      res
+    })
+
+    expect(setCookieCallback).to.have.been.calledTwice
   })
 })

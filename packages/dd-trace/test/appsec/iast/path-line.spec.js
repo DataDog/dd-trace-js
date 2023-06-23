@@ -1,6 +1,7 @@
 const proxyquire = require('proxyquire')
 const path = require('path')
 const os = require('os')
+const { expect } = require('chai')
 
 class CallSiteMock {
   constructor (fileName, lineNumber) {
@@ -190,6 +191,51 @@ describe('path-line', function () {
           expect(pathAndLine.line).to.be.equals(firstFileOutOfDDLineNumber)
         })
       })
+    })
+  })
+
+  describe('getNodeModulesPaths', () => {
+    function getCallSiteInfo () {
+      const previousPrepareStackTrace = Error.prepareStackTrace
+      const previousStackTraceLimit = Error.stackTraceLimit
+      let callsiteList
+      Error.stackTraceLimit = 100
+      Error.prepareStackTrace = function (_, callsites) {
+        callsiteList = callsites
+      }
+      const e = new Error()
+      e.stack
+      Error.prepareStackTrace = previousPrepareStackTrace
+      Error.stackTraceLimit = previousStackTraceLimit
+      return callsiteList
+    }
+
+    it('should handle windows paths correctly', () => {
+      const basePath = pathLine.ddBasePath
+      pathLine.ddBasePath = path.join('test', 'base', 'path')
+
+      const list = getCallSiteInfo()
+      const firstNonDDPath = pathLine.getFirstNonDDPathAndLineFromCallsites(list)
+
+      const nodeModulesPaths = pathLine.getNodeModulesPaths(__filename)
+      expect(nodeModulesPaths[0]).to.eq(path.join('node_modules', process.cwd(), firstNonDDPath.path))
+
+      pathLine.ddBasePath = basePath
+    })
+
+    it('should convert / to \\ in windows platforms', () => {
+      const dirname = __dirname
+      const dirParts = dirname.split(path.sep)
+      const paths = pathLine.getNodeModulesPaths(dirParts.join('/'))
+
+      expect(paths[0]).to.equals(path.join('node_modules', dirname))
+    })
+
+    it('should return multiple paths', () => {
+      const paths = pathLine.getNodeModulesPaths('/this/is/a/path', '/another/path')
+
+      expect(paths.length).to.equals(2)
+      expect(paths[0].startsWith('node_modules')).to.true
     })
   })
 })

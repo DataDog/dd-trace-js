@@ -92,6 +92,7 @@ describe('Config', () => {
     expect(config).to.have.property('traceId128BitGenerationEnabled', false)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
+    expect(config).to.have.property('spanComputePeerService', false)
     expect(config).to.have.deep.property('serviceMapping', {})
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['tracecontext', 'datadog'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext', 'datadog'])

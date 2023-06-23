@@ -204,6 +204,17 @@ class Config {
       false
     )
 
+    const DD_OPENAI_LOGS_ENABLED = coalesce(
+      options.openAiLogsEnabled,
+      process.env.DD_OPENAI_LOGS_ENABLED,
+      false
+    )
+
+    const DD_API_KEY = coalesce(
+      process.env.DATADOG_API_KEY,
+      process.env.DD_API_KEY
+    )
+
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
 
     const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
@@ -295,6 +306,8 @@ class Config {
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     )
+    const DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+
     const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
       process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       '512'
@@ -471,6 +484,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
+    this.openAiLogsEnabled = DD_OPENAI_LOGS_ENABLED
+    this.apiKey = DD_API_KEY
     this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
@@ -511,6 +526,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       exporters: DD_PROFILING_EXPORTERS
     }
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+    this.spanComputePeerService = (this.spanAttributeSchema === 'v0'
+      ? isTrue(DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED)
+      : true
+    )
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
