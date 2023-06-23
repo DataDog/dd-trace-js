@@ -56,11 +56,6 @@ class GraphQLResolvePlugin extends TracingPlugin {
     }
   }
 
-  finish (finishTime) {
-    const span = this.activeSpan
-    span.finish(finishTime)
-  }
-
   constructor (...args) {
     super(...args)
 

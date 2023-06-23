@@ -306,6 +306,8 @@ class Config {
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     )
+    const DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+
     const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
       process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       '512'
@@ -524,6 +526,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       exporters: DD_PROFILING_EXPORTERS
     }
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+    this.spanComputePeerService = (this.spanAttributeSchema === 'v0'
+      ? isTrue(DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED)
+      : true
+    )
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
