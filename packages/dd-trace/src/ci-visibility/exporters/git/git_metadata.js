@@ -48,6 +48,9 @@ function getCommonRequestOptions (url) {
  */
 function getCommitsToExclude ({ url, isEvpProxy, repositoryUrl }, callback) {
   const latestCommits = getLatestCommits()
+
+  log.debug(`There were ${latestCommits.length} commits since last month.`)
+
   const [headCommit] = latestCommits
 
   const commonOptions = getCommonRequestOptions(url)
@@ -158,11 +161,14 @@ function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
     repositoryUrl = getRepositoryUrl()
   }
 
+  log.debug(`Uploading git history for repository ${repositoryUrl}`)
+
   if (!repositoryUrl) {
     return callback(new Error('Repository URL is empty'))
   }
 
   if (isShallowRepository()) {
+    log.debug('It is shallow clone, unshallowing...')
     unshallowRepository()
   }
 
@@ -170,13 +176,19 @@ function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
     if (err) {
       return callback(err)
     }
+    log.debug(`There are ${commitsToExclude.length} commits to exclude.`)
+
     const commitsToUpload = getCommitsToUpload(commitsToExclude)
 
     if (!commitsToUpload.length) {
       log.debug('No commits to upload')
       return callback(null)
     }
+    log.debug(`There are ${commitsToUpload.length} commits to upload`)
+
     const packFilesToUpload = generatePackFilesForCommits(commitsToUpload)
+
+    log.debug(`Uploading ${packFilesToUpload.length} packfiles.`)
 
     if (!packFilesToUpload.length) {
       return callback(new Error('Failed to generate packfiles'))
