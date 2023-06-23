@@ -49,7 +49,8 @@ class JestPlugin extends CiPlugin {
       isSuitesSkipped,
       isSuitesSkippingEnabled,
       isCodeCoverageEnabled,
-      testCodeCoverageLinesTotal
+      testCodeCoverageLinesTotal,
+      onDone
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
@@ -63,7 +64,7 @@ class JestPlugin extends CiPlugin {
       this.testModuleSpan.finish()
       this.testSessionSpan.finish()
       finishAllTraceSpans(this.testSessionSpan)
-      this.tracer._exporter.flush()
+      this.tracer._exporter.flush(onDone)
     })
 
     // Test suites can be run in a different process from jest's main one.

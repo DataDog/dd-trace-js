@@ -246,15 +246,22 @@ function cliWrapper (cli, jestVersion) {
       // ignore errors
     }
 
+    const flushPromise = new Promise(resolve => {
+      onDone = resolve
+    })
+
     sessionAsyncResource.runInAsyncScope(() => {
       testSessionFinishCh.publish({
         status: success ? 'pass' : 'fail',
         isSuitesSkipped,
         isSuitesSkippingEnabled,
         isCodeCoverageEnabled,
-        testCodeCoverageLinesTotal
+        testCodeCoverageLinesTotal,
+        onDone
       })
     })
+
+    await flushPromise
 
     return result
   })
