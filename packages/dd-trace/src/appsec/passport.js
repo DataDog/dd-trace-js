@@ -39,6 +39,10 @@ function parseUser (login, passportUser, mode) {
     'usr.id': login
   }
 
+  if (!user['usr.id']) {
+    return user
+  }
+
   if (passportUser) {
     // Guess id
     if (passportUser.id) {
@@ -91,9 +95,9 @@ function passportTrackEvent (credentials, passportUser, rootSpan, mode) {
 
   if (passportUser) {
     // If a passportUser object is published then the login succeded
-    let userTags = {}
+    const userTags = {}
     Object.entries(user).some((entry) => {
-      let attr = entry[0].split('.')[1]
+      const attr = entry[0].split('.')[1]
       userTags[attr] = entry[1]
       // Prevent attributes from beint sent under 'users.login.success' prefix
       delete user[entry[0]]

@@ -63,7 +63,7 @@ describe('Passport', () => {
       expect(setUser.setUserTags).not.to.have.been.called
       expect(events.trackEvent).to.have.been.calledOnceWithExactly(
         'users.login.failure',
-        { 'usr.id': loginLocal.username },
+        { 'usr.id': ' ' },
         'passportTrackEvent',
         undefined,
         'safe'
@@ -89,7 +89,7 @@ describe('Passport', () => {
       user.id = 'publicName'
       passportModule.passportTrackEvent(loginLocal, user, rootSpan, 'safe')
 
-      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly({ id: '' }, rootSpan)
+      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly({ id: ' ' }, rootSpan)
       expect(events.trackEvent).to.have.been.calledOnceWithExactly(
         'users.login.success',
         {},
@@ -104,14 +104,18 @@ describe('Passport', () => {
 
       user.id = 'publicName'
       passportModule.passportTrackEvent(loginLocal, user, rootSpan, 'extended')
-      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly({ id: user.id }, rootSpan)
+      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly(
+        {
+          id: user.id,
+          login: 'test',
+          email: 'testUser@test.com',
+          username: 'Test User'
+        },
+        rootSpan
+      )
       expect(events.trackEvent).to.have.been.calledOnceWithExactly(
         'users.login.success',
-        {
-          'usr.email': user.email,
-          'usr.username': user.username,
-          'usr.login': loginLocal.username
-        },
+        {},
         'passportTrackEvent',
         rootSpan,
         'extended'
@@ -158,11 +162,7 @@ describe('Passport', () => {
       passportModule.passportTrackEvent(loginLocal, userUuid, rootSpan, 'extended')
       expect(events.trackEvent).to.have.been.calledOnceWithExactly(
         'users.login.success',
-        {
-          'usr.email': userUuid.email,
-          'usr.username': userUuid.username,
-          'usr.login': loginLocal.username
-        },
+        {},
         'passportTrackEvent',
         rootSpan,
         'extended'
@@ -193,14 +193,18 @@ describe('Passport', () => {
       rootSpan.context = () => { return {} }
 
       passportModule.passportTrackEvent(loginLocal, user, rootSpan, 'extended')
-      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly({ id: user._id }, rootSpan)
+      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly(
+        {
+          id: user._id,
+          login: 'test',
+          email: 'testUser@test.com',
+          username: 'Test User'
+        },
+        rootSpan
+      )
       expect(events.trackEvent).to.have.been.calledOnceWithExactly(
         'users.login.success',
-        {
-          'usr.email': user.email,
-          'usr.username': user.username,
-          'usr.login': loginLocal.username
-        },
+        {},
         'passportTrackEvent',
         rootSpan,
         'extended'
@@ -216,14 +220,16 @@ describe('Passport', () => {
       rootSpan.context = () => { return {} }
 
       passportModule.passportTrackEvent(loginLocal, user, rootSpan, 'extended')
-      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly({ id: loginLocal.username }, rootSpan)
+      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly(
+        {
+          id: loginLocal.username,
+          login: 'test',
+          email: 'testUser@test.com',
+          username: 'Test User'
+        }, rootSpan)
       expect(events.trackEvent).to.have.been.calledOnceWithExactly(
         'users.login.success',
-        {
-          'usr.email': user.email,
-          'usr.username': user.name,
-          'usr.login': loginLocal.username
-        },
+        {},
         'passportTrackEvent',
         rootSpan,
         'extended'
