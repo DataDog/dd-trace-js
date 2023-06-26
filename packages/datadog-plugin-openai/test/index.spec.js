@@ -1680,8 +1680,8 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
                 expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/images/edits')
 
-                expect(traces[0][0].meta).to.have.property('openai.request.mask', 'hal.png')
-                expect(traces[0][0].meta).to.have.property('openai.request.image', 'hal.png')
+                expect(traces[0][0].meta).to.have.property('openai.request.mask', 'ntsc.png')
+                expect(traces[0][0].meta).to.have.property('openai.request.image', 'ntsc.png')
                 expect(traces[0][0].meta).to.have.property('openai.request.prompt', 'Change all red to blue')
                 expect(traces[0][0].meta).to.have.property('openai.request.response_format', 'url')
                 expect(traces[0][0].meta).to.have.property('openai.request.size', '256x256')
@@ -1695,9 +1695,9 @@ describe('Plugin', () => {
               })
 
             const result = await openai.createImageEdit(
-              fs.createReadStream(Path.join(__dirname, 'hal.png')),
+              fs.createReadStream(Path.join(__dirname, 'ntsc.png')),
               'Change all red to blue',
-              fs.createReadStream(Path.join(__dirname, 'hal.png')),
+              fs.createReadStream(Path.join(__dirname, 'ntsc.png')),
               1,
               '256x256',
               'url',
@@ -1710,8 +1710,8 @@ describe('Plugin', () => {
               status: 'info',
               message: 'sampled createImageEdit',
               prompt: 'Change all red to blue',
-              file: 'hal.png',
-              mask: 'hal.png'
+              file: 'ntsc.png',
+              mask: 'ntsc.png'
             })
 
             await checkTraces
@@ -1757,7 +1757,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
                 expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/images/variations')
 
-                expect(traces[0][0].meta).to.have.property('openai.request.image', 'hal.png')
+                expect(traces[0][0].meta).to.have.property('openai.request.image', 'ntsc.png')
                 expect(traces[0][0].meta).to.have.property('openai.request.response_format', 'url')
                 expect(traces[0][0].meta).to.have.property('openai.request.size', '256x256')
                 expect(traces[0][0].meta).to.have.property('openai.request.user', 'hunter2')
@@ -1770,14 +1770,14 @@ describe('Plugin', () => {
               })
 
             const result = await openai.createImageVariation(
-              fs.createReadStream(Path.join(__dirname, 'hal.png')), 1, '256x256', 'url', 'hunter2')
+              fs.createReadStream(Path.join(__dirname, 'ntsc.png')), 1, '256x256', 'url', 'hunter2')
 
             expect(result.data.data[0].url.startsWith('https://')).to.be.true
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
               message: 'sampled createImageVariation',
-              file: 'hal.png'
+              file: 'ntsc.png'
             })
 
             await checkTraces
