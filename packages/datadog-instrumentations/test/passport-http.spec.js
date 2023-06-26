@@ -88,7 +88,7 @@ withVersions('passport-http', 'passport-http', version => {
       expect(res.data).to.equal('Granted')
       expect(subscriberStub).to.be.calledOnceWithExactly(
         {
-          credentials: { type: 'http', username: 'test', password: '1234' },
+          credentials: { type: 'http', username: 'test' },
           user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' }
         }
       )
@@ -106,7 +106,7 @@ withVersions('passport-http', 'passport-http', version => {
       expect(res.data).to.equal('Denied')
       expect(subscriberStub).to.be.calledOnceWithExactly(
         {
-          credentials: { type: 'http', username: 'test', password: '1' },
+          credentials: { type: 'http', username: 'test' },
           user: false
         }
       )

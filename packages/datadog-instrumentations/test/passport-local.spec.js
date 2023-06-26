@@ -84,7 +84,7 @@ withVersions('passport-local', 'passport-local', version => {
       expect(res.data).to.equal('Granted')
       expect(subscriberStub).to.be.calledOnceWithExactly(
         {
-          credentials: { type: 'local', username: 'test', password: '1234' },
+          credentials: { type: 'local', username: 'test' },
           user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' }
         }
       )
@@ -97,7 +97,7 @@ withVersions('passport-local', 'passport-local', version => {
       expect(res.data).to.equal('Denied')
       expect(subscriberStub).to.be.calledOnceWithExactly(
         {
-          credentials: { type: 'local', username: 'test', password: '1' },
+          credentials: { type: 'local', username: 'test' },
           user: false
         }
       )
