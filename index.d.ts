@@ -559,7 +559,9 @@ export declare interface TracerOptions {
      */
     eventTracking?: {
       /**
-       * Controls the automated user event tracking mode
+       * Controls the automated user event tracking mode. Possible values are disabled, safe and extended.
+       * On safe mode any possible Personal Identifable Information (PII) about the user will be removed from the event.
+       * On extended mode any PII or non-PII information about the user could be added to the event.
        * @default 'safe'
        */
       mode?: 'safe' | 'extended' | 'disabled'
