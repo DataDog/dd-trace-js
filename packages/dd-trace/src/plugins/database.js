@@ -38,13 +38,17 @@ class DatabasePlugin extends StoragePlugin {
   }
 
   injectDbmQuery (query, serviceName, isPreparedStatement = false) {
-    if (this.config.dbmPropagationMode === 'disabled') {
+    const mode = this.config.dbmPropagationMode || this._tracerConfig.dbmPropagationMode
+
+    if (mode === 'disabled') {
       return query
     }
+
     const servicePropagation = this.createDBMPropagationCommentService(serviceName)
-    if (isPreparedStatement || this.config.dbmPropagationMode === 'service') {
+
+    if (isPreparedStatement || mode === 'service') {
       return `/*${servicePropagation}*/ ${query}`
-    } else if (this.config.dbmPropagationMode === 'full') {
+    } else if (mode === 'full') {
       this.activeSpan.setTag('_dd.dbm_trace_injected', 'true')
       const traceparent = this.activeSpan._spanContext.toTraceparent()
       return `/*${servicePropagation},traceparent='${traceparent}'*/ ${query}`

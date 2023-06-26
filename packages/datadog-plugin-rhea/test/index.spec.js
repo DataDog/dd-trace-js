@@ -47,6 +47,13 @@ describe('Plugin', () => {
           })
 
           describe('sending a message', () => {
+            withPeerService(
+              () => tracer,
+              () => context.sender.send({ body: 'Hello World!' }),
+              'localhost',
+              'out.host'
+            )
+
             it('should automatically instrument', (done) => {
               agent.use(traces => {
                 const span = traces[0][0]
