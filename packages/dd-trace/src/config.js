@@ -230,6 +230,9 @@ class Config {
     const DD_TELEMETRY_HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
       ? parseInt(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000
       : 60000
+    const DD_OPENAI_SPAN_CHAR_LIMIT = process.env.DD_OPENAI_SPAN_CHAR_LIMIT
+      ? parseInt(process.env.DD_OPENAI_SPAN_CHAR_LIMIT)
+      : 128
     const DD_TELEMETRY_DEBUG = coalesce(
       process.env.DD_TELEMETRY_DEBUG,
       false
@@ -310,6 +313,8 @@ class Config {
       isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED),
       false
     )
+    const DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+
     const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
       process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       '512'
@@ -529,6 +534,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     }
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     this.traceRemoveIntegrationServiceNamesEnabled = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+    this.spanComputePeerService = (this.spanAttributeSchema === 'v0'
+      ? isTrue(DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED)
+      : true
+    )
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
@@ -571,6 +580,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
 
     this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
+
+    this.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
 
     if (this.gitMetadataEnabled) {
       this.repositoryUrl = coalesce(
