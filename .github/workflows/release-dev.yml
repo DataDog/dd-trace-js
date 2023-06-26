@@ -30,7 +30,7 @@ jobs:
 
   injection-image-publish:
     runs-on: ubuntu-latest
-    needs: ['publish']
+    needs: ['dev_release']
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
