@@ -120,10 +120,28 @@ describe('Plugin', () => {
 
       describe('client', () => {
         describe('without configuration', () => {
-          before(() => agent.load('moleculer', { server: false }))
-          before(() => startBroker())
-          after(() => broker.stop())
-          after(() => agent.close({ ritmReset: false }))
+          const hostname = os.hostname()
+          let tracer
+
+          beforeEach(() => startBroker())
+          afterEach(() => broker.stop())
+
+          beforeEach(done => {
+            agent.load('moleculer', { server: false })
+              .then(() => { tracer = require('../../dd-trace') })
+              .then(done)
+              .catch(done)
+          })
+          afterEach(() => agent.close({ ritmReset: false }))
+
+          withPeerService(
+            () => tracer,
+            done => {
+              broker.call('math.add', { a: 5, b: 3 }).catch(done)
+            },
+            hostname,
+            'out.host'
+          )
 
           it('should do automatic instrumentation', done => {
             agent.use(traces => {
@@ -133,7 +151,7 @@ describe('Plugin', () => {
               expect(spans[0]).to.have.property('service', namingSchema.client.serviceName)
               expect(spans[0]).to.have.property('resource', 'math.add')
               expect(spans[0].meta).to.have.property('span.kind', 'client')
-              expect(spans[0].meta).to.have.property('out.host', os.hostname())
+              expect(spans[0].meta).to.have.property('out.host', hostname)
               expect(spans[0].meta).to.have.property('moleculer.context.action', 'math.add')
               expect(spans[0].meta).to.have.property('moleculer.context.node_id', `server-${process.pid}`)
               expect(spans[0].meta).to.have.property('moleculer.context.request_id')

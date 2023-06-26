@@ -12,8 +12,8 @@ class CassandraDriverPlugin extends DatabasePlugin {
       query = combine(query)
     }
 
-    this.startSpan('cassandra.query', {
-      service: this.config.service,
+    this.startSpan(this.operationName(), {
+      service: this.serviceName(this.config, this.system),
       resource: trim(query, 5000),
       type: 'cassandra',
       kind: 'client',
