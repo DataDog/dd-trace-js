@@ -4,6 +4,7 @@ const { expect } = require('chai')
 const getPort = require('get-port')
 const os = require('os')
 const agent = require('../../dd-trace/test/plugins/agent')
+const namingSchema = require('./naming')
 
 const sort = trace => trace.sort((a, b) => a.start.toNumber() - b.start.toNumber())
 
@@ -54,8 +55,8 @@ describe('Plugin', () => {
             agent.use(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0]).to.have.property('name', 'moleculer.action')
-              expect(spans[0]).to.have.property('service', 'test')
+              expect(spans[0]).to.have.property('name', namingSchema.server.opName)
+              expect(spans[0]).to.have.property('service', namingSchema.server.serviceName)
               expect(spans[0]).to.have.property('type', 'web')
               expect(spans[0]).to.have.property('resource', 'math.add')
               expect(spans[0].meta).to.have.property('span.kind', 'server')
@@ -67,8 +68,8 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
               expect(spans[0].meta).to.have.property('component', 'moleculer')
 
-              expect(spans[1]).to.have.property('name', 'moleculer.action')
-              expect(spans[1]).to.have.property('service', 'test')
+              expect(spans[1]).to.have.property('name', namingSchema.server.opName)
+              expect(spans[1]).to.have.property('service', namingSchema.server.serviceName)
               expect(spans[1]).to.have.property('type', 'web')
               expect(spans[1]).to.have.property('resource', 'math.numerify')
               expect(spans[1].meta).to.have.property('span.kind', 'server')
@@ -83,6 +84,11 @@ describe('Plugin', () => {
 
             broker.call('math.add', { a: 5, b: 3 }).catch(done)
           })
+          withNamingSchema(
+            (done) => broker.call('math.add', { a: 5, b: 3 }).then(done, done),
+            () => namingSchema.server.opName,
+            () => namingSchema.server.serviceName
+          )
         })
 
         describe('with configuration', () => {
@@ -103,6 +109,12 @@ describe('Plugin', () => {
 
             broker.call('math.add', { a: 5, b: 3 }).catch(done)
           })
+
+          withNamingSchema(
+            (done) => broker.call('math.add', { a: 5, b: 3 }).then(done, done),
+            () => namingSchema.server.opName,
+            () => 'custom'
+          )
         })
       })
 
@@ -135,8 +147,8 @@ describe('Plugin', () => {
             agent.use(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0]).to.have.property('name', 'moleculer.call')
-              expect(spans[0]).to.have.property('service', 'test')
+              expect(spans[0]).to.have.property('name', namingSchema.client.opName)
+              expect(spans[0]).to.have.property('service', namingSchema.client.serviceName)
               expect(spans[0]).to.have.property('resource', 'math.add')
               expect(spans[0].meta).to.have.property('span.kind', 'client')
               expect(spans[0].meta).to.have.property('out.host', hostname)
@@ -151,6 +163,12 @@ describe('Plugin', () => {
 
             broker.call('math.add', { a: 5, b: 3 }).catch(done)
           })
+
+          withNamingSchema(
+            (done) => broker.call('math.add', { a: 5, b: 3 }).then(done, done),
+            () => namingSchema.client.opName,
+            () => namingSchema.client.serviceName
+          )
         })
 
         describe('with configuration', () => {
@@ -171,6 +189,12 @@ describe('Plugin', () => {
 
             broker.call('math.add', { a: 5, b: 3 }).catch(done)
           })
+
+          withNamingSchema(
+            (done) => broker.call('math.add', { a: 5, b: 3 }).then(done, done),
+            () => namingSchema.client.opName,
+            () => 'custom'
+          )
         })
       })
 
@@ -187,7 +211,7 @@ describe('Plugin', () => {
           const clientPromise = agent.use(traces => {
             const spans = sort(traces[0])
 
-            expect(spans[0]).to.have.property('name', 'moleculer.call')
+            expect(spans[0]).to.have.property('name', namingSchema.client.opName)
 
             spanId = spans[0].span_id
           })
@@ -195,8 +219,8 @@ describe('Plugin', () => {
           const serverPromise = agent.use(traces => {
             const spans = sort(traces[0])
 
-            expect(spans[0]).to.have.property('name', 'moleculer.action')
-            expect(spans[1]).to.have.property('name', 'moleculer.action')
+            expect(spans[0]).to.have.property('name', namingSchema.server.opName)
+            expect(spans[1]).to.have.property('name', namingSchema.server.opName)
 
             parentId = spans[0].parent_id
           })
@@ -252,7 +276,7 @@ describe('Plugin', () => {
           const clientPromise = agent.use(traces => {
             const spans = sort(traces[0])
 
-            expect(spans[0]).to.have.property('name', 'moleculer.call')
+            expect(spans[0]).to.have.property('name', namingSchema.client.opName)
             expect(spans[0].meta).to.have.property('moleculer.context.node_id', `server-${process.pid}`)
             expect(spans[0].meta).to.have.property('moleculer.node_id', `client-${process.pid}`)
 
@@ -262,8 +286,8 @@ describe('Plugin', () => {
           const serverPromise = agent.use(traces => {
             const spans = sort(traces[0])
 
-            expect(spans[0]).to.have.property('name', 'moleculer.action')
-            expect(spans[1]).to.have.property('name', 'moleculer.action')
+            expect(spans[0]).to.have.property('name', namingSchema.server.opName)
+            expect(spans[1]).to.have.property('name', namingSchema.server.opName)
 
             parentId = spans[0].parent_id
           })
