@@ -151,7 +151,7 @@ function onPassportVerify ({ credentials, user }) {
   const rootSpan = store && store.req && web.root(store.req)
 
   if (!rootSpan) {
-    log.warn('No rootSpan found in onPassportVerifySafe')
+    log.warn('No rootSpan found in onPassportVerify')
     return
   }
 
