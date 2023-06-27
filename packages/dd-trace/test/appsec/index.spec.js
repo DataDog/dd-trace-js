@@ -498,7 +498,7 @@ describe('AppSec Index', () => {
 
         passportVerify.publish({ credentials, passportUser, passportErr, passportInfo })
 
-        expect(log.warn).to.have.been.calledOnceWithExactly('No rootSpan found in onPassportVerifySafe')
+        expect(log.warn).to.have.been.calledOnceWithExactly('No rootSpan found in onPassportVerify')
       })
     })
   })

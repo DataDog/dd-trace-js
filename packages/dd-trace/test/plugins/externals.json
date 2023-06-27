@@ -35,6 +35,10 @@
     {
       "name": "loopback",
       "versions": [">=2.38.1"]
+    },
+    {
+      "name": "cookie-parser",
+      "versions": [">=1.4.6"]
     }
   ],
   "fastify": [

@@ -2,46 +2,46 @@
 
 // Plugin temporarily disabled. See https://github.com/DataDog/dd-trace-js/issues/312
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
-class Http2ServerPlugin extends Plugin {
+class Http2ServerPlugin extends ServerPlugin {
   static get id () {
     return 'http2'
   }
 
-  constructor (...args) {
-    super(...args)
+  addTraceSub (eventName, handler) {
+    this.addSub(`apm:${this.constructor.id}:server:${this.operation}:${eventName}`, handler)
+  }
 
-    this.addSub('apm:http2:server:request:start', ({ req, res }) => {
-      const store = storage.getStore()
-      const span = web.startSpan(this.tracer, this.config, req, res, 'web.request')
+  start ({ req, res }) {
+    const store = storage.getStore()
+    const span = web.startSpan(this.tracer, this.config, req, res, 'web.request')
 
-      span.setTag(COMPONENT, this.constructor.id)
+    span.setTag(COMPONENT, this.constructor.id)
 
-      this.enter(span, { ...store, req, res })
+    this.enter(span, { ...store, req, res })
 
-      const context = web.getContext(req)
+    const context = web.getContext(req)
 
-      if (!context.instrumented) {
-        context.res.writeHead = web.wrapWriteHead(context)
-        context.instrumented = true
-      }
-    })
+    if (!context.instrumented) {
+      context.res.writeHead = web.wrapWriteHead(context)
+      context.instrumented = true
+    }
+  }
 
-    this.addSub('apm:http2:server:request:error', (error) => {
-      web.addError(error)
-    })
+  finish ({ req }) {
+    const context = web.getContext(req)
 
-    this.addSub('apm:http2:server:request:finish', ({ req }) => {
-      const context = web.getContext(req)
+    if (!context || !context.res) return // Not created by a http.Server instance.
 
-      if (!context || !context.res) return // Not created by a http.Server instance.
+    web.finishAll(context)
+  }
 
-      web.finishAll(context)
-    })
+  error (error) {
+    web.addError(error)
   }
 
   configure (config) {

@@ -8,9 +8,11 @@ const tags = require('../../../ext/tags')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { DD_MAJOR } = require('../../../version')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
+const SERVICE_NAME = DD_MAJOR < 3 ? 'test-http-client' : 'test'
 
 describe('Plugin', () => {
   let http2
@@ -52,6 +54,31 @@ describe('Plugin', () => {
             })
         })
 
+        withPeerService(
+          () => tracer,
+          done => {
+            getPort().then(port => {
+              const app = (stream, headers) => {
+                stream.respond({
+                  ':status': 200
+                })
+                stream.end()
+              }
+              appListener = server(app, port, () => {
+                const client = http2
+                  .connect(`${protocol}://localhost:${port}`)
+                  .on('error', done)
+
+                const req = client.request({ ':path': '/user', ':method': 'GET' })
+                req.on('error', done)
+
+                req.end()
+              })
+            })
+          },
+          'localhost', 'out.host'
+        )
+
         it('should do automatic instrumentation', done => {
           const app = (stream, headers) => {
             stream.respond({
@@ -63,7 +90,7 @@ describe('Plugin', () => {
           getPort().then(port => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('service', 'test')
+                expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
                 expect(traces[0][0]).to.have.property('type', 'http')
                 expect(traces[0][0]).to.have.property('resource', 'GET')
                 expect(traces[0][0].meta).to.have.property('span.kind', 'client')
