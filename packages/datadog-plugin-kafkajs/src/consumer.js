@@ -8,11 +8,9 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
   start ({ topic, partition, message, groupId }) {
     const childOf = extract(this.tracer, message.headers)
-    const service = this.tracer._service
 
     const header = {
       childOf,
-      service: this.config.service || `${service}-kafka`,
       resource: topic,
       type: 'worker',
       meta: {
@@ -34,7 +32,6 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
   }
 }
 
-// split this into two
 function extract (tracer, bufferMap) {
   if (!bufferMap) return null
 

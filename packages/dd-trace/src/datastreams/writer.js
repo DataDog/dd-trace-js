@@ -52,7 +52,7 @@ class DataStreamsWriter {
         return
       }
       makeRequest(compressedData, this._url, (err, res) => {
-        log.debug(`Response from the intake: ${res}`)
+        log.debug(`Response from the agent: ${res}`)
         if (err) {
           log.error(err)
         }

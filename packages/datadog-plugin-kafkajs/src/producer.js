@@ -16,7 +16,6 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       pathwayCtx = encodePathwayContext(dataStreamsContext)
     }
     const span = this.startSpan('kafka.produce', {
-      service: this.config.service || `${this.tracer._service}-kafka`,
       resource: topic,
       meta: {
         'component': 'kafkajs',
