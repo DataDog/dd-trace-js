@@ -5,15 +5,15 @@ const { channel } = require('./helpers/instrument')
 const passportVerifyChannel = channel('datadog:passport:verify:finish')
 
 function wrapVerifiedAndPublish (username, password, verified, strategy) {
-  if (passportVerifyChannel.hasSubscribers) {
-    return shimmer.wrap(verified, function (err, user, info) {
-      const credentials = { type: strategy, username }
-      passportVerifyChannel.publish({ credentials, user })
-      return verified.apply(this, arguments)
-    })
-  } else {
+  if (!passportVerifyChannel.hasSubscribers) {
     return verified
   }
+
+  return shimmer.wrap(verified, function (err, user, info) {
+    const credentials = { type: strategy, username }
+    passportVerifyChannel.publish({ credentials, user })
+    return verified.apply(this, arguments)
+  })
 }
 
 function wrapVerify (verify, passReq, type) {
