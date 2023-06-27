@@ -158,7 +158,7 @@ class DataStreamsProcessor {
       pathwayStartNs: pathwayStartNs,
       previousDirection: direction,
       closestOppositeDirectionHash: closestOppositeDirectionHash,
-      closestOppositeDirectionEdgeStart: closestOppositeDirectionEdgeStart,
+      closestOppositeDirectionEdgeStart: closestOppositeDirectionEdgeStart
     }
   }
 

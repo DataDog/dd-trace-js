@@ -11,7 +11,7 @@ describe('encoding', () => {
     const hash = computePathwayHash('test-service', 'test-env',
       ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
     expect(hash)
-      .to.deep.equal(Buffer.from('4c3d7cd1c66a7336', 'hex'))
+      .to.deep.equal(Buffer.from('ec99e1e8e682985d', 'hex'))
   })
   it('encoding and decoding should be a no op', () => {
     const expectedContext = {
@@ -26,7 +26,8 @@ describe('encoding', () => {
     expect(decoded.edgeStartNs).to.equal(expectedContext.edgeStartNs)
   })
   it('decoding of a context should be consistent between languages', () => {
-    const data = Buffer.from([76,206,77,142,7,104,87,40,196,231,192,159,143,98,200,217,195,159,143,98])
+    const data = Buffer.from([76, 206, 77, 142, 7, 104, 87, 40, 196, 231,
+      192, 159, 143, 98, 200, 217, 195, 159, 143, 98])
     const decoded = decodePathwayContext(data)
     const expectedContext = {
       hash: Buffer.from('4cce4d8e07685728', 'hex'),

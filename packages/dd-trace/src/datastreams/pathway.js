@@ -1,23 +1,26 @@
-// encoding used here is FNV1a
+// encoding used here is sha256
 // other languages use FNV1
 // this inconsistency is ok because hashes do not need to be consistent across services
-const fnv = require('fnv-plus')
+const crypto = require('crypto')
 const { encodeVarint, decodeVarint } = require('./encoding')
-const cache = require('lru-cache')
+const LRUCache = require('lru-cache')
 
-function fnvHash (checkpointString) {
-  const hash = fnv.hash(checkpointString, 64)
-  return Buffer.from(hash.hex(), 'hex')
+const options = { max: 500 }
+const cache = new LRUCache(options)
+
+function shaHash (checkpointString) {
+  const hash = crypto.createHash('md5').update(checkpointString).digest('hex').slice(0, 16)
+  return Buffer.from(hash, 'hex')
 }
 
 function computeHash (service, env, edgeTags, parentHash) {
   const key = `${service}${env}` + edgeTags.join('') + parentHash.toString()
-  if (cache.has(key)) {
+  if (cache.get(key)) {
     return cache.get(key)
   }
-  const currentHash = fnvHash(`${service}${env}` + edgeTags.join(''))
+  const currentHash = shaHash(`${service}${env}` + edgeTags.join(''))
   const buf = Buffer.concat([ currentHash, parentHash ], 16)
-  const val = fnvHash(buf.toString())
+  const val = shaHash(buf.toString())
   cache.set(key, val)
   return val
 }
