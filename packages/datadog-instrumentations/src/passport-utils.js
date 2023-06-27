@@ -9,7 +9,7 @@ function wrapVerifiedAndPublish (username, password, verified, strategy) {
     return shimmer.wrap(verified, function (err, user, info) {
       const credentials = { type: strategy, username }
       passportVerifyChannel.publish({ credentials, user })
-      return verified.call(this, err, user, info)
+      return verified.apply(this, arguments)
     })
   } else {
     return verified
