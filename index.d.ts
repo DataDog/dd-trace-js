@@ -1881,4 +1881,4 @@ export namespace opentelemetry {
  */
 export declare const tracer: Tracer;
 
-export default tracer;
+export = tracer;
