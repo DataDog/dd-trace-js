@@ -174,7 +174,7 @@
    "passport-http": [
      {
        "name": "passport-http",
-       "versions": ["0.3.0"]
+       "versions": [">=0.3.0"]
      },
      {
        "name": "passport",
@@ -184,7 +184,7 @@
    "passport-local": [
     {
       "name": "passport-local",
-      "versions": ["1.0.0"]
+      "versions": [">=1.0.0"]
     },
     {
       "name": "passport",
