@@ -631,7 +631,6 @@ describe('Config', () => {
         blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
         blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
         eventTracking: {
-          enabled: true,
           mode: 'safe'
         }
       },
@@ -699,7 +698,6 @@ describe('Config', () => {
         blockedTemplateHtml: undefined,
         blockedTemplateJson: undefined,
         eventTracking: {
-          enabled: true,
           mode: 'safe'
         }
       },
@@ -714,7 +712,6 @@ describe('Config', () => {
           blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
           blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
           eventTracking: {
-            enabled: false,
             mode: 'disabled'
           }
         }
