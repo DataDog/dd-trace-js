@@ -2,9 +2,10 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { channel } = require('./helpers/instrument')
+
 const passportVerifyChannel = channel('datadog:passport:verify:finish')
 
-function wrapVerifiedAndPublish (username, password, verified, strategy) {
+function wrapVerifiedAndPublish (username, password, verified, type) {
   if (!passportVerifyChannel.hasSubscribers) {
     return verified
   }
