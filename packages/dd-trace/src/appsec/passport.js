@@ -24,7 +24,7 @@ function isSdkCalled (tags) {
 function getLogin (credentials) {
   const type = credentials && credentials.type
   let login
-  if (type === 'local' || type === 'http) {
+  if (type === 'local' || type === 'http') {
     login = credentials.username
   }
 
