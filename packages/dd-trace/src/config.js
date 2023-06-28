@@ -221,6 +221,8 @@ class Config {
     const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
     const isGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
 
+    const inWindowsAzureAppServices = process.env.WEBSITE_NODE_DEFAULT_VERSION !== undefined && process.env.IISNODE_VERSION !== undefined
+
     const inServerlessEnvironment = inAWSLambda || isGCPFunction
 
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
@@ -617,6 +619,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
 
     this.isGCPFunction = isGCPFunction
+
+    this.inWindowsAzureAppServices = inWindowsAzureAppServices
 
     tagger.add(this.tags, {
       service: this.service,

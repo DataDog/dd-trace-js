@@ -22,4 +22,18 @@ function maybeStartServerlessMiniAgent () {
   }
 }
 
-module.exports = { maybeStartServerlessMiniAgent }
+function startAgents() {
+  const log = require('./log')
+
+  log.error('I would start the agents if I knew how...')
+
+  if (process.env.TRACE_AGENT_PATH !== undefined) {
+    
+  }
+
+  if (process.env.DOGSTATSD_PATH !== undefined) {
+    
+  }
+}
+
+module.exports = { maybeStartServerlessMiniAgent, startAgents }

@@ -34,6 +34,10 @@ class Tracer extends NoopProxy {
         require('./serverless').maybeStartServerlessMiniAgent()
       }
 
+      if (config.inWindowsAzureAppServices) {
+        require('./serverless').startAgents()
+      }
+
       if (config.profiling.enabled) {
         // do not stop tracer initialization if the profiler fails to be imported
         try {
