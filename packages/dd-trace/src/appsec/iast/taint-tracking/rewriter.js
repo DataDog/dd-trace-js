@@ -10,12 +10,46 @@ const { getRewriteFunction } = require('./rewriter-telemetry')
 
 let rewriter
 let getPrepareStackTrace
+
+let getRewriterOriginalPathAndLineFromSourceMap
+
+function isEnableSourceMapsFlagPresent () {
+  return process.execArgv &&
+    process.execArgv.some(arg => arg.includes('--enable-source-maps'))
+}
+
+function getGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, getOriginalPathAndLineFromSourceMap) {
+  if (chainSourceMap) {
+    return function (path, line, column) {
+      // if --enable-source-maps is present stacktraces of the rewritten files contain the original path, file and
+      // column because the sourcemap chaining is done during the rewriting process so we can skip it
+      if (isPrivateModule(path) && isNotLibraryFile(path)) {
+        return { path, line, column }
+      } else {
+        return getOriginalPathAndLineFromSourceMap(path, line, column)
+      }
+    }
+  } else {
+    return getOriginalPathAndLineFromSourceMap
+  }
+}
+
 function getRewriter (telemetryVerbosity) {
   if (!rewriter) {
-    const iastRewriter = require('@datadog/native-iast-rewriter')
-    const Rewriter = iastRewriter.Rewriter
-    getPrepareStackTrace = iastRewriter.getPrepareStackTrace
-    rewriter = new Rewriter({ csiMethods, telemetryVerbosity: getName(telemetryVerbosity) })
+    try {
+      const iastRewriter = require('@datadog/native-iast-rewriter')
+      const Rewriter = iastRewriter.Rewriter
+      getPrepareStackTrace = iastRewriter.getPrepareStackTrace
+
+      const chainSourceMap = isEnableSourceMapsFlagPresent()
+      getRewriterOriginalPathAndLineFromSourceMap =
+        getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, iastRewriter.getOriginalPathAndLineFromSourceMap)
+
+      rewriter = new Rewriter({ csiMethods, telemetryVerbosity: getName(telemetryVerbosity), chainSourceMap })
+    } catch (e) {
+      iastLog.error('Unable to initialize TaintTracking Rewriter')
+        .errorAndPublish(e)
+    }
   }
   return rewriter
 }
@@ -74,6 +108,10 @@ function disableRewriter () {
   Error.prepareStackTrace = originalPrepareStackTrace
 }
 
+function getOriginalPathAndLineFromSourceMap ({ path, line, column }) {
+  return getRewriterOriginalPathAndLineFromSourceMap(path, line, column)
+}
+
 module.exports = {
-  enableRewriter, disableRewriter
+  enableRewriter, disableRewriter, getOriginalPathAndLineFromSourceMap
 }
