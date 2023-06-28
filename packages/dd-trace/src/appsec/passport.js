@@ -96,15 +96,13 @@ function passportTrackEvent (credentials, passportUser, rootSpan, mode) {
   if (passportUser) {
     // If a passportUser object is published then the login succeded
     const userTags = {}
-    Object.entries(user).some((entry) => {
-      const attr = entry[0].split('.')[1]
-      userTags[attr] = entry[1]
-      // Prevent attributes from beint sent under 'users.login.success' prefix
-      delete user[entry[0]]
+    Object.entries(user).forEach(([k, v]) => {
+      const attr = k.split('.', 2)[1]
+      userTags[attr] = v
     })
 
     setUserTags(userTags, rootSpan)
-    trackEvent('users.login.success', user, 'passportTrackEvent', rootSpan, mode)
+    trackEvent('users.login.success', null, 'passportTrackEvent', rootSpan, mode)
   } else {
     trackEvent('users.login.failure', user, 'passportTrackEvent', rootSpan, mode)
   }
