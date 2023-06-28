@@ -62,8 +62,6 @@ describe('IAST Rewriter', () => {
   describe('getOriginalPathAndLineFromSourceMap', () => {
     let rewriter, getOriginalPathAndLineFromSourceMap, argvs
     beforeEach(() => {
-      delete require.cache[require.resolve('../../../../src/appsec/iast/taint-tracking/rewriter')]
-
       getOriginalPathAndLineFromSourceMap = sinon.spy()
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
         '@datadog/native-iast-rewriter': {
