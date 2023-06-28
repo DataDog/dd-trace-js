@@ -80,6 +80,7 @@ describe('test-api-manual', () => {
       receiverPromise.then(() => done())
     })
   })
+
   it('does not report test spans if DD_CIVISIBILITY_MANUAL_API_ENABLED is not set', (done) => {
     receiver.assertPayloadReceived(() => {
       const error = new Error('should not report spans')
