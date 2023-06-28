@@ -18,7 +18,7 @@ describe('passport-utils', () => {
     })
   })
 
-  it('should call wrap when there is no subscribers', () => {
+  it('should not call wrap when there is no subscribers', () => {
     const wrap = passportUtils.wrapVerify(() => {}, false, 'type')
 
     wrap()
