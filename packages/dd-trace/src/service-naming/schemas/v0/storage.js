@@ -16,7 +16,16 @@ function mysqlServiceName (service, config, dbConfig, system) {
   if (typeof config.service === 'function') {
     return config.service(dbConfig)
   }
-  return config.service ? config.service : fromSystem(service, system)
+  return config.service || fromSystem(service, system)
+}
+
+function withSuffixFunction (suffix) {
+  return (service, config, params) => {
+    if (typeof config.service === 'function') {
+      return config.service(params)
+    }
+    return config.service || `${service}-${suffix}`
+  }
 }
 
 const redisConfig = {
@@ -28,6 +37,14 @@ const redisConfig = {
 
 const storage = {
   client: {
+    'cassandra-driver': {
+      opName: () => 'cassandra.query',
+      serviceName: (service, config, system) => config.service || fromSystem(service, system)
+    },
+    elasticsearch: {
+      opName: () => 'elasticsearch.query',
+      serviceName: (service, config) => config.service || `${service}-elasticsearch`
+    },
     ioredis: redisConfig,
     mariadb: {
       opName: () => 'mariadb.query',
@@ -37,6 +54,10 @@ const storage = {
       opName: () => 'memcached.command',
       serviceName: (service, config, system) => config.service || fromSystem(service, system)
     },
+    'mongodb-core': {
+      opName: () => 'mongodb.query',
+      serviceName: (service, config) => config.service || `${service}-mongodb`
+    },
     mysql: {
       opName: () => 'mysql.query',
       serviceName: mysqlServiceName
@@ -44,6 +65,18 @@ const storage = {
     mysql2: {
       opName: () => 'mysql.query',
       serviceName: mysqlServiceName
+    },
+    opensearch: {
+      opName: () => 'opensearch.query',
+      serviceName: (service, config) => config.service || `${service}-opensearch`
+    },
+    oracledb: {
+      opName: () => 'oracle.query',
+      serviceName: withSuffixFunction('oracle')
+    },
+    pg: {
+      opName: () => 'pg.query',
+      serviceName: withSuffixFunction('postgres')
     },
     redis: redisConfig,
     tedious: {

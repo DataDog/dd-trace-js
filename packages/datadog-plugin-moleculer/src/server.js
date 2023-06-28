@@ -10,9 +10,9 @@ class MoleculerServerPlugin extends ServerPlugin {
   start ({ action, ctx, broker }) {
     const followsFrom = this.tracer.extract('text_map', ctx.meta)
 
-    this.startSpan('moleculer.action', {
+    this.startSpan(this.operationName(), {
       childOf: followsFrom || this.activeSpan,
-      service: this.config.service,
+      service: this.config.service || this.serviceName(),
       resource: action.name,
       kind: 'server',
       type: 'web',

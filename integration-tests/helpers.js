@@ -27,6 +27,7 @@ class FakeAgent extends EventEmitter {
   async start () {
     const app = express()
     app.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
+    app.use(bodyParser.json({ limit: Infinity, type: 'application/json' }))
     app.put('/v0.4/traces', (req, res) => {
       if (req.body.length === 0) return res.status(200).send()
       res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
@@ -41,6 +42,13 @@ class FakeAgent extends EventEmitter {
         headers: req.headers,
         payload: req.body,
         files: req.files
+      })
+    })
+    app.post('/telemetry/proxy/api/v2/apmtelemetry', (req, res) => {
+      res.status(200).send()
+      this.emit('telemetry', {
+        headers: req.headers,
+        payload: req.body
       })
     })
 
@@ -100,6 +108,48 @@ class FakeAgent extends EventEmitter {
       }
     }
     this.on('message', messageHandler)
+
+    return resultPromise
+  }
+
+  assertTelemetryReceived (fn, timeout, requestType, expectedMessageCount = 1) {
+    timeout = timeout || 5000
+    let resultResolve
+    let resultReject
+    let msgCount = 0
+    const errors = []
+
+    const timeoutObj = setTimeout(() => {
+      resultReject([...errors, new Error('timeout')])
+    }, timeout)
+
+    const resultPromise = new Promise((resolve, reject) => {
+      resultResolve = () => {
+        clearTimeout(timeoutObj)
+        resolve()
+      }
+      resultReject = (e) => {
+        clearTimeout(timeoutObj)
+        reject(e)
+      }
+    })
+
+    const messageHandler = msg => {
+      if (msg.payload.request_type !== requestType) return
+      msgCount += 1
+      try {
+        fn(msg)
+        if (msgCount === expectedMessageCount) {
+          resultResolve()
+        }
+      } catch (e) {
+        errors.push(e)
+      }
+      if (msgCount === expectedMessageCount) {
+        this.removeListener('telemetry', messageHandler)
+      }
+    }
+    this.on('telemetry', messageHandler)
 
     return resultPromise
   }

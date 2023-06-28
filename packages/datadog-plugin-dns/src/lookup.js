@@ -33,7 +33,7 @@ class DNSLookupPlugin extends ClientPlugin {
       span.setTag('dns.address', result)
     }
 
-    span.finish()
+    super.finish()
   }
 }
 

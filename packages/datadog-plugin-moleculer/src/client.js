@@ -8,8 +8,8 @@ class MoleculerClientPlugin extends ClientPlugin {
   static get operation () { return 'call' }
 
   start ({ actionName, opts }) {
-    const span = this.startSpan('moleculer.call', {
-      service: this.config.service,
+    const span = this.startSpan(this.operationName(), {
+      service: this.config.service || this.serviceName(),
       resource: actionName,
       kind: 'client'
     })
@@ -29,7 +29,7 @@ class MoleculerClientPlugin extends ClientPlugin {
       span.addTags(moleculerTags(broker, ctx, this.config))
     }
 
-    span.finish()
+    super.finish()
   }
 }
 

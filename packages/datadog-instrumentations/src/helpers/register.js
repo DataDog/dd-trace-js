@@ -19,6 +19,9 @@ const disabledInstrumentations = new Set(
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
+// Globals
+require('../fetch')
+
 // TODO: make this more efficient
 
 for (const packageName of names) {
