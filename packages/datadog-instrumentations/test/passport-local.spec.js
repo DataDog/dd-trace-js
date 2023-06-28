@@ -45,6 +45,16 @@ withVersions('passport-local', 'passport-local', version => {
         passport.authenticate('local', {
           successRedirect: '/grant',
           failureRedirect: '/deny',
+          passReqToCallback: false,
+          session: false
+        })
+      )
+
+      app.post('/req',
+        passport.authenticate('local', {
+          successRedirect: '/grant',
+          failureRedirect: '/deny',
+          passReqToCallback: true,
           session: false
         })
       )
@@ -79,6 +89,19 @@ withVersions('passport-local', 'passport-local', version => {
 
     it('should call subscriber with proper arguments on success', async () => {
       const res = await axios.post(`http://localhost:${port}/`, { username: 'test', password: '1234' })
+
+      expect(res.status).to.equal(200)
+      expect(res.data).to.equal('Granted')
+      expect(subscriberStub).to.be.calledOnceWithExactly(
+        {
+          credentials: { type: 'local', username: 'test' },
+          user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' }
+        }
+      )
+    })
+
+    it('should call subscriber with proper arguments on success with passReqToCallback set to true', async () => {
+      const res = await axios.post(`http://localhost:${port}/req`, { username: 'test', password: '1234' })
 
       expect(res.status).to.equal(200)
       expect(res.data).to.equal('Granted')

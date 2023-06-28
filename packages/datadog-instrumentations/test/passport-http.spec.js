@@ -44,6 +44,16 @@ withVersions('passport-http', 'passport-http', version => {
         passport.authenticate('basic', {
           successRedirect: '/grant',
           failureRedirect: '/deny',
+          passReqToCallback: false,
+          session: false
+        })
+      )
+
+      app.post('/req',
+        passport.authenticate('basic', {
+          successRedirect: '/grant',
+          failureRedirect: '/deny',
+          passReqToCallback: true,
           session: false
         })
       )
@@ -77,6 +87,24 @@ withVersions('passport-http', 'passport-http', version => {
     })
 
     it('should call subscriber with proper arguments on success', async () => {
+      const res = await axios.get(`http://localhost:${port}/`, {
+        headers: {
+          // test:1234
+          'Authorization': 'Basic dGVzdDoxMjM0'
+        }
+      })
+
+      expect(res.status).to.equal(200)
+      expect(res.data).to.equal('Granted')
+      expect(subscriberStub).to.be.calledOnceWithExactly(
+        {
+          credentials: { type: 'http', username: 'test' },
+          user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' }
+        }
+      )
+    })
+
+    it('should call subscriber with proper arguments on success with passReqToCallback set to true', async () => {
       const res = await axios.get(`http://localhost:${port}/`, {
         headers: {
           // test:1234
