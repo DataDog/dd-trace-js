@@ -125,7 +125,7 @@ describe('AppSec Index', () => {
     })
 
     it('should not subscribe to passportVerify if eventTracking is disabled', () => {
-      config.eventTracking.enabled = false
+      config.appsec.eventTracking.enabled = false
 
       AppSec.disable()
       AppSec.enable(config)
@@ -498,8 +498,6 @@ describe('AppSec Index', () => {
       it('Should call log if no rootSpan is found', () => {
         const credentials = { type: 'local', username: 'test' }
         const user = { id: '1234', username: 'Test' }
-        const err = {}
-        const info = {}
 
         sinon.stub(storage, 'getStore').returns(undefined)
 
