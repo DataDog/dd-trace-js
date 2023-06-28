@@ -491,12 +491,10 @@ describe('AppSec Index', () => {
       it('Should call passportTrackEvent', () => {
         const credentials = { type: 'local', username: 'test' }
         const user = { id: '1234', username: 'Test' }
-        const err = {}
-        const info = {}
 
         sinon.stub(storage, 'getStore').returns({ req: {} })
 
-        passportVerify.publish({ credentials, user, err, info })
+        passportVerify.publish({ credentials, user })
 
         expect(passport.passportTrackEvent).to.have.been.calledOnceWithExactly(
           credentials,
