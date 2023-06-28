@@ -11,8 +11,7 @@ class MongodbCorePlugin extends DatabasePlugin {
   start ({ ns, ops, options = {}, name }) {
     const query = getQuery(ops)
     const resource = truncate(getResource(this, ns, query, name))
-
-    const span = this.startSpan(this.operationName(), {
+    this.startSpan(this.operationName(), {
       service: this.serviceName(this.config),
       resource,
       type: 'mongodb',
@@ -25,14 +24,15 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.port': options.port
       }
     })
-    if (this.tracer._computePeerService && ns) {
-      const dbParts = ns.split('.', 2)
-      // if we should compute peer.service and the ns is well formed (dbName.collection)
-      // then we can eagerly set if safely
-      if (dbParts.length === 2) {
-        span.setTag('peer.service', dbParts[0])
-      }
+  }
+
+  getPeerService (tags) {
+    const ns = tags['db.name']
+    if (ns && tags['peer.service'] === undefined) {
+      // the mongo ns is either dbName either dbName.collection. So we keep the first part
+      tags['peer.service'] = ns.split('.', 1)[0]
     }
+    return super.getPeerService(tags)
   }
 }
 
