@@ -501,7 +501,7 @@ describe('AppSec Index', () => {
 
         sinon.stub(storage, 'getStore').returns(undefined)
 
-        passportVerify.publish({ credentials, user, err, info })
+        passportVerify.publish({ credentials, user })
 
         expect(log.warn).to.have.been.calledOnceWithExactly('No rootSpan found in onPassportVerify')
         expect(passport.passportTrackEvent).not.to.have.been.called
