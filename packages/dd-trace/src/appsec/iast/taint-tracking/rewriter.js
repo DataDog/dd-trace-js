@@ -11,7 +11,9 @@ const { getRewriteFunction } = require('./rewriter-telemetry')
 let rewriter
 let getPrepareStackTrace
 
-let getRewriterOriginalPathAndLineFromSourceMap
+let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) {
+  return { path, line, column }
+}
 
 function isEnableSourceMapsFlagPresent () {
   return process.execArgv &&
@@ -42,8 +44,11 @@ function getRewriter (telemetryVerbosity) {
       getPrepareStackTrace = iastRewriter.getPrepareStackTrace
 
       const chainSourceMap = isEnableSourceMapsFlagPresent()
-      getRewriterOriginalPathAndLineFromSourceMap =
-        getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, iastRewriter.getOriginalPathAndLineFromSourceMap)
+      const getOriginalPathAndLineFromSourceMap = iastRewriter.getOriginalPathAndLineFromSourceMap
+      if (getOriginalPathAndLineFromSourceMap) {
+        getRewriterOriginalPathAndLineFromSourceMap =
+          getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, getOriginalPathAndLineFromSourceMap)
+      }
 
       rewriter = new Rewriter({ csiMethods, telemetryVerbosity: getName(telemetryVerbosity), chainSourceMap })
     } catch (e) {
