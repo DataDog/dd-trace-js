@@ -77,7 +77,7 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
 
     return `${protocol}//${hostname}${pathname}`
   } catch (e) {
-    return repositoryUrl
+    return ''
   }
 }
 
@@ -93,6 +93,7 @@ function resolveTilde (filePath) {
 }
 
 module.exports = {
+  removeEmptyValues,
   normalizeRef,
   getCIMetadata () {
     const { env } = process
@@ -605,7 +606,6 @@ module.exports = {
     normalizeTag(tags, GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository)
     normalizeTag(tags, GIT_BRANCH, normalizeRef)
     normalizeTag(tags, GIT_TAG, normalizeRef)
-
     return removeEmptyValues(tags)
   }
 }

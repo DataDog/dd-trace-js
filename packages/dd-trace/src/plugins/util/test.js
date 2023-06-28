@@ -6,7 +6,7 @@ const ignore = require('ignore')
 
 const { getGitMetadata } = require('./git')
 const { getUserProviderGitMetadata } = require('./user-provided-git')
-const { getCIMetadata } = require('./ci')
+const { getCIMetadata, removeEmptyValues } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
 const {
   GIT_BRANCH,
@@ -16,7 +16,7 @@ const {
   GIT_COMMIT_AUTHOR_EMAIL,
   GIT_COMMIT_AUTHOR_NAME,
   GIT_COMMIT_MESSAGE,
-  CI_WORKSPACE_PATH
+  CI_WORKSPACE_PATH, CI_PIPELINE_URL
 } = require('./tags')
 const id = require('../../id')
 
@@ -24,6 +24,8 @@ const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../
 const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { version: ddTraceVersion } = require('../../../../../package.json')
+const { valid } = require('semver')
+const { URL } = require('url')
 
 const TEST_FRAMEWORK = 'test.framework'
 const TEST_FRAMEWORK_VERSION = 'test.framework_version'
@@ -116,6 +118,35 @@ function getPkgManager () {
   }
 }
 
+function validateMetadata (metadata) {
+  if (GIT_REPOSITORY_URL in metadata) {
+    const validUrl = validateUrl(metadata[GIT_REPOSITORY_URL])
+    if (!validUrl) {
+      delete metadata[GIT_REPOSITORY_URL]
+    }
+  }
+  if (CI_PIPELINE_URL in metadata) {
+    const validUrl = validateUrl(metadata[CI_PIPELINE_URL])
+    if (!validUrl) {
+      delete metadata[CI_PIPELINE_URL]
+    }
+  }
+  return removeEmptyValues(metadata)
+}
+
+function validateUrl (url) {
+  if (url.startsWith('git@') && url.includes(':')) {
+    const hostname = url.substring(url.indexOf('@') + 1, url.lastIndexOf(':'))
+    return hostname.includes('.')
+  }
+  try {
+    const { protocol, hostname, pathname } = new URL(url)
+    return (protocol === 'https:' || protocol === 'http:')
+  } catch (e) {
+    return false
+  }
+}
+
 function getTestEnvironmentMetadata (testFramework, config) {
   // TODO: eventually these will come from the tracer (generally available)
   const ciMetadata = getCIMetadata()
@@ -145,13 +176,14 @@ function getTestEnvironmentMetadata (testFramework, config) {
 
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
 
-  const metadata = {
+  let metadata = {
     [TEST_FRAMEWORK]: testFramework,
     ...gitMetadata,
     ...ciMetadata,
     ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata
   }
+  metadata = validateMetadata(metadata)
   if (config && config.service) {
     metadata['service.name'] = config.service
   }
