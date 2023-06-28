@@ -1,3 +1,5 @@
+'use strict'
+
 global.tests = []
 global.beforeEachHooks = []
 global.afterEachHooks = []

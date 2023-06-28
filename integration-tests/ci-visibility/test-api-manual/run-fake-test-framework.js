@@ -1,5 +1,6 @@
+'use strict'
+
 /* eslint-disable */
-require('./setup-fake-test-framework')
 
 function runTests () {
   const promises = global.tests.map(async (test) => {
