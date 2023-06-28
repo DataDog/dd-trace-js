@@ -7,7 +7,7 @@ const { setUserTags } = require('./sdk/set_user')
 const UUID_PATTERN = '^[0-9A-F]{8}-[0-9A-F]{4}-[1-5][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$'
 const regexUsername = new RegExp(UUID_PATTERN, 'i')
 
-const SDK_USER_EVENT_PATTERN = '_dd\\.appsec\\.events\\.users\\.[\\W\\w+]+\\.sdk'
+const SDK_USER_EVENT_PATTERN = '^_dd\\.appsec\\.events\\.users\\.[\\W\\w+]+\\.sdk$'
 const regexSdkEvent = new RegExp(SDK_USER_EVENT_PATTERN, 'i')
 
 function isSdkCalled (tags) {
