@@ -123,6 +123,15 @@ describe('AppSec Index', () => {
       expect(queryParser.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
     })
+
+    it('should not subscribe to passportVerify if eventTracking is disabled', () => {
+      config.eventTracking.enabled = false
+
+      AppSec.disable()
+      AppSec.enable(config)
+
+      expect(passportVerify.hasSubscribers).to.be.false
+    })
   })
 
   describe('disable', () => {
@@ -471,23 +480,6 @@ describe('AppSec Index', () => {
     })
 
     describe('onPassportVerify', () => {
-      it('Should not subscribe to the channel if disabled', () => {
-        const config = {
-          appsec: {
-            enabled: true,
-            eventTracking: {
-              enabled: false,
-              mode: 'disabled'
-            }
-          }
-        }
-
-        AppSec.disable()
-        AppSec.enable(config)
-
-        expect(passportVerify.hasSubscribers).to.be.false
-      })
-
       it('Should call passportTrackEvent', () => {
         const credentials = { type: 'local', username: 'test' }
         const user = { id: '1234', username: 'Test' }
