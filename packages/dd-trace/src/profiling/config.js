@@ -27,6 +27,7 @@ class Config {
       DD_TRACE_AGENT_URL,
       DD_AGENT_HOST,
       DD_TRACE_AGENT_PORT,
+      DD_PROFILING_DEBUG_SOURCE_MAPS,
       DD_PROFILING_UPLOAD_TIMEOUT,
       DD_PROFILING_SOURCE_MAP,
       DD_PROFILING_UPLOAD_PERIOD,
@@ -52,7 +53,7 @@ class Config {
     const endpointCollection = coalesce(options.endpointCollection,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED, false)
     const pprofPrefix = coalesce(options.pprofPrefix,
-      DD_PROFILING_PPROF_PREFIX)
+      DD_PROFILING_PPROF_PREFIX, '')
 
     this.enabled = enabled
     this.service = service
@@ -70,6 +71,7 @@ class Config {
     this.flushInterval = flushInterval
     this.uploadTimeout = uploadTimeout
     this.sourceMap = sourceMap
+    this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
     this.endpointCollection = endpointCollection
     this.pprofPrefix = pprofPrefix
 
@@ -86,7 +88,7 @@ class Config {
     ], this)
 
     const oomMonitoringEnabled = isTrue(coalesce(options.oomMonitoring,
-      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED, false))
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED, true))
     const heapLimitExtensionSize = coalesce(options.oomHeapLimitExtensionSize,
       Number(DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE), 0)
     const maxHeapExtensionCount = coalesce(options.oomMaxHeapExtensionCount,

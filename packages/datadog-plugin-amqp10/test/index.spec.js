@@ -60,6 +60,13 @@ describe('Plugin', () => {
         })
 
         describe('when sending messages', () => {
+          withPeerService(
+            () => tracer,
+            () => sender.send({ key: 'value' }),
+            'localhost',
+            'out.host'
+          )
+
           it('should do automatic instrumentation', done => {
             agent
               .use(traces => {
