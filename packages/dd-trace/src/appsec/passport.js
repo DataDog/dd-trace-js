@@ -20,6 +20,7 @@ function isSdkCalled (tags) {
   return called
 }
 
+// delete this function later if we know it's always credential.username
 function getLogin (credentials) {
   const type = credentials && credentials.type
   let login
