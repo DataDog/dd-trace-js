@@ -89,7 +89,7 @@ function passportTrackEvent (credentials, passportUser, rootSpan, mode) {
   const user = parseUser(getLogin(credentials), passportUser, mode)
 
   if (user['usr.id'] === undefined) {
-    log.warn('No username found in authentication instrumentation')
+    log.warn('No user ID found in authentication instrumentation')
     return
   }
 
