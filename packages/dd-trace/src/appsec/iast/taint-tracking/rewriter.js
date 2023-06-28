@@ -8,7 +8,9 @@ const { csiMethods } = require('./csi-methods')
 
 let rewriter
 let getPrepareStackTrace
-let getRewriterOriginalPathAndLineFromSourceMap
+let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) {
+  return { path, line, column }
+}
 
 function isEnableSourceMapsFlagPresent () {
   return process.execArgv &&
