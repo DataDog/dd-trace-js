@@ -68,7 +68,7 @@ withVersions('passport-local', 'passport-local', version => {
         })
       })
     })
-    beforeEach(async () => {
+    beforeEach(() => {
       subscriberStub = sinon.stub()
     })
 

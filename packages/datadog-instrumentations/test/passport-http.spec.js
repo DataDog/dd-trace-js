@@ -67,7 +67,7 @@ withVersions('passport-http', 'passport-http', version => {
         })
       })
     })
-    beforeEach(async () => {
+    beforeEach(() => {
       subscriberStub = sinon.stub()
     })
 
