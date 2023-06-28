@@ -471,6 +471,23 @@ describe('AppSec Index', () => {
     })
 
     describe('onPassportVerify', () => {
+      it('Should not subscribe to the channel if disabled', () => {
+        const config = {
+          appsec: {
+            enabled: true,
+            eventTracking: {
+              enabled: false,
+              mode: 'disabled'
+            }
+          }
+        }
+
+        AppSec.disable()
+        AppSec.enable(config)
+
+        expect(passportVerify.hasSubscribers).to.be.false
+      })
+
       it('Should call passportTrackEvent', () => {
         const credentials = { type: 'local', username: 'test' }
         const user = { id: '1234', username: 'Test' }
@@ -490,15 +507,16 @@ describe('AppSec Index', () => {
 
       it('Should call log if no rootSpan is found', () => {
         const credentials = { type: 'local', username: 'test' }
-        const passportUser = { id: '1234', username: 'Test' }
-        const passportErr = {}
-        const passportInfo = {}
+        const user = { id: '1234', username: 'Test' }
+        const err = {}
+        const info = {}
 
         sinon.stub(storage, 'getStore').returns(undefined)
 
-        passportVerify.publish({ credentials, passportUser, passportErr, passportInfo })
+        passportVerify.publish({ credentials, user, err, info })
 
         expect(log.warn).to.have.been.calledOnceWithExactly('No rootSpan found in onPassportVerify')
+        expect(passport.passportTrackEvent).not.to.have.been.called
       })
     })
   })
