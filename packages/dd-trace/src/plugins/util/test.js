@@ -119,13 +119,13 @@ function getPkgManager () {
 }
 
 function validateMetadata (metadata) {
-  if (GIT_REPOSITORY_URL in metadata) {
+  if (GIT_REPOSITORY_URL in metadata && metadata[GIT_REPOSITORY_URL]) {
     const validUrl = validateUrl(metadata[GIT_REPOSITORY_URL])
     if (!validUrl) {
       delete metadata[GIT_REPOSITORY_URL]
     }
   }
-  if (CI_PIPELINE_URL in metadata) {
+  if (CI_PIPELINE_URL in metadata && metadata[CI_PIPELINE_URL]) {
     const validUrl = validateUrl(metadata[CI_PIPELINE_URL])
     if (!validUrl) {
       delete metadata[CI_PIPELINE_URL]
@@ -140,8 +140,8 @@ function validateUrl (url) {
     return hostname.includes('.')
   }
   try {
-    const { protocol, hostname, pathname } = new URL(url)
-    return (protocol === 'https:' || protocol === 'http:')
+    const url_object = new URL(url)
+    return (url_object.protocol === 'https:' || url_object.protocol === 'http:')
   } catch (e) {
     return false
   }
