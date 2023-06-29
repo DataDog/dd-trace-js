@@ -49,8 +49,8 @@ describe('StatsPoint', () => {
     aggStats.addLatencies(mockCheckpoint)
     const edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     const pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
-    edgeLatency.accept(DEFAULT_LATENCY/1e9)
-    pathwayLatency.accept(DEFAULT_LATENCY/1e9)
+    edgeLatency.accept(DEFAULT_LATENCY / 1e9)
+    pathwayLatency.accept(DEFAULT_LATENCY / 1e9)
 
     const encoded = aggStats.encode()
     expect(encoded.Hash.toString()).to.equal(new Uint64(DEFAULT_CURRENT_HASH).toString())

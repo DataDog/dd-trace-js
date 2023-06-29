@@ -19,6 +19,7 @@ describe('Plugin', () => {
       let kafka
       let tracer
       describe('without configuration', () => {
+        const messages = [{ key: 'key1', value: 'test2' }]
         beforeEach(async () => {
           tracer = require('../../dd-trace')
           await agent.load('kafkajs')
@@ -32,7 +33,6 @@ describe('Plugin', () => {
         })
         describe('producer', () => {
           it('should be instrumented', async () => {
-            const messages = [{ key: 'producer1', value: 'test2' }]
             const expectedSpanPromise = expectSpanWithDefaults({
               name: namingSchema.send.opName,
               service: namingSchema.send.serviceName,
@@ -90,19 +90,11 @@ describe('Plugin', () => {
             }
           })
 
-          const messages = [{ key: 'producer1', value: 'test2' }]
           withNamingSchema(
             async () => sendMessages(kafka, testTopic, messages),
             () => namingSchema.send.opName,
             () => namingSchema.send.serviceName
           )
-        })
-
-        describe('producer data stream monitoring', () => {
-          beforeEach(() => {
-            tracer.init()
-            tracer.use('kafkajs', { dsmEnabled: true })
-          })
         })
         describe('consumer', () => {
           let consumer
@@ -117,7 +109,6 @@ describe('Plugin', () => {
           })
 
           it('should be instrumented', async () => {
-            const messages = [{ key: 'consumer1', value: 'test2' }]
             const expectedSpanPromise = expectSpanWithDefaults({
               name: namingSchema.receive.opName,
               service: namingSchema.receive.serviceName,
@@ -139,10 +130,11 @@ describe('Plugin', () => {
           })
 
           it('should run the consumer in the context of the consumer span', done => {
-            const messages = [{ key: 'consumer2', value: 'test2' }]
             const firstSpan = tracer.scope().active()
+
             let eachMessage = async ({ topic, partition, message }) => {
               const currentSpan = tracer.scope().active()
+
               try {
                 expect(currentSpan).to.not.equal(firstSpan)
                 expect(currentSpan.context()._name).to.equal(namingSchema.receive.opName)
@@ -154,14 +146,30 @@ describe('Plugin', () => {
               }
             }
 
-            consumer.run({
-              eachMessage: (...args) => eachMessage(...args) })
+            consumer.run({ eachMessage: (...args) => eachMessage(...args) })
               .then(() => sendMessages(kafka, testTopic, messages))
               .catch(done)
           })
 
+          it('should propagate context', async () => {
+            const expectedSpanPromise = agent.use(traces => {
+              const span = traces[0][0]
+
+              expect(span).to.include({
+                name: 'kafka.consume',
+                service: 'test-kafka',
+                resource: testTopic
+              })
+
+              expect(parseInt(span.parent_id.toString())).to.be.gt(0)
+            })
+
+            await consumer.run({ eachMessage: () => {} })
+            await sendMessages(kafka, testTopic, messages)
+            await expectedSpanPromise
+          })
+
           it('should be instrumented w/ error', async () => {
-            const messages = [{ key: 'consumer3', value: 'test2' }]
             const fakeError = new Error('Oh No!')
             const expectedSpanPromise = expectSpanWithDefaults({
               name: namingSchema.receive.opName,
@@ -190,7 +198,6 @@ describe('Plugin', () => {
           })
 
           it('should run constructor even if no eachMessage supplied', (done) => {
-            const messages = [{ key: 'consumer4', value: 'test2' }]
             let eachBatch = async ({ batch }) => {
               try {
                 expect(batch.isEmpty()).to.be.false
@@ -202,9 +209,7 @@ describe('Plugin', () => {
               }
             }
 
-            const runResult = consumer.run({
-              eachBatch: (...args) => eachBatch(...args)
-            })
+            const runResult = consumer.run({ eachBatch: (...args) => eachBatch(...args) })
 
             if (!runResult || !runResult.then) {
               throw new Error('Consumer.run returned invalid result')
@@ -215,7 +220,6 @@ describe('Plugin', () => {
               .catch(done)
           })
 
-          const messages = [{ key: 'consumer4', value: 'test2' }]
           withNamingSchema(
             async () => {
               await consumer.run({ eachMessage: () => {} })
@@ -226,7 +230,7 @@ describe('Plugin', () => {
           )
         })
 
-        describe('consumer data stream monitoring', () => {
+        describe('data stream monitoring', () => {
           let consumer
           beforeEach(async () => {
             tracer.init()

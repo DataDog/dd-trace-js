@@ -7,9 +7,13 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
   static get operation () { return 'consume' }
 
   start ({ topic, partition, message, groupId }) {
+    if (this.config.dsmEnabled) {
+      this.tracer.decodeDataStreamsContext(message.headers['dd-pathway-ctx'])
+      this.tracer
+        .setCheckpoint(['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka'])
+    }
     const childOf = extract(this.tracer, message.headers)
-
-    const header = {
+    this.startSpan({
       childOf,
       resource: topic,
       type: 'worker',
@@ -21,14 +25,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       metrics: {
         'kafka.partition': partition
       }
-    }
-
-    if (this.config.dsmEnabled) {
-      this.tracer.decodeDataStreamsContext(message.headers['dd-pathway-ctx'])
-      this.tracer
-        .setCheckpoint(['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka'])
-    }
-    this.startSpan('kafka.consume', header)
+    })
   }
 }
 
