@@ -8,7 +8,6 @@ const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const log = require('../../dd-trace/src/log')
-const url = require('url')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -40,12 +39,12 @@ class HttpClientPlugin extends ClientPlugin {
     const method = (options.method || 'GET').toUpperCase()
     const childOf = store && allowed ? store.span : null
     // TODO delegate to super.startspan
-    const span = this.startSpan('http.request', {
+    const span = this.startSpan(this.operationName(), {
       childOf,
       meta: {
         [COMPONENT]: this.constructor.id,
         'span.kind': 'client',
-        'service.name': getServiceName(this.tracer, this.config, options),
+        'service.name': this.serviceName(this.config, options),
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
@@ -210,27 +209,6 @@ function hasAmazonSignature (options) {
   const search = options.search || options.path
 
   return search && search.toLowerCase().indexOf('x-amz-signature=') !== -1
-}
-
-function getServiceName (tracer, config, options) {
-  if (config.splitByDomain) {
-    return getHost(options)
-  } else if (config.service) {
-    return config.service
-  }
-
-  return tracer._service
-}
-
-function getHost (options) {
-  if (typeof options === 'string') {
-    return url.parse(options).host
-  }
-
-  const hostname = options.hostname || options.host || 'localhost'
-  const port = options.port
-
-  return [hostname, port].filter(val => val).join(':')
 }
 
 function startsWith (searchString) {

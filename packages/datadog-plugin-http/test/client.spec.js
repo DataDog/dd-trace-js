@@ -11,6 +11,8 @@ const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DD_MAJOR } = require('../../../version')
+const axios = require('axios')
+const namingSchema = require('./naming')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -76,6 +78,25 @@ describe('Plugin', () => {
           },
           'localhost',
           'out.host'
+        )
+
+        withNamingSchema(
+          () => {
+            const app = express()
+            app.get('/user', (req, res) => {
+              res.status(200).send()
+            })
+            getPort().then(port => {
+              appListener = server(app, port, () => {
+                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                  res.on('data', () => {})
+                })
+                req.end()
+              })
+            })
+          },
+          () => namingSchema.client.opName,
+          () => namingSchema.client.serviceName
         )
 
         it('should do automatic instrumentation', done => {
@@ -1045,6 +1066,7 @@ describe('Plugin', () => {
 
       describe('with splitByDomain configuration', () => {
         let config
+        let serverPort
 
         beforeEach(() => {
           config = {
@@ -1060,6 +1082,26 @@ describe('Plugin', () => {
               express = require('express')
             })
         })
+
+        withNamingSchema(
+          () => {
+            const app = express()
+            app.get('/user', (req, res) => {
+              res.status(200).send()
+            })
+            getPort().then(port => {
+              serverPort = port
+              appListener = server(app, port, () => {
+                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                  res.on('data', () => {})
+                })
+                req.end()
+              })
+            })
+          },
+          () => namingSchema.client.opName,
+          () => `localhost:${serverPort}`
+        )
 
         it('should use the remote endpoint as the service name', done => {
           const app = express()
