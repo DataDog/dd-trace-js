@@ -3,6 +3,7 @@
 const { EventEmitter } = require('events')
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
+const namingSchema = require('../../datadog-plugin-http/test/naming')
 
 class MockAbortController {
   constructor () {
@@ -136,6 +137,16 @@ describe('Plugin', () => {
         appListener = server
           .listen(port, 'localhost', () => done())
       })
+
+      const spanProducerFn = (done) => {
+        request(http2, `http://localhost:${port}/user`).catch(done)
+      }
+
+      withNamingSchema(
+        spanProducerFn,
+        () => namingSchema.server.opName,
+        () => namingSchema.server.serviceName
+      )
 
       it('should do automatic instrumentation', done => {
         agent

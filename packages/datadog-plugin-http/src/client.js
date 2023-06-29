@@ -9,6 +9,7 @@ const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const log = require('../../dd-trace/src/log')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { URL } = require('url')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
@@ -44,7 +45,7 @@ class HttpClientPlugin extends ClientPlugin {
       meta: {
         [COMPONENT]: this.constructor.id,
         'span.kind': 'client',
-        'service.name': this.serviceName(this.config, options),
+        'service.name': this.serviceName(this.config, extractSessionDetails(options)),
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
@@ -209,6 +210,17 @@ function hasAmazonSignature (options) {
   const search = options.search || options.path
 
   return search && search.toLowerCase().indexOf('x-amz-signature=') !== -1
+}
+
+function extractSessionDetails (options) {
+  if (typeof options === 'string') {
+    return new URL(options).host
+  }
+
+  const host = options.hostname || options.host || 'localhost'
+  const port = options.port
+
+  return { host, port }
 }
 
 function startsWith (searchString) {

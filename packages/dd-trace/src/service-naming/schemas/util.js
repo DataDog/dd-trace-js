@@ -2,20 +2,13 @@ function identityService (service) {
   return service
 }
 
-function getHost (options) {
-  if (typeof options === 'string') {
-    return new URL(options).host
-  }
-
-  const hostname = options.hostname || options.host || 'localhost'
-  const port = options.port
-
-  return [hostname, port].filter(val => val).join(':')
+function getFormattedHostString ({ host, port }) {
+  return [host, port].filter(val => val).join(':')
 }
 
-function httpPluginClientService (tracerService, pluginConfig, options) {
+function httpPluginClientService (tracerService, pluginConfig, sessionDetails) {
   if (pluginConfig.splitByDomain) {
-    return getHost(options)
+    return getFormattedHostString(sessionDetails)
   } else if (pluginConfig.service) {
     return pluginConfig.service
   }

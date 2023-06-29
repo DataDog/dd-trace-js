@@ -60,41 +60,30 @@ describe('Plugin', () => {
             })
         })
 
+        const spanProducerFn = () => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+          getPort().then(port => {
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => {})
+              })
+              req.end()
+            })
+          })
+        }
+
         withPeerService(
           () => tracer,
-          () => {
-            const app = express()
-            app.get('/user', (req, res) => {
-              res.status(200).send()
-            })
-            getPort().then(port => {
-              appListener = server(app, port, () => {
-                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                  res.on('data', () => {})
-                })
-                req.end()
-              })
-            })
-          },
+          spanProducerFn,
           'localhost',
           'out.host'
         )
 
         withNamingSchema(
-          () => {
-            const app = express()
-            app.get('/user', (req, res) => {
-              res.status(200).send()
-            })
-            getPort().then(port => {
-              appListener = server(app, port, () => {
-                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                  res.on('data', () => {})
-                })
-                req.end()
-              })
-            })
-          },
+          spanProducerFn,
           () => namingSchema.client.opName,
           () => namingSchema.client.serviceName
         )

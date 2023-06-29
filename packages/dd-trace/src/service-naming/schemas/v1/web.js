@@ -9,6 +9,10 @@ const web = {
     http: {
       opName: () => 'http.client.request',
       serviceName: httpPluginClientService
+    },
+    http2: {
+      opName: () => 'http.client.request',
+      serviceName: httpPluginClientService
     }
   },
   server: {
@@ -17,6 +21,10 @@ const web = {
       serviceName: identityService
     },
     http: {
+      opName: () => 'http.server.request',
+      serviceName: identityService
+    },
+    http2: {
       opName: () => 'http.server.request',
       serviceName: identityService
     }
