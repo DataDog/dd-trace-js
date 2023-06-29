@@ -5,12 +5,14 @@ const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
 const { taintObject } = require('./operations')
 const {
-  HTTP_REQUEST_PARAMETER,
   HTTP_REQUEST_BODY,
   HTTP_REQUEST_COOKIE_VALUE,
   HTTP_REQUEST_COOKIE_NAME,
   HTTP_REQUEST_HEADER_VALUE,
-  HTTP_REQUEST_HEADER_NAME
+  HTTP_REQUEST_HEADER_NAME,
+  HTTP_REQUEST_PARAMETER,
+  HTTP_REQUEST_PATH_PARAM
+
 } = require('./origin-types')
 
 class TaintTrackingPlugin extends Plugin {
@@ -43,6 +45,14 @@ class TaintTrackingPlugin extends Plugin {
     this.addSub(
       'datadog:cookie:parse:finish',
       ({ cookies }) => this._cookiesTaintTrackingHandler(cookies)
+    )
+    this.addSub(
+      'datadog:express:process_params:start',
+      ({ req }) => {
+        if (req && req.params && typeof req.params === 'object') {
+          this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
+        }
+      }
     )
   }
 
