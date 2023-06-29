@@ -556,6 +556,19 @@ export declare interface TracerOptions {
      * Specifies a path to a custom blocking template json file.
      */
     blockedTemplateJson?: string,
+
+    /**
+     * Controls the automated user event tracking configuration
+     */
+    eventTracking?: {
+      /**
+       * Controls the automated user event tracking mode. Possible values are disabled, safe and extended.
+       * On safe mode, any detected Personally Identifiable Information (PII) about the user will be redacted from the event.
+       * On extended mode, no redaction will take place.
+       * @default 'safe'
+       */
+      mode?: 'safe' | 'extended' | 'disabled'
+    }
   };
 
   /**
