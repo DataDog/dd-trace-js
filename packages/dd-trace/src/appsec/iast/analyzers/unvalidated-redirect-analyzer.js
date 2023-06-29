@@ -4,7 +4,11 @@ const InjectionAnalyzer = require('./injection-analyzer')
 const { UNVALIDATED_REDIRECT } = require('../vulnerabilities')
 const { getNodeModulesPaths } = require('../path-line')
 const { getRanges } = require('../taint-tracking/operations')
-const { HTTP_REQUEST_HEADER_VALUE } = require('../taint-tracking/source-types')
+const {
+  HTTP_REQUEST_HEADER_VALUE,
+  HTTP_REQUEST_PATH,
+  HTTP_REQUEST_PATH_PARAM
+} = require('../taint-tracking/source-types')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('express/lib/response.js')
 
@@ -17,9 +21,6 @@ class UnvalidatedRedirectAnalyzer extends InjectionAnalyzer {
     this.addSub('datadog:http:server:response:set-header:finish', ({ name, value }) => this.analyze(name, value))
   }
 
-  // TODO: In case the location header value is tainted, this analyzer should check the ranges of the tainted.
-  // And do not report a vulnerability if source of the ranges (range.iinfo.type) are exclusively url or path params
-  // to avoid false positives.
   analyze (name, value) {
     if (!this.isLocationHeader(name) || typeof value !== 'string') return
 
@@ -34,12 +35,28 @@ class UnvalidatedRedirectAnalyzer extends InjectionAnalyzer {
     if (!value) return false
 
     const ranges = getRanges(iastContext, value)
-    return ranges && ranges.length > 0 && !this._isRefererHeader(ranges)
+    return ranges && ranges.length > 0 && !this._areSafeRanges(ranges)
   }
 
-  _isRefererHeader (ranges) {
-    return ranges && ranges.every(range => range.iinfo.type === HTTP_REQUEST_HEADER_VALUE &&
-      range.iinfo.parameterName && range.iinfo.parameterName.toLowerCase() === 'referer')
+  // Do not report vulnerability if ranges sources are exclusively url,
+  // path params or referer header to avoid false positives.
+  _areSafeRanges (ranges) {
+    return ranges && ranges.every(
+      range => this._isPathParam(range) || this._isUrl(range) || this._isRefererHeader(range)
+    )
+  }
+
+  _isRefererHeader (range) {
+    return range.iinfo.type === HTTP_REQUEST_HEADER_VALUE &&
+      range.iinfo.parameterName && range.iinfo.parameterName.toLowerCase() === 'referer'
+  }
+
+  _isPathParam (range) {
+    return range.iinfo.type === HTTP_REQUEST_PATH_PARAM
+  }
+
+  _isUrl (range) {
+    return range.iinfo.type === HTTP_REQUEST_PATH
   }
 
   _getExcludedPaths () {

@@ -3,7 +3,12 @@
 const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 const overheadController = require('../../../../src/appsec/iast/overhead-controller')
-const { HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_PARAMETER } =
+const {
+  HTTP_REQUEST_HEADER_VALUE,
+  HTTP_REQUEST_PARAMETER,
+  HTTP_REQUEST_PATH,
+  HTTP_REQUEST_PATH_PARAM
+} =
   require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 describe('unvalidated-redirect-analyzer', () => {
@@ -11,7 +16,10 @@ describe('unvalidated-redirect-analyzer', () => {
   const TAINTED_LOCATION = 'evil.com'
 
   const TAINTED_HEADER_REFERER_ONLY = 'TAINTED_HEADER_REFERER_ONLY'
-  const TAINTED_HEADER_REFERER_AMONG_OTHERS = 'TAINTED_HEADER_REFERER_ONLY_AMONG_OTHERS'
+  const TAINTED_PATH_PARAMS_ONLY = 'TAINTED_PATH_PARAMS_ONLY'
+  const TAINTED_URL_ONLY = 'TAINTED_URL_ONLY'
+  const TAINTED_SAFE_RANGES = 'TAINTED_SAFE_RANGES'
+  const TAINTED_SAFE_RANGES_AMONG_OTHERS = 'TAINTED_SAFE_RANGES_AMONG_OTHERS'
 
   const REFERER_RANGE = {
     iinfo: {
@@ -31,6 +39,18 @@ describe('unvalidated-redirect-analyzer', () => {
       parameterName: 'param2'
     }
   }
+  const PATH_PARAM_RANGE = {
+    iinfo: {
+      type: HTTP_REQUEST_PATH_PARAM,
+      parameterName: 'path_param'
+    }
+  }
+  const URL_RANGE = {
+    iinfo: {
+      type: HTTP_REQUEST_PATH,
+      parameterName: 'path'
+    }
+  }
 
   const TaintTrackingMock = {
     isTainted: (iastContext, string) => {
@@ -38,14 +58,21 @@ describe('unvalidated-redirect-analyzer', () => {
     },
 
     getRanges: (iastContext, value) => {
-      if (value === NOT_TAINTED_LOCATION) return null
-
-      if (value === TAINTED_HEADER_REFERER_ONLY) {
-        return [REFERER_RANGE]
-      } else if (value === TAINTED_HEADER_REFERER_AMONG_OTHERS) {
-        return [REFERER_RANGE, PARAMETER1_RANGE]
-      } else {
-        return [PARAMETER1_RANGE, PARAMETER2_RANGE]
+      switch (value) {
+        case NOT_TAINTED_LOCATION:
+          return null
+        case TAINTED_HEADER_REFERER_ONLY:
+          return [REFERER_RANGE]
+        case TAINTED_PATH_PARAMS_ONLY:
+          return [PATH_PARAM_RANGE]
+        case TAINTED_URL_ONLY:
+          return [URL_RANGE]
+        case TAINTED_SAFE_RANGES:
+          return [REFERER_RANGE, PATH_PARAM_RANGE, URL_RANGE]
+        case TAINTED_SAFE_RANGES_AMONG_OTHERS:
+          return [REFERER_RANGE, PATH_PARAM_RANGE, URL_RANGE, PARAMETER1_RANGE]
+        default:
+          return [PARAMETER1_RANGE, PARAMETER2_RANGE]
       }
     }
   }
@@ -105,8 +132,26 @@ describe('unvalidated-redirect-analyzer', () => {
     expect(report).to.not.be.called
   })
 
+  it('should not report if tainted origin is path param exclusively', () => {
+    unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_PATH_PARAMS_ONLY)
+
+    expect(report).to.not.be.called
+  })
+
+  it('should not report if tainted origin is url exclusively', () => {
+    unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_URL_ONLY)
+
+    expect(report).to.not.be.called
+  })
+
+  it('should not report if all tainted origin are safe', () => {
+    unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_SAFE_RANGES)
+
+    expect(report).to.not.be.called
+  })
+
   it('should report if tainted origin contains referer header among others', () => {
-    unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_HEADER_REFERER_AMONG_OTHERS)
+    unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_SAFE_RANGES_AMONG_OTHERS)
 
     expect(report).to.be.called
   })
