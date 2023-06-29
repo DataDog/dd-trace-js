@@ -153,7 +153,12 @@ describe('Plugin', () => {
             agent.use(traces => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+
+              // pg modifies stacktraces as of v8.11.1
+              const actualErrorNoStack = traces[0][0].meta[ERROR_STACK].split('\n')[0]
+              const expectedErrorNoStack = error.stack.split('\n')[0]
+              expect(actualErrorNoStack).to.eql(expectedErrorNoStack)
+
               expect(traces[0][0].meta).to.have.property('component', 'pg')
               expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
             })
