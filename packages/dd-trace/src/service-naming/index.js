@@ -26,7 +26,11 @@ class SchemaManager {
     return this.schema.getServiceName(type, kind, plugin, this.config.service, ...serviceNameArgs)
   }
 
-  shortCircuitServiceName (pluginConfig) {
+  shortCircuitServiceName (pluginConfig, ...args) {
+    // We're short-circuiting, so we do not obey custom service functions
+    if (typeof pluginConfig.service === 'function') {
+      return this.config.service
+    }
     return pluginConfig.service || this.config.service
   }
 
