@@ -20,7 +20,7 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
 
   setUserTags(user, rootSpan)
 
-  trackEvent(tracer, 'users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan)
+  trackEvent('users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan, 'sdk')
 }
 
 function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
@@ -35,7 +35,7 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
     ...metadata
   }
 
-  trackEvent(tracer, 'users.login.failure', fields, 'trackUserLoginFailureEvent')
+  trackEvent('users.login.failure', fields, 'trackUserLoginFailureEvent', getRootSpan(tracer), 'sdk')
 }
 
 function trackCustomEvent (tracer, eventName, metadata) {
@@ -44,10 +44,10 @@ function trackCustomEvent (tracer, eventName, metadata) {
     return
   }
 
-  trackEvent(tracer, eventName, metadata, 'trackCustomEvent')
+  trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer), 'sdk')
 }
 
-function trackEvent (tracer, eventName, fields, sdkMethodName, rootSpan = getRootSpan(tracer)) {
+function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
   if (!rootSpan) {
     log.warn(`Root span not available in ${sdkMethodName}`)
     return
@@ -56,6 +56,14 @@ function trackEvent (tracer, eventName, fields, sdkMethodName, rootSpan = getRoo
   const tags = {
     [`appsec.events.${eventName}.track`]: 'true',
     [MANUAL_KEEP]: 'true'
+  }
+
+  if (mode === 'sdk') {
+    tags[`_dd.appsec.events.${eventName}.sdk`] = 'true'
+  }
+
+  if (mode === 'safe' || mode === 'extended') {
+    tags[`_dd.appsec.events.${eventName}.auto.mode`] = mode
   }
 
   if (fields) {
@@ -70,5 +78,6 @@ function trackEvent (tracer, eventName, fields, sdkMethodName, rootSpan = getRoo
 module.exports = {
   trackUserLoginSuccessEvent,
   trackUserLoginFailureEvent,
-  trackCustomEvent
+  trackCustomEvent,
+  trackEvent
 }
