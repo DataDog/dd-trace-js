@@ -57,7 +57,6 @@ let originalPrepareStackTrace = Error.prepareStackTrace
 function getPrepareStackTraceAccessor () {
   let actual = getPrepareStackTrace(originalPrepareStackTrace)
   return {
-    configurable: true,
     get () {
       return actual
     },
@@ -88,10 +87,7 @@ function getCompileMethodFn (compileMethod) {
 function enableRewriter () {
   const rewriter = getRewriter()
   if (rewriter) {
-    const pstDescriptor = Object.getOwnPropertyDescriptor(global.Error, 'prepareStackTrace')
-    if (!pstDescriptor || pstDescriptor.configurable) {
-      Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
-    }
+    Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
     shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
   }
 }
