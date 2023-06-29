@@ -95,6 +95,7 @@ describe('Plugin', () => {
             }
           })
 
+          const messages = [{ key: 'producer1', value: 'test2' }]
           withNamingSchema(
             async () => sendMessages(kafka, testTopic, messages),
             () => namingSchema.send.opName,
@@ -275,6 +276,7 @@ describe('Plugin', () => {
               .catch(done)
           })
 
+          const messages = [{ key: 'consumer4', value: 'test2' }]
           withNamingSchema(
             async () => {
               await consumer.run({ eachMessage: () => {} })
