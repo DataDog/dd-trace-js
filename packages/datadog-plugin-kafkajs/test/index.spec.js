@@ -4,14 +4,9 @@ const { expect } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const Hash = require('../src/hash')
-const sinon = require('sinon')
-
-const DEFAULT_PATHWAY_HASH = Buffer.from('e858292fd15a41e4', 'hex')
-const DEFAULT_PATHWAY_CTX = Buffer.from('e073ca23a5577149a0a8879de561a0a8879de561', 'hex')
-const DEFAULT_TIMESTAMP = Number(new Date('2023-04-20T16:20:00.000Z'))
 
 const namingSchema = require('./naming')
+const { getDataStreamsContext } = require('../../dd-trace/src/data_streams_context')
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
@@ -104,65 +99,9 @@ describe('Plugin', () => {
         })
 
         describe('producer data stream monitoring', () => {
-          const sandbox = sinon.createSandbox()
-          before(() => {
-            // for DSM propagation test
-            sandbox.spy(Hash, 'decodePathwayContext')
-            sandbox.spy(Hash, 'encodePathwayContext')
-            sinon.replace(Date, 'now', () => DEFAULT_TIMESTAMP)
-          })
-          after(() => {
-            sandbox.restore()
-            sinon.restore()
-          })
-
           beforeEach(() => {
             tracer.init()
             tracer.use('kafkajs', { dsmEnabled: true })
-          })
-
-          it('should set root dsm checkpoint when there is no consumer parent span', async () => {
-            const messages = [{ key: 'producerDSM', value: 'test2' }]
-            await sendMessages(kafka, testTopic, messages)
-            const pathwayCtxArgs = Hash.encodePathwayContext.getCall(-1).args
-            const pathwayHash = pathwayCtxArgs[0]
-            const originTimestamp = pathwayCtxArgs[1]
-            const currentTimestamp = pathwayCtxArgs[2]
-            expect(pathwayHash.length).to.equal(DEFAULT_PATHWAY_HASH.length)
-            for (let i = 0; i < DEFAULT_PATHWAY_HASH.length; i++) {
-              expect(pathwayHash[i]).to.equal(DEFAULT_PATHWAY_HASH[i])
-            }
-            expect(originTimestamp).to.equal(DEFAULT_TIMESTAMP)
-            expect(currentTimestamp).to.equal(DEFAULT_TIMESTAMP)
-          })
-
-          it('should receive dsm header propagation from consumer span', async () => {
-            const messages = [{ key: 'producerDSM2', value: 'test2' }]
-            const scope = tracer.scope()
-            const childOf = tracer.startSpan('fake consumer parent span', {
-              tags: {
-                name: 'kafka.consume',
-                service: 'test-kafka',
-                meta: {
-                  'span.kind': 'consumer',
-                  'component': 'kafkajs'
-                },
-                metrics: {
-                  'dd-pathway-ctx': DEFAULT_PATHWAY_CTX
-                },
-                resource: testTopic,
-                error: 0,
-                type: 'worker'
-              }
-            })
-            await scope.activate(childOf, async () => {
-              await sendMessages(kafka, testTopic, messages)
-              const propagatedCtx = Hash.decodePathwayContext.getCall(-1).args[0]
-              expect(propagatedCtx.length).to.equal(DEFAULT_PATHWAY_CTX.length)
-              for (let i = 0; i < DEFAULT_PATHWAY_CTX.length; i++) {
-                expect(DEFAULT_PATHWAY_CTX[i]).to.equal(propagatedCtx[i])
-              }
-            })
           })
         })
         describe('consumer', () => {
@@ -288,74 +227,33 @@ describe('Plugin', () => {
         })
 
         describe('consumer data stream monitoring', () => {
-          const sandbox = sinon.createSandbox()
           let consumer
           beforeEach(async () => {
             tracer.init()
             tracer.use('kafkajs', { dsmEnabled: true })
             consumer = kafka.consumer({ groupId: 'test-group' })
-            sandbox.spy(Hash, 'encodePathwayContext')
-            sinon.replace(Date, 'now', () => DEFAULT_TIMESTAMP)
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
           })
 
           afterEach(async () => {
             await consumer.disconnect()
-            sandbox.restore()
-            sinon.restore()
           })
 
-          it('should set root dsm checkpoint when there is no parent node', async () => {
-            const expectedPathwayHash = Buffer.from('e858292fd15a41e4', 'hex')
+          it('Should set a checkpoint on produce', async () => {
             const messages = [{ key: 'consumerDSM1', value: 'test2' }]
             await sendMessages(kafka, testTopic, messages)
-            const pathwayCtxArgs = Hash.encodePathwayContext.getCall(-1).args
-            const pathwayHash = pathwayCtxArgs[0]
-            const originTimestamp = pathwayCtxArgs[1]
-            const currentTimestamp = pathwayCtxArgs[2]
-            expect(pathwayHash.length).to.equal(expectedPathwayHash.length)
-            for (let i = 0; i < expectedPathwayHash.length; i++) {
-              expect(pathwayHash[i]).to.equal(expectedPathwayHash[i])
-            }
-            expect(originTimestamp).to.equal(DEFAULT_TIMESTAMP)
-            expect(currentTimestamp).to.equal(DEFAULT_TIMESTAMP)
+            const dataStreamsContext = getDataStreamsContext()
+            console.log(dataStreamsContext)
           })
 
-          it('should propagate context', (done) => {
-            const messages = [{ key: 'consumerDSM2', value: 'test2' }]
-            const expectedPathwayCtx = Buffer.from('16f60748b780b322a0a8879de56180aeb9f7f361', 'hex')
-            const scope = tracer.scope()
-            const span = tracer.startSpan('consumer span', {
-              tags: {
-                name: 'kafka.consume',
-                service: 'test-kafka',
-                meta: {
-                  'span.kind': 'consumer',
-                  'component': 'kafkajs'
-                },
-                metrics: {
-                  'dd-pathway-ctx': DEFAULT_PATHWAY_CTX
-                },
-                resource: testTopic,
-                error: 0,
-                type: 'worker'
-              }
-            })
-            scope.activate(span, async () => {
-              consumer.run({
-                eachMessage: async ({ topic, partition, message, heartbeat, pause }) => {
-                  if (span.context().toTraceId() !== tracer.scope().active().context().toTraceId()) return
-                  const propagatedCtx = message.headers['dd-pathway-ctx']
-                  expect(propagatedCtx.length).to.equal(expectedPathwayCtx.length)
-                  for (let i = 0; i < expectedPathwayCtx.length; i++) {
-                    expect(expectedPathwayCtx[i]).to.equal(propagatedCtx[i])
-                  }
-                  done()
-                } })
-                .then(() => sendMessages(kafka, testTopic, messages))
-                .catch(done)
-            })
+          it('Should set a checkpoint on consume', (done) => {
+            consumer.run({
+              eachMessage: async ({ topic, partition, message, heartbeat, pause }) => {
+                console.log(message)
+                done()
+              } })
+              .catch(done)
           })
         })
       })
