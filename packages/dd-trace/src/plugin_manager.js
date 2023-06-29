@@ -21,7 +21,7 @@ const disabledPlugins = new Set(
   DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())
 )
 
-// TODO actually ... should we be looking at envrionment variables this deep down in the code?
+// TODO actually ... should we be looking at environment variables this deep down in the code?
 
 const pluginClasses = {}
 

@@ -177,6 +177,11 @@ class Config {
       true
     )
 
+    const DD_CIVISIBILITY_MANUAL_API_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
+      false
+    )
+
     const DD_SERVICE = options.service ||
       process.env.DD_SERVICE ||
       process.env.DD_SERVICE_NAME ||
@@ -390,6 +395,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maybeFile(appsec.blockedTemplateJson),
       maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
     )
+    const DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = coalesce(
+      appsec.eventTracking && appsec.eventTracking.mode,
+      process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
+      'safe'
+    ).toLowerCase()
 
     const remoteConfigOptions = options.remoteConfig || {}
     const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
@@ -559,7 +569,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       blockedTemplateHtml: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
-      blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
+      blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
+      eventTracking: {
+        enabled: ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING),
+        mode: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING
+      }
     }
     this.remoteConfig = {
       enabled: DD_REMOTE_CONFIGURATION_ENABLED,
@@ -581,6 +595,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
 
     this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
+    this.isManualApiEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_MANUAL_API_ENABLED)
 
     this.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
 
