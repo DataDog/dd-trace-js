@@ -1059,6 +1059,7 @@ describe('Config', () => {
     beforeEach(() => {
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
+      delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
       options = {}
     })
     context('ci visibility mode is enabled', () => {
@@ -1082,6 +1083,15 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 'false'
         const config = new Config(options)
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
+      })
+      it('should disable manual testing API by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('isManualApiEnabled', false)
+      })
+      it('should enable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is passed', () => {
+        process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'true'
+        const config = new Config(options)
+        expect(config).to.have.property('isManualApiEnabled', true)
       })
     })
     context('ci visibility mode is not enabled', () => {
