@@ -140,8 +140,8 @@ function validateUrl (url) {
     return hostname.includes('.')
   }
   try {
-    const url_object = new URL(url)
-    return (url_object.protocol === 'https:' || url_object.protocol === 'http:')
+    const urlObject = new URL(url)
+    return (urlObject.protocol === 'https:' || urlObject.protocol === 'http:')
   } catch (e) {
     return false
   }
