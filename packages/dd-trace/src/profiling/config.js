@@ -111,7 +111,7 @@ class Config {
     const profilers = options.profilers
       ? options.profilers
       : getProfilers({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS })
-    this.hotspots = isTrue(coalesce(options.hotspots,
+    this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
       DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, false))
 
     this.profilers = ensureProfilers(profilers, this)

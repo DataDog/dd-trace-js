@@ -33,6 +33,10 @@ class NativeWallProfiler {
     this._started = false
   }
 
+  codeHotspotsEnabled () {
+    return this._codeHotspotsEnabled
+  }
+
   resetStack () {
     this._currentLabels = undefined
     this._labelStack = []
