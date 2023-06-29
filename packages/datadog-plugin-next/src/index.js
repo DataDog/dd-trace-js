@@ -19,11 +19,11 @@ class NextPlugin extends ServerPlugin {
   start ({ req, res }) {
     const store = storage.getStore()
     const childOf = store ? store.span : store
-    const span = this.tracer.startSpan('next.request', {
+    const span = this.tracer.startSpan(this.operationName(), {
       childOf,
       tags: {
         [COMPONENT]: this.constructor.id,
-        'service.name': this.config.service || this.tracer._service,
+        'service.name': this.config.service || this.serviceName(),
         'resource.name': req.method,
         'span.type': 'web',
         'span.kind': 'server',

@@ -3,7 +3,7 @@
 const { EventEmitter } = require('events')
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
-const namingSchema = require('../../datadog-plugin-http/test/naming')
+const namingSchema = require('./naming')
 
 class MockAbortController {
   constructor () {

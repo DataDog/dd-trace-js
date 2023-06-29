@@ -27,6 +27,10 @@ const web = {
     http2: {
       opName: () => 'web.request',
       serviceName: identityService
+    },
+    next: {
+      opName: () => 'next.request',
+      serviceName: identityService
     }
   }
 }

@@ -9,6 +9,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { writeFileSync } = require('fs')
 const { satisfies } = require('semver')
 const { DD_MAJOR } = require('../../../version')
+const namingSchema = require('./naming')
 
 describe('Plugin', function () {
   let server
@@ -95,6 +96,16 @@ describe('Plugin', function () {
       describe('without configuration', () => {
         startServer()
 
+        withNamingSchema(
+          (done) => {
+            axios
+              .get(`http://localhost:${port}/api/hello/world`)
+              .catch(done)
+          },
+          () => namingSchema.server.opName,
+          () => namingSchema.server.serviceName
+        )
+
         describe('for api routes', () => {
           it('should do automatic instrumentation', done => {
             agent
@@ -124,7 +135,7 @@ describe('Plugin', function () {
             ['/api/hello/other', '/api/hello/other']
           ]
           pathTests.forEach(([url, expectedPath]) => {
-            it(`should infer the corrrect resource path (${expectedPath})`, done => {
+            it(`should infer the correct resource path (${expectedPath})`, done => {
               agent
                 .use(traces => {
                   const spans = traces[0]
