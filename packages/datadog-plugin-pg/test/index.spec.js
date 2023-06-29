@@ -22,6 +22,7 @@ describe('Plugin', () => {
 
   describe('pg', () => {
     withVersions('pg', 'pg', version => {
+      const pgHasPromiseSupport = semver.intersects(version, '>=5.1')
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -97,7 +98,7 @@ describe('Plugin', () => {
             })
           })
 
-          if (semver.intersects(version, '>=5.1')) { // initial promise support
+          if (pgHasPromiseSupport) { // initial promise support
             it('should do automatic instrumentation when using promises', done => {
               agent.use(traces => {
                 expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
@@ -191,13 +192,15 @@ describe('Plugin', () => {
             })
           })
 
-          withNamingSchema(
-            done => client.query('SELECT $1::text as message', ['Hello world!'])
-              .then(() => client.end())
-              .catch(done),
-            () => namingSchema.outbound.opName,
-            () => namingSchema.outbound.serviceName
-          )
+          if (pgHasPromiseSupport) {
+            withNamingSchema(
+              done => client.query('SELECT $1::text as message', ['Hello world!'])
+                .then(() => client.end())
+                .catch(done),
+              () => namingSchema.outbound.opName,
+              () => namingSchema.outbound.serviceName
+            )
+          }
         })
       })
 
@@ -240,13 +243,15 @@ describe('Plugin', () => {
           })
         })
 
-        withNamingSchema(
-          done => client.query('SELECT $1::text as message', ['Hello world!'])
-            .then(() => client.end())
-            .catch(done),
-          () => namingSchema.outbound.opName,
-          () => 'custom'
-        )
+        if (pgHasPromiseSupport) {
+          withNamingSchema(
+            done => client.query('SELECT $1::text as message', ['Hello world!'])
+              .then(() => client.end())
+              .catch(done),
+            () => namingSchema.outbound.opName,
+            () => 'custom'
+          )
+        }
       })
 
       describe('with a service name callback', () => {
@@ -288,13 +293,15 @@ describe('Plugin', () => {
           })
         })
 
-        withNamingSchema(
-          done => client.query('SELECT $1::text as message', ['Hello world!'])
-            .then(() => client.end())
-            .catch(done),
-          () => namingSchema.outbound.opName,
-          () => '127.0.0.1-postgres'
-        )
+        if (pgHasPromiseSupport) {
+          withNamingSchema(
+            done => client.query('SELECT $1::text as message', ['Hello world!'])
+              .then(() => client.end())
+              .catch(done),
+            () => namingSchema.outbound.opName,
+            () => '127.0.0.1-postgres'
+          )
+        }
       })
 
       describe('with DBM propagation enabled with service using plugin configurations', () => {
