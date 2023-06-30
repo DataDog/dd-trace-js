@@ -46,7 +46,7 @@ function createWrapSelect () {
   const connectCh = channel('apm:elasticsearch:query:connect')
   return function wrapRequest (request) {
     return function () {
-      if (arguments.length > 0) {
+      if (arguments.length === 1) {
         const cb = arguments[0]
         arguments[0] = function (err, connection) {
           if (connectCh.hasSubscribers && connection?.host) {
