@@ -13,6 +13,8 @@ const {
 } = require('./tags')
 
 const { normalizeRef } = require('./ci')
+const log = require('../../log')
+const { URL } = require('url')
 
 function removeEmptyValues (tags) {
   return Object.keys(tags).reduce((filteredTags, tag) => {
@@ -39,6 +41,39 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
   }
 }
 
+function validateGitRepositoryUrl (repoUrl) {
+  if (repoUrl) {
+    const validUrl = /((http|git|ssh|http(s)|file|\/?)|(git@[\w.]+))(:(\/\/)?)([\w.@:/\-~]+)(\.git)(\/)?/.test(repoUrl)
+    if (validUrl) {
+      return true
+    }
+  }
+  return false
+}
+
+function validateGitCommitSha (gitCommitSha) {
+  if (gitCommitSha) {
+    const isValidSha1 = /^[0-9a-f]{40}$/.test(gitCommitSha)
+    const isValidSha256 = /^[0-9a-f]{64}$/.test(gitCommitSha)
+    if (isValidSha1 || isValidSha256) {
+      return true
+    }
+  }
+  return false
+}
+
+function validateGitMetadata (metadata) {
+  const size = Object.keys(metadata).length
+  if (size > 0) {
+    if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
+      log.error('DD_GIT_COMMIT_SHA must be a full-length git SHA')
+    }
+    if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
+      log.error('DD_GIT_REPOSITORY_URL must be a valid URL')
+    }
+  }
+}
+
 function getUserProviderGitMetadata () {
   const {
     DD_GIT_COMMIT_SHA,
@@ -62,7 +97,7 @@ function getUserProviderGitMetadata () {
     tag = normalizeRef(DD_GIT_BRANCH)
   }
 
-  return removeEmptyValues({
+  const metadata = removeEmptyValues({
     [GIT_COMMIT_SHA]: DD_GIT_COMMIT_SHA,
     [GIT_BRANCH]: branch,
     [GIT_REPOSITORY_URL]: filterSensitiveInfoFromRepository(DD_GIT_REPOSITORY_URL),
@@ -75,6 +110,8 @@ function getUserProviderGitMetadata () {
     [GIT_COMMIT_AUTHOR_EMAIL]: DD_GIT_COMMIT_AUTHOR_EMAIL,
     [GIT_COMMIT_AUTHOR_DATE]: DD_GIT_COMMIT_AUTHOR_DATE
   })
+  validateGitMetadata(metadata)
+  return metadata
 }
 
 module.exports = { getUserProviderGitMetadata }
