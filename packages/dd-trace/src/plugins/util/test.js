@@ -24,7 +24,6 @@ const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../
 const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { version: ddTraceVersion } = require('../../../../../package.json')
-const { valid } = require('semver')
 const { URL } = require('url')
 
 const TEST_FRAMEWORK = 'test.framework'
