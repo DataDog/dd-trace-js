@@ -246,7 +246,8 @@ function getCiVisEvpProxyConfig (port) {
   return {
     ...process.env,
     DD_TRACE_AGENT_PORT: port,
-    NODE_OPTIONS: '-r dd-trace/ci/init'
+    NODE_OPTIONS: '-r dd-trace/ci/init',
+    DD_CIVISIBILITY_AGENTLESS_ENABLED: '0'
   }
 }
 
