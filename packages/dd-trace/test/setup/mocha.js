@@ -48,12 +48,14 @@ function loadInstFile (file, instrumentations) {
   })
 }
 
-function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName) {
+function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, withHooks = () => {}) {
   let fullConfig
 
   describe('service and operation naming', () => {
     Object.keys(schemaDefinitions).forEach(versionName => {
       describe(`in version ${versionName}`, () => {
+        withHooks(versionName)
+
         before(() => {
           fullConfig = Nomenclature.config
           Nomenclature.configure({

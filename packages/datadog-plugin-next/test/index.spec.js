@@ -18,7 +18,7 @@ describe('Plugin', function () {
   describe('next', () => {
     // TODO: Figure out why 10.x tests are failing.
     withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
-      const startServer = withConfig => {
+      const startServer = (withConfig = false, schemaVersion = 'v0') => {
         before(async () => {
           port = await getPort()
 
@@ -35,7 +35,8 @@ describe('Plugin', function () {
               VERSION: version,
               PORT: port,
               DD_TRACE_AGENT_PORT: agent.server.address().port,
-              WITH_CONFIG: withConfig
+              WITH_CONFIG: withConfig,
+              DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion
             }
           })
 
@@ -93,18 +94,19 @@ describe('Plugin', function () {
         execSync(`rm -rf ${paths.join(' ')}`)
       })
 
+      withNamingSchema(
+        (done) => {
+          axios
+            .get(`http://localhost:${port}/api/hello/world`)
+            .catch(done)
+        },
+        () => namingSchema.server.opName,
+        () => namingSchema.server.serviceName,
+        (versionName) => startServer(false, versionName)
+      )
+
       describe('without configuration', () => {
         startServer()
-
-        withNamingSchema(
-          (done) => {
-            axios
-              .get(`http://localhost:${port}/api/hello/world`)
-              .catch(done)
-          },
-          () => namingSchema.server.opName,
-          () => namingSchema.server.serviceName
-        )
 
         describe('for api routes', () => {
           it('should do automatic instrumentation', done => {
