@@ -10,6 +10,10 @@ const web = {
       opName: () => 'http.client.request',
       serviceName: httpPluginClientService
     },
+    fetch: {
+      opName: () => 'http.client.request',
+      serviceName: httpPluginClientService
+    },
     http2: {
       opName: () => 'http.client.request',
       serviceName: httpPluginClientService

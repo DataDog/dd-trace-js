@@ -76,7 +76,7 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName) 
             .then(done)
             .catch(done)
 
-          spanProducerFn(done)
+          spanProducerFn()
         })
       })
     })
