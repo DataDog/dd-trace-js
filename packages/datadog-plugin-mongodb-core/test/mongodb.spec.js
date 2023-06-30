@@ -76,6 +76,12 @@ describe('Plugin', () => {
         })
 
         describe('server', () => {
+          withPeerService(
+            () => tracer,
+            () => collection.insertOne({ a: 1 }, {}, () => {}),
+            'test', 'peer.service'
+          )
+
           it('should do automatic instrumentation', done => {
             agent
               .use(traces => {
