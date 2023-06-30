@@ -98,8 +98,12 @@ describe('Plugin', () => {
                 getUnary: (_, callback) => callback()
               })
 
-              client.getUnary({ first: 'foobar' }, () => {})
+              withPeerService(
+                () => tracer,
+                (done) => client.getUnary({ first: 'foobar' }, () => done()),
+                'test.TestService', 'rpc.service')
 
+              client.getUnary({ first: 'foobar' }, () => {})
               return agent
                 .use(traces => {
                   expect(traces[0][0]).to.deep.include({
@@ -115,6 +119,7 @@ describe('Plugin', () => {
                     'grpc.method.package': 'test',
                     'grpc.method.path': '/test.TestService/getUnary',
                     'grpc.method.kind': 'unary',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client',
                     'component': 'grpc'
                   })
@@ -151,6 +156,7 @@ describe('Plugin', () => {
                     'grpc.method.package': 'test',
                     'grpc.method.path': '/test.TestService/getServerStream',
                     'grpc.method.kind': 'server_streaming',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client',
                     'component': 'grpc'
                   })
@@ -185,6 +191,7 @@ describe('Plugin', () => {
                     'grpc.method.package': 'test',
                     'grpc.method.path': '/test.TestService/getClientStream',
                     'grpc.method.kind': 'client_streaming',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client',
                     'component': 'grpc'
                   })
@@ -216,6 +223,7 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
                   expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getBidi')
                   expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'bidi_streaming')
+                  expect(traces[0][0].meta).to.have.property('rpc.service', 'test.TestService')
                   expect(traces[0][0].meta).to.have.property('span.kind', 'client')
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
                   expect(traces[0][0].meta).to.have.property('component', 'grpc')
@@ -286,6 +294,7 @@ describe('Plugin', () => {
                     'grpc.method.package': 'test',
                     'grpc.method.path': '/test.TestService/getUnary',
                     'grpc.method.kind': 'unary',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client',
                     'component': 'grpc'
                   })
@@ -313,6 +322,7 @@ describe('Plugin', () => {
                     'grpc.method.package': 'test',
                     'grpc.method.path': '/test.TestService/getUnary',
                     'grpc.method.kind': 'unary',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client',
                     'component': 'grpc'
                   })
@@ -350,6 +360,7 @@ describe('Plugin', () => {
                     'grpc.method.service': 'TestService',
                     'grpc.method.package': 'test',
                     'grpc.method.path': '/test.TestService/getUnary',
+                    'rpc.service': 'test.TestService',
                     'grpc.method.kind': 'unary',
                     'span.kind': 'client',
                     'component': 'grpc'
@@ -382,6 +393,7 @@ describe('Plugin', () => {
                     'grpc.method.package': 'test',
                     'grpc.method.path': '/test.TestService/getUnary',
                     'grpc.method.kind': 'unary',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client',
                     'component': 'grpc'
                   })
@@ -584,6 +596,7 @@ describe('Plugin', () => {
                     'grpc.method.path': '/test.TestService/getUnary',
                     'grpc.method.kind': 'unary',
                     'grpc.request.metadata.foo': 'bar',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client'
                   })
                 })
@@ -611,6 +624,7 @@ describe('Plugin', () => {
                     'grpc.method.path': '/test.TestService/getUnary',
                     'grpc.method.kind': 'unary',
                     'grpc.response.metadata.foo': 'bar',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client'
                   })
 
