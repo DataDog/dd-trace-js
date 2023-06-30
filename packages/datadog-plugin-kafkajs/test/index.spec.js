@@ -21,6 +21,7 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
         beforeEach(async () => {
+          process.env['DD_DATA_STREAMS_ENABLED'] = 'true'
           tracer = require('../../dd-trace')
           await agent.load('kafkajs')
           const {
@@ -246,9 +247,10 @@ describe('Plugin', () => {
 
           it('Should set a checkpoint on produce', async () => {
             const messages = [{ key: 'consumerDSM1', value: 'test2' }]
+            console.log("start of test")
             await sendMessages(kafka, testTopic, messages)
             const dataStreamsContext = getDataStreamsContext()
-            console.log(dataStreamsContext)
+            console.log("data streams context", dataStreamsContext)
           })
 
           it('Should set a checkpoint on consume', (done) => {

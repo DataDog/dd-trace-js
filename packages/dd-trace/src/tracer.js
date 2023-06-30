@@ -29,7 +29,9 @@ class DatadogTracer extends Tracer {
   // They should be moved outside of the tracer in the future.
   setCheckpoint (edgeTags) {
     const ctx = this._dataStreamsProcessor.setCheckpoint(edgeTags, getDataStreamsContext())
+    console.log("setting checkpoint")
     setDataStreamsContext(ctx)
+    console.log("context in set checkpoint is", getDataStreamsContext())
     return ctx
   }
 

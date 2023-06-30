@@ -12,7 +12,6 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     if (this.config.dsmEnabled) {
       const dataStreamsContext = this.tracer
         .setCheckpoint(['direction:out', `topic:${topic}`, 'type:kafka'])
-      console.log("context is", dataStreamsContext)
       pathwayCtx = encodePathwayContext(dataStreamsContext)
     }
     const span = this.startSpan({
