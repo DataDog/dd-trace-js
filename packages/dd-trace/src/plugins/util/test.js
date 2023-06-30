@@ -176,14 +176,13 @@ function getTestEnvironmentMetadata (testFramework, config) {
 
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
 
-  let metadata = {
+  const metadata = validateMetadata({
     [TEST_FRAMEWORK]: testFramework,
     ...gitMetadata,
     ...ciMetadata,
     ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata
-  }
-  metadata = validateMetadata(metadata)
+  })
   if (config && config.service) {
     metadata['service.name'] = config.service
   }
