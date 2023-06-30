@@ -22,9 +22,10 @@ describe('Plugin Manager', () => {
     tracer = {}
     instantiated = []
     class FakePlugin {
-      constructor (aTracer) {
+      constructor (aTracer, tracerConfig) {
         expect(aTracer).to.equal(tracer)
         instantiated.push(this.constructor.id)
+        this._tracerConfig = tracerConfig
       }
     }
 
@@ -95,6 +96,16 @@ describe('Plugin Manager', () => {
         loadChannel.publish({ name: 'two' })
         expect(Two.prototype.configure).to.have.been.calledWithMatch({
           enabled: true,
+          foo: 'bar'
+        })
+      })
+      it('should update _tracerConfig in plugins upon calling configure()', () => {
+        expect(pm._tracerConfig).to.eql(null)
+        pm.configurePlugin('two', { foo: 'bar' })
+        loadChannel.publish({ name: 'two' })
+        expect(pm._pluginsByName['two']._tracerConfig).to.eql(null)
+        pm.configure({ foo: 'bar' })
+        expect(pm._pluginsByName['two']._tracerConfig).to.deep.equal({
           foo: 'bar'
         })
       })

@@ -107,6 +107,7 @@ module.exports = class PluginManager {
 
     for (const name in pluginClasses) {
       this.loadPlugin(name)
+      this._pluginsByName[name]._tracerConfig = config
     }
   }
 
