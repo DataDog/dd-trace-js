@@ -108,6 +108,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
+    expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
+    expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -198,6 +200,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_HTML_PATH
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH
+    process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
@@ -265,6 +268,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
+    expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
+    expect(config).to.have.nested.property('appsec.eventTracking.mode', 'extended')
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -573,6 +578,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_JSON // note the inversion between
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_HTML // json and html here
+    process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
@@ -623,7 +629,10 @@ describe('Config', () => {
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
         blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
-        blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH
+        blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
+        eventTracking: {
+          mode: 'safe'
+        }
       },
       remoteConfig: {
         pollInterval: 42
@@ -666,6 +675,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
+    expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
+    expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
@@ -685,7 +696,10 @@ describe('Config', () => {
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
         blockedTemplateHtml: undefined,
-        blockedTemplateJson: undefined
+        blockedTemplateJson: undefined,
+        eventTracking: {
+          mode: 'disabled'
+        }
       },
       experimental: {
         appsec: {
@@ -696,7 +710,10 @@ describe('Config', () => {
           obfuscatorKeyRegex: '^$',
           obfuscatorValueRegex: '^$',
           blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
-          blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH
+          blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
+          eventTracking: {
+            mode: 'safe'
+          }
         }
       }
     })
@@ -710,7 +727,11 @@ describe('Config', () => {
       obfuscatorKeyRegex: '.*',
       obfuscatorValueRegex: '.*',
       blockedTemplateHtml: undefined,
-      blockedTemplateJson: undefined
+      blockedTemplateJson: undefined,
+      eventTracking: {
+        enabled: false,
+        mode: 'disabled'
+      }
     })
   })
 
@@ -1059,6 +1080,7 @@ describe('Config', () => {
     beforeEach(() => {
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
+      delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
       options = {}
     })
     context('ci visibility mode is enabled', () => {
@@ -1082,6 +1104,15 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 'false'
         const config = new Config(options)
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
+      })
+      it('should disable manual testing API by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('isManualApiEnabled', false)
+      })
+      it('should enable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is passed', () => {
+        process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'true'
+        const config = new Config(options)
+        expect(config).to.have.property('isManualApiEnabled', true)
       })
     })
     context('ci visibility mode is not enabled', () => {
