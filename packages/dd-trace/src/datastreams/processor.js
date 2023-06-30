@@ -73,7 +73,6 @@ class DataStreamsProcessor {
       port,
       url
     })
-    console.log("dsm enabled ", config)
     this.bucketSizeNs = 1e10
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
