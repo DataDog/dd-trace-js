@@ -206,6 +206,11 @@ describe('Plugin', () => {
           })
         })
 
+        withPeerService(
+          () => tracer,
+          () => pool.query('SELECT 1', (_) => {}),
+          'db', 'db.name')
+
         it('should do automatic instrumentation', done => {
           agent.use(traces => {
             expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
