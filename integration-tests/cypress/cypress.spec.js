@@ -139,6 +139,8 @@ describe(`cypress@${version}`, function () {
   it('can run and report tests', (done) => {
     const receiverPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        console.log('payloads', payloads)
+        console.log('payloads json', JSON.stringify(payloads))
         const events = payloads.flatMap(({ payload }) => payload.events)
 
         const testSessionEvent = events.find(event => event.type === 'test_session_end')

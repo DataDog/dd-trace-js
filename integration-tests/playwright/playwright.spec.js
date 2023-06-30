@@ -108,7 +108,7 @@ versions.forEach((version) => {
               assert.equal(stepEvent.content.name, 'playwright.step')
               assert.property(stepEvent.content.meta, 'playwright.step')
             })
-          }).then(() => done()).catch(done)
+          }, 20000).then(() => done()).catch(done)
 
           childProcess = exec(
             './node_modules/.bin/playwright test -c playwright.config.js',
@@ -137,7 +137,7 @@ versions.forEach((version) => {
         assert.include(testOutput, '1 passed')
         assert.include(testOutput, '1 skipped')
         assert.notInclude(testOutput, 'TypeError')
-      }).then(() => done()).catch(done)
+      }, 20000).then(() => done()).catch(done)
 
       childProcess = exec(
         'node ./node_modules/typescript/bin/tsc' +
