@@ -164,6 +164,7 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
+    process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc, d:dd'
     process.env.DD_VERSION = '1.0.0'
     process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '.*'
     process.env.DD_TRACE_CLIENT_IP_ENABLED = 'true'
@@ -255,6 +256,10 @@ describe('Config', () => {
     expect(config).to.have.deep.property('serviceMapping', {
       a: 'aa',
       b: 'bb'
+    })
+    expect(config).to.have.deep.property('peerServiceMapping', {
+      c: 'cc',
+      d: 'dd'
     })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['b3', 'tracecontext'])
@@ -555,6 +560,7 @@ describe('Config', () => {
     process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa'
+    process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc'
     process.env.DD_VERSION = '0.0.0'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
@@ -608,6 +614,9 @@ describe('Config', () => {
       },
       serviceMapping: {
         b: 'bb'
+      },
+      peerServiceMapping: {
+        d: 'dd'
       },
       tracePropagationStyle: {
         inject: [],
@@ -663,6 +672,7 @@ describe('Config', () => {
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
+    expect(config).to.have.deep.property('peerServiceMapping', { d: 'dd' })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', [])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', [])
     expect(config).to.have.nested.property('experimental.runtimeId', false)
