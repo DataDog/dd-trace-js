@@ -37,7 +37,6 @@ jobs:
         framework: [cucumber, playwright]
     runs-on: ubuntu-latest
     env:
-      NODE_OPTIONS: '-r ./ci/init'
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
@@ -48,6 +47,8 @@ jobs:
           node-version: ${{ matrix.version }}
       - run: yarn install
       - run: yarn test:integration:${{ matrix.framework }}
+        env:
+          NODE_OPTIONS: '-r ./ci/init'
 
   integration-cypress:
     strategy:
@@ -57,7 +58,6 @@ jobs:
         cypress-version: [6.7.0, latest]
     runs-on: ubuntu-latest
     env:
-      NODE_OPTIONS: '-r ./ci/init'
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
@@ -71,6 +71,7 @@ jobs:
       - run: yarn test:integration:cypress
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
+          NODE_OPTIONS: '-r ./ci/init'
 
   lint:
     runs-on: ubuntu-latest
