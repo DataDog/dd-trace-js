@@ -36,8 +36,17 @@ function isShallowRepository () {
 }
 
 function unshallowRepository () {
-  sanitizedExec('git', ['config', 'remote.origin.partialclonefilter', '"blob:none"'])
-  sanitizedExec('git', ['fetch', '--shallow-since="1 month ago"', '--update-shallow', '--refetch'])
+  const defaultRemoteName = sanitizedExec('git', ['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'])
+  const revParseHead = sanitizedExec('git', ['rev-parse', 'HEAD'])
+  sanitizedExec('git', [
+    'fetch',
+    '--shallow-since="1 month ago"',
+    '--update-shallow',
+    '--filter="blob:none"',
+    '--recurse-submodules=no',
+    defaultRemoteName,
+    revParseHead
+  ])
 }
 
 function getRepositoryUrl () {
