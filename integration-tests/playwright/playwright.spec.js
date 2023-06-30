@@ -116,11 +116,15 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...envVars,
-                PW_BASE_URL: `http://localhost:${webAppPort}`
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                DD_TRACE_DEBUG: '1'
               },
               stdio: 'pipe'
             }
           )
+
+          childProcess.stdout.pipe(process.stdout)
+          childProcess.stderr.pipe(process.stderr)
         })
       })
     })

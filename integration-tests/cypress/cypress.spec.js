@@ -124,11 +124,15 @@ describe(`cypress@${version}`, function () {
         cwd,
         env: {
           ...restEnvVars,
-          CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+          CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+          DD_TRACE_DEBUG: '1'
         },
         stdio: 'pipe'
       }
     )
+    childProcess.stdout.pipe(process.stdout)
+    childProcess.stderr.pipe(process.stderr)
+
     childProcess.on('exit', () => {
       receiverPromise.then(() => {
         done()
@@ -233,11 +237,14 @@ describe(`cypress@${version}`, function () {
         cwd,
         env: {
           ...restEnvVars,
-          CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+          CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+          DD_TRACE_DEBUG: '1'
         },
         stdio: 'pipe'
       }
     )
+    childProcess.stdout.pipe(process.stdout)
+    childProcess.stderr.pipe(process.stderr)
 
     childProcess.on('exit', () => {
       receiverPromise.then(() => {
@@ -277,11 +284,15 @@ describe(`cypress@${version}`, function () {
         cwd,
         env: {
           ...restEnvVars,
-          CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+          CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+          DD_TRACE_DEBUG: '1'
         },
         stdio: 'pipe'
       }
     )
+
+    childProcess.stdout.pipe(process.stdout)
+    childProcess.stderr.pipe(process.stderr)
 
     childProcess.on('exit', () => {
       receiverPromise.then(() => {
