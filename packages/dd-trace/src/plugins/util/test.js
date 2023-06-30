@@ -124,7 +124,7 @@ function validateMetadata (metadata) {
       delete metadata[GIT_REPOSITORY_URL]
     }
   }
-  if (CI_PIPELINE_URL in metadata && metadata[CI_PIPELINE_URL]) {
+  if (metadata[CI_PIPELINE_URL]) {
     const validUrl = validateUrl(metadata[CI_PIPELINE_URL])
     if (!validUrl) {
       delete metadata[CI_PIPELINE_URL]
