@@ -108,7 +108,7 @@ versions.forEach((version) => {
               assert.equal(stepEvent.content.name, 'playwright.step')
               assert.property(stepEvent.content.meta, 'playwright.step')
             })
-          }, 20000).then(() => done()).catch(done)
+          }).then(() => done()).catch(done)
 
           childProcess = exec(
             './node_modules/.bin/playwright test -c playwright.config.js',
@@ -116,15 +116,11 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...envVars,
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                DD_TRACE_DEBUG: '1'
+                PW_BASE_URL: `http://localhost:${webAppPort}`
               },
               stdio: 'pipe'
             }
           )
-
-          childProcess.stdout.pipe(process.stdout)
-          childProcess.stderr.pipe(process.stderr)
         })
       })
     })
@@ -141,7 +137,7 @@ versions.forEach((version) => {
         assert.include(testOutput, '1 passed')
         assert.include(testOutput, '1 skipped')
         assert.notInclude(testOutput, 'TypeError')
-      }, 20000).then(() => done()).catch(done)
+      }).then(() => done()).catch(done)
 
       childProcess = exec(
         'node ./node_modules/typescript/bin/tsc' +
