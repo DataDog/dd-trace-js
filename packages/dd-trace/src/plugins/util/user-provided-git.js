@@ -114,4 +114,4 @@ function getUserProviderGitMetadata () {
   return metadata
 }
 
-module.exports = { getUserProviderGitMetadata }
+module.exports = { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha }
