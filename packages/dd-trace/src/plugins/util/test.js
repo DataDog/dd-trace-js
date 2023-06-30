@@ -16,7 +16,8 @@ const {
   GIT_COMMIT_AUTHOR_EMAIL,
   GIT_COMMIT_AUTHOR_NAME,
   GIT_COMMIT_MESSAGE,
-  CI_WORKSPACE_PATH, CI_PIPELINE_URL
+  CI_WORKSPACE_PATH,
+  CI_PIPELINE_URL
 } = require('./tags')
 const id = require('../../id')
 
