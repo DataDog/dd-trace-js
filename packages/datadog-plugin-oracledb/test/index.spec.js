@@ -62,6 +62,12 @@ describe('Plugin', () => {
         })
 
         function connectionTests (url) {
+          if (url) {
+            withPeerService(
+              () => tracer,
+              () => connection.execute(dbQuery),
+              url.pathname.slice(1), 'db.instance')
+          }
           it('should be instrumented for promise API', done => {
             agent.use(traces => {
               expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
