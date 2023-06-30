@@ -83,7 +83,6 @@ function wrapSmithySend (send) {
             responseStartChannel.publish(message)
 
             cb.apply(this, arguments)
-
             if (message.needsFinish) {
               responseFinishChannel.publish(message.response.error)
             }
@@ -94,6 +93,7 @@ function wrapSmithySend (send) {
           .then(
             result => {
               const message = getMessage(request, null, result)
+
               completeChannel.publish(message)
               return result
             },
@@ -167,6 +167,11 @@ function getChannelSuffix (name) {
 }
 
 addHook({ name: '@aws-sdk/smithy-client', versions: ['>=3'] }, smithy => {
+  shimmer.wrap(smithy.Client.prototype, 'send', wrapSmithySend)
+  return smithy
+})
+
+addHook({ name: '@smithy/smithy-client', versions: ['>=1'] }, smithy => {
   shimmer.wrap(smithy.Client.prototype, 'send', wrapSmithySend)
   return smithy
 })
