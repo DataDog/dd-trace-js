@@ -6,7 +6,9 @@ const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/he
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const namingSchema = require('./naming')
-const { getDataStreamsContext } = require('../../dd-trace/src/data_streams_context')
+const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
@@ -244,22 +246,35 @@ describe('Plugin', () => {
           afterEach(async () => {
             await consumer.disconnect()
           })
+          const expectedProducerHash = computePathwayHash(
+            'test',
+            'tester',
+            ['direction:out', 'topic:' + testTopic, 'type:kafka'],
+            ENTRY_PARENT_HASH
+          )
+          const expectedConsumerHash = computePathwayHash(
+            'test',
+            'tester',
+            ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka'],
+            expectedProducerHash
+          )
 
           it('Should set a checkpoint on produce', async () => {
             const messages = [{ key: 'consumerDSM1', value: 'test2' }]
-            console.log("start of test")
+            const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
             await sendMessages(kafka, testTopic, messages)
-            const dataStreamsContext = getDataStreamsContext()
-            console.log("data streams context", dataStreamsContext)
+            expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
+            setDataStreamsContextSpy.restore()
           })
 
-          it('Should set a checkpoint on consume', (done) => {
-            consumer.run({
+          it('Should set a checkpoint on consume', async () => {
+            await sendMessages(kafka, testTopic, messages)
+            const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+            await consumer.run({
               eachMessage: async ({ topic, partition, message, heartbeat, pause }) => {
-                console.log(message)
-                done()
+                expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedConsumerHash)
               } })
-              .catch(done)
+            setDataStreamsContextSpy.restore()
           })
         })
       })

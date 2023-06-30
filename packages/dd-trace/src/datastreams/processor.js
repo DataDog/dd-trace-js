@@ -189,5 +189,6 @@ module.exports = {
   DataStreamsProcessor: DataStreamsProcessor,
   StatsPoint: StatsPoint,
   StatsBucket: StatsBucket,
-  TimeBuckets
+  TimeBuckets,
+  ENTRY_PARENT_HASH
 }
