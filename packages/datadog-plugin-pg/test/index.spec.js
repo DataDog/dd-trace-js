@@ -54,6 +54,16 @@ describe('Plugin', () => {
             client.connect(err => done(err))
           })
 
+          withPeerService(
+            () => tracer,
+            (done) => client.query('SELECT 1', (err, result) => {
+              if (err) {
+                done()
+              }
+            }),
+            'postgres', 'db.name'
+          )
+
           it('should do automatic instrumentation when using callbacks', done => {
             agent.use(traces => {
               expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)

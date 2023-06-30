@@ -38,6 +38,11 @@ describe('Plugin', () => {
           connection.connect()
         })
 
+        withPeerService(
+          () => tracer,
+          (done) => connection.query('SELECT 1', (_) => done()),
+          'db', 'db.name')
+
         it('should propagate context to callbacks, with correct callback args', done => {
           const span = tracer.startSpan('test')
 
