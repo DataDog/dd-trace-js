@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
-	<title>couchbase | dd-trace</title>
+	<title>openai | dd-trace</title>
 	<meta name="description" content="Documentation for dd-trace">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<link rel="stylesheet" href="../assets/css/main.css">
@@ -57,10 +57,10 @@
 					<a href="../modules/plugins.html">plugins</a>
 				</li>
 				<li>
-					<a href="plugins.couchbase.html">couchbase</a>
+					<a href="plugins.openai.html">openai</a>
 				</li>
 			</ul>
-			<h1>Interface couchbase</h1>
+			<h1>Interface openai</h1>
 		</div>
 	</div>
 </header>
@@ -71,8 +71,14 @@
 				<div class="tsd-comment tsd-typography">
 					<div class="lead">
 						<p>This plugin automatically instruments the
-						<a href="https://www.npmjs.com/package/couchbase">couchbase</a> module.</p>
+						<a href="https://platform.openai.com/docs/api-reference?lang=node.js">openai</a> module.</p>
 					</div>
+					<p>Note that for logs to work you&#39;ll need to set the <code>DD_API_KEY</code> environment variable.
+						You&#39;ll also need to adjust any firewall settings to allow the tracer to communicate
+					with <code>http-intake.logs.datadoghq.com</code>.</p>
+					<p>Note that for metrics to work you&#39;ll need to enable
+						<a href="https://docs.datadoghq.com/developers/dogstatsd/?tab=hostagent#setup">DogStatsD</a>
+					in the agent.</p>
 				</div>
 			</section>
 			<section class="tsd-panel tsd-hierarchy">
@@ -82,7 +88,7 @@
 						<span class="tsd-signature-type">Instrumentation</span>
 						<ul class="tsd-hierarchy">
 							<li>
-								<span class="target">couchbase</span>
+								<span class="target">openai</span>
 							</li>
 						</ul>
 					</li>
@@ -95,9 +101,9 @@
 						<section class="tsd-index-section tsd-is-inherited">
 							<h3>Properties</h3>
 							<ul class="tsd-index-list">
-								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.couchbase.html#enabled" class="tsd-kind-icon">enabled</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.couchbase.html#measured" class="tsd-kind-icon">measured</a></li>
-								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.couchbase.html#service" class="tsd-kind-icon">service</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.openai.html#enabled" class="tsd-kind-icon">enabled</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.openai.html#measured" class="tsd-kind-icon">measured</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-inherited"><a href="plugins.openai.html#service" class="tsd-kind-icon">service</a></li>
 							</ul>
 						</section>
 					</div>
@@ -180,16 +186,16 @@
 				</ul>
 				<ul class="current">
 					<li class="current tsd-kind-interface tsd-parent-kind-namespace">
-						<a href="plugins.couchbase.html" class="tsd-kind-icon">couchbase</a>
+						<a href="plugins.openai.html" class="tsd-kind-icon">openai</a>
 						<ul>
 							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
-								<a href="plugins.couchbase.html#enabled" class="tsd-kind-icon">enabled</a>
+								<a href="plugins.openai.html#enabled" class="tsd-kind-icon">enabled</a>
 							</li>
 							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
-								<a href="plugins.couchbase.html#measured" class="tsd-kind-icon">measured</a>
+								<a href="plugins.openai.html#measured" class="tsd-kind-icon">measured</a>
 							</li>
 							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-inherited">
-								<a href="plugins.couchbase.html#service" class="tsd-kind-icon">service</a>
+								<a href="plugins.openai.html#service" class="tsd-kind-icon">service</a>
 							</li>
 						</ul>
 					</li>
