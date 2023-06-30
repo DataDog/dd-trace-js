@@ -53,7 +53,7 @@ function maybeEnable (Plugin) {
 module.exports = class PluginManager {
   constructor (tracer) {
     this._tracer = tracer
-    this._tracerConfig = null
+    this._tracerConfig = {}
     this._pluginsByName = {}
     this._configsByName = {}
 
