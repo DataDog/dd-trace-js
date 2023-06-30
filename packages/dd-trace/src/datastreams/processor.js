@@ -73,6 +73,7 @@ class DataStreamsProcessor {
       port,
       url
     })
+    console.log("dsm enabled ", config)
     this.bucketSizeNs = 1e10
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
@@ -110,7 +111,7 @@ class DataStreamsProcessor {
   }
 
   setCheckpoint (edgeTags, ctx = null) {
-    if (!this.enabled) return {}
+    if (!this.enabled) return null
     const nowNs = Date.now() * 1e6
     const direction = edgeTags.find(t => t.startsWith('direction:'))
     let pathwayStartNs = nowNs
