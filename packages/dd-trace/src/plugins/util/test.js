@@ -118,7 +118,7 @@ function getPkgManager () {
 }
 
 function validateMetadata (metadata) {
-  if (GIT_REPOSITORY_URL in metadata && metadata[GIT_REPOSITORY_URL]) {
+  if (metadata[GIT_REPOSITORY_URL]) {
     const validUrl = validateUrl(metadata[GIT_REPOSITORY_URL])
     if (!validUrl) {
       delete metadata[GIT_REPOSITORY_URL]
