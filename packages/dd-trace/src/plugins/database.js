@@ -4,6 +4,7 @@ const StoragePlugin = require('./storage')
 
 class DatabasePlugin extends StoragePlugin {
   static get operation () { return 'query' }
+  static get peerServicePrecursors () { return ['db.name'] }
 
   constructor (...args) {
     super(...args)
