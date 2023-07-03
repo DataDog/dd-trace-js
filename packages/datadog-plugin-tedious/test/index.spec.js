@@ -81,7 +81,8 @@ describe('Plugin', () => {
           connection.execSql(request)
         },
         () => namingSchema.client.opName,
-        () => namingSchema.client.serviceName
+        () => namingSchema.client.serviceName,
+        'test'
       )
 
       withPeerService(

@@ -92,7 +92,8 @@ describe('Plugin', () => {
           withNamingSchema(
             async () => sendMessages(kafka, testTopic, messages),
             () => namingSchema.send.opName,
-            () => namingSchema.send.serviceName
+            () => namingSchema.send.serviceName,
+            'test'
           )
         })
         describe('consumer', () => {
@@ -225,7 +226,8 @@ describe('Plugin', () => {
               await sendMessages(kafka, testTopic, messages)
             },
             () => namingSchema.send.opName,
-            () => namingSchema.send.serviceName
+            () => namingSchema.send.serviceName,
+            'test'
           )
         })
       })

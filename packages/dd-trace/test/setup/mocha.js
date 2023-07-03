@@ -48,7 +48,7 @@ function loadInstFile (file, instrumentations) {
   })
 }
 
-function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName) {
+function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, expectedShortCircuitName) {
   let fullConfig
 
   describe('service and operation naming', () => {
@@ -77,6 +77,31 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName) 
             .catch(done)
           spanProducerFn()
         })
+      })
+    })
+
+    describe('service naming short-circuit in v0', () => {
+      before(() => {
+        fullConfig = Nomenclature.config
+        Nomenclature.configure({
+          spanAttributeSchema: 'v0',
+          service: fullConfig.service,
+          traceRemoveIntegrationServiceNamesEnabled: true
+        })
+      })
+      after(() => {
+        Nomenclature.configure(fullConfig)
+      })
+
+      it('should pass service name through', done => {
+        agent
+          .use(traces => {
+            const span = traces[0][0]
+            expect(span).to.have.property('service', expectedShortCircuitName)
+          })
+          .then(done)
+          .catch(done)
+        spanProducerFn()
       })
     })
   })
