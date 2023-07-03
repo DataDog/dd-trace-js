@@ -126,7 +126,8 @@ describe('Plugin', () => {
             withNamingSchema(
               () => channel.assertQueue('test', {}, () => {}),
               () => namingSchema.controlPlane.opName,
-              () => namingSchema.controlPlane.serviceName
+              () => namingSchema.controlPlane.serviceName,
+              'test'
             )
           })
 
@@ -189,7 +190,8 @@ describe('Plugin', () => {
                 channel.publish('exchange', 'routingKey', Buffer.from('content'))
               },
               () => namingSchema.send.opName,
-              () => namingSchema.send.serviceName
+              () => namingSchema.send.serviceName,
+              'test'
             )
           })
 
@@ -277,7 +279,8 @@ describe('Plugin', () => {
                 })
               },
               () => namingSchema.receive.opName,
-              () => namingSchema.receive.serviceName
+              () => namingSchema.receive.serviceName,
+              'test'
             )
           })
         })
@@ -341,7 +344,8 @@ describe('Plugin', () => {
         withNamingSchema(
           () => channel.assertQueue('test', {}, () => {}),
           () => namingSchema.controlPlane.opName,
-          () => 'test-custom-service'
+          () => 'test-custom-service',
+          'test-custom-service'
         )
       })
     })
