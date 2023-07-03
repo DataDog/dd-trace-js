@@ -6,6 +6,9 @@ const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/he
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const namingSchema = require('./naming')
+const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
@@ -20,6 +23,7 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
         beforeEach(async () => {
+          process.env['DD_DATA_STREAMS_ENABLED'] = 'true'
           tracer = require('../../dd-trace')
           await agent.load('kafkajs')
           const {
@@ -229,6 +233,51 @@ describe('Plugin', () => {
             () => namingSchema.send.serviceName,
             'test'
           )
+        })
+
+        describe('data stream monitoring', () => {
+          let consumer
+          beforeEach(async () => {
+            tracer.init()
+            tracer.use('kafkajs', { dsmEnabled: true })
+            consumer = kafka.consumer({ groupId: 'test-group' })
+            await consumer.connect()
+            await consumer.subscribe({ topic: testTopic })
+          })
+
+          afterEach(async () => {
+            await consumer.disconnect()
+          })
+          const expectedProducerHash = computePathwayHash(
+            'test',
+            'tester',
+            ['direction:out', 'topic:' + testTopic, 'type:kafka'],
+            ENTRY_PARENT_HASH
+          )
+          const expectedConsumerHash = computePathwayHash(
+            'test',
+            'tester',
+            ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka'],
+            expectedProducerHash
+          )
+
+          it('Should set a checkpoint on produce', async () => {
+            const messages = [{ key: 'consumerDSM1', value: 'test2' }]
+            const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+            await sendMessages(kafka, testTopic, messages)
+            expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
+            setDataStreamsContextSpy.restore()
+          })
+
+          it('Should set a checkpoint on consume', async () => {
+            await sendMessages(kafka, testTopic, messages)
+            const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+            await consumer.run({
+              eachMessage: async ({ topic, partition, message, heartbeat, pause }) => {
+                expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedConsumerHash)
+              } })
+            setDataStreamsContextSpy.restore()
+          })
         })
       })
     })
