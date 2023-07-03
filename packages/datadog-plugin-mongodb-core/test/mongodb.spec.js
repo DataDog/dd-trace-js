@@ -249,7 +249,8 @@ describe('Plugin', () => {
           withNamingSchema(
             () => collection.insertOne({ a: 1 }, {}, () => {}),
             () => namingSchema.outbound.opName,
-            () => namingSchema.outbound.serviceName
+            () => namingSchema.outbound.serviceName,
+            'test'
           )
         })
       })
@@ -303,7 +304,8 @@ describe('Plugin', () => {
         withNamingSchema(
           () => collection.insertOne({ a: 1 }, () => {}),
           () => namingSchema.outbound.opName,
-          () => 'custom'
+          () => 'custom',
+          'custom'
         )
       })
     })

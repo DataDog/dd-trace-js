@@ -186,6 +186,7 @@ describe('Plugin', () => {
           },
           () => namingSchema.server.opName,
           () => namingSchema.server.serviceName,
+          'test',
           (traces) => {
             const spans = sort(traces[0])
             return spans[0]
