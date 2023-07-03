@@ -606,6 +606,7 @@ module.exports = {
     normalizeTag(tags, GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository)
     normalizeTag(tags, GIT_BRANCH, normalizeRef)
     normalizeTag(tags, GIT_TAG, normalizeRef)
+
     return removeEmptyValues(tags)
   }
 }

@@ -1,5 +1,6 @@
 const path = require('path')
 const fs = require('fs')
+const { URL } = require('url')
 
 const istanbul = require('istanbul-lib-coverage')
 const ignore = require('ignore')
@@ -24,7 +25,6 @@ const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../
 const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { version: ddTraceVersion } = require('../../../../../package.json')
-const { URL } = require('url')
 
 const TEST_FRAMEWORK = 'test.framework'
 const TEST_FRAMEWORK_VERSION = 'test.framework_version'
