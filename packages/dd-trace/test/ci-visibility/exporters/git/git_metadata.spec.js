@@ -227,7 +227,6 @@ describe('git_metadata', () => {
     validUrls.forEach((validUrl) => {
       expect(validateGitRepositoryUrl(validUrl)).to.be.true
     })
-    done()
   })
   it('should return false if Git commit SHA is invalid', () => {
     const invalidSha1 = 'cb466452bfe18d4f6be2836c2a5551843013cf382'
