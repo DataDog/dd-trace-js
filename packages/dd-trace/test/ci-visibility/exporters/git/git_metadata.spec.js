@@ -215,7 +215,7 @@ describe('git_metadata', () => {
       expect(validateGitRepositoryUrl(invalidUrl)).to.be.false
     })
   })
-  it('should return true if Git repository URL is valid', (done) => {
+  it('should return true if Git repository URL is valid', () => {
     const validUrl1 = 'https://test.com/repo/dummy.git'
     const validUrl2 = 'http://test.com/repo/dummy.git'
     const validUrl3 = 'https://github.com/DataDog/dd-trace-js.git'
