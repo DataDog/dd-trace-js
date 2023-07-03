@@ -3,8 +3,13 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
 const Readable = require('stream').Readable
-const pkgs = ['grpc', '@grpc/grpc-js']
+
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+
+const nodeMajor = parseInt(process.versions.node.split('.')[0])
+const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
+
+const namingSchema = require('./naming')
 
 describe('Plugin', () => {
   let grpc
@@ -77,6 +82,13 @@ describe('Plugin', () => {
           const client = await buildClient({
             getUnary: (_, callback) => callback()
           })
+
+          withNamingSchema(
+            (done) => client.getUnary({ first: 'foobar' }, () => done()),
+            () => namingSchema.server.opName,
+            () => namingSchema.server.serviceName,
+            'test'
+          )
 
           client.getUnary({ first: 'foobar' }, () => {})
 

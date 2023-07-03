@@ -8,6 +8,11 @@ const loader = require('../../../versions/@grpc/proto-loader').get()
 const pkgs = ['grpc', '@grpc/grpc-js']
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
+const nodeMajor = parseInt(process.versions.node.split('.')[0])
+const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
+
+const namingSchema = require('./naming')
+
 describe('Plugin', () => {
   let grpc
   let port
@@ -102,6 +107,13 @@ describe('Plugin', () => {
                 () => tracer,
                 (done) => client.getUnary({ first: 'foobar' }, () => done()),
                 'test.TestService', 'rpc.service')
+
+              withNamingSchema(
+                (done) => client.getUnary({ first: 'foobar' }, () => done()),
+                () => namingSchema.client.opName,
+                () => namingSchema.client.serviceName,
+                'test'
+              )
 
               client.getUnary({ first: 'foobar' }, () => {})
               return agent

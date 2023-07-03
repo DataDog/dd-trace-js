@@ -12,8 +12,8 @@ class GrpcClientPlugin extends ClientPlugin {
   start ({ metadata, path, type }) {
     const metadataFilter = this.config.metadataFilter
     const method = getMethodMetadata(path, type)
-    const span = this.startSpan('grpc.request', {
-      service: this.config.service || `${this.tracer._service}-grpc-client`,
+    const span = this.startSpan(this.operationName(), {
+      service: this.config.service || this.serviceName(),
       resource: path,
       kind: 'client',
       type: 'http',
