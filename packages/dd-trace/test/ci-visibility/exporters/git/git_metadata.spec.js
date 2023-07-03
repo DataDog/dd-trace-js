@@ -240,7 +240,6 @@ describe('git_metadata', () => {
     invalidShas.forEach((invalidSha) => {
       expect(validateGitCommitSha(invalidSha)).to.be.false
     })
-    done()
   })
   it('should return true if Git commit SHA is valid', () => {
     const validSha1 = 'cb466452bfe18d4f6be2836c2a5551843013cf38'
