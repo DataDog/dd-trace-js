@@ -4,6 +4,7 @@ const BaseAwsSdkPlugin = require('../base')
 
 class S3 extends BaseAwsSdkPlugin {
   static get id () { return 's3' }
+  static get peerServicePrecursors () { return ['bucketname'] }
 
   generateTags (params, operation, response) {
     const tags = {}
