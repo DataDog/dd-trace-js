@@ -98,7 +98,8 @@ describe('Plugin', () => {
         withNamingSchema(
           async () => client.get('foo'),
           () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName
+          () => namingSchema.outbound.serviceName,
+          'test'
         )
       })
 
@@ -146,7 +147,8 @@ describe('Plugin', () => {
         withNamingSchema(
           async () => client.get('foo'),
           () => namingSchema.outbound.opName,
-          () => 'custom'
+          () => 'custom',
+          'custom'
         )
       })
 

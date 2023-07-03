@@ -1,3 +1,6 @@
+require('../setup/tap')
+
+const { expect } = require('chai')
 const SchemaDefinition = require('../../src/service-naming/schemas/definition')
 
 describe('Service naming', () => {
@@ -35,12 +38,18 @@ describe('Service naming', () => {
 
       it('should forward additional args to opName', () => {
         singleton.opName('messaging', 'producer', 'redis', extra)
-        expect(versions.v0.getOpName).to.be.calledWith('messaging', 'outbound', 'redis', extra)
+        expect(versions.v0.getOpName).to.have.been.calledWith('messaging', 'producer', 'redis', extra)
       })
 
       it('should forward additional args to serviceName and add configured service', () => {
         singleton.serviceName('messaging', 'producer', 'redis', extra)
-        expect(versions.v0.getServiceName).to.be.calledWith('messaging', 'outbound', 'redis', 'test-service', extra)
+        expect(versions.v0.getServiceName).to.have.been.calledWith(
+          'messaging',
+          'producer',
+          'redis',
+          'test-service',
+          extra
+        )
       })
     })
   })
