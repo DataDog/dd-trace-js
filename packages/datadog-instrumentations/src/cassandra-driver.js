@@ -28,7 +28,7 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
     }
 
     return asyncResource.runInAsyncScope(() => {
-      startCh.publish({ keyspace: this.keyspace, query: queries })
+      startCh.publish({ keyspace: this.keyspace, query: queries, contactPoints: this.options?.contactPoints })
       try {
         const res = batch.apply(this, arguments)
         if (typeof res === 'function' || !res) {
@@ -56,7 +56,7 @@ addHook({ name: 'cassandra-driver', versions: ['>=4.4'] }, cassandra => {
     }
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
-      startCh.publish({ keyspace: this.keyspace, query })
+      startCh.publish({ keyspace: this.keyspace, query, contactPoints: this.options?.contactPoints })
       const promise = _execute.apply(this, arguments)
 
       const promiseAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -88,7 +88,7 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'] }, cassandra => {
       }
 
       return asyncResource.runInAsyncScope(() => {
-        startCh.publish({ keyspace: this.keyspace, query })
+        startCh.publish({ keyspace: this.keyspace, query, contactPoints: this.options?.contactPoints })
 
         const lastIndex = arguments.length - 1
         let cb = arguments[lastIndex]
