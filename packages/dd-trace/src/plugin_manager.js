@@ -134,6 +134,7 @@ module.exports = class PluginManager {
       queryStringObfuscation,
       site,
       url,
+      dbmPropagationMode,
       dsmEnabled
     } = this._tracerConfig
 
@@ -147,6 +148,7 @@ module.exports = class PluginManager {
       sharedConfig.queryStringObfuscation = queryStringObfuscation
     }
 
+    sharedConfig.dbmPropagationMode = dbmPropagationMode
     sharedConfig.dsmEnabled = dsmEnabled
 
     if (serviceMapping && serviceMapping[name]) {
