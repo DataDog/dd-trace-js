@@ -7,7 +7,10 @@ const { storage } = require('../../datadog-core')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { DataStreamsProcessor } = require('./datastreams/processor')
+const { decodePathwayContext } = require('./datastreams/pathway')
 const { DD_MAJOR } = require('../../../version')
+const DataStreamsContext = require('./data_streams_context')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -17,9 +20,24 @@ const MEASURED = tags.MEASURED
 class DatadogTracer extends Tracer {
   constructor (config) {
     super(config)
-
+    this._dataStreamsProcessor = new DataStreamsProcessor(config)
     this._scope = new Scope()
     setStartupLogConfig(config)
+  }
+
+  // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.
+  // They should be moved outside of the tracer in the future.
+  setCheckpoint (edgeTags) {
+    const ctx = this._dataStreamsProcessor.setCheckpoint(edgeTags, DataStreamsContext.getDataStreamsContext())
+    DataStreamsContext.setDataStreamsContext(ctx)
+    return ctx
+  }
+
+  decodeDataStreamsContext (data) {
+    const ctx = decodePathwayContext(data)
+    // we erase the previous context everytime we decode a new one
+    DataStreamsContext.setDataStreamsContext(ctx)
+    return ctx
   }
 
   trace (name, options, fn) {
