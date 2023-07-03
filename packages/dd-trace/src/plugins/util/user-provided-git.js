@@ -46,14 +46,9 @@ function validateGitRepositoryUrl (repoUrl) {
 }
 
 function validateGitCommitSha (gitCommitSha) {
-  if (gitCommitSha) {
-    const isValidSha1 = /^[0-9a-f]{40}$/.test(gitCommitSha)
-    const isValidSha256 = /^[0-9a-f]{64}$/.test(gitCommitSha)
-    if (isValidSha1 || isValidSha256) {
-      return true
-    }
-  }
-  return false
+  const isValidSha1 = /^[0-9a-f]{40}$/.test(gitCommitSha)
+  const isValidSha256 = /^[0-9a-f]{64}$/.test(gitCommitSha)
+  return isValidSha1 || isValidSha256
 }
 
 function validateGitMetadata (metadata) {
