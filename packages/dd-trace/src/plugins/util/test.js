@@ -17,7 +17,8 @@ const {
   GIT_COMMIT_AUTHOR_EMAIL,
   GIT_COMMIT_AUTHOR_NAME,
   GIT_COMMIT_MESSAGE,
-  CI_WORKSPACE_PATH, CI_PIPELINE_URL
+  CI_WORKSPACE_PATH,
+  CI_PIPELINE_URL
 } = require('./tags')
 const id = require('../../id')
 
@@ -118,13 +119,13 @@ function getPkgManager () {
 }
 
 function validateMetadata (metadata) {
-  if (GIT_REPOSITORY_URL in metadata && metadata[GIT_REPOSITORY_URL]) {
+  if (metadata[GIT_REPOSITORY_URL]) {
     const validUrl = validateUrl(metadata[GIT_REPOSITORY_URL])
     if (!validUrl) {
       delete metadata[GIT_REPOSITORY_URL]
     }
   }
-  if (CI_PIPELINE_URL in metadata && metadata[CI_PIPELINE_URL]) {
+  if (metadata[CI_PIPELINE_URL]) {
     const validUrl = validateUrl(metadata[CI_PIPELINE_URL])
     if (!validUrl) {
       delete metadata[CI_PIPELINE_URL]
@@ -175,14 +176,13 @@ function getTestEnvironmentMetadata (testFramework, config) {
 
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
 
-  let metadata = {
+  const metadata = validateMetadata({
     [TEST_FRAMEWORK]: testFramework,
     ...gitMetadata,
     ...ciMetadata,
     ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata
-  }
-  metadata = validateMetadata(metadata)
+  })
   if (config && config.service) {
     metadata['service.name'] = config.service
   }
