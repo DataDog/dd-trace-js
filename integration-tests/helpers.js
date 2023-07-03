@@ -180,9 +180,12 @@ async function createSandbox (dependencies = [], isGitRepo = false) {
   const out = path.join(folder, 'dd-trace.tgz')
   const allDependencies = [`file:${out}`].concat(dependencies)
 
+  // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
+  const { NODE_OPTIONS, ...restOfEnv } = process.env
+
   await mkdir(folder)
   await exec(`yarn pack --filename ${out}`) // TODO: cache this
-  await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder })
+  await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
   await exec(`cp -R ./integration-tests/* ${folder}`)
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
@@ -243,7 +246,8 @@ function getCiVisEvpProxyConfig (port) {
   return {
     ...process.env,
     DD_TRACE_AGENT_PORT: port,
-    NODE_OPTIONS: '-r dd-trace/ci/init'
+    NODE_OPTIONS: '-r dd-trace/ci/init',
+    DD_CIVISIBILITY_AGENTLESS_ENABLED: '0'
   }
 }
 
