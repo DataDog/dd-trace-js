@@ -16,6 +16,7 @@ module.exports = {
   '@opensearch-project/opensearch': () => require('../opensearch'),
   '@opentelemetry/sdk-trace-node': () => require('../otel-sdk-trace'),
   '@redis/client': () => require('../redis'),
+  '@smithy/smithy-client': () => require('../aws-sdk'),
   'amqp10': () => require('../amqp10'),
   'amqplib': () => require('../amqplib'),
   'aws-sdk': () => require('../aws-sdk'),
