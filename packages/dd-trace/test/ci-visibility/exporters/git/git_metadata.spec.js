@@ -214,7 +214,6 @@ describe('git_metadata', () => {
     invalidUrls.forEach((invalidUrl) => {
       expect(validateGitRepositoryUrl(invalidUrl)).to.be.false
     })
-    done()
   })
   it('should return true if Git repository URL is valid', (done) => {
     const validUrl1 = 'https://test.com/repo/dummy.git'
