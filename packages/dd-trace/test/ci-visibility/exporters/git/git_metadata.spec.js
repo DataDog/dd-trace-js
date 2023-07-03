@@ -251,7 +251,6 @@ describe('git_metadata', () => {
     validShas.forEach((validSha) => {
       expect(validateGitCommitSha(validSha)).to.be.true
     })
-    done()
   })
   it('should not crash if packfiles can not be accessed', (done) => {
     const scope = nock('https://api.test.com')
