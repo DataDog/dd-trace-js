@@ -106,8 +106,7 @@ function getUserProviderGitMetadata () {
     [GIT_COMMIT_AUTHOR_EMAIL]: DD_GIT_COMMIT_AUTHOR_EMAIL,
     [GIT_COMMIT_AUTHOR_DATE]: DD_GIT_COMMIT_AUTHOR_DATE
   })
-  validateGitMetadata(metadata)
-  return metadata
+  return removeInvalidGitMetadata(metadata)
 }
 
 module.exports = { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha }
