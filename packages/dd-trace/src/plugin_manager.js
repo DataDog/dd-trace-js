@@ -133,7 +133,8 @@ module.exports = class PluginManager {
       serviceMapping,
       queryStringObfuscation,
       site,
-      url
+      url,
+      dsmEnabled
     } = this._tracerConfig
 
     const sharedConfig = {}
@@ -145,6 +146,8 @@ module.exports = class PluginManager {
     if (queryStringObfuscation !== undefined) {
       sharedConfig.queryStringObfuscation = queryStringObfuscation
     }
+
+    sharedConfig.dsmEnabled = dsmEnabled
 
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
