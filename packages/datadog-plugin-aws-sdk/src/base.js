@@ -1,11 +1,11 @@
 'use strict'
 
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
 
-class BaseAwsSdkPlugin extends Plugin {
+class BaseAwsSdkPlugin extends ClientPlugin {
   static get id () { return 'aws' }
 
   get serviceIdentifier () {
@@ -116,7 +116,7 @@ class BaseAwsSdkPlugin extends Plugin {
       this.config.hooks.request(span, response)
     }
 
-    span.finish()
+    super.finish()
   }
 
   configure (config) {
