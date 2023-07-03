@@ -14,6 +14,7 @@ module.exports = {
   get '@node-redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@opensearch-project/opensearch' () { return require('../../../datadog-plugin-opensearch/src') },
   get '@redis/client' () { return require('../../../datadog-plugin-redis/src') },
+  get '@smithy/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get 'amqp10' () { return require('../../../datadog-plugin-amqp10/src') },
   get 'amqplib' () { return require('../../../datadog-plugin-amqplib/src') },
   get 'aws-sdk' () { return require('../../../datadog-plugin-aws-sdk/src') },
