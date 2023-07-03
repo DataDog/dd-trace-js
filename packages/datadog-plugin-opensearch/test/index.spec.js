@@ -214,7 +214,8 @@ describe('Plugin', () => {
         withNamingSchema(
           () => client.search({ index: 'logstash-2000.01.01', body: {} }),
           () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName
+          () => namingSchema.outbound.serviceName,
+          'test'
         )
       })
 
@@ -284,7 +285,8 @@ describe('Plugin', () => {
         withNamingSchema(
           () => client.search({ index: 'logstash-2000.01.01', body: {} }),
           () => namingSchema.outbound.opName,
-          () => 'custom'
+          () => 'custom',
+          'custom'
         )
       })
     })

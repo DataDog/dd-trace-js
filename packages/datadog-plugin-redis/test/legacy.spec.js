@@ -148,7 +148,8 @@ describe('Legacy Plugin', () => {
         withNamingSchema(
           () => client.get('foo', () => {}),
           () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName
+          () => namingSchema.outbound.serviceName,
+          'test'
         )
       })
 
@@ -196,7 +197,8 @@ describe('Legacy Plugin', () => {
         withNamingSchema(
           () => client.get('foo', () => {}),
           () => namingSchema.outbound.opName,
-          () => 'custom'
+          () => 'custom',
+          'custom'
         )
       })
 
