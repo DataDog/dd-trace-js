@@ -54,6 +54,15 @@ describe('Plugin', () => {
           return agent.close({ ritmReset: false })
         })
 
+        withPeerService(
+          () => tracer,
+          (done) => s3.putObject({
+            Bucket: bucketName,
+            Key: 'test-key',
+            Body: 'test body'
+          }, (err) => err && done()),
+          bucketName, 'bucketname')
+
         it('should allow disabling a specific span kind of a service', (done) => {
           let total = 0
 
