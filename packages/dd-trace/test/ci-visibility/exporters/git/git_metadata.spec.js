@@ -202,7 +202,7 @@ describe('git_metadata', () => {
       done()
     })
   })
-  it('should return false if Git repository URL is invalid', (done) => {
+  it('should return false if Git repository URL is invalid', () => {
     const invalidUrl1 = 'https://test.com'
     const invalidUrl2 = 'https://test.com'
     const invalidUrl3 = 'http://test.com/repo/dummy.4git'
