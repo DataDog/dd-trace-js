@@ -42,13 +42,7 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
 }
 
 function validateGitRepositoryUrl (repoUrl) {
-  if (repoUrl) {
-    const validUrl = /((http|git|ssh|http(s)|file|\/?)|(git@[\w.]+))(:(\/\/)?)([\w.@:/\-~]+)(\.git)(\/)?/.test(repoUrl)
-    if (validUrl) {
-      return true
-    }
-  }
-  return false
+  return /((http|git|ssh|http(s)|file|\/?)|(git@[\w.]+))(:(\/\/)?)([\w.@:/\-~]+)(\.git)(\/)?/.test(repoUrl)
 }
 
 function validateGitCommitSha (gitCommitSha) {
