@@ -106,7 +106,8 @@ module.exports = {
   mergeCoverage,
   fromCoverageMapToCoverage,
   getTestLineStart,
-  getCallSites
+  getCallSites,
+  validateMetadata
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19

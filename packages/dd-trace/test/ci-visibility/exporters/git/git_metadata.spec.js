@@ -5,6 +5,8 @@ require('../../../../../dd-trace/test/setup/tap')
 const nock = require('nock')
 const os = require('os')
 const fs = require('fs')
+const { validateMetadata } = require('../../../../src/plugins/util/test')
+const { GIT_REPOSITORY_URL } = require('../../../../src/plugins/util/tags')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 
@@ -78,6 +80,21 @@ describe('git_metadata', () => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
+    })
+  })
+
+  it('should remove if Git repository URL is invalid', () => {
+    const invalidUrl1 = 'https://test.com'
+    const invalidUrl2 = 'https://test.com'
+    const invalidUrl3 = 'http://test.com/repo/dummy.4git'
+    const invalidUrl4 = 'https://test.com/repo/dummy.gi'
+    const invalidUrl5 = 'www.test.com/repo/dummy.git'
+    const invalidUrl6 = 'test.com/repo/dummy.git'
+    const invalidUrl7 = ''
+
+    const invalidUrls = [invalidUrl1, invalidUrl2, invalidUrl3, invalidUrl4, invalidUrl5, invalidUrl6, invalidUrl7]
+    invalidUrls.forEach((invalidUrl) => {
+      expect(validateMetadata({ [GIT_REPOSITORY_URL]: invalidUrl })).to.be.equal({})
     })
   })
 
