@@ -68,6 +68,7 @@ describe('Plugin', () => {
                 '{"query":{"match_all":{}}}'
               )
               expect(traces[0][0].meta).to.have.property('component', 'opensearch')
+              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
             })
             .then(done)
             .catch(done)
@@ -213,7 +214,8 @@ describe('Plugin', () => {
         withNamingSchema(
           () => client.search({ index: 'logstash-2000.01.01', body: {} }),
           () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName
+          () => namingSchema.outbound.serviceName,
+          'test'
         )
       })
 
@@ -239,6 +241,20 @@ describe('Plugin', () => {
             node: 'http://localhost:9201'
           })
         })
+
+        withPeerService(
+          () => tracer,
+          (done) => client.search({
+            index: 'docs',
+            sort: 'name',
+            size: 100,
+            body: {
+              query: {
+                match_all: {}
+              }
+            }
+          }),
+          'localhost', 'out.host')
 
         it('should be configured with the correct values', done => {
           client.search({
@@ -269,7 +285,8 @@ describe('Plugin', () => {
         withNamingSchema(
           () => client.search({ index: 'logstash-2000.01.01', body: {} }),
           () => namingSchema.outbound.opName,
-          () => 'custom'
+          () => 'custom',
+          'custom'
         )
       })
     })
