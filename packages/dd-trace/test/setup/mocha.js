@@ -48,7 +48,13 @@ function loadInstFile (file, instrumentations) {
   })
 }
 
-function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, expectedShortCircuitName, selectSpan = (traces) => traces[0][0]) {
+function withNamingSchema (
+  spanProducerFn,
+  expectedOpName,
+  expectedServiceName,
+  expectedShortCircuitName,
+  selectSpan = (traces) => traces[0][0]
+) {
   let fullConfig
 
   describe('service and operation naming', () => {
