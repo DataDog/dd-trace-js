@@ -30,7 +30,8 @@ versions.forEach((version) => {
       sandbox = await createSandbox([`@playwright/test@${version}`, 'typescript'], true)
       cwd = sandbox.folder
       // install necessary browser
-      execSync('npx playwright install', { cwd })
+      const { NODE_OPTIONS, ...restOfEnv } = process.env
+      execSync('npx playwright install', { cwd, env: restOfEnv })
       webAppPort = await getPort()
       webAppServer.listen(webAppPort)
     })
