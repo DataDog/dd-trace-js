@@ -51,16 +51,23 @@ function validateGitCommitSha (gitCommitSha) {
   return isValidSha1 || isValidSha256
 }
 
-function validateGitMetadata (metadata) {
-  const size = Object.keys(metadata).length
-  if (size > 0) {
-    if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
-      log.error('DD_GIT_COMMIT_SHA must be a full-length git SHA')
+function removeInvalidGitMetadata (metadata) {
+  return Object.keys(metadata).reduce((filteredTags, tag) => {
+    if (tag === GIT_REPOSITORY_URL) {
+      if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
+        log.error('DD_GIT_COMMIT_SHA must be a full-length git SHA')
+        return filteredTags
+      }
     }
-    if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
-      log.error('DD_GIT_REPOSITORY_URL must be a valid URL')
+    if (tag === GIT_COMMIT_SHA) {
+      if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
+        log.error('DD_GIT_REPOSITORY_URL must be a valid URL')
+        return filteredTags
+      }
     }
-  }
+    filteredTags[tag] = metadata[tag]
+    return filteredTags
+  }, {})
 }
 
 function getUserProviderGitMetadata () {
