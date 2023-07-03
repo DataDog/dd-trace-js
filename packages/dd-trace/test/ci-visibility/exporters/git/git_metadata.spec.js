@@ -243,7 +243,7 @@ describe('git_metadata', () => {
     })
     done()
   })
-  it('should return true if Git commit SHA is valid', (done) => {
+  it('should return true if Git commit SHA is valid', () => {
     const validSha1 = 'cb466452bfe18d4f6be2836c2a5551843013cf38'
     const validSha2 = 'cb466452bfe18d4f6be2836c2a5551843013cf381234223920318230492823f3'
 
