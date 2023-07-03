@@ -153,7 +153,8 @@ describe('Plugin', () => {
         withNamingSchema(
           done => memcached.get('test', err => err && done(err)),
           () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName
+          () => namingSchema.outbound.serviceName,
+          'test'
         )
       })
 

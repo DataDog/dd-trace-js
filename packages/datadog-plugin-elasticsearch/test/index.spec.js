@@ -307,7 +307,8 @@ describe('Plugin', () => {
               hasCallbackSupport ? () => {} : undefined
             ),
             () => namingSchema.outbound.opName,
-            () => namingSchema.outbound.serviceName
+            () => namingSchema.outbound.serviceName,
+            'test'
           )
         })
       })
@@ -371,7 +372,8 @@ describe('Plugin', () => {
             hasCallbackSupport ? () => {} : undefined
           ),
           () => namingSchema.outbound.opName,
-          () => 'custom'
+          () => 'custom',
+          'custom'
         )
       })
     })

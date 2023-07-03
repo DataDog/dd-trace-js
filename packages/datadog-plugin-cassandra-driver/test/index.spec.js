@@ -155,7 +155,8 @@ describe('Plugin', () => {
         withNamingSchema(
           done => client.execute('SELECT now() FROM local;', err => err && done(err)),
           () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName
+          () => namingSchema.outbound.serviceName,
+          'test'
         )
       })
 
@@ -200,7 +201,8 @@ describe('Plugin', () => {
         withNamingSchema(
           done => client.execute('SELECT now() FROM local;', err => err && done(err)),
           () => namingSchema.outbound.opName,
-          () => 'custom'
+          () => 'custom',
+          'custom'
         )
       })
 

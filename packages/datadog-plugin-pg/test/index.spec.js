@@ -212,7 +212,8 @@ describe('Plugin', () => {
               .then(() => client.end())
               .catch(done),
             () => namingSchema.outbound.opName,
-            () => namingSchema.outbound.serviceName
+            () => namingSchema.outbound.serviceName,
+            'test'
           )
         })
       })
@@ -261,7 +262,8 @@ describe('Plugin', () => {
             .then(() => client.end())
             .catch(done),
           () => namingSchema.outbound.opName,
-          () => 'custom'
+          () => 'custom',
+          'custom'
         )
       })
 
@@ -309,7 +311,9 @@ describe('Plugin', () => {
             .then(() => client.end())
             .catch(done),
           () => namingSchema.outbound.opName,
-          () => '127.0.0.1-postgres'
+          () => '127.0.0.1-postgres',
+          // We cannot respect function-provided service naming when short-circuiting
+          'test'
         )
       })
 
