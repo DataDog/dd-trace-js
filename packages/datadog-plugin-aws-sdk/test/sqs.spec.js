@@ -50,6 +50,14 @@ describe('Plugin', () => {
           return agent.close({ ritmReset: false })
         })
 
+        withPeerService(
+          () => tracer,
+          (done) => sqs.sendMessage({
+            MessageBody: 'test body',
+            QueueUrl
+          }, (err) => err && done()),
+          'SQS_QUEUE_NAME', 'queuename')
+
         it('should propagate the tracing context from the producer to the consumer', (done) => {
           let parentId
           let traceId
