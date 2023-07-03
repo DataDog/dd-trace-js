@@ -43,6 +43,7 @@ class OutboundPlugin extends TracingPlugin {
       ...this.constructor.peerServicePrecursors,
       ...COMMON_PEER_SVC_SOURCE_TAGS
     ]
+
     for (const sourceTag of sourceTags) {
       if (tags[sourceTag]) {
         return {
