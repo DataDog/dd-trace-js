@@ -36,6 +36,13 @@ function isShallowRepository () {
 }
 
 function unshallowRepository () {
+  const gitVersionString = sanitizedExec('git', ['version'])
+  const gitVersionSplit = gitVersionString.split(' ')[2].split('.')
+  const gitVersionMain = parseInt(gitVersionSplit[0])
+  const gitVersionSecondary = parseInt(gitVersionSplit[1])
+  if (gitVersionMain <= 2 && gitVersionSecondary < 27) {
+    return
+  }
   const defaultRemoteName = sanitizedExec('git', ['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'])
   const revParseHead = sanitizedExec('git', ['rev-parse', 'HEAD'])
   sanitizedExec('git', [
