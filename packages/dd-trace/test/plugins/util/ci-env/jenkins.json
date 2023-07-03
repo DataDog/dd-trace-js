@@ -8,7 +8,7 @@
       "GIT_BRANCH": "origin/master",
       "GIT_COMMIT": "jenkins-git-commit",
       "GIT_URL_1": "https://jenkins.com/repo/sample",
-      "GIT_URL_2": "https://jenkins.com/repo/sample",
+      "GIT_URL_2": "https://jenkins.com/repo/otherSample",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
       "JOB_URL": "https://jenkins.com/job"
