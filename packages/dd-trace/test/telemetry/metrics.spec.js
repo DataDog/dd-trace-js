@@ -34,8 +34,7 @@ describe('metrics', () => {
       const manager = new metrics.NamespaceManager()
       const ns = manager.namespace('test')
       expect(ns).to.be.instanceOf(metrics.Namespace)
-      expect(ns.namespace).to.equal('test')
-      expect(ns.toString()).to.equal('dd.instrumentation_telemetry_data.test')
+      expect(ns.metrics.namespace).to.equal('test')
     })
 
     it('should reuse namespace instances with the same name', () => {
@@ -55,38 +54,44 @@ describe('metrics', () => {
 
       expect(manager.toJSON()).to.deep.equal([
         {
-          namespace: 'test1',
-          series: [
-            {
-              metric: 'metric1',
-              points: [[now / 1e3, 1]],
-              interval: undefined,
-              type: 'count',
-              tags: [
-                'bar:baz',
-                'lib_language:nodejs',
-                `version:${process.version}`
-              ],
-              common: true
-            }
-          ]
+          distributions: undefined,
+          metrics: {
+            namespace: 'test1',
+            series: [
+              {
+                metric: 'metric1',
+                points: [[now / 1e3, 1]],
+                interval: undefined,
+                type: 'count',
+                tags: [
+                  'bar:baz',
+                  'lib_language:nodejs',
+                  `version:${process.version}`
+                ],
+                common: true
+              }
+            ]
+          }
         },
         {
-          namespace: 'test2',
-          series: [
-            {
-              metric: 'metric2',
-              points: [[now / 1e3, 1]],
-              interval: undefined,
-              type: 'count',
-              tags: [
-                'bux:bax',
-                'lib_language:nodejs',
-                `version:${process.version}`
-              ],
-              common: true
-            }
-          ]
+          distributions: undefined,
+          metrics: {
+            namespace: 'test2',
+            series: [
+              {
+                metric: 'metric2',
+                points: [[now / 1e3, 1]],
+                interval: undefined,
+                type: 'count',
+                tags: [
+                  'bux:bax',
+                  'lib_language:nodejs',
+                  `version:${process.version}`
+                ],
+                common: true
+              }
+            ]
+          }
         }
       ])
     })
@@ -155,19 +160,20 @@ describe('metrics', () => {
   })
 
   describe('Namespace', () => {
-    it('should store namespace name', () => {
+    it('should pass namespace name through to collections', () => {
       const ns = new metrics.Namespace('name')
-      expect(ns).to.have.property('namespace', 'name')
-    })
-
-    it('should convert to string', () => {
-      const ns = new metrics.Namespace('name')
-      expect(ns.toString()).to.equal('dd.instrumentation_telemetry_data.name')
+      expect(ns.metrics).to.have.property('namespace', 'name')
+      expect(ns.distributions).to.have.property('namespace', 'name')
     })
 
     it('should get count metric', () => {
       const ns = new metrics.Namespace('name')
       expect(ns.count('name')).to.be.instanceOf(metrics.CountMetric)
+    })
+
+    it('should get distribution metric', () => {
+      const ns = new metrics.Namespace('name')
+      expect(ns.distribution('name')).to.be.instanceOf(metrics.DistributionMetric)
     })
 
     it('should get gauge metric', () => {
@@ -180,22 +186,15 @@ describe('metrics', () => {
       expect(ns.rate('name')).to.be.instanceOf(metrics.RateMetric)
     })
 
-    it('should get metric by type', () => {
-      const ns = new metrics.Namespace('name')
-      expect(ns.getMetric('count', 'name')).to.be.instanceOf(metrics.CountMetric)
-      expect(ns.getMetric('gauge', 'name')).to.be.instanceOf(metrics.GaugeMetric)
-      expect(ns.getMetric('rate', 'name')).to.be.instanceOf(metrics.RateMetric)
-
-      expect(() => ns.getMetric('non-existent', 'name'))
-        .to.throw(Error, 'Unknown metric type non-existent')
-    })
-
     it('should have unique metrics per unique tag set', () => {
       const ns = new metrics.Namespace('test')
       ns.count('foo', { bar: 'baz' }).inc()
       ns.count('foo', { bar: 'baz' }).inc() // not unique
       ns.count('foo', { bux: 'bax' }).inc()
-      expect(ns).to.have.lengthOf(2)
+      expect(ns.metrics).to.have.lengthOf(2)
+      expect(ns.distributions).to.have.lengthOf(0)
+      ns.distribution('foo', { bux: 'bax' }).track()
+      expect(ns.distributions).to.have.lengthOf(1)
     })
 
     it('should reset metrics', () => {
@@ -218,33 +217,36 @@ describe('metrics', () => {
       ns.count('foo', { bux: 'bax' }).inc()
 
       expect(ns.toJSON()).to.deep.equal({
-        namespace: 'test',
-        series: [
-          {
-            metric: 'foo',
-            points: [[now / 1e3, 1]],
-            interval: undefined,
-            type: 'count',
-            tags: [
-              'bar:baz',
-              'lib_language:nodejs',
-              `version:${process.version}`
-            ],
-            common: true
-          },
-          {
-            metric: 'foo',
-            points: [[now / 1e3, 1]],
-            interval: undefined,
-            type: 'count',
-            tags: [
-              'bux:bax',
-              'lib_language:nodejs',
-              `version:${process.version}`
-            ],
-            common: true
-          }
-        ]
+        distributions: undefined,
+        metrics: {
+          namespace: 'test',
+          series: [
+            {
+              metric: 'foo',
+              points: [[now / 1e3, 1]],
+              interval: undefined,
+              type: 'count',
+              tags: [
+                'bar:baz',
+                'lib_language:nodejs',
+                `version:${process.version}`
+              ],
+              common: true
+            },
+            {
+              metric: 'foo',
+              points: [[now / 1e3, 1]],
+              interval: undefined,
+              type: 'count',
+              tags: [
+                'bux:bax',
+                'lib_language:nodejs',
+                `version:${process.version}`
+              ],
+              common: true
+            }
+          ]
+        }
       })
     })
   })
@@ -259,7 +261,7 @@ describe('metrics', () => {
 
       expect(metric.type).to.equal('count')
       expect(metric).to.deep.equal({
-        namespace: 'dd.instrumentation_telemetry_data.tracers',
+        namespace: 'tracers',
         metric: 'name',
         tags: [
           'foo:bar',
@@ -363,6 +365,79 @@ describe('metrics', () => {
     })
   })
 
+  describe('DistributionMetric', () => {
+    it('should expose input data', () => {
+      const ns = new metrics.Namespace('tracers')
+      const metric = ns.distribution('name', {
+        foo: 'bar',
+        baz: 'buz'
+      })
+
+      expect(metric.type).to.equal('distribution')
+      expect(metric).to.deep.eql({
+        namespace: 'tracers',
+        metric: 'name',
+        tags: [
+          'foo:bar',
+          'baz:buz',
+          'lib_language:nodejs',
+          `version:${process.version}`
+        ],
+        common: true,
+        points: []
+      })
+    })
+
+    it('should track', () => {
+      const ns = new metrics.Namespace('tracers')
+      const metric = ns.distribution('name')
+
+      metric.track(100)
+      metric.track(50)
+      metric.track(300)
+
+      expect(metric.points).to.deep.equal([
+        100,
+        50,
+        300
+      ])
+    })
+
+    it('should reset state', () => {
+      const ns = new metrics.Namespace('tracers')
+      const metric = ns.distribution('name')
+
+      metric.track(1)
+      metric.reset()
+
+      expect(metric.points).to.deep.equal([])
+    })
+
+    it('should convert to json', () => {
+      const ns = new metrics.Namespace('tracers')
+      const metric = ns.distribution('name', {
+        foo: 'bar',
+        baz: 'buz'
+      })
+
+      metric.track(123)
+
+      expect(metric.toJSON()).to.deep.equal({
+        metric: 'name',
+        points: [
+          123
+        ],
+        common: true,
+        tags: [
+          'foo:bar',
+          'baz:buz',
+          'lib_language:nodejs',
+          `version:${process.version}`
+        ]
+      })
+    })
+  })
+
   describe('GaugeMetric', () => {
     it('should expose input data', () => {
       const ns = new metrics.Namespace('tracers')
@@ -373,7 +448,7 @@ describe('metrics', () => {
 
       expect(metric.type).to.equal('gauge')
       expect(metric).to.deep.equal({
-        namespace: 'dd.instrumentation_telemetry_data.tracers',
+        namespace: 'tracers',
         metric: 'name',
         tags: [
           'foo:bar',
@@ -466,7 +541,7 @@ describe('metrics', () => {
 
       expect(metric.type).to.equal('rate')
       expect(metric).to.deep.equal({
-        namespace: 'dd.instrumentation_telemetry_data.tracers',
+        namespace: 'tracers',
         metric: 'name',
         tags: [
           'foo:bar',

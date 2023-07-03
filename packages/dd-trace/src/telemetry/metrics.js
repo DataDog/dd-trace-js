@@ -89,6 +89,26 @@ class CountMetric extends Metric {
   }
 }
 
+class DistributionMetric extends Metric {
+  get type () {
+    return 'distribution'
+  }
+
+  track (value = 1) {
+    this.points.push(value)
+  }
+
+  toJSON () {
+    const { metric, points, tags, common } = this
+    return {
+      metric,
+      points,
+      common,
+      tags
+    }
+  }
+}
+
 class GaugeMetric extends Metric {
   get type () {
     return 'gauge'
@@ -129,11 +149,12 @@ class RateMetric extends Metric {
 
 const metricsTypes = {
   count: CountMetric,
+  distribution: DistributionMetric,
   gauge: GaugeMetric,
   rate: RateMetric
 }
 
-class Namespace extends Map {
+class MetricsCollection extends Map {
   constructor (namespace) {
     super()
     this.namespace = namespace
@@ -146,43 +167,68 @@ class Namespace extends Map {
   }
 
   toString () {
-    return `dd.instrumentation_telemetry_data.${this.namespace}`
-  }
-
-  getMetric (type, name, tags, interval) {
-    const metricId = getId(type, this, name, tags)
-
-    let metric = this.get(metricId)
-    if (metric) return metric
-
-    const Factory = metricsTypes[type]
-    if (!Factory) {
-      throw new Error(`Unknown metric type ${type}`)
-    }
-
-    metric = new Factory(this, name, true, tags, interval)
-    this.set(metricId, metric)
-
-    return metric
-  }
-
-  count (name, tags) {
-    return this.getMetric('count', name, tags)
-  }
-
-  gauge (name, tags) {
-    return this.getMetric('gauge', name, tags)
-  }
-
-  rate (name, interval, tags) {
-    return this.getMetric('rate', name, tags, interval)
+    return this.namespace
   }
 
   toJSON () {
+    if (!this.size) return
     const { namespace } = this
     return {
       namespace,
       series: mapToJsonArray(this)
+    }
+  }
+}
+
+function getMetric (collection, type, name, tags, interval) {
+  const metricId = getId(type, collection, name, tags)
+
+  let metric = collection.get(metricId)
+  if (metric) return metric
+
+  const Factory = metricsTypes[type]
+  if (!Factory) {
+    throw new Error(`Unknown metric type ${type}`)
+  }
+
+  metric = new Factory(collection, name, true, tags, interval)
+  collection.set(metricId, metric)
+
+  return metric
+}
+
+class Namespace {
+  constructor (namespace) {
+    this.distributions = new MetricsCollection(namespace)
+    this.metrics = new MetricsCollection(namespace)
+  }
+
+  reset () {
+    this.metrics.reset()
+    this.distributions.reset()
+  }
+
+  count (name, tags) {
+    return getMetric(this.metrics, 'count', name, tags)
+  }
+
+  gauge (name, tags) {
+    return getMetric(this.metrics, 'gauge', name, tags)
+  }
+
+  rate (name, interval, tags) {
+    return getMetric(this.metrics, 'rate', name, tags, interval)
+  }
+
+  distribution (name, tags) {
+    return getMetric(this.distributions, 'distribution', name, tags)
+  }
+
+  toJSON () {
+    const { distributions, metrics } = this
+    return {
+      distributions: distributions.toJSON(),
+      metrics: metrics.toJSON()
     }
   }
 }
@@ -203,7 +249,15 @@ class NamespaceManager extends Map {
 
   send (config, application, host) {
     for (const namespace of this.values()) {
-      sendData(config, application, host, 'generate-metrics', namespace.toJSON())
+      const { metrics, distributions } = namespace.toJSON()
+
+      if (metrics) {
+        sendData(config, application, host, 'generate-metrics', metrics)
+      }
+
+      if (distributions) {
+        sendData(config, application, host, 'distributions', distributions)
+      }
 
       // TODO: This could also be clear() but then it'd have to rebuild all
       // metric instances on every send. This may be desirable if we want tags
@@ -217,8 +271,10 @@ const manager = new NamespaceManager()
 
 module.exports = {
   CountMetric,
+  DistributionMetric,
   GaugeMetric,
   RateMetric,
+  MetricsCollection,
   Namespace,
   NamespaceManager,
   manager
