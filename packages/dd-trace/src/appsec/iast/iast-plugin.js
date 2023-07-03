@@ -104,13 +104,16 @@ class IastPlugin extends Plugin {
   onConfigure () {}
 
   configure (config) {
-    if (config && !this.configured) {
+    if (typeof config !== 'object') {
+      config = { enabled: config }
+    }
+    if (config.enabled && !this.configured) {
       this.onConfigure()
       this.configured = true
     }
 
     if (iastTelemetry.isEnabled()) {
-      if (config) {
+      if (config.enabled) {
         this.enableTelemetry()
       } else {
         this.disableTelemetry()

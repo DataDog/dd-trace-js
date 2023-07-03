@@ -112,12 +112,12 @@ describe('Telemetry', () => {
     })
   })
 
-  describe('onRequestStarted', () => {
+  describe('onRequestStart', () => {
     it('should call init if enabled and verbosity is not Off', () => {
       iastTelemetry.configure(defaultConfig)
 
       const iastContext = {}
-      iastTelemetry.onRequestStarted(iastContext)
+      iastTelemetry.onRequestStart(iastContext)
 
       expect(initRequestNamespace).to.be.calledOnceWith(iastContext)
     })
@@ -135,7 +135,7 @@ describe('Telemetry', () => {
       })
 
       const iastContext = {}
-      iastTelemetry.onRequestStarted(iastContext)
+      iastTelemetry.onRequestStart(iastContext)
 
       expect(initRequestNamespace).to.not.be.calledOnce
     })

@@ -37,7 +37,7 @@ class Telemetry {
     return this.isEnabled() && isInfoAllowed(this.verbosity)
   }
 
-  onRequestStarted (context) {
+  onRequestStart (context) {
     if (this.isEnabled() && this.verbosity !== Verbosity.OFF) {
       initRequestNamespace(context)
     }

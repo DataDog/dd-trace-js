@@ -54,7 +54,7 @@ function onIncomingHttpRequestStart (data) {
           createTransaction(rootSpan.context().toSpanId(), iastContext)
           overheadController.initializeRequestContext(iastContext)
           taintTrackingPlugin.taintHeaders(data.req.headers, iastContext)
-          iastTelemetry.onRequestStarted(iastContext)
+          iastTelemetry.onRequestStart(iastContext)
         }
         if (rootSpan.addTags) {
           rootSpan.addTags({
