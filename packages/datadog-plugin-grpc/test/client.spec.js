@@ -110,7 +110,8 @@ describe('Plugin', () => {
               withNamingSchema(
                 (done) => client.getUnary({ first: 'foobar' }, () => done()),
                 () => namingSchema.client.opName,
-                () => namingSchema.client.serviceName
+                () => namingSchema.client.serviceName,
+                'test'
               )
 
               client.getUnary({ first: 'foobar' }, () => {})
