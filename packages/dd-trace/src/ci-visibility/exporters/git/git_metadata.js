@@ -51,8 +51,6 @@ function getCommitsToExclude ({ url, isEvpProxy, repositoryUrl }, callback) {
 
   log.debug(`There were ${latestCommits.length} commits since last month.`)
 
-  const [headCommit] = latestCommits
-
   const commonOptions = getCommonRequestOptions(url)
 
   const options = {
@@ -91,7 +89,7 @@ function getCommitsToExclude ({ url, isEvpProxy, repositoryUrl }, callback) {
     } catch (e) {
       return callback(new Error(`Can't parse commits to exclude response: ${e.message}`))
     }
-    callback(null, commitsToExclude, headCommit)
+    callback(null, commitsToExclude, latestCommits)
   })
 }
 
@@ -172,13 +170,16 @@ function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
     unshallowRepository()
   }
 
-  getCommitsToExclude({ url, repositoryUrl, isEvpProxy }, (err, commitsToExclude, headCommit) => {
+  getCommitsToExclude({ url, repositoryUrl, isEvpProxy }, (err, commitsToExclude, latestCommits) => {
     if (err) {
       return callback(err)
     }
     log.debug(`There are ${commitsToExclude.length} commits to exclude.`)
+    const [headCommit] = latestCommits
+    const commitsToInclude = latestCommits.filter((commit) => !commitsToExclude.includes(commit))
+    log.debug(`There are ${commitsToInclude.length} commits to include.`)
 
-    const commitsToUpload = getCommitsToUpload(commitsToExclude)
+    const commitsToUpload = getCommitsToUpload(commitsToExclude, commitsToInclude)
 
     if (!commitsToUpload.length) {
       log.debug('No commits to upload')
