@@ -3,137 +3,161 @@
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_COMMIT": "gitcommit",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_SOURCE_DIR": "/foo/bar",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "GIT_CLONE_COMMIT_HASH": "bitrise-git-commit",
-      "GIT_REPOSITORY_URL": "sample"
+      "GIT_REPOSITORY_URL": "https://bitrise-build-url.com/"
     },
     {
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "/foo/bar",
       "git.commit.message": "bitrise-git-commit-message",
       "git.commit.sha": "gitcommit",
-      "git.repository_url": "sample"
+      "git.repository_url": "https://bitrise-build-url.com/"
     }
   ],
   [
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
+      "BITRISE_GIT_COMMIT": "gitcommit",
+      "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
+      "BITRISE_SOURCE_DIR": "/foo/bar",
+      "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
+      "GIT_CLONE_COMMIT_HASH": "bitrise-git-commit",
+      "GIT_REPOSITORY_URL": "git@github.com:DataDog/dummy-example.git"
+    },
+    {
+      "ci.pipeline.id": "bitrise-pipeline-id",
+      "ci.pipeline.name": "bitrise-pipeline-name",
+      "ci.pipeline.number": "bitrise-pipeline-number",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
+      "ci.provider.name": "bitrise",
+      "ci.workspace_path": "/foo/bar",
+      "git.commit.message": "bitrise-git-commit-message",
+      "git.commit.sha": "gitcommit",
+      "git.repository_url": "git@github.com:DataDog/dummy-example.git"
+    }
+  ],
+  [
+    {
+      "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
+      "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_BRANCH": "origin/master",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_SOURCE_DIR": "/foo/bar",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "GIT_CLONE_COMMIT_HASH": "bitrise-git-commit",
-      "GIT_REPOSITORY_URL": "sample"
+      "GIT_REPOSITORY_URL": "https://bitrise-build-url.com/"
     },
     {
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
       "git.commit.message": "bitrise-git-commit-message",
       "git.commit.sha": "bitrise-git-commit",
-      "git.repository_url": "sample"
+      "git.repository_url": "https://bitrise-build-url.com/"
     }
   ],
   [
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_BRANCH": "origin/master",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_SOURCE_DIR": "foo/bar",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "GIT_CLONE_COMMIT_HASH": "bitrise-git-commit",
-      "GIT_REPOSITORY_URL": "sample"
+      "GIT_REPOSITORY_URL": "https://bitrise-build-url.com/"
     },
     {
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "foo/bar",
       "git.branch": "master",
       "git.commit.message": "bitrise-git-commit-message",
       "git.commit.sha": "bitrise-git-commit",
-      "git.repository_url": "sample"
+      "git.repository_url": "https://bitrise-build-url.com/"
     }
   ],
   [
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_BRANCH": "origin/master",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_SOURCE_DIR": "/foo/bar~",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "GIT_CLONE_COMMIT_HASH": "bitrise-git-commit",
-      "GIT_REPOSITORY_URL": "sample"
+      "GIT_REPOSITORY_URL": "https://bitrise-build-url.com/"
     },
     {
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "/foo/bar~",
       "git.branch": "master",
       "git.commit.message": "bitrise-git-commit-message",
       "git.commit.sha": "bitrise-git-commit",
-      "git.repository_url": "sample"
+      "git.repository_url": "https://bitrise-build-url.com/"
     }
   ],
   [
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_BRANCH": "origin/master",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_SOURCE_DIR": "/foo/~/bar",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "GIT_CLONE_COMMIT_HASH": "bitrise-git-commit",
-      "GIT_REPOSITORY_URL": "sample"
+      "GIT_REPOSITORY_URL": "https://bitrise-build-url.com/"
     },
     {
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "/foo/~/bar",
       "git.branch": "master",
       "git.commit.message": "bitrise-git-commit-message",
       "git.commit.sha": "bitrise-git-commit",
-      "git.repository_url": "sample"
+      "git.repository_url": "https://bitrise-build-url.com/"
     }
   ],
   [
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_BRANCH": "origin/master",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_SOURCE_DIR": "~/foo/bar",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "GIT_CLONE_COMMIT_HASH": "bitrise-git-commit",
-      "GIT_REPOSITORY_URL": "sample",
+      "GIT_REPOSITORY_URL": "https://bitrise-build-url.com/",
       "HOME": "/not-my-home",
       "USERPROFILE": "/not-my-home"
     },
@@ -141,26 +165,26 @@
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "/not-my-home/foo/bar",
       "git.branch": "master",
       "git.commit.message": "bitrise-git-commit-message",
       "git.commit.sha": "bitrise-git-commit",
-      "git.repository_url": "sample"
+      "git.repository_url": "https://bitrise-build-url.com/"
     }
   ],
   [
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_BRANCH": "origin/master",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_SOURCE_DIR": "~foo/bar",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "GIT_CLONE_COMMIT_HASH": "bitrise-git-commit",
-      "GIT_REPOSITORY_URL": "sample",
+      "GIT_REPOSITORY_URL": "https://bitrise-build-url.com/",
       "HOME": "/not-my-home",
       "USERPROFILE": "/not-my-home"
     },
@@ -168,26 +192,26 @@
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "~foo/bar",
       "git.branch": "master",
       "git.commit.message": "bitrise-git-commit-message",
       "git.commit.sha": "bitrise-git-commit",
-      "git.repository_url": "sample"
+      "git.repository_url": "https://bitrise-build-url.com/"
     }
   ],
   [
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_BRANCH": "origin/master",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_SOURCE_DIR": "~",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "GIT_CLONE_COMMIT_HASH": "bitrise-git-commit",
-      "GIT_REPOSITORY_URL": "sample",
+      "GIT_REPOSITORY_URL": "https://bitrise-build-url.com/",
       "HOME": "/not-my-home",
       "USERPROFILE": "/not-my-home"
     },
@@ -195,88 +219,88 @@
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "/not-my-home",
       "git.branch": "master",
       "git.commit.message": "bitrise-git-commit-message",
       "git.commit.sha": "bitrise-git-commit",
-      "git.repository_url": "sample"
+      "git.repository_url": "https://bitrise-build-url.com/"
     }
   ],
   [
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_BRANCH": "refs/heads/master",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_SOURCE_DIR": "/foo/bar",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "GIT_CLONE_COMMIT_HASH": "bitrise-git-commit",
-      "GIT_REPOSITORY_URL": "sample"
+      "GIT_REPOSITORY_URL": "https://bitrise-build-url.com/"
     },
     {
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
       "git.commit.message": "bitrise-git-commit-message",
       "git.commit.sha": "bitrise-git-commit",
-      "git.repository_url": "sample"
+      "git.repository_url": "https://bitrise-build-url.com/"
     }
   ],
   [
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_BRANCH": "refs/heads/feature/one",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_SOURCE_DIR": "/foo/bar",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "GIT_CLONE_COMMIT_HASH": "bitrise-git-commit",
-      "GIT_REPOSITORY_URL": "sample"
+      "GIT_REPOSITORY_URL": "https://bitrise-build-url.com/"
     },
     {
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "feature/one",
       "git.commit.message": "bitrise-git-commit-message",
       "git.commit.sha": "bitrise-git-commit",
-      "git.repository_url": "sample"
+      "git.repository_url": "https://bitrise-build-url.com/"
     }
   ],
   [
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_BRANCH": "origin/tags/0.1.0",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_GIT_TAG": "origin/tags/0.1.0",
       "BITRISE_SOURCE_DIR": "/foo/bar",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "GIT_CLONE_COMMIT_HASH": "bitrise-git-commit",
-      "GIT_REPOSITORY_URL": "sample"
+      "GIT_REPOSITORY_URL": "https://bitrise-build-url.com/"
     },
     {
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "/foo/bar",
       "git.commit.message": "bitrise-git-commit-message",
       "git.commit.sha": "bitrise-git-commit",
-      "git.repository_url": "sample",
+      "git.repository_url": "https://bitrise-build-url.com/",
       "git.tag": "0.1.0"
     }
   ],
@@ -284,25 +308,25 @@
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_BRANCH": "refs/heads/tags/0.1.0",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_GIT_TAG": "refs/heads/tags/0.1.0",
       "BITRISE_SOURCE_DIR": "/foo/bar",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "GIT_CLONE_COMMIT_HASH": "bitrise-git-commit",
-      "GIT_REPOSITORY_URL": "sample"
+      "GIT_REPOSITORY_URL": "https://bitrise-build-url.com/"
     },
     {
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "/foo/bar",
       "git.commit.message": "bitrise-git-commit-message",
       "git.commit.sha": "bitrise-git-commit",
-      "git.repository_url": "sample",
+      "git.repository_url": "https://bitrise-build-url.com/",
       "git.tag": "0.1.0"
     }
   ],
@@ -310,7 +334,7 @@
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_BRANCH": "origin/master",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_SOURCE_DIR": "/foo/bar",
@@ -322,7 +346,7 @@
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
@@ -335,7 +359,7 @@
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_BRANCH": "origin/master",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_SOURCE_DIR": "/foo/bar",
@@ -347,7 +371,7 @@
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
@@ -360,7 +384,7 @@
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_BRANCH": "origin/notmaster",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_SOURCE_DIR": "/foo/bar",
@@ -372,7 +396,7 @@
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "notmaster",
@@ -385,7 +409,7 @@
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "DD_GIT_BRANCH": "user-supplied-branch",
@@ -404,7 +428,7 @@
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "git.branch": "user-supplied-branch",
       "git.commit.author.date": "usersupplied-authordate",
@@ -422,7 +446,7 @@
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "DD_GIT_COMMIT_AUTHOR_DATE": "usersupplied-authordate",
@@ -441,7 +465,7 @@
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "git.commit.author.date": "usersupplied-authordate",
       "git.commit.author.email": "usersupplied-authoremail",
@@ -459,7 +483,7 @@
     {
       "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
       "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
-      "BITRISE_BUILD_URL": "bitrise-build-url",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
       "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
       "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
       "GIT_CLONE_COMMIT_HASH": "bitrise-git-commit",
@@ -469,7 +493,7 @@
       "ci.pipeline.id": "bitrise-pipeline-id",
       "ci.pipeline.name": "bitrise-pipeline-name",
       "ci.pipeline.number": "bitrise-pipeline-number",
-      "ci.pipeline.url": "bitrise-build-url",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
       "ci.provider.name": "bitrise",
       "git.commit.message": "bitrise-git-commit-message",
       "git.commit.sha": "bitrise-git-commit",

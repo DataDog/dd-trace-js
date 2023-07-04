@@ -51,7 +51,8 @@ describe('Plugin', () => {
           withNamingSchema(
             async () => pubsub.createTopic(topicName),
             () => namingSchema.controlPlane.opName,
-            () => namingSchema.controlPlane.serviceName
+            () => namingSchema.controlPlane.serviceName,
+            'test'
           )
 
           it('should be instrumented', async () => {
@@ -156,7 +157,8 @@ describe('Plugin', () => {
               await publish(topic, { data: Buffer.from('hello') })
             },
             () => namingSchema.send.opName,
-            () => namingSchema.send.serviceName
+            () => namingSchema.send.serviceName,
+            'test'
           )
         })
 
@@ -255,7 +257,8 @@ describe('Plugin', () => {
               await publish(topic, { data: Buffer.from('hello') })
             },
             () => namingSchema.receive.opName,
-            () => namingSchema.receive.serviceName
+            () => namingSchema.receive.serviceName,
+            'test'
           )
         })
 

@@ -4,6 +4,7 @@ const StoragePlugin = require('./storage')
 
 class DatabasePlugin extends StoragePlugin {
   static get operation () { return 'query' }
+  static get peerServicePrecursors () { return ['db.name'] }
 
   constructor (...args) {
     super(...args)
@@ -38,7 +39,7 @@ class DatabasePlugin extends StoragePlugin {
   }
 
   injectDbmQuery (query, serviceName, isPreparedStatement = false) {
-    const mode = this.config.dbmPropagationMode || this._tracerConfig.dbmPropagationMode
+    const mode = this.config.dbmPropagationMode
 
     if (mode === 'disabled') {
       return query

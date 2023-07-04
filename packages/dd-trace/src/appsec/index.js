@@ -7,6 +7,7 @@ const {
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   bodyParser,
+  passportVerify,
   queryParser
 } = require('./channels')
 const waf = require('./waf')
@@ -16,6 +17,8 @@ const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { block, setTemplates } = require('./blocking')
+const { passportTrackEvent } = require('./passport')
+const { storage } = require('../../../datadog-core')
 
 let isEnabled = false
 let config
@@ -36,6 +39,10 @@ function enable (_config) {
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     bodyParser.subscribe(onRequestBodyParsed)
     queryParser.subscribe(onRequestQueryParsed)
+
+    if (_config.appsec.eventTracking.enabled) {
+      passportVerify.subscribe(onPassportVerify)
+    }
 
     isEnabled = true
     config = _config
@@ -139,6 +146,18 @@ function onRequestQueryParsed ({ req, res, abortController }) {
   handleResults(results, req, res, rootSpan, abortController)
 }
 
+function onPassportVerify ({ credentials, user }) {
+  const store = storage.getStore()
+  const rootSpan = store && store.req && web.root(store.req)
+
+  if (!rootSpan) {
+    log.warn('No rootSpan found in onPassportVerify')
+    return
+  }
+
+  passportTrackEvent(credentials, user, rootSpan, config.appsec.eventTracking.mode)
+}
+
 function handleResults (actions, req, res, rootSpan, abortController) {
   if (!actions || !req || !res || !rootSpan || !abortController) return
 
@@ -160,6 +179,7 @@ function disable () {
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
   if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)
   if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
+  if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
 }
 
 module.exports = {
