@@ -35,12 +35,28 @@ function isShallowRepository () {
   return sanitizedExec('git', ['rev-parse', '--is-shallow-repository']) === 'true'
 }
 
-function unshallowRepository () {
+function getGitVersion () {
   const gitVersionString = sanitizedExec('git', ['version'])
-  const gitVersionSplit = gitVersionString.split(' ')[2].split('.')
-  const gitVersionMain = parseInt(gitVersionSplit[0])
-  const gitVersionSecondary = parseInt(gitVersionSplit[1])
-  if (gitVersionMain <= 2 && gitVersionSecondary < 27) {
+  const gitVersionMatches = gitVersionString.match(/git version (\d+)\.(\d+)\.(\d+)/)
+  try {
+    return {
+      major: parseInt(gitVersionMatches[1]),
+      minor: parseInt(gitVersionMatches[2]),
+      patch: parseInt(gitVersionMatches[3])
+    }
+  } catch (e) {
+    return null
+  }
+}
+
+function unshallowRepository () {
+  const gitVersion = getGitVersion()
+  if (!gitVersion) {
+    log.warn('Git version could not be extracted, so git unshallow will not proceed')
+    return
+  }
+  if (gitVersion.major < 2 || (gitVersion.major === 2 && gitVersion.minor < 27)) {
+    log.warn('Git version is <2.27, so git unshallow will not proceed')
     return
   }
   const defaultRemoteName = sanitizedExec('git', ['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'])
