@@ -88,7 +88,7 @@ function getLatestCommits () {
   }
 }
 
-function getCommitsToUpload (commitsToExclude) {
+function getCommitsToUpload (commitsToExclude, commitsToInclude) {
   const commitsToExcludeString = commitsToExclude.map(commit => `^${commit}`)
 
   try {
@@ -100,8 +100,8 @@ function getCommitsToUpload (commitsToExclude) {
         '--no-object-names',
         '--filter=blob:none',
         '--since="1 month ago"',
-        'HEAD',
-        ...commitsToExcludeString
+        ...commitsToExcludeString,
+        ...commitsToInclude
       ],
       { stdio: 'pipe', maxBuffer: GIT_REV_LIST_MAX_BUFFER })
       .toString()
