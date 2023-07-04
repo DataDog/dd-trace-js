@@ -58,7 +58,7 @@ jobs:
   parametric:
     runs-on: ubuntu-latest
     env:
-      CLIENTS_ENABLED: nodejs
+      TEST_LIBRARY: nodejs
       NODEJS_DDTRACE_MODULE: datadog/dd-trace-js#${{ github.sha }}
     steps:
       - name: Checkout system tests
@@ -68,9 +68,17 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+      - name: Build
+        run: ./build.sh -i runner
       - name: Run
-        run: |
-          cd parametric
-          pip install wheel
-          pip install -r requirements.txt
-          ./run.sh
+        run: ./run.sh PARAMETRIC
+        
+      - name: Compress artifact
+        if: ${{ always() }}  
+        run: tar -czvf artifact.tar.gz $(ls | grep logs)
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        if: ${{ always() }}
+        with:
+          name: logs_parametric
+          path: artifact.tar.gz
