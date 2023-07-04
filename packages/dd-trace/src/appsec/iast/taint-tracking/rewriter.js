@@ -18,7 +18,7 @@ function isEnableSourceMapsFlagPresent () {
 }
 
 function getGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, getOriginalPathAndLineFromSourceMap) {
-  if (chainSourceMap && false) {
+  if (chainSourceMap) {
     return function (path, line, column) {
       // if --enable-source-maps is present stacktraces of the rewritten files contain the original path, file and
       // column because the sourcemap chaining is done during the rewriting process so we can skip it
@@ -98,6 +98,7 @@ function disableRewriter () {
 }
 
 function getOriginalPathAndLineFromSourceMap ({ path, line, column }) {
+  console.log('getOriginalPathAndLineFromSourceMap')
   return getRewriterOriginalPathAndLineFromSourceMap(path, line, column)
 }
 
