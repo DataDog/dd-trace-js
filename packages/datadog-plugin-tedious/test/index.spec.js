@@ -81,7 +81,15 @@ describe('Plugin', () => {
           connection.execSql(request)
         },
         () => namingSchema.client.opName,
-        () => namingSchema.client.serviceName
+        () => namingSchema.client.serviceName,
+        'test'
+      )
+
+      withPeerService(
+        () => tracer,
+        (done) => connection.execSql(new tds.Request('SELECT 1', (err) => {
+          if (err) return done(err)
+        })), 'master', 'db.name'
       )
 
       describe('with tedious disabled', () => {

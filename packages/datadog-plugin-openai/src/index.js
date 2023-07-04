@@ -100,7 +100,7 @@ class OpenApiPlugin extends TracingPlugin {
     }
 
     // createChatCompletion, createCompletion
-    if ('logit_bias' in payload) {
+    if (typeof payload.logit_bias === 'object' && payload.logit_bias) {
       for (const [tokenId, bias] of Object.entries(payload.logit_bias)) {
         tags[`openai.request.logit_bias.${tokenId}`] = bias
       }
@@ -264,6 +264,8 @@ function retrieveModelRequestExtraction (tags, payload) {
 }
 
 function createChatCompletionRequestExtraction (tags, payload, store) {
+  if (!defensiveArrayLength(payload.messages)) return
+
   store.messages = payload.messages
   for (let i = 0; i < payload.messages.length; i++) {
     const message = payload.messages[i]
@@ -411,7 +413,7 @@ function createFineTuneRequestExtraction (tags, body) {
   tags['openai.request.compute_classification_metrics'] = body.compute_classification_metrics
   tags['openai.request.classification_n_classes'] = body.classification_n_classes
   tags['openai.request.classification_positive_class'] = body.classification_positive_class
-  tags['openai.request.classification_betas_count'] = body.classification_betas.length
+  tags['openai.request.classification_betas_count'] = defensiveArrayLength(body.classification_betas)
 }
 
 function commonFineTuneResponseExtraction (tags, body) {
@@ -521,6 +523,7 @@ function commonCreateResponseExtraction (tags, body, store) {
 
 // createCompletion, createChatCompletion, createEdit, createEmbedding
 function usageExtraction (tags, body) {
+  if (typeof body.usage !== 'object' || !body.usage) return
   tags['openai.response.usage.prompt_tokens'] = body.usage.prompt_tokens
   tags['openai.response.usage.completion_tokens'] = body.usage.completion_tokens
   tags['openai.response.usage.total_tokens'] = body.usage.total_tokens
@@ -673,6 +676,10 @@ function normalizeStringOrTokenArray (input, truncate = true) {
     ? `[${input.join(', ')}]` // "[1, 2, 999]"
     : input // "foo"
   return truncate ? truncateText(normalized) : normalized
+}
+
+function defensiveArrayLength (maybeArray) {
+  return Array.isArray(maybeArray) ? maybeArray.length : undefined
 }
 
 module.exports = OpenApiPlugin

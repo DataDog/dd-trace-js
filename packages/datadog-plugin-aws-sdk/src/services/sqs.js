@@ -6,6 +6,7 @@ const { storage } = require('../../../datadog-core')
 
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
+  static get peerServicePrecursors () { return ['queuename'] }
 
   constructor (...args) {
     super(...args)

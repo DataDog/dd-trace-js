@@ -135,7 +135,8 @@ describe('Plugin', () => {
           withNamingSchema(
             () => sender.send({ key: 'value' }),
             () => namingSchema.send.opName,
-            () => namingSchema.send.serviceName
+            () => namingSchema.send.serviceName,
+            'test'
           )
         })
 
@@ -181,7 +182,8 @@ describe('Plugin', () => {
           withNamingSchema(
             () => sender.send({ key: 'value' }),
             () => namingSchema.receive.opName,
-            () => namingSchema.receive.serviceName
+            () => namingSchema.receive.serviceName,
+            'test'
           )
         })
       })
@@ -223,7 +225,8 @@ describe('Plugin', () => {
         withNamingSchema(
           () => sender.send({ key: 'value' }),
           () => namingSchema.receive.opName,
-          () => 'test-custom-name'
+          () => 'test-custom-name',
+          'test-custom-name'
         )
       })
     })

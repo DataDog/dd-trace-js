@@ -18,6 +18,7 @@ describe('Sns', () => {
     let QueueUrl
     let parentId
     let spanId
+    let tracer
 
     const snsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sns' : 'aws-sdk'
     const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
@@ -36,6 +37,10 @@ describe('Sns', () => {
         expect(parentId).to.equal(spanId)
       }).then(done, done)
     }
+
+    beforeEach(() => {
+      tracer = require('../../dd-trace')
+    })
 
     before(() => {
       parentId = '0'
@@ -95,6 +100,14 @@ describe('Sns', () => {
     after(() => {
       return agent.close({ ritmReset: false })
     })
+
+    withPeerService(
+      () => tracer,
+      (done) => sns.publish({
+        TopicArn,
+        Message: 'message 1'
+      }, (err) => err && done()),
+      'TestTopic', 'topicname')
 
     it('injects trace context to SNS publish', done => {
       assertPropagation(done)
