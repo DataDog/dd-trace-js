@@ -105,19 +105,19 @@ describe('unvalidated-redirect-analyzer', () => {
   it('should not report headers other than Location', () => {
     unvalidatedRedirectAnalyzer.analyze('X-test', NOT_TAINTED_LOCATION)
 
-    expect(report).to.not.have.been.called
+    expect(report).not.to.be.called
   })
 
   it('should not report Location header with non string values', () => {
     unvalidatedRedirectAnalyzer.analyze('X-test', [TAINTED_LOCATION])
 
-    expect(report).to.not.have.been.called
+    expect(report).not.to.be.called
   })
 
   it('should not report Location header with not tainted string value', () => {
     unvalidatedRedirectAnalyzer.analyze('Location', NOT_TAINTED_LOCATION)
 
-    expect(report).to.not.have.been.called
+    expect(report).not.to.be.called
   })
 
   it('should report Location header with tainted string value', () => {
@@ -129,25 +129,25 @@ describe('unvalidated-redirect-analyzer', () => {
   it('should not report if tainted origin is referer header exclusively', () => {
     unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_HEADER_REFERER_ONLY)
 
-    expect(report).to.not.be.called
+    expect(report).not.to.be.called
   })
 
   it('should not report if tainted origin is path param exclusively', () => {
     unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_PATH_PARAMS_ONLY)
 
-    expect(report).to.not.be.called
+    expect(report).not.to.be.called
   })
 
   it('should not report if tainted origin is url exclusively', () => {
     unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_URL_ONLY)
 
-    expect(report).to.not.be.called
+    expect(report).not.to.be.called
   })
 
   it('should not report if all tainted origin are safe', () => {
     unvalidatedRedirectAnalyzer.analyze('Location', TAINTED_SAFE_RANGES)
 
-    expect(report).to.not.be.called
+    expect(report).not.to.be.called
   })
 
   it('should report if tainted origin contains referer header among others', () => {
