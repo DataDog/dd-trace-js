@@ -49,7 +49,7 @@ function unshallowRepository () {
     'fetch',
     '--shallow-since="1 month ago"',
     '--update-shallow',
-    '--filter="blob:none"',
+    '--filter=blob:none',
     '--recurse-submodules=no',
     defaultRemoteName,
     revParseHead
