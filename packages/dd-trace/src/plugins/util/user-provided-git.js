@@ -41,8 +41,9 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
   }
 }
 
+// The regex is extracted from https://github.com/jonschlinkert/is-git-url/blob/396965ffabf2f46656c8af4c47bef1d69f09292e/index.js#L9C15-L9C87
 function validateGitRepositoryUrl (repoUrl) {
-  return /((http|git|ssh|http(s)|file|\/?)|(git@[\w.]+))(:(\/\/)?)([\w.@:/\-~]+)(\.git)(\/)?/.test(repoUrl)
+  return /(?:git|ssh|https?|git@[-\w.]+):(\/\/)?(.*?)(\.git)(\/?|\#[-\d\w._]+?)$/.test(repoUrl)
 }
 
 function validateGitCommitSha (gitCommitSha) {
