@@ -52,7 +52,7 @@ class Config {
       Number(DD_PROFILING_UPLOAD_TIMEOUT), 60 * 1000)
     const sourceMap = coalesce(options.sourceMap,
       DD_PROFILING_SOURCE_MAP, true)
-    const endpointCollection = coalesce(options.endpointCollection,
+    const endpointCollectionEnabled = coalesce(options.endpointCollection,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED, false)
     const pprofPrefix = coalesce(options.pprofPrefix,
       DD_PROFILING_PPROF_PREFIX, '')
@@ -74,7 +74,7 @@ class Config {
     this.uploadTimeout = uploadTimeout
     this.sourceMap = sourceMap
     this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
-    this.endpointCollection = endpointCollection
+    this.endpointCollectionEnabled = endpointCollectionEnabled
     this.pprofPrefix = pprofPrefix
 
     const hostname = coalesce(options.hostname, DD_AGENT_HOST) || 'localhost'

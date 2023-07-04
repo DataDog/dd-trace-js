@@ -6,13 +6,32 @@ const dc = require('../../../../diagnostics_channel')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const afterCh = dc.channel('dd-trace:storage:after')
-const incomingHttpRequestStart = dc.channel('dd-trace:incomingHttpRequestStart')
-const incomingHttpRequestEnd = dc.channel('dd-trace:incomingHttpRequestEnd')
+const enterCh = dc.channel('dd-trace:storage:enter')
 
 function getActiveSpan () {
   const store = storage.getStore()
   if (!store) return
   return store.span
+}
+
+function getStartedSpans (context) {
+  if (!context) return
+  return context._trace.started
+}
+
+function getSpanContextTags (span) {
+  return span.context()._tags
+}
+
+function isWebServerSpan (tags) {
+  return tags['span.type'] === 'web'
+}
+
+function endpointNameFromTags (tags) {
+  return tags['resource.name'] || [
+    tags['http.method'],
+    tags['http.route']
+  ].filter(v => v).join(' ')
 }
 
 class NativeWallProfiler {
@@ -23,6 +42,7 @@ class NativeWallProfiler {
     // input as millis, passed on as micros
     this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
     this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
+    this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
     this._mapper = undefined
     this._pprof = undefined
 
@@ -35,11 +55,6 @@ class NativeWallProfiler {
 
   codeHotspotsEnabled () {
     return this._codeHotspotsEnabled
-  }
-
-  resetStack () {
-    this._currentLabels = undefined
-    this._labelStack = []
   }
 
   start ({ mapper } = {}) {
@@ -62,7 +77,6 @@ class NativeWallProfiler {
       process._stopProfilerIdleNotifier = () => {}
     }
 
-    this.resetStack()
     this._pprof.time.start({
       intervalMicros: this._samplingIntervalMicros,
       durationMillis: this._flushIntervalMillis,
@@ -72,9 +86,8 @@ class NativeWallProfiler {
 
     if (this._codeHotspotsEnabled) {
       beforeCh.subscribe(this._enter)
+      enterCh.subscribe(this._enter)
       afterCh.subscribe(this._exit)
-      incomingHttpRequestStart.subscribe(this._enter)
-      incomingHttpRequestEnd.subscribe(this._exit)
     }
 
     this._started = true
@@ -88,21 +101,36 @@ class NativeWallProfiler {
     if (!this._started) return
 
     const currentSpan = getActiveSpan() || null
-    const activeCtx = currentSpan ? currentSpan.context() : null
+    const currentContext = currentSpan ? currentSpan.context() : null
 
-    const labels = activeCtx ? {
-      'span id': activeCtx.toSpanId()
+    if (!currentContext) return
+
+    const startedSpans = getStartedSpans(currentContext)
+    if (!startedSpans || startedSpans.length === 0) return
+    const rootContext = startedSpans[0].context()
+    if (!rootContext) return
+
+    const labels = currentContext ? {
+      'local root span id': rootContext.toSpanId(),
+      'span id': currentContext.toSpanId()
     } : null
 
-    if (this._currentLabels || this._labelStack.length > 0) {
-      this._labelStack.push(this._currentLabels)
+    if (this._endpointCollectionEnabled) {
+      const webServerTags = startedSpans
+        .map(getSpanContextTags)
+        .filter(isWebServerSpan)[0]
+
+      if (webServerTags) {
+        labels['trace endpoint'] = endpointNameFromTags(webServerTags)
+      }
     }
+
     this.setLabels(labels)
   }
 
   _exit () {
     if (!this._started) return
-    this.setLabels(this._labelStack.pop())
+    this.setLabels(undefined)
   }
 
   profile () {
@@ -121,9 +149,7 @@ class NativeWallProfiler {
     if (this._codeHotspotsEnabled) {
       beforeCh.unsubscribe(this._enter)
       afterCh.unsubscribe(this._exit)
-      incomingHttpRequestStart.unsubscribe(this._enter)
-      incomingHttpRequestEnd.unsubscribe(this._exit)
-      this.resetStack()
+      enterCh.unsubscribe(this._enter)
     }
     this._started = false
     return profile
