@@ -30,7 +30,9 @@ describe('rewriter telemetry', () => {
     instrumentedPropagationAdd = sinon.stub(INSTRUMENTED_PROPAGATION, 'add')
   })
 
-  afterEach(sinon.restore)
+  afterEach(() => {
+    sinon.restore()
+  })
 
   it('should not increase any metrics with OFF verbosity', () => {
     iastTelemetry.verbosity = Verbosity.OFF

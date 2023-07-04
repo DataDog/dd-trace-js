@@ -32,8 +32,6 @@ describe('IAST Plugin', () => {
   })
 
   describe('with appsec telemetry disabled', () => {
-    let IastPlugin
-
     beforeEach(() => {
       class PluginClass {
         addSub (channelName, handler) {
@@ -64,8 +62,7 @@ describe('IAST Plugin', () => {
         './telemetry/metrics': {},
         '../../../../datadog-core': datadogCore
       })
-      IastPlugin = iastPluginMod.IastPlugin
-      iastPlugin = new IastPlugin()
+      iastPlugin = new iastPluginMod.IastPlugin()
     })
 
     afterEach(() => {
@@ -174,6 +171,7 @@ describe('IAST Plugin', () => {
         const metric = {
           increase: sinon.spy()
         }
+
         iastPlugin._execHandlerAndIncMetric({
           handler,
           metric
@@ -187,7 +185,6 @@ describe('IAST Plugin', () => {
 
   describe('with appsec telemetry enabled', () => {
     let iastTelemetry
-    let IastPlugin
 
     beforeEach(() => {
       class PluginClass {
@@ -202,7 +199,7 @@ describe('IAST Plugin', () => {
         isEnabled: () => true,
         isDebugEnabled: () => true
       }
-      IastPlugin = proxyquire('../../../src/appsec/iast/iast-plugin', {
+      const IastPlugin = proxyquire('../../../src/appsec/iast/iast-plugin', {
         '../../plugins/plugin': PluginClass,
         './iast-log': {
           errorAndPublish: logError
@@ -228,7 +225,7 @@ describe('IAST Plugin', () => {
 
         loadChannel.publish({ name: 'test' })
 
-        expect(onInstrumentationLoadedMock).to.be.calledWith('test')
+        expect(onInstrumentationLoadedMock).to.be.calledOnceWith('test')
       })
     })
 

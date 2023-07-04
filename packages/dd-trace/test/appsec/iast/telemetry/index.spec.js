@@ -55,7 +55,7 @@ describe('Telemetry', () => {
       iastTelemetry.configure(defaultConfig)
 
       expect(iastTelemetry.enabled).to.be.true
-      expect(iastTelemetry.verbosity).to.be.eq(Verbosity.INFORMATION)
+      expect(iastTelemetry.verbosity).to.be.equal(Verbosity.INFORMATION)
       expect(telemetryLogs.start).to.be.calledOnce
     })
 
@@ -64,7 +64,7 @@ describe('Telemetry', () => {
       iastTelemetry.configure(defaultConfig)
 
       expect(iastTelemetry.enabled).to.be.false
-      expect(iastTelemetry.verbosity).to.be.eq(Verbosity.OFF)
+      expect(iastTelemetry.verbosity).to.be.equal(Verbosity.OFF)
       expect(telemetryLogs.start).to.be.called
     })
 
@@ -83,7 +83,7 @@ describe('Telemetry', () => {
       })
 
       expect(iastTelemetry.enabled).to.be.true
-      expect(iastTelemetry.verbosity).to.be.eq(Verbosity.OFF)
+      expect(iastTelemetry.verbosity).to.be.equal(Verbosity.OFF)
       expect(telemetryMetrics.manager.set).to.be.calledOnce
       expect(telemetryLogs.start).to.be.calledOnce
     })
@@ -95,7 +95,7 @@ describe('Telemetry', () => {
       })
 
       expect(iastTelemetry.enabled).to.be.false
-      expect(iastTelemetry.verbosity).to.be.eq(Verbosity.OFF)
+      expect(iastTelemetry.verbosity).to.be.equal(Verbosity.OFF)
       expect(telemetryMetrics.manager.set).to.not.be.called
       expect(telemetryLogs.start).to.be.calledOnce
     })
