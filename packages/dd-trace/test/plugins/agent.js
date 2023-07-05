@@ -36,19 +36,42 @@ function ciVisRequestHandler (request, response) {
 }
 
 function addEnvironmentVariablesToHeaders (headers) {
-  // get all environment variables that start with "DD_"
-  const ddEnvVars = Object.entries(process.env)
-    .filter(([key]) => key.startsWith('DD_'))
-    .map(([key, value]) => `${key}=${value}`)
+  return new Promise((resolve, reject) => {
+    // get all environment variables that start with "DD_"
+    var ddEnvVars = new Map(
+      Object.entries(process.env)
+        .filter(([key]) => key.startsWith('DD_'))
+        .map(([key, value]) => [key, value])
+    )
+    debugger
+    if (global.testAgentServiceName) {
+      ddEnvVars.set('DD_SERVICE', global.testAgentServiceName)
+    // } else if (tracer.service && tracer.service != process.env["DD_SERVICE"]) {
+    //   ddEnvVars.set('DD_SERVICE', tracer.service)
+    }
+    ddEnvVars.set('DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', global.schemaVersionName)
+  
+    for (let i = 0; i < plugins.length; i++) {
+      var plugin_name = plugins[i]
+      if (tracer._pluginManager._configsByName[plugin_name] && tracer._pluginManager._configsByName[plugin_name].service) {
+        ddEnvVars.set(`DD_${plugin_name.toUpperCase()}_SERVICE`, tracer._pluginManager._configsByName[plugin_name].service)
+      }
+    }
 
-  // add the DD environment variables to the header if any exist
-  // to send with trace to final agent destination
-  if (ddEnvVars.length > 0) {
-    headers['X-Datadog-Trace-Env-Variables'] = ddEnvVars.join(',')
-  }
+    // serialize the DD environment variables into a string of k=v pairs separated by comma
+    var serializedEnvVars = Array.from(ddEnvVars.entries())
+      .map(([key, value]) => `${key}=${value}`)
+      .join(',')
+
+    // add the serialized DD environment variables to the header
+    // to send with trace to the final agent destination
+    headers['X-Datadog-Trace-Env-Variables'] = serializedEnvVars
+
+    resolve(headers)
+  })
 }
 
-function handleTraceRequest (req, res, sendToTestAgent) {
+async function handleTraceRequest (req, res, sendToTestAgent) {
   // handles the received trace request and sends trace to Test Agent if bool enabled.
   if (sendToTestAgent) {
     const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
@@ -59,7 +82,7 @@ function handleTraceRequest (req, res, sendToTestAgent) {
     delete req.headers['content-length']
 
     // add current environment variables to trace headers
-    addEnvironmentVariablesToHeaders(req.headers)
+    await addEnvironmentVariablesToHeaders(req.headers)
 
     const testAgentReq = http.request(
       `${testAgentUrl}/v0.4/traces`, {
@@ -153,8 +176,8 @@ module.exports = {
       res.status(404).end()
     })
 
-    agent.put('/v0.4/traces', (req, res) => {
-      handleTraceRequest(req, res, useTestAgent)
+    agent.put('/v0.4/traces', async (req, res) => {
+      await handleTraceRequest(req, res, useTestAgent)
     })
 
     // CI Visibility Agentless intake

@@ -17,6 +17,8 @@ global.withVersions = withVersions
 global.withExports = withExports
 global.withNamingSchema = withNamingSchema
 global.withPeerService = withPeerService
+global.testAgentServiceName = null
+global.schemaVersionName = "v0"
 
 const packageVersionFailures = Object.create({})
 
@@ -75,7 +77,11 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
             })
             .then(done)
             .catch(done)
+          global.testAgentServiceName = expectedServiceName()
+          global.schemaVersionName = versionName
           spanProducerFn(done)
+          global.testAgentServiceName = null
+          global.schemaVersionName = "v0"
         })
       })
     })
@@ -101,7 +107,10 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
           })
           .then(done)
           .catch(done)
+        global.testAgentServiceName = expectedShortCircuitName
+        global.schemaVersionName = "v0"
         spanProducerFn(done)
+        global.testAgentServiceName = null
       })
     })
   })
@@ -128,8 +137,9 @@ function withPeerService (tracer, spanGenerationFn, service, serviceSource) {
         })
         .then(done)
         .catch(done)
-
+      global.schemaVersionName = "v1"
       spanGenerationFn(done)
+      global.schemaVersionName = "v0"
     })
   })
 }
