@@ -1,8 +1,8 @@
 'use strict'
 
 const csiMethods = [
-  { src: 'plusOperator', operator: true },
   { src: 'concat' },
+  { src: 'plusOperator', operator: true },
   { src: 'replace' },
   { src: 'slice' },
   { src: 'substr' },
@@ -12,19 +12,6 @@ const csiMethods = [
   { src: 'trimStart', dst: 'trim' }
 ]
 
-function getExpectedMethods () {
-  const set = new Set()
-  for (const definition of csiMethods) {
-    if (definition.dst) {
-      set.add(definition.dst)
-    } else {
-      set.add(definition.src)
-    }
-  }
-  return [...set]
-}
-
 module.exports = {
-  csiMethods,
-  getExpectedMethods
+  csiMethods
 }

@@ -3,10 +3,22 @@
 const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
-const { getExpectedMethods } = require('../../../../src/appsec/iast/taint-tracking/csi-methods')
+const { csiMethods } = require('../../../../src/appsec/iast/taint-tracking/csi-methods')
 const iastTelemetry = require('../../../../src/appsec/iast/telemetry')
 const { EXECUTED_PROPAGATION, REQUEST_TAINTED } = require('../../../../src/appsec/iast/telemetry/iast-metric')
 const { Verbosity } = require('../../../../src/appsec/iast/telemetry/verbosity')
+
+function getExpectedMethods () {
+  const set = new Set()
+  for (const definition of csiMethods) {
+    if (definition.dst) {
+      set.add(definition.dst)
+    } else {
+      set.add(definition.src)
+    }
+  }
+  return [...set]
+}
 
 describe('IAST TaintTracking Operations', () => {
   let taintTrackingOperations
