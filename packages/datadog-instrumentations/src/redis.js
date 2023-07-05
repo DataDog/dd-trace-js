@@ -11,6 +11,8 @@ const startCh = channel('apm:redis:command:start')
 const finishCh = channel('apm:redis:command:finish')
 const errorCh = channel('apm:redis:command:error')
 
+const state = []
+
 function wrapAddCommand (addCommand) {
   return function (command) {
     if (!startCh.hasSubscribers) {
@@ -22,7 +24,7 @@ function wrapAddCommand (addCommand) {
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
-      start(this, name, args)
+      start(this, name, args, this.__url)
 
       const res = addCommand.apply(this, arguments)
       const onResolve = asyncResource.bind(() => finish(finishCh, errorCh))
@@ -35,12 +37,53 @@ function wrapAddCommand (addCommand) {
   }
 }
 
-addHook({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1.1'] }, redis => {
+function wrapCommandQueueClass (cls) {
+  const ret = class RedisCommandQueue extends cls {
+    constructor () {
+      super(arguments)
+      if (state['url']) {
+        try {
+          const parsed = new URL(state['url'])
+          if (parsed) {
+            this.__url = { host: parsed.hostname, port: +parsed.port || 6379 }
+          }
+        } catch (error) {
+          // ignore
+        }
+      }
+      this.__url = this.__url || { host: 'localhost', port: 6379 }
+    }
+  }
+  return ret
+}
+
+function wrapCreateClient (request) {
+  return function (opts) {
+    state['url'] = opts?.url
+    const ret = request.apply(this, arguments)
+    delete state['url']
+    return ret
+  }
+}
+
+addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1'] }, redis => {
+  redis.default = wrapCommandQueueClass(redis.default)
   shimmer.wrap(redis.default.prototype, 'addCommand', wrapAddCommand)
   return redis
 })
 
-addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1'] }, redis => {
+addHook({ name: '@node-redis/client', file: 'dist/lib/client/index.js', versions: ['>=1'] }, redis => {
+  shimmer.wrap(redis.default, 'create', wrapCreateClient)
+  return redis
+})
+
+addHook({ name: '@redis/client', file: 'dist/lib/client/index.js', versions: ['>=1.1'] }, redis => {
+  shimmer.wrap(redis.default, 'create', wrapCreateClient)
+  return redis
+})
+
+addHook({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1.1'] }, redis => {
+  redis.default = wrapCommandQueueClass(redis.default)
   shimmer.wrap(redis.default.prototype, 'addCommand', wrapAddCommand)
   return redis
 })
@@ -106,9 +149,9 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
   return redis
 })
 
-function start (client, command, args) {
+function start (client, command, args, url = {}) {
   const db = client.selected_db
-  const connectionOptions = client.connection_options || client.connection_option || client.connectionOption || {}
+  const connectionOptions = client.connection_options || client.connection_option || client.connectionOption || url
   startCh.publish({ db, command, args, connectionOptions })
 }
 
