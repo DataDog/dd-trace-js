@@ -1,9 +1,10 @@
 const { identityService } = require('../util')
+const { DD_MAJOR } = require('../../../../../../version')
 
 const web = {
   client: {
     grpc: {
-      opName: () => 'grpc.client',
+      opName: () => DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
       serviceName: identityService
     },
     moleculer: {
@@ -13,7 +14,7 @@ const web = {
   },
   server: {
     grpc: {
-      opName: () => 'grpc.server',
+      opName: () => DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.server',
       serviceName: identityService
     },
     moleculer: {
