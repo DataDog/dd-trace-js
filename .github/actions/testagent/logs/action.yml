@@ -21,6 +21,7 @@ runs:
         RESPONSE_CODE=$(echo "$RESPONSE" | awk 'END {print $NF}')
         if [[ $RESPONSE_CODE -eq 200 ]]; then
           echo "All APM Test Agent Check Traces returned successful! (HTTP 200)"
+          cat response.txt
         else
           echo "APM Test Agent Check Traces failed with response code: $RESPONSE_CODE"
           echo "Failures:"
