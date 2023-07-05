@@ -24,7 +24,7 @@ function wrapAddCommand (addCommand) {
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
-      start(this, name, args, this.__url)
+      start(this, name, args, this._url)
 
       const res = addCommand.apply(this, arguments)
       const onResolve = asyncResource.bind(() => finish(finishCh, errorCh))
@@ -45,13 +45,13 @@ function wrapCommandQueueClass (cls) {
         try {
           const parsed = new URL(state['url'])
           if (parsed) {
-            this.__url = { host: parsed.hostname, port: +parsed.port || 6379 }
+            this._url = { host: parsed.hostname, port: +parsed.port || 6379 }
           }
         } catch (error) {
           // ignore
         }
       }
-      this.__url = this.__url || { host: 'localhost', port: 6379 }
+      this._url = this._url || { host: 'localhost', port: 6379 }
     }
   }
   return ret
