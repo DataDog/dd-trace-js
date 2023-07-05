@@ -2,7 +2,7 @@
 
 const telemetryMetrics = require('../../../telemetry/metrics')
 const telemetryLogs = require('./log')
-const { Verbosity, isDebugAllowed, isInfoAllowed, getVerbosity } = require('./verbosity')
+const { Verbosity, getVerbosity } = require('./verbosity')
 const { initRequestNamespace, finalizeRequestNamespace, globalNamespace } = require('./namespaces')
 
 class Telemetry {
@@ -29,14 +29,6 @@ class Telemetry {
     return this.enabled
   }
 
-  isDebugEnabled () {
-    return this.isEnabled() && isDebugAllowed(this.verbosity)
-  }
-
-  isInformationEnabled () {
-    return this.isEnabled() && isInfoAllowed(this.verbosity)
-  }
-
   onRequestStart (context) {
     if (this.isEnabled() && this.verbosity !== Verbosity.OFF) {
       initRequestNamespace(context)
@@ -45,7 +37,7 @@ class Telemetry {
 
   onRequestEnd (context, rootSpan) {
     if (this.isEnabled() && this.verbosity !== Verbosity.OFF) {
-      finalizeRequestNamespace(context, rootSpan, this.namespace)
+      finalizeRequestNamespace(context, rootSpan)
     }
   }
 }

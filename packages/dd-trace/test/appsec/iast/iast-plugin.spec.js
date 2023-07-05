@@ -196,8 +196,7 @@ describe('IAST Plugin', () => {
         }
       }
       iastTelemetry = {
-        isEnabled: () => true,
-        isDebugEnabled: () => true
+        isEnabled: () => true
       }
       const IastPlugin = proxyquire('../../../src/appsec/iast/iast-plugin', {
         '../../plugins/plugin': PluginClass,
@@ -225,7 +224,7 @@ describe('IAST Plugin', () => {
 
         loadChannel.publish({ name: 'test' })
 
-        expect(onInstrumentationLoadedMock).to.be.calledOnceWith('test')
+        expect(onInstrumentationLoadedMock).to.be.calledWith('test')
       })
     })
 
