@@ -17,7 +17,7 @@ runs:
       shell: bash
     - uses: actions/checkout@v2
     - run: |
-        RESPONSE=$(curl -s -w "\n%{http_code}" -o response.txt http://testagent:9126/test/trace_check/failures)
+        RESPONSE=$(curl -s -w "\n%{http_code}" -o response.txt http://127.0.0.1:9126/test/trace_check/failures)
         RESPONSE_CODE=$(echo "$RESPONSE" | awk 'END {print $NF}')
         if [[ $RESPONSE_CODE -eq 200 ]]; then
           echo "All APM Test Agent Check Traces returned successful! (HTTP 200)"
