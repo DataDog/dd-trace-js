@@ -217,7 +217,7 @@ async function testSeq (seqId, reqType, validatePayload) {
   expect(req.url).to.equal(`/telemetry/proxy/api/v2/apmtelemetry`)
   expect(req.headers).to.include({
     'content-type': 'application/json',
-    'dd-telemetry-api-version': 'v1',
+    'dd-telemetry-api-version': 'v2',
     'dd-telemetry-request-type': reqType
   })
   const osName = os.type()
