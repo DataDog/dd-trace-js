@@ -19,7 +19,7 @@ addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
   class Kafka extends obj.Kafka {
     constructor (options) {
       super(options)
-      this.__brokers = (options.brokers && typeof options.brokers !== 'function')
+      this._brokers = (options.brokers && typeof options.brokers !== 'function')
         ? options.brokers.join(',') : undefined
     }
   }
@@ -28,7 +28,7 @@ addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
   shimmer.wrap(Kafka.prototype, 'producer', createProducer => function () {
     const producer = createProducer.apply(this, arguments)
     const send = producer.send
-    const bootstrapServers = this.__brokers
+    const bootstrapServers = this._brokers
 
     producer.send = function () {
       const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
