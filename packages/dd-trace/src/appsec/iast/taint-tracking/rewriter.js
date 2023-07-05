@@ -69,6 +69,7 @@ function getPrepareStackTraceAccessor () {
 
 function getCompileMethodFn (compileMethod) {
   return function (content, filename) {
+    console.log('compileMethod', filename, isPrivateModule(filename) && isNotLibraryFile(filename))
     try {
       if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
         const rewritten = rewriter.rewrite(content, filename)
