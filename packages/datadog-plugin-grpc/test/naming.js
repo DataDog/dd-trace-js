@@ -1,9 +1,10 @@
 const { resolveNaming } = require('../../dd-trace/test/plugins/helpers')
+const { DD_MAJOR } = require('../../../version')
 
 module.exports = resolveNaming({
   client: {
     v0: {
-      opName: 'grpc.client',
+      opName: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
       serviceName: 'test'
     },
     v1: {
@@ -13,7 +14,7 @@ module.exports = resolveNaming({
   },
   server: {
     v0: {
-      opName: 'grpc.server',
+      opName: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.server',
       serviceName: 'test'
     },
     v1: {
