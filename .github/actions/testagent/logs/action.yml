@@ -15,3 +15,16 @@ runs:
           docker-compose logs testagent
         fi
       shell: bash
+    - uses: actions/checkout@v2
+    - run: |
+        RESPONSE=$(curl -s -w "\n%{http_code}" -o response.txt http://testagent:9126/test/trace_check/failures)
+        RESPONSE_CODE=$(echo "$RESPONSE" | awk 'END {print $NF}')
+        if [[ $RESPONSE_CODE -eq 200 ]]; then
+          echo "All APM Test Agent Check Traces returned successful! (HTTP 200)"
+        else
+          echo "APM Test Agent Check Traces failed with response code: $RESPONSE_CODE"
+          echo "Failures:"
+          cat response.txt
+          exit 1
+        fi
+      shell: bash
