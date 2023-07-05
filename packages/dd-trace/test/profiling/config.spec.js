@@ -108,6 +108,109 @@ describe('config', () => {
     expect(errors[1]).to.equal('Unknown profiler "also_nope"')
   })
 
+  it('should support profiler config with empty DD_PROFILING_PROFILERS', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: ''
+    }
+    const options = {
+      logger: {
+        debug () {},
+        info () {},
+        warn () {},
+        error () {}
+      }
+    }
+
+    const config = new Config(options)
+
+    expect(config.profilers).to.be.an('array')
+    expect(config.profilers.length).to.equal(0)
+  })
+
+  it('should support profiler config with DD_PROFILING_PROFILERS', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: 'wall'
+    }
+    const options = {
+      logger: {
+        debug () {},
+        info () {},
+        warn () {},
+        error () {}
+      }
+    }
+
+    const config = new Config(options)
+
+    expect(config.profilers).to.be.an('array')
+    expect(config.profilers.length).to.equal(1)
+    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
+  })
+
+  it('should support profiler config with DD_PROFILING_XXX_ENABLED', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: 'wall',
+      DD_PROFILING_WALLTIME_ENABLED: '0',
+      DD_PROFILING_HEAP_ENABLED: '1'
+    }
+    const options = {
+      logger: {
+        debug () {},
+        info () {},
+        warn () {},
+        error () {}
+      }
+    }
+
+    const config = new Config(options)
+
+    expect(config.profilers).to.be.an('array')
+    expect(config.profilers.length).to.equal(1)
+    expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
+  })
+
+  it('should deduplicate profilers', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: 'wall,wall',
+      DD_PROFILING_WALLTIME_ENABLED: '1'
+    }
+    const options = {
+      logger: {
+        debug () {},
+        info () {},
+        warn () {},
+        error () {}
+      }
+    }
+
+    const config = new Config(options)
+
+    expect(config.profilers).to.be.an('array')
+    expect(config.profilers.length).to.equal(1)
+    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
+  })
+
+  it('should prioritize options over env variables', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: 'wall'
+    }
+    const options = {
+      logger: {
+        debug () {},
+        info () {},
+        warn () {},
+        error () {}
+      },
+      profilers: ['space']
+    }
+
+    const config = new Config(options)
+
+    expect(config.profilers).to.be.an('array')
+    expect(config.profilers.length).to.equal(1)
+    expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
+  })
+
   it('should support tags', () => {
     const tags = {
       env: 'dev'

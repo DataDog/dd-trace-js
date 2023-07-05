@@ -171,6 +171,27 @@
       "dep": true
     }
   ],
+   "passport-http": [
+     {
+       "name": "passport",
+       "versions": [">=0.4.1"]
+     },
+     {
+       "name": "express",
+       "versions": [">=4.16.2"]
+     }
+   ],
+   "passport-local": [
+    {
+      "name": "passport",
+      "versions": [">=0.4.1"]
+    },
+     {
+       "name": "express",
+       "versions": [">=4.16.2"]
+     }
+
+  ],
   "pg": [
     {
       "name": "pg-native",

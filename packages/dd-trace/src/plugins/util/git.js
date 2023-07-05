@@ -35,9 +35,41 @@ function isShallowRepository () {
   return sanitizedExec('git', ['rev-parse', '--is-shallow-repository']) === 'true'
 }
 
+function getGitVersion () {
+  const gitVersionString = sanitizedExec('git', ['version'])
+  const gitVersionMatches = gitVersionString.match(/git version (\d+)\.(\d+)\.(\d+)/)
+  try {
+    return {
+      major: parseInt(gitVersionMatches[1]),
+      minor: parseInt(gitVersionMatches[2]),
+      patch: parseInt(gitVersionMatches[3])
+    }
+  } catch (e) {
+    return null
+  }
+}
+
 function unshallowRepository () {
-  sanitizedExec('git', ['config', 'remote.origin.partialclonefilter', '"blob:none"'])
-  sanitizedExec('git', ['fetch', '--shallow-since="1 month ago"', '--update-shallow', '--refetch'])
+  const gitVersion = getGitVersion()
+  if (!gitVersion) {
+    log.warn('Git version could not be extracted, so git unshallow will not proceed')
+    return
+  }
+  if (gitVersion.major < 2 || (gitVersion.major === 2 && gitVersion.minor < 27)) {
+    log.warn('Git version is <2.27, so git unshallow will not proceed')
+    return
+  }
+  const defaultRemoteName = sanitizedExec('git', ['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'])
+  const revParseHead = sanitizedExec('git', ['rev-parse', 'HEAD'])
+  sanitizedExec('git', [
+    'fetch',
+    '--shallow-since="1 month ago"',
+    '--update-shallow',
+    '--filter=blob:none',
+    '--recurse-submodules=no',
+    defaultRemoteName,
+    revParseHead
+  ])
 }
 
 function getRepositoryUrl () {
@@ -56,7 +88,7 @@ function getLatestCommits () {
   }
 }
 
-function getCommitsToUpload (commitsToExclude) {
+function getCommitsToUpload (commitsToExclude, commitsToInclude) {
   const commitsToExcludeString = commitsToExclude.map(commit => `^${commit}`)
 
   try {
@@ -68,8 +100,8 @@ function getCommitsToUpload (commitsToExclude) {
         '--no-object-names',
         '--filter=blob:none',
         '--since="1 month ago"',
-        'HEAD',
-        ...commitsToExcludeString
+        ...commitsToExcludeString,
+        ...commitsToInclude
       ],
       { stdio: 'pipe', maxBuffer: GIT_REV_LIST_MAX_BUFFER })
       .toString()

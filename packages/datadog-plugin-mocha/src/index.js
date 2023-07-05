@@ -70,7 +70,7 @@ class MochaPlugin extends CiPlugin {
     this.addSub('ci:mocha:test-suite:finish', (status) => {
       const store = storage.getStore()
       if (store && store.span) {
-        const span = storage.getStore().span
+        const span = store.span
         // the test status of the suite may have been set in ci:mocha:test-suite:error already
         if (!span.context()._tags[TEST_STATUS]) {
           span.setTag(TEST_STATUS, status)
@@ -82,7 +82,7 @@ class MochaPlugin extends CiPlugin {
     this.addSub('ci:mocha:test-suite:error', (err) => {
       const store = storage.getStore()
       if (store && store.span) {
-        const span = storage.getStore().span
+        const span = store.span
         span.setTag('error', err)
         span.setTag(TEST_STATUS, 'fail')
       }
@@ -99,7 +99,7 @@ class MochaPlugin extends CiPlugin {
       const store = storage.getStore()
 
       if (store && store.span) {
-        const span = storage.getStore().span
+        const span = store.span
 
         span.setTag(TEST_STATUS, status)
 

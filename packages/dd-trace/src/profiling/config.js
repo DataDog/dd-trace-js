@@ -12,7 +12,7 @@ const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { tagger } = require('./tagger')
-const { isTrue } = require('../util')
+const { isFalse, isTrue } = require('../util')
 
 class Config {
   constructor (options = {}) {
@@ -32,6 +32,8 @@ class Config {
       DD_PROFILING_SOURCE_MAP,
       DD_PROFILING_UPLOAD_PERIOD,
       DD_PROFILING_PPROF_PREFIX,
+      DD_PROFILING_HEAP_ENABLED,
+      DD_PROFILING_WALLTIME_ENABLED,
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
@@ -106,16 +108,41 @@ class Config {
       exportCommand
     }
 
-    const profilers = coalesce(options.profilers, DD_PROFILING_PROFILERS, [
-      new WallProfiler(this),
-      new SpaceProfiler(this)
-    ])
+    const profilers = options.profilers
+      ? options.profilers
+      : getProfilers({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS })
 
     this.profilers = ensureProfilers(profilers, this)
   }
 }
 
 module.exports = { Config }
+
+function getProfilers ({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS }) {
+  // First consider "legacy" DD_PROFILING_PROFILERS env variable, defaulting to wall + space
+  // Use a Set to avoid duplicates
+  const profilers = new Set(coalesce(DD_PROFILING_PROFILERS, 'wall,space').split(','))
+
+  // Add/remove wall depending on the value of DD_PROFILING_WALLTIME_ENABLED
+  if (DD_PROFILING_WALLTIME_ENABLED != null) {
+    if (isTrue(DD_PROFILING_WALLTIME_ENABLED)) {
+      profilers.add('wall')
+    } else if (isFalse(DD_PROFILING_WALLTIME_ENABLED)) {
+      profilers.delete('wall')
+    }
+  }
+
+  // Add/remove wall depending on the value of DD_PROFILING_HEAP_ENABLED
+  if (DD_PROFILING_HEAP_ENABLED != null) {
+    if (isTrue(DD_PROFILING_HEAP_ENABLED)) {
+      profilers.add('space')
+    } else if (isFalse(DD_PROFILING_HEAP_ENABLED)) {
+      profilers.delete('space')
+    }
+  }
+
+  return [...profilers]
+}
 
 function getExportStrategy (name, options) {
   const strategy = Object.values(oomExportStrategies).find(value => value === name)

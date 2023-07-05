@@ -310,7 +310,8 @@ describe('Plugin', () => {
           withNamingSchema(
             () => server.insert(`test.${collection}`, [{ a: 1 }], () => {}),
             () => namingSchema.outbound.opName,
-            () => namingSchema.outbound.serviceName
+            () => namingSchema.outbound.serviceName,
+            'test'
           )
         })
       })
@@ -354,7 +355,8 @@ describe('Plugin', () => {
         withNamingSchema(
           () => server.insert(`test.${collection}`, [{ a: 1 }], () => {}),
           () => namingSchema.outbound.opName,
-          () => 'custom'
+          () => 'custom',
+          'custom'
         )
       })
     })
