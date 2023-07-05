@@ -37,7 +37,7 @@ function isLogCollectionEnabled (config) {
 
 function onTelemetryStart (msg) {
   if (!msg || !isLogCollectionEnabled(msg.config)) {
-    log.info('IAST telemetry logs start received but log collection is not enabled or configuration is incorrect')
+    log.info('IAST telemetry logs start event received but log collection is not enabled or configuration is incorrect')
     return false
   }
 

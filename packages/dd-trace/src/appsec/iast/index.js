@@ -53,8 +53,8 @@ function onIncomingHttpRequestStart (data) {
           const iastContext = iastContextFunctions.saveIastContext(store, topContext, { rootSpan, req: data.req })
           createTransaction(rootSpan.context().toSpanId(), iastContext)
           overheadController.initializeRequestContext(iastContext)
-          taintTrackingPlugin.taintHeaders(data.req.headers, iastContext)
           iastTelemetry.onRequestStart(iastContext)
+          taintTrackingPlugin.taintHeaders(data.req.headers, iastContext)
         }
         if (rootSpan.addTags) {
           rootSpan.addTags({
