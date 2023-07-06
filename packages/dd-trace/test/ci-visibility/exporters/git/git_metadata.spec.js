@@ -1,10 +1,10 @@
 'use strict'
 
 require('../../../../../dd-trace/test/setup/tap')
-
 const nock = require('nock')
 const os = require('os')
 const fs = require('fs')
+const { validateGitRepositoryUrl, validateGitCommitSha } = require('../../../../src/plugins/util/user-provided-git')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 
@@ -202,7 +202,57 @@ describe('git_metadata', () => {
       done()
     })
   })
+  describe('validateGitRepositoryUrl', () => {
+    it('should return false if Git repository URL is invalid', () => {
+      const invalidUrl1 = 'https://test.com'
+      const invalidUrl2 = 'https://test.com'
+      const invalidUrl3 = 'http://test.com/repo/dummy.4git'
+      const invalidUrl4 = 'https://test.com/repo/dummy.gi'
+      const invalidUrl5 = 'www.test.com/repo/dummy.git'
+      const invalidUrl6 = 'test.com/repo/dummy.git'
 
+      const invalidUrls = [invalidUrl1, invalidUrl2, invalidUrl3, invalidUrl4, invalidUrl5, invalidUrl6]
+      invalidUrls.forEach((invalidUrl) => {
+        expect(validateGitRepositoryUrl(invalidUrl)).to.be.false
+      })
+    })
+    it('should return true if Git repository URL is valid', () => {
+      const validUrl1 = 'https://test.com/repo/dummy.git'
+      const validUrl2 = 'http://test.com/repo/dummy.git'
+      const validUrl3 = 'https://github.com/DataDog/dd-trace-js.git'
+      const validUrl4 = 'git@github.com:DataDog/dd-trace-js.git'
+      const validUrl5 = 'git@github.com:user/repo.git'
+
+      const validUrls = [validUrl1, validUrl2, validUrl3, validUrl4, validUrl5]
+      validUrls.forEach((validUrl) => {
+        expect(validateGitRepositoryUrl(validUrl)).to.be.true
+      })
+    })
+  })
+  describe('validateGitCommitSha', () => {
+    it('should return false if Git commit SHA is invalid', () => {
+      const invalidSha1 = 'cb466452bfe18d4f6be2836c2a5551843013cf382'
+      const invalidSha2 = 'cb466452bfe18d4f6be2836c2a5551843013cf3!'
+      const invalidSha3 = ''
+      const invalidSha4 = 'test'
+      const invalidSha5 = 'cb466452bfe18d4f6be2836c2a5551843013cf382cb466452bfe18d4f6be2836c2a5551843013cf382'
+      const invalidSha6 = 'cb466452bfe18d4f6be2836c2a5551843013cf2'
+      const invalidSha7 = 'cb466452bfe18d4f6be2836c2a5551843013cf3812342239203182304928'
+      const invalidShas = [invalidSha1, invalidSha2, invalidSha3, invalidSha4, invalidSha5, invalidSha6, invalidSha7]
+      invalidShas.forEach((invalidSha) => {
+        expect(validateGitCommitSha(invalidSha)).to.be.false
+      })
+    })
+    it('should return true if Git commit SHA is valid', () => {
+      const validSha1 = 'cb466452bfe18d4f6be2836c2a5551843013cf38'
+      const validSha2 = 'cb466452bfe18d4f6be2836c2a5551843013cf381234223920318230492823f3'
+
+      const validShas = [validSha1, validSha2]
+      validShas.forEach((validSha) => {
+        expect(validateGitCommitSha(validSha)).to.be.true
+      })
+    })
+  })
   it('should not crash if packfiles can not be accessed', (done) => {
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')

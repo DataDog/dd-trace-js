@@ -85,7 +85,7 @@ describe('Plugin', () => {
             broker.call('math.add', { a: 5, b: 3 }).catch(done)
           })
           withNamingSchema(
-            (done) => broker.call('math.add', { a: 5, b: 3 }).then(done, done),
+            (done) => broker.call('math.add', { a: 5, b: 3 }).catch(done),
             () => namingSchema.server.opName,
             () => namingSchema.server.serviceName,
             'test'
@@ -112,7 +112,7 @@ describe('Plugin', () => {
           })
 
           withNamingSchema(
-            (done) => broker.call('math.add', { a: 5, b: 3 }).then(done, done),
+            (done) => broker.call('math.add', { a: 5, b: 3 }).catch(done),
             () => namingSchema.server.opName,
             () => 'custom',
             'custom'
@@ -167,7 +167,7 @@ describe('Plugin', () => {
           })
 
           withNamingSchema(
-            (done) => broker.call('math.add', { a: 5, b: 3 }).then(done, done),
+            (done) => broker.call('math.add', { a: 5, b: 3 }).catch(done),
             () => namingSchema.client.opName,
             () => namingSchema.client.serviceName,
             'test'
@@ -194,7 +194,7 @@ describe('Plugin', () => {
           })
 
           withNamingSchema(
-            (done) => broker.call('math.add', { a: 5, b: 3 }).then(done, done),
+            (done) => broker.call('math.add', { a: 5, b: 3 }).catch(done),
             () => namingSchema.client.opName,
             () => 'custom',
             'custom'

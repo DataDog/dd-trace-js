@@ -6,6 +6,9 @@ const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/he
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const namingSchema = require('./naming')
+const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
@@ -17,14 +20,15 @@ describe('Plugin', () => {
       const testTopic = 'test-topic'
       let kafka
       let tracer
+      let Kafka
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
         beforeEach(async () => {
+          process.env['DD_DATA_STREAMS_ENABLED'] = 'true'
           tracer = require('../../dd-trace')
           await agent.load('kafkajs')
-          const {
-            Kafka
-          } = require(`../../../versions/kafkajs@${version}`).get()
+          Kafka = require(`../../../versions/kafkajs@${version}`).get().Kafka
+
           kafka = new Kafka({
             clientId: `kafkajs-test-${version}`,
             brokers: ['127.0.0.1:9092']
@@ -51,6 +55,12 @@ describe('Plugin', () => {
 
             return expectedSpanPromise
           })
+
+          withPeerService(
+            () => tracer,
+            (done) => sendMessages(kafka, testTopic, messages).catch(done),
+            '127.0.0.1:9092',
+            'messaging.kafka.bootstrap.servers')
 
           it('should be instrumented w/ error', async () => {
             const producer = kafka.producer()
@@ -88,6 +98,23 @@ describe('Plugin', () => {
               return expectedSpanPromise
             }
           })
+          if (version !== '1.4.0') {
+            it('should not extract bootstrap servers when initialized with a function', async () => {
+              const expectedSpanPromise = agent.use(traces => {
+                const span = traces[0][0]
+                expect(span.meta).to.not.have.any.keys(['messaging.kafka.bootstrap.servers'])
+              })
+
+              kafka = new Kafka({
+                clientId: `kafkajs-test-${version}`,
+                brokers: () => ['127.0.0.1:9092']
+              })
+
+              await sendMessages(kafka, testTopic, messages)
+
+              return expectedSpanPromise
+            })
+          }
 
           withNamingSchema(
             async () => sendMessages(kafka, testTopic, messages),
@@ -229,6 +256,51 @@ describe('Plugin', () => {
             () => namingSchema.send.serviceName,
             'test'
           )
+        })
+
+        describe('data stream monitoring', () => {
+          let consumer
+          beforeEach(async () => {
+            tracer.init()
+            tracer.use('kafkajs', { dsmEnabled: true })
+            consumer = kafka.consumer({ groupId: 'test-group' })
+            await consumer.connect()
+            await consumer.subscribe({ topic: testTopic })
+          })
+
+          afterEach(async () => {
+            await consumer.disconnect()
+          })
+          const expectedProducerHash = computePathwayHash(
+            'test',
+            'tester',
+            ['direction:out', 'topic:' + testTopic, 'type:kafka'],
+            ENTRY_PARENT_HASH
+          )
+          const expectedConsumerHash = computePathwayHash(
+            'test',
+            'tester',
+            ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka'],
+            expectedProducerHash
+          )
+
+          it('Should set a checkpoint on produce', async () => {
+            const messages = [{ key: 'consumerDSM1', value: 'test2' }]
+            const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+            await sendMessages(kafka, testTopic, messages)
+            expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
+            setDataStreamsContextSpy.restore()
+          })
+
+          it('Should set a checkpoint on consume', async () => {
+            await sendMessages(kafka, testTopic, messages)
+            const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+            await consumer.run({
+              eachMessage: async ({ topic, partition, message, heartbeat, pause }) => {
+                expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedConsumerHash)
+              } })
+            setDataStreamsContextSpy.restore()
+          })
         })
       })
     })
