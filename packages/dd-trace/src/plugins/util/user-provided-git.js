@@ -13,7 +13,6 @@ const {
 } = require('./tags')
 
 const { normalizeRef } = require('./ci')
-const log = require('../../log')
 const { URL } = require('url')
 
 function removeEmptyValues (tags) {
@@ -53,25 +52,6 @@ function validateGitCommitSha (gitCommitSha) {
   return isValidSha1 || isValidSha256
 }
 
-function removeInvalidGitMetadata (metadata) {
-  return Object.keys(metadata).reduce((filteredTags, tag) => {
-    if (tag === GIT_REPOSITORY_URL) {
-      if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
-        log.error('DD_GIT_REPOSITORY_URL must be a valid URL')
-        return filteredTags
-      }
-    }
-    if (tag === GIT_COMMIT_SHA) {
-      if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
-        log.error('DD_GIT_COMMIT_SHA must be a full-length git SHA')
-        return filteredTags
-      }
-    }
-    filteredTags[tag] = metadata[tag]
-    return filteredTags
-  }, {})
-}
-
 function getUserProviderGitMetadata () {
   const {
     DD_GIT_COMMIT_SHA,
@@ -95,7 +75,7 @@ function getUserProviderGitMetadata () {
     tag = normalizeRef(DD_GIT_BRANCH)
   }
 
-  const metadata = removeEmptyValues({
+  return removeEmptyValues({
     [GIT_COMMIT_SHA]: DD_GIT_COMMIT_SHA,
     [GIT_BRANCH]: branch,
     [GIT_REPOSITORY_URL]: filterSensitiveInfoFromRepository(DD_GIT_REPOSITORY_URL),
@@ -108,7 +88,6 @@ function getUserProviderGitMetadata () {
     [GIT_COMMIT_AUTHOR_EMAIL]: DD_GIT_COMMIT_AUTHOR_EMAIL,
     [GIT_COMMIT_AUTHOR_DATE]: DD_GIT_COMMIT_AUTHOR_DATE
   })
-  return removeInvalidGitMetadata(metadata)
 }
 
 module.exports = { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha }

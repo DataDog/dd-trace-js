@@ -1,12 +1,13 @@
 const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
+const log = require('../../log')
 
 const istanbul = require('istanbul-lib-coverage')
 const ignore = require('ignore')
 
 const { getGitMetadata } = require('./git')
-const { getUserProviderGitMetadata } = require('./user-provided-git')
+const { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha } = require('./user-provided-git')
 const { getCIMetadata, removeEmptyValues } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
 const {
@@ -106,8 +107,7 @@ module.exports = {
   mergeCoverage,
   fromCoverageMapToCoverage,
   getTestLineStart,
-  getCallSites,
-  validateMetadata
+  getCallSites
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -119,33 +119,38 @@ function getPkgManager () {
   }
 }
 
-function validateMetadata (metadata) {
-  if (metadata[GIT_REPOSITORY_URL]) {
-    const validUrl = validateUrl(metadata[GIT_REPOSITORY_URL])
-    if (!validUrl) {
-      delete metadata[GIT_REPOSITORY_URL]
-    }
-  }
-  if (metadata[CI_PIPELINE_URL]) {
-    const validUrl = validateUrl(metadata[CI_PIPELINE_URL])
-    if (!validUrl) {
-      delete metadata[CI_PIPELINE_URL]
-    }
-  }
-  return removeEmptyValues(metadata)
-}
-
 function validateUrl (url) {
-  if (url.startsWith('git@') && url.includes(':')) {
-    const hostname = url.substring(url.indexOf('@') + 1, url.lastIndexOf(':'))
-    return hostname.includes('.')
-  }
   try {
     const urlObject = new URL(url)
     return (urlObject.protocol === 'https:' || urlObject.protocol === 'http:')
   } catch (e) {
     return false
   }
+}
+
+function removeInvalidGitMetadata (metadata) {
+  return Object.keys(metadata).reduce((filteredTags, tag) => {
+    if (tag === GIT_REPOSITORY_URL) {
+      if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
+        log.error('DD_GIT_REPOSITORY_URL must be a valid URL')
+        return filteredTags
+      }
+    }
+    if (tag === GIT_COMMIT_SHA) {
+      if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
+        log.error('DD_GIT_COMMIT_SHA must be a full-length git SHA')
+        return filteredTags
+      }
+    }
+    if (tag === CI_PIPELINE_URL) {
+      if (!validateUrl(metadata[CI_PIPELINE_URL])) {
+        console.log(`Removing URL ${metadata[CI_PIPELINE_URL]}`)
+        return filteredTags
+      }
+    }
+    filteredTags[tag] = metadata[tag]
+    return filteredTags
+  }, {})
 }
 
 function getTestEnvironmentMetadata (testFramework, config) {
@@ -177,17 +182,17 @@ function getTestEnvironmentMetadata (testFramework, config) {
 
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
 
-  const metadata = validateMetadata({
+  const metadata = {
     [TEST_FRAMEWORK]: testFramework,
     ...gitMetadata,
     ...ciMetadata,
     ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata
-  })
+  }
   if (config && config.service) {
     metadata['service.name'] = config.service
   }
-  return metadata
+  return removeInvalidGitMetadata(metadata)
 }
 
 function getTestParametersString (parametersByTestName, testName) {

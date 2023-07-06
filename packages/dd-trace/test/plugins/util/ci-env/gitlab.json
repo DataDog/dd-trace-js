@@ -4,7 +4,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -35,7 +35,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://gitlab.com/repo/myrepo.git"
     }
   ],
@@ -44,7 +44,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -75,7 +75,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://gitlab.com/repo/myrepo.git"
     }
   ],
@@ -84,7 +84,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -115,7 +115,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://gitlab.com/repo/myrepo.git"
     }
   ],
@@ -124,7 +124,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -157,7 +157,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://gitlab.com/repo/myrepo.git"
     }
   ],
@@ -166,7 +166,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -199,7 +199,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://gitlab.com/repo/myrepo.git"
     }
   ],
@@ -208,7 +208,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -241,7 +241,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://gitlab.com/repo/myrepo.git"
     }
   ],
@@ -250,7 +250,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "refs/heads/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -281,7 +281,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://gitlab.com/repo/myrepo.git"
     }
   ],
@@ -290,7 +290,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "refs/heads/feature/one",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -321,7 +321,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://gitlab.com/repo/myrepo.git"
     }
   ],
@@ -330,7 +330,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TAG": "origin/tags/0.1.0",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
@@ -362,7 +362,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://gitlab.com/repo/myrepo.git",
       "git.tag": "0.1.0"
     }
@@ -372,7 +372,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TAG": "refs/heads/tags/0.1.0",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
@@ -404,7 +404,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://gitlab.com/repo/myrepo.git",
       "git.tag": "0.1.0"
     }
@@ -414,7 +414,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TAG": "0.1.0",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
@@ -446,7 +446,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://gitlab.com/repo/myrepo.git",
       "git.tag": "0.1.0"
     }
@@ -456,7 +456,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -487,7 +487,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -496,7 +496,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -527,7 +527,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -536,7 +536,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -567,7 +567,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -576,7 +576,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -607,7 +607,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -616,7 +616,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -647,7 +647,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "git@hostname.com:org/repo.git"
     }
   ],
@@ -656,7 +656,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -709,7 +709,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -763,7 +763,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -794,7 +794,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://gitlab.com/DataDog/dogweb.git"
     }
   ],
@@ -803,7 +803,7 @@
       "CI_COMMIT_AUTHOR": "John Doe <john@doe.com>",
       "CI_COMMIT_MESSAGE": "gitlab-git-commit-message",
       "CI_COMMIT_REF_NAME": "origin/master",
-      "CI_COMMIT_SHA": "gitlab-git-commit",
+      "CI_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "CI_COMMIT_TIMESTAMP": "2021-07-21T11:43:07-04:00",
       "CI_JOB_ID": "gitlab-job-id",
       "CI_JOB_NAME": "gitlab-job-name",
@@ -838,7 +838,7 @@
       "git.commit.author.email": "john@doe.com",
       "git.commit.author.name": "John Doe",
       "git.commit.message": "gitlab-git-commit-message",
-      "git.commit.sha": "gitlab-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://gitlab.com/repo/myrepo.git"
     }
   ]
