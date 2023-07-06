@@ -8,7 +8,7 @@ const ignore = require('ignore')
 
 const { getGitMetadata } = require('./git')
 const { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha } = require('./user-provided-git')
-const { getCIMetadata, removeEmptyValues } = require('./ci')
+const { getCIMetadata } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
 const {
   GIT_BRANCH,
@@ -144,9 +144,11 @@ function removeInvalidGitMetadata (metadata) {
     }
     if (tag === CI_PIPELINE_URL) {
       if (!validateUrl(metadata[CI_PIPELINE_URL])) {
-        console.log(`Removing URL ${metadata[CI_PIPELINE_URL]}`)
         return filteredTags
       }
+    }
+    if (!metadata[tag]) {
+      return filteredTags
     }
     filteredTags[tag] = metadata[tag]
     return filteredTags
