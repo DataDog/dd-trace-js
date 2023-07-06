@@ -19,10 +19,10 @@ class NativeWallProfiler {
   constructor (options = {}) {
     this.type = 'wall'
     // input as micros, passed on as micros
-    this._samplingInterval = options.samplingInterval || 1e6 / 99 // 99hz
+    this._samplingIntervalMicros = options.samplingInterval || 1e6 / 99 // 99hz
     // input as millis, passed on as micros
-    this._flushInterval = options.flushInterval * 1000 || 60 * 1e6 // 60 seconds
-    this._hotspots = options.hotspots
+    this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
+    this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
     this._mapper = undefined
     this._pprof = undefined
 
@@ -30,6 +30,7 @@ class NativeWallProfiler {
     this._enter = this._enter.bind(this)
     this._exit = this._exit.bind(this)
     this._logger = options.logger
+    this._started = false
   }
 
   resetStack () {
@@ -38,8 +39,11 @@ class NativeWallProfiler {
   }
 
   start ({ mapper } = {}) {
-    if (this._hotspots && !this._emittedFFMessage && this._logger) {
-      this._logger.debug(`Wall profiler: Enable config_trace_show_breakdown_profiling_for_node feature flag to see code hotspots.`)
+    if (this._started) return
+
+    if (this._codeHotspotsEnabled && !this._emittedFFMessage && this._logger) {
+      this._logger.debug(
+        'Wall profiler: Enable config_trace_show_breakdown_profiling_for_node feature flag to see code hotspots.')
       this._emittedFFMessage = true
     }
 
@@ -55,25 +59,31 @@ class NativeWallProfiler {
     }
 
     this.resetStack()
-    this._record()
-    if (this._hotspots) {
+    this._pprof.time.start({
+      intervalMicros: this._samplingIntervalMicros,
+      durationMillis: this._flushIntervalMillis,
+      sourceMapper: this._mapper,
+      customLabels: this._codeHotspotsEnabled,
+      lineNumbers: false })
+
+    if (this._codeHotspotsEnabled) {
       beforeCh.subscribe(this._enter)
       afterCh.subscribe(this._exit)
       incomingHttpRequestStart.subscribe(this._enter)
       incomingHttpRequestEnd.subscribe(this._exit)
     }
+
+    this._started = true
   }
 
   setLabels (labels) {
-    this._currentLabels = labels
-    this._setLabels(labels)
+    this._pprof.time.setLabels(labels)
   }
 
   _enter () {
-    if (!this._setLabels) return
+    if (!this._started) return
 
     const currentSpan = getActiveSpan() || null
-
     const activeCtx = currentSpan ? currentSpan.context() : null
 
     const labels = activeCtx ? {
@@ -87,14 +97,13 @@ class NativeWallProfiler {
   }
 
   _exit () {
-    if (!this._setLabels) return
-
+    if (!this._started) return
     this.setLabels(this._labelStack.pop())
   }
 
   profile () {
-    if (!this._stop) return
-    return this._stop(true)
+    if (!this._started) return
+    return this._pprof.time.stop(true)
   }
 
   encode (profile) {
@@ -102,30 +111,18 @@ class NativeWallProfiler {
   }
 
   stop () {
-    if (!this._stop) return
-    this._stop()
-    this._stop = undefined
-    this._setLabels = undefined
-    if (this._hotspots) {
+    if (!this._started) return
+
+    const profile = this._pprof.time.stop()
+    if (this._codeHotspotsEnabled) {
       beforeCh.unsubscribe(this._enter)
       afterCh.unsubscribe(this._exit)
       incomingHttpRequestStart.unsubscribe(this._enter)
       incomingHttpRequestEnd.unsubscribe(this._exit)
       this.resetStack()
     }
-  }
-
-  _record () {
-    if (this._hotspots) {
-      const { stop, setLabels } = this._pprof.time.startWithLabels(
-        this._samplingInterval, this._flushInterval, null, this._mapper, false)
-      this._stop = stop
-      this._setLabels = setLabels
-    } else {
-      this._stop = this._pprof.time.start(
-        this._samplingInterval, null, this._mapper, false)
-      this._setLabels = undefined
-    }
+    this._started = false
+    return profile
   }
 }
 
