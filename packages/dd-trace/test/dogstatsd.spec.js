@@ -64,7 +64,7 @@ describe('dogstatsd', () => {
     Client = proxyquire('../src/dogstatsd', {
       'dgram': dgram,
       'dns': dns
-    })
+    }).DogStatsDClient
 
     httpData = []
     statusCode = 200
