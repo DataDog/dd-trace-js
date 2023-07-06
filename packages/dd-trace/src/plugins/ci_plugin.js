@@ -12,8 +12,12 @@ const {
   TEST_MODULE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND,
-  TEST_MODULE
+  TEST_MODULE,
+  TEST_FRAMEWORK
 } = require('./util/test')
+const {
+  getTestType
+} = require('./util/ci')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
@@ -111,7 +115,10 @@ module.exports = class CiPlugin extends Plugin {
     const childOf = getTestParentSpan(this.tracer)
 
     let testTags = {
-      ...getTestCommonTags(testName, testSuite, this.frameworkVersion),
+      ...getTestCommonTags(testName,
+        testSuite,
+        this.frameworkVersion,
+        getTestType(this.testEnvironmentMetadata[TEST_FRAMEWORK])),
       [COMPONENT]: this.constructor.id,
       ...extraTags
     }

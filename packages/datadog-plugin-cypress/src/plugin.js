@@ -22,6 +22,9 @@ const {
   getTestSuitePath,
   addIntelligentTestRunnerSpanTags
 } = require('../../dd-trace/src/plugins/util/test')
+const {
+  getTestType
+} = require('../../dd-trace/src/plugins/util/ci')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
 
@@ -37,7 +40,7 @@ const CYPRESS_STATUS_TO_TEST_STATUS = {
 function getTestSpanMetadata (tracer, testName, testSuite, cypressConfig) {
   const childOf = getTestParentSpan(tracer)
 
-  const commonTags = getTestCommonTags(testName, testSuite, cypressConfig.version)
+  const commonTags = getTestCommonTags(testName, testSuite, cypressConfig.version, getTestType(TEST_FRAMEWORK_NAME))
 
   return {
     childOf,
