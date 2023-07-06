@@ -128,7 +128,7 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: williamconti549/dd-apm-test-agent:service-naming
+    image: williamconti549/dd-apm-test-agent:service-naming-2
     ports:
         - "127.0.0.1:9126:9126"
     environment:

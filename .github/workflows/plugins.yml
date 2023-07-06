@@ -892,7 +892,7 @@ jobs:
           - 1521:1521
           - 5500:5500
       testagent:
-        image: williamconti549/dd-apm-test-agent:service-naming
+        image: williamconti549/dd-apm-test-agent:service-naming-2
         env:
           LOG_LEVEL: DEBUG
           TRACE_LANGUAGE: javascript

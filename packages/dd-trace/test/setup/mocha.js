@@ -136,7 +136,7 @@ function withPeerService (tracer, spanGenerationFn, service, serviceSource) {
       // FIXME: workaround due to the evaluation order of mocha beforeEach
       const tracerObj = typeof tracer === 'function' ? tracer() : tracer
       computePeerServiceSpy = sinon.stub(tracerObj._tracer, '_computePeerService').value(true)
-      global.schemaVersionName = "v1"
+      global.schemaVersionName = "v0.5" // set to something other than v0 to allow peer.service check to run, but also don't set to v1 since we dont have expectedServiceName
     })
     afterEach(() => {
       computePeerServiceSpy.restore()
