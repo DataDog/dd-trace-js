@@ -11,7 +11,7 @@ const startCh = channel('apm:redis:command:start')
 const finishCh = channel('apm:redis:command:finish')
 const errorCh = channel('apm:redis:command:error')
 
-const state = []
+let createClientUrl
 
 function wrapAddCommand (addCommand) {
   return function (command) {
@@ -41,9 +41,9 @@ function wrapCommandQueueClass (cls) {
   const ret = class RedisCommandQueue extends cls {
     constructor () {
       super(arguments)
-      if (state.url) {
+      if (createClientUrl) {
         try {
-          const parsed = new URL(state.url)
+          const parsed = new URL(createClientUrl)
           if (parsed) {
             this._url = { host: parsed.hostname, port: +parsed.port || 6379 }
           }
@@ -59,9 +59,9 @@ function wrapCommandQueueClass (cls) {
 
 function wrapCreateClient (request) {
   return function (opts) {
-    state.url = opts && opts.url
+    createClientUrl = opts && opts.url
     const ret = request.apply(this, arguments)
-    delete state.url
+    delete createClientUrl
     return ret
   }
 }
