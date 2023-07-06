@@ -40,11 +40,11 @@ function getRewriter () {
       const Rewriter = iastRewriter.Rewriter
       getPrepareStackTrace = iastRewriter.getPrepareStackTrace
 
-      const chainSourceMap = isEnableSourceMapsFlagPresent()
-      getRewriterOriginalPathAndLineFromSourceMap =
-        getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, iastRewriter.getOriginalPathAndLineFromSourceMap)
+      //const chainSourceMap = isEnableSourceMapsFlagPresent()
+      //getRewriterOriginalPathAndLineFromSourceMap =
+      //  getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, iastRewriter.getOriginalPathAndLineFromSourceMap)
 
-      rewriter = new Rewriter({ csiMethods, chainSourceMap })
+      rewriter = new Rewriter({ csiMethods, chainSourceMap: false })
     } catch (e) {
       iastLog.error('Unable to initialize TaintTracking Rewriter')
         .errorAndPublish(e)
@@ -69,7 +69,6 @@ function getPrepareStackTraceAccessor () {
 
 function getCompileMethodFn (compileMethod) {
   return function (content, filename) {
-    console.log('compileMethod', filename, isPrivateModule(filename) && isNotLibraryFile(filename))
     try {
       if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
         const rewritten = rewriter.rewrite(content, filename)
@@ -99,7 +98,6 @@ function disableRewriter () {
 }
 
 function getOriginalPathAndLineFromSourceMap ({ path, line, column }) {
-  console.log('getOriginalPathAndLineFromSourceMap')
   return getRewriterOriginalPathAndLineFromSourceMap(path, line, column)
 }
 
