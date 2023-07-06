@@ -12,8 +12,11 @@ const {
   getCodeOwnersForFilename,
   getCoveredFilenamesFromCoverage,
   mergeCoverage,
-  resetCoverage
+  resetCoverage,
+  removeInvalidGitMetadata
 } = require('../../../src/plugins/util/test')
+
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
 
 describe('getTestParametersString', () => {
   it('returns formatted test parameters and removes params from input', () => {
@@ -161,6 +164,57 @@ describe('coverage utils', () => {
 
       // The copied coverage remains the same after the original reset
       expect(copiedCoverageJson).to.equal(JSON.stringify(newCoverageMap.toJSON()))
+    })
+  })
+})
+
+describe('metadata validation', () => {
+  it('should remove invalid metadata', () => {
+    const invalidMetadata1 = {
+      [GIT_REPOSITORY_URL]: 'www.datadog.com',
+      [CI_PIPELINE_URL]: 'www.datadog.com',
+      [GIT_COMMIT_SHA]: 'abc123'
+    }
+    const invalidMetadata2 = {
+      [GIT_REPOSITORY_URL]: 'https://datadog.com/repo',
+      [CI_PIPELINE_URL]: 'datadog.com',
+      [GIT_COMMIT_SHA]: 'abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123'
+    }
+    const invalidMetadata3 = {
+      [GIT_REPOSITORY_URL]: 'datadog.com',
+      [CI_PIPELINE_URL]: 'datadog.com',
+      [GIT_COMMIT_SHA]: 'abc123'
+    }
+    const invalidMetadata4 = {
+      [GIT_REPOSITORY_URL]: 'datadog.com/repo.git',
+      [CI_PIPELINE_URL]: 'www.datadog.com5',
+      [GIT_COMMIT_SHA]: 'abc123'
+    }
+    const invalidMetadata5 = { GIT_REPOSITORY_URL: '', CI_PIPELINE_URL: '', GIT_COMMIT_SHA: '' }
+    const invalidMetadatas = [invalidMetadata1, invalidMetadata2, invalidMetadata3, invalidMetadata4, invalidMetadata5]
+    invalidMetadatas.forEach((invalidMetadata) => {
+      expect(JSON.stringify(removeInvalidGitMetadata(invalidMetadata))).to.equal(JSON.stringify({}))
+    })
+  })
+  it('should keep valid metadata', () => {
+    const validMetadata1 = {
+      [GIT_REPOSITORY_URL]: 'https://datadoghq.com/myrepo/repo.git',
+      [CI_PIPELINE_URL]: 'https://datadog.com',
+      [GIT_COMMIT_SHA]: 'cb466452bfe18d4f6be2836c2a5551843013cf381234223920318230492823f3'
+    }
+    const validMetadata2 = {
+      [GIT_REPOSITORY_URL]: 'http://datadoghq.com/myrepo/repo.git',
+      [CI_PIPELINE_URL]: 'http://datadog.com',
+      [GIT_COMMIT_SHA]: 'cb466452bfe18d4f6be2836c2a5551843013cf38'
+    }
+    const validMetadata3 = {
+      [GIT_REPOSITORY_URL]: 'git@github.com:DataDog/dd-trace-js.git',
+      [CI_PIPELINE_URL]: 'https://datadog.com/pipeline',
+      [GIT_COMMIT_SHA]: 'cb466452bfe18d4f6be2836c2a5551843013cf381234223920318230492823f3'
+    }
+    const validMetadatas = [validMetadata1, validMetadata2, validMetadata3]
+    validMetadatas.forEach((validMetadata) => {
+      expect(JSON.stringify(removeInvalidGitMetadata(validMetadata))).to.be.equal(JSON.stringify(validMetadata))
     })
   })
 })
