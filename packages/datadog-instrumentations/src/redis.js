@@ -61,7 +61,7 @@ function wrapCreateClient (request) {
   return function (opts) {
     createClientUrl = opts && opts.url
     const ret = request.apply(this, arguments)
-    delete createClientUrl
+    createClientUrl = undefined
     return ret
   }
 }
