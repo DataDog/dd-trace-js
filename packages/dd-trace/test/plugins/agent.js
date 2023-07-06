@@ -35,7 +35,7 @@ function ciVisRequestHandler (request, response) {
   })
 }
 
-function addEnvironmentVariablesToHeaders (headers) {
+function addEnvironmentVariablesToHeaders (headers, traces) {
   return new Promise((resolve, reject) => {
     // get all environment variables that start with "DD_"
     var ddEnvVars = new Map(
@@ -43,11 +43,14 @@ function addEnvironmentVariablesToHeaders (headers) {
         .filter(([key]) => key.startsWith('DD_'))
         .map(([key, value]) => [key, value])
     )
-    debugger
     if (global.testAgentServiceName) {
       ddEnvVars.set('DD_SERVICE', global.testAgentServiceName)
     // } else if (tracer.service && tracer.service != process.env["DD_SERVICE"]) {
     //   ddEnvVars.set('DD_SERVICE', tracer.service)
+    }
+    if (global.schemaVersionName) {
+      console.log(global.testAgentServiceName)
+      console.log(traces[0][0].service)
     }
     ddEnvVars.set('DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', global.schemaVersionName)
   
@@ -83,7 +86,7 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
     delete req.headers['content-length']
 
     const testAgentRes = await new Promise(async (resolve, reject) => {
-      await addEnvironmentVariablesToHeaders(req.headers)
+      await addEnvironmentVariablesToHeaders(req.headers, req.body)
       const testAgentReq = http.request(
         `${testAgentUrl}/v0.4/traces`, {
           method: 'PUT',
@@ -100,20 +103,6 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
       testAgentReq.write(JSON.stringify(req.body))
       testAgentReq.end()
     })
-
-    if (testAgentRes.statusCode !== 200) {
-      // handle request failures from the Test Agent here
-      let body = ''
-      testAgentRes.on('data', chunk => {
-        body += chunk
-      })
-      await new Promise(resolve => testAgentRes.on('end', resolve))
-
-      if (!responseSent) {
-        res.status(400).send(body)
-        responseSent = true;
-      }
-    }
   }
 
   if (!responseSent) {

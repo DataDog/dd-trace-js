@@ -18,7 +18,7 @@ global.withExports = withExports
 global.withNamingSchema = withNamingSchema
 global.withPeerService = withPeerService
 global.testAgentServiceName = null
-global.schemaVersionName = "v0"
+global.schemaVersionName = null
 
 const packageVersionFailures = Object.create({})
 
@@ -75,7 +75,7 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
 
         afterEach(async () => {
           global.testAgentServiceName = null
-          global.schemaVersionName = "v0"
+          global.schemaVersionName = null
         })
 
         it(`should conform to the naming schema`, done => {
@@ -132,13 +132,14 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
 function withPeerService (tracer, spanGenerationFn, service, serviceSource) {
   describe('peer service computation', () => {
     let computePeerServiceSpy
-    beforeEach(() => {
+    beforeEach(async () => {
       // FIXME: workaround due to the evaluation order of mocha beforeEach
       const tracerObj = typeof tracer === 'function' ? tracer() : tracer
       computePeerServiceSpy = sinon.stub(tracerObj._tracer, '_computePeerService').value(true)
+      debugger
       global.schemaVersionName = "v0.5" // set to something other than v0 to allow peer.service check to run, but also don't set to v1 since we dont have expectedServiceName
     })
-    afterEach(() => {
+    afterEach(async () => {
       computePeerServiceSpy.restore()
       global.schemaVersionName = "v0"
     })
