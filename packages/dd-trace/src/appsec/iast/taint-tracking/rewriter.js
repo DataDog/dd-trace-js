@@ -8,6 +8,7 @@ const { csiMethods } = require('./csi-methods')
 
 let rewriter
 let getPrepareStackTrace
+/*
 let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) {
   return { path, line, column }
 }
@@ -32,6 +33,7 @@ function getGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, getOrig
     return getOriginalPathAndLineFromSourceMap
   }
 }
+*/
 
 function getRewriter () {
   if (!rewriter) {
@@ -97,10 +99,10 @@ function disableRewriter () {
   Error.prepareStackTrace = originalPrepareStackTrace
 }
 
-function getOriginalPathAndLineFromSourceMap ({ path, line, column }) {
+/*function getOriginalPathAndLineFromSourceMap ({ path, line, column }) {
   return getRewriterOriginalPathAndLineFromSourceMap(path, line, column)
-}
+}*/
 
 module.exports = {
-  enableRewriter, disableRewriter, getOriginalPathAndLineFromSourceMap
+  enableRewriter, disableRewriter //, getOriginalPathAndLineFromSourceMap
 }
