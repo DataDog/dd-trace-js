@@ -156,7 +156,7 @@ function isMoreSpecificThan (routeA, routeB) {
 }
 
 function routeIsRegex (route) {
-  return route.includes('(/') && route.includes('/)')
+  return route.includes('(/')
 }
 
 module.exports = RouterPlugin
