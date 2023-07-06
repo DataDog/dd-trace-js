@@ -73,6 +73,7 @@ function addEnvironmentVariablesToHeaders (headers) {
 
 async function handleTraceRequest (req, res, sendToTestAgent) {
   // handles the received trace request and sends trace to Test Agent if bool enabled.
+  let responseSent = false;
   if (sendToTestAgent) {
     const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
 
@@ -81,36 +82,44 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
     delete req.headers['content-type']
     delete req.headers['content-length']
 
-    // add current environment variables to trace headers
-    await addEnvironmentVariablesToHeaders(req.headers)
-
-    const testAgentReq = http.request(
-      `${testAgentUrl}/v0.4/traces`, {
-        method: 'PUT',
-        headers: {
-          ...req.headers,
-          'X-Datadog-Agent-Proxy-Disabled': 'True',
-          'Content-Type': 'application/json'
-        }
-      })
-
-    testAgentReq.on('response', testAgentRes => {
-      if (testAgentRes.statusCode !== 200) {
-        // handle request failures from the Test Agent here
-        let body = ''
-        testAgentRes.on('data', chunk => {
-          body += chunk
+    const testAgentRes = await new Promise(async (resolve, reject) => {
+      await addEnvironmentVariablesToHeaders(req.headers)
+      const testAgentReq = http.request(
+        `${testAgentUrl}/v0.4/traces`, {
+          method: 'PUT',
+          headers: {
+            ...req.headers,
+            'X-Datadog-Agent-Proxy-Disabled': 'True',
+            'Content-Type': 'application/json'
+          }
         })
-        testAgentRes.on('end', () => {
-          res.status(400).send(body)
-        })
-      }
+
+      testAgentReq.on('response', resolve)
+      testAgentReq.on('error', reject)
+
+      testAgentReq.write(JSON.stringify(req.body))
+      testAgentReq.end()
     })
-    testAgentReq.write(JSON.stringify(req.body))
-    testAgentReq.end()
+
+    if (testAgentRes.statusCode !== 200) {
+      // handle request failures from the Test Agent here
+      let body = ''
+      testAgentRes.on('data', chunk => {
+        body += chunk
+      })
+      await new Promise(resolve => testAgentRes.on('end', resolve))
+
+      if (!responseSent) {
+        res.status(400).send(body)
+        responseSent = true;
+      }
+    }
   }
 
-  res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
+  if (!responseSent) {
+    res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
+    responseSent = true;
+  }
   handlers.forEach(({ handler, spanResourceMatch }) => {
     const trace = req.body
     const spans = trace.flatMap(span => span)
