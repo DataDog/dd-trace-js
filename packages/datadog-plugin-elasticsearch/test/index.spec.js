@@ -55,6 +55,21 @@ describe('Plugin', () => {
           }, hasCallbackSupport ? () => {} : undefined)
         })
 
+        withPeerService(
+          () => tracer,
+          () => client.search({
+            index: 'docs',
+            sort: 'name',
+            size: 100,
+            body: {
+              query: {
+                match_all: {}
+              }
+            }
+          }, hasCallbackSupport ? () => {} : undefined),
+          'localhost', 'out.host'
+        )
+
         it('should set the correct tags', done => {
           agent
             .use(traces => {
@@ -65,6 +80,8 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
               expect(traces[0][0].meta).to.have.property('elasticsearch.url', '/docs/_search')
+              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+
               if (hasCallbackSupport) {
                 expect(traces[0][0].meta).to.have.property('elasticsearch.body', '{"query":{"match_all":{}}}')
                 expect(traces[0][0].meta).to.have.property('elasticsearch.params', '{"sort":"name","size":100}')
@@ -290,7 +307,8 @@ describe('Plugin', () => {
               hasCallbackSupport ? () => {} : undefined
             ),
             () => namingSchema.outbound.opName,
-            () => namingSchema.outbound.serviceName
+            () => namingSchema.outbound.serviceName,
+            'test'
           )
         })
       })
@@ -354,7 +372,8 @@ describe('Plugin', () => {
             hasCallbackSupport ? () => {} : undefined
           ),
           () => namingSchema.outbound.opName,
-          () => 'custom'
+          () => 'custom',
+          'custom'
         )
       })
     })

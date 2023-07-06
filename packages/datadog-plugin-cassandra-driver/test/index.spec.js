@@ -43,6 +43,12 @@ describe('Plugin', () => {
           client.shutdown(done)
         })
 
+        withPeerService(
+          () => tracer,
+          (done) => client.execute('SELECT now() FROM local;', err => err && done(err)),
+          '127.0.0.1', 'db.cassandra.contact.points'
+        )
+
         it('should do automatic instrumentation', done => {
           const query = 'SELECT now() FROM local;'
           agent
@@ -58,6 +64,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('cassandra.keyspace', 'system')
               expect(traces[0][0].meta).to.have.property('component', 'cassandra-driver')
               expect(traces[0][0].meta).to.have.property('network.destination.port', '9042')
+              expect(traces[0][0].meta).to.have.property('db.cassandra.contact.points', '127.0.0.1')
             })
             .then(done)
             .catch(done)
@@ -148,7 +155,8 @@ describe('Plugin', () => {
         withNamingSchema(
           done => client.execute('SELECT now() FROM local;', err => err && done(err)),
           () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName
+          () => namingSchema.outbound.serviceName,
+          'test'
         )
       })
 
@@ -193,7 +201,8 @@ describe('Plugin', () => {
         withNamingSchema(
           done => client.execute('SELECT now() FROM local;', err => err && done(err)),
           () => namingSchema.outbound.opName,
-          () => 'custom'
+          () => 'custom',
+          'custom'
         )
       })
 

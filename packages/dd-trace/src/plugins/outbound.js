@@ -35,7 +35,7 @@ class OutboundPlugin extends TracingPlugin {
      *   `_dd.peer.service.source`'s value is `peer.service`
      */
 
-    if (tags['peer.service']) {
+    if (tags['peer.service'] !== undefined) {
       return { [PEER_SERVICE_SOURCE_KEY]: 'peer.service' }
     }
 
@@ -43,6 +43,7 @@ class OutboundPlugin extends TracingPlugin {
       ...this.constructor.peerServicePrecursors,
       ...COMMON_PEER_SVC_SOURCE_TAGS
     ]
+
     for (const sourceTag of sourceTags) {
       if (tags[sourceTag]) {
         return {
@@ -61,13 +62,17 @@ class OutboundPlugin extends TracingPlugin {
 
   finish () {
     const span = this.activeSpan
+    this.tagPeerService(span)
+    super.finish(...arguments)
+  }
+
+  tagPeerService (span) {
     if (this.tracer._computePeerService) {
       const peerData = this.getPeerService(span.context()._tags)
       if (peerData) {
         span.addTags(peerData)
       }
     }
-    super.finish(...arguments)
   }
 
   connect (url) {

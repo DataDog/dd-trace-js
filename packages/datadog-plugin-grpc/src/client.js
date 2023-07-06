@@ -7,12 +7,13 @@ const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
 class GrpcClientPlugin extends ClientPlugin {
   static get id () { return 'grpc' }
   static get operation () { return 'client:request' }
+  static get peerServicePrecursors () { return ['rpc.service'] }
 
   start ({ metadata, path, type }) {
     const metadataFilter = this.config.metadataFilter
     const method = getMethodMetadata(path, type)
-    const span = this.startSpan('grpc.client', {
-      service: this.config.service,
+    const span = this.startSpan(this.operationName(), {
+      service: this.config.service || this.serviceName(),
       resource: path,
       kind: 'client',
       type: 'http',
@@ -28,6 +29,11 @@ class GrpcClientPlugin extends ClientPlugin {
         'grpc.status.code': 0
       }
     })
+
+    // needed as precursor for peer.service
+    if (method.service && method.package) {
+      span.setTag('rpc.service', method.package + '.' + method.service)
+    }
 
     if (metadata) {
       addMetadataTags(span, metadata, metadataFilter, 'request')

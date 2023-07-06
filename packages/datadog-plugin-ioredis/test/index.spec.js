@@ -110,7 +110,8 @@ describe('Plugin', () => {
         withNamingSchema(
           done => redis.get('foo').catch(done),
           () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName
+          () => namingSchema.outbound.serviceName,
+          'test'
         )
       })
 
@@ -151,7 +152,8 @@ describe('Plugin', () => {
           () => {
             if (Nomenclature.version === 'v0') return 'custom-test'
             return 'custom'
-          }
+          },
+          'custom'
         )
       })
 

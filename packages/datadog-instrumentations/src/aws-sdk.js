@@ -166,6 +166,11 @@ function getChannelSuffix (name) {
   ].includes(name) ? name : 'default'
 }
 
+addHook({ name: '@smithy/smithy-client', versions: ['>=1.0.3'] }, smithy => {
+  shimmer.wrap(smithy.Client.prototype, 'send', wrapSmithySend)
+  return smithy
+})
+
 addHook({ name: '@aws-sdk/smithy-client', versions: ['>=3'] }, smithy => {
   shimmer.wrap(smithy.Client.prototype, 'send', wrapSmithySend)
   return smithy

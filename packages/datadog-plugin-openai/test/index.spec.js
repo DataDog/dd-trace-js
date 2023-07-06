@@ -830,7 +830,7 @@ describe('Plugin', () => {
       describe('createFineTune()', () => {
         let scope
 
-        before(() => {
+        beforeEach(() => {
           scope = nock('https://api.openai.com:443')
             .post('/v1/fine-tunes')
             .reply(200, {
@@ -876,7 +876,7 @@ describe('Plugin', () => {
             ])
         })
 
-        after(() => {
+        afterEach(() => {
           nock.removeInterceptor(scope)
           scope.done()
         })
@@ -939,6 +939,19 @@ describe('Plugin', () => {
           })
 
           expect(result.data.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
+
+          await checkTraces
+        })
+
+        it('does not throw when missing classification betas', async () => {
+          const checkTraces = agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('name', 'openai.request')
+            })
+
+          await openai.createFineTune({
+            classification_betas: null
+          })
 
           await checkTraces
         })
@@ -1789,7 +1802,7 @@ describe('Plugin', () => {
         describe('createChatCompletion()', () => {
           let scope
 
-          before(() => {
+          beforeEach(() => {
             scope = nock('https://api.openai.com:443')
               .post('/v1/chat/completions')
               .reply(200, {
@@ -1823,7 +1836,7 @@ describe('Plugin', () => {
               ])
           })
 
-          after(() => {
+          afterEach(() => {
             nock.removeInterceptor(scope)
             scope.done()
           })
@@ -1931,6 +1944,20 @@ describe('Plugin', () => {
                 finish_reason: 'length',
                 index: 0
               }]
+            })
+
+            await checkTraces
+          })
+
+          it('does not error with invalid .messages or missing .logit_bias', async () => {
+            const checkTraces = agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('name', 'openai.request')
+              })
+
+            await openai.createChatCompletion({
+              model: 'gpt-3.5-turbo',
+              messages: null
             })
 
             await checkTraces

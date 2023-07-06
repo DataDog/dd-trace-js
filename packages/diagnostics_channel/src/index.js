@@ -54,4 +54,68 @@ if (major === '19' && minor === '9') {
   }
 }
 
+if (!Channel.prototype.runStores) {
+  const ActiveChannelPrototype = getActiveChannelPrototype()
+
+  Channel.prototype.bindStore = ActiveChannelPrototype.bindStore = function (store, transform) {
+    if (!this._stores) {
+      this._stores = new Map()
+    }
+    this._stores.set(store, transform)
+  }
+
+  Channel.prototype.unbindStore = ActiveChannelPrototype.runStores = function (store) {
+    if (!this._stores) return
+    this._stores.delete(store)
+  }
+
+  Channel.prototype.runStores = ActiveChannelPrototype.runStores = function (data, fn, thisArg, ...args) {
+    if (!this._stores) return Reflect.apply(fn, thisArg, args)
+
+    let run = () => {
+      this.publish(data)
+      return Reflect.apply(fn, thisArg, args)
+    }
+
+    for (const entry of this._stores.entries()) {
+      const store = entry[0]
+      const transform = entry[1]
+      run = wrapStoreRun(store, data, run, transform)
+    }
+
+    return run()
+  }
+}
+
+function defaultTransform (data) {
+  return data
+}
+
+function wrapStoreRun (store, data, next, transform = defaultTransform) {
+  return () => {
+    let context
+    try {
+      context = transform(data)
+    } catch (err) {
+      process.nextTick(() => {
+        throw err
+      })
+      return next()
+    }
+
+    return store.run(context, next)
+  }
+}
+
+function getActiveChannelPrototype () {
+  const dummyChannel = channel('foo')
+  const listener = () => {}
+
+  dummyChannel.subscribe(listener)
+  const ActiveChannelPrototype = Object.getPrototypeOf(dummyChannel)
+  dummyChannel.unsubscribe(listener)
+
+  return ActiveChannelPrototype
+}
+
 module.exports = dc
