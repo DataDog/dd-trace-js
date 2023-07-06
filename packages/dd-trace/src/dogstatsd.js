@@ -143,4 +143,17 @@ class DogStatsDClient {
   }
 }
 
-module.exports = DogStatsDClient
+class NoopDogStatsDClient {
+  gauge () { }
+
+  increment () { }
+
+  distribution () { }
+
+  flush () { }
+}
+
+module.exports = {
+  DogStatsDClient,
+  NoopDogStatsDClient
+}
