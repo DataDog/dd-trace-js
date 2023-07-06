@@ -5,6 +5,23 @@ const { getRootSpan } = require('./utils')
 const { MANUAL_KEEP } = require('../../../../../ext/tags')
 const { setUserTags } = require('./set_user')
 
+const UUID_PATTERN = '^[0-9A-F]{8}-[0-9A-F]{4}-[1-5][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$'
+const regexUsername = new RegExp(UUID_PATTERN, 'i')
+
+const SDK_USER_EVENT_PATTERN = '^_dd\\.appsec\\.events\\.users\\.[\\W\\w+]+\\.sdk$'
+const regexSdkEvent = new RegExp(SDK_USER_EVENT_PATTERN, 'i')
+
+function isSdkCalled (rootSpan) {
+  const tags = rootSpan && rootSpan.context() && rootSpan.context()._tags
+  let called = false
+
+  if (tags && typeof tags === 'object') {
+    called = Object.entries(tags).some(([key, value]) => regexSdkEvent.test(key) && value === 'true')
+  }
+
+  return called
+}
+
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
   if (!user || !user.id) {
@@ -18,9 +35,9 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
     return
   }
 
-  setUserTags(user, rootSpan)
+  const mData = { custom: { ...metadata } }
 
-  trackEvent('users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan, 'sdk')
+  trackEvent('users.login.success', user, mData, 'trackUserLoginSuccessEvent', rootSpan, 'sdk')
 }
 
 function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
@@ -29,13 +46,15 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
     return
   }
 
-  const fields = {
-    'usr.id': userId,
-    'usr.exists': exists ? 'true' : 'false',
-    ...metadata
+  const mData = {
+    user: {
+      id: userId,
+      exists: exists
+    },
+    custom: { ...metadata }
   }
 
-  trackEvent('users.login.failure', fields, 'trackUserLoginFailureEvent', getRootSpan(tracer), 'sdk')
+  trackEvent('users.login.failure', null, mData, 'trackUserLoginFailureEvent', getRootSpan(tracer), 'sdk')
 }
 
 function trackCustomEvent (tracer, eventName, metadata) {
@@ -44,10 +63,13 @@ function trackCustomEvent (tracer, eventName, metadata) {
     return
   }
 
-  trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer), 'sdk')
+  const mData = { custom: { ...metadata }
+  }
+
+  trackEvent(eventName, null, mData, 'trackCustomEvent', getRootSpan(tracer), 'sdk')
 }
 
-function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
+function trackEvent (eventName, user, metadata, sdkMethodName, rootSpan, mode) {
   if (!rootSpan) {
     log.warn(`Root span not available in ${sdkMethodName}`)
     return
@@ -66,9 +88,38 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
     tags[`_dd.appsec.events.${eventName}.auto.mode`] = mode
   }
 
-  if (fields) {
-    for (const metadataKey of Object.keys(fields)) {
-      tags[`appsec.events.${eventName}.${metadataKey}`] = '' + fields[metadataKey]
+  if (mode === 'safe') {
+    // Remove PII in safe mode
+    if (user) {
+      if (!regexUsername.test(user.id)) {
+        user = null
+      }
+    }
+
+    if (metadata && metadata.user) {
+      if (metadata.user.id && !regexUsername.test(metadata.user.id)) {
+        metadata = null
+      }
+    }
+  }
+
+  if (mode === 'sdk' || ((mode === 'safe' || mode === 'extended') && !isSdkCalled(rootSpan))) {
+    if (user) {
+      setUserTags(user, rootSpan)
+    }
+
+    if (metadata) {
+      if (metadata.user) {
+        for (const userKey of Object.keys(metadata.user)) {
+          tags[`appsec.events.${eventName}.usr.${userKey}`] = '' + metadata.user[userKey]
+        }
+      }
+
+      if (metadata.custom) {
+        for (const metadataKey of Object.keys(metadata.custom)) {
+          tags[`appsec.events.${eventName}.${metadataKey}`] = '' + metadata.custom[metadataKey]
+        }
+      }
     }
   }
 

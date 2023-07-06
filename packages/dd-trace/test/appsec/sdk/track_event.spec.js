@@ -21,7 +21,8 @@ describe('track_event', () => {
       }
 
       rootSpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
+        context: () => {}
       }
 
       getRootSpan = sinon.stub().callsFake(() => rootSpan)
@@ -69,11 +70,14 @@ describe('track_event', () => {
       it('should call setUser and addTags with metadata', () => {
         const user = { id: 'user_id' }
 
-        trackUserLoginSuccessEvent(tracer, user, {
-          metakey1: 'metaValue1',
-          metakey2: 'metaValue2',
-          metakey3: 'metaValue3'
-        })
+        trackUserLoginSuccessEvent(tracer,
+          user,
+          {
+            metakey1: 'metaValue1',
+            metakey2: 'metaValue2',
+            metakey3: 'metaValue3'
+          }
+        )
 
         expect(log.warn).to.not.have.been.called
         expect(setUserTags).to.have.been.calledOnceWithExactly(user, rootSpan)
@@ -229,7 +233,8 @@ describe('track_event', () => {
 
     describe('trackEvent', () => {
       it('should call addTags with safe mode', () => {
-        trackEvent('event', { metaKey1: 'metaValue1', metakey2: 'metaValue2' }, 'trackEvent', rootSpan, 'safe')
+        const metadata = { custom: { metaKey1: 'metaValue1', metakey2: 'metaValue2' } }
+        trackEvent('event', null, metadata, 'trackEvent', rootSpan, 'safe')
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.event.track': 'true',
           'manual.keep': 'true',
@@ -240,7 +245,8 @@ describe('track_event', () => {
       })
 
       it('should call addTags with extended mode', () => {
-        trackEvent('event', { metaKey1: 'metaValue1', metakey2: 'metaValue2' }, 'trackEvent', rootSpan, 'extended')
+        const metadata = { custom: { metaKey1: 'metaValue1', metakey2: 'metaValue2' } }
+        trackEvent('event', null, metadata, 'trackEvent', rootSpan, 'extended')
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.event.track': 'true',
           'manual.keep': 'true',
@@ -248,6 +254,195 @@ describe('track_event', () => {
           'appsec.events.event.metaKey1': 'metaValue1',
           'appsec.events.event.metakey2': 'metaValue2'
         })
+      })
+
+      it('should report login success and no id in safe mode when id is not a uuid', () => {
+        const user = {
+          id: 'publicName',
+          email: 'testUser@test.com',
+          username: 'Test User'
+        }
+
+        trackEvent('users.login.success', user, null, 'login', rootSpan, 'safe')
+
+        expect(setUserTags).not.to.have.been.called
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+          {
+            'appsec.events.users.login.success.track': 'true',
+            'manual.keep': 'true',
+            '_dd.appsec.events.users.login.success.auto.mode': 'safe'
+          }
+        )
+      })
+
+      it('should report login success and the extended fields in extended mode', () => {
+        const user = {
+          id: 'publicName',
+          email: 'testUser@test.com',
+          username: 'Test User'
+        }
+
+        trackEvent('users.login.success', user, null, 'login', rootSpan, 'extended')
+
+        expect(setUserTags).to.have.been.calledOnceWithExactly(
+          {
+            id: 'publicName',
+            email: 'testUser@test.com',
+            username: 'Test User'
+          },
+          rootSpan
+        )
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+          {
+            'appsec.events.users.login.success.track': 'true',
+            'manual.keep': 'true',
+            '_dd.appsec.events.users.login.success.auto.mode': 'extended'
+          }
+        )
+      })
+
+      it('should not call setUserTags in safe mode if sdk user event functions are already called', () => {
+        const user = {
+          id: 'publicName',
+          email: 'testUser@test.com',
+          username: 'Test User'
+        }
+
+        rootSpan.context = () => {
+          return {
+            _tags: {
+              '_dd.appsec.events.users.login.success.sdk': 'true'
+            }
+          }
+        }
+
+        trackEvent('users.login.success', user, null, 'login', rootSpan, 'safe')
+        expect(setUserTags).not.to.have.been.called
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+          {
+            'appsec.events.users.login.success.track': 'true',
+            'manual.keep': 'true',
+            '_dd.appsec.events.users.login.success.auto.mode': 'safe'
+          }
+        )
+      })
+
+      it('should not call setUserTags in extended mode if sdk login success function is already called', () => {
+        const user = {
+          id: 'publicName',
+          email: 'testUser@test.com',
+          username: 'Test User'
+        }
+
+        rootSpan.context = () => {
+          return {
+            _tags: {
+              '_dd.appsec.events.users.login.success.sdk': 'true'
+            }
+          }
+        }
+
+        trackEvent('users.login.success', user, null, 'login', rootSpan, 'extended')
+        expect(setUserTags).not.to.have.been.called
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+          {
+            'appsec.events.users.login.success.track': 'true',
+            'manual.keep': 'true',
+            '_dd.appsec.events.users.login.success.auto.mode': 'extended'
+          }
+        )
+      })
+
+      it('should not call setUserTags in extended mode if sdk login failure function is already called', () => {
+        const user = {
+          id: 'publicName',
+          email: 'testUser@test.com',
+          username: 'Test User'
+        }
+
+        rootSpan.context = () => {
+          return {
+            _tags: {
+              '_dd.appsec.events.users.login.failure.sdk': 'true'
+            }
+          }
+        }
+
+        trackEvent('users.login.failure', user, null, 'login', rootSpan, 'extended')
+        expect(setUserTags).not.to.have.been.called
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+          {
+            'appsec.events.users.login.failure.track': 'true',
+            'manual.keep': 'true',
+            '_dd.appsec.events.users.login.failure.auto.mode': 'extended'
+          }
+        )
+      })
+
+      it('should call setUserTags in extended mode if sdk custom event function is already called', () => {
+        const user = {
+          id: 'publicName',
+          email: 'testUser@test.com',
+          username: 'Test User'
+        }
+
+        rootSpan.context = () => {
+          return {
+            _tags: {
+              '_dd.appsec.events.custom.event.sdk': 'true'
+            }
+          }
+        }
+
+        trackEvent('users.login.success', user, null, 'login', rootSpan, 'extended')
+        expect(setUserTags).to.have.been.calledOnceWithExactly(
+          {
+            id: 'publicName',
+            email: 'testUser@test.com',
+            username: 'Test User'
+          },
+          rootSpan
+        )
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+          {
+            'appsec.events.users.login.success.track': 'true',
+            'manual.keep': 'true',
+            '_dd.appsec.events.users.login.success.auto.mode': 'extended'
+          }
+        )
+      })
+
+      it('should call setUserTags in sdk mode if sdk user event functions are already called', () => {
+        const user = {
+          id: 'publicName',
+          email: 'testUser@test.com',
+          username: 'Test User'
+        }
+
+        rootSpan.context = () => {
+          return {
+            _tags: {
+              '_dd.appsec.events.users.login.success.sdk': 'true'
+            }
+          }
+        }
+
+        trackEvent('users.login.success', user, null, 'login', rootSpan, 'sdk')
+        expect(setUserTags).to.have.been.calledOnceWithExactly(
+          {
+            id: 'publicName',
+            email: 'testUser@test.com',
+            username: 'Test User'
+          },
+          rootSpan
+        )
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+          {
+            'appsec.events.users.login.success.track': 'true',
+            'manual.keep': 'true',
+            '_dd.appsec.events.users.login.success.sdk': 'true'
+          }
+        )
       })
     })
   })
