@@ -41,9 +41,9 @@ function wrapCommandQueueClass (cls) {
   const ret = class RedisCommandQueue extends cls {
     constructor () {
       super(arguments)
-      if (state['url']) {
+      if (state.url) {
         try {
-          const parsed = new URL(state['url'])
+          const parsed = new URL(state.url)
           if (parsed) {
             this._url = { host: parsed.hostname, port: +parsed.port || 6379 }
           }
