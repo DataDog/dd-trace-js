@@ -8,7 +8,7 @@ const nock = require('nock')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const DogStatsDClient = require('../../dd-trace/src/dogstatsd')
+const { DogStatsDClient } = require('../../dd-trace/src/dogstatsd')
 const ExternalLogger = require('../../dd-trace/src/external-logger/src')
 const Sampler = require('../../dd-trace/src/sampler')
 
