@@ -59,9 +59,9 @@ function wrapCommandQueueClass (cls) {
 
 function wrapCreateClient (request) {
   return function (opts) {
-    state['url'] = opts?.url
+    state.url = opts && opts.url
     const ret = request.apply(this, arguments)
-    delete state['url']
+    delete state.url
     return ret
   }
 }
