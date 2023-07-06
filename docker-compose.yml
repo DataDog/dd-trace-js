@@ -134,7 +134,7 @@ services:
     environment:
         - LOG_LEVEL=DEBUG
         - TRACE_LANGUAGE=javascript
-        - DISABLE_ERROR_RESPONSES=true
-        - POOL_TRACE_CHECK_FAILURES=true
+        - DD_DISABLE_ERROR_RESPONSES=true
+        - DD_POOL_TRACE_CHECK_FAILURES=true
         - DISABLED_CHECKS=trace_content_length
         - PORT=9126
