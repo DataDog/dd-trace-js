@@ -64,8 +64,18 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
           })
         })
 
+        beforeEach(async () => {
+          global.testAgentServiceName = expectedServiceName()
+          global.schemaVersionName = versionName
+        })
+
         after(() => {
           Nomenclature.configure(fullConfig)
+        })
+
+        afterEach(async () => {
+          global.testAgentServiceName = null
+          global.schemaVersionName = "v0"
         })
 
         it(`should conform to the naming schema`, done => {
@@ -77,11 +87,7 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
             })
             .then(done)
             .catch(done)
-          global.testAgentServiceName = expectedServiceName()
-          global.schemaVersionName = versionName
           spanProducerFn(done)
-          global.testAgentServiceName = null
-          global.schemaVersionName = "v0"
         })
       })
     })
@@ -95,8 +101,18 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
           traceRemoveIntegrationServiceNamesEnabled: true
         })
       })
+
+      beforeEach(async () => {
+        global.testAgentServiceName = expectedShortCircuitName
+        global.schemaVersionName = "v0"
+      })
       after(() => {
         Nomenclature.configure(fullConfig)
+      })
+
+      afterEach(async () => {
+        global.testAgentServiceName = null
+        global.schemaVersionName = "v0"
       })
 
       it('should pass service name through', done => {
@@ -107,10 +123,7 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
           })
           .then(done)
           .catch(done)
-        global.testAgentServiceName = expectedShortCircuitName
-        global.schemaVersionName = "v0"
         spanProducerFn(done)
-        global.testAgentServiceName = null
       })
     })
   })
@@ -137,9 +150,7 @@ function withPeerService (tracer, spanGenerationFn, service, serviceSource) {
         })
         .then(done)
         .catch(done)
-      global.schemaVersionName = "v1"
       spanGenerationFn(done)
-      global.schemaVersionName = "v0"
     })
   })
 }
