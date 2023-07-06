@@ -17,3 +17,10 @@ runs:
           exit 1
         fi
       shell: bash
+    - uses: actions/checkout@v2
+    - run: |
+        RESPONSE=$(curl -s -w "\n%{http_code}" -o response.txt http://127.0.0.1:9126/test/trace_check/summary)
+        RESPONSE_CODE=$(echo "$RESPONSE" | awk 'END {print $NF}')
+        echo "APM Test Agent Check Traces Summary Results:"
+        cat response.txt
+      shell: bash
