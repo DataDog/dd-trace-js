@@ -22,9 +22,6 @@ const {
   getTestSuitePath,
   addIntelligentTestRunnerSpanTags
 } = require('../../dd-trace/src/plugins/util/test')
-const {
-  getTestType
-} = require('../../dd-trace/src/plugins/util/ci')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
 

@@ -101,7 +101,7 @@ function resolveTilde (filePath) {
 
 module.exports = {
   normalizeRef,
-  getTestType,
+  getTestTypeFromFramework,
   getCIMetadata () {
     const { env } = process
 

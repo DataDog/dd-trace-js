@@ -6,7 +6,7 @@ const ignore = require('ignore')
 
 const { getGitMetadata } = require('./git')
 const { getUserProviderGitMetadata } = require('./user-provided-git')
-const { getCIMetadata } = require('./ci')
+const { getCIMetadata, getTestTypeFromFramework } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
 const {
   GIT_BRANCH,
@@ -191,7 +191,7 @@ function getTestParentSpan (tracer) {
 function getTestCommonTags (name, suite, version, testFramework) {
   return {
     [SPAN_TYPE]: 'test',
-    [TEST_TYPE]: getTestType(testFramework),
+    [TEST_TYPE]: getTestTypeFromFramework(testFramework),
     [SAMPLING_RULE_DECISION]: 1,
     [SAMPLING_PRIORITY]: AUTO_KEEP,
     [TEST_NAME]: name,

@@ -12,12 +12,8 @@ const {
   TEST_MODULE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND,
-  TEST_MODULE,
-  TEST_FRAMEWORK
+  TEST_MODULE
 } = require('./util/test')
-const {
-  getTestType
-} = require('./util/ci')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
@@ -118,7 +114,7 @@ module.exports = class CiPlugin extends Plugin {
       ...getTestCommonTags(testName,
         testSuite,
         this.frameworkVersion,
-        this.constructor.id,
+        this.constructor.id),
       [COMPONENT]: this.constructor.id,
       ...extraTags
     }
