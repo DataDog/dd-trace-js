@@ -74,6 +74,7 @@ versions.forEach((version) => {
             assert.include(testModuleEvent.content.resource, 'test_module.playwright test')
             assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
             assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'browser')
+            assert.equal(testModuleEvent.content.meta[TEST_TYPE], 'browser')
             assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
               'test_suite.todo-list-page-test.js',
               'test_suite.landing-page-test.js',

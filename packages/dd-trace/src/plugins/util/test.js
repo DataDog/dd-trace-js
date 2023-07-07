@@ -174,7 +174,7 @@ function getTestParametersString (parametersByTestName, testName) {
 }
 
 function getTestTypeFromFramework (testFramework) {
-  if (testFramework.includes('playwright') || testFramework.includes('cypress')) {
+  if (testFramework === 'playwright' || testFramework === 'cypress') {
     return 'browser'
   }
   return 'test'
@@ -276,12 +276,12 @@ function getCodeOwnersForFilename (filename, entries) {
   return null
 }
 
-function getTestLevelCommonTags (command, testFrameworkVersion) {
+function getTestLevelCommonTags (command, testFrameworkVersion, testFramework) {
   return {
     [TEST_FRAMEWORK_VERSION]: testFrameworkVersion,
     [LIBRARY_VERSION]: ddTraceVersion,
     [TEST_COMMAND]: command,
-    [TEST_TYPE]: 'test'
+    [TEST_TYPE]: getTestTypeFromFramework(testFramework)
   }
 }
 
@@ -291,7 +291,7 @@ function getTestSessionCommonTags (command, testFrameworkVersion, testFramework)
     [RESOURCE_NAME]: `test_session.${command}`,
     [TEST_MODULE]: testFramework,
     [TEST_TOOLCHAIN]: getPkgManager(),
-    ...getTestLevelCommonTags(command, testFrameworkVersion)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
   }
 }
 
@@ -300,7 +300,7 @@ function getTestModuleCommonTags (command, testFrameworkVersion, testFramework) 
     [SPAN_TYPE]: 'test_module_end',
     [RESOURCE_NAME]: `test_module.${command}`,
     [TEST_MODULE]: testFramework,
-    ...getTestLevelCommonTags(command, testFrameworkVersion)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
   }
 }
 
@@ -310,7 +310,7 @@ function getTestSuiteCommonTags (command, testFrameworkVersion, testSuite, testF
     [RESOURCE_NAME]: `test_suite.${testSuite}`,
     [TEST_MODULE]: testFramework,
     [TEST_SUITE]: testSuite,
-    ...getTestLevelCommonTags(command, testFrameworkVersion)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
   }
 }
 
