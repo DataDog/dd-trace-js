@@ -48,10 +48,6 @@ function addEnvironmentVariablesToHeaders (headers, traces) {
     // } else if (tracer.service && tracer.service != process.env["DD_SERVICE"]) {
     //   ddEnvVars.set('DD_SERVICE', tracer.service)
     }
-    if (global.schemaVersionName) {
-      console.log(global.testAgentServiceName)
-      console.log(traces[0][0].service)
-    }
     ddEnvVars.set('DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', global.schemaVersionName)
   
     for (let i = 0; i < plugins.length; i++) {
@@ -97,18 +93,21 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
           }
         })
 
-      testAgentReq.on('response', resolve)
-      testAgentReq.on('error', reject)
-
+      testAgentReq.on('response', () => {
+        res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
+        resolve()
+      })
+      testAgentReq.on('error', () => {
+        res.status(500).send(error)
+        reject(error)
+      })
       testAgentReq.write(JSON.stringify(req.body))
       testAgentReq.end()
     })
+  } else {
+    res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
   }
 
-  if (!responseSent) {
-    res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
-    responseSent = true;
-  }
   handlers.forEach(({ handler, spanResourceMatch }) => {
     const trace = req.body
     const spans = trace.flatMap(span => span)
