@@ -63,13 +63,9 @@ class GrpcClientPlugin extends ClientPlugin {
     return parentStore
   }
 
-  error ({ error }) {
-    const span = this.activeSpan
-
-    if (!span) return
-
+  error ({ span, error }) {
     this.addCode(span, error.code)
-    this.addError(error)
+    this.addError(error, span)
   }
 
   finish ({ span, result }) {
