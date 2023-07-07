@@ -129,7 +129,7 @@ function validateUrl (url) {
   }
 }
 
-function removeInvalidGitMetadata (metadata) {
+function removeInvalidMetadata (metadata) {
   return Object.keys(metadata).reduce((filteredTags, tag) => {
     if (tag === GIT_REPOSITORY_URL) {
       if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
@@ -147,9 +147,6 @@ function removeInvalidGitMetadata (metadata) {
       if (!validateUrl(metadata[CI_PIPELINE_URL])) {
         return filteredTags
       }
-    }
-    if (!metadata[tag]) {
-      return filteredTags
     }
     filteredTags[tag] = metadata[tag]
     return filteredTags

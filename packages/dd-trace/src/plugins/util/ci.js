@@ -93,7 +93,6 @@ function resolveTilde (filePath) {
 }
 
 module.exports = {
-  removeEmptyValues,
   normalizeRef,
   getCIMetadata () {
     const { env } = process
