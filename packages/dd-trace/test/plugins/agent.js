@@ -95,7 +95,7 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
             }
           })
         testAgentReq.on('response', resolve)
-        testAgentReq.on('error', reject(error))
+        testAgentReq.on('error', reject)
         testAgentReq.write(JSON.stringify(req.body))
         testAgentReq.end()
       })

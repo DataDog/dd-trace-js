@@ -65,6 +65,7 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
         })
 
         beforeEach(async () => {
+          await new Promise(resolve => setTimeout(resolve, 15))
           global.testAgentServiceName = expectedServiceName()
           global.schemaVersionName = versionName
         })
@@ -103,6 +104,7 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
       })
 
       beforeEach(async () => {
+        await new Promise(resolve => setTimeout(resolve, 15))
         global.testAgentServiceName = expectedShortCircuitName
         global.schemaVersionName = "v0"
       })
