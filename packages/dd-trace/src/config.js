@@ -69,10 +69,7 @@ function propagationStyle (key, option, defaultValue) {
   }
 
   // Should be an array at this point
-  if (Array.isArray(option)) {
-    const style = option.map(v => v.toLowerCase())
-    return new ConfigOrigin(style, 'code')
-  }
+  if (Array.isArray(option)) return option.map(v => v.toLowerCase())
 
   // If it's not an array but not undefined there's something wrong with the input
   if (typeof option !== 'undefined') {
@@ -83,42 +80,12 @@ function propagationStyle (key, option, defaultValue) {
   const envKey = `DD_TRACE_PROPAGATION_STYLE_${key.toUpperCase()}`
   const envVar = coalesce(process.env[envKey], process.env.DD_TRACE_PROPAGATION_STYLE)
   if (typeof envVar !== 'undefined') {
-    const style = envVar.split(',')
+    return envVar.split(',')
       .filter(v => v !== '')
       .map(v => v.trim().toLowerCase())
-    return new ConfigOrigin(style, 'env_var')
   }
 
-  return new ConfigOrigin(defaultValue, 'default')
-}
-
-class ConfigOrigin {
-  constructor (value, origin) {
-    this.value = value
-    this.origin = origin
-  }
-
-  get value () {
-    return this.value
-  }
-
-  get origin () {
-    return this.origin
-  }
-}
-
-function getConfigOrigin (code, env, def = undefined) {
-  for (const value in code) {
-    if (value) {
-      return new ConfigOrigin(value, 'code')
-    }
-  }
-  for (const value in env) {
-    if (value) {
-      return new ConfigOrigin(value, 'env_var')
-    }
-  }
-  return new ConfigOrigin(def, 'default')
+  return defaultValue
 }
 
 class Config {
@@ -147,42 +114,73 @@ class Config {
     tagger.add(this.tags, process.env.DD_TRACE_GLOBAL_TAGS)
     tagger.add(this.tags, options.tags)
 
-    const configWithOrigin = {}
+    const DD_TRACING_ENABLED = coalesce(
+      process.env.DD_TRACING_ENABLED,
+      true
+    )
+    const DD_PROFILING_ENABLED = coalesce(
+      options.profiling, // TODO: remove when enabled by default
+      process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,
+      process.env.DD_PROFILING_ENABLED,
+      false
+    )
+    const DD_PROFILING_EXPORTERS = coalesce(
+      process.env.DD_PROFILING_EXPORTERS,
+      'agent'
+    )
+    const DD_PROFILING_SOURCE_MAP = process.env.DD_PROFILING_SOURCE_MAP
+    const DD_LOGS_INJECTION = coalesce(
+      options.logInjection,
+      process.env.DD_LOGS_INJECTION,
+      false
+    )
+    const DD_RUNTIME_METRICS_ENABLED = coalesce(
+      options.runtimeMetrics, // TODO: remove when enabled by default
+      process.env.DD_RUNTIME_METRICS_ENABLED,
+      false
+    )
+    const DD_DBM_PROPAGATION_MODE = coalesce(
+      options.dbmPropagationMode,
+      process.env.DD_DBM_PROPAGATION_MODE,
+      'disabled'
+    )
+    const DD_DATA_STREAMS_ENABLED = coalesce(
+      options.dsmEnabled,
+      process.env.DD_DATA_STREAMS_ENABLED,
+      false
+    )
+    const DD_AGENT_HOST = coalesce(
+      options.hostname,
+      process.env.DD_AGENT_HOST,
+      process.env.DD_TRACE_AGENT_HOSTNAME,
+      '127.0.0.1'
+    )
+    const DD_TRACE_AGENT_PORT = coalesce(
+      options.port,
+      process.env.DD_TRACE_AGENT_PORT,
+      '8126'
+    )
+    const DD_TRACE_AGENT_URL = coalesce(
+      options.url,
+      process.env.DD_TRACE_AGENT_URL,
+      process.env.DD_TRACE_URL,
+      null
+    )
+    const DD_IS_CIVISIBILITY = coalesce(
+      options.isCiVisibility,
+      false
+    )
+    const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
 
-    configWithOrigin.DD_TRACING_ENABLED = getConfigOrigin([], [process.env.DD_TRACING_ENABLED], true)
+    const DD_CIVISIBILITY_ITR_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_ITR_ENABLED,
+      true
+    )
 
-    configWithOrigin.DD_PROFILING_ENABLED = getConfigOrigin([options.profiling], // TODO: remove when enabled by default
-      [process.env.DD_EXPERIMENTAL_PROFILING_ENABLED, process.env.DD_PROFILING_ENABLED], false)
-
-    configWithOrigin.DD_PROFILING_EXPORTERS = getConfigOrigin([], [process.env.DD_PROFILING_EXPORTERS], 'agent')
-
-    configWithOrigin.DD_PROFILING_SOURCE_MAP = new ConfigOrigin(process.env.DD_PROFILING_SOURCE_MAP, 'env_var')
-
-    configWithOrigin.DD_LOGS_INJECTION = getConfigOrigin([options.logInjection], [process.env.DD_LOGS_INJECTION], false)
-
-    configWithOrigin.DD_RUNTIME_METRICS_ENABLED = getConfigOrigin(
-      [options.runtimeMetrics], // TODO: remove when enabled by default
-      [process.env.DD_RUNTIME_METRICS_ENABLED], false)
-
-    configWithOrigin.DD_DBM_PROPAGATION_MODE = getConfigOrigin(
-      [options.dbmPropagationMode], [process.env.DD_DBM_PROPAGATION_MODE], 'disabled')
-
-    configWithOrigin.DD_AGENT_HOST = getConfigOrigin([options.hostname],
-      [process.env.DD_AGENT_HOST, process.env.DD_TRACE_AGENT_HOSTNAME], '127.0.0.1')
-
-    configWithOrigin.DD_TRACE_AGENT_PORT = getConfigOrigin(
-      [options.port], [process.env.DD_TRACE_AGENT_PORT], '8126')
-
-    configWithOrigin.DD_TRACE_AGENT_URL = getConfigOrigin([options.url],
-      [process.env.DD_TRACE_AGENT_URL, process.env.DD_TRACE_URL], null)
-
-    configWithOrigin.DD_IS_CIVISIBILITY = getConfigOrigin([options.isCiVisibility], [], false)
-
-    configWithOrigin.DD_CIVISIBILITY_AGENTLESS_URL =
-    new ConfigOrigin(process.env.DD_CIVISIBILITY_AGENTLESS_URL, 'env_var')
-
-    configWithOrigin.DD_CIVISIBILITY_ITR_ENABLED = getConfigOrigin(
-      process.env.DD_CIVISIBILITY_ITR_ENABLED, true)
+    const DD_CIVISIBILITY_MANUAL_API_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
+      false
+    )
 
     const DD_SERVICE = options.service ||
       process.env.DD_SERVICE ||
@@ -193,70 +191,94 @@ class Config {
       process.env.K_SERVICE || // Google Cloud Function Name set by newer runtimes
       pkg.name ||
       'node'
-    if (DD_SERVICE === options.service) {
-      configWithOrigin.DD_SERVICE = new ConfigOrigin(DD_SERVICE, 'code')
-    } else if (DD_SERVICE === 'node') {
-      configWithOrigin.DD_SERVICE = new ConfigOrigin(DD_SERVICE, 'default')
-    } else {
-      configWithOrigin.DD_SERVICE = new ConfigOrigin(DD_SERVICE, 'env_var')
-    }
-
     const DD_SERVICE_MAPPING = coalesce(
       options.serviceMapping,
       process.env.DD_SERVICE_MAPPING ? fromEntries(
         process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ) : {}
     )
-    if (DD_SERVICE_MAPPING) {
-      if (DD_SERVICE_MAPPING === options.serviceMapping) {
-        configWithOrigin.DD_SERVICE_MAPPING = new ConfigOrigin(DD_SERVICE_MAPPING, 'code')
-      } else {
-        configWithOrigin.DD_SERVICE_MAPPING = new ConfigOrigin(DD_SERVICE_MAPPING, 'env_var')
-      }
-    }
+    const DD_ENV = coalesce(
+      options.env,
+      process.env.DD_ENV,
+      this.tags.env
+    )
+    const DD_VERSION = coalesce(
+      options.version,
+      process.env.DD_VERSION,
+      this.tags.version,
+      pkg.version
+    )
+    const DD_TRACE_STARTUP_LOGS = coalesce(
+      options.startupLogs,
+      process.env.DD_TRACE_STARTUP_LOGS,
+      false
+    )
 
-    configWithOrigin.DD_ENV = getConfigOrigin([options.env],
-      [process.env.DD_ENV, this.tags.env])
+    const DD_OPENAI_LOGS_ENABLED = coalesce(
+      options.openAiLogsEnabled,
+      process.env.DD_OPENAI_LOGS_ENABLED,
+      false
+    )
 
-    configWithOrigin.DD_VERSION = getConfigOrigin([options.version],
-      [process.env.DD_VERSION, this.tags.version, pkg.version])
-
-    configWithOrigin.DD_TRACE_STARTUP_LOGS = getConfigOrigin(
-      [options.startupLogs], [process.env.DD_TRACE_STARTUP_LOGS], false)
+    const DD_API_KEY = coalesce(
+      process.env.DATADOG_API_KEY,
+      process.env.DD_API_KEY
+    )
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+
     const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
     const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
     const isGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
+
     const inServerlessEnvironment = inAWSLambda || isGCPFunction
 
-    configWithOrigin.DD_TRACE_TELEMETRY_ENABLED = getConfigOrigin(
-      [process.env.DD_TRACE_TELEMETRY_ENABLED], [!inServerlessEnvironment])
-
-    configWithOrigin.DD_TELEMETRY_DEBUG_ENABLED = getConfigOrigin(
-      [], [process.env.DD_TELEMETRY_DEBUG_ENABLED], false)
-
-    configWithOrigin.DD_TRACE_AGENT_PROTOCOL_VERSION = getConfigOrigin(
-      [options.protocolVersion], [process.env.DD_TRACE_AGENT_PROTOCOL_VERSION], '0.4')
-
-    configWithOrigin.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = getConfigOrigin(
-      [parseInt(options.flushMinSpans)], [parseInt(process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS)], 1000)
-
-    configWithOrigin.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = getConfigOrigin(
-      [], [process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP], qsRegex)
-
-    configWithOrigin.DD_TRACE_CLIENT_IP_ENABLED = getConfigOrigin([options.clientIpEnabled],
-      [process.env.DD_TRACE_CLIENT_IP_ENABLED && isTrue(process.env.DD_TRACE_CLIENT_IP_ENABLED)], false)
-
-    configWithOrigin.DD_TRACE_CLIENT_IP_HEADER = getConfigOrigin([options.clientIpHeader],
-      [process.env.DD_TRACE_CLIENT_IP_HEADER], null)
-
+    const DD_TRACE_TELEMETRY_ENABLED = coalesce(
+      process.env.DD_TRACE_TELEMETRY_ENABLED,
+      !inServerlessEnvironment
+    )
+    const DD_TELEMETRY_HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
+      ? parseInt(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000
+      : 60000
+    const DD_OPENAI_SPAN_CHAR_LIMIT = process.env.DD_OPENAI_SPAN_CHAR_LIMIT
+      ? parseInt(process.env.DD_OPENAI_SPAN_CHAR_LIMIT)
+      : 128
+    const DD_TELEMETRY_DEBUG = coalesce(
+      process.env.DD_TELEMETRY_DEBUG,
+      false
+    )
+    const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
+      options.protocolVersion,
+      process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
+      '0.4'
+    )
+    const DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = coalesce(
+      parseInt(options.flushMinSpans),
+      parseInt(process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS),
+      1000
+    )
+    const DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = coalesce(
+      process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
+      qsRegex
+    )
+    const DD_TRACE_CLIENT_IP_ENABLED = coalesce(
+      options.clientIpEnabled,
+      process.env.DD_TRACE_CLIENT_IP_ENABLED && isTrue(process.env.DD_TRACE_CLIENT_IP_ENABLED),
+      false
+    )
+    const DD_TRACE_CLIENT_IP_HEADER = coalesce(
+      options.clientIpHeader,
+      process.env.DD_TRACE_CLIENT_IP_HEADER,
+      null
+    )
     // TODO: Remove the experimental env vars as a major?
-    configWithOrigin.DD_TRACE_B3_ENABLED = getConfigOrigin([options.experimental && options.experimental.b3],
-      [process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED], false)
-
+    const DD_TRACE_B3_ENABLED = coalesce(
+      options.experimental && options.experimental.b3,
+      process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
+      false
+    )
     const defaultPropagationStyle = ['tracecontext', 'datadog']
-    if (isTrue(configWithOrigin.DD_TRACE_B3_ENABLED.value)) {
+    if (isTrue(DD_TRACE_B3_ENABLED)) {
       defaultPropagationStyle.push('b3')
       defaultPropagationStyle.push('b3 single header')
     }
@@ -270,55 +292,59 @@ class Config {
         'environment variables'
       )
     }
-    configWithOrigin.DD_TRACE_PROPAGATION_STYLE_INJECT = propagationStyle(
+    const DD_TRACE_PROPAGATION_STYLE_INJECT = propagationStyle(
       'inject',
       options.tracePropagationStyle,
       defaultPropagationStyle
     )
-    configWithOrigin.DD_TRACE_PROPAGATION_STYLE_EXTRACT = propagationStyle(
+    const DD_TRACE_PROPAGATION_STYLE_EXTRACT = propagationStyle(
       'extract',
       options.tracePropagationStyle,
       defaultPropagationStyle
     )
-    configWithOrigin.DD_TRACE_RUNTIME_ID_ENABLED = getConfigOrigin(
-      [options.experimental && options.experimental.runtimeId],
-      [process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED],
+    const DD_TRACE_RUNTIME_ID_ENABLED = coalesce(
+      options.experimental && options.experimental.runtimeId,
+      process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
       false
     )
-    configWithOrigin.DD_TRACE_EXPORTER = getConfigOrigin(
-      [options.experimental && options.experimental.exporter],
-      [process.env.DD_TRACE_EXPERIMENTAL_EXPORTER]
+    const DD_TRACE_EXPORTER = coalesce(
+      options.experimental && options.experimental.exporter,
+      process.env.DD_TRACE_EXPERIMENTAL_EXPORTER
     )
-    configWithOrigin.DD_TRACE_GET_RUM_DATA_ENABLED = getConfigOrigin(
-      [options.experimental && options.experimental.enableGetRumData],
-      [process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED],
+    const DD_TRACE_GET_RUM_DATA_ENABLED = coalesce(
+      options.experimental && options.experimental.enableGetRumData,
+      process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       false
     )
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     )
-    configWithOrigin.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = new ConfigOrigin(
-      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA, 'env_var'
+    const DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+
+    const DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = coalesce(
+      isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED),
+      false
     )
-    configWithOrigin.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = getConfigOrigin(
-      [], [process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH],
+    const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
+      process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       '512'
     )
 
-    configWithOrigin.DD_TRACE_STATS_COMPUTATION_ENABLED = getConfigOrigin(
-      [options.stats],
-      [process.env.DD_TRACE_STATS_COMPUTATION_ENABLED, isGCPFunction]
+    const DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
+      options.stats,
+      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
+      isGCPFunction
     )
 
-    configWithOrigin.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = getConfigOrigin(
-      [options.traceId128BitGenerationEnabled],
-      [process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED],
+    const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
+      options.traceId128BitGenerationEnabled,
+      process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
       false
     )
 
-    configWithOrigin.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = getConfigOrigin(
-      [options.traceId128BitLoggingEnabled],
-      [process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED],
+    const DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = coalesce(
+      options.traceId128BitLoggingEnabled,
+      process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,
       false
     )
 
@@ -332,125 +358,119 @@ class Config {
       appsec = {}
     }
 
-    configWithOrigin.DD_APPSEC_ENABLED = getConfigOrigin(
-      [appsec.enabled],
-      [process.env.DD_APPSEC_ENABLED && isTrue(process.env.DD_APPSEC_ENABLED)]
+    const DD_APPSEC_ENABLED = coalesce(
+      appsec.enabled,
+      process.env.DD_APPSEC_ENABLED && isTrue(process.env.DD_APPSEC_ENABLED)
     )
 
-    configWithOrigin.DD_APPSEC_RULES = getConfigOrigin(
-      [appsec.rules], [process.env.DD_APPSEC_RULES]
+    const DD_APPSEC_RULES = coalesce(
+      appsec.rules,
+      process.env.DD_APPSEC_RULES
     )
-    configWithOrigin.DD_APPSEC_TRACE_RATE_LIMIT = getConfigOrigin(
-      [parseInt(appsec.rateLimit)],
-      [parseInt(process.env.DD_APPSEC_TRACE_RATE_LIMIT)],
+    const DD_APPSEC_TRACE_RATE_LIMIT = coalesce(
+      parseInt(appsec.rateLimit),
+      parseInt(process.env.DD_APPSEC_TRACE_RATE_LIMIT),
       100
     )
-    configWithOrigin.DD_APPSEC_WAF_TIMEOUT = getConfigOrigin(
-      [parseInt(appsec.wafTimeout)],
-      [parseInt(process.env.DD_APPSEC_WAF_TIMEOUT)],
+    const DD_APPSEC_WAF_TIMEOUT = coalesce(
+      parseInt(appsec.wafTimeout),
+      parseInt(process.env.DD_APPSEC_WAF_TIMEOUT),
       5e3 // µs
     )
-    configWithOrigin.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = getConfigOrigin(
-      [appsec.obfuscatorKeyRegex],
-      [process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP],
+    const DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = coalesce(
+      appsec.obfuscatorKeyRegex,
+      process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?)key)|token|consumer_?(?:id|key|se\
 cret)|sign(?:ed|ature)|bearer|authorization`
     )
-    configWithOrigin.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = getConfigOrigin(
-      [appsec.obfuscatorValueRegex],
-      [process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP],
+    const DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = coalesce(
+      appsec.obfuscatorValueRegex,
+      process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|to\
 ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\
 \\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?\
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
     )
-    configWithOrigin.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = getConfigOrigin(
-      [maybeFile(appsec.blockedTemplateHtml)],
-      [maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)]
+    const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = coalesce(
+      maybeFile(appsec.blockedTemplateHtml),
+      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
     )
-    configWithOrigin.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = getConfigOrigin(
-      [maybeFile(appsec.blockedTemplateJson)],
-      [maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)]
+    const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = coalesce(
+      maybeFile(appsec.blockedTemplateJson),
+      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
     )
+    const DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = coalesce(
+      appsec.eventTracking && appsec.eventTracking.mode,
+      process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
+      'safe'
+    ).toLowerCase()
 
     const remoteConfigOptions = options.remoteConfig || {}
-    configWithOrigin.DD_REMOTE_CONFIGURATION_ENABLED = getConfigOrigin(
-      [process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
-        !inServerlessEnvironment]
+    const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
+      process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
+      !inServerlessEnvironment
     )
-    configWithOrigin.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = getConfigOrigin(
-      [parseInt(remoteConfigOptions.pollInterval)],
-      [parseInt(process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)],
+    const DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = coalesce(
+      parseInt(remoteConfigOptions.pollInterval),
+      parseInt(process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS),
       5 // seconds
     )
 
     const iastOptions = options.experimental && options.experimental.iast
-    configWithOrigin.DD_IAST_ENABLED = getConfigOrigin(
-      [iastOptions && (iastOptions === true || iastOptions.enabled === true)],
-      [process.env.DD_IAST_ENABLED],
+    const DD_IAST_ENABLED = coalesce(
+      iastOptions &&
+      (iastOptions === true || iastOptions.enabled === true),
+      process.env.DD_IAST_ENABLED,
       false
     )
-
-    if (process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED) {
-      configWithOrigin.DD_TELEMETRY_LOG_COLLECTION_ENABLED = new ConfigOrigin(
-        process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED, 'env_var'
-      )
-    } else {
-      configWithOrigin.DD_TELEMETRY_LOG_COLLECTION_ENABLED = new ConfigOrigin(
-        configWithOrigin.DD_IAST_ENABLED, configWithOrigin.DD_IAST_ENABLED.origin
-      )
-    }
+    const DD_TELEMETRY_LOG_COLLECTION_ENABLED = coalesce(
+      process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED,
+      DD_IAST_ENABLED
+    )
 
     const defaultIastRequestSampling = 30
-    configWithOrigin.iastRequestSampling = getConfigOrigin(
-      [parseInt(iastOptions && iastOptions.requestSampling)],
-      [parseInt(process.env.DD_IAST_REQUEST_SAMPLING)],
+    const iastRequestSampling = coalesce(
+      parseInt(iastOptions && iastOptions.requestSampling),
+      parseInt(process.env.DD_IAST_REQUEST_SAMPLING),
       defaultIastRequestSampling
     )
-    const DD_IAST_REQUEST_SAMPLING = configWithOrigin.iastRequestSampling < 0 ||
-    configWithOrigin.iastRequestSampling > 100 ? defaultIastRequestSampling : configWithOrigin.iastRequestSampling
+    const DD_IAST_REQUEST_SAMPLING = iastRequestSampling < 0 ||
+      iastRequestSampling > 100 ? defaultIastRequestSampling : iastRequestSampling
 
-    if (DD_IAST_REQUEST_SAMPLING === defaultIastRequestSampling) {
-      configWithOrigin.DD_IAST_REQUEST_SAMPLING = new ConfigOrigin(DD_IAST_REQUEST_SAMPLING, 'default')
-    } else {
-      configWithOrigin.DD_IAST_REQUEST_SAMPLING = new ConfigOrigin(
-        DD_IAST_REQUEST_SAMPLING, configWithOrigin.iastRequestSampling.origin
-      )
-    }
-
-    configWithOrigin.DD_IAST_MAX_CONCURRENT_REQUESTS = getConfigOrigin(
-      [parseInt(iastOptions && iastOptions.maxConcurrentRequests)],
-      [parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS)],
+    const DD_IAST_MAX_CONCURRENT_REQUESTS = coalesce(
+      parseInt(iastOptions && iastOptions.maxConcurrentRequests),
+      parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS),
       2
     )
 
-    configWithOrigin.DD_IAST_MAX_CONTEXT_OPERATIONS = getConfigOrigin(
-      [parseInt(iastOptions && iastOptions.maxContextOperations)],
-      [parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS)],
+    const DD_IAST_MAX_CONTEXT_OPERATIONS = coalesce(
+      parseInt(iastOptions && iastOptions.maxContextOperations),
+      parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS),
       2
     )
 
-    configWithOrigin.DD_IAST_DEDUPLICATION_ENABLED = getConfigOrigin(
-      [iastOptions && iastOptions.deduplicationEnabled],
-      [process.env.DD_IAST_DEDUPLICATION_ENABLED && isTrue(process.env.DD_IAST_DEDUPLICATION_ENABLED)],
+    const DD_IAST_DEDUPLICATION_ENABLED = coalesce(
+      iastOptions && iastOptions.deduplicationEnabled,
+      process.env.DD_IAST_DEDUPLICATION_ENABLED && isTrue(process.env.DD_IAST_DEDUPLICATION_ENABLED),
       true
     )
 
-    configWithOrigin.DD_IAST_REDACTION_ENABLED = getConfigOrigin(
-      [iastOptions && iastOptions.redactionEnabled],
-      [!isFalse(process.env.DD_IAST_REDACTION_ENABLED)],
+    const DD_IAST_REDACTION_ENABLED = coalesce(
+      iastOptions && iastOptions.redactionEnabled,
+      !isFalse(process.env.DD_IAST_REDACTION_ENABLED),
       true
     )
 
-    configWithOrigin.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = getConfigOrigin(
-      [], [process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED], true
+    const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
+      true
     )
 
-    configWithOrigin.DD_TRACE_GIT_METADATA_ENABLED = getConfigOrigin(
-      [], [process.env.DD_TRACE_GIT_METADATA_ENABLED], true
+    const DD_TRACE_GIT_METADATA_ENABLED = coalesce(
+      process.env.DD_TRACE_GIT_METADATA_ENABLED,
+      true
     )
 
-    // TODO
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
     const sampler = {
@@ -484,61 +504,15 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     const defaultFlushInterval = inServerlessEnvironment ? 0 : 2000
 
-    this.telemetryConfigs = [] // TODO: error field
-    let seqId = 0
-    this.tracing = !isFalse(configWithOrigin.DD_TRACING_ENABLED.value)
-    this.telemetryConfigs.push(
-      {
-        name: 'tracing',
-        value: this.tracing,
-        origin: configWithOrigin.DD_TRACING_ENABLED.origin,
-        seq_id: ++seqId
-      }
-    )
-    this.namingSchemaVer = configWithOrigin.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA.value
-    this.telemetryConfigs.push(
-      {
-        name: 'namingSchemaVer',
-        value: this.namingSchemaVer,
-        origin: configWithOrigin.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA.origin,
-        seq_id: ++seqId
-      }
-    )
-    this.dbmPropagationMode = configWithOrigin.DD_DBM_PROPAGATION_MODE.value
-    this.telemetryConfigs.push(
-      {
-        name: 'dbmPropagationMode',
-        value: this.dbmPropagationMode,
-        origin: configWithOrigin.DD_DBM_PROPAGATION_MODE.origin,
-        seq_id: ++seqId
-      }
-    )
-    this.logInjection = isTrue(configWithOrigin.DD_LOGS_INJECTION.value)
-    this.telemetryConfigs.push(
-      {
-        name: 'logInjection',
-        value: this.logInjection,
-        origin: configWithOrigin.DD_LOGS_INJECTION.origin,
-        seq_id: ++seqId
-      }
-    )
-    this.env = configWithOrigin.DD_ENV.value
-    this.telemetryConfigs.push(
-      {
-        name: 'env',
-        value: this.env,
-        origin: configWithOrigin.DD_ENV.origin,
-        seq_id: ++seqId
-      }
-    )
-
-    let urlOrigin
-    if (configWithOrigin.DD_CIVISIBILITY_AGENTLESS_URL.value) {
-      urlOrigin =
-    }
-    this.url = configWithOrigin.DD_CIVISIBILITY_AGENTLESS_URL.value
-      ? new URL(configWithOrigin.DD_CIVISIBILITY_AGENTLESS_URL.value)
-      : getAgentUrl(configWithOrigin.DD_TRACE_AGENT_URL, options)
+    this.tracing = !isFalse(DD_TRACING_ENABLED)
+    this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
+    this.dsmEnabled = isTrue(DD_DATA_STREAMS_ENABLED)
+    this.openAiLogsEnabled = DD_OPENAI_LOGS_ENABLED
+    this.apiKey = DD_API_KEY
+    this.logInjection = isTrue(DD_LOGS_INJECTION)
+    this.env = DD_ENV
+    this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
+      : getAgentUrl(DD_TRACE_AGENT_URL, options)
     this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
@@ -575,13 +549,19 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       exporters: DD_PROFILING_EXPORTERS
     }
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+    this.spanComputePeerService = (this.spanAttributeSchema === 'v0'
+      ? isTrue(DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED)
+      : true
+    )
+    this.traceRemoveIntegrationServiceNamesEnabled = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
     this.telemetry = {
       enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
+      heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
-      debug: isTrue(DD_TELEMETRY_DEBUG_ENABLED)
+      debug: isTrue(DD_TELEMETRY_DEBUG)
     }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
@@ -594,7 +574,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       blockedTemplateHtml: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
-      blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
+      blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
+      eventTracking: {
+        enabled: ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING),
+        mode: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING
+      }
     }
     this.remoteConfig = {
       enabled: DD_REMOTE_CONFIGURATION_ENABLED,
@@ -616,6 +600,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
 
     this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
+    this.isManualApiEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_MANUAL_API_ENABLED)
+
+    this.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
 
     if (this.gitMetadataEnabled) {
       this.repositoryUrl = coalesce(
