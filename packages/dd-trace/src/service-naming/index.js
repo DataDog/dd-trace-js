@@ -23,15 +23,11 @@ class SchemaManager {
   }
 
   serviceName (type, kind, plugin, ...serviceNameArgs) {
-    return this.schema.getServiceName(type, kind, plugin, this.config.service, ...serviceNameArgs)
-  }
+    const schema = this.shouldUseConsistentServiceNaming
+      ? this.schemas['v1']
+      : this.schema
 
-  shortCircuitServiceName (pluginConfig, ...args) {
-    // We're short-circuiting, so we do not obey custom service functions
-    if (typeof pluginConfig.service === 'function') {
-      return this.config.service
-    }
-    return pluginConfig.service || this.config.service
+    return schema.getServiceName(type, kind, plugin, this.config.service, ...serviceNameArgs)
   }
 
   configure (config = {}) {

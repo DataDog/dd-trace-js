@@ -5,7 +5,6 @@ const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios')
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
-const namingSchema = require('./naming')
 
 describe('Plugin', () => {
   let http
@@ -103,8 +102,16 @@ describe('Plugin', () => {
         done => {
           axios.get(`http://localhost:${port}/user`).catch(done)
         },
-        () => namingSchema.server.opName,
-        () => namingSchema.server.serviceName
+        {
+          v0: {
+            serviceName: () => 'test',
+            opName: () => 'http.request'
+          },
+          v1: {
+            serviceName: () => 'test',
+            opName: () => 'http.server.request'
+          }
+        }
       )
 
       it('should do automatic instrumentation', done => {

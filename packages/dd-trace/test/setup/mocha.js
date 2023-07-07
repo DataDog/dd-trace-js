@@ -48,13 +48,18 @@ function loadInstFile (file, instrumentations) {
   })
 }
 
-function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, expectedShortCircuitName, testHooks = () => {}) {
+function withNamingSchema (
+  spanProducerFn,
+  expected,
+  hooks = (version, defaultToGlobalService) => {}
+) {
   let fullConfig
 
   describe('service and operation naming', () => {
     Object.keys(schemaDefinitions).forEach(versionName => {
       describe(`in version ${versionName}`, () => {
-        testHooks(versionName)
+        hooks(versionName, false)
+        const { opName, serviceName } = expected[versionName]
 
         before(() => {
           fullConfig = Nomenclature.config
@@ -72,17 +77,23 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
           agent
             .use(traces => {
               const span = traces[0][0]
-              expect(span).to.have.property('name', expectedOpName())
-              expect(span).to.have.property('service', expectedServiceName())
+              expect(span).to.have.property('name', opName())
+              expect(span).to.have.property('service', serviceName())
             })
             .then(done)
             .catch(done)
+
           spanProducerFn(done)
         })
       })
     })
 
     describe('service naming short-circuit in v0', () => {
+      hooks('v0', true)
+
+      // when short-circuit is enabled, we expect the serviceName v1 version to be used.
+      const { serviceName } = expected['v1']
+
       before(() => {
         fullConfig = Nomenclature.config
         Nomenclature.configure({
@@ -91,6 +102,7 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
           traceRemoveIntegrationServiceNamesEnabled: true
         })
       })
+
       after(() => {
         Nomenclature.configure(fullConfig)
       })
@@ -99,7 +111,7 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
         agent
           .use(traces => {
             const span = traces[0][0]
-            expect(span).to.have.property('service', expectedShortCircuitName)
+            expect(span).to.have.property('service', serviceName())
           })
           .then(done)
           .catch(done)

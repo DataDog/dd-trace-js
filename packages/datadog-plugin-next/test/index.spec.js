@@ -9,7 +9,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { writeFileSync } = require('fs')
 const { satisfies } = require('semver')
 const { DD_MAJOR } = require('../../../version')
-const namingSchema = require('./naming')
 
 describe('Plugin', function () {
   let server
@@ -18,7 +17,7 @@ describe('Plugin', function () {
   describe('next', () => {
     // TODO: Figure out why 10.x tests are failing.
     withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
-      const startServer = (withConfig = false, schemaVersion = 'v0') => {
+      const startServer = (withConfig = false, schemaVersion = 'v0', defaultToGlobalService = false) => {
         before(async () => {
           port = await getPort()
 
@@ -36,7 +35,8 @@ describe('Plugin', function () {
               PORT: port,
               DD_TRACE_AGENT_PORT: agent.server.address().port,
               WITH_CONFIG: withConfig,
-              DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion
+              DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
+              DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService
             }
           })
 
@@ -100,9 +100,17 @@ describe('Plugin', function () {
             .get(`http://localhost:${port}/api/hello/world`)
             .catch(done)
         },
-        () => namingSchema.server.opName,
-        () => namingSchema.server.serviceName,
-        (versionName) => startServer(false, versionName)
+        {
+          v0: {
+            serviceName: () => 'test',
+            opName: () => 'next.request'
+          },
+          v1: {
+            serviceName: () => 'test',
+            opName: () => 'http.server.request'
+          }
+        },
+        (version, defaultToGlobalService) => startServer(false, version, defaultToGlobalService)
       )
 
       describe('without configuration', () => {

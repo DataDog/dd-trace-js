@@ -11,7 +11,6 @@ const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DD_MAJOR } = require('../../../version')
-const namingSchema = require('./naming')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -83,8 +82,16 @@ describe('Plugin', () => {
 
         withNamingSchema(
           spanProducerFn,
-          () => namingSchema.client.opName,
-          () => namingSchema.client.serviceName
+          {
+            v0: {
+              serviceName: () => 'test',
+              opName: () => 'http.request'
+            },
+            v1: {
+              serviceName: () => 'test',
+              opName: () => 'http.client.request'
+            }
+          }
         )
 
         it('should do automatic instrumentation', done => {
@@ -1087,8 +1094,16 @@ describe('Plugin', () => {
               })
             })
           },
-          () => namingSchema.client.opName,
-          () => `localhost:${serverPort}`
+          {
+            v0: {
+              serviceName: () => `localhost:${serverPort}`,
+              opName: () => 'http.request'
+            },
+            v1: {
+              serviceName: () => `localhost:${serverPort}`,
+              opName: () => 'http.client.request'
+            }
+          }
         )
 
         it('should use the remote endpoint as the service name', done => {

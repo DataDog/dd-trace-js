@@ -23,9 +23,6 @@ class TracingPlugin extends Plugin {
   }
 
   serviceName (...serviceArgs) {
-    if (Nomenclature.shouldUseConsistentServiceNaming) {
-      return Nomenclature.shortCircuitServiceName(this.config, ...serviceArgs)
-    }
     const { type, id, kind } = this.constructor
     return Nomenclature.serviceName(type, kind, id, ...serviceArgs)
   }
