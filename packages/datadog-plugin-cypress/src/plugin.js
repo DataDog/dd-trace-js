@@ -119,6 +119,7 @@ function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) 
 }
 
 module.exports = (on, config) => {
+  let isTestsSkipped = false
   const tracer = require('../../dd-trace')
   const testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
@@ -306,7 +307,7 @@ module.exports = (on, config) => {
         testSessionSpan,
         testModuleSpan,
         {
-          isSuitesSkipped: !!testsToSkip.length,
+          isSuitesSkipped: isTestsSkipped,
           isSuitesSkippingEnabled,
           isCodeCoverageEnabled
         }
@@ -352,6 +353,7 @@ module.exports = (on, config) => {
       if (testsToSkip.find(test => {
         return testName === test.name && testSuite === test.suite
       })) {
+        isTestsSkipped = true
         return { shouldSkip: true }
       }
 
