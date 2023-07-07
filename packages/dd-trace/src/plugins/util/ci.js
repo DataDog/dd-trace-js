@@ -81,8 +81,8 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
   }
 }
 
-function getTestType (frameworkName) {
-  if (frameworkName === 'playwright' || frameworkName === 'cypress') {
+function getTestTypeFromFramework (testFramework) {
+  if (testFramework === 'playwright' || testFramework === 'cypress') {
     return 'browser'
   }
   return 'test'

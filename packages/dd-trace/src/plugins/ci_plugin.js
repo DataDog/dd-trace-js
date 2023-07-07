@@ -118,7 +118,7 @@ module.exports = class CiPlugin extends Plugin {
       ...getTestCommonTags(testName,
         testSuite,
         this.frameworkVersion,
-        getTestType(this.testEnvironmentMetadata[TEST_FRAMEWORK])),
+        this.constructor.id,
       [COMPONENT]: this.constructor.id,
       ...extraTags
     }

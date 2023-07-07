@@ -188,10 +188,10 @@ function getTestParentSpan (tracer) {
   })
 }
 
-function getTestCommonTags (name, suite, version, testType = 'test') {
+function getTestCommonTags (name, suite, version, testFramework) {
   return {
     [SPAN_TYPE]: 'test',
-    [TEST_TYPE]: testType,
+    [TEST_TYPE]: getTestType(testFramework),
     [SAMPLING_RULE_DECISION]: 1,
     [SAMPLING_PRIORITY]: AUTO_KEEP,
     [TEST_NAME]: name,

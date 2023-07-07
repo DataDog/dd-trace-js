@@ -40,7 +40,7 @@ const CYPRESS_STATUS_TO_TEST_STATUS = {
 function getTestSpanMetadata (tracer, testName, testSuite, cypressConfig) {
   const childOf = getTestParentSpan(tracer)
 
-  const commonTags = getTestCommonTags(testName, testSuite, cypressConfig.version, getTestType(TEST_FRAMEWORK_NAME))
+  const commonTags = getTestCommonTags(testName, testSuite, cypressConfig.version, TEST_FRAMEWORK_NAME)
 
   return {
     childOf,
