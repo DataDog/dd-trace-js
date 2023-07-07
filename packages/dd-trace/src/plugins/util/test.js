@@ -6,7 +6,7 @@ const ignore = require('ignore')
 
 const { getGitMetadata } = require('./git')
 const { getUserProviderGitMetadata } = require('./user-provided-git')
-const { getCIMetadata, getTestTypeFromFramework } = require('./ci')
+const { getCIMetadata } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
 const {
   GIT_BRANCH,
@@ -171,6 +171,13 @@ function getTestParametersString (parametersByTestName, testName) {
     // so we ignore the test parameters and move on
     return ''
   }
+}
+
+function getTestTypeFromFramework (testFramework) {
+  if (testFramework === 'playwright' || testFramework === 'cypress') {
+    return 'browser'
+  }
+  return 'test'
 }
 
 function finishAllTraceSpans (span) {

@@ -81,13 +81,6 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
   }
 }
 
-function getTestTypeFromFramework (testFramework) {
-  if (testFramework === 'playwright' || testFramework === 'cypress') {
-    return 'browser'
-  }
-  return 'test'
-}
-
 function resolveTilde (filePath) {
   if (!filePath || typeof filePath !== 'string') {
     return ''
@@ -101,7 +94,6 @@ function resolveTilde (filePath) {
 
 module.exports = {
   normalizeRef,
-  getTestTypeFromFramework,
   getCIMetadata () {
     const { env } = process
 
