@@ -48,13 +48,13 @@ function loadInstFile (file, instrumentations) {
   })
 }
 
-function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, withHooks = () => {}) {
+function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, expectedShortCircuitName, testHooks = () => {}) {
   let fullConfig
 
   describe('service and operation naming', () => {
     Object.keys(schemaDefinitions).forEach(versionName => {
       describe(`in version ${versionName}`, () => {
-        withHooks(versionName)
+        testHooks(versionName)
 
         before(() => {
           fullConfig = Nomenclature.config
@@ -77,9 +77,34 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
             })
             .then(done)
             .catch(done)
-
           spanProducerFn(done)
         })
+      })
+    })
+
+    describe('service naming short-circuit in v0', () => {
+      before(() => {
+        fullConfig = Nomenclature.config
+        Nomenclature.configure({
+          spanAttributeSchema: 'v0',
+          service: fullConfig.service,
+          traceRemoveIntegrationServiceNamesEnabled: true
+        })
+      })
+      after(() => {
+        Nomenclature.configure(fullConfig)
+      })
+
+      it('should pass service name through', done => {
+        agent
+          .use(traces => {
+            const span = traces[0][0]
+            expect(span).to.have.property('service', expectedShortCircuitName)
+          })
+          .then(done)
+          .catch(done)
+
+        spanProducerFn(done)
       })
     })
   })

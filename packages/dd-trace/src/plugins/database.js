@@ -39,7 +39,7 @@ class DatabasePlugin extends StoragePlugin {
   }
 
   injectDbmQuery (query, serviceName, isPreparedStatement = false) {
-    const mode = this.config.dbmPropagationMode || this._tracerConfig.dbmPropagationMode
+    const mode = this.config.dbmPropagationMode
 
     if (mode === 'disabled') {
       return query

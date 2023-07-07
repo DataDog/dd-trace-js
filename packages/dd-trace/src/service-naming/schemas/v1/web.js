@@ -2,6 +2,10 @@ const { identityService, httpPluginClientService } = require('../util')
 
 const web = {
   client: {
+    grpc: {
+      opName: () => 'grpc.client.request',
+      serviceName: identityService
+    },
     moleculer: {
       opName: () => 'moleculer.client.request',
       serviceName: identityService
@@ -20,6 +24,10 @@ const web = {
     }
   },
   server: {
+    grpc: {
+      opName: () => 'grpc.server.request',
+      serviceName: identityService
+    },
     moleculer: {
       opName: () => 'moleculer.server.request',
       serviceName: identityService
