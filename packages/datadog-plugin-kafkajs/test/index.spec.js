@@ -20,15 +20,15 @@ describe('Plugin', () => {
       const testTopic = 'test-topic'
       let kafka
       let tracer
+      let Kafka
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
         beforeEach(async () => {
           process.env['DD_DATA_STREAMS_ENABLED'] = 'true'
           tracer = require('../../dd-trace')
           await agent.load('kafkajs')
-          const {
-            Kafka
-          } = require(`../../../versions/kafkajs@${version}`).get()
+          Kafka = require(`../../../versions/kafkajs@${version}`).get().Kafka
+
           kafka = new Kafka({
             clientId: `kafkajs-test-${version}`,
             brokers: ['127.0.0.1:9092']
@@ -55,6 +55,12 @@ describe('Plugin', () => {
 
             return expectedSpanPromise
           })
+
+          withPeerService(
+            () => tracer,
+            (done) => sendMessages(kafka, testTopic, messages).catch(done),
+            '127.0.0.1:9092',
+            'messaging.kafka.bootstrap.servers')
 
           it('should be instrumented w/ error', async () => {
             const producer = kafka.producer()
@@ -92,6 +98,23 @@ describe('Plugin', () => {
               return expectedSpanPromise
             }
           })
+          if (version !== '1.4.0') {
+            it('should not extract bootstrap servers when initialized with a function', async () => {
+              const expectedSpanPromise = agent.use(traces => {
+                const span = traces[0][0]
+                expect(span.meta).to.not.have.any.keys(['messaging.kafka.bootstrap.servers'])
+              })
+
+              kafka = new Kafka({
+                clientId: `kafkajs-test-${version}`,
+                brokers: () => ['127.0.0.1:9092']
+              })
+
+              await sendMessages(kafka, testTopic, messages)
+
+              return expectedSpanPromise
+            })
+          }
 
           withNamingSchema(
             async () => sendMessages(kafka, testTopic, messages),
