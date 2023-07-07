@@ -989,7 +989,7 @@ jobs:
         env:
           LOG_LEVEL: DEBUG
           TRACE_LANGUAGE: javascript
-          DISABLED_CHECKS: trace_content_length
+          ENABLED_CHECKS: trace_count_header,meta_tracer_version_header
           PORT: 9126
         ports:
           - 9126:9126
