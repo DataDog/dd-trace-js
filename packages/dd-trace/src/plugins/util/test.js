@@ -174,7 +174,7 @@ function getTestParametersString (parametersByTestName, testName) {
 }
 
 function getTestTypeFromFramework (testFramework) {
-  if (testFramework.contains('playwright') || testFramework.contains('cypress')) {
+  if (testFramework.includes('playwright') || testFramework.includes('cypress')) {
     return 'browser'
   }
   return 'test'
