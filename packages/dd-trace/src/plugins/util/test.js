@@ -108,7 +108,7 @@ module.exports = {
   fromCoverageMapToCoverage,
   getTestLineStart,
   getCallSites,
-  removeInvalidGitMetadata
+  removeInvalidMetadata
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -192,7 +192,7 @@ function getTestEnvironmentMetadata (testFramework, config) {
   if (config && config.service) {
     metadata['service.name'] = config.service
   }
-  return removeInvalidGitMetadata(metadata)
+  return removeInvalidMetadata(metadata)
 }
 
 function getTestParametersString (parametersByTestName, testName) {

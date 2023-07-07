@@ -13,7 +13,7 @@ const {
   getCoveredFilenamesFromCoverage,
   mergeCoverage,
   resetCoverage,
-  removeInvalidGitMetadata
+  removeInvalidMetadata
 } = require('../../../src/plugins/util/test')
 
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
@@ -190,10 +190,10 @@ describe('metadata validation', () => {
       [CI_PIPELINE_URL]: 'www.datadog.com5',
       [GIT_COMMIT_SHA]: 'abc123'
     }
-    const invalidMetadata5 = { GIT_REPOSITORY_URL: '', CI_PIPELINE_URL: '', GIT_COMMIT_SHA: '' }
+    const invalidMetadata5 = { [GIT_REPOSITORY_URL]: '', [CI_PIPELINE_URL]: '', [GIT_COMMIT_SHA]: '' }
     const invalidMetadatas = [invalidMetadata1, invalidMetadata2, invalidMetadata3, invalidMetadata4, invalidMetadata5]
     invalidMetadatas.forEach((invalidMetadata) => {
-      expect(JSON.stringify(removeInvalidGitMetadata(invalidMetadata))).to.equal(JSON.stringify({}))
+      expect(JSON.stringify(removeInvalidMetadata(invalidMetadata))).to.equal(JSON.stringify({}))
     })
   })
   it('should keep valid metadata', () => {
@@ -214,7 +214,7 @@ describe('metadata validation', () => {
     }
     const validMetadatas = [validMetadata1, validMetadata2, validMetadata3]
     validMetadatas.forEach((validMetadata) => {
-      expect(JSON.stringify(removeInvalidGitMetadata(validMetadata))).to.be.equal(JSON.stringify(validMetadata))
+      expect(JSON.stringify(removeInvalidMetadata(validMetadata))).to.be.equal(JSON.stringify(validMetadata))
     })
   })
 })
