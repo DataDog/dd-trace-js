@@ -71,9 +71,11 @@ function addEnvironmentVariablesToHeaders (headers, traces) {
 }
 
 async function handleTraceRequest (req, res, sendToTestAgent) {
+  res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
+
   // handles the received trace request and sends trace to Test Agent if bool enabled.
-  let responseSent = false;
   if (sendToTestAgent) {
+
     const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
 
     // remove incorrect headers
@@ -81,31 +83,23 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
     delete req.headers['content-type']
     delete req.headers['content-length']
 
-    const testAgentRes = await new Promise(async (resolve, reject) => {
-      await addEnvironmentVariablesToHeaders(req.headers, req.body)
-      const testAgentReq = http.request(
-        `${testAgentUrl}/v0.4/traces`, {
-          method: 'PUT',
-          headers: {
-            ...req.headers,
-            'X-Datadog-Agent-Proxy-Disabled': 'True',
-            'Content-Type': 'application/json'
-          }
-        })
-
-      testAgentReq.on('response', () => {
-        res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
-        resolve()
+    addEnvironmentVariablesToHeaders(req.headers, req.body).then( async (reqHeaders) => {
+      await new Promise((resolve, reject) => { 
+        const testAgentReq = http.request(
+          `${testAgentUrl}/v0.4/traces`, {
+            method: 'PUT',
+            headers: {
+              ...reqHeaders,
+              'X-Datadog-Agent-Proxy-Disabled': 'True',
+              'Content-Type': 'application/json'
+            }
+          })
+        testAgentReq.on('response', resolve)
+        testAgentReq.on('error', reject(error))
+        testAgentReq.write(JSON.stringify(req.body))
+        testAgentReq.end()
       })
-      testAgentReq.on('error', () => {
-        res.status(500).send(error)
-        reject(error)
-      })
-      testAgentReq.write(JSON.stringify(req.body))
-      testAgentReq.end()
     })
-  } else {
-    res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
   }
 
   handlers.forEach(({ handler, spanResourceMatch }) => {

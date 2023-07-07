@@ -65,7 +65,6 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
         })
 
         beforeEach(async () => {
-          await new Promise(resolve => setTimeout(resolve, 200))
           global.testAgentServiceName = expectedServiceName()
           global.schemaVersionName = versionName
         })
@@ -104,7 +103,6 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
       })
 
       beforeEach(async () => {
-        await new Promise(resolve => setTimeout(resolve, 50))
         global.testAgentServiceName = expectedShortCircuitName
         global.schemaVersionName = "v0"
       })
@@ -138,7 +136,6 @@ function withPeerService (tracer, spanGenerationFn, service, serviceSource) {
       // FIXME: workaround due to the evaluation order of mocha beforeEach
       const tracerObj = typeof tracer === 'function' ? tracer() : tracer
       computePeerServiceSpy = sinon.stub(tracerObj._tracer, '_computePeerService').value(true)
-      debugger
       global.schemaVersionName = "v0.5" // set to something other than v0 to allow peer.service check to run, but also don't set to v1 since we dont have expectedServiceName
     })
     afterEach(async () => {
