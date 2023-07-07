@@ -256,7 +256,7 @@ describe('track_event', () => {
         })
       })
 
-      it('should report login success and no id in safe mode when id is not a uuid', () => {
+      it('should report login success and no id in safe mode when id is a PII', () => {
         const user = {
           id: 'publicName',
           email: 'testUser@test.com',
@@ -271,6 +271,25 @@ describe('track_event', () => {
             'appsec.events.users.login.success.track': 'true',
             'manual.keep': 'true',
             '_dd.appsec.events.users.login.success.auto.mode': 'safe'
+          }
+        )
+      })
+
+      it('should report login failure and no id in safe mode when id is a PII', () => {
+        const metadata = {
+          user: {
+            id: 'publicName'
+          }
+        }
+
+        trackEvent('users.login.failure', null, metadata, 'login', rootSpan, 'safe')
+
+        expect(setUserTags).not.to.have.been.called
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly(
+          {
+            'appsec.events.users.login.failure.track': 'true',
+            'manual.keep': 'true',
+            '_dd.appsec.events.users.login.failure.auto.mode': 'safe'
           }
         )
       })
