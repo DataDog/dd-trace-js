@@ -46,6 +46,7 @@ const originalCoverageMap = createCoverageMap()
 
 let suitesToSkip = []
 let frameworkVersion
+let isSuitesSkipped = false
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -124,8 +125,6 @@ function mochaHook (Runner) {
         status = 'fail'
       }
       testFileToSuiteAr.clear()
-
-      const isSuitesSkipped = !!suitesToSkip.length
 
       let testCodeCoverageLinesTotal
       if (global.__coverage__) {
@@ -360,7 +359,10 @@ addHook({
         suitesToSkip = skippableSuites
       }
       // We remove the suites that we skip through ITR
-      runner.suite.suites = getSuitesToRun(runner.suite.suites)
+      const newSuites = getSuitesToRun(runner.suite.suites)
+      isSuitesSkipped = newSuites.length !== runner.suite.suites.length
+      runner.suite.suites = newSuites
+
       global.run()
     }
 
