@@ -42,6 +42,7 @@ const jestItrConfigurationCh = channel('ci:jest:itr-configuration')
 let skippableSuites = []
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
+let isSuitesSkipped = false
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -227,7 +228,6 @@ function cliWrapper (cli, jestVersion) {
         log.error(err)
       }
     }
-    const isSuitesSkipped = !!skippableSuites.length
 
     const processArgv = process.argv.slice(2).join(' ')
     sessionAsyncResource.runInAsyncScope(() => {
@@ -429,6 +429,8 @@ addHook({
     const { tests } = testPaths
 
     const filteredTests = getJestSuitesToRun(skippableSuites, tests, rootDir)
+
+    isSuitesSkipped = filteredTests.length !== tests.length
 
     skippableSuites = []
 
