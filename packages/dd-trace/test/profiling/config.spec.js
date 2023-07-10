@@ -7,7 +7,6 @@ const os = require('os')
 const path = require('path')
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
-const CpuProfiler = require('../../src/profiling/profilers/cpu')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
@@ -58,7 +57,7 @@ describe('config', () => {
         error () { }
       },
       exporters: 'agent,file',
-      profilers: 'wall,cpu-experimental',
+      profilers: 'wall',
       url: 'http://localhost:1234/'
     }
 
@@ -79,9 +78,8 @@ describe('config', () => {
     expect(config.exporters[0]._url.toString()).to.equal(options.url)
     expect(config.exporters[1]).to.be.an.instanceof(FileExporter)
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(2)
+    expect(config.profilers.length).to.equal(1)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[1]).to.be.an.instanceOf(CpuProfiler)
   })
 
   it('should filter out invalid profilers', () => {
