@@ -210,6 +210,13 @@ function getTestParametersString (parametersByTestName, testName) {
   }
 }
 
+function getTestTypeFromFramework (testFramework) {
+  if (testFramework === 'playwright' || testFramework === 'cypress') {
+    return 'browser'
+  }
+  return 'test'
+}
+
 function finishAllTraceSpans (span) {
   span.context()._trace.started.forEach(traceSpan => {
     if (traceSpan !== span) {
@@ -225,10 +232,10 @@ function getTestParentSpan (tracer) {
   })
 }
 
-function getTestCommonTags (name, suite, version) {
+function getTestCommonTags (name, suite, version, testFramework) {
   return {
     [SPAN_TYPE]: 'test',
-    [TEST_TYPE]: 'test',
+    [TEST_TYPE]: getTestTypeFromFramework(testFramework),
     [SAMPLING_RULE_DECISION]: 1,
     [SAMPLING_PRIORITY]: AUTO_KEEP,
     [TEST_NAME]: name,
@@ -306,12 +313,12 @@ function getCodeOwnersForFilename (filename, entries) {
   return null
 }
 
-function getTestLevelCommonTags (command, testFrameworkVersion) {
+function getTestLevelCommonTags (command, testFrameworkVersion, testFramework) {
   return {
     [TEST_FRAMEWORK_VERSION]: testFrameworkVersion,
     [LIBRARY_VERSION]: ddTraceVersion,
     [TEST_COMMAND]: command,
-    [TEST_TYPE]: 'test'
+    [TEST_TYPE]: getTestTypeFromFramework(testFramework)
   }
 }
 
@@ -321,7 +328,7 @@ function getTestSessionCommonTags (command, testFrameworkVersion, testFramework)
     [RESOURCE_NAME]: `test_session.${command}`,
     [TEST_MODULE]: testFramework,
     [TEST_TOOLCHAIN]: getPkgManager(),
-    ...getTestLevelCommonTags(command, testFrameworkVersion)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
   }
 }
 
@@ -330,7 +337,7 @@ function getTestModuleCommonTags (command, testFrameworkVersion, testFramework) 
     [SPAN_TYPE]: 'test_module_end',
     [RESOURCE_NAME]: `test_module.${command}`,
     [TEST_MODULE]: testFramework,
-    ...getTestLevelCommonTags(command, testFrameworkVersion)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
   }
 }
 
@@ -340,7 +347,7 @@ function getTestSuiteCommonTags (command, testFrameworkVersion, testSuite, testF
     [RESOURCE_NAME]: `test_suite.${testSuite}`,
     [TEST_MODULE]: testFramework,
     [TEST_SUITE]: testSuite,
-    ...getTestLevelCommonTags(command, testFrameworkVersion)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
   }
 }
 
