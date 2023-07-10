@@ -1,11 +1,13 @@
 const path = require('path')
 const fs = require('fs')
+const { URL } = require('url')
+const log = require('../../log')
 
 const istanbul = require('istanbul-lib-coverage')
 const ignore = require('ignore')
 
 const { getGitMetadata } = require('./git')
-const { getUserProviderGitMetadata } = require('./user-provided-git')
+const { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha } = require('./user-provided-git')
 const { getCIMetadata } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
 const {
@@ -16,7 +18,8 @@ const {
   GIT_COMMIT_AUTHOR_EMAIL,
   GIT_COMMIT_AUTHOR_NAME,
   GIT_COMMIT_MESSAGE,
-  CI_WORKSPACE_PATH
+  CI_WORKSPACE_PATH,
+  CI_PIPELINE_URL
 } = require('./tags')
 const id = require('../../id')
 
@@ -104,7 +107,8 @@ module.exports = {
   mergeCoverage,
   fromCoverageMapToCoverage,
   getTestLineStart,
-  getCallSites
+  getCallSites,
+  removeInvalidMetadata
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -114,6 +118,39 @@ function getPkgManager () {
   } catch (e) {
     return ''
   }
+}
+
+function validateUrl (url) {
+  try {
+    const urlObject = new URL(url)
+    return (urlObject.protocol === 'https:' || urlObject.protocol === 'http:')
+  } catch (e) {
+    return false
+  }
+}
+
+function removeInvalidMetadata (metadata) {
+  return Object.keys(metadata).reduce((filteredTags, tag) => {
+    if (tag === GIT_REPOSITORY_URL) {
+      if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
+        log.error('DD_GIT_REPOSITORY_URL must be a valid URL')
+        return filteredTags
+      }
+    }
+    if (tag === GIT_COMMIT_SHA) {
+      if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
+        log.error('DD_GIT_COMMIT_SHA must be a full-length git SHA')
+        return filteredTags
+      }
+    }
+    if (tag === CI_PIPELINE_URL) {
+      if (!validateUrl(metadata[CI_PIPELINE_URL])) {
+        return filteredTags
+      }
+    }
+    filteredTags[tag] = metadata[tag]
+    return filteredTags
+  }, {})
 }
 
 function getTestEnvironmentMetadata (testFramework, config) {
@@ -155,7 +192,7 @@ function getTestEnvironmentMetadata (testFramework, config) {
   if (config && config.service) {
     metadata['service.name'] = config.service
   }
-  return metadata
+  return removeInvalidMetadata(metadata)
 }
 
 function getTestParametersString (parametersByTestName, testName) {
