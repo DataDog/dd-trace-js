@@ -95,7 +95,7 @@
     "node-abort-controller": "^3.0.1",
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.2",
-    "protobufjs": "^7.1.2",
+    "protobufjs": "^7.2.4",
     "retry": "^0.10.1",
     "semver": "^7.3.8"
   },
