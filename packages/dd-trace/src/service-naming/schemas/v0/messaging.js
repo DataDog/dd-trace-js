@@ -1,7 +1,7 @@
 const { identityService } = require('../util')
 
-function amqpServiceName (service) {
-  return `${service}-amqp`
+function amqpServiceName ({ tracerService }) {
+  return `${tracerService}-amqp`
 }
 
 const messaging = {
