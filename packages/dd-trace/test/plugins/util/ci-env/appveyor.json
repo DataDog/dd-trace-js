@@ -6,7 +6,7 @@
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_REPO_BRANCH": "master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -26,7 +26,7 @@
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
-      "git.commit.sha": "appveyor-repo-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/appveyor-repo-name.git"
     }
   ],
@@ -37,7 +37,7 @@
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_REPO_BRANCH": "master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -57,7 +57,7 @@
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
-      "git.commit.sha": "appveyor-repo-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/appveyor-repo-name.git"
     }
   ],
@@ -68,7 +68,7 @@
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_REPO_BRANCH": "master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -88,7 +88,7 @@
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
-      "git.commit.sha": "appveyor-repo-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/appveyor-repo-name.git"
     }
   ],
@@ -99,7 +99,7 @@
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_REPO_BRANCH": "master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -119,7 +119,7 @@
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
-      "git.commit.sha": "appveyor-repo-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/appveyor-repo-name.git"
     }
   ],
@@ -130,7 +130,7 @@
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_REPO_BRANCH": "master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -152,7 +152,7 @@
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
-      "git.commit.sha": "appveyor-repo-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/appveyor-repo-name.git"
     }
   ],
@@ -163,7 +163,7 @@
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_REPO_BRANCH": "master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -183,7 +183,7 @@
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
-      "git.commit.sha": "appveyor-repo-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/appveyor-repo-name.git"
     }
   ],
@@ -194,7 +194,7 @@
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_REPO_BRANCH": "master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -216,7 +216,7 @@
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
-      "git.commit.sha": "appveyor-repo-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/appveyor-repo-name.git"
     }
   ],
@@ -227,7 +227,7 @@
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_REPO_BRANCH": "master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -254,7 +254,7 @@
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_REPO_BRANCH": "origin/master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -274,7 +274,7 @@
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
-      "git.commit.sha": "appveyor-repo-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/appveyor-repo-name.git"
     }
   ],
@@ -285,7 +285,7 @@
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_REPO_BRANCH": "refs/heads/master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -305,7 +305,7 @@
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
-      "git.commit.sha": "appveyor-repo-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/appveyor-repo-name.git"
     }
   ],
@@ -316,7 +316,7 @@
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_REPO_BRANCH": "refs/heads/feature/one",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -336,7 +336,7 @@
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
-      "git.commit.sha": "appveyor-repo-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/appveyor-repo-name.git"
     }
   ],
@@ -348,7 +348,7 @@
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH": "origin/pr",
       "APPVEYOR_REPO_BRANCH": "origin/master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -368,7 +368,7 @@
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
-      "git.commit.sha": "appveyor-repo-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/appveyor-repo-name.git"
     }
   ],
@@ -380,7 +380,7 @@
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH": "refs/heads/pr",
       "APPVEYOR_REPO_BRANCH": "refs/heads/master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -400,7 +400,7 @@
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
-      "git.commit.sha": "appveyor-repo-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/appveyor-repo-name.git"
     }
   ],
@@ -411,7 +411,7 @@
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_REPO_BRANCH": "origin/master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -432,7 +432,7 @@
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
-      "git.commit.sha": "appveyor-repo-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/appveyor-repo-name.git",
       "git.tag": "0.1.0"
     }
@@ -444,7 +444,7 @@
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
       "APPVEYOR_REPO_BRANCH": "refs/heads/master",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -465,7 +465,7 @@
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
-      "git.commit.sha": "appveyor-repo-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/appveyor-repo-name.git",
       "git.tag": "0.1.0"
     }
@@ -475,7 +475,7 @@
       "APPVEYOR": "true",
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
@@ -516,7 +516,7 @@
       "APPVEYOR": "true",
       "APPVEYOR_BUILD_ID": "appveyor-build-id",
       "APPVEYOR_BUILD_NUMBER": "appveyor-pipeline-number",
-      "APPVEYOR_REPO_COMMIT": "appveyor-repo-commit",
+      "APPVEYOR_REPO_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "APPVEYOR_REPO_COMMIT_AUTHOR": "appveyor-commit-author-name",
       "APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL": "appveyor-commit-author-email@datadoghq.com",
       "APPVEYOR_REPO_COMMIT_MESSAGE": "appveyor-commit-message",
