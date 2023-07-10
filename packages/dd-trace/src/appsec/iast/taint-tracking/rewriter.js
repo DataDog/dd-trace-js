@@ -8,30 +8,6 @@ const { csiMethods } = require('./csi-methods')
 
 let rewriter
 let getPrepareStackTrace
-let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) {
-  return { path, line, column }
-}
-
-function isEnableSourceMapsFlagPresent () {
-  return process.execArgv &&
-    process.execArgv.some(arg => arg.includes('--enable-source-maps'))
-}
-
-function getGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, getOriginalPathAndLineFromSourceMap) {
-  if (chainSourceMap) {
-    return function (path, line, column) {
-      // if --enable-source-maps is present stacktraces of the rewritten files contain the original path, file and
-      // column because the sourcemap chaining is done during the rewriting process so we can skip it
-      if (isPrivateModule(path) && isNotLibraryFile(path)) {
-        return { path, line, column }
-      } else {
-        return getOriginalPathAndLineFromSourceMap(path, line, column)
-      }
-    }
-  } else {
-    return getOriginalPathAndLineFromSourceMap
-  }
-}
 
 function getRewriter () {
   if (!rewriter) {
@@ -39,12 +15,7 @@ function getRewriter () {
       const iastRewriter = require('@datadog/native-iast-rewriter')
       const Rewriter = iastRewriter.Rewriter
       getPrepareStackTrace = iastRewriter.getPrepareStackTrace
-
-      const chainSourceMap = isEnableSourceMapsFlagPresent()
-      getRewriterOriginalPathAndLineFromSourceMap =
-        getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, iastRewriter.getOriginalPathAndLineFromSourceMap)
-
-      rewriter = new Rewriter({ csiMethods, chainSourceMap })
+      rewriter = new Rewriter({ csiMethods })
     } catch (e) {
       iastLog.error('Unable to initialize TaintTracking Rewriter')
         .errorAndPublish(e)
@@ -97,10 +68,6 @@ function disableRewriter () {
   Error.prepareStackTrace = originalPrepareStackTrace
 }
 
-function getOriginalPathAndLineFromSourceMap ({ path, line, column }) {
-  return getRewriterOriginalPathAndLineFromSourceMap(path, line, column)
-}
-
 module.exports = {
-  enableRewriter, disableRewriter, getOriginalPathAndLineFromSourceMap
+  enableRewriter, disableRewriter
 }
