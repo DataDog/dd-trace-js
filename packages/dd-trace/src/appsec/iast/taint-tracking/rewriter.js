@@ -43,7 +43,7 @@ function getRewriter () {
       const chainSourceMap = isEnableSourceMapsFlagPresent()
       getRewriterOriginalPathAndLineFromSourceMap =
         getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, iastRewriter.getOriginalPathAndLineFromSourceMap)
-      rewriter = new Rewriter({ csiMethods, chainSourceMap, logLevel: "DEBUG", logger: {"error": console.log, log: console.log, debug: console.log}})
+      rewriter = new Rewriter({ csiMethods, chainSourceMap })
     } catch (e) {
       iastLog.error('Unable to initialize TaintTracking Rewriter')
         .errorAndPublish(e)
