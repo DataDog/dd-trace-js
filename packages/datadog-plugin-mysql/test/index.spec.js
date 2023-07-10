@@ -4,7 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
-const namingSchema = require('./naming')
+const { expectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let mysql
@@ -69,8 +69,8 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation', done => {
           agent.use(traces => {
-            expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
             expect(traces[0][0]).to.have.property('type', 'sql')
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')
@@ -137,7 +137,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent.use(traces => {
-            expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', 'custom')
             done()
           })
@@ -171,7 +171,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent.use(traces => {
-            expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', 'custom')
             sinon.assert.calledWith(serviceSpy, sinon.match({
               host: 'localhost',
@@ -213,8 +213,8 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation', done => {
           agent.use(traces => {
-            expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
             expect(traces[0][0]).to.have.property('type', 'sql')
             expect(traces[0][0].meta).to.have.property('span.kind', 'client')

@@ -1,4 +1,4 @@
-function getRedisService ({ pluginConfig, connectionName }) {
+function getRedisService (pluginConfig, connectionName) {
   if (pluginConfig.splitByInstance && connectionName) {
     return pluginConfig.service
       ? `${pluginConfig.service}-${connectionName}`
@@ -8,7 +8,7 @@ function getRedisService ({ pluginConfig, connectionName }) {
   return pluginConfig.service
 }
 
-function fromSystem ({ tracerService, system }) {
+function fromSystem (tracerService, system) {
   return system ? `${tracerService}-${system}` : undefined
 }
 
@@ -16,7 +16,7 @@ function mysqlServiceName ({ tracerService, pluginConfig, dbConfig, system }) {
   if (typeof pluginConfig.service === 'function') {
     return pluginConfig.service(dbConfig)
   }
-  return pluginConfig.service || fromSystem({ tracerService, system })
+  return pluginConfig.service || fromSystem(tracerService, system)
 }
 
 function withSuffixFunction (suffix) {
@@ -30,8 +30,8 @@ function withSuffixFunction (suffix) {
 
 const redisConfig = {
   opName: () => 'redis.command',
-  serviceName: (service, config, system, connectionName) => {
-    return getRedisService(config, connectionName) || fromSystem(service, system)
+  serviceName: ({ tracerService, pluginConfig, system, connectionName }) => {
+    return getRedisService(pluginConfig, connectionName) || fromSystem(tracerService, system)
   }
 }
 
@@ -39,11 +39,13 @@ const storage = {
   client: {
     'cassandra-driver': {
       opName: () => 'cassandra.query',
-      serviceName: (service, config, system) => config.service || fromSystem(service, system)
+      serviceName: ({ tracerService, pluginConfig, system }) =>
+        pluginConfig.service || fromSystem(tracerService, system)
     },
     elasticsearch: {
       opName: () => 'elasticsearch.query',
-      serviceName: (service, config) => config.service || `${service}-elasticsearch`
+      serviceName: ({ tracerService, pluginConfig }) =>
+        pluginConfig.service || `${tracerService}-elasticsearch`
     },
     ioredis: redisConfig,
     mariadb: {
@@ -52,11 +54,13 @@ const storage = {
     },
     memcached: {
       opName: () => 'memcached.command',
-      serviceName: (service, config, system) => config.service || fromSystem(service, system)
+      serviceName: ({ tracerService, pluginConfig, system }) =>
+        pluginConfig.service || fromSystem(tracerService, system)
     },
     'mongodb-core': {
       opName: () => 'mongodb.query',
-      serviceName: (service, config) => config.service || `${service}-mongodb`
+      serviceName: ({ tracerService, pluginConfig }) =>
+        pluginConfig.service || `${tracerService}-mongodb`
     },
     mysql: {
       opName: () => 'mysql.query',
@@ -68,7 +72,8 @@ const storage = {
     },
     opensearch: {
       opName: () => 'opensearch.query',
-      serviceName: (service, config) => config.service || `${service}-opensearch`
+      serviceName: ({ tracerService, pluginConfig }) =>
+        pluginConfig.service || `${tracerService}-opensearch`
     },
     oracledb: {
       opName: () => 'oracle.query',
@@ -82,7 +87,7 @@ const storage = {
     tedious: {
       opName: () => 'tedious.request',
       serviceName: ({ tracerService, pluginConfig, system }) =>
-        pluginConfig.service || fromSystem({ tracerService, system })
+        pluginConfig.service || fromSystem(tracerService, system)
     }
   }
 }

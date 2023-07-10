@@ -85,8 +85,15 @@ function withNamingSchema (
           agent
             .use(traces => {
               const span = selectSpan(traces)
-              expect(span).to.have.property('name', opName())
-              expect(span).to.have.property('service', serviceName())
+              const expectedOpName = typeof opName === 'function'
+                ? opName()
+                : opName
+              const expectedServiceName = typeof serviceName === 'function'
+                ? serviceName()
+                : serviceName
+
+              expect(span).to.have.property('name', expectedOpName)
+              expect(span).to.have.property('service', expectedServiceName)
             })
             .then(done)
             .catch(done)
@@ -117,10 +124,14 @@ function withNamingSchema (
         agent
           .use(traces => {
             const span = traces[0][0]
-            expect(span).to.have.property('service', serviceName())
+            const expectedServiceName = typeof serviceName === 'function'
+              ? serviceName()
+              : serviceName
+            expect(span).to.have.property('service', expectedServiceName)
           })
           .then(done)
           .catch(done)
+
         spanProducerFn(done)
       })
     })
