@@ -485,6 +485,40 @@ versions.forEach(version => {
               }
             )
           })
+          it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
+            receiver.setSuitesToSkip([{
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/features/not-existing.feature'
+              }
+            }])
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const testSession = events.find(event => event.type === 'test_session_end').content
+                assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+                assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+                assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+                const testModule = events.find(event => event.type === 'test_module_end').content
+                assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+                assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+                assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+              }, 25000)
+
+            childProcess = exec(
+              runTestsWithCoverageCommand,
+              {
+                cwd,
+                env: envVars,
+                stdio: 'inherit'
+              }
+            )
+            childProcess.on('exit', () => {
+              eventsPromise.then(() => {
+                done()
+              }).catch(done)
+            })
+          })
           if (!isAgentless) {
             context('if the agent is not event platform proxy compatible', () => {
               it('does not do any intelligent test runner request', (done) => {
