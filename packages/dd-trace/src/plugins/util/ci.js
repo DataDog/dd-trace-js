@@ -77,7 +77,7 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
 
     return `${protocol}//${hostname}${pathname}`
   } catch (e) {
-    return repositoryUrl
+    return ''
   }
 }
 
