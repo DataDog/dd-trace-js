@@ -1,30 +1,30 @@
-function getRedisService (config, connectionName) {
-  if (config.splitByInstance && connectionName) {
-    return config.service
-      ? `${config.service}-${connectionName}`
+function getRedisService ({ pluginConfig, connectionName }) {
+  if (pluginConfig.splitByInstance && connectionName) {
+    return pluginConfig.service
+      ? `${pluginConfig.service}-${connectionName}`
       : connectionName
   }
 
-  return config.service
+  return pluginConfig.service
 }
 
-function fromSystem (service, system) {
-  return system ? `${service}-${system}` : undefined
+function fromSystem ({ tracerService, system }) {
+  return system ? `${tracerService}-${system}` : undefined
 }
 
-function mysqlServiceName (service, config, dbConfig, system) {
-  if (typeof config.service === 'function') {
-    return config.service(dbConfig)
+function mysqlServiceName ({ tracerService, pluginConfig, dbConfig, system }) {
+  if (typeof pluginConfig.service === 'function') {
+    return pluginConfig.service(dbConfig)
   }
-  return config.service || fromSystem(service, system)
+  return pluginConfig.service || fromSystem({ tracerService, system })
 }
 
 function withSuffixFunction (suffix) {
-  return (service, config, params) => {
-    if (typeof config.service === 'function') {
-      return config.service(params)
+  return ({ tracerService, pluginConfig, params }) => {
+    if (typeof pluginConfig.service === 'function') {
+      return pluginConfig.service(params)
     }
-    return config.service || `${service}-${suffix}`
+    return pluginConfig.service || `${tracerService}-${suffix}`
   }
 }
 
@@ -81,7 +81,8 @@ const storage = {
     redis: redisConfig,
     tedious: {
       opName: () => 'tedious.request',
-      serviceName: (service, config, system) => config.service || fromSystem(service, system)
+      serviceName: ({ tracerService, pluginConfig, system }) =>
+        pluginConfig.service || fromSystem({ tracerService, system })
     }
   }
 }
