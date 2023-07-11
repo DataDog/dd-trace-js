@@ -46,12 +46,12 @@ class MissingHeaderAnalyzer extends Analyzer {
 
   _isVulnerable ({ req, res }, context) {
     if (!IGNORED_RESPONSE_STATUS_LIST.includes(res.statusCode) && this._isResponseHtml(res)) {
-      return this._validateRequestAndResponse(req, res)
+      return this._isVulnerableFromRequestAndResponse(req, res)
     }
     return false
   }
 
-  _validateRequestAndResponse (req, res) {
+  _isVulnerableFromRequestAndResponse (req, res) {
     return false
   }
 

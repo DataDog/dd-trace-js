@@ -9,7 +9,8 @@ class XcontenttypeHeaderMissingAnalyzer extends MissingHeaderAnalyzer {
   constructor () {
     super(XCONTENTTYPE_HEADER_MISSING, XCONTENTTYPEOPTIONS_HEADER_NAME)
   }
-  _validateRequestAndResponse (req, res) {
+
+  _isVulnerableFromRequestAndResponse (req, res) {
     const headerToCheck = res.getHeader(XCONTENTTYPEOPTIONS_HEADER_NAME)
     return !headerToCheck || headerToCheck.trim().toLowerCase() !== 'nosniff'
   }

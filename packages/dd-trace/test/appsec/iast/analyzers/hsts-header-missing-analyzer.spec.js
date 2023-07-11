@@ -10,6 +10,7 @@ describe('hsts header missing analyzer', () => {
   it('Expected vulnerability identifier', () => {
     expect(HSTS_HEADER_MISSING).to.be.equals('HSTS_HEADER_MISSING')
   })
+
   prepareTestServerForIast('hsts header missing analyzer',
     (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config) => {
       function makeRequestWithXFordwardedProtoHeader (done) {
