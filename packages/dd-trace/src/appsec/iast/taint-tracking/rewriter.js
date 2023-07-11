@@ -15,7 +15,7 @@ function getRewriter () {
       const iastRewriter = require('@datadog/native-iast-rewriter')
       const Rewriter = iastRewriter.Rewriter
       getPrepareStackTrace = iastRewriter.getPrepareStackTrace
-      rewriter = new Rewriter({ csiMethods })
+      rewriter = new Rewriter({ csiMethods, chainSourceMap: false })
     } catch (e) {
       iastLog.error('Unable to initialize TaintTracking Rewriter')
         .errorAndPublish(e)
