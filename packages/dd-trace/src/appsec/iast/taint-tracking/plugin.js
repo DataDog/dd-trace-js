@@ -90,9 +90,19 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     })
   }
 
+  taintUrl (req, iastContext) {
+    this.execSource({
+      handler: function () {
+        req.url = newTaintedString(iastContext, req.url, 'req.url', HTTP_REQUEST_PATH)
+      },
+      tag: [HTTP_REQUEST_PATH],
+      iastContext
+    })
+  }
+
   taintRequest (req, iastContext) {
-    taintObject(iastContext, req.headers, HTTP_REQUEST_HEADER_VALUE, true, HTTP_REQUEST_HEADER_NAME)
-    req.url = newTaintedString(iastContext, req.url, 'req.url', HTTP_REQUEST_PATH)
+    this.taintHeaders(req.headers, iastContext)
+    this.taintUrl(req, iastContext)
   }
 
   enable () {
