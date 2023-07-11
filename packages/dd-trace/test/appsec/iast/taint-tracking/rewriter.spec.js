@@ -13,19 +13,38 @@ describe('IAST Rewriter', () => {
   })
 
   describe('Enabling rewriter', () => {
-    let rewriter
+    let rewriter, iastTelemetry
+
     const shimmer = {
       wrap: sinon.spy(),
       unwrap: sinon.spy()
     }
 
+    class Rewriter {
+      rewrite (content, filename) {
+        return {
+          content: content + 'rewritten',
+          metrics: {
+            instrumentedPropagation: 2
+          }
+        }
+      }
+    }
+
     beforeEach(() => {
+      iastTelemetry = {
+        add: sinon.spy()
+      }
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
-        '../../../../../datadog-shimmer': shimmer
+        '@datadog/native-iast-rewriter': { Rewriter, getPrepareStackTrace: function () {} },
+        '../../../../../datadog-shimmer': shimmer,
+        '../../telemetry': iastTelemetry
       })
     })
 
-    afterEach(sinon.restore)
+    afterEach(() => {
+      sinon.restore()
+    })
 
     it('Should wrap module compile method on taint tracking enable', () => {
       rewriter.enableRewriter()

@@ -13,6 +13,9 @@ const EXCLUDED_PATHS = getNodeModulesPaths('mysql2', 'sequelize')
 class SqlInjectionAnalyzer extends InjectionAnalyzer {
   constructor () {
     super(SQL_INJECTION)
+  }
+
+  onConfigure () {
     this.addSub('apm:mysql:query:start', ({ sql }) => this.analyze(sql, 'MYSQL'))
     this.addSub('apm:mysql2:query:start', ({ sql }) => this.analyze(sql, 'MYSQL'))
     this.addSub('apm:pg:query:start', ({ query }) => this.analyze(query.text, 'POSTGRES'))
@@ -41,10 +44,9 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
 
   analyze (value, dialect) {
     const store = storage.getStore()
-
     if (!(store && store.sqlAnalyzed)) {
       const iastContext = getIastContext(store)
-      if (store && !iastContext) return
+      if (this._isInvalidContext(store, iastContext)) return
       this._reportIfVulnerable(value, iastContext, dialect)
     }
   }
@@ -66,6 +68,7 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
       addVulnerability(context, vulnerability)
     }
   }
+
   _getExcludedPaths () {
     return EXCLUDED_PATHS
   }
