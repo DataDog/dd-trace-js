@@ -83,9 +83,7 @@ class TracingPlugin extends Plugin {
     this.addBind(`${prefix}:${eventName}`, transform)
   }
 
-  addError (error) {
-    const span = this.activeSpan
-
+  addError (error, span = this.activeSpan) {
     if (!span._spanContext._tags['error']) {
       // Errors may be wrapped in a context.
       error = (error && error.error) || error
