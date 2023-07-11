@@ -19,6 +19,8 @@ describe('ldap-injection-analyzer', () => {
     './injection-analyzer': InjectionAnalyzer
   })
 
+  ldapInjectionAnalyzer.configure(true)
+
   it('should subscribe to ldapjs client search channel', () => {
     expect(ldapInjectionAnalyzer._subscriptions).to.have.lengthOf(1)
     expect(ldapInjectionAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:ldapjs:client:search')
@@ -70,5 +72,38 @@ describe('ldap-injection-analyzer', () => {
     proxiedLdapInjectionAnalyzer.analyze(TAINTED_QUERY)
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'LDAP_INJECTION' })
+  })
+
+  it('should call analyzeAll when datadog:ldapjs:client:search event is published', () => {
+    const store = {}
+    const iastContext = {}
+    const getStore = sinon.stub().returns(store)
+    const getIastContext = sinon.stub().returns(iastContext)
+
+    const iastPlugin = proxyquire('../../../../src/appsec/iast/iast-plugin', {
+      '../../../../datadog-core': { storage: { getStore } },
+      './iast-context': { getIastContext }
+    })
+
+    const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
+      '../iast-plugin': iastPlugin,
+      '../overhead-controller': { hasQuota: () => true }
+    })
+    const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
+      '../taint-tracking/operations': TaintTrackingMock,
+      './vulnerability-analyzer': ProxyAnalyzer
+    })
+
+    const ldapInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/ldap-injection-analyzer', {
+      './injection-analyzer': InjectionAnalyzer
+    })
+    const analyzeAll = sinon.stub(ldapInjectionAnalyzer, 'analyzeAll')
+    ldapInjectionAnalyzer.configure(true)
+
+    const onLdapClientSearch = ldapInjectionAnalyzer._subscriptions[0]._handler
+
+    onLdapClientSearch({ base: 'base', filter: 'filter', name: 'datadog:ldapjs:client:search' })
+
+    expect(analyzeAll.firstCall).to.be.calledWith('base', 'filter')
   })
 })

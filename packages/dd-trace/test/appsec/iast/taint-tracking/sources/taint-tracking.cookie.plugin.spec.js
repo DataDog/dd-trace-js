@@ -9,7 +9,7 @@ const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-t
 const {
   HTTP_REQUEST_COOKIE_NAME,
   HTTP_REQUEST_COOKIE_VALUE
-} = require('../../../../../src/appsec/iast/taint-tracking/origin-types')
+} = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 const { testInRequest } = require('../../utils')
 
 describe('Cookies sourcing with cookies', () => {

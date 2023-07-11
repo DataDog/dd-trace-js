@@ -1,15 +1,15 @@
 'use strict'
 
 const csiMethods = [
-  { src: 'plusOperator', operator: true },
-  { src: 'trim' },
-  { src: 'trimStart', dst: 'trim' },
-  { src: 'trimEnd' },
   { src: 'concat' },
-  { src: 'substring' },
-  { src: 'substr' },
+  { src: 'plusOperator', operator: true },
+  { src: 'replace' },
   { src: 'slice' },
-  { src: 'replace' }
+  { src: 'substr' },
+  { src: 'substring' },
+  { src: 'trim' },
+  { src: 'trimEnd' },
+  { src: 'trimStart', dst: 'trim' }
 ]
 
 module.exports = {

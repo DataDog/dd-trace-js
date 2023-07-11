@@ -13,8 +13,7 @@ const {
   taintTrackingPlugin
 } = require('./taint-tracking')
 const { IAST_ENABLED_TAG_KEY } = require('./tags')
-
-const telemetryLogs = require('./telemetry/logs')
+const iastTelemetry = require('./telemetry')
 
 // TODO Change to `apm:http:server:request:[start|close]` when the subscription
 //  order of the callbacks can be enforce
@@ -22,24 +21,24 @@ const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
 const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 
 function enable (config, _tracer) {
+  iastTelemetry.configure(config, config.iast && config.iast.telemetryVerbosity)
   enableAllAnalyzers()
-  enableTaintTracking(config.iast)
+  enableTaintTracking(config.iast, iastTelemetry.verbosity)
   requestStart.subscribe(onIncomingHttpRequestStart)
   requestClose.subscribe(onIncomingHttpRequestEnd)
   overheadController.configure(config.iast)
   overheadController.startGlobalContext()
   vulnerabilityReporter.start(config, _tracer)
-  telemetryLogs.start()
 }
 
 function disable () {
+  iastTelemetry.stop()
   disableAllAnalyzers()
   disableTaintTracking()
   overheadController.finishGlobalContext()
   if (requestStart.hasSubscribers) requestStart.unsubscribe(onIncomingHttpRequestStart)
   if (requestClose.hasSubscribers) requestClose.unsubscribe(onIncomingHttpRequestEnd)
   vulnerabilityReporter.stop()
-  telemetryLogs.stop()
 }
 
 function onIncomingHttpRequestStart (data) {
@@ -54,6 +53,7 @@ function onIncomingHttpRequestStart (data) {
           const iastContext = iastContextFunctions.saveIastContext(store, topContext, { rootSpan, req: data.req })
           createTransaction(rootSpan.context().toSpanId(), iastContext)
           overheadController.initializeRequestContext(iastContext)
+          iastTelemetry.onRequestStart(iastContext)
           taintTrackingPlugin.taintHeaders(data.req.headers, iastContext)
         }
         if (rootSpan.addTags) {
@@ -76,6 +76,7 @@ function onIncomingHttpRequestEnd (data) {
       const rootSpan = iastContext.rootSpan
       vulnerabilityReporter.sendVulnerabilities(vulnerabilities, rootSpan)
       removeTransaction(iastContext)
+      iastTelemetry.onRequestEnd(iastContext, iastContext.rootSpan)
     }
     // TODO web.getContext(data.req) is required when the request is aborted
     if (iastContextFunctions.cleanIastContext(store, topContext, iastContext)) {

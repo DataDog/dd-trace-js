@@ -247,6 +247,10 @@ class Config {
       process.env.DD_TELEMETRY_DEBUG,
       false
     )
+    const DD_TELEMETRY_METRICS_ENABLED = coalesce(
+      process.env.DD_TELEMETRY_METRICS_ENABLED,
+      false
+    )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
       options.protocolVersion,
       process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
@@ -461,6 +465,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       true
     )
 
+    const DD_IAST_TELEMETRY_VERBOSITY = coalesce(
+      iastOptions && iastOptions.telemetryVerbosity,
+      process.env.DD_IAST_TELEMETRY_VERBOSITY,
+      'INFORMATION'
+    )
+
     const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
       true
@@ -561,7 +571,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
       heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
-      debug: isTrue(DD_TELEMETRY_DEBUG)
+      debug: isTrue(DD_TELEMETRY_DEBUG),
+      metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED)
     }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
@@ -590,7 +601,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
       deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
-      redactionEnabled: DD_IAST_REDACTION_ENABLED
+      redactionEnabled: DD_IAST_REDACTION_ENABLED,
+      telemetryVerbosity: DD_IAST_TELEMETRY_VERBOSITY
     }
 
     this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
