@@ -1,13 +1,15 @@
 'use strict'
 
 const types = require('./types')
-const { channel, addHook, AsyncResource } = require('../helpers/instrument')
+const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
 const startChannel = channel('apm:grpc:server:request:start')
+const asyncStartChannel = channel('apm:grpc:server:request:asyncStart')
 const errorChannel = channel('apm:grpc:server:request:error')
 const updateChannel = channel('apm:grpc:server:request:update')
 const finishChannel = channel('apm:grpc:server:request:finish')
+const emitChannel = channel('apm:grpc:server:request:emit')
 
 // https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
 const OK = 0
@@ -31,28 +33,38 @@ function wrapHandler (func, name) {
     const type = types[this.type]
     const isStream = type !== 'unary'
 
-    const parentResource = new AsyncResource('bound-anonymous-fn')
-    const requestResource = new AsyncResource('bound-anonymous-fn')
+    const ctx = { name, metadata, type }
 
-    return requestResource.runInAsyncScope(() => {
-      startChannel.publish({ name, metadata, type })
+    return startChannel.runStores(ctx, () => {
+      try {
+        const onCancel = () => {
+          ctx.code = CANCELLED
+          finishChannel.publish(ctx)
+        }
 
-      const onCancel = requestResource.bind(() => {
-        finishChannel.publish({ code: CANCELLED })
-      })
+        // Finish the span if the call was cancelled.
+        call.once('cancelled', onCancel)
 
-      // Finish the span if the call was cancelled.
-      call.once('cancelled', onCancel)
+        if (isStream) {
+          wrapStream(call, ctx, onCancel)
+        } else {
+          arguments[1] = wrapCallback(callback, call, ctx, onCancel)
+        }
 
-      if (isStream) {
-        wrapStream(call, requestResource, onCancel)
-      } else {
-        arguments[1] = wrapCallback(callback, call, requestResource, parentResource, onCancel)
+        shimmer.wrap(call, 'emit', emit => {
+          return function () {
+            return emitChannel.runStores(ctx, () => {
+              return emit.apply(this, arguments)
+            })
+          }
+        })
+
+        return func.apply(this, arguments)
+      } catch (e) {
+        ctx.error = e
+        errorChannel.publish(ctx)
       }
-
-      shimmer.wrap(call, 'emit', emit => requestResource.bind(emit))
-
-      return func.apply(this, arguments)
+      // No end channel needed
     })
   }
 }
@@ -67,69 +79,66 @@ function wrapRegister (register) {
   }
 }
 
-function wrapStream (call, requestResource, onCancel) {
-  if (call.call && call.call.sendStatus) {
-    call.call.sendStatus = wrapSendStatus(call.call.sendStatus, requestResource)
-  }
-
-  shimmer.wrap(call, 'emit', emit => {
-    return function (eventName, ...args) {
-      switch (eventName) {
+function createWrapEmit (call, ctx, onCancel) {
+  return function wrapEmit (emit) {
+    return function (event, arg1) {
+      switch (event) {
         case 'error':
-          errorChannel.publish(args[0])
-          finishChannel.publish({ code: args[0].code })
-
+          ctx.error = arg1
+          errorChannel.publish(ctx)
+          ctx.code = arg1.code
+          finishChannel.publish(ctx)
           call.removeListener('cancelled', onCancel)
-
           break
-
-          // Finish the span of the response only if it was successful.
-          // Otherwise it'll be finished in the `error` listener.
         case 'finish':
           if (call.status) {
             updateChannel.publish(call.status)
           }
-
           if (!call.status || call.status.code === 0) {
-            finishChannel.publish()
+            finishChannel.publish(ctx)
           }
-
           call.removeListener('cancelled', onCancel)
-
           break
       }
 
       return emit.apply(this, arguments)
     }
-  })
-}
-
-function wrapCallback (callback, call, requestResource, parentResource, onCancel) {
-  return function (err, value, trailer, flags) {
-    requestResource.runInAsyncScope(() => {
-      if (err) {
-        errorChannel.publish(err)
-        finishChannel.publish(err)
-      } else {
-        finishChannel.publish({ code: OK, trailer })
-      }
-
-      call.removeListener('cancelled', onCancel)
-    })
-
-    if (callback) {
-      return parentResource.runInAsyncScope(() => {
-        return callback.apply(this, arguments)
-      })
-    }
   }
 }
 
-function wrapSendStatus (sendStatus, requestResource) {
-  return function (status) {
-    requestResource.runInAsyncScope(() => {
-      updateChannel.publish(status)
+function wrapStream (call, ctx, onCancel) {
+  if (call.call && call.call.sendStatus) {
+    call.call.sendStatus = wrapSendStatus(call.call.sendStatus, ctx)
+  }
+
+  shimmer.wrap(call, 'emit', createWrapEmit(call, ctx, onCancel))
+}
+
+function wrapCallback (callback = () => {}, call, ctx, onCancel) {
+  return function (err, value, trailer, flags) {
+    if (err) {
+      ctx.error = err
+      errorChannel.publish(ctx)
+    } else {
+      ctx.code = OK
+      ctx.trailer = trailer
+    }
+
+    finishChannel.publish(ctx)
+
+    call.removeListener('cancelled', onCancel)
+
+    return asyncStartChannel.runStores(ctx, () => {
+      return callback.apply(this, arguments)
+      // No async end channel needed
     })
+  }
+}
+
+function wrapSendStatus (sendStatus, ctx) {
+  return function (status) {
+    ctx.status = status
+    updateChannel.publish(ctx)
 
     return sendStatus.apply(this, arguments)
   }

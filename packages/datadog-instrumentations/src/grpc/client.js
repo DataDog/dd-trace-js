@@ -1,15 +1,17 @@
 'use strict'
 
 const types = require('./types')
-const { addHook, channel, AsyncResource } = require('../helpers/instrument')
+const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
 const patched = new WeakSet()
 const instances = new WeakMap()
 
 const startChannel = channel('apm:grpc:client:request:start')
+const asyncStartChannel = channel('apm:grpc:client:request:asyncStart')
 const errorChannel = channel('apm:grpc:client:request:error')
 const finishChannel = channel('apm:grpc:client:request:finish')
+const emitChannel = channel('apm:grpc:client:request:emit')
 
 function createWrapMakeRequest (type) {
   return function wrapMakeRequest (makeRequest) {
@@ -99,45 +101,39 @@ function wrapMethod (method, path, type) {
   return wrapped
 }
 
-function wrapCallback (requestResource, parentResource, callback) {
+function wrapCallback (ctx, callback = () => { }) {
   return function (err) {
     if (err) {
-      requestResource.runInAsyncScope(() => {
-        errorChannel.publish(err)
-      })
+      ctx.error = err
+      errorChannel.publish(ctx)
     }
 
-    if (callback) {
-      return parentResource.runInAsyncScope(() => {
-        return callback.apply(this, arguments)
-      })
-    }
+    return asyncStartChannel.runStores(ctx, () => {
+      return callback.apply(this, arguments)
+      // No async end channel needed
+    })
   }
 }
 
-function wrapStream (call, requestResource, parentResource) {
-  if (!call || typeof call.emit !== 'function') return
+function createWrapEmit (ctx) {
+  return function wrapEmit (emit) {
+    return function (event, arg1) {
+      switch (event) {
+        case 'error':
+          ctx.error = arg1
+          errorChannel.publish(ctx)
+          break
+        case 'status':
+          ctx.result = arg1
+          finishChannel.publish(ctx)
+          break
+      }
 
-  shimmer.wrap(call, 'emit', emit => {
-    return function (eventName, ...args) {
-      requestResource.runInAsyncScope(() => {
-        switch (eventName) {
-          case 'error':
-            errorChannel.publish(args[0])
-
-            break
-          case 'status':
-            finishChannel.publish(args[0])
-
-            break
-        }
-      })
-
-      return parentResource.runInAsyncScope(() => {
+      return emitChannel.runStores(ctx, () => {
         return emit.apply(this, arguments)
       })
     }
-  })
+  }
 }
 
 function callMethod (client, method, args, path, metadata, type) {
@@ -145,25 +141,31 @@ function callMethod (client, method, args, path, metadata, type) {
 
   const length = args.length
   const callback = args[length - 1]
-  const parentResource = new AsyncResource('bound-anonymous-fn')
-  const requestResource = new AsyncResource('bound-anonymous-fn')
 
-  return requestResource.runInAsyncScope(() => {
-    startChannel.publish({ metadata, path, type })
+  const ctx = { metadata, path, type }
 
-    if (type === types.unary || type === types.client_stream) {
-      if (typeof callback === 'function') {
-        args[length - 1] = wrapCallback(requestResource, parentResource, callback)
-      } else {
-        args[length] = wrapCallback(requestResource, parentResource)
+  return startChannel.runStores(ctx, () => {
+    try {
+      if (type === types.unary || type === types.client_stream) {
+        if (typeof callback === 'function') {
+          args[length - 1] = wrapCallback(ctx, callback)
+        } else {
+          args[length] = wrapCallback(ctx)
+        }
       }
+
+      const call = method.apply(client, args)
+
+      if (call && typeof call.emit === 'function') {
+        shimmer.wrap(call, 'emit', createWrapEmit(ctx))
+      }
+
+      return call
+    } catch (e) {
+      ctx.error = e
+      errorChannel.publish(ctx)
     }
-
-    const call = method.apply(client, args)
-
-    wrapStream(call, requestResource, parentResource)
-
-    return call
+    // No end channel needed
   })
 }
 
