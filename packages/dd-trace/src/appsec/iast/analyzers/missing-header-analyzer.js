@@ -19,7 +19,13 @@ class MissingHeaderAnalyzer extends Analyzer {
     super(type)
 
     this.headerName = headerName
-    this.addSub('datadog:iast:response-end', (data) => this.analyze(data))
+  }
+
+  onConfigure () {
+    this.addSub({
+      channelName: 'datadog:iast:response-end',
+      moduleName: 'http'
+    }, (data) => this.analyze(data))
   }
 
   _getLocation () {
