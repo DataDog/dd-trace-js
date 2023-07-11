@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 const overheadController = require('../../../../src/appsec/iast/overhead-controller')
 const { HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_PARAMETER } =
-  require('../../../../src/appsec/iast/taint-tracking/origin-types')
+  require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 describe('unvalidated-redirect-analyzer', () => {
   const NOT_TAINTED_LOCATION = 'url.com'
@@ -66,6 +66,8 @@ describe('unvalidated-redirect-analyzer', () => {
       './injection-analyzer': InjectionAnalyzer,
       '../taint-tracking/operations': TaintTrackingMock
     })
+
+  unvalidatedRedirectAnalyzer.configure(true)
 
   it('should subscribe to set-header:finish channel', () => {
     expect(unvalidatedRedirectAnalyzer._subscriptions).to.have.lengthOf(1)
