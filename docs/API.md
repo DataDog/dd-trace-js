@@ -134,6 +134,7 @@ tracer.use('pg', {
 * [net](./interfaces/plugins.net.html)
 * [next](./interfaces/plugins.next.html)
 * [opensearch](./interfaces/plugins.opensearch.html)
+* [openai](./interfaces/plugins.openai.html)
 * [oracledb](./interfaces/plugins.oracledb.html)
 * [paperplane](./interfaces/plugins.paperplane.html)
 * [pino](./interfaces/plugins.pino.html)
