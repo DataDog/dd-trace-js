@@ -1,5 +1,6 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { TEXT_MAP } = require('../../../ext/formats')
 const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
@@ -7,9 +8,20 @@ const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
 class GrpcClientPlugin extends ClientPlugin {
   static get id () { return 'grpc' }
   static get operation () { return 'client:request' }
+  static get prefix () { return `apm:grpc:client:request` }
   static get peerServicePrecursors () { return ['rpc.service'] }
 
-  start ({ metadata, path, type }) {
+  constructor (...args) {
+    super(...args)
+
+    this.addTraceBind('emit', ({ parentStore }) => {
+      return parentStore
+    })
+  }
+
+  bindStart (message) {
+    const store = storage.getStore()
+    const { metadata, path, type } = message
     const metadataFilter = this.config.metadataFilter
     const method = getMethodMetadata(path, type)
     const span = this.startSpan(this.operationName(), {
@@ -28,7 +40,7 @@ class GrpcClientPlugin extends ClientPlugin {
       metrics: {
         'grpc.status.code': 0
       }
-    })
+    }, false)
 
     // needed as precursor for peer.service
     if (method.service && method.package) {
@@ -39,22 +51,27 @@ class GrpcClientPlugin extends ClientPlugin {
       addMetadataTags(span, metadata, metadataFilter, 'request')
       inject(this.tracer, span, metadata)
     }
+
+    message.span = span
+    message.parentStore = store
+    message.currentStore = { ...store, span }
+
+    return message.currentStore
   }
 
-  error (error) {
-    const span = this.activeSpan
+  bindAsyncStart ({ parentStore }) {
+    return parentStore
+  }
 
-    if (!span) return
-
+  error ({ span, error }) {
     this.addCode(span, error.code)
-    this.addError(error)
+    this.addError(error, span)
   }
 
-  finish ({ code, metadata }) {
-    const span = this.activeSpan
-
+  finish ({ span, result }) {
     if (!span) return
 
+    const { code, metadata } = result || {}
     const metadataFilter = this.config.metadataFilter
 
     this.addCode(span, code)
@@ -63,7 +80,8 @@ class GrpcClientPlugin extends ClientPlugin {
       addMetadataTags(span, metadata, metadataFilter, 'response')
     }
 
-    super.finish()
+    this.tagPeerService(span)
+    span.finish()
   }
 
   configure (config) {
