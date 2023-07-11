@@ -4,14 +4,16 @@ const InjectionAnalyzer = require('./injection-analyzer')
 const { UNVALIDATED_REDIRECT } = require('../vulnerabilities')
 const { getNodeModulesPaths } = require('../path-line')
 const { getRanges } = require('../taint-tracking/operations')
-const { HTTP_REQUEST_HEADER_VALUE } = require('../taint-tracking/origin-types')
+const { HTTP_REQUEST_HEADER_VALUE } = require('../taint-tracking/source-types')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('express/lib/response.js')
 
 class UnvalidatedRedirectAnalyzer extends InjectionAnalyzer {
   constructor () {
     super(UNVALIDATED_REDIRECT)
+  }
 
+  onConfigure () {
     this.addSub('datadog:http:server:response:set-header:finish', ({ name, value }) => this.analyze(name, value))
   }
 
