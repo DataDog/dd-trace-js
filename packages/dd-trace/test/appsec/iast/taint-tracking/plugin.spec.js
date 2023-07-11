@@ -8,7 +8,7 @@ const {
   HTTP_REQUEST_COOKIE_VALUE,
   HTTP_REQUEST_COOKIE_NAME,
   HTTP_REQUEST_PATH_PARAM
-} = require('../../../../src/appsec/iast/taint-tracking/origin-types')
+} = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 const middlewareNextChannel = dc.channel('apm:express:middleware:next')
 const queryParseFinishChannel = dc.channel('datadog:qs:parse:finish')
