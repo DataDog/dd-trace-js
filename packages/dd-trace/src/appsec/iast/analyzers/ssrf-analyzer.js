@@ -6,7 +6,9 @@ const { SSRF } = require('../vulnerabilities')
 class SSRFAnalyzer extends InjectionAnalyzer {
   constructor () {
     super(SSRF)
+  }
 
+  onConfigure () {
     this.addSub('apm:http:client:request:start', ({ args }) => {
       if (typeof args.originalUrl === 'string') {
         this.analyze(args.originalUrl)

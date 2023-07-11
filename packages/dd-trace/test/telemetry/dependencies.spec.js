@@ -41,6 +41,7 @@ describe('dependencies', () => {
 
     afterEach(() => {
       dependencies.stop()
+      sendData.reset()
       global.setImmediate = originalSetImmediate
     })
 

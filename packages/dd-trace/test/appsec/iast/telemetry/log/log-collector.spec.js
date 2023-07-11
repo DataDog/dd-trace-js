@@ -1,10 +1,10 @@
 const { expect } = require('chai')
-const { calculateDDBasePath } = require('../../../../src/util')
+const { calculateDDBasePath } = require('../../../../../src/util')
 
 const ddBasePath = calculateDDBasePath(__dirname)
 
 describe('telemetry log collector', () => {
-  const logCollector = require('../../../../src/appsec/iast/telemetry/log_collector')
+  const logCollector = require('../../../../../src/appsec/iast/telemetry/log/log-collector')
 
   afterEach(() => {
     logCollector.reset(3)
@@ -24,14 +24,16 @@ describe('telemetry log collector', () => {
     })
 
     it('should store logs with same message but different stack', () => {
-      const ddFrame = `at T (${ddBasePath}packages/dd-trace/test/appsec/iast/telemetry/log_collector.spec.js:29:21)`
+      const ddFrame =
+        `at T (${ddBasePath}packages/dd-trace/test/appsec/iast/telemetry/log/log-collector.spec.js:29:21)`
       expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
       expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `stack 2\n${ddFrame}` })).to.be.true
       expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `stack 3\n${ddFrame}` })).to.be.true
     })
 
     it('should store logs with same message, same stack but different level', () => {
-      const ddFrame = `at T (${ddBasePath}packages/dd-trace/test/appsec/iast/telemetry/log_collector.spec.js:29:21)`
+      const ddFrame =
+        `at T (${ddBasePath}packages/dd-trace/test/appsec/iast/telemetry/log/log-collector.spec.js:29:21)`
       expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
       expect(logCollector.add({ message: 'Error 1', level: 'WARN', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
       expect(logCollector.add({ message: 'Error 1', level: 'DEBUG', stack_trace: `stack 1\n${ddFrame}` })).to.be.true

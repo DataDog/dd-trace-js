@@ -1,9 +1,9 @@
 'use strict'
 
-const dc = require('../../../../../diagnostics_channel')
-const logCollector = require('./log_collector')
-const { sendData } = require('../../../telemetry/send-data')
-const log = require('../../../log')
+const dc = require('../../../../../../diagnostics_channel')
+const logCollector = require('./log-collector')
+const { sendData } = require('../../../../telemetry/send-data')
+const log = require('../../../../log')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
@@ -37,7 +37,7 @@ function isLogCollectionEnabled (config) {
 
 function onTelemetryStart (msg) {
   if (!msg || !isLogCollectionEnabled(msg.config)) {
-    log.info('IAST telemetry logs start received but log collection is not enabled or configuration is incorrect')
+    log.info('IAST telemetry logs start event received but log collection is not enabled or configuration is incorrect')
     return false
   }
 

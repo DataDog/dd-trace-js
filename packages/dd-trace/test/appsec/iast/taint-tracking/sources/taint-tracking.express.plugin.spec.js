@@ -9,7 +9,7 @@ const { storage } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
 const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-tracking/operations')
-const { HTTP_REQUEST_PATH_PARAM } = require('../../../../../src/appsec/iast/taint-tracking/origin-types')
+const { HTTP_REQUEST_PATH_PARAM } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 
 describe('Path params sourcing with express', () => {
   let express
