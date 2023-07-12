@@ -2,7 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { expectedSchema } = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const hostname = process.env.CI ? 'oracledb' : 'localhost'
 const config = {
@@ -10,6 +10,7 @@ const config = {
   password: 'Oracle18',
   connectString: `${hostname}:1521/xepdb1`
 }
+const expectedPeerService = new URL('http://' + config.connectString).pathname.slice(1)
 
 const dbQuery = 'select current_timestamp from dual'
 
@@ -39,6 +40,18 @@ describe('Plugin', () => {
             await connection.close()
           })
 
+          withNamingSchema(
+            () => connection.execute(dbQuery),
+            rawExpectedSchema.outbound
+          )
+
+          withPeerService(
+            () => tracer,
+            () => connection.execute(dbQuery),
+            expectedPeerService,
+            'db.instance'
+          )
+
           connectionTests(new URL('http://' + config.connectString))
         })
 
@@ -62,12 +75,6 @@ describe('Plugin', () => {
         })
 
         function connectionTests (url) {
-          if (url) {
-            withPeerService(
-              () => tracer,
-              () => connection.execute(dbQuery),
-              url.pathname.slice(1), 'db.instance')
-          }
           it('should be instrumented for promise API', done => {
             agent.use(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
@@ -163,6 +170,13 @@ describe('Plugin', () => {
           })
 
           poolTests(new URL('http://' + config.connectString))
+
+          withPeerService(
+            () => tracer,
+            () => connection.execute(dbQuery),
+            expectedPeerService,
+            'db.instance'
+          )
         })
 
         describe('with pool and connect descriptor', () => {
@@ -255,6 +269,19 @@ describe('Plugin', () => {
           after(async () => {
             await agent.close({ ritmReset: false })
           })
+          withNamingSchema(
+            () => connection.execute(dbQuery),
+            {
+              v0: {
+                opName: 'oracle.query',
+                serviceName: 'custom'
+              },
+              v1: {
+                opName: 'oracle.query',
+                serviceName: 'custom'
+              }
+            }
+          )
           it('should set the service name', done => {
             agent.use(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
@@ -278,6 +305,19 @@ describe('Plugin', () => {
           after(async () => {
             await agent.close({ ritmReset: false })
           })
+          withNamingSchema(
+            () => connection.execute(dbQuery),
+            {
+              v0: {
+                opName: 'oracle.query',
+                serviceName: 'oracledb:1521/xepdb1'
+              },
+              v1: {
+                opName: 'oracle.query',
+                serviceName: 'oracledb:1521/xepdb1'
+              }
+            }
+          )
           it('should set the service name', done => {
             agent.use(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
