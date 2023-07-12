@@ -892,11 +892,11 @@ jobs:
           - 1521:1521
           - 5500:5500
       testagent:
-        image: williamconti549/dd-apm-test-agent:service-naming-2
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.11.0
         env:
           LOG_LEVEL: DEBUG
           TRACE_LANGUAGE: javascript
-          DISABLED_CHECKS: trace_content_length
+          ENABLED_CHECKS: trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service,trace_dd_service
           DD_DISABLE_ERROR_RESPONSES: true
           DD_POOL_TRACE_CHECK_FAILURES: true
           PORT: 9126
