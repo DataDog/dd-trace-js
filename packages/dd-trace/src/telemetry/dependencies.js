@@ -9,6 +9,8 @@ const { fileURLToPath } = require('url')
 
 const savedDependencies = new Set()
 const detectedDependencyKeys = new Set()
+const detectedDependencyVersions = new Set()
+
 const FILE_URI_START = `file://`
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 
@@ -56,8 +58,14 @@ function onModuleLoad (data) {
         if (basedir) {
           try {
             const { version } = requirePackageJson(basedir, module)
-            savedDependencies.add(`${name} ${version}`)
-            waitAndSend(config, application, host)
+            const dependencyAndVersion = `${name} ${version}`
+
+            if (!detectedDependencyVersions.has(dependencyAndVersion)) {
+              savedDependencies.add(dependencyAndVersion)
+              detectedDependencyVersions.add(dependencyAndVersion)
+
+              waitAndSend(config, application, host)
+            }
           } catch (e) {
             // can not read the package.json, do nothing
           }
