@@ -1,4 +1,3 @@
-const { identityService } = require('../util')
 
 function configWithFallback ({ tracerService, pluginConfig }) {
   return pluginConfig.service || tracerService
@@ -11,7 +10,7 @@ const redisNaming = {
 
 const mySQLNaming = {
   opName: () => 'mysql.query',
-  serviceName: identityService
+  serviceName: configWithFallback
 }
 
 function withFunction ({ tracerService, pluginConfig, params }) {
@@ -34,7 +33,7 @@ const storage = {
     ioredis: redisNaming,
     mariadb: {
       opName: () => 'mariadb.query',
-      serviceName: identityService
+      serviceName: withFunction
     },
     memcached: {
       opName: () => 'memcached.command',
