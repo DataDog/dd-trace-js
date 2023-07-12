@@ -4,7 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
-const { expectedSchema } = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let mysql
@@ -27,15 +27,18 @@ describe('Plugin', () => {
         beforeEach(async () => {
           await agent.load('mysql')
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
-
           connection = mysql.createConnection({
             host: 'localhost',
             user: 'root',
             database: 'db'
           })
-
           connection.connect()
         })
+
+        withNamingSchema(
+          () => connection.query('SELECT 1 + 1 AS solution', () => {}),
+          rawExpectedSchema.outbound
+        )
 
         it('should propagate context to callbacks, with correct callback args', done => {
           const span = tracer.startSpan('test')
@@ -131,9 +134,22 @@ describe('Plugin', () => {
             user: 'root',
             database: 'db'
           })
-
           connection.connect()
         })
+
+        withNamingSchema(
+          () => connection.query('SELECT 1 + 1 AS solution', () => {}),
+          {
+            v0: {
+              opName: 'mysql.query',
+              serviceName: 'custom'
+            },
+            v1: {
+              opName: 'mysql.query',
+              serviceName: 'custom'
+            }
+          }
+        )
 
         it('should be configured with the correct values', done => {
           agent.use(traces => {
@@ -165,9 +181,22 @@ describe('Plugin', () => {
             user: 'root',
             database: 'db'
           })
-
           connection.connect()
         })
+
+        withNamingSchema(
+          () => connection.query('SELECT 1 + 1 AS solution', () => {}),
+          {
+            v0: {
+              opName: 'mysql.query',
+              serviceName: 'custom'
+            },
+            v1: {
+              opName: 'mysql.query',
+              serviceName: 'custom'
+            }
+          }
+        )
 
         it('should be configured with the correct values', done => {
           agent.use(traces => {

@@ -10,7 +10,7 @@ const redisNaming = {
 
 const mySQLNaming = {
   opName: () => 'mysql.query',
-  serviceName: configWithFallback
+  serviceName: withFunction
 }
 
 function withFunction ({ tracerService, pluginConfig, params }) {

@@ -4,7 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
-const { expectedSchema } = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let mysql2
@@ -42,6 +42,11 @@ describe('Plugin', () => {
           () => tracer,
           (done) => connection.query('SELECT 1', (_) => done()),
           'db', 'db.name')
+
+        withNamingSchema(
+          () => connection.query('SELECT 1', (_) => {}),
+          rawExpectedSchema.outbound
+        )
 
         it('should propagate context to callbacks, with correct callback args', done => {
           const span = tracer.startSpan('test')
@@ -199,6 +204,20 @@ describe('Plugin', () => {
           connection.connect()
         })
 
+        withNamingSchema(
+          () => connection.query('SELECT 1', (_) => {}),
+          {
+            v0: {
+              opName: 'mysql.query',
+              serviceName: 'custom'
+            },
+            v1: {
+              opName: 'mysql.query',
+              serviceName: 'custom'
+            }
+          }
+        )
+
         it('should be configured with the correct values', done => {
           agent
             .use(traces => {
@@ -233,6 +252,20 @@ describe('Plugin', () => {
 
           connection.connect()
         })
+
+        withNamingSchema(
+          () => connection.query('SELECT 1', (_) => {}),
+          {
+            v0: {
+              opName: 'mysql.query',
+              serviceName: 'custom'
+            },
+            v1: {
+              opName: 'mysql.query',
+              serviceName: 'custom'
+            }
+          }
+        )
 
         it('should be configured with the correct values', done => {
           agent.use(traces => {
