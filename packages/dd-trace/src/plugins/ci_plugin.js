@@ -111,7 +111,12 @@ module.exports = class CiPlugin extends Plugin {
     const childOf = getTestParentSpan(this.tracer)
 
     let testTags = {
-      ...getTestCommonTags(testName, testSuite, this.frameworkVersion),
+      ...getTestCommonTags(
+        testName,
+        testSuite,
+        this.frameworkVersion,
+        this.constructor.id
+      ),
       [COMPONENT]: this.constructor.id,
       ...extraTags
     }

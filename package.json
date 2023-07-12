@@ -70,7 +70,7 @@
     "@datadog/native-iast-rewriter": "2.0.1",
     "@datadog/native-iast-taint-tracking": "^1.5.0",
     "@datadog/native-metrics": "^2.0.0",
-    "@datadog/pprof": "2.2.3",
+    "@datadog/pprof": "3.0.0",
     "@datadog/sketches-js": "^2.1.0",
     "@opentelemetry/api": "^1.0.0",
     "@opentelemetry/core": "^1.14.0",
@@ -94,7 +94,7 @@
     "node-abort-controller": "^3.0.1",
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.2",
-    "protobufjs": "^7.1.2",
+    "protobufjs": "^7.2.4",
     "retry": "^0.10.1",
     "semver": "^7.3.8"
   },

@@ -3,12 +3,19 @@
 class NativeWallProfiler {
   constructor (options = {}) {
     this.type = 'wall'
-    this._samplingInterval = options.samplingInterval || 1e6 / 99 // 99hz
+    this._samplingIntervalMicros = options.samplingInterval || 1e6 / 99 // 99hz
+    this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
+    this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
     this._mapper = undefined
     this._pprof = undefined
+
+    this._logger = options.logger
+    this._started = false
   }
 
   start ({ mapper } = {}) {
+    if (this._started) return
+
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
 
@@ -20,12 +27,20 @@ class NativeWallProfiler {
       process._stopProfilerIdleNotifier = () => {}
     }
 
-    this._record()
+    this._pprof.time.start({
+      intervalMicros: this._samplingIntervalMicros,
+      durationMillis: this._flushIntervalMillis,
+      sourceMapper: this._mapper,
+      customLabels: this._codeHotspotsEnabled,
+      lineNumbers: false
+    })
+
+    this._started = true
   }
 
   profile () {
-    if (!this._stop) return
-    return this._stop(true)
+    if (!this._started) return
+    return this._pprof.time.stop(true)
   }
 
   encode (profile) {
@@ -33,14 +48,11 @@ class NativeWallProfiler {
   }
 
   stop () {
-    if (!this._stop) return
-    this._stop()
-    this._stop = undefined
-  }
+    if (!this._started) return
 
-  _record () {
-    this._stop = this._pprof.time.start(this._samplingInterval, null,
-      this._mapper, false)
+    const profile = this._pprof.time.stop()
+    this._started = false
+    return profile
   }
 }
 
