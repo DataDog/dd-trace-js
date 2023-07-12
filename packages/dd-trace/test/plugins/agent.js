@@ -35,30 +35,32 @@ function ciVisRequestHandler (request, response) {
   })
 }
 
-function addEnvironmentVariablesToHeaders (headers, traces) {
+function addEnvironmentVariablesToHeaders (headers) {
   return new Promise((resolve, reject) => {
     // get all environment variables that start with "DD_"
-    var ddEnvVars = new Map(
+    const ddEnvVars = new Map(
       Object.entries(process.env)
         .filter(([key]) => key.startsWith('DD_'))
         .map(([key, value]) => [key, value])
     )
     if (global.testAgentServiceName) {
       ddEnvVars.set('DD_SERVICE', global.testAgentServiceName)
-    // } else if (tracer.service && tracer.service != process.env["DD_SERVICE"]) {
-    //   ddEnvVars.set('DD_SERVICE', tracer.service)
     }
-    ddEnvVars.set('DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', global.schemaVersionName)
-  
+    if (global.schemaVersionName) {
+      ddEnvVars.set('DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', global.schemaVersionName)
+    }
+
     for (let i = 0; i < plugins.length; i++) {
-      var plugin_name = plugins[i]
-      if (tracer._pluginManager._configsByName[plugin_name] && tracer._pluginManager._configsByName[plugin_name].service) {
-        ddEnvVars.set(`DD_${plugin_name.toUpperCase()}_SERVICE`, tracer._pluginManager._configsByName[plugin_name].service)
+      const pluginName = plugins[i]
+      // check for plugin level service name configuration
+      const pluginConfig = tracer._pluginManager._configsByName[pluginName]
+      if (pluginConfig && pluginConfig.service) {
+        ddEnvVars.set(`DD_${pluginName.toUpperCase()}_SERVICE`, pluginConfig.service)
       }
     }
 
     // serialize the DD environment variables into a string of k=v pairs separated by comma
-    var serializedEnvVars = Array.from(ddEnvVars.entries())
+    const serializedEnvVars = Array.from(ddEnvVars.entries())
       .map(([key, value]) => `${key}=${value}`)
       .join(',')
 
@@ -72,10 +74,8 @@ function addEnvironmentVariablesToHeaders (headers, traces) {
 
 async function handleTraceRequest (req, res, sendToTestAgent) {
   res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
-
   // handles the received trace request and sends trace to Test Agent if bool enabled.
   if (sendToTestAgent) {
-
     const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
 
     // remove incorrect headers
@@ -83,8 +83,8 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
     delete req.headers['content-type']
     delete req.headers['content-length']
 
-    addEnvironmentVariablesToHeaders(req.headers, req.body).then( async (reqHeaders) => {
-      await new Promise((resolve, reject) => { 
+    addEnvironmentVariablesToHeaders(req.headers).then(async (reqHeaders) => {
+      await new Promise((resolve, reject) => {
         const testAgentReq = http.request(
           `${testAgentUrl}/v0.4/traces`, {
             method: 'PUT',

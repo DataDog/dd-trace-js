@@ -74,7 +74,7 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
           Nomenclature.configure(fullConfig)
         })
 
-        afterEach(async () => {
+        afterEach(() => {
           global.testAgentServiceName = null
           global.schemaVersionName = null
         })
@@ -106,15 +106,15 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
       beforeEach(async () => {
         await new Promise(resolve => setTimeout(resolve, 15))
         global.testAgentServiceName = expectedShortCircuitName
-        global.schemaVersionName = "v0"
+        global.schemaVersionName = 'v0'
       })
       after(() => {
         Nomenclature.configure(fullConfig)
       })
 
-      afterEach(async () => {
+      afterEach(() => {
         global.testAgentServiceName = null
-        global.schemaVersionName = "v0"
+        global.schemaVersionName = 'v0'
       })
 
       it('should pass service name through', done => {
@@ -134,15 +134,17 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
 function withPeerService (tracer, spanGenerationFn, service, serviceSource) {
   describe('peer service computation', () => {
     let computePeerServiceSpy
-    beforeEach(async () => {
+    beforeEach(() => {
       // FIXME: workaround due to the evaluation order of mocha beforeEach
       const tracerObj = typeof tracer === 'function' ? tracer() : tracer
       computePeerServiceSpy = sinon.stub(tracerObj._tracer, '_computePeerService').value(true)
-      global.schemaVersionName = "v0.5" // set to something other than v0 to allow peer.service check to run, but also don't set to v1 since we dont have expectedServiceName
+      // set to something other than v0 to allow peer.service check to run, but also don't set to v1
+      // to prevent service naming checks from running as we don't know the expected service name
+      global.schemaVersionName = 'v0.5'
     })
-    afterEach(async () => {
+    afterEach(() => {
       computePeerServiceSpy.restore()
-      global.schemaVersionName = "v0"
+      global.schemaVersionName = 'v0'
     })
 
     it('should compute peer service', done => {
