@@ -8,7 +8,7 @@ const dc = require('../../../diagnostics_channel')
 const { fileURLToPath } = require('url')
 
 const savedDependencies = new Set()
-const detectedDependencyNames = new Set()
+const detectedDependencyKeys = new Set()
 const FILE_URI_START = `file://`
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 
@@ -46,8 +46,11 @@ function onModuleLoad (data) {
     }
     const parseResult = filename && parse(filename)
     const request = data.request || (parseResult && parseResult.name)
-    if (filename && request && isDependency(filename, request) && !detectedDependencyNames.has(request)) {
-      detectedDependencyNames.add(request)
+    const dependencyKey = parseResult && parseResult.basedir ? parseResult.basedir : request
+
+    if (filename && request && isDependency(filename, request) && !detectedDependencyKeys.has(dependencyKey)) {
+      detectedDependencyKeys.add(dependencyKey)
+
       if (parseResult) {
         const { name, basedir } = parseResult
         if (basedir) {
@@ -88,7 +91,7 @@ function stop () {
   config = null
   application = null
   host = null
-  detectedDependencyNames.clear()
+  detectedDependencyKeys.clear()
   savedDependencies.clear()
   if (moduleLoadStartChannel.hasSubscribers) {
     moduleLoadStartChannel.unsubscribe(onModuleLoad)
