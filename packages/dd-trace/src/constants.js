@@ -28,6 +28,7 @@ module.exports = {
   CLIENT_PORT_KEY: 'network.destination.port',
   PEER_SERVICE_KEY: 'peer.service',
   PEER_SERVICE_SOURCE_KEY: '_dd.peer.service.source',
+  PEER_SERVICE_REMAP_KEY: '_dd.peer.service.remapped_from',
   SCI_REPOSITORY_URL: '_dd.git.repository_url',
   SCI_COMMIT_SHA: '_dd.git.commit.sha'
 }
