@@ -82,5 +82,11 @@ benchmark:
         GROUP: 2
       - MAJOR_VERSION: 18
         GROUP: 3
+      - MAJOR_VERSION: 20
+        GROUP: 1
+      - MAJOR_VERSION: 20
+        GROUP: 2
+      - MAJOR_VERSION: 20
+        GROUP: 3
   variables:
     SPLITS: 3
