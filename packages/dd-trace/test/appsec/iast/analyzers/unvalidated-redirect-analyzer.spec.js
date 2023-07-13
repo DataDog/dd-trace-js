@@ -8,8 +8,7 @@ const {
   HTTP_REQUEST_PARAMETER,
   HTTP_REQUEST_PATH,
   HTTP_REQUEST_PATH_PARAM
-} =
-  require('../../../../src/appsec/iast/taint-tracking/source-types')
+} = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 describe('unvalidated-redirect-analyzer', () => {
   const NOT_TAINTED_LOCATION = 'url.com'
