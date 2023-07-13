@@ -70,6 +70,12 @@ benchmark:
   extends: .benchmarks
   parallel:
     matrix:
+      - MAJOR_VERSION: 12
+        GROUP: 1
+      - MAJOR_VERSION: 12
+        GROUP: 2
+      - MAJOR_VERSION: 12
+        GROUP: 3
       - MAJOR_VERSION: 14
         GROUP: 1
       - MAJOR_VERSION: 14
@@ -81,12 +87,6 @@ benchmark:
       - MAJOR_VERSION: 16
         GROUP: 2
       - MAJOR_VERSION: 16
-        GROUP: 3
-      - MAJOR_VERSION: 18
-        GROUP: 1
-      - MAJOR_VERSION: 18
-        GROUP: 2
-      - MAJOR_VERSION: 18
         GROUP: 3
   variables:
     SPLITS: 3
