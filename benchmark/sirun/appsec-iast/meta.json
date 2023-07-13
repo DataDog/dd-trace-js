@@ -2,7 +2,7 @@
   "name": "appsec-iast",
   "cachegrind": false,
   "instructions": true,
-  "iterations": 30,
+  "iterations": 15,
   "variants": {
     "no-vulnerability-control": {
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
