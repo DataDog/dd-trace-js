@@ -101,6 +101,7 @@ function stop () {
   host = null
   detectedDependencyKeys.clear()
   savedDependencies.clear()
+  detectedDependencyVersions.clear()
   if (moduleLoadStartChannel.hasSubscribers) {
     moduleLoadStartChannel.unsubscribe(onModuleLoad)
   }
