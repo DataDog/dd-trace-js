@@ -18,7 +18,6 @@ class Config {
     const {
       DD_PROFILING_ENABLED,
       DD_PROFILING_PROFILERS,
-      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
       DD_ENV,
       DD_TAGS,
       DD_SERVICE,
@@ -36,7 +35,9 @@ class Config {
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
-      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES
+      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED
     } = process.env
 
     const enabled = isTrue(coalesce(options.enabled, DD_PROFILING_ENABLED, true))
@@ -51,8 +52,8 @@ class Config {
       Number(DD_PROFILING_UPLOAD_TIMEOUT), 60 * 1000)
     const sourceMap = coalesce(options.sourceMap,
       DD_PROFILING_SOURCE_MAP, true)
-    const endpointCollection = coalesce(options.endpointCollection,
-      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED, false)
+    const endpointCollectionEnabled = coalesce(options.endpointCollection,
+      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, false)
     const pprofPrefix = coalesce(options.pprofPrefix,
       DD_PROFILING_PPROF_PREFIX, '')
 
@@ -73,7 +74,7 @@ class Config {
     this.uploadTimeout = uploadTimeout
     this.sourceMap = sourceMap
     this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
-    this.endpointCollection = endpointCollection
+    this.endpointCollectionEnabled = endpointCollectionEnabled
     this.pprofPrefix = pprofPrefix
 
     const hostname = coalesce(options.hostname, DD_AGENT_HOST) || 'localhost'
@@ -110,6 +111,8 @@ class Config {
     const profilers = options.profilers
       ? options.profilers
       : getProfilers({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS })
+    this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, false))
 
     this.profilers = ensureProfilers(profilers, this)
   }
