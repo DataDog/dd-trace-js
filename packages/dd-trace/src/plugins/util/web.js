@@ -103,6 +103,7 @@ const web = {
     context.res = res
 
     this.setConfig(req, config)
+    addRequestTags(context)
 
     return span
   },
