@@ -12,7 +12,7 @@ const { httpAgent, httpsAgent } = require('./agents')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 
-const maxActiveRequests = 8
+const maxActiveRequests = 800
 const containerId = docker.id()
 
 let activeRequests = 0
