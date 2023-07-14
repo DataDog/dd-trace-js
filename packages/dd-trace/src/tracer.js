@@ -25,6 +25,10 @@ class DatadogTracer extends Tracer {
     setStartupLogConfig(config)
   }
 
+  configure ({ env, sampler }) {
+    this._prioritySampler.configure(env, sampler)
+  }
+
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.
   // They should be moved outside of the tracer in the future.
   setCheckpoint (edgeTags) {

@@ -1094,7 +1094,7 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              headers: ['host', 'x-foo']
+              headers: ['host', 'x-foo', 'x-bar:http.bar', 'x-baz:http.baz']
             }
           }
 
@@ -1109,7 +1109,8 @@ describe('Plugin', () => {
           const app = express()
 
           app.get('/user', (req, res) => {
-            res.setHeader('x-foo', 'bar')
+            res.setHeader('x-foo', 'foo')
+            res.setHeader('x-bar', 'bar')
             res.status(200).send()
           })
 
@@ -1119,13 +1120,17 @@ describe('Plugin', () => {
                 const meta = traces[0][0].meta
 
                 expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.host`, `localhost:${port}`)
-                expect(meta).to.have.property(`${HTTP_RESPONSE_HEADERS}.x-foo`, 'bar')
+                expect(meta).to.have.property(`http.baz`, 'baz')
+                expect(meta).to.have.property(`${HTTP_RESPONSE_HEADERS}.x-foo`, 'foo')
+                expect(meta).to.have.property(`http.bar`, 'bar')
               })
               .then(done)
               .catch(done)
 
             appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              const url = `${protocol}://localhost:${port}/user`
+              const headers = { 'x-baz': 'baz' }
+              const req = http.request(url, { headers }, res => {
                 res.on('data', () => {})
               })
 

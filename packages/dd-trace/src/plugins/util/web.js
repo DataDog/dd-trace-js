@@ -477,16 +477,16 @@ function addResourceTag (context) {
 function addHeaders (context) {
   const { req, res, config, span } = context
 
-  config.headers.forEach(key => {
+  config.headers.map(h => h.split(':')).forEach(([key, tag]) => {
     const reqHeader = req.headers[key]
     const resHeader = res.getHeader(key)
 
     if (reqHeader) {
-      span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
+      span.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, reqHeader)
     }
 
     if (resHeader) {
-      span.setTag(`${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
+      span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
     }
   })
 }
