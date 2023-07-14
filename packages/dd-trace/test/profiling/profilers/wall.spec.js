@@ -15,7 +15,10 @@ describe('profilers/native/wall', () => {
       encode: sinon.stub().returns(Promise.resolve()),
       time: {
         start: sinon.stub(),
-        stop: sinon.stub().returns('profile')
+        stop: sinon.stub().returns('profile'),
+        constants: {
+          kSampleCount: 0
+        }
       }
     }
 
@@ -48,7 +51,7 @@ describe('profilers/native/wall', () => {
       { intervalMicros: 1e6 / 99,
         durationMillis: 60000,
         sourceMapper: undefined,
-        customLabels: false,
+        withContexts: false,
         lineNumbers: false })
   })
 
@@ -63,7 +66,7 @@ describe('profilers/native/wall', () => {
       { intervalMicros: 500,
         durationMillis: 60000,
         sourceMapper: undefined,
-        customLabels: false,
+        withContexts: false,
         lineNumbers: false })
   })
 
@@ -134,7 +137,7 @@ describe('profilers/native/wall', () => {
       { intervalMicros: 1e6 / 99,
         durationMillis: 60000,
         sourceMapper: mapper,
-        customLabels: false,
+        withContexts: false,
         lineNumbers: false })
   })
 })
