@@ -93,6 +93,7 @@ function request (data, options, callback) {
       activeRequests--
 
       if (res.statusCode >= 200 && res.statusCode <= 299) {
+        console.log('ok', res.statusCode)
         callback(null, responseData, res.statusCode)
       } else {
         let errorMessage = ''
@@ -110,14 +111,13 @@ function request (data, options, callback) {
         }
         const error = new Error(errorMessage)
         error.status = res.statusCode
-
+        console.error('Error on request', { data, options, error: { error } })
         callback(error, null, res.statusCode)
       }
     })
   }
 
   const makeRequest = onError => {
-    console.log('make request, request.writable: ', request.writable)
     if (!request.writable) {
       log.debug('Maximum number of active requests reached: payload is discarded.')
       return callback(null)
