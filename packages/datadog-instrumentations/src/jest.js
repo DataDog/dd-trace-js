@@ -473,7 +473,7 @@ function jasmineAsyncInstallWraper (jasmineAsyncInstallExport, jestVersion) {
             const formattedError = formatJestError(spec.result.failedExpectations[0].error)
             testErrCh.publish(formattedError)
           }
-          testRunFinishCh.publish(specStatusToTestStatus[spec.result.status])
+          testRunFinishCh.publish({ status: specStatusToTestStatus[spec.result.status] })
           onComplete.apply(this, arguments)
         })
         arguments[0] = callback
