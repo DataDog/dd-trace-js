@@ -389,7 +389,7 @@
 
 "@datadog/native-iast-rewriter@./datadog-native-iast-rewriter-2.1.0.tgz":
   version "2.1.0"
-  resolved "./datadog-native-iast-rewriter-2.1.0.tgz#d804c0c6c09531666c0b777097ac0b33cec2a711"
+  resolved "./datadog-native-iast-rewriter-2.1.0.tgz#8434df45e12c0b53bcb1705cbd9470a740fd7839"
   dependencies:
     lru-cache "^7.14.0"
     node-gyp-build "^4.5.0"
