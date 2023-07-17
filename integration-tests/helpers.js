@@ -172,7 +172,7 @@ function spawnProc (filename, options = {}) {
   })
 }
 
-async function createSandbox (dependencies = [], isGitRepo = false) {
+async function createSandbox (dependencies = [], isGitRepo = false, integrationTestsPath = "./integration-tests/*") {
   /* To execute integration tests without a sandbox uncomment the next line
    * and do `yarn link && yarn link dd-trace` */
   // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
@@ -186,7 +186,7 @@ async function createSandbox (dependencies = [], isGitRepo = false) {
   await mkdir(folder)
   await exec(`yarn pack --filename ${out}`) // TODO: cache this
   await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
-  await exec(`cp -R ./integration-tests/* ${folder}`)
+  await exec(`cp -R ${integrationTestsPath} ${folder}`)
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
     await exec('echo "node_modules/" > .gitignore', { cwd: folder })
