@@ -7,6 +7,9 @@ const dc = require('../../../../../diagnostics_channel')
 const {
   HTTP_REQUEST_COOKIE_VALUE,
   HTTP_REQUEST_COOKIE_NAME,
+  HTTP_REQUEST_HEADER_NAME,
+  HTTP_REQUEST_HEADER_VALUE,
+  HTTP_REQUEST_PATH,
   HTTP_REQUEST_PATH_PARAM
 } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
@@ -226,6 +229,31 @@ describe('IAST Taint tracking plugin', () => {
 
       processParamsStartCh.publish({ req })
       expect(taintTrackingOperations.taintObject).to.not.be.called
+    })
+
+    it('Should taint headers and uri from request', () => {
+      const req = {
+        headers: {
+          'x-iast-header': 'header-value'
+        },
+        url: 'https://testurl'
+      }
+      taintTrackingPlugin.taintRequest(req, iastContext)
+
+      expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
+        iastContext,
+        req.headers,
+        HTTP_REQUEST_HEADER_VALUE,
+        true,
+        HTTP_REQUEST_HEADER_NAME
+      )
+
+      expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(
+        iastContext,
+        req.url,
+        'req.url',
+        HTTP_REQUEST_PATH
+      )
     })
   })
 })
