@@ -86,6 +86,13 @@ exports.datadog = function datadog (lambdaHandler) {
     const context = extractContext(args)
 
     checkTimeout(context)
-    return lambdaHandler.apply(this, args).then((res) => { clearTimeout(__lambdaTimeout); return res })
+    const result = lambdaHandler.apply(this, args)
+    if (result && typeof result.then === 'function') {
+      return result.then((res) => {
+        clearTimeout(__lambdaTimeout)
+        return res
+      })
+    }
+    return result
   }
 }
