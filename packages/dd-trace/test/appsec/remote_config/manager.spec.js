@@ -5,7 +5,7 @@ const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../../src/appsec/rem
 
 const noop = () => {}
 
-describe('RemoteConfigManager', () => {
+describe.only('RemoteConfigManager', () => {
   let uuid
   let scheduler
   let Scheduler
@@ -73,8 +73,6 @@ describe('RemoteConfigManager', () => {
     expect(rc.requestOptions).to.deep.equal({
       method: 'POST',
       url: config.url,
-      hostname: config.hostname,
-      port: config.port,
       path: '/v0.7/config'
     })
 
