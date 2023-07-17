@@ -166,7 +166,7 @@ class JestPlugin extends CiPlugin {
       this.enter(span, store)
     })
 
-    this.addSub('ci:jest:test:finish', ( {status, testStartLine }) => {
+    this.addSub('ci:jest:test:finish', ({ status, testStartLine }) => {
       const span = storage.getStore().span
       span.setTag(TEST_STATUS, status)
       span.setTag(TEST_SOURCE_START, testStartLine)

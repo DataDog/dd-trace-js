@@ -129,7 +129,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             suite: this.testSuite,
             runner: 'jest-circus',
             testParameters,
-            frameworkVersion: jestVersion,
+            frameworkVersion: jestVersion
           })
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
