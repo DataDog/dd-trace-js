@@ -200,7 +200,7 @@ class JestPlugin extends CiPlugin {
     const extraTags = {
       [JEST_TEST_RUNNER]: runner,
       [TEST_PARAMETERS]: testParameters,
-      [TEST_FRAMEWORK_VERSION]: frameworkVersion,
+      [TEST_FRAMEWORK_VERSION]: frameworkVersion
     }
     if (testStartLine) {
       extraTags[TEST_SOURCE_START] = testStartLine
