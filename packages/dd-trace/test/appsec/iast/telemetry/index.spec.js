@@ -216,6 +216,16 @@ describe('Telemetry', () => {
           }
         }).catch(done)
       })
+
+      it('should have url source execution metric', (done) => {
+        agent
+          .use(traces => {
+            expect(traces[0][0].metrics['_dd.iast.telemetry.executed.source.http_request_path']).to.be.equal(1)
+          })
+          .then(done)
+          .catch(done)
+        axios.get(`http://localhost:${config.port}/`).catch(done)
+      })
     }
     testInRequest(app, tests)
   })
