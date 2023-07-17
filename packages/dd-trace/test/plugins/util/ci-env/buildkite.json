@@ -9,7 +9,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -29,7 +29,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -43,7 +43,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -63,7 +63,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -77,7 +77,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -97,7 +97,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -111,7 +111,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -131,7 +131,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -145,7 +145,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -167,7 +167,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -181,7 +181,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -203,7 +203,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -217,7 +217,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -239,7 +239,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -253,7 +253,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -273,7 +273,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -287,7 +287,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -307,7 +307,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -321,7 +321,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -341,7 +341,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -355,7 +355,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -375,7 +375,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "git@hostname.com:org/repo.git"
     }
   ],
@@ -389,7 +389,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -409,7 +409,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -423,7 +423,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -443,7 +443,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -457,7 +457,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -477,7 +477,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -491,7 +491,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -510,7 +510,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git",
       "git.tag": "0.1.0"
     }
@@ -525,7 +525,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -544,7 +544,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git",
       "git.tag": "0.1.0"
     }
@@ -559,7 +559,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -578,7 +578,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git",
       "git.tag": "0.1.0"
     }
@@ -592,7 +592,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -637,7 +637,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -682,7 +682,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -700,7 +700,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/DataDog/dogweb.git"
     }
   ],
@@ -716,7 +716,7 @@
       "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
       "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
       "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
-      "BUILDKITE_COMMIT": "buildkite-git-commit",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILDKITE_JOB_ID": "buildkite-job-id",
       "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
       "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
@@ -735,7 +735,7 @@
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
-      "git.commit.sha": "buildkite-git-commit"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123"
     }
   ]
 ]

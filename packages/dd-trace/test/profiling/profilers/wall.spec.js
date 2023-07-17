@@ -9,14 +9,16 @@ const sinon = require('sinon')
 describe('profilers/native/wall', () => {
   let NativeWallProfiler
   let pprof
-  let stop
 
   beforeEach(() => {
-    stop = sinon.stub().returns('profile')
     pprof = {
       encode: sinon.stub().returns(Promise.resolve()),
       time: {
-        start: sinon.stub().returns(stop)
+        start: sinon.stub(),
+        stop: sinon.stub().returns('profile'),
+        constants: {
+          kSampleCount: 0
+        }
       }
     }
 
@@ -45,7 +47,12 @@ describe('profilers/native/wall', () => {
     process._stopProfilerIdleNotifier = stop
 
     sinon.assert.calledOnce(pprof.time.start)
-    sinon.assert.calledWith(pprof.time.start, 1e6 / 99)
+    sinon.assert.calledWith(pprof.time.start,
+      { intervalMicros: 1e6 / 99,
+        durationMillis: 60000,
+        sourceMapper: undefined,
+        withContexts: false,
+        lineNumbers: false })
   })
 
   it('should use the provided configuration options', () => {
@@ -53,8 +60,14 @@ describe('profilers/native/wall', () => {
     const profiler = new NativeWallProfiler({ samplingInterval })
 
     profiler.start()
+    profiler.stop()
 
-    sinon.assert.calledWith(pprof.time.start, samplingInterval)
+    sinon.assert.calledWith(pprof.time.start,
+      { intervalMicros: 500,
+        durationMillis: 60000,
+        sourceMapper: undefined,
+        withContexts: false,
+        lineNumbers: false })
   })
 
   it('should not stop when not started', () => {
@@ -62,7 +75,7 @@ describe('profilers/native/wall', () => {
 
     profiler.stop()
 
-    sinon.assert.notCalled(stop)
+    sinon.assert.notCalled(pprof.time.stop)
   })
 
   it('should stop the internal time profiler', () => {
@@ -71,7 +84,7 @@ describe('profilers/native/wall', () => {
     profiler.start()
     profiler.stop()
 
-    sinon.assert.calledOnce(stop)
+    sinon.assert.calledOnce(pprof.time.stop)
   })
 
   it('should stop the internal time profiler only once', () => {
@@ -81,7 +94,7 @@ describe('profilers/native/wall', () => {
     profiler.stop()
     profiler.stop()
 
-    sinon.assert.calledOnce(stop)
+    sinon.assert.calledOnce(pprof.time.stop)
   })
 
   it('should collect profiles from the internal time profiler', () => {
@@ -93,8 +106,9 @@ describe('profilers/native/wall', () => {
 
     expect(profile).to.equal('profile')
 
-    sinon.assert.calledOnce(stop)
+    sinon.assert.calledOnce(pprof.time.stop)
     sinon.assert.calledOnce(pprof.time.start)
+    profiler.stop()
   })
 
   it('should encode profiles from the pprof time profiler', () => {
@@ -106,6 +120,8 @@ describe('profilers/native/wall', () => {
 
     profiler.encode(profile)
 
+    profiler.stop()
+
     sinon.assert.calledOnce(pprof.encode)
   })
 
@@ -115,7 +131,13 @@ describe('profilers/native/wall', () => {
     const mapper = {}
 
     profiler.start({ mapper })
+    profiler.stop()
 
-    sinon.assert.calledWith(pprof.time.start, 1e6 / 99, null, mapper, false)
+    sinon.assert.calledWith(pprof.time.start,
+      { intervalMicros: 1e6 / 99,
+        durationMillis: 60000,
+        sourceMapper: mapper,
+        withContexts: false,
+        lineNumbers: false })
   })
 })

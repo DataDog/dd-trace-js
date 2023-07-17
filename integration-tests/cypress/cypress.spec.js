@@ -364,7 +364,7 @@ describe(`cypress@${version}`, function () {
         }).catch(done)
       })
     })
-    it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
+    it('can skip tests received by the intelligent test runner API and still reports code coverage', (done) => {
       receiver.setSuitesToSkip([{
         type: 'test',
         attributes: {
@@ -469,6 +469,56 @@ describe(`cypress@${version}`, function () {
 
       childProcess.on('exit', () => {
         receiverPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+    it('sets _dd.ci.itr.tests_skipped to false if the received test is not skipped', (done) => {
+      receiver.setSuitesToSkip([{
+        type: 'test',
+        attributes: {
+          name: 'fake name',
+          suite: 'i/dont/exist.spec.js'
+        }
+      }])
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+          assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+          assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          const testModule = events.find(event => event.type === 'test_module_end').content
+          assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+          assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+          assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+        }, 25000)
+
+      const skippableRequestPromise = receiver
+        .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
+        .then(skippableRequest => {
+          assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
+          assert.propertyVal(skippableRequest.headers, 'dd-application-key', '1')
+        })
+
+      const {
+        NODE_OPTIONS,
+        ...restEnvVars
+      } = getCiVisAgentlessConfig(receiver.port)
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+          },
+          stdio: 'pipe'
+        }
+      )
+      childProcess.on('exit', () => {
+        Promise.all([eventsPromise, skippableRequestPromise]).then(() => {
           done()
         }).catch(done)
       })

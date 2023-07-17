@@ -48,8 +48,8 @@ describe('telemetry logs', () => {
 
   describe('start', () => {
     it('should be enabled by default and subscribe', () => {
-      const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
-        '../../../../../diagnostics_channel': dc
+      const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
+        '../../../../../../diagnostics_channel': dc
       })
       logs.start()
       defaultConfig.telemetry.logCollection = true
@@ -60,8 +60,8 @@ describe('telemetry logs', () => {
     })
 
     it('should be disabled and not subscribe if DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
-      const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
-        '../../../../../diagnostics_channel': dc
+      const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
+        '../../../../../../diagnostics_channel': dc
       })
       logs.start()
 
@@ -75,10 +75,10 @@ describe('telemetry logs', () => {
       const sendData = sinon.stub()
 
       let logCollectorCalled = 0
-      const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
-        '../../../../../diagnostics_channel': dc,
-        '../../../telemetry/send-data': { sendData },
-        './log_collector': {
+      const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
+        '../../../../../../diagnostics_channel': dc,
+        '../../../../telemetry/send-data': { sendData },
+        './log-collector': {
           drain: () => {
             logCollectorCalled++
             return { message: 'Error 1', level: 'ERROR' }
@@ -104,8 +104,8 @@ describe('telemetry logs', () => {
 
   describe('stop', () => {
     it('should unsubscribe configured listeners', () => {
-      const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
-        '../../../../../diagnostics_channel': dc
+      const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
+        '../../../../../../diagnostics_channel': dc
       })
       logs.start()
       onTelemetryStart()(onTelemetryStartMsg)
@@ -117,8 +117,8 @@ describe('telemetry logs', () => {
     })
 
     it('should unsubscribe configured listeners when datadog:telemetry:stop is received', () => {
-      const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
-        '../../../../../diagnostics_channel': dc
+      const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
+        '../../../../../../diagnostics_channel': dc
       })
       logs.start()
       onTelemetryStart()(onTelemetryStartMsg)
@@ -133,9 +133,9 @@ describe('telemetry logs', () => {
   describe('sendData', () => {
     it('should be not called with DEBUG level', () => {
       const logCollectorAdd = sinon.stub()
-      const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
-        '../../../../../diagnostics_channel': dc,
-        './log_collector': {
+      const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
+        '../../../../../../diagnostics_channel': dc,
+        './log-collector': {
           add: logCollectorAdd
         }
       })
@@ -149,9 +149,9 @@ describe('telemetry logs', () => {
 
     it('should be called with WARN level', () => {
       const logCollectorAdd = sinon.stub()
-      const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
-        '../../../../../diagnostics_channel': dc,
-        './log_collector': {
+      const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
+        '../../../../../../diagnostics_channel': dc,
+        './log-collector': {
           add: logCollectorAdd
         }
       })
@@ -165,9 +165,9 @@ describe('telemetry logs', () => {
 
     it('should be called with ERROR level', () => {
       const logCollectorAdd = sinon.stub()
-      const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
-        '../../../../../diagnostics_channel': dc,
-        './log_collector': {
+      const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
+        '../../../../../../diagnostics_channel': dc,
+        './log-collector': {
           add: logCollectorAdd
         }
       })
@@ -181,9 +181,9 @@ describe('telemetry logs', () => {
 
     it('should be called with ERROR level and stack_trace', () => {
       const logCollectorAdd = sinon.stub()
-      const logs = proxyquire('../../../../src/appsec/iast/telemetry/logs', {
-        '../../../../../diagnostics_channel': dc,
-        './log_collector': {
+      const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
+        '../../../../../../diagnostics_channel': dc,
+        './log-collector': {
           add: logCollectorAdd
         }
       })

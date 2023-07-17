@@ -25,6 +25,9 @@ const EXCLUDED_PATHS_FROM_STACK = [
 class WeakHashAnalyzer extends Analyzer {
   constructor () {
     super(WEAK_HASH)
+  }
+
+  onConfigure () {
     this.addSub('datadog:crypto:hashing:start', ({ algorithm }) => this.analyze(algorithm))
   }
 

@@ -6,9 +6,9 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL_1": "https://jenkins.com/repo/sample",
-      "GIT_URL_2": "https://jenkins.com/repo/otherSample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL_1": "https://jenkins.com/repo/sample.git",
+      "GIT_URL_2": "https://jenkins.com/repo/otherSample.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
       "JOB_URL": "https://jenkins.com/job"
@@ -21,8 +21,8 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -32,8 +32,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
       "JOB_URL": "https://jenkins.com/job"
@@ -46,8 +46,8 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -57,8 +57,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
       "JOB_URL": "https://jenkins.com/job"
@@ -71,8 +71,8 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -82,8 +82,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
       "JOB_URL": "https://jenkins.com/job",
@@ -98,8 +98,8 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "foo/bar",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -109,8 +109,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
       "JOB_URL": "https://jenkins.com/job",
@@ -125,8 +125,8 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar~",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -136,8 +136,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
       "JOB_URL": "https://jenkins.com/job",
@@ -152,8 +152,8 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/~/bar",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -163,8 +163,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "HOME": "/not-my-home",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
@@ -181,8 +181,8 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/not-my-home/foo/bar",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -192,8 +192,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "HOME": "/not-my-home",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
@@ -210,8 +210,8 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "~foo/bar",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -221,8 +221,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "HOME": "/not-my-home",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
@@ -239,8 +239,8 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/not-my-home",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -250,8 +250,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
       "JOB_URL": "https://jenkins.com/job",
@@ -266,8 +266,8 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -277,8 +277,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "refs/heads/master",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName/master",
       "JOB_URL": "https://jenkins.com/job",
@@ -293,8 +293,8 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -304,8 +304,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "refs/heads/master",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName/another",
       "JOB_URL": "https://jenkins.com/job",
@@ -320,8 +320,8 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -331,8 +331,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "refs/heads/feature/one",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName/feature/one",
       "JOB_URL": "https://jenkins.com/job",
@@ -347,8 +347,8 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "feature/one",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -358,8 +358,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "refs/heads/master",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName/KEY1=VALUE1,KEY2=VALUE2",
       "JOB_URL": "https://jenkins.com/job",
@@ -374,8 +374,8 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -385,8 +385,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "refs/heads/master",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName/KEY1=VALUE1,KEY2=VALUE2/master",
       "JOB_URL": "https://jenkins.com/job",
@@ -401,8 +401,8 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
   ],
   [
@@ -412,8 +412,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/tags/0.1.0",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
       "JOB_URL": "https://jenkins.com/job",
       "WORKSPACE": "/foo/bar"
@@ -425,8 +425,8 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git",
       "git.tag": "0.1.0"
     }
   ],
@@ -437,8 +437,8 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "refs/heads/tags/0.1.0",
-      "GIT_COMMIT": "jenkins-git-commit",
-      "GIT_URL": "https://jenkins.com/repo/sample",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
       "JOB_URL": "https://jenkins.com/job",
       "WORKSPACE": "/foo/bar"
@@ -450,8 +450,8 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
-      "git.commit.sha": "jenkins-git-commit",
-      "git.repository_url": "https://jenkins.com/repo/sample",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://jenkins.com/repo/sample.git",
       "git.tag": "0.1.0"
     }
   ],
@@ -462,7 +462,7 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "http://hostname.com/repo.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
@@ -478,7 +478,7 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -489,7 +489,7 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "http://user@hostname.com/repo.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
@@ -505,7 +505,7 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -516,7 +516,7 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "http://user%E2%82%AC@hostname.com/repo.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
@@ -532,7 +532,7 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -543,7 +543,7 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "http://user:pwd@hostname.com/repo.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
@@ -559,7 +559,7 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
   ],
@@ -570,7 +570,7 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_BRANCH": "origin/master",
-      "GIT_COMMIT": "jenkins-git-commit",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "git@hostname.com:org/repo.git",
       "JENKINS_URL": "jenkins",
       "JOB_NAME": "jobName",
@@ -586,7 +586,7 @@
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
       "git.branch": "master",
-      "git.commit.sha": "jenkins-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "git@hostname.com:org/repo.git"
     }
   ],
@@ -606,7 +606,7 @@
       "DD_GIT_COMMIT_MESSAGE": "usersupplied-message",
       "DD_GIT_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "DD_GIT_REPOSITORY_URL": "git@github.com:DataDog/userrepo.git",
-      "GIT_COMMIT": "jenkins-git-commit",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "JENKINS_URL": "jenkins",
       "JOB_URL": "https://jenkins.com/job"
     },
@@ -644,7 +644,7 @@
       "DD_GIT_COMMIT_SHA": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "DD_GIT_REPOSITORY_URL": "git@github.com:DataDog/userrepo.git",
       "DD_GIT_TAG": "0.0.2",
-      "GIT_COMMIT": "jenkins-git-commit",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "JENKINS_URL": "jenkins",
       "JOB_URL": "https://jenkins.com/job"
     },
@@ -672,7 +672,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_COMMIT": "jenkins-git-commit",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL_1": "https://user:password@github.com/DataDog/dogweb.git",
       "JENKINS_URL": "jenkins",
       "JOB_URL": "https://jenkins.com/job"
@@ -683,7 +683,7 @@
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
-      "git.commit.sha": "jenkins-git-commit",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/DataDog/dogweb.git"
     }
   ],
@@ -693,7 +693,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_COMMIT": "jenkins-git-commit",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "JENKINS_URL": "jenkins",
       "JOB_URL": "https://jenkins.com/job",
       "NODE_LABELS": "built-in linux",
@@ -707,7 +707,7 @@
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
-      "git.commit.sha": "jenkins-git-commit"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123"
     }
   ]
 ]

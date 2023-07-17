@@ -138,10 +138,6 @@ class SpanProcessor {
       }
     }
 
-    for (const span of trace.finished) {
-      span.context()._tags = {}
-    }
-
     trace.started = active
     trace.finished = []
   }

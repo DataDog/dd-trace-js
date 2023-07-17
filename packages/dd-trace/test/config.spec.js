@@ -115,6 +115,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
+    expect(config).to.have.nested.property('iast.telemetryVerbosity', 'INFORMATION')
   })
 
   it('should support logging', () => {
@@ -164,6 +165,7 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
+    process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc, d:dd'
     process.env.DD_VERSION = '1.0.0'
     process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '.*'
     process.env.DD_TRACE_CLIENT_IP_ENABLED = 'true'
@@ -211,6 +213,7 @@ describe('Config', () => {
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
     process.env.DD_IAST_DEDUPLICATION_ENABLED = false
     process.env.DD_IAST_REDACTION_ENABLED = false
+    process.env.DD_IAST_TELEMETRY_VERBOSITY = 'DEBUG'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
 
@@ -256,6 +259,10 @@ describe('Config', () => {
       a: 'aa',
       b: 'bb'
     })
+    expect(config).to.have.deep.property('peerServiceMapping', {
+      c: 'cc',
+      d: 'dd'
+    })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['b3', 'tracecontext'])
     expect(config).to.have.nested.property('experimental.runtimeId', true)
@@ -280,6 +287,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
+    expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -392,7 +400,8 @@ describe('Config', () => {
           maxConcurrentRequests: 4,
           maxContextOperations: 5,
           deduplicationEnabled: false,
-          redactionEnabled: false
+          redactionEnabled: false,
+          telemetryVerbosity: 'DEBUG'
         }
       },
       appsec: false,
@@ -445,6 +454,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
+    expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
     expect(config).to.have.deep.nested.property('sampler', {
       sampleRate: 0.5,
       rateLimit: 1000,
@@ -555,6 +565,7 @@ describe('Config', () => {
     process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa'
+    process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc'
     process.env.DD_VERSION = '0.0.0'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
@@ -608,6 +619,9 @@ describe('Config', () => {
       },
       serviceMapping: {
         b: 'bb'
+      },
+      peerServiceMapping: {
+        d: 'dd'
       },
       tracePropagationStyle: {
         inject: [],
@@ -663,6 +677,7 @@ describe('Config', () => {
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
+    expect(config).to.have.deep.property('peerServiceMapping', { d: 'dd' })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', [])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', [])
     expect(config).to.have.nested.property('experimental.runtimeId', false)
@@ -849,6 +864,7 @@ describe('Config', () => {
     expect(config.telemetry.heartbeatInterval).to.eq(60000)
     expect(config.telemetry.logCollection).to.be.false
     expect(config.telemetry.debug).to.be.false
+    expect(config.telemetry.metrics).to.be.false
   })
 
   it('should set DD_TELEMETRY_HEARTBEAT_INTERVAL', () => {
@@ -871,6 +887,17 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
 
     process.env.DD_TRACE_TELEMETRY_ENABLED = origTraceTelemetryValue
+  })
+
+  it('should set DD_TELEMETRY_METRICS_ENABLED', () => {
+    const origTelemetryMetricsEnabledValue = process.env.DD_TELEMETRY_METRICS_ENABLED
+    process.env.DD_TELEMETRY_METRICS_ENABLED = 'true'
+
+    const config = new Config()
+
+    expect(config.telemetry.metrics).to.be.true
+
+    process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabledValue
   })
 
   it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
