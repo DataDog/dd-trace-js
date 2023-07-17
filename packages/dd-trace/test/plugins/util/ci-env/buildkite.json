@@ -2,7 +2,7 @@
   [
     {
       "BUILDKITE": "true",
-      "BUILDKITE_BRANCH": "master",
+      "BUILDKITE_BRANCH": "main",
       "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
       "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
       "BUILDKITE_BUILD_CHECKOUT_PATH": "/foo/bar",
@@ -25,7 +25,7 @@
       "ci.pipeline.url": "https://buildkite-build-url.com",
       "ci.provider.name": "buildkite",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
@@ -36,7 +36,7 @@
   [
     {
       "BUILDKITE": "true",
-      "BUILDKITE_BRANCH": "master",
+      "BUILDKITE_BRANCH": "main",
       "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
       "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
       "BUILDKITE_BUILD_CHECKOUT_PATH": "foo/bar",
@@ -59,7 +59,7 @@
       "ci.pipeline.url": "https://buildkite-build-url.com",
       "ci.provider.name": "buildkite",
       "ci.workspace_path": "foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
@@ -70,7 +70,7 @@
   [
     {
       "BUILDKITE": "true",
-      "BUILDKITE_BRANCH": "master",
+      "BUILDKITE_BRANCH": "main",
       "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
       "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
       "BUILDKITE_BUILD_CHECKOUT_PATH": "/foo/bar~",
@@ -93,7 +93,7 @@
       "ci.pipeline.url": "https://buildkite-build-url.com",
       "ci.provider.name": "buildkite",
       "ci.workspace_path": "/foo/bar~",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
@@ -104,7 +104,7 @@
   [
     {
       "BUILDKITE": "true",
-      "BUILDKITE_BRANCH": "master",
+      "BUILDKITE_BRANCH": "main",
       "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
       "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
       "BUILDKITE_BUILD_CHECKOUT_PATH": "/foo/~/bar",
@@ -127,7 +127,7 @@
       "ci.pipeline.url": "https://buildkite-build-url.com",
       "ci.provider.name": "buildkite",
       "ci.workspace_path": "/foo/~/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
@@ -138,7 +138,7 @@
   [
     {
       "BUILDKITE": "true",
-      "BUILDKITE_BRANCH": "master",
+      "BUILDKITE_BRANCH": "main",
       "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
       "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
       "BUILDKITE_BUILD_CHECKOUT_PATH": "~/foo/bar",
@@ -163,7 +163,7 @@
       "ci.pipeline.url": "https://buildkite-build-url.com",
       "ci.provider.name": "buildkite",
       "ci.workspace_path": "/not-my-home/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
@@ -174,7 +174,7 @@
   [
     {
       "BUILDKITE": "true",
-      "BUILDKITE_BRANCH": "master",
+      "BUILDKITE_BRANCH": "main",
       "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
       "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
       "BUILDKITE_BUILD_CHECKOUT_PATH": "~foo/bar",
@@ -199,7 +199,7 @@
       "ci.pipeline.url": "https://buildkite-build-url.com",
       "ci.provider.name": "buildkite",
       "ci.workspace_path": "~foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
@@ -210,7 +210,7 @@
   [
     {
       "BUILDKITE": "true",
-      "BUILDKITE_BRANCH": "master",
+      "BUILDKITE_BRANCH": "main",
       "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
       "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
       "BUILDKITE_BUILD_CHECKOUT_PATH": "~",
@@ -235,7 +235,7 @@
       "ci.pipeline.url": "https://buildkite-build-url.com",
       "ci.provider.name": "buildkite",
       "ci.workspace_path": "/not-my-home",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
@@ -246,7 +246,7 @@
   [
     {
       "BUILDKITE": "true",
-      "BUILDKITE_BRANCH": "master",
+      "BUILDKITE_BRANCH": "main",
       "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
       "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
       "BUILDKITE_BUILD_CHECKOUT_PATH": "/foo/bar",
@@ -269,7 +269,7 @@
       "ci.pipeline.url": "https://buildkite-build-url.com",
       "ci.provider.name": "buildkite",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
@@ -280,7 +280,7 @@
   [
     {
       "BUILDKITE": "true",
-      "BUILDKITE_BRANCH": "master",
+      "BUILDKITE_BRANCH": "main",
       "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
       "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
       "BUILDKITE_BUILD_CHECKOUT_PATH": "/foo/bar",
@@ -303,7 +303,7 @@
       "ci.pipeline.url": "https://buildkite-build-url.com",
       "ci.provider.name": "buildkite",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
@@ -314,7 +314,7 @@
   [
     {
       "BUILDKITE": "true",
-      "BUILDKITE_BRANCH": "master",
+      "BUILDKITE_BRANCH": "main",
       "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
       "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
       "BUILDKITE_BUILD_CHECKOUT_PATH": "/foo/bar",
@@ -337,7 +337,7 @@
       "ci.pipeline.url": "https://buildkite-build-url.com",
       "ci.provider.name": "buildkite",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
@@ -348,7 +348,7 @@
   [
     {
       "BUILDKITE": "true",
-      "BUILDKITE_BRANCH": "master",
+      "BUILDKITE_BRANCH": "main",
       "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
       "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
       "BUILDKITE_BUILD_CHECKOUT_PATH": "/foo/bar",
@@ -371,7 +371,7 @@
       "ci.pipeline.url": "https://buildkite-build-url.com",
       "ci.provider.name": "buildkite",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
@@ -382,7 +382,7 @@
   [
     {
       "BUILDKITE": "true",
-      "BUILDKITE_BRANCH": "origin/master",
+      "BUILDKITE_BRANCH": "origin/main",
       "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
       "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
       "BUILDKITE_BUILD_CHECKOUT_PATH": "/foo/bar",
@@ -405,7 +405,7 @@
       "ci.pipeline.url": "https://buildkite-build-url.com",
       "ci.provider.name": "buildkite",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",
@@ -416,7 +416,7 @@
   [
     {
       "BUILDKITE": "true",
-      "BUILDKITE_BRANCH": "refs/heads/master",
+      "BUILDKITE_BRANCH": "refs/heads/main",
       "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
       "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
       "BUILDKITE_BUILD_CHECKOUT_PATH": "/foo/bar",
@@ -439,7 +439,7 @@
       "ci.pipeline.url": "https://buildkite-build-url.com",
       "ci.provider.name": "buildkite",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
       "git.commit.author.name": "buildkite-git-commit-author-name",
       "git.commit.message": "buildkite-git-commit-message",

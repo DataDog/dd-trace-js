@@ -14,11 +14,11 @@
 - [ ] CircleCI [jobs/workflows][4].
 - [ ] Plugin is [exported][5].
 
-[1]: https://github.com/DataDog/dd-trace-js/blob/master/index.d.ts
-[2]: https://github.com/DataDog/dd-trace-js/blob/master/docs/test.ts
+[1]: https://github.com/DataDog/dd-trace-js/blob/main/index.d.ts
+[2]: https://github.com/DataDog/dd-trace-js/blob/main/docs/test.ts
 [3]: https://github.com/DataDog/documentation/blob/master/content/en/tracing/trace_collection/library_config/nodejs.md
-[4]: https://github.com/DataDog/dd-trace-js/blob/master/.circleci/config.yml
-[5]: https://github.com/DataDog/dd-trace-js/blob/master/packages/dd-trace/src/plugins/index.js
+[4]: https://github.com/DataDog/dd-trace-js/blob/main/.circleci/config.yml
+[5]: https://github.com/DataDog/dd-trace-js/blob/main/packages/dd-trace/src/plugins/index.js
 
 ### Additional Notes
 <!-- Anything else we should know when reviewing? -->

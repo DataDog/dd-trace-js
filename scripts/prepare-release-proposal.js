@@ -60,9 +60,9 @@ function commitBranchDiffs (args) {
 
   const commandCore = `branch-diff --user DataDog --repo dd-trace-js --exclude-label=${excludedLabels.join(',')}`
 
-  const releaseNotesDraft = execSync(`${commandCore} ${releaseBranch} master`).toString()
+  const releaseNotesDraft = execSync(`${commandCore} ${releaseBranch} main`).toString()
 
-  execSync(`${commandCore} --format=sha --reverse ${releaseBranch} master | xargs git cherry-pick`)
+  execSync(`${commandCore} --format=sha --reverse ${releaseBranch} main | xargs git cherry-pick`)
 
   console.log(releaseNotesDraft)
 }
