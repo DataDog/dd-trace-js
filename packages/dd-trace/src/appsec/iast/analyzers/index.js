@@ -3,10 +3,10 @@
 const analyzers = require('./analyzers')
 const setCookiesHeaderInterceptor = require('./set-cookies-header-interceptor')
 
-function enableAllAnalyzers () {
-  setCookiesHeaderInterceptor.configure(true)
+function enableAllAnalyzers (tracerConfig) {
+  setCookiesHeaderInterceptor.configure({ enabled: true, tracerConfig })
   for (const analyzer in analyzers) {
-    analyzers[analyzer].configure(true)
+    analyzers[analyzer].configure({ enabled: true, tracerConfig })
   }
 }
 
