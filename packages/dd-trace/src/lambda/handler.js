@@ -86,10 +86,10 @@ exports.datadog = function datadog (lambdaHandler) {
     const context = extractContext(args)
 
     checkTimeout(context)
-    if (lambdaHandler.constructor.name === "AsyncFunction") {
-      return Promise.resolve(lambdaHandler.apply(this, args)).then((res) => { clearTimeout(__lambdaTimeout); return res })
+    if (lambdaHandler.constructor.name === 'AsyncFunction') {
+      return Promise.resolve(lambdaHandler.apply(this, args))
+        .then((res) => { clearTimeout(__lambdaTimeout); return res })
     }
     return lambdaHandler.apply(this, args)
-
   }
 }
