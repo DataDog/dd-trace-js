@@ -127,7 +127,6 @@ class NativeWallProfiler {
       this._profilerState = this._pprof.time.getState()
       this._currentContext = {}
       this._pprof.time.setContext(this._currentContext)
-      this._profilerState = undefined
       this._lastSpan = undefined
       this._lastStartedSpans = undefined
       this._lastSampleCount = 0
