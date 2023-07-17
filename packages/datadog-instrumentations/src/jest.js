@@ -130,7 +130,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             runner: 'jest-circus',
             testParameters,
             frameworkVersion: jestVersion,
-            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
           })
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
@@ -145,7 +144,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             const formattedError = formatJestError(event.test.errors[0])
             testErrCh.publish(formattedError)
           }
-          testRunFinishCh.publish(status)
+          testRunFinishCh.publish({
+            status,
+            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
+          })
           // restore in case it is retried
           event.test.fn = originalTestFns.get(event.test)
         })
