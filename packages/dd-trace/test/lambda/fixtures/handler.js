@@ -20,10 +20,10 @@ const handler = async (_event, _context) => {
   return response
 }
 
-const callbackHandler = async (_event, _context, callback) => {
+const callbackHandler = (_event, _context, callback) => {
   const response = sampleResponse
 
-  callback(response)
+  callback('', response)
 }
 
 

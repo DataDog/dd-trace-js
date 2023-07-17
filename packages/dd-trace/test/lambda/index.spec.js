@@ -113,9 +113,12 @@ describe('lambda', () => {
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
-
+      let result
+      const callback = (_error, res) => {
+        result = res
+      }
       // Run the function.
-      const result = await datadog(app.handler)(_event, _context)
+      datadog(app.callbackHandler)(_event, _context, callback)
 
       expect(result).to.not.equal(undefined)
       const body = JSON.parse(result.body)
