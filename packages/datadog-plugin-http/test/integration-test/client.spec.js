@@ -5,7 +5,7 @@ const {
   spawnProc,
   createSandbox,
   curlAndAssertMessage
-} = require('./helpers')
+} = require('../../../../integration-tests/helpers')
 const path = require('path')
 const { assert } = require('chai')
 
@@ -25,7 +25,7 @@ describe('esm', () => {
   let cwd
 
   before(async () => {
-    sandbox = await createSandbox(['express'])
+    sandbox = await createSandbox([], false, `./packages/datadog-plugin-http/test/integration-test/*`)
     cwd = sandbox.folder
   })
 
@@ -44,7 +44,7 @@ describe('esm', () => {
 
   context('http', () => {
     it('is instrumented', async () => {
-      proc = await spawnProc(path.join(cwd, 'esm/http.mjs'), {
+      proc = await spawnProc(path.join(cwd, 'server.mjs'), {
         cwd,
         env: {
           NODE_OPTIONS: `--loader=${hookFile}`,
@@ -58,27 +58,6 @@ describe('esm', () => {
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
         assert.propertyVal(payload[0][0], 'name', 'web.request')
-      })
-    })
-  })
-
-  context('express', () => {
-    it('is instrumented', async () => {
-      proc = await spawnProc(path.join(cwd, 'esm/express.mjs'), {
-        cwd,
-        env: {
-          NODE_OPTIONS: `--loader=${hookFile}`,
-          AGENT_PORT: agent.port
-        }
-      })
-      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(payload.length, 1)
-        assert.isArray(payload[0])
-        assert.strictEqual(payload[0].length, 4)
-        assert.propertyVal(payload[0][0], 'name', 'express.request')
-        assert.propertyVal(payload[0][1], 'name', 'express.middleware')
       })
     })
   })
