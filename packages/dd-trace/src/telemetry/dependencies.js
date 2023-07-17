@@ -7,7 +7,7 @@ const { sendData } = require('./send-data')
 const dc = require('../../../diagnostics_channel')
 const { fileURLToPath } = require('url')
 
-const savedDependencies = new Set()
+const savedDependenciesToSend = new Set()
 const detectedDependencyKeys = new Set()
 const detectedDependencyVersions = new Set()
 
@@ -20,14 +20,14 @@ function waitAndSend (config, application, host) {
   if (!immediate) {
     immediate = setImmediate(() => {
       immediate = null
-      if (savedDependencies.size > 0) {
-        const dependencies = Array.from(savedDependencies.values()).splice(0, 1000).map(pair => {
-          savedDependencies.delete(pair)
+      if (savedDependenciesToSend.size > 0) {
+        const dependencies = Array.from(savedDependenciesToSend.values()).splice(0, 1000).map(pair => {
+          savedDependenciesToSend.delete(pair)
           const [name, version] = pair.split(' ')
           return { name, version }
         })
         sendData(config, application, host, 'app-dependencies-loaded', { dependencies })
-        if (savedDependencies.size > 0) {
+        if (savedDependenciesToSend.size > 0) {
           waitAndSend(config, application, host)
         }
       }
@@ -61,7 +61,7 @@ function onModuleLoad (data) {
             const dependencyAndVersion = `${name} ${version}`
 
             if (!detectedDependencyVersions.has(dependencyAndVersion)) {
-              savedDependencies.add(dependencyAndVersion)
+              savedDependenciesToSend.add(dependencyAndVersion)
               detectedDependencyVersions.add(dependencyAndVersion)
 
               waitAndSend(config, application, host)
@@ -100,7 +100,7 @@ function stop () {
   application = null
   host = null
   detectedDependencyKeys.clear()
-  savedDependencies.clear()
+  savedDependenciesToSend.clear()
   detectedDependencyVersions.clear()
   if (moduleLoadStartChannel.hasSubscribers) {
     moduleLoadStartChannel.unsubscribe(onModuleLoad)
