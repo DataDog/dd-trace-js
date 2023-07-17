@@ -3,7 +3,7 @@
 const { SourceIastPlugin } = require('../iast-plugin')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
-const { taintObject } = require('./operations')
+const { taintObject, newTaintedString } = require('./operations')
 const {
   HTTP_REQUEST_BODY,
   HTTP_REQUEST_COOKIE_VALUE,
@@ -11,6 +11,7 @@ const {
   HTTP_REQUEST_HEADER_VALUE,
   HTTP_REQUEST_HEADER_NAME,
   HTTP_REQUEST_PARAMETER,
+  HTTP_REQUEST_PATH,
   HTTP_REQUEST_PATH_PARAM
 } = require('./source-types')
 
@@ -87,6 +88,21 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       tag: [HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME],
       iastContext
     })
+  }
+
+  taintUrl (req, iastContext) {
+    this.execSource({
+      handler: function () {
+        req.url = newTaintedString(iastContext, req.url, 'req.url', HTTP_REQUEST_PATH)
+      },
+      tag: [HTTP_REQUEST_PATH],
+      iastContext
+    })
+  }
+
+  taintRequest (req, iastContext) {
+    this.taintHeaders(req.headers, iastContext)
+    this.taintUrl(req, iastContext)
   }
 
   enable () {
