@@ -135,7 +135,7 @@ function endResponse (res, appResult) {
   }
 }
 
-function checkNoVulnerabilityInRequest (vulnerability, config, done) {
+function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest) {
   agent
     .use(traces => {
       // iastJson == undefiend is valid
@@ -144,7 +144,11 @@ function checkNoVulnerabilityInRequest (vulnerability, config, done) {
     })
     .then(done)
     .catch(done)
-  axios.get(`http://localhost:${config.port}/`).catch(done)
+  if (makeRequest) {
+    makeRequest(done)
+  } else {
+    axios.get(`http://localhost:${config.port}/`).catch(done)
+  }
 }
 function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb, makeRequest, config, done) {
   let location
@@ -247,18 +251,18 @@ function prepareTestServerForIast (description, tests, iastConfig) {
       return agent.close({ ritmReset: false })
     })
 
-    function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb) {
+    function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb, makeRequest) {
       it(`should have ${vulnerability} vulnerability`, function (done) {
         this.timeout(5000)
         app = fn
-        checkVulnerabilityInRequest(vulnerability, occurrences, cb, undefined, config, done)
+        checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done)
       })
     }
 
-    function testThatRequestHasNoVulnerability (fn, vulnerability) {
+    function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest) {
       it(`should not have ${vulnerability} vulnerability`, function (done) {
         app = fn
-        checkNoVulnerabilityInRequest(vulnerability, config, done)
+        checkNoVulnerabilityInRequest(vulnerability, config, done, makeRequest)
       })
     }
     tests(testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config)
