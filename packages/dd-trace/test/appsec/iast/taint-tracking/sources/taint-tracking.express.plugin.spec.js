@@ -9,7 +9,67 @@ const { storage } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
 const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-tracking/operations')
-const { HTTP_REQUEST_PATH_PARAM } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
+const {
+  HTTP_REQUEST_PATH,
+  HTTP_REQUEST_PATH_PARAM
+} = require('../../../../../src/appsec/iast/taint-tracking/source-types')
+
+describe('Path sourcing with express', () => {
+  let express
+  let appListener
+
+  withVersions('express', 'express', version => {
+    before(() => {
+      return agent.load(['http', 'express'], { client: false })
+    })
+
+    after(() => {
+      return agent.close({ ritmReset: false })
+    })
+
+    beforeEach(() => {
+      iast.enable(new Config({
+        experimental: {
+          iast: {
+            enabled: true,
+            requestSampling: 100
+          }
+        }
+      }))
+
+      express = require(`../../../../../../../versions/express@${version}`).get()
+    })
+
+    afterEach(() => {
+      appListener && appListener.close()
+      appListener = null
+
+      iast.disable()
+    })
+
+    it('should taint path', done => {
+      const app = express()
+      app.get('/path/*', (req, res) => {
+        const store = storage.getStore()
+        const iastContext = iastContextFunctions.getIastContext(store)
+        const isPathTainted = isTainted(iastContext, req.url)
+        expect(isPathTainted).to.be.true
+        const taintedPathValueRanges = getRanges(iastContext, req.url)
+        expect(taintedPathValueRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_PATH)
+        res.status(200).send()
+      })
+
+      getPort().then(port => {
+        appListener = app.listen(port, 'localhost', () => {
+          axios
+            .get(`http://localhost:${port}/path/vulnerable`)
+            .then(() => done())
+            .catch(done)
+        })
+      })
+    })
+  })
+})
 
 describe('Path params sourcing with express', () => {
   let express
