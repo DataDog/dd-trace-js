@@ -21,7 +21,9 @@ describe('Plugin', () => {
       let kafka
       let tracer
       let Kafka
+
       describe('without configuration', () => {
+        let groupId
         const messages = [{ key: 'key1', value: 'test2' }]
         beforeEach(async () => {
           process.env['DD_DATA_STREAMS_ENABLED'] = 'true'
@@ -33,6 +35,7 @@ describe('Plugin', () => {
             clientId: `kafkajs-test-${version}`,
             brokers: ['127.0.0.1:9092']
           })
+          groupId = 'test-group-' + Date.now()
         })
         describe('producer', () => {
           it('should be instrumented', async () => {
@@ -48,6 +51,7 @@ describe('Plugin', () => {
               },
               resource: testTopic,
               error: 0
+
             })
 
             await sendMessages(kafka, testTopic, messages)
@@ -125,7 +129,7 @@ describe('Plugin', () => {
         describe('consumer (eachMessage)', () => {
           let consumer
           beforeEach(async () => {
-            consumer = kafka.consumer({ groupId: 'test-group' })
+            consumer = kafka.consumer({ groupId })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
           })
@@ -236,7 +240,7 @@ describe('Plugin', () => {
         describe('consumer (eachBatch)', () => {
           let consumer
           beforeEach(async () => {
-            consumer = kafka.consumer({ groupId: 'test-group' })
+            consumer = kafka.consumer({ groupId })
             await consumer.subscribe({ topic: testTopic })
             await consumer.connect()
           })
@@ -347,10 +351,11 @@ describe('Plugin', () => {
 
         describe('data stream monitoring', () => {
           let consumer
+
           beforeEach(async () => {
             tracer.init()
             tracer.use('kafkajs', { dsmEnabled: true })
-            consumer = kafka.consumer({ groupId: 'test-group' })
+            consumer = kafka.consumer({ groupId })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
           })
@@ -367,7 +372,7 @@ describe('Plugin', () => {
           const expectedConsumerHash = computePathwayHash(
             'test',
             'tester',
-            ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka'],
+            ['direction:in', 'group:' + groupId, 'topic:' + testTopic, 'type:kafka'],
             expectedProducerHash
           )
 
