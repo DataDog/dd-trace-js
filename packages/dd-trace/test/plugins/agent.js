@@ -41,7 +41,6 @@ function addEnvironmentVariablesToHeaders (headers) {
     const ddEnvVars = new Map(
       Object.entries(process.env)
         .filter(([key]) => key.startsWith('DD_'))
-        .map(([key, value]) => [key, value])
     )
     if (global.testAgentServiceName) {
       ddEnvVars.set('DD_SERVICE', global.testAgentServiceName)
@@ -50,8 +49,7 @@ function addEnvironmentVariablesToHeaders (headers) {
       ddEnvVars.set('DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', global.schemaVersionName)
     }
 
-    for (let i = 0; i < plugins.length; i++) {
-      const pluginName = plugins[i]
+    for (const pluginName of plugins) {
       // check for plugin level service name configuration
       const pluginConfig = tracer._pluginManager._configsByName[pluginName]
       if (pluginConfig && pluginConfig.service) {
