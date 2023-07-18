@@ -143,8 +143,8 @@ $ yarn leak:plugins
 
 ### Linting
 
-We use [ESLint](https://eslint.org) to make sure that new code is
-conform to our coding standards.
+We use [ESLint](https://eslint.org) to make sure that new code
+conforms to our coding standards.
 
 To run the linter, use:
 
