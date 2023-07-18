@@ -117,18 +117,18 @@ describe('span sampler', () => {
       })
 
       sampler.sample(spanContexts[0])
-      expect(spans[0].context()._sampling.spanSampling).to.eql({
+      expect(spans[0].context()._spanSampling).to.eql({
         sampleRate: 1.0,
         maxPerSecond: 5
       })
-      expect(spans[1].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[2].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[3].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[4].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[5].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[6].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[7].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[8].context()._sampling.spanSampling).to.be.undefined
+      expect(spans[1].context()._spanSampling).to.be.undefined
+      expect(spans[2].context()._spanSampling).to.be.undefined
+      expect(spans[3].context()._spanSampling).to.be.undefined
+      expect(spans[4].context()._spanSampling).to.be.undefined
+      expect(spans[5].context()._spanSampling).to.be.undefined
+      expect(spans[6].context()._spanSampling).to.be.undefined
+      expect(spans[7].context()._spanSampling).to.be.undefined
+      expect(spans[8].context()._spanSampling).to.be.undefined
     })
 
     it('should consider missing service as match-all for service name', () => {
@@ -147,16 +147,16 @@ describe('span sampler', () => {
         maxPerSecond: 5
       }
       sampler.sample(spanContexts[0])
-      expect(spans[0].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[1].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[2].context()._sampling.spanSampling).to.be.undefined
+      expect(spans[0].context()._spanSampling).to.be.undefined
+      expect(spans[1].context()._spanSampling).to.be.undefined
+      expect(spans[2].context()._spanSampling).to.be.undefined
       // Only 3 and 4 should match because of the name pattern
-      expect(spans[3].context()._sampling.spanSampling).to.eql(spanSampling)
-      expect(spans[4].context()._sampling.spanSampling).to.eql(spanSampling)
-      expect(spans[5].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[6].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[7].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[8].context()._sampling.spanSampling).to.be.undefined
+      expect(spans[3].context()._spanSampling).to.eql(spanSampling)
+      expect(spans[4].context()._spanSampling).to.eql(spanSampling)
+      expect(spans[5].context()._spanSampling).to.be.undefined
+      expect(spans[6].context()._spanSampling).to.be.undefined
+      expect(spans[7].context()._spanSampling).to.be.undefined
+      expect(spans[8].context()._spanSampling).to.be.undefined
     })
 
     it('should consider missing name as match-all for span name', () => {
@@ -175,16 +175,16 @@ describe('span sampler', () => {
         maxPerSecond: 10
       }
       sampler.sample(spanContexts[0])
-      expect(spans[0].context()._sampling.spanSampling).to.eql(spanSampling)
-      expect(spans[1].context()._sampling.spanSampling).to.eql(spanSampling)
-      expect(spans[2].context()._sampling.spanSampling).to.eql(spanSampling)
-      expect(spans[3].context()._sampling.spanSampling).to.eql(spanSampling)
-      expect(spans[4].context()._sampling.spanSampling).to.eql(spanSampling)
-      expect(spans[5].context()._sampling.spanSampling).to.eql(spanSampling)
-      expect(spans[8].context()._sampling.spanSampling).to.eql(spanSampling)
+      expect(spans[0].context()._spanSampling).to.eql(spanSampling)
+      expect(spans[1].context()._spanSampling).to.eql(spanSampling)
+      expect(spans[2].context()._spanSampling).to.eql(spanSampling)
+      expect(spans[3].context()._spanSampling).to.eql(spanSampling)
+      expect(spans[4].context()._spanSampling).to.eql(spanSampling)
+      expect(spans[5].context()._spanSampling).to.eql(spanSampling)
+      expect(spans[8].context()._spanSampling).to.eql(spanSampling)
       // Should not match because of different service name
-      expect(spans[6].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[7].context()._sampling.spanSampling).to.be.undefined
+      expect(spans[6].context()._spanSampling).to.be.undefined
+      expect(spans[7].context()._spanSampling).to.be.undefined
     })
 
     it('should stop at first rule match', () => {
@@ -206,18 +206,18 @@ describe('span sampler', () => {
       })
 
       sampler.sample(spanContexts[0])
-      expect(spans[0].context()._sampling.spanSampling).to.eql({
+      expect(spans[0].context()._spanSampling).to.eql({
         sampleRate: 1.0,
         maxPerSecond: 5
       })
-      expect(spans[1].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[2].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[3].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[4].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[5].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[6].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[7].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[8].context()._sampling.spanSampling).to.be.undefined
+      expect(spans[1].context()._spanSampling).to.be.undefined
+      expect(spans[2].context()._spanSampling).to.be.undefined
+      expect(spans[3].context()._spanSampling).to.be.undefined
+      expect(spans[4].context()._spanSampling).to.be.undefined
+      expect(spans[5].context()._spanSampling).to.be.undefined
+      expect(spans[6].context()._spanSampling).to.be.undefined
+      expect(spans[7].context()._spanSampling).to.be.undefined
+      expect(spans[8].context()._spanSampling).to.be.undefined
     })
 
     it('should use span service name tags where present', () => {
@@ -236,15 +236,15 @@ describe('span sampler', () => {
         maxPerSecond: 5
       }
       sampler.sample(spanContexts[0])
-      expect(spans[0].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[1].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[2].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[3].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[4].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[5].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[6].context()._sampling.spanSampling).to.eql(spanSampling)
-      expect(spans[7].context()._sampling.spanSampling).to.eql(spanSampling)
-      expect(spans[8].context()._sampling.spanSampling).to.be.undefined
+      expect(spans[0].context()._spanSampling).to.be.undefined
+      expect(spans[1].context()._spanSampling).to.be.undefined
+      expect(spans[2].context()._spanSampling).to.be.undefined
+      expect(spans[3].context()._spanSampling).to.be.undefined
+      expect(spans[4].context()._spanSampling).to.be.undefined
+      expect(spans[5].context()._spanSampling).to.be.undefined
+      expect(spans[6].context()._spanSampling).to.eql(spanSampling)
+      expect(spans[7].context()._spanSampling).to.eql(spanSampling)
+      expect(spans[8].context()._spanSampling).to.be.undefined
     })
 
     it('should properly sample multiple single spans with one rule', () => {
@@ -264,14 +264,14 @@ describe('span sampler', () => {
         maxPerSecond: 5
       }
       sampler.sample(spanContexts[0])
-      expect(spans[1].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[2].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[3].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[4].context()._sampling.spanSampling).to.eql(spanSampling)
-      expect(spans[5].context()._sampling.spanSampling).to.eql(spanSampling)
-      expect(spans[6].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[7].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[8].context()._sampling.spanSampling).to.be.undefined
+      expect(spans[1].context()._spanSampling).to.be.undefined
+      expect(spans[2].context()._spanSampling).to.be.undefined
+      expect(spans[3].context()._spanSampling).to.be.undefined
+      expect(spans[4].context()._spanSampling).to.eql(spanSampling)
+      expect(spans[5].context()._spanSampling).to.eql(spanSampling)
+      expect(spans[6].context()._spanSampling).to.be.undefined
+      expect(spans[7].context()._spanSampling).to.be.undefined
+      expect(spans[8].context()._spanSampling).to.be.undefined
     })
 
     it('should properly sample mutiple single spans with multiple rules', () => {
@@ -293,19 +293,19 @@ describe('span sampler', () => {
       })
 
       sampler.sample(spanContexts[0])
-      expect(spans[0].context()._sampling.spanSampling, {
+      expect(spans[0].context()._spanSampling, {
         sampleRate: 1.0,
         maxPerSecond: 5
       })
-      expect(spans[3].context()._sampling.spanSampling, {
+      expect(spans[3].context()._spanSampling, {
         sampleRate: 1.0,
         maxPerSecond: 10
       })
-      expect(spans[4].context()._sampling.spanSampling, {
+      expect(spans[4].context()._spanSampling, {
         sampleRate: 1.0,
         maxPerSecond: 10
       })
-      expect(spans[5].context()._sampling.spanSampling, {
+      expect(spans[5].context()._spanSampling, {
         sampleRate: 1.0,
         maxPerSecond: 10
       })
@@ -324,15 +324,15 @@ describe('span sampler', () => {
       })
 
       sampler.sample(spanContexts[0])
-      expect(spans[0].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[1].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[2].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[3].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[4].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[5].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[6].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[7].context()._sampling.spanSampling).to.be.undefined
-      expect(spans[8].context()._sampling.spanSampling).to.eql({
+      expect(spans[0].context()._spanSampling).to.be.undefined
+      expect(spans[1].context()._spanSampling).to.be.undefined
+      expect(spans[2].context()._spanSampling).to.be.undefined
+      expect(spans[3].context()._spanSampling).to.be.undefined
+      expect(spans[4].context()._spanSampling).to.be.undefined
+      expect(spans[5].context()._spanSampling).to.be.undefined
+      expect(spans[6].context()._spanSampling).to.be.undefined
+      expect(spans[7].context()._spanSampling).to.be.undefined
+      expect(spans[8].context()._spanSampling).to.eql({
         sampleRate: 1.0,
         maxPerSecond: 1
       })
@@ -362,7 +362,7 @@ describe('span sampler', () => {
       })
 
       sampler.sample(spanContexts[0])
-      expect(spans[0].context()._sampling).to.haveOwnProperty('spanSampling')
+      expect(spans[0].context()).to.haveOwnProperty('_spanSampling')
     })
 
     it('should not sample a matched span on non-allowed sample rate', () => {
@@ -380,7 +380,7 @@ describe('span sampler', () => {
 
       sampler.sample(spanContexts[0])
       for (const span of spans) {
-        expect(span.context()._sampling).to.not.haveOwnProperty('spanSampling')
+        expect(span.context()).to.not.haveOwnProperty('_spanSampling')
       }
     })
 
@@ -404,8 +404,8 @@ describe('span sampler', () => {
       })
 
       sampler.sample(spanContexts[0])
-      expect(spans[2].context()._sampling).to.haveOwnProperty('spanSampling')
-      expect(spans[0].context()._sampling).to.not.haveOwnProperty('spanSampling')
+      expect(spans[2].context()).to.haveOwnProperty('_spanSampling')
+      expect(spans[0].context()).to.not.haveOwnProperty('_spanSampling')
     })
   })
 
@@ -456,13 +456,13 @@ describe('span sampler', () => {
       })
 
       sampler.sample(spanContexts[0])
-      expect(spans[0].context()._sampling).to.haveOwnProperty('spanSampling')
-      delete spans[0].context()._sampling.spanSampling
+      expect(spans[0].context()).to.haveOwnProperty('_spanSampling')
+      delete spans[0].context()._spanSampling
 
       // with how quickly these tests execute, the limiter should not allow the
       // next call to sample any spans
       sampler.sample(spanContexts[0])
-      expect(spans[0].context()._sampling).to.not.haveOwnProperty('spanSampling')
+      expect(spans[0].context()).to.not.haveOwnProperty('_spanSampling')
     })
 
     it('should map different rules to different rate limiters', () => {
@@ -484,16 +484,16 @@ describe('span sampler', () => {
       })
 
       sampler.sample(spanContexts[0])
-      expect(spans[0].context()._sampling).to.haveOwnProperty('spanSampling')
-      expect(spans[1].context()._sampling).to.haveOwnProperty('spanSampling')
-      delete spans[0].context()._sampling.spanSampling
-      delete spans[1].context()._sampling.spanSampling
+      expect(spans[0].context()).to.haveOwnProperty('_spanSampling')
+      expect(spans[1].context()).to.haveOwnProperty('_spanSampling')
+      delete spans[0].context()._spanSampling
+      delete spans[1].context()._spanSampling
 
       // with how quickly these tests execute, the limiter should not allow the
       // next call to sample any spans
       sampler.sample(spanContexts[0])
-      expect(spans[0].context()._sampling).to.not.haveOwnProperty('spanSampling')
-      expect(spans[1].context()._sampling).to.haveOwnProperty('spanSampling')
+      expect(spans[0].context()).to.not.haveOwnProperty('_spanSampling')
+      expect(spans[1].context()).to.haveOwnProperty('_spanSampling')
     })
 
     it('should map limit by all spans matching pattern', () => {
@@ -510,15 +510,15 @@ describe('span sampler', () => {
 
       // First time around both should have spanSampling to prove match
       sampler.sample(spanContexts[0])
-      expect(spans[3].context()._sampling).to.haveOwnProperty('spanSampling')
-      expect(spans[4].context()._sampling).to.haveOwnProperty('spanSampling')
-      delete spans[3].context()._sampling.spanSampling
-      delete spans[4].context()._sampling.spanSampling
+      expect(spans[3].context()).to.haveOwnProperty('_spanSampling')
+      expect(spans[4].context()).to.haveOwnProperty('_spanSampling')
+      delete spans[3].context()._spanSampling
+      delete spans[4].context()._spanSampling
 
       // Second time around only first should have spanSampling to prove limits
       sampler.sample(spanContexts[0])
-      expect(spans[3].context()._sampling).to.haveOwnProperty('spanSampling')
-      expect(spans[4].context()._sampling).to.not.haveOwnProperty('spanSampling')
+      expect(spans[3].context()).to.haveOwnProperty('_spanSampling')
+      expect(spans[4].context()).to.not.haveOwnProperty('_spanSampling')
     })
 
     it('should allow unlimited rate limits', async () => {
@@ -534,8 +534,8 @@ describe('span sampler', () => {
 
       const interval = setInterval(() => {
         sampler.sample(spanContexts[0])
-        expect(spans[0].context()._sampling).to.haveOwnProperty('spanSampling')
-        delete spans[0].context()._sampling.spanSampling
+        expect(spans[0].context()).to.haveOwnProperty('_spanSampling')
+        delete spans[0].context()._spanSampling
       }, 1)
 
       await new Promise(resolve => {
@@ -559,13 +559,13 @@ describe('span sampler', () => {
 
       await new Promise(resolve => {
         sampler.sample(spanContexts[0])
-        const before = spans[0].context()._sampling.spanSampling
-        delete spans[0].context()._sampling.spanSampling
+        const before = spans[0].context()._spanSampling
+        delete spans[0].context()._spanSampling
 
         setTimeout(() => {
           sampler.sample(spanContexts[0])
-          const after = spans[0].context()._sampling.spanSampling
-          delete spans[0].context()._sampling.spanSampling
+          const after = spans[0].context()._spanSampling
+          delete spans[0].context()._spanSampling
 
           expect(before).to.eql(after)
           resolve()
