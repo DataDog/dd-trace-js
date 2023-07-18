@@ -10,6 +10,7 @@ module.exports = {
   '@grpc/grpc-js': () => require('../grpc'),
   '@hapi/hapi': () => require('../hapi'),
   '@jest/core': () => require('../jest'),
+  '@jest/transform': () => require('../jest'),
   '@jest/reporters': () => require('../jest'),
   '@koa/router': () => require('../koa'),
   '@node-redis/client': () => require('../redis'),
