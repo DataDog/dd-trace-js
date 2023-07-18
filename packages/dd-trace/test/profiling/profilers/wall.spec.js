@@ -48,11 +48,13 @@ describe('profilers/native/wall', () => {
 
     sinon.assert.calledOnce(pprof.time.start)
     sinon.assert.calledWith(pprof.time.start,
-      { intervalMicros: 1e6 / 99,
+      {
+        intervalMicros: 1e6 / 99,
         durationMillis: 60000,
         sourceMapper: undefined,
         withContexts: false,
-        lineNumbers: false })
+        lineNumbers: false
+      })
   })
 
   it('should use the provided configuration options', () => {
@@ -63,11 +65,13 @@ describe('profilers/native/wall', () => {
     profiler.stop()
 
     sinon.assert.calledWith(pprof.time.start,
-      { intervalMicros: 500,
+      {
+        intervalMicros: 500,
         durationMillis: 60000,
         sourceMapper: undefined,
         withContexts: false,
-        lineNumbers: false })
+        lineNumbers: false
+      })
   })
 
   it('should not stop when not started', () => {
@@ -134,10 +138,12 @@ describe('profilers/native/wall', () => {
     profiler.stop()
 
     sinon.assert.calledWith(pprof.time.start,
-      { intervalMicros: 1e6 / 99,
+      {
+        intervalMicros: 1e6 / 99,
         durationMillis: 60000,
         sourceMapper: mapper,
         withContexts: false,
-        lineNumbers: false })
+        lineNumbers: false
+      })
   })
 })
