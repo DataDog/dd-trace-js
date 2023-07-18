@@ -157,9 +157,9 @@ module.exports = class PluginManager {
     }
 
     if (clientIpEnabled !== undefined) {
-      sharedConfig.clientIpEnabled= clientIpEnabled
-    } 
-    
+      sharedConfig.clientIpEnabled = clientIpEnabled
+    }
+
     sharedConfig.site = site
     sharedConfig.url = url
 
