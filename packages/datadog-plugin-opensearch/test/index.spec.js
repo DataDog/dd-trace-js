@@ -225,9 +225,11 @@ describe('Plugin', () => {
         before(() => {
           return agent.load('opensearch', {
             service: 'custom',
-            hooks: { query: (span, params) => {
-              span.addTags({ 'opensearch.params': 'foo', 'opensearch.method': params.method })
-            } }
+            hooks: {
+              query: (span, params) => {
+                span.addTags({ 'opensearch.params': 'foo', 'opensearch.method': params.method })
+              }
+            }
           })
         })
 

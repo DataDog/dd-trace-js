@@ -22,10 +22,12 @@ const artifactsUrl = num =>
 
 function get (url, headers) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: Object.assign({
-      'user-agent': 'dd-results-retriever',
-      accept: 'application/json'
-    }, headers) }, async res => {
+    https.get(url, {
+      headers: Object.assign({
+        'user-agent': 'dd-results-retriever',
+        accept: 'application/json'
+      }, headers)
+    }, async res => {
       if (res.statusCode >= 300 && res.statusCode < 400) {
         resolve(get(res.headers.location))
         return
