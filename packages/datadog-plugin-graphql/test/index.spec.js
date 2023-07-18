@@ -177,12 +177,10 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          done => {
+          () => {
             const source = `query MyQuery { hello(name: "world") }`
             const variableValues = { who: 'world' }
             graphql.graphql({ schema, source, variableValues })
-              .then(done)
-              .catch(done)
           },
           () => namingSchema.server.opName,
           () => namingSchema.server.serviceName,
