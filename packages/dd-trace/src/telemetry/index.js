@@ -159,6 +159,9 @@ function updateConfig (changes, config) {
   if (!config.telemetry.enabled) return
   if (changes.length === 0) return
 
+  // Hack to make system tests happy until we ship telemetry v2
+  if (process.env.DD_INTERNAL_TELEMETRY_V2_ENABLED !== '1') return
+
   const application = createAppObject(config)
   const host = createHostObject()
 
