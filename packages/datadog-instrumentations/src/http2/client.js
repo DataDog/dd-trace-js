@@ -1,31 +1,27 @@
 'use strict'
 
 const shimmer = require('../../../datadog-shimmer')
-const { addHook, channel, AsyncResource } = require('../helpers/instrument')
+const { addHook, channel } = require('../helpers/instrument')
 
+const connectChannel = channel('apm:http2:client:connect:start')
 const startChannel = channel('apm:http2:client:request:start')
-const finishChannel = channel('apm:http2:client:request:finish')
+const endChannel = channel('apm:http2:client:request:end')
+const asyncStartChannel = channel('apm:http2:client:request:asyncStart')
+const asyncEndChannel = channel('apm:http2:client:request:asyncEnd')
 const errorChannel = channel('apm:http2:client:request:error')
-const responseChannel = channel('apm:http2:client:response')
 
-function createWrapEmit (requestResource, parentResource) {
+function createWrapEmit (ctx) {
   return function wrapEmit (emit) {
     return function (event, arg1) {
-      requestResource.runInAsyncScope(() => {
-        switch (event) {
-          case 'response':
-            responseChannel.publish(arg1)
-            break
-          case 'error':
-            errorChannel.publish(arg1)
-          case 'close': // eslint-disable-line no-fallthrough
-            finishChannel.publish()
-            break
-        }
-      })
+      ctx.eventName = event
+      ctx.eventData = arg1
 
-      return parentResource.runInAsyncScope(() => {
-        return emit.apply(this, arguments)
+      return asyncStartChannel.runStores(ctx, () => {
+        try {
+          return emit.apply(this, arguments)
+        } finally {
+          asyncEndChannel.publish(ctx)
+        }
       })
     }
   }
@@ -34,17 +30,21 @@ function createWrapEmit (requestResource, parentResource) {
 function createWrapRequest (authority, options) {
   return function wrapRequest (request) {
     return function (headers) {
-      const parentResource = new AsyncResource('bound-anonymous-fn')
-      const requestResource = new AsyncResource('bound-anonymous-fn')
+      const ctx = { headers, authority, options }
 
-      return requestResource.runInAsyncScope(() => {
-        startChannel.publish({ headers, authority, options })
+      return startChannel.runStores(ctx, () => {
+        try {
+          const req = request.apply(this, arguments)
 
-        const req = request.apply(this, arguments)
+          shimmer.wrap(req, 'emit', createWrapEmit(ctx))
 
-        shimmer.wrap(req, 'emit', createWrapEmit(requestResource, parentResource))
-
-        return req
+          return req
+        } catch (e) {
+          ctx.error = e
+          errorChannel.publish(ctx)
+        } finally {
+          endChannel.publish(ctx)
+        }
       })
     }
   }
@@ -52,6 +52,9 @@ function createWrapRequest (authority, options) {
 
 function wrapConnect (connect) {
   return function (authority, options) {
+    if (connectChannel.hasSubscribers) {
+      connectChannel.publish({ authority })
+    }
     const session = connect.apply(this, arguments)
 
     shimmer.wrap(session, 'request', createWrapRequest(authority, options))

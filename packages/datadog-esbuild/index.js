@@ -39,7 +39,19 @@ module.exports.setup = function (build) {
 
     if (args.namespace === 'file' && packagesOfInterest.has(packageName)) {
       // The file namespace is used when requiring files from disk in userland
-      const pathToPackageJson = require.resolve(`${packageName}/package.json`, { paths: [ args.resolveDir ] })
+
+      let pathToPackageJson
+      try {
+        pathToPackageJson = require.resolve(`${packageName}/package.json`, { paths: [ args.resolveDir ] })
+      } catch (err) {
+        if (err.code === 'MODULE_NOT_FOUND') {
+          console.warn(`Unable to open "${packageName}/package.json". Is the "${packageName}" package dead code?`)
+          return
+        } else {
+          throw err
+        }
+      }
+
       const pkg = require(pathToPackageJson)
 
       if (DEBUG) {

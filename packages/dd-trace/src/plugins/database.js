@@ -4,6 +4,7 @@ const StoragePlugin = require('./storage')
 
 class DatabasePlugin extends StoragePlugin {
   static get operation () { return 'query' }
+  static get peerServicePrecursors () { return ['db.name'] }
 
   constructor (...args) {
     super(...args)
@@ -37,14 +38,18 @@ class DatabasePlugin extends StoragePlugin {
     `ddps='${encodedDdps}',ddpv='${encodedDdpv}'`
   }
 
-  injectDbmQuery (query, serviceName) {
-    if (this.config.dbmPropagationMode === 'disabled') {
+  injectDbmQuery (query, serviceName, isPreparedStatement = false) {
+    const mode = this.config.dbmPropagationMode
+
+    if (mode === 'disabled') {
       return query
     }
+
     const servicePropagation = this.createDBMPropagationCommentService(serviceName)
-    if (this.config.dbmPropagationMode === 'service') {
+
+    if (isPreparedStatement || mode === 'service') {
       return `/*${servicePropagation}*/ ${query}`
-    } else if (this.config.dbmPropagationMode === 'full') {
+    } else if (mode === 'full') {
       this.activeSpan.setTag('_dd.dbm_trace_injected', 'true')
       const traceparent = this.activeSpan._spanContext.toTraceparent()
       return `/*${servicePropagation},traceparent='${traceparent}'*/ ${query}`

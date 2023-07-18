@@ -103,7 +103,8 @@ describe('path-traversal-analyzer', () => {
 
   it('Should report 1st argument', () => {
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer',
-      { './injection-analyzer': InjectionAnalyzer,
+      {
+        './injection-analyzer': InjectionAnalyzer,
         '../iast-context': { getIastContext: () => iastContext }
       })
 
@@ -197,9 +198,9 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
       })
 
       after(() => {
-        fs.rmSync(fsSyncWayMethodPath, { force: true })
-        fs.rmSync(fsAsyncWayMethodPath, { force: true })
-        fs.rmSync(fsPromiseWayMethodPath, { force: true })
+        fs.unlinkSync(fsSyncWayMethodPath)
+        fs.unlinkSync(fsAsyncWayMethodPath)
+        fs.unlinkSync(fsPromiseWayMethodPath)
       })
 
       runFsMethodTest(`test fs.${methodName}Sync method`, vulnerableIndex, (args) => {

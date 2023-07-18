@@ -40,6 +40,7 @@ tracer.use('pg', {
 <h5 id="generic-pool"></h5>
 <h5 id="google-cloud-pubsub"></h5>
 <h5 id="fastify"></h5>
+<h5 id="fetch"></h5>
 <h5 id="graphql"></h5>
 <h5 id="graphql-tags"></h5>
 <h5 id="graphql-config"></h5>
@@ -110,6 +111,7 @@ tracer.use('pg', {
 * [elasticsearch](./interfaces/plugins.elasticsearch.html)
 * [express](./interfaces/plugins.express.html)
 * [fastify](./interfaces/plugins.fastify.html)
+* [fetch](./interfaces/plugins.fetch.html)
 * [generic-pool](./interfaces/plugins.generic_pool.html)
 * [google-cloud-pubsub](./interfaces/plugins.google_cloud_pubsub.html)
 * [graphql](./interfaces/plugins.graphql.html)
@@ -132,6 +134,7 @@ tracer.use('pg', {
 * [net](./interfaces/plugins.net.html)
 * [next](./interfaces/plugins.next.html)
 * [opensearch](./interfaces/plugins.opensearch.html)
+* [openai](./interfaces/plugins.openai.html)
 * [oracledb](./interfaces/plugins.oracledb.html)
 * [paperplane](./interfaces/plugins.paperplane.html)
 * [pino](./interfaces/plugins.pino.html)
@@ -340,6 +343,23 @@ opentracing.initGlobalTracer(tracer)
 ```
 
 The following tags are available to override Datadog specific options:
+
+* `service.name`: The service name to be used for this span. The service name from the tracer will be used if this is not provided.
+* `resource.name`: The resource name to be used for this span. The operation name will be used if this is not provided.
+* `span.type`: The span type to be used for this span. Will fallback to `custom` if not provided.
+
+<h2 id="opentelemetry-api">OpenTelemetry Compatibility</h2>
+
+This library is OpenTelemetry compliant. Use the [OpenTelemetry API](https://opentelemetry.io/docs/instrumentation/js/) and the Datadog Tracer (dd-trace) library to measure execution times for specific pieces of code. In the following example, a Datadog TracerProvider is registered with @opentelemetry/api:
+
+```javascript
+const tracer = require('dd-trace').init()
+
+const tracerProvider = new tracer.TracerProvider()
+tracerProvider.register()
+```
+
+The following attributes are available to override Datadog specific options:
 
 * `service.name`: The service name to be used for this span. The service name from the tracer will be used if this is not provided.
 * `resource.name`: The resource name to be used for this span. The operation name will be used if this is not provided.

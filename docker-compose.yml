@@ -12,11 +12,13 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
   mssql:
-    image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
+  # A working MSSQL server is not available on ARM.
+  # This image provides _most_ of sqlserver functionalities, but
+  # does not support stored procedures (corresponding tests will fail)
+    image: mcr.microsoft.com/azure-sql-edge
     environment:
       - "ACCEPT_EULA=Y"
       - "SA_PASSWORD=DD_HUNTER2"
-      - "MSSQL_PID=Express"
     ports:
       - "127.0.0.1:1433:1433"
   mysql:
@@ -124,3 +126,13 @@ services:
       - LDAP_ADMIN_PASSWORD=adminpassword
       - LDAP_USERS=user01,user02
       - LDAP_PASSWORDS=password1,password2
+
+  testagent:
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+    ports:
+        - "127.0.0.1:9126:9126"
+    environment:
+        - LOG_LEVEL=DEBUG
+        - TRACE_LANGUAGE=javascript
+        - DISABLED_CHECKS=trace_content_length
+        - PORT=9126

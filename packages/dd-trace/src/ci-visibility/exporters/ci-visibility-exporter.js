@@ -120,7 +120,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
    * CI Visibility Protocol, hence the this._canUseCiVisProtocol promise.
    */
   getItrConfiguration (testConfiguration, callback) {
-    this.sendGitMetadata()
+    const { repositoryUrl } = testConfiguration
+    this.sendGitMetadata(repositoryUrl)
     if (!this.shouldRequestItrConfiguration()) {
       return callback(null, {})
     }
@@ -147,7 +148,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
     })
   }
 
-  sendGitMetadata () {
+  sendGitMetadata (repositoryUrl) {
     if (!this._config.isGitUploadEnabled) {
       return
     }
@@ -155,7 +156,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       if (!canUseCiVisProtocol) {
         return
       }
-      sendGitMetadataRequest(this._getApiUrl(), !!this._isUsingEvpProxy, (err) => {
+      sendGitMetadataRequest(this._getApiUrl(), !!this._isUsingEvpProxy, repositoryUrl, (err) => {
         if (err) {
           log.error(`Error uploading git metadata: ${err.message}`)
         } else {

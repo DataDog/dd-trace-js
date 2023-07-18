@@ -1,10 +1,10 @@
 'use strict'
 
 require('../../../../../dd-trace/test/setup/tap')
-
 const nock = require('nock')
 const os = require('os')
 const fs = require('fs')
+const { validateGitRepositoryUrl, validateGitCommitSha } = require('../../../../src/plugins/util/user-provided-git')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 
@@ -73,7 +73,7 @@ describe('git_metadata', () => {
       .reply(204)
 
     isShallowRepositoryStub.returns(true)
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(unshallowRepositoryStub).to.have.been.called
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
@@ -88,7 +88,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
@@ -104,7 +104,7 @@ describe('git_metadata', () => {
 
     getCommitsToUploadStub.returns([])
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err).to.be.null
       // to check that it is not called
       expect(scope.isDone()).to.be.false
@@ -120,7 +120,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       // eslint-disable-next-line
       expect(err.message).to.contain('Error fetching commits to exclude: Error from https://api.test.com/api/v2/git/repository/search_commits: 404 Not Found. Response from the endpoint: "Not found SHA"')
       // to check that it is not called
@@ -137,7 +137,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err.message).to.contain("Can't parse commits to exclude response: Invalid commit type response")
       // to check that it is not called
       expect(scope.isDone()).to.be.false
@@ -153,7 +153,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err.message).to.contain("Can't parse commits to exclude response: Invalid commit format")
       // to check that it is not called
       expect(scope.isDone()).to.be.false
@@ -169,7 +169,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(502)
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err.message).to.contain('Could not upload packfiles: status code 502')
       expect(scope.isDone()).to.be.true
       done()
@@ -196,13 +196,63 @@ describe('git_metadata', () => {
       secondTemporaryPackFile
     ])
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
     })
   })
+  describe('validateGitRepositoryUrl', () => {
+    it('should return false if Git repository URL is invalid', () => {
+      const invalidUrl1 = 'https://test.com'
+      const invalidUrl2 = 'https://test.com'
+      const invalidUrl3 = 'http://test.com/repo/dummy.4git'
+      const invalidUrl4 = 'https://test.com/repo/dummy.gi'
+      const invalidUrl5 = 'www.test.com/repo/dummy.git'
+      const invalidUrl6 = 'test.com/repo/dummy.git'
 
+      const invalidUrls = [invalidUrl1, invalidUrl2, invalidUrl3, invalidUrl4, invalidUrl5, invalidUrl6]
+      invalidUrls.forEach((invalidUrl) => {
+        expect(validateGitRepositoryUrl(invalidUrl)).to.be.false
+      })
+    })
+    it('should return true if Git repository URL is valid', () => {
+      const validUrl1 = 'https://test.com/repo/dummy.git'
+      const validUrl2 = 'http://test.com/repo/dummy.git'
+      const validUrl3 = 'https://github.com/DataDog/dd-trace-js.git'
+      const validUrl4 = 'git@github.com:DataDog/dd-trace-js.git'
+      const validUrl5 = 'git@github.com:user/repo.git'
+
+      const validUrls = [validUrl1, validUrl2, validUrl3, validUrl4, validUrl5]
+      validUrls.forEach((validUrl) => {
+        expect(validateGitRepositoryUrl(validUrl)).to.be.true
+      })
+    })
+  })
+  describe('validateGitCommitSha', () => {
+    it('should return false if Git commit SHA is invalid', () => {
+      const invalidSha1 = 'cb466452bfe18d4f6be2836c2a5551843013cf382'
+      const invalidSha2 = 'cb466452bfe18d4f6be2836c2a5551843013cf3!'
+      const invalidSha3 = ''
+      const invalidSha4 = 'test'
+      const invalidSha5 = 'cb466452bfe18d4f6be2836c2a5551843013cf382cb466452bfe18d4f6be2836c2a5551843013cf382'
+      const invalidSha6 = 'cb466452bfe18d4f6be2836c2a5551843013cf2'
+      const invalidSha7 = 'cb466452bfe18d4f6be2836c2a5551843013cf3812342239203182304928'
+      const invalidShas = [invalidSha1, invalidSha2, invalidSha3, invalidSha4, invalidSha5, invalidSha6, invalidSha7]
+      invalidShas.forEach((invalidSha) => {
+        expect(validateGitCommitSha(invalidSha)).to.be.false
+      })
+    })
+    it('should return true if Git commit SHA is valid', () => {
+      const validSha1 = 'cb466452bfe18d4f6be2836c2a5551843013cf38'
+      const validSha2 = 'cb466452bfe18d4f6be2836c2a5551843013cf381234223920318230492823f3'
+
+      const validShas = [validSha1, validSha2]
+      validShas.forEach((validSha) => {
+        expect(validateGitCommitSha(validSha)).to.be.true
+      })
+    })
+  })
   it('should not crash if packfiles can not be accessed', (done) => {
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')
@@ -215,7 +265,7 @@ describe('git_metadata', () => {
       'not there either'
     ])
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err.message).to.contain('Could not read "not-there"')
       expect(scope.isDone()).to.be.false
       done()
@@ -231,7 +281,7 @@ describe('git_metadata', () => {
 
     generatePackFilesForCommitsStub.returns([])
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err.message).to.contain('Failed to generate packfiles')
       expect(scope.isDone()).to.be.false
       done()
@@ -247,7 +297,7 @@ describe('git_metadata', () => {
 
     getRepositoryUrlStub.returns('')
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err.message).to.contain('Repository URL is empty')
       expect(scope.isDone()).to.be.false
       done()
@@ -265,7 +315,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
       done()
@@ -282,9 +332,35 @@ describe('git_metadata', () => {
         done()
       })
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), true, (err) => {
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), true, '', (err) => {
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
+    })
+  })
+
+  it('should use the input repository url and not call getRepositoryUrl', (done) => {
+    let resolvePromise
+    const requestPromise = new Promise(resolve => {
+      resolvePromise = resolve
+    })
+    const scope = nock('https://api.test.com')
+      .post('/evp_proxy/v2/api/v2/git/repository/search_commits')
+      .reply(200, function () {
+        const { meta: { repository_url: repositoryUrl } } = JSON.parse(this.req.requestBodyBuffers.toString())
+        resolvePromise(repositoryUrl)
+        return JSON.stringify({ data: [] })
+      })
+      .post('/evp_proxy/v2/api/v2/git/repository/packfile')
+      .reply(204)
+
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), true, 'https://custom-git@datadog.com', (err) => {
+      expect(err).to.be.null
+      expect(scope.isDone()).to.be.true
+      requestPromise.then((repositoryUrl) => {
+        expect(getRepositoryUrlStub).not.to.have.been.called
+        expect(repositoryUrl).to.equal('https://custom-git@datadog.com')
+        done()
+      })
     })
   })
 })

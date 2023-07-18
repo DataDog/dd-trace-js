@@ -2,7 +2,13 @@
 
 require('./setup/tap')
 
-describe('metrics', () => {
+const os = require('os')
+
+const isWindows = os.platform() === 'win32'
+
+const suiteDescribe = isWindows ? describe.skip : describe
+
+suiteDescribe('metrics', () => {
   let metrics
   let config
   let clock
@@ -22,7 +28,9 @@ describe('metrics', () => {
     }
 
     metrics = proxyquire('../src/metrics', {
-      './dogstatsd': Client
+      './dogstatsd': {
+        DogStatsDClient: Client
+      }
     })
 
     config = {

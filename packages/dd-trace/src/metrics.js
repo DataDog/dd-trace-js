@@ -5,7 +5,7 @@
 const { URL, format } = require('url')
 const v8 = require('v8')
 const os = require('os')
-const Client = require('./dogstatsd')
+const { DogStatsDClient } = require('./dogstatsd')
 const log = require('./log')
 const Histogram = require('./histogram')
 const { performance } = require('perf_hooks')
@@ -67,7 +67,7 @@ module.exports = {
       }))
     }
 
-    client = new Client(clientConfig)
+    client = new DogStatsDClient(clientConfig)
 
     time = process.hrtime()
 

@@ -1,12 +1,35 @@
 stages:
+  - package
   - deploy
   - benchmarks
   - benchmarks-pr-comment
 
-include: ".gitlab/benchmarks.yml"
+include:
+  - remote: https://gitlab-templates.ddbuild.io/apm/packaging.yml
+  - local: ".gitlab/benchmarks.yml"
+
+variables:
+  JS_PACKAGE_VERSION:
+    description: "Version to build for .deb and .rpm. Must be already published in NPM"
 
 .common: &common
   tags: [ "runner:main", "size:large" ]
+
+package:
+  extends: .package
+  rules:
+  - if: $JS_PACKAGE_VERSION
+    when: on_success
+  - if: '$CI_COMMIT_TAG =~ /^v.*/'
+    when: on_success
+  script:
+    - ../.gitlab/build-deb-rpm.sh
+
+.release-package:
+  stage: deploy
+  variables:
+    PRODUCT_NAME: auto_inject-node
+    PACKAGE_FILTER: js # product name is "node" but package name ends "js"
 
 deploy_to_reliability_env:
   stage: deploy
@@ -26,7 +49,7 @@ deploy_to_reliability_env:
 deploy_to_docker_registries:
   stage: deploy
   rules:
-    - if: '$CI_COMMIT_TAG =~ /^v.*/'
+    - if: '$CI_COMMIT_TAG =~ /^v.*/ || $CI_COMMIT_TAG == "dev"'
       when: on_success
     - when: manual
       allow_failure: true
@@ -56,3 +79,5 @@ deploy_latest_to_docker_registries:
     IMG_SOURCES: ghcr.io/datadog/dd-trace-js/dd-lib-js-init:$CI_COMMIT_TAG
     IMG_DESTINATIONS: dd-lib-js-init:latest
     IMG_SIGNING: "false"
+    RETRY_COUNT: 5
+    RETRY_DELAY: 300

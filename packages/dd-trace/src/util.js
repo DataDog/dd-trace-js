@@ -16,7 +16,7 @@ function isError (value) {
   if (value instanceof Error) {
     return true
   }
-  if (value && value.message && value.stack) {
+  if (value && value.message) {
     return true
   }
   return false

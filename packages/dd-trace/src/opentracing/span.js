@@ -11,6 +11,9 @@ const tagger = require('../tagger')
 const metrics = require('../metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
+const telemetryMetrics = require('../telemetry/metrics')
+
+const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 const {
   DD_TRACE_EXPERIMENTAL_STATE_TRACKING,
@@ -19,6 +22,30 @@ const {
 
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
+
+const OTEL_ENABLED = !!process.env.DD_TRACE_OTEL_ENABLED
+
+const integrationCounters = {
+  span_created: {},
+  span_finished: {}
+}
+
+function getIntegrationCounter (event, integration) {
+  const counters = integrationCounters[event]
+
+  if (integration in counters) {
+    return counters[integration]
+  }
+
+  const counter = tracerMetrics.count(event, [
+    `integration_name:${integration.toLowerCase()}`,
+    `otel_enabled:${OTEL_ENABLED}`
+  ])
+
+  integrationCounters[event][integration] = counter
+
+  return counter
+}
 
 class DatadogSpan {
   constructor (tracer, processor, prioritySampler, fields, debug) {
@@ -38,11 +65,16 @@ class DatadogSpan {
     // This name property is not updated when the span name changes.
     // This is necessary for span count metrics.
     this._name = operationName
+    this._integrationName = fields.integrationName || 'opentracing'
+
+    getIntegrationCounter('span_created', this._integrationName).inc()
 
     this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
     this._spanContext._tags = tags
     this._spanContext._hostname = hostname
+
+    this._spanContext._trace.started.push(this)
 
     this._startTime = fields.startTime || this._getTime()
 
@@ -124,6 +156,8 @@ class DatadogSpan {
       }
     }
 
+    getIntegrationCounter('span_finished', this._integrationName).inc()
+
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       metrics.decrement('runtime.node.spans.unfinished')
       metrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
@@ -147,8 +181,14 @@ class DatadogSpan {
 
   _createContext (parent, fields) {
     let spanContext
+    let startTime
 
-    if (parent) {
+    if (fields.context) {
+      spanContext = fields.context
+      if (!spanContext._trace.startTime) {
+        startTime = dateNow()
+      }
+    } else if (parent) {
       spanContext = new SpanContext({
         traceId: parent._traceId,
         spanId: id(),
@@ -160,11 +200,11 @@ class DatadogSpan {
       })
 
       if (!spanContext._trace.startTime) {
-        spanContext._trace.startTime = dateNow()
+        startTime = dateNow()
       }
     } else {
       const spanId = id()
-      const startTime = dateNow()
+      startTime = dateNow()
       spanContext = new SpanContext({
         traceId: spanId,
         spanId
@@ -178,8 +218,10 @@ class DatadogSpan {
       }
     }
 
-    spanContext._trace.started.push(this)
     spanContext._trace.ticks = spanContext._trace.ticks || now()
+    if (startTime) {
+      spanContext._trace.startTime = startTime
+    }
 
     return spanContext
   }

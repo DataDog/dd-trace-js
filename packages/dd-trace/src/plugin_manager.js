@@ -21,13 +21,18 @@ const disabledPlugins = new Set(
   DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())
 )
 
-// TODO actually ... should we be looking at envrionment variables this deep down in the code?
+// TODO actually ... should we be looking at environment variables this deep down in the code?
 
 const pluginClasses = {}
 
 loadChannel.subscribe(({ name }) => {
-  const Plugin = plugins[name]
+  maybeEnable(plugins[name])
+})
 
+// Globals
+maybeEnable(require('../../datadog-plugin-fetch/src'))
+
+function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
     const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
@@ -42,7 +47,7 @@ loadChannel.subscribe(({ name }) => {
       pluginClasses[Plugin.id] = Plugin
     }
   }
-})
+}
 
 // TODO this must always be a singleton.
 module.exports = class PluginManager {
@@ -68,7 +73,7 @@ module.exports = class PluginManager {
 
     if (!Plugin) return
     if (!this._pluginsByName[name]) {
-      this._pluginsByName[name] = new Plugin(this._tracer)
+      this._pluginsByName[name] = new Plugin(this._tracer, this._tracerConfig)
     }
     if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
 
@@ -76,6 +81,7 @@ module.exports = class PluginManager {
       enabled: this._tracerConfig.plugins !== false
     }
 
+    // extracts predetermined configuration from tracer and combines it with plugin-specific config
     this._pluginsByName[name].configure({
       ...this._getSharedConfig(name),
       ...pluginConfig
@@ -128,7 +134,8 @@ module.exports = class PluginManager {
       queryStringObfuscation,
       site,
       url,
-      dbmPropagationMode
+      dbmPropagationMode,
+      dsmEnabled
     } = this._tracerConfig
 
     const sharedConfig = {}
@@ -142,6 +149,7 @@ module.exports = class PluginManager {
     }
 
     sharedConfig.dbmPropagationMode = dbmPropagationMode
+    sharedConfig.dsmEnabled = dsmEnabled
 
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]

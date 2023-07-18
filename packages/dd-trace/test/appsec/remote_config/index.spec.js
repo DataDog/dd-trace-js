@@ -126,7 +126,7 @@ describe('Remote Config index', () => {
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities.callCount).to.be.equal(6)
+        expect(rc.updateCapabilities.callCount).to.be.equal(7)
         expect(rc.updateCapabilities.getCall(0))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
         expect(rc.updateCapabilities.getCall(1))
@@ -139,6 +139,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
         expect(rc.updateCapabilities.getCall(5))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
+        expect(rc.updateCapabilities.getCall(6))
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
 
         expect(rc.on.callCount).to.be.equal(4)
         expect(rc.on.getCall(0)).to.have.been.calledWith('ASM_DATA')
@@ -152,7 +154,7 @@ describe('Remote Config index', () => {
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities.callCount).to.be.equal(6)
+        expect(rc.updateCapabilities.callCount).to.be.equal(7)
         expect(rc.updateCapabilities.getCall(0))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
         expect(rc.updateCapabilities.getCall(1))
@@ -165,6 +167,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
         expect(rc.updateCapabilities.getCall(5))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
+        expect(rc.updateCapabilities.getCall(6))
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
 
         expect(rc.on.callCount).to.be.equal(4)
         expect(rc.on.getCall(0)).to.have.been.calledWith('ASM_DATA')
@@ -178,7 +182,7 @@ describe('Remote Config index', () => {
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities.callCount).to.be.equal(7)
+        expect(rc.updateCapabilities.callCount).to.be.equal(8)
         expect(rc.updateCapabilities.getCall(0))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
         expect(rc.updateCapabilities.getCall(1))
@@ -193,6 +197,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
         expect(rc.updateCapabilities.getCall(6))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
+        expect(rc.updateCapabilities.getCall(7))
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
       })
     })
 
@@ -202,7 +208,7 @@ describe('Remote Config index', () => {
         rc.updateCapabilities.resetHistory()
         remoteConfig.disableWafUpdate()
 
-        expect(rc.updateCapabilities.callCount).to.be.equal(6)
+        expect(rc.updateCapabilities.callCount).to.be.equal(7)
         expect(rc.updateCapabilities.getCall(0))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, false)
         expect(rc.updateCapabilities.getCall(1))
@@ -215,6 +221,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, false)
         expect(rc.updateCapabilities.getCall(5))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_RULES, false)
+        expect(rc.updateCapabilities.getCall(6))
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
 
         expect(rc.off.callCount).to.be.equal(4)
         expect(rc.off.getCall(0)).to.have.been.calledWith('ASM_DATA')

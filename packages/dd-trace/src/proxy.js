@@ -64,6 +64,12 @@ class Tracer extends NoopProxy {
         this._pluginManager.configure(config)
         setStartupLogPluginManager(this._pluginManager)
         telemetry.start(config, this._pluginManager)
+
+        if (config.isManualApiEnabled) {
+          const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
+          this._testApiManualPlugin = new TestApiManualPlugin(this)
+          this._testApiManualPlugin.configure({ ...config, enabled: true })
+        }
       }
     } catch (e) {
       log.error(e)
@@ -75,6 +81,10 @@ class Tracer extends NoopProxy {
   use () {
     this._pluginManager.configurePlugin(...arguments)
     return this
+  }
+
+  get TracerProvider () {
+    return require('./opentelemetry/tracer_provider')
   }
 }
 

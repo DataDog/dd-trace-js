@@ -11,7 +11,8 @@
     "proxyquire": true,
     "withNamingSchema": true,
     "withVersions": true,
-    "withExports": true
+    "withExports": true,
+    "withPeerService": true
   },
   "rules": {
     "no-unused-expressions": 0,

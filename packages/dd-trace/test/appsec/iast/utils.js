@@ -85,6 +85,7 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability) {
     agent
       .use(traces => {
         expect(traces[0][0].meta['_dd.iast.json']).to.include(`"${vulnerability}"`)
+        expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
       })
       .then(done)
       .catch(done)
@@ -100,7 +101,112 @@ function copyFileToTmp (src) {
   return dest
 }
 
-function prepareTestServerForIast (description, tests) {
+function beforeEachIastTest (iastConfig) {
+  iastConfig = iastConfig || {
+    enabled: true,
+    requestSampling: 100,
+    maxConcurrentRequests: 100,
+    maxContextOperations: 100
+  }
+
+  beforeEach(() => {
+    vulnerabilityReporter.clearCache()
+    iast.enable(new Config({
+      experimental: {
+        iast: iastConfig
+      }
+    }))
+  })
+}
+
+function endResponse (res, appResult) {
+  if (appResult && typeof appResult.then === 'function') {
+    appResult.then(() => {
+      if (!res.headersSent) {
+        res.writeHead(200)
+      }
+      res.end()
+    })
+  } else {
+    if (!res.headersSent) {
+      res.writeHead(200)
+    }
+    res.end()
+  }
+}
+
+function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest) {
+  agent
+    .use(traces => {
+      // iastJson == undefiend is valid
+      const iastJson = traces[0][0].meta['_dd.iast.json'] || ''
+      expect(iastJson).to.not.include(`"${vulnerability}"`)
+    })
+    .then(done)
+    .catch(done)
+  if (makeRequest) {
+    makeRequest(done)
+  } else {
+    axios.get(`http://localhost:${config.port}/`).catch(done)
+  }
+}
+function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb, makeRequest, config, done) {
+  let location
+  let occurrences = occurrencesAndLocation
+  if (typeof occurrencesAndLocation === 'object') {
+    location = occurrencesAndLocation.location
+    occurrences = occurrencesAndLocation.occurrences
+  }
+  agent
+    .use(traces => {
+      expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
+      expect(traces[0][0].meta).to.have.property('_dd.iast.json')
+      const vulnerabilitiesTrace = JSON.parse(traces[0][0].meta['_dd.iast.json'])
+      expect(vulnerabilitiesTrace).to.not.be.null
+      const vulnerabilitiesCount = new Map()
+      vulnerabilitiesTrace.vulnerabilities.forEach(v => {
+        let count = vulnerabilitiesCount.get(v.type) || 0
+        vulnerabilitiesCount.set(v.type, ++count)
+      })
+
+      expect(vulnerabilitiesCount.get(vulnerability)).to.not.be.null
+      if (occurrences) {
+        expect(vulnerabilitiesCount.get(vulnerability)).to.equal(occurrences)
+      }
+
+      if (location) {
+        let found = false
+        vulnerabilitiesTrace.vulnerabilities.forEach(v => {
+          if (v.type === vulnerability && v.location.path.endsWith(location.path)) {
+            if (location.line) {
+              if (location.line === v.location.line) {
+                found = true
+              }
+            } else {
+              found = true
+            }
+          }
+        })
+
+        if (!found) {
+          throw new Error(`Expected ${vulnerability} on ${location.path}:${location.line}`)
+        }
+      }
+
+      if (cb) {
+        cb(vulnerabilitiesTrace.vulnerabilities.filter(v => v.type === vulnerability))
+      }
+    })
+    .then(done)
+    .catch(done)
+  if (makeRequest) {
+    makeRequest(done)
+  } else {
+    axios.get(`http://localhost:${config.port}/`).catch(done)
+  }
+}
+
+function prepareTestServerForIast (description, tests, iastConfig) {
   describe(description, () => {
     const config = {}
     let http
@@ -116,16 +222,7 @@ function prepareTestServerForIast (description, tests) {
 
     before(() => {
       listener = (req, res) => {
-        const appResult = app && app(req, res)
-        if (appResult && typeof appResult.then === 'function') {
-          appResult.then(() => {
-            res.writeHead(200)
-            res.end()
-          })
-        } else {
-          res.writeHead(200)
-          res.end()
-        }
+        endResponse(res, app && app(req, res))
       }
     })
 
@@ -142,22 +239,7 @@ function prepareTestServerForIast (description, tests) {
         .listen(config.port, 'localhost', () => done())
     })
 
-    beforeEach(async () => {
-      vulnerabilityReporter.clearCache()
-    })
-
-    beforeEach(() => {
-      iast.enable(new Config({
-        experimental: {
-          iast: {
-            enabled: true,
-            requestSampling: 100,
-            maxConcurrentRequests: 100,
-            maxContextOperations: 100
-          }
-        }
-      }))
-    })
+    beforeEachIastTest(iastConfig)
 
     afterEach(() => {
       iast.disable()
@@ -169,66 +251,81 @@ function prepareTestServerForIast (description, tests) {
       return agent.close({ ritmReset: false })
     })
 
-    function testThatRequestHasVulnerability (fn, vulnerability, { occurrences, location } = {}) {
+    function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb, makeRequest) {
       it(`should have ${vulnerability} vulnerability`, function (done) {
         this.timeout(5000)
         app = fn
-        agent
-          .use(traces => {
-            expect(traces[0][0].meta).to.have.property('_dd.iast.json')
-            const vulnerabilitiesTrace = JSON.parse(traces[0][0].meta['_dd.iast.json'])
-            expect(vulnerabilitiesTrace).to.not.be.null
-            const vulnerabilitiesCount = new Map()
-            vulnerabilitiesTrace.vulnerabilities.forEach(v => {
-              let count = vulnerabilitiesCount.get(v.type) || 0
-              vulnerabilitiesCount.set(v.type, ++count)
-            })
+        checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done)
+      })
+    }
 
-            expect(vulnerabilitiesCount.get(vulnerability)).to.not.be.null
+    function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest) {
+      it(`should not have ${vulnerability} vulnerability`, function (done) {
+        app = fn
+        checkNoVulnerabilityInRequest(vulnerability, config, done, makeRequest)
+      })
+    }
+    tests(testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config)
+  })
+}
 
-            if (occurrences) {
-              expect(vulnerabilitiesCount.get(vulnerability)).to.equal(occurrences)
-            }
+function prepareTestServerForIastInExpress (description, expressVersion, tests) {
+  describe(description, () => {
+    const config = {}
+    let listener, app, server
 
-            if (location) {
-              let found = false
-              vulnerabilitiesTrace.vulnerabilities.forEach(v => {
-                if (v.type === vulnerability && v.location.path.endsWith(location.path)) {
-                  if (location.line) {
-                    if (location.line === v.location.line) {
-                      found = true
-                    }
-                  } else {
-                    found = true
-                  }
-                }
-              })
+    before(() => {
+      return agent.load(['express', 'http'], { client: false }, { flushInterval: 1 })
+    })
 
-              if (!found) {
-                throw new Error(`Expected ${vulnerability} on ${location.path}:${location.line}`)
-              }
-            }
-          })
-          .then(done)
-          .catch(done)
-        axios.get(`http://localhost:${config.port}/`).catch(done)
+    before(() => {
+      listener = (req, res) => {
+        endResponse(res, app && app(req, res))
+      }
+    })
+
+    before((done) => {
+      const express = require(`../../../../../versions/express@${expressVersion}`).get()
+      const bodyParser = require(`../../../../../versions/body-parser`).get()
+      const expressApp = express()
+      expressApp.use(bodyParser.json())
+
+      expressApp.all('/', listener)
+      getPort().then(newPort => {
+        config.port = newPort
+        server = expressApp.listen(newPort, () => {
+          done()
+        })
+      })
+    })
+
+    beforeEachIastTest()
+
+    afterEach(() => {
+      iast.disable()
+      app = null
+    })
+
+    after(() => {
+      server.close()
+      return agent.close({ ritmReset: false })
+    })
+
+    function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb, makeRequest) {
+      it(`should have ${vulnerability} vulnerability`, function (done) {
+        this.timeout(5000)
+        app = fn
+        checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done)
       })
     }
 
     function testThatRequestHasNoVulnerability (fn, vulnerability) {
       it(`should not have ${vulnerability} vulnerability`, function (done) {
         app = fn
-        agent
-          .use(traces => {
-            // iastJson == undefiend is valid
-            const iastJson = traces[0][0].meta['_dd.iast.json'] || ''
-            expect(iastJson).to.not.include(`"${vulnerability}"`)
-          })
-          .then(done)
-          .catch(done)
-        axios.get(`http://localhost:${config.port}/`).catch(done)
+        checkNoVulnerabilityInRequest(vulnerability, config, done)
       })
     }
+
     tests(testThatRequestHasVulnerability, testThatRequestHasNoVulnerability, config)
   })
 }
@@ -237,5 +334,6 @@ module.exports = {
   testOutsideRequestHasVulnerability,
   testInRequest,
   copyFileToTmp,
-  prepareTestServerForIast
+  prepareTestServerForIast,
+  prepareTestServerForIastInExpress
 }

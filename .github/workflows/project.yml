@@ -5,7 +5,7 @@ on:
   push:
     branches: [master]
   schedule:
-    - cron: '0 4 * * *'
+    - cron: "0 4 * * *"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -22,12 +22,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: ./.github/actions/node/setup
-      - run: yarn install
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
+      - run: yarn install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
 
@@ -35,8 +34,33 @@ jobs:
     strategy:
       matrix:
         version: [16, latest]
-        framework: [cucumber, cypress, playwright]
+        framework: [cucumber, playwright]
     runs-on: ubuntu-latest
+    env:
+      DD_SERVICE: dd-trace-js-integration-tests
+      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.version }}
+      - run: yarn install
+      - run: yarn test:integration:${{ matrix.framework }}
+        env:
+          NODE_OPTIONS: '-r ./ci/init'
+
+  integration-cypress:
+    strategy:
+      matrix:
+        version: [16, latest]
+        # 6.7.0 is the minimum version we support
+        cypress-version: [6.7.0, latest]
+    runs-on: ubuntu-latest
+    env:
+      DD_SERVICE: dd-trace-js-integration-tests
+      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/node/setup
@@ -44,7 +68,10 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
-      - run: yarn test:integration:${{ matrix.framework }}
+      - run: yarn test:integration:cypress
+        env:
+          CYPRESS_VERSION: ${{ matrix.cypress-version }}
+          NODE_OPTIONS: '-r ./ci/init'
 
   lint:
     runs-on: ubuntu-latest

@@ -6,6 +6,7 @@ const { ACKNOWLEDGED } = require('../../src/appsec/remote_config/apply_states')
 
 const rules = require('../../src/appsec/recommended.json')
 const waf = require('../../src/appsec/waf')
+const blocking = require('../../src/appsec/blocking')
 
 describe('AppSec Rule Manager', () => {
   let config
@@ -17,6 +18,8 @@ describe('AppSec Rule Manager', () => {
     sinon.stub(waf, 'init').callThrough()
     sinon.stub(waf, 'destroy').callThrough()
     sinon.stub(waf, 'update').callThrough()
+
+    sinon.stub(blocking, 'updateBlockingConfiguration').callThrough()
   })
 
   afterEach(() => {
@@ -29,6 +32,31 @@ describe('AppSec Rule Manager', () => {
       applyRules(rules, config.appsec)
 
       expect(waf.init).to.have.been.calledOnceWithExactly(rules, config.appsec)
+      expect(blocking.updateBlockingConfiguration).not.to.have.been.called
+    })
+
+    it('should call updateBlockingConfiguration with proper params', () => {
+      const testRules = {
+        ...rules,
+        actions: [
+          {
+            id: 'block',
+            otherParam: 'other'
+          },
+          {
+            id: 'otherId',
+            moreParams: 'more'
+          }
+        ]
+      }
+
+      applyRules(testRules, config.appsec)
+
+      expect(waf.init).to.have.been.calledOnceWithExactly(testRules, config.appsec)
+      expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly({
+        id: 'block',
+        otherParam: 'other'
+      })
     })
 
     it('should throw if null/undefined are passed', () => {
@@ -45,6 +73,7 @@ describe('AppSec Rule Manager', () => {
 
       clearAllRules()
       expect(waf.destroy).to.have.been.calledOnce
+      expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly(undefined)
     })
   })
 
@@ -256,6 +285,7 @@ describe('AppSec Rule Manager', () => {
         expect(waf.update).calledWithExactly(expectedPayload)
       })
     })
+
     describe('ASM_DD', () => {
       beforeEach(() => {
         applyRules(rules, config.appsec)
@@ -402,6 +432,75 @@ describe('AppSec Rule Manager', () => {
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
 
         expect(waf.update).to.have.been.calledOnceWithExactly(asm)
+      })
+
+      it('should apply blocking actions', () => {
+        const asm = {
+          actions: [
+            {
+              id: 'block',
+              otherParam: 'other'
+            },
+            {
+              id: 'otherId',
+              moreParams: 'more'
+            }
+          ]
+        }
+
+        const toApply = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: asm
+          }
+        ]
+
+        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+
+        expect(waf.update).not.to.have.been.called
+        expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly(
+          {
+            id: 'block',
+            otherParam: 'other'
+          })
+      })
+
+      it('should unapply blocking actions', () => {
+        const asm = {
+          actions: [
+            {
+              id: 'block',
+              otherParam: 'other'
+            },
+            {
+              id: 'otherId',
+              moreParams: 'more'
+            }
+          ]
+        }
+        const toApply = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: asm
+          }
+        ]
+        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+        // reset counters
+        blocking.updateBlockingConfiguration.reset()
+
+        const toUnapply = [
+          {
+            product: 'ASM',
+            id: '1'
+          }
+        ]
+
+        updateWafFromRC({ toUnapply, toApply: [], toModify: [] })
+
+        expect(waf.update).not.to.have.been.called
+        expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly(undefined)
       })
 
       it('should ignore other properties', () => {

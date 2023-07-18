@@ -144,6 +144,11 @@ class Config {
       process.env.DD_DBM_PROPAGATION_MODE,
       'disabled'
     )
+    const DD_DATA_STREAMS_ENABLED = coalesce(
+      options.dsmEnabled,
+      process.env.DD_DATA_STREAMS_ENABLED,
+      false
+    )
     const DD_AGENT_HOST = coalesce(
       options.hostname,
       process.env.DD_AGENT_HOST,
@@ -170,6 +175,11 @@ class Config {
     const DD_CIVISIBILITY_ITR_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_ITR_ENABLED,
       true
+    )
+
+    const DD_CIVISIBILITY_MANUAL_API_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
+      false
     )
 
     const DD_SERVICE = options.service ||
@@ -205,6 +215,17 @@ class Config {
       false
     )
 
+    const DD_OPENAI_LOGS_ENABLED = coalesce(
+      options.openAiLogsEnabled,
+      process.env.DD_OPENAI_LOGS_ENABLED,
+      false
+    )
+
+    const DD_API_KEY = coalesce(
+      process.env.DATADOG_API_KEY,
+      process.env.DD_API_KEY
+    )
+
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
 
     const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
@@ -220,8 +241,18 @@ class Config {
       process.env.DD_TRACE_TELEMETRY_ENABLED,
       !inServerlessEnvironment
     )
-    const DD_TELEMETRY_DEBUG_ENABLED = coalesce(
-      process.env.DD_TELEMETRY_DEBUG_ENABLED,
+    const DD_TELEMETRY_HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
+      ? parseInt(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000
+      : 60000
+    const DD_OPENAI_SPAN_CHAR_LIMIT = process.env.DD_OPENAI_SPAN_CHAR_LIMIT
+      ? parseInt(process.env.DD_OPENAI_SPAN_CHAR_LIMIT)
+      : 128
+    const DD_TELEMETRY_DEBUG = coalesce(
+      process.env.DD_TELEMETRY_DEBUG,
+      false
+    )
+    const DD_TELEMETRY_METRICS_ENABLED = coalesce(
+      process.env.DD_TELEMETRY_METRICS_ENABLED,
       false
     )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
@@ -295,6 +326,18 @@ class Config {
     )
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+    )
+    const DD_TRACE_PEER_SERVICE_MAPPING = coalesce(
+      options.peerServiceMapping,
+      process.env.DD_TRACE_PEER_SERVICE_MAPPING ? fromEntries(
+        process.env.DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
+      ) : {}
+    )
+    const DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+
+    const DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = coalesce(
+      isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED),
+      false
     )
     const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
       process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
@@ -370,6 +413,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maybeFile(appsec.blockedTemplateJson),
       maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
     )
+    const DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = coalesce(
+      appsec.eventTracking && appsec.eventTracking.mode,
+      process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
+      'safe'
+    ).toLowerCase()
 
     const remoteConfigOptions = options.remoteConfig || {}
     const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
@@ -427,6 +475,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       true
     )
 
+    const DD_IAST_TELEMETRY_VERBOSITY = coalesce(
+      iastOptions && iastOptions.telemetryVerbosity,
+      process.env.DD_IAST_TELEMETRY_VERBOSITY,
+      'INFORMATION'
+    )
+
     const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
       true
@@ -472,6 +526,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
+    this.dsmEnabled = isTrue(DD_DATA_STREAMS_ENABLED)
+    this.openAiLogsEnabled = DD_OPENAI_LOGS_ENABLED
+    this.apiKey = DD_API_KEY
     this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
@@ -512,13 +569,21 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       exporters: DD_PROFILING_EXPORTERS
     }
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+    this.spanComputePeerService = (this.spanAttributeSchema === 'v0'
+      ? isTrue(DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED)
+      : true
+    )
+    this.traceRemoveIntegrationServiceNamesEnabled = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+    this.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
     this.telemetry = {
       enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
+      heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
-      debug: isTrue(DD_TELEMETRY_DEBUG_ENABLED)
+      debug: isTrue(DD_TELEMETRY_DEBUG),
+      metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED)
     }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
@@ -531,7 +596,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       blockedTemplateHtml: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
-      blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
+      blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
+      eventTracking: {
+        enabled: ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING),
+        mode: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING
+      }
     }
     this.remoteConfig = {
       enabled: DD_REMOTE_CONFIGURATION_ENABLED,
@@ -543,7 +612,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
       deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
-      redactionEnabled: DD_IAST_REDACTION_ENABLED
+      redactionEnabled: DD_IAST_REDACTION_ENABLED,
+      telemetryVerbosity: DD_IAST_TELEMETRY_VERBOSITY
     }
 
     this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
@@ -553,6 +623,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
 
     this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
+    this.isManualApiEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_MANUAL_API_ENABLED)
+
+    this.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
 
     if (this.gitMetadataEnabled) {
       this.repositoryUrl = coalesce(

@@ -3,6 +3,22 @@
 const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
+const { csiMethods } = require('../../../../src/appsec/iast/taint-tracking/csi-methods')
+const iastTelemetry = require('../../../../src/appsec/iast/telemetry')
+const { EXECUTED_PROPAGATION, REQUEST_TAINTED } = require('../../../../src/appsec/iast/telemetry/iast-metric')
+const { Verbosity } = require('../../../../src/appsec/iast/telemetry/verbosity')
+
+function getExpectedMethods () {
+  const set = new Set()
+  for (const definition of csiMethods) {
+    if (definition.dst) {
+      set.add(definition.dst)
+    } else {
+      set.add(definition.src)
+    }
+  }
+  return [...set]
+}
 
 describe('IAST TaintTracking Operations', () => {
   let taintTrackingOperations
@@ -16,7 +32,12 @@ describe('IAST TaintTracking Operations', () => {
     isTainted: id => id,
     getRanges: id => id,
     concat: id => id,
-    trim: id => id
+    trim: id => id,
+    getMetrics: id => {
+      return {
+        requestCount: 5
+      }
+    }
   }
 
   const store = {}
@@ -36,7 +57,8 @@ describe('IAST TaintTracking Operations', () => {
     taintTrackingOperations = proxyquire('../../../../src/appsec/iast/taint-tracking/operations', {
       '@datadog/native-iast-taint-tracking': taintedUtilsMock,
       '../../../../../datadog-core': datadogCore,
-      './taint-tracking-impl': taintTrackingImpl
+      './taint-tracking-impl': taintTrackingImpl,
+      '../telemetry': iastTelemetry
     })
   })
 
@@ -125,6 +147,75 @@ describe('IAST TaintTracking Operations', () => {
       expect(result).to.equal(obj)
     })
 
+    it('Should call newTaintedString in object keys when keyTainting is true', () => {
+      const iastContext = {}
+      const transactionId = 'id'
+      taintTrackingOperations.createTransaction(transactionId, iastContext)
+
+      const VALUE_TYPE = 'value.type'
+      const KEY_TYPE = 'key.type'
+
+      const obj = {
+        key1: 'parent',
+        key2: {
+          key3: 'child'
+        }
+      }
+
+      const result = taintTrackingOperations.taintObject(iastContext, obj, VALUE_TYPE, true, KEY_TYPE)
+      expect(taintedUtilsMock.newTaintedString.getCall(0)).to.have.been
+        .calledWithExactly(transactionId, 'key2', 'key2', KEY_TYPE)
+      expect(taintedUtilsMock.newTaintedString.getCall(1)).to.have.been
+        .calledWithExactly(transactionId, 'child', 'key2.key3', VALUE_TYPE)
+      expect(taintedUtilsMock.newTaintedString.getCall(2)).to.have.been
+        .calledWithExactly(transactionId, 'key3', 'key2.key3', KEY_TYPE)
+      expect(taintedUtilsMock.newTaintedString.getCall(3)).to.have.been
+        .calledWithExactly(transactionId, 'parent', 'key1', VALUE_TYPE)
+      expect(taintedUtilsMock.newTaintedString.getCall(4)).to.have.been
+        .calledWithExactly(transactionId, 'key1', 'key1', KEY_TYPE)
+      expect(result).to.equal(obj)
+
+      taintTrackingOperations.removeTransaction()
+    })
+
+    it('Should taint object keys when taintingKeys is true', () => {
+      const taintTrackingOperations = require('../../../../src/appsec/iast/taint-tracking/operations')
+      const iastContext = {}
+      const transactionId = 'id'
+      taintTrackingOperations.createTransaction(transactionId, iastContext)
+
+      const VALUE_TYPE = 'value.type'
+      const KEY_TYPE = 'key.type'
+
+      const obj = {
+        keyLargerThan10Chars: 'parent',
+        anotherKeyLargerThan10Chars: {
+          shortKey: 'child'
+        }
+      }
+
+      const checkValueAndKeyAreTainted = (target, key) => {
+        // Strings shorter than 10 characters are not tainted directly, but a new instance of the string is created
+        // in dd-native-iast-taint-tracking. This leads to object keys that meet this condition not being detected
+        // as tainted
+        if (key && key.length >= 10) {
+          const isKeyTainted = taintTrackingOperations.isTainted(iastContext, key)
+          expect(isKeyTainted).to.be.true
+        }
+
+        const obj = key ? target[key] : target
+        if (!key || typeof obj === 'object') {
+          Object.keys(obj).forEach(k => checkValueAndKeyAreTainted(obj, k))
+        } else if (typeof obj === 'string') {
+          const isValueTainted = taintTrackingOperations.isTainted(iastContext, obj)
+          expect(isValueTainted).to.be.true
+        }
+      }
+
+      taintTrackingOperations.taintObject(iastContext, obj, VALUE_TYPE, true, KEY_TYPE)
+      checkValueAndKeyAreTainted(obj, null)
+    })
+
     it('Should handle the exception', () => {
       const iastContext = {}
       const transactionId = 'id'
@@ -205,6 +296,25 @@ describe('IAST TaintTracking Operations', () => {
       taintTrackingOperations.removeTransaction(iastContext)
       expect(taintedUtils.removeTransaction).not.to.be.called
     })
+
+    it('Should increment REQUEST_TAINTED metric if INFORMATION or greater verbosity is enabled', () => {
+      const iastContext = {
+        [taintTrackingOperations.IAST_TRANSACTION_ID]: 'id'
+      }
+      iastTelemetry.configure({
+        telemetry: { enabled: true, metrics: true },
+        iast: {
+          telemetryVerbosity: 'INFORMATION'
+        }
+      })
+
+      const requestTaintedAdd = sinon.stub(REQUEST_TAINTED, 'add')
+
+      taintTrackingOperations.enableTaintOperations(iastTelemetry.verbosity)
+      taintTrackingOperations.removeTransaction(iastContext)
+
+      expect(requestTaintedAdd).to.be.calledOnceWith(5, null, iastContext)
+    })
   })
 
   describe('SetMaxTransactions', () => {
@@ -222,11 +332,13 @@ describe('IAST TaintTracking Operations', () => {
   })
 
   describe('enableTaintTracking', () => {
+    let context
     beforeEach(() => {
+      context = { [taintTrackingOperations.IAST_TRANSACTION_ID]: 'id' }
       iastContextFunctions.saveIastContext(
         store,
         {},
-        { [taintTrackingOperations.IAST_TRANSACTION_ID]: 'id' }
+        context
       )
     })
 
@@ -252,6 +364,22 @@ describe('IAST TaintTracking Operations', () => {
       // taintedUtils methods are not called
       global._ddiast.plusOperator('helloworld', 'hello', 'world')
       expect(taintedUtils.concat).not.to.be.called
+    })
+
+    it('Should set debug global._ddiast object', () => {
+      taintTrackingOperations.enableTaintOperations(Verbosity.DEBUG)
+
+      // dummy taintedUtils is declared in global scope
+      expect(global._ddiast).not.to.be.undefined
+      expect(global._ddiast.plusOperator).not.to.be.undefined
+
+      const executedPropagationIncrease = sinon.stub(EXECUTED_PROPAGATION, 'inc')
+
+      // taintedUtils methods are not called
+      global._ddiast.plusOperator('helloworld', 'hello', 'world')
+      expect(taintedUtils.concat).to.be.called
+
+      expect(executedPropagationIncrease).to.be.calledOnceWith(null, context)
     })
   })
 
@@ -449,12 +577,27 @@ describe('IAST TaintTracking Operations', () => {
     })
   })
 
-  describe('TaintTrackingDummy', () => {
+  describe('TaintTrackingNoop', () => {
     it('should have the same properties as TaintTracking', () => {
-      const tt = taintTrackingImpl.TaintTracking
-      const dummy = taintTrackingImpl.TaintTrackingDummy
+      const tt = taintTrackingImpl.getTaintTrackingImpl()
+      const noop = taintTrackingImpl.getTaintTrackingNoop()
 
-      expect(dummy).to.have.all.keys(Object.keys(tt))
+      expect(noop).to.have.all.keys(Object.keys(tt))
+    })
+
+    it('should have the same properties as TaintTrackingDebug', () => {
+      const ttDebug = taintTrackingImpl.getTaintTrackingImpl(Verbosity.DEBUG)
+      const noop = taintTrackingImpl.getTaintTrackingNoop()
+
+      expect(noop).to.have.all.keys(Object.keys(ttDebug))
+    })
+
+    it('should have the same properties as csiMethods', () => {
+      const tt = taintTrackingImpl.getTaintTrackingImpl()
+
+      const csiExpectedMethods = getExpectedMethods()
+
+      expect(tt).to.have.all.keys(csiExpectedMethods)
     })
   })
 })

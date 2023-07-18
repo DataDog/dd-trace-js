@@ -1,14 +1,13 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
 const URL = require('url').URL
 const log = require('../../dd-trace/src/log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
@@ -24,79 +23,95 @@ const HTTP2_HEADER_PATH = ':path'
 const HTTP2_HEADER_STATUS = ':status'
 const HTTP2_METHOD_GET = 'GET'
 
-class Http2ClientPlugin extends Plugin {
-  static get id () {
-    return 'http2'
+class Http2ClientPlugin extends ClientPlugin {
+  static get id () { return 'http2' }
+  static get prefix () { return `apm:http2:client:request` }
+
+  bindStart (message) {
+    const { authority, options, headers = {} } = message
+    const sessionDetails = extractSessionDetails(authority, options)
+    const path = headers[HTTP2_HEADER_PATH] || '/'
+    const pathname = path.split(/[?#]/)[0]
+    const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
+    const uri = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${pathname}`
+    const allowed = this.config.filter(uri)
+
+    const store = storage.getStore()
+    const childOf = store && allowed ? store.span : null
+    const span = this.startSpan('http.request', {
+      childOf,
+      meta: {
+        [COMPONENT]: this.constructor.id,
+        [SPAN_KIND]: CLIENT,
+        'service.name': getServiceName(this.tracer, this.config, sessionDetails),
+        'resource.name': method,
+        'span.type': 'http',
+        'http.method': method,
+        'http.url': uri,
+        'out.host': sessionDetails.host
+      },
+      metrics: {
+        [CLIENT_PORT_KEY]: parseInt(sessionDetails.port)
+      }
+    }, false)
+
+    // TODO: Figure out a better way to do this for any span.
+    if (!allowed) {
+      span._spanContext._trace.record = false
+    }
+
+    addHeaderTags(span, headers, HTTP_REQUEST_HEADERS, this.config)
+
+    if (!hasAmazonSignature(headers, path)) {
+      this.tracer.inject(span, HTTP_HEADERS, headers)
+    }
+
+    message.parentStore = store
+    message.currentStore = { ...store, span }
+
+    return message.currentStore
   }
 
-  constructor (...args) {
-    super(...args)
+  bindAsyncStart ({ eventName, eventData, currentStore, parentStore }) {
+    switch (eventName) {
+      case 'response':
+        this._onResponse(currentStore, eventData)
+        return parentStore
+      case 'error':
+        this._onError(currentStore, eventData)
+        return parentStore
+      case 'close':
+        this._onClose(currentStore, eventData)
+        return parentStore
+    }
 
-    this.addSub('apm:http2:client:request:start', ({ authority, options, headers = {} }) => {
-      const sessionDetails = extractSessionDetails(authority, options)
-      const path = headers[HTTP2_HEADER_PATH] || '/'
-      const pathname = path.split(/[?#]/)[0]
-      const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
-      const uri = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${pathname}`
-      const allowed = this.config.filter(uri)
-
-      const store = storage.getStore()
-      const childOf = store && allowed ? store.span : null
-      const span = this.tracer.startSpan('http.request', {
-        childOf,
-        tags: {
-          [COMPONENT]: this.constructor.id,
-          [CLIENT_PORT_KEY]: parseInt(sessionDetails.port),
-          [SPAN_KIND]: CLIENT,
-          'service.name': getServiceName(this.tracer, this.config, sessionDetails),
-          'resource.name': method,
-          'span.type': 'http',
-          'http.method': method,
-          'http.url': uri,
-          'out.host': sessionDetails.host
-        }
-      })
-
-      // TODO: Figure out a better way to do this for any span.
-      if (!allowed) {
-        span._spanContext._trace.record = false
-      }
-
-      addHeaderTags(span, headers, HTTP_REQUEST_HEADERS, this.config)
-
-      if (!hasAmazonSignature(headers, path)) {
-        this.tracer.inject(span, HTTP_HEADERS, headers)
-      }
-
-      analyticsSampler.sample(span, this.config.measured)
-
-      this.enter(span, store)
-    })
-
-    this.addSub('apm:http2:client:response', (headers) => {
-      const span = storage.getStore().span
-      const status = headers && headers[HTTP2_HEADER_STATUS]
-
-      span.setTag(HTTP_STATUS_CODE, status)
-
-      if (!this.config.validateStatus(status)) {
-        this.addError()
-      }
-
-      addHeaderTags(span, headers, HTTP_RESPONSE_HEADERS, this.config)
-    })
-
-    this.addSub('apm:http2:client:request:finish', () => {
-      const span = storage.getStore().span
-
-      span.finish()
-    })
-
-    this.addSub('apm:http2:client:request:error', this.addError)
+    return storage.getStore()
   }
 
   configure (config) {
     return super.configure(normalizeConfig(config))
+  }
+
+  _onResponse (store, headers) {
+    const status = headers && headers[HTTP2_HEADER_STATUS]
+
+    store.span.setTag(HTTP_STATUS_CODE, status)
+
+    if (!this.config.validateStatus(status)) {
+      storage.run(store, () => this.addError())
+    }
+
+    addHeaderTags(store.span, headers, HTTP_RESPONSE_HEADERS, this.config)
+  }
+
+  _onError ({ span }, error) {
+    span.setTag('error', error)
+    span.finish()
+  }
+
+  _onClose ({ span }) {
+    this.tagPeerService(span)
+    span.finish()
   }
 }
 

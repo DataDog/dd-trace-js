@@ -705,6 +705,116 @@ describe('Plugin', () => {
           })
         })
 
+        it('long regex should not steal path', done => {
+          const app = express()
+
+          try {
+            app.use(/\/foo\/(bar|baz|bez)/, (req, res, next) => {
+              next()
+            })
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
+            this.skip && this.skip() // mocha allows dynamic skipping, tap does not
+            return done()
+          }
+
+          app.get('/foo/bar', (req, res) => {
+            res.status(200).send('')
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/foo/bar`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should work with regex having flags', done => {
+          const app = express()
+
+          try {
+            app.use(/\/foo\/(bar|baz|bez)/i, (req, res, next) => {
+              next()
+            })
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
+            this.skip && this.skip() // mocha allows dynamic skipping, tap does not
+            return done()
+          }
+
+          app.get('/foo/bar', (req, res) => {
+            res.status(200).send('')
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/foo/bar`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('long regex child of string router should not steal path', done => {
+          const app = express()
+          const router = express.Router()
+
+          try {
+            router.use(/\/(bar|baz|bez)/, (req, res, next) => {
+              next()
+            })
+            app.use('/foo', router)
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
+            this.skip && this.skip() // mocha allows dynamic skipping, tap does not
+            return done()
+          }
+
+          app.get('/foo/bar', (req, res) => {
+            res.status(200).send('')
+          })
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('resource', 'GET /foo/bar')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/foo/bar`)
+                .catch(done)
+            })
+          })
+        })
+
         it('should not lose the current path on next', done => {
           const app = express()
           const Router = express.Router

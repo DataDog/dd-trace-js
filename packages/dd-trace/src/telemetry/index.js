@@ -6,9 +6,7 @@ const os = require('os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
 
-const HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
-  ? Number(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000
-  : 60000
+const { manager: metricsManager } = require('./metrics')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
@@ -19,6 +17,7 @@ let pluginManager
 let application
 let host
 let interval
+let heartbeatInterval
 const sentIntegrations = new Set()
 
 function getIntegrations () {
@@ -108,7 +107,7 @@ function createHostObject () {
 }
 
 function getTelemetryData () {
-  return { config, application, host, heartbeatInterval: HEARTBEAT_INTERVAL }
+  return { config, application, host, heartbeatInterval }
 }
 
 function start (aConfig, thePluginManager) {
@@ -119,11 +118,14 @@ function start (aConfig, thePluginManager) {
   pluginManager = thePluginManager
   application = createAppObject()
   host = createHostObject()
+  heartbeatInterval = config.telemetry.heartbeatInterval
+
   dependencies.start(config, application, host)
   sendData(config, application, host, 'app-started', appStarted())
   interval = setInterval(() => {
+    metricsManager.send(config, application, host)
     sendData(config, application, host, 'app-heartbeat')
-  }, HEARTBEAT_INTERVAL)
+  }, heartbeatInterval)
   interval.unref()
   process.on('beforeExit', onBeforeExit)
 

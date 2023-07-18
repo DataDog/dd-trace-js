@@ -40,6 +40,13 @@ describe('Legacy Plugin', () => {
           sub = redis.createClient()
         })
 
+        withPeerService(
+          () => tracer,
+          () => client.get('foo'),
+          '127.0.0.1',
+          'out.host'
+        )
+
         it('should do automatic instrumentation when using callbacks', done => {
           client.on('error', done)
           agent
@@ -141,7 +148,8 @@ describe('Legacy Plugin', () => {
         withNamingSchema(
           () => client.get('foo', () => {}),
           () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName
+          () => namingSchema.outbound.serviceName,
+          'test'
         )
       })
 
@@ -189,7 +197,8 @@ describe('Legacy Plugin', () => {
         withNamingSchema(
           () => client.get('foo', () => {}),
           () => namingSchema.outbound.opName,
-          () => 'custom'
+          () => 'custom',
+          'custom'
         )
       })
 

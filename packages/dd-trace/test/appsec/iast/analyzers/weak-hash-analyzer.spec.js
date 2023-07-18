@@ -3,10 +3,13 @@
 const weakHashAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-hash-analyzer')
 const proxyquire = require('proxyquire')
 const { prepareTestServerForIast, testOutsideRequestHasVulnerability } = require('../utils')
+const path = require('path')
 
 describe('weak-hash-analyzer', () => {
   const VULNERABLE_ALGORITHM = 'sha1'
   const NON_VULNERABLE_ALGORITHM = 'sha512'
+
+  weakHashAnalyzer.configure(true)
 
   it('should subscribe to crypto hashing channel', () => {
     expect(weakHashAnalyzer._subscriptions).to.have.lengthOf(1)
@@ -59,6 +62,57 @@ describe('weak-hash-analyzer', () => {
     proxiedWeakHashAnalyzer.analyze(VULNERABLE_ALGORITHM)
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'WEAK_HASH' })
+  })
+
+  describe('some locations should be excluded', () => {
+    let locationPrefix
+    before(() => {
+      if (process.platform === 'win32') {
+        locationPrefix = 'C:\\path\\to\\project'
+      } else {
+        locationPrefix = '/path/to/project'
+      }
+    })
+
+    it('redlock', () => {
+      const location = {
+        path: path.join(locationPrefix, 'node_modules', 'redlock', 'dist', 'cjs'),
+        line: 183
+      }
+      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+    })
+
+    it('etag', () => {
+      const location = {
+        path: path.join(locationPrefix, 'node_modules', 'etag', 'index.js'),
+        line: 47
+      }
+      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+    })
+
+    it('websocket-server', () => {
+      const location = {
+        path: path.join(locationPrefix, 'node_modules', 'ws', 'lib', 'websocket-server.js'),
+        line: 371
+      }
+      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+    })
+
+    it('mysql 41 authentication mechanism', () => {
+      const location = {
+        path: path.join(locationPrefix, 'node_modules', 'mysql2', 'lib', 'auth_41.js'),
+        line: 30
+      }
+      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+    })
+
+    it('@micro-orm hash for keys', () => {
+      const location = {
+        path: path.join(locationPrefix, 'node_modules', '@mikro-orm', 'core', 'utils', 'Utils.js'),
+        line: 30
+      }
+      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+    })
   })
 
   describe('full feature', () => {

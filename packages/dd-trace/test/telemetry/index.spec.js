@@ -64,7 +64,7 @@ describe('telemetry', () => {
     circularObject.child.parent = circularObject
 
     telemetry.start({
-      telemetry: { enabled: true },
+      telemetry: { enabled: true, heartbeatInterval: 60000 },
       hostname: 'localhost',
       port: traceAgent.address().port,
       service: 'test service',
@@ -154,7 +154,7 @@ describe('telemetry', () => {
       expect.fail('server should not be called')
     }).listen(0, () => {
       telemetry.start({
-        telemetry: { enabled: false },
+        telemetry: { enabled: false, heartbeatInterval: 60000 },
         hostname: 'localhost',
         port: server.address().port
       })
@@ -169,8 +169,6 @@ describe('telemetry', () => {
 
 describe('telemetry with interval change', () => {
   it('should set the interval correctly', (done) => {
-    process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL = 12345
-
     const telemetry = proxyquire('../../src/telemetry', {
       '../exporters/common/docker': {
         id () {
@@ -190,7 +188,7 @@ describe('telemetry with interval change', () => {
     }
 
     telemetry.start({
-      telemetry: { enabled: true },
+      telemetry: { enabled: true, heartbeatInterval: 12345000 },
       hostname: 'localhost',
       port: 8126,
       service: 'test service',
@@ -205,7 +203,6 @@ describe('telemetry with interval change', () => {
 
     process.nextTick(() => {
       expect(intervalSetCorrectly).to.be.true
-      delete process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
       done()
     })
   })

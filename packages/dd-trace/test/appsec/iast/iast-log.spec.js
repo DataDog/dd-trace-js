@@ -6,20 +6,10 @@ const ddBasePath = calculateDDBasePath(__dirname)
 const EOL = '\n'
 
 describe('IAST log', () => {
-  const telemetryDebugConfig = {
-    config: {
-      telemetry: {
-        logCollection: true,
-        debug: true
-      }
-    }
-  }
-
   const telemetryDefaultConfig = {
     config: {
       telemetry: {
-        logCollection: true,
-        debug: false
+        logCollection: true
       }
     }
   }
@@ -57,8 +47,8 @@ describe('IAST log', () => {
       warn: sinon.stub(),
       error: sinon.stub()
     }
-    telemetryLogs = proxyquire('../../../src/appsec/iast/telemetry/logs', {
-      '../../../../../diagnostics_channel': {
+    telemetryLogs = proxyquire('../../../src/appsec/iast/telemetry/log', {
+      '../../../../../../diagnostics_channel': {
         channel: (name) => name === 'datadog:telemetry:start' ? telemetryStartChannel : telemetryStopChannel
       }
     })
@@ -67,7 +57,7 @@ describe('IAST log', () => {
     telemetryLogs.start()
 
     iastLog = proxyquire('../../../src/appsec/iast/iast-log', {
-      './telemetry/logs': telemetryLogs,
+      './telemetry/log': telemetryLogs,
       '../../log': log
     })
   })
@@ -75,81 +65,6 @@ describe('IAST log', () => {
   afterEach(() => {
     sinon.reset()
     telemetryLogs.stop()
-  })
-
-  describe('debug', () => {
-    it('should call log.debug', () => {
-      iastLog.debug('debug')
-
-      expect(log.debug).to.be.calledOnceWith('debug')
-    })
-
-    it('should call log.debug and not publish msg via telemetry', () => {
-      iastLog.debugAndPublish('debug')
-
-      expect(log.debug).to.be.calledOnceWith('debug')
-      expect(telemetryLogs.publish).to.not.be.called
-    })
-
-    it('should call log.debug and publish msg via telemetry', () => {
-      onTelemetryStart(telemetryDebugConfig)
-
-      iastLog.debugAndPublish('debug')
-
-      expect(log.debug).to.be.calledOnceWith('debug')
-      expect(telemetryLogs.publish).to.be.calledOnceWith({ message: 'debug', level: 'DEBUG' })
-    })
-
-    it('should chain multiple debug calls', () => {
-      onTelemetryStart(telemetryDebugConfig)
-
-      iastLog.debug('debug').debugAndPublish('debugAndPublish').debug('debug2')
-
-      expect(log.debug).to.be.calledThrice
-      expect(log.debug.getCall(0).args[0]).to.be.eq('debug')
-      expect(log.debug.getCall(1).args[0]).to.be.eq('debugAndPublish')
-      expect(log.debug.getCall(2).args[0]).to.be.eq('debug2')
-      expect(telemetryLogs.publish).to.be.calledOnceWith({ message: 'debugAndPublish', level: 'DEBUG' })
-    })
-
-    it('should chain multiple debug calls', () => {
-      onTelemetryStart(telemetryDebugConfig)
-
-      iastLog.debug('debug')
-
-      telemetryLogs.stop()
-
-      iastLog.debugAndPublish('debugAndPublish').debug('debug2')
-    })
-  })
-
-  describe('info', () => {
-    it('should call log.info', () => {
-      iastLog.info('info')
-
-      expect(log.info).to.be.calledOnceWith('info')
-    })
-
-    it('should call log.info and publish msg via telemetry', () => {
-      onTelemetryStart(telemetryDebugConfig)
-
-      iastLog.infoAndPublish('info')
-
-      expect(log.info).to.be.calledOnceWith('info')
-      expect(telemetryLogs.publish).to.be.calledOnceWith({ message: 'info', level: 'DEBUG' })
-    })
-
-    it('should chain multiple info calls', () => {
-      onTelemetryStart(telemetryDebugConfig)
-
-      iastLog.info('info').infoAndPublish('infoAndPublish').info('info2')
-
-      expect(log.info).to.be.calledThrice
-      expect(log.info.getCall(0).args[0]).to.be.eq('info')
-      expect(log.info.getCall(1).args[0]).to.be.eq('infoAndPublish')
-      expect(log.info.getCall(2).args[0]).to.be.eq('info2')
-      expect(telemetryLogs.publish).to.be.calledOnceWith({ message: 'infoAndPublish', level: 'DEBUG' })
-    })
   })
 
   describe('warn', () => {

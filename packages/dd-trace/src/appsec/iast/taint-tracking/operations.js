@@ -3,7 +3,10 @@
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { IAST_TRANSACTION_ID } = require('../iast-context')
 const iastLog = require('../iast-log')
-const { TaintTracking, TaintTrackingDummy } = require('./taint-tracking-impl')
+const iastTelemetry = require('../telemetry')
+const { REQUEST_TAINTED } = require('../telemetry/iast-metric')
+const { isInfoAllowed } = require('../telemetry/verbosity')
+const { getTaintTrackingImpl, getTaintTrackingNoop } = require('./taint-tracking-impl')
 
 function createTransaction (id, iastContext) {
   if (id && iastContext) {
@@ -11,9 +14,21 @@ function createTransaction (id, iastContext) {
   }
 }
 
+let onRemoveTransaction = (transactionId, iastContext) => {}
+
+function onRemoveTransactionInformationTelemetry (transactionId, iastContext) {
+  const metrics = TaintedUtils.getMetrics(transactionId, iastTelemetry.verbosity)
+  if (metrics && metrics.requestCount) {
+    REQUEST_TAINTED.add(metrics.requestCount, null, iastContext)
+  }
+}
+
 function removeTransaction (iastContext) {
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
+
+    onRemoveTransaction(transactionId, iastContext)
+
     TaintedUtils.removeTransaction(transactionId)
     delete iastContext[IAST_TRANSACTION_ID]
   }
@@ -30,14 +45,14 @@ function newTaintedString (iastContext, string, name, type) {
   return result
 }
 
-function taintObject (iastContext, object, type) {
+function taintObject (iastContext, object, type, keyTainting, keyType) {
   let result = object
   if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
     const queue = [{ parent: null, property: null, value: object }]
     const visited = new WeakSet()
     while (queue.length > 0) {
-      const { parent, property, value } = queue.pop()
+      const { parent, property, value, key } = queue.pop()
       if (value === null) {
         continue
       }
@@ -47,14 +62,23 @@ function taintObject (iastContext, object, type) {
           if (!parent) {
             result = tainted
           } else {
-            parent[property] = tainted
+            if (keyTainting && key) {
+              const taintedProperty = TaintedUtils.newTaintedString(transactionId, key, property, keyType)
+              parent[taintedProperty] = tainted
+            } else {
+              parent[property] = tainted
+            }
           }
         } else if (typeof value === 'object' && !visited.has(value)) {
           visited.add(value)
           const keys = Object.keys(value)
           for (let i = 0; i < keys.length; i++) {
             const key = keys[i]
-            queue.push({ parent: value, property: property ? `${property}.${key}` : key, value: value[key] })
+            queue.push({ parent: value, property: property ? `${property}.${key}` : key, value: value[key], key })
+          }
+          if (parent && keyTainting && key) {
+            const taintedProperty = TaintedUtils.newTaintedString(transactionId, key, property, keyType)
+            parent[taintedProperty] = value
           }
         }
       } catch (e) {
@@ -87,12 +111,16 @@ function getRanges (iastContext, string) {
   return result
 }
 
-function enableTaintOperations () {
-  global._ddiast = TaintTracking
+function enableTaintOperations (telemetryVerbosity) {
+  if (isInfoAllowed(telemetryVerbosity)) {
+    onRemoveTransaction = onRemoveTransactionInformationTelemetry
+  }
+
+  global._ddiast = getTaintTrackingImpl(telemetryVerbosity)
 }
 
 function disableTaintOperations () {
-  global._ddiast = TaintTrackingDummy
+  global._ddiast = getTaintTrackingNoop()
 }
 
 function setMaxTransactions (transactions) {

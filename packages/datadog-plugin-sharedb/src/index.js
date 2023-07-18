@@ -25,7 +25,7 @@ class SharedbPlugin extends ServerPlugin {
     if (this.config.hooks && this.config.hooks.reply) {
       this.config.hooks.reply(span, request, res)
     }
-    span.finish()
+    super.finish()
   }
 }
 

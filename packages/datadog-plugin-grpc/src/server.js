@@ -1,5 +1,6 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { TEXT_MAP } = require('../../../ext/formats')
 const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
@@ -7,6 +8,7 @@ const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
 class GrpcServerPlugin extends ServerPlugin {
   static get id () { return 'grpc' }
   static get operation () { return 'server:request' }
+  static get prefix () { return `apm:grpc:server:request` }
 
   constructor (...args) {
     super(...args)
@@ -18,15 +20,21 @@ class GrpcServerPlugin extends ServerPlugin {
 
       this.addCode(span, code)
     })
+
+    this.addTraceBind('emit', ({ currentStore }) => {
+      return currentStore
+    })
   }
 
-  start ({ name, metadata, type }) {
+  bindStart (message) {
+    const store = storage.getStore()
+    const { name, metadata, type } = message
     const metadataFilter = this.config.metadataFilter
     const childOf = extract(this.tracer, metadata)
     const method = getMethodMetadata(name, type)
-    const span = this.startSpan('grpc.server', {
+    const span = this.startSpan(this.operationName(), {
       childOf,
-      service: this.config.service,
+      service: this.config.service || this.serviceName(),
       resource: name,
       kind: 'server',
       type: 'web',
@@ -44,9 +52,19 @@ class GrpcServerPlugin extends ServerPlugin {
     })
 
     addMetadataTags(span, metadata, metadataFilter, 'request')
+
+    message.span = span
+    message.parentStore = store
+    message.currentStore = { ...store, span }
+
+    return message.currentStore
   }
 
-  error (error) {
+  bindAsyncStart ({ parentStore }) {
+    return parentStore
+  }
+
+  error ({ error }) {
     const span = this.activeSpan
 
     if (!span) return
@@ -55,9 +73,7 @@ class GrpcServerPlugin extends ServerPlugin {
     this.addError(error)
   }
 
-  finish ({ code, trailer } = {}) {
-    const span = this.activeSpan
-
+  finish ({ span, code, trailer }) {
     if (!span) return
 
     const metadataFilter = this.config.metadataFilter

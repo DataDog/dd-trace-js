@@ -1,0 +1,17 @@
+name: "Get APM Test Agent Logs"
+description: "Get the APM Test Agent logs from the test run."
+inputs:
+  container-id:
+    description: "ID of the Docker Container to get logs from (optional)"
+    required: false
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v2
+    - run: |
+        if [ -n "${{inputs.container-id}}" ]; then
+          docker logs ${{inputs.container-id}}
+        else
+          docker-compose logs testagent
+        fi
+      shell: bash

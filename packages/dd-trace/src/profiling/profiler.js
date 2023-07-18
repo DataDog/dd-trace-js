@@ -4,12 +4,11 @@ const { EventEmitter } = require('events')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 
-function maybeSourceMap (sourceMap) {
+function maybeSourceMap (sourceMap, SourceMapper, debug) {
   if (!sourceMap) return
-  const { SourceMapper } = require('@datadog/pprof')
   return SourceMapper.create([
     process.cwd()
-  ])
+  ], debug)
 }
 
 class Profiler extends EventEmitter {
@@ -24,7 +23,7 @@ class Profiler extends EventEmitter {
   }
 
   start (options) {
-    this._start(options).catch(() => {})
+    this._start(options).catch((err) => { if (options.logger) options.logger.error(err) })
     return this
   }
 
@@ -42,7 +41,17 @@ class Profiler extends EventEmitter {
     // of the profiler from running without source maps.
     let mapper
     try {
-      mapper = await maybeSourceMap(config.sourceMap)
+      const { setLogger, SourceMapper } = require('@datadog/pprof')
+      setLogger(config.logger)
+
+      mapper = await maybeSourceMap(config.sourceMap, SourceMapper, config.debugSourceMaps)
+      if (config.SourceMap && config.debugSourceMaps) {
+        this._logger.debug(() => {
+          return mapper.infoMap.size === 0
+            ? 'Found no source maps'
+            : `Found source maps for following files: [${Array.from(mapper.infoMap.keys()).join(', ')}]`
+        })
+      }
     } catch (err) {
       this._logger.error(err)
     }

@@ -83,21 +83,16 @@ function extractContext (args) {
  */
 exports.datadog = function datadog (lambdaHandler) {
   return (...args) => {
-    const patched = lambdaHandler.apply(this, args)
+    const context = extractContext(args)
 
-    try {
-      const context = extractContext(args)
-
-      checkTimeout(context)
-
-      if (patched) {
-        // clear the timeout as soon as a result is returned
-        patched.then(_ => clearTimeout(__lambdaTimeout))
-      }
-    } catch (e) {
-      log.debug('Error patching AWS Lambda handler. Timeout spans will not be generated.')
+    checkTimeout(context)
+    const result = lambdaHandler.apply(this, args)
+    if (result && typeof result.then === 'function') {
+      return result.then((res) => {
+        clearTimeout(__lambdaTimeout)
+        return res
+      })
     }
-
-    return patched
+    return result
   }
 }

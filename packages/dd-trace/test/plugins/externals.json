@@ -35,6 +35,10 @@
     {
       "name": "loopback",
       "versions": [">=2.38.1"]
+    },
+    {
+      "name": "cookie-parser",
+      "versions": [">=1.4.6"]
     }
   ],
   "fastify": [
@@ -166,6 +170,27 @@
       "name": "react-dom",
       "dep": true
     }
+  ],
+   "passport-http": [
+     {
+       "name": "passport",
+       "versions": [">=0.4.1"]
+     },
+     {
+       "name": "express",
+       "versions": [">=4.16.2"]
+     }
+   ],
+   "passport-local": [
+    {
+      "name": "passport",
+      "versions": [">=0.4.1"]
+    },
+     {
+       "name": "express",
+       "versions": [">=4.16.2"]
+     }
+
   ],
   "pg": [
     {

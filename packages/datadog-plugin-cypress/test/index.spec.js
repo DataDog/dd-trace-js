@@ -60,14 +60,15 @@ describe('Plugin', function () {
           quiet: true,
           headless: true
         })
-        const passingTestPromise = agent.use(traces => {
-          const testSpan = traces[0][0]
-          expect(testSpan.name).to.equal('cypress.test')
-          expect(testSpan.resource).to.equal(
+        agent.use(traces => {
+          const passedTestSpan = traces[0][0]
+          const failedTestSpan = traces[1][0]
+          expect(passedTestSpan.name).to.equal('cypress.test')
+          expect(passedTestSpan.resource).to.equal(
             'cypress/integration/integration-test.js.can visit a page renders a hello world'
           )
-          expect(testSpan.type).to.equal('test')
-          expect(testSpan.meta).to.contain({
+          expect(passedTestSpan.type).to.equal('test')
+          expect(passedTestSpan.meta).to.contain({
             language: 'javascript',
             addTags: 'custom',
             addTagsBeforeEach: 'custom',
@@ -77,24 +78,22 @@ describe('Plugin', function () {
             [TEST_STATUS]: 'pass',
             [TEST_SUITE]: 'cypress/integration/integration-test.js',
             [TEST_SOURCE_FILE]: 'cypress/integration/integration-test.js',
-            [TEST_TYPE]: 'test',
+            [TEST_TYPE]: 'browser',
             [ORIGIN_KEY]: CI_APP_ORIGIN,
             [TEST_IS_RUM_ACTIVE]: 'true',
             [TEST_CODE_OWNERS]: JSON.stringify(['@datadog']),
             [LIBRARY_VERSION]: ddTraceVersion,
             [COMPONENT]: 'cypress'
           })
-          expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          expect(testSpan.metrics[TEST_SOURCE_START]).to.exist
-        }, { timeoutMs: testTimeout })
-        const failingTestPromise = agent.use(traces => {
-          const testSpan = traces[0][0]
-          expect(testSpan.name).to.equal('cypress.test')
-          expect(testSpan.resource).to.equal(
+          expect(passedTestSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
+          expect(passedTestSpan.metrics[TEST_SOURCE_START]).to.exist
+
+          expect(failedTestSpan.name).to.equal('cypress.test')
+          expect(failedTestSpan.resource).to.equal(
             'cypress/integration/integration-test.js.can visit a page will fail'
           )
-          expect(testSpan.type).to.equal('test')
-          expect(testSpan.meta).to.contain({
+          expect(failedTestSpan.type).to.equal('test')
+          expect(failedTestSpan.meta).to.contain({
             language: 'javascript',
             addTags: 'custom',
             addTagsBeforeEach: 'custom',
@@ -104,21 +103,20 @@ describe('Plugin', function () {
             [TEST_STATUS]: 'fail',
             [TEST_SUITE]: 'cypress/integration/integration-test.js',
             [TEST_SOURCE_FILE]: 'cypress/integration/integration-test.js',
-            [TEST_TYPE]: 'test',
+            [TEST_TYPE]: 'browser',
             [ORIGIN_KEY]: CI_APP_ORIGIN,
             [ERROR_TYPE]: 'AssertionError',
             [TEST_IS_RUM_ACTIVE]: 'true',
             [COMPONENT]: 'cypress'
           })
-          expect(testSpan.meta).to.not.contain({
+          expect(failedTestSpan.meta).to.not.contain({
             addTagsAfterFailure: 'custom'
           })
-          expect(testSpan.meta[ERROR_MESSAGE]).to.contain(
+          expect(failedTestSpan.meta[ERROR_MESSAGE]).to.contain(
             "expected '<div.hello-world>' to have text 'Bye World', but the text was 'Hello World'"
           )
-          expect(testSpan.metrics[TEST_SOURCE_START]).to.exist
-        }, { timeoutMs: testTimeout })
-        Promise.all([passingTestPromise, failingTestPromise]).then(() => done()).catch(done)
+          expect(failedTestSpan.metrics[TEST_SOURCE_START]).to.exist
+        }, { timeoutMs: testTimeout }).then(() => done()).catch(done)
       })
     })
   })

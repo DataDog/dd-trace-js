@@ -1,4 +1,6 @@
+import { performance } from 'perf_hooks'
 import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope, User } from '..';
+import { opentelemetry } from '..';
 import { formats, kinds, priority, tags, types } from '../ext';
 import { BINARY, HTTP_HEADERS, LOG, TEXT_MAP } from '../ext/formats';
 import { SERVER, CLIENT, PRODUCER, CONSUMER } from '../ext/kinds'
@@ -105,7 +107,10 @@ tracer.init({
     obfuscatorKeyRegex: '.*',
     obfuscatorValueRegex: '.*',
     blockedTemplateHtml: './blocked.html',
-    blockedTemplateJson: './blocked.json'
+    blockedTemplateJson: './blocked.json',
+    eventTracking: {
+      mode: 'safe'
+    }
   }
 });
 
@@ -246,6 +251,8 @@ tracer.use('express');
 tracer.use('express', httpServerOptions);
 tracer.use('fastify');
 tracer.use('fastify', httpServerOptions);
+tracer.use('fetch');
+tracer.use('fetch', httpClientOptions);
 tracer.use('generic-pool');
 tracer.use('google-cloud-pubsub');
 tracer.use('graphql');
@@ -405,3 +412,68 @@ const req = {} as IncomingMessage
 const res = {} as OutgoingMessage
 resBlockRequest = tracer.appsec.blockRequest(req, res)
 tracer.appsec.setUser(user)
+
+// OTel TracerProvider registers and provides a tracer
+const provider: opentelemetry.TracerProvider = new tracer.TracerProvider();
+provider.register();
+
+const otelTracer: opentelemetry.Tracer = provider.getTracer("name", "version")
+
+// OTel supports several time input formats
+otelTracer.startSpan("name", { startTime: new Date() })
+otelTracer.startSpan("name", { startTime: Date.now() })
+otelTracer.startSpan("name", { startTime: process.hrtime() })
+otelTracer.startSpan("name", { startTime: performance.now() })
+
+// OTel spans can be marked as root spans
+otelTracer.startSpan("name", { root: true })
+
+// OTel can start an active span with or without span options
+otelTracer.startActiveSpan("name", (span) => span.end())
+otelTracer.startActiveSpan("name", {}, (span) => span.end())
+
+// OTel attributes (this maps to dd tags)
+const otelSpan: opentelemetry.Span = otelTracer.startSpan("name", {
+  attributes: {
+    string: "value",
+    number: 1,
+    boolean: true
+  }
+})
+
+// OTel spans expose span context
+const spanContext: opentelemetry.SpanContext = otelSpan.spanContext()
+
+// OTel spans can be renamed
+otelSpan.updateName("new name")
+
+// OTel spans can have their attributes changed
+otelSpan.setAttribute("string", "value")
+otelSpan.setAttribute("number", 1)
+otelSpan.setAttribute("boolean", true)
+
+otelSpan.setAttributes({
+  string: "value",
+  number: 1,
+  boolean: true
+})
+
+// OTel spans can have their status set
+otelSpan.setStatus({ code: 0, message: "unset" })
+otelSpan.setStatus({ code: 1, message: "ok" })
+otelSpan.setStatus({ code: 2, message: "error" })
+
+// OTel spans can expose if they are being recorded or not
+const recording: boolean = otelSpan.isRecording()
+
+// OTel spans can record exceptions
+otelSpan.recordException(new Error('error'))
+
+// OTel spans can be ended with an optional timestamp
+otelSpan.end(Date.now())
+
+// OTel span contexts can expose ids, flags, and tracestate header data
+const otelTraceId: string = spanContext.traceId
+const otelSpanId: string = spanContext.spanId
+const otelTraceFlags: number = spanContext.traceFlags
+const otelTraceState: opentelemetry.TraceState = spanContext.traceState!

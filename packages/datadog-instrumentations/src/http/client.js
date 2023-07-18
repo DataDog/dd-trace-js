@@ -101,6 +101,7 @@ function patch (http, methodName) {
   }
 
   function normalizeArgs (inputURL, inputOptions, cb) {
+    const originalUrl = inputURL
     inputURL = normalizeOptions(inputURL)
 
     const [callback, inputOptionsNormalized] = normalizeCallback(inputOptions, cb, inputURL)
@@ -108,7 +109,7 @@ function patch (http, methodName) {
     normalizeHeaders(options)
     const uri = url.format(options)
 
-    return { uri, options, callback }
+    return { uri, options, callback, originalUrl }
   }
 
   function combineOptions (inputURL, inputOptions) {

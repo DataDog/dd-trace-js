@@ -20,6 +20,12 @@ const handler = async (_event, _context) => {
   return response
 }
 
+const callbackHandler = (_event, _context, callback) => {
+  const response = sampleResponse
+
+  callback('', response)
+}
+
 const timeoutHandler = async (...args) => {
   await _tracer.trace('self.sleepy', () => {
     return sleep(50)
@@ -48,9 +54,21 @@ const swappedArgsHandler = async (event, _, context) => {
   return response
 }
 
+const errorHandler = async (_event, _context) => {
+  class CustomError extends Error {
+    constructor (message) {
+      super(message)
+      Object.defineProperty(this, 'name', { value: 'CustomError' })
+    }
+  }
+  throw new CustomError('my error')
+}
+
 module.exports = {
   finishSpansEarlyTimeoutHandler,
   handler,
   swappedArgsHandler,
-  timeoutHandler
+  timeoutHandler,
+  errorHandler,
+  callbackHandler
 }

@@ -1,19 +1,20 @@
 'use strict'
 
-const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const CASSANDRA_CONTACT_POINTS_KEY = 'db.cassandra.contact.points'
 
 class CassandraDriverPlugin extends DatabasePlugin {
   static get id () { return 'cassandra-driver' }
   static get system () { return 'cassandra' }
+  static get peerServicePrecursors () { return [CASSANDRA_CONTACT_POINTS_KEY] }
 
-  start ({ keyspace, query, connectionOptions = {} }) {
+  start ({ keyspace, query, contactPoints = {} }) {
     if (Array.isArray(query)) {
       query = combine(query)
     }
 
-    this.startSpan('cassandra.query', {
-      service: this.config.service,
+    this.startSpan(this.operationName(), {
+      service: this.serviceName(this.config, this.system),
       resource: trim(query, 5000),
       type: 'cassandra',
       kind: 'client',
@@ -21,8 +22,7 @@ class CassandraDriverPlugin extends DatabasePlugin {
         'db.type': 'cassandra',
         'cassandra.query': query,
         'cassandra.keyspace': keyspace,
-        'out.host': connectionOptions.host,
-        [CLIENT_PORT_KEY]: connectionOptions.port
+        [CASSANDRA_CONTACT_POINTS_KEY]: contactPoints.join(',') || null
       }
     })
   }

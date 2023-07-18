@@ -1,0 +1,66 @@
+{
+  "name": "appsec-iast",
+  "cachegrind": false,
+  "instructions": true,
+  "iterations": 15,
+  "variants": {
+    "no-vulnerability-control": {
+      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
+      "run": "node --require ../../../init.js server-without-vulnerability.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js server-without-vulnerability.js\"",
+      "env": {
+        "DD_IAST_ENABLED": "0"
+      }
+    },
+    "no-vulnerability-iast-enabled-default-config": {
+      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
+      "run": "node --require ../../../init.js server-without-vulnerability.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js server-without-vulnerability.js\"",
+      "baseline": "no-vulnerability-control",
+      "env": {
+        "DD_IAST_ENABLED": "1"
+      }
+    },
+    "no-vulnerability-iast-enabled-always-active": {
+      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
+      "run": "node --require ../../../init.js server-without-vulnerability.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js server-without-vulnerability.js\"",
+      "baseline": "no-vulnerability-control",
+      "env": {
+        "DD_IAST_ENABLED": "1",
+        "DD_IAST_REQUEST_SAMPLING": "100",
+        "DD_IAST_MAX_CONCURRENT_REQUESTS": "1000",
+        "DD_IAST_MAX_CONTEXT_OPERATIONS": "100"
+      }
+    },
+    "with-vulnerability-control": {
+      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
+      "run": "node --require ../../../init.js server-with-vulnerability.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js server-with-vulnerability.js\"",
+      "env": {
+        "DD_IAST_ENABLED": "0"
+      }
+    },
+    "with-vulnerability-iast-enabled-default-config": {
+      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
+      "run": "node --require ../../../init.js server-with-vulnerability.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js server-with-vulnerability.js\"",
+      "baseline": "with-vulnerability-control",
+      "env": {
+        "DD_IAST_ENABLED": "1"
+      }
+    },
+    "with-vulnerability-iast-enabled-always-active": {
+      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
+      "run": "node --require ../../../init.js server-with-vulnerability.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js server-with-vulnerability.js\"",
+      "baseline": "with-vulnerability-control",
+      "env": {
+        "DD_IAST_ENABLED": "1",
+        "DD_IAST_REQUEST_SAMPLING": "100",
+        "DD_IAST_MAX_CONCURRENT_REQUESTS": "1000",
+        "DD_IAST_MAX_CONTEXT_OPERATIONS": "100"
+      }
+    }
+  }
+}

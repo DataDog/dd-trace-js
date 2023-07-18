@@ -1,7 +1,6 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const log = require('../../src/log')
 const waf = require('../../src/appsec/waf')
 const RuleManager = require('../../src/appsec/rule_manager')
 const appsec = require('../../src/appsec')
@@ -9,7 +8,8 @@ const {
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   bodyParser,
-  queryParser
+  queryParser,
+  passportVerify
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
@@ -17,12 +17,15 @@ const Config = require('../../src/config')
 const axios = require('axios')
 const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
+const { storage } = require('../../../datadog-core')
 
 describe('AppSec Index', () => {
   let config
   let AppSec
   let web
   let blocking
+  let passport
+  let log
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -36,7 +39,11 @@ describe('AppSec Index', () => {
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
         blockedTemplateHtml: blockedTemplate.html,
-        blockedTemplateJson: blockedTemplate.json
+        blockedTemplateJson: blockedTemplate.json,
+        eventTracking: {
+          enabled: true,
+          mode: 'safe'
+        }
       }
     }
 
@@ -48,9 +55,21 @@ describe('AppSec Index', () => {
       setTemplates: sinon.stub()
     }
 
+    passport = {
+      passportTrackEvent: sinon.stub()
+    }
+
+    log = {
+      debug: sinon.stub(),
+      warn: sinon.stub(),
+      error: sinon.stub()
+    }
+
     AppSec = proxyquire('../../src/appsec', {
+      '../log': log,
       '../plugins/util/web': web,
-      './blocking': blocking
+      './blocking': blocking,
+      './passport': passport
     })
 
     sinon.stub(waf, 'init').callThrough()
@@ -79,7 +98,6 @@ describe('AppSec Index', () => {
     })
 
     it('should log when enable fails', () => {
-      sinon.stub(log, 'error')
       RuleManager.applyRules.restore()
 
       const err = new Error('Invalid Rules')
@@ -97,11 +115,22 @@ describe('AppSec Index', () => {
     it('should subscribe to blockable channels', () => {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
+      expect(passportVerify.hasSubscribers).to.be.false
 
       AppSec.enable(config)
 
       expect(bodyParser.hasSubscribers).to.be.true
       expect(queryParser.hasSubscribers).to.be.true
+      expect(passportVerify.hasSubscribers).to.be.true
+    })
+
+    it('should not subscribe to passportVerify if eventTracking is disabled', () => {
+      config.appsec.eventTracking.enabled = false
+
+      AppSec.disable()
+      AppSec.enable(config)
+
+      expect(passportVerify.hasSubscribers).to.be.false
     })
   })
 
@@ -142,6 +171,7 @@ describe('AppSec Index', () => {
 
       expect(bodyParser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
+      expect(passportVerify.hasSubscribers).to.be.false
     })
   })
 
@@ -333,7 +363,7 @@ describe('AppSec Index', () => {
     })
   })
 
-  describe('checkRequestData', () => {
+  describe('Channel handlers', () => {
     let abortController, req, res, rootSpan
 
     beforeEach(() => {
@@ -448,6 +478,35 @@ describe('AppSec Index', () => {
         expect(res.end).to.have.been.called
       })
     })
+
+    describe('onPassportVerify', () => {
+      it('Should call passportTrackEvent', () => {
+        const credentials = { type: 'local', username: 'test' }
+        const user = { id: '1234', username: 'Test' }
+
+        sinon.stub(storage, 'getStore').returns({ req: {} })
+
+        passportVerify.publish({ credentials, user })
+
+        expect(passport.passportTrackEvent).to.have.been.calledOnceWithExactly(
+          credentials,
+          user,
+          rootSpan,
+          config.appsec.eventTracking.mode)
+      })
+
+      it('Should call log if no rootSpan is found', () => {
+        const credentials = { type: 'local', username: 'test' }
+        const user = { id: '1234', username: 'Test' }
+
+        sinon.stub(storage, 'getStore').returns(undefined)
+
+        passportVerify.publish({ credentials, user })
+
+        expect(log.warn).to.have.been.calledOnceWithExactly('No rootSpan found in onPassportVerify')
+        expect(passport.passportTrackEvent).not.to.have.been.called
+      })
+    })
   })
 })
 
@@ -469,6 +528,8 @@ describe('IP blocking', () => {
     id: '1',
     file: ruleData
   }]
+  const htmlDefaultContent = blockedTemplate.html
+  const jsonDefaultContent = JSON.parse(blockedTemplate.json)
 
   let http, appListener, port
   before(() => {
@@ -542,9 +603,6 @@ describe('IP blocking', () => {
     })
 
     describe(`block - ip in header ${ipHeader}`, () => {
-      const htmlDefaultContent = blockedTemplate.html
-      const jsonDefaultContent = JSON.parse(blockedTemplate.json)
-
       it('should block the request with JSON content if no headers', async () => {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
@@ -577,6 +635,111 @@ describe('IP blocking', () => {
         }).catch((err) => {
           expect(err.response.status).to.be.equal(403)
           expect(err.response.data).to.be.equal(htmlDefaultContent)
+        })
+      })
+    })
+  })
+
+  describe('Custom actions', () => {
+    describe('Default content with custom status', () => {
+      const toModifyCustomActions = [{
+        product: 'ASM',
+        id: 'custom-actions',
+        file: {
+          actions: [
+            {
+              id: 'block',
+              type: 'block_request',
+              parameters: {
+                status_code: 500,
+                type: 'auto'
+              }
+            }
+          ]
+        }
+      }]
+
+      beforeEach(() => {
+        RuleManager.updateWafFromRC({
+          toUnapply: [],
+          toApply: [],
+          toModify: [...toModify, ...toModifyCustomActions]
+        })
+      })
+
+      afterEach(() => {
+        RuleManager.clearAllRules()
+      })
+
+      it('Should block with custom status code and JSON content', () => {
+        return axios.get(`http://localhost:${port}/`, {
+          headers: {
+            'x-forwarded-for': invalidIp
+          }
+        }).then(() => {
+          throw new Error('Not expected')
+        }).catch((err) => {
+          expect(err.response.status).to.be.equal(500)
+          expect(err.response.data).to.deep.equal(jsonDefaultContent)
+        })
+      })
+
+      it('Should block with custom status code and HTML content', () => {
+        return axios.get(`http://localhost:${port}/`, {
+          headers: {
+            'x-forwarded-for': invalidIp,
+            'Accept': 'text/html'
+          }
+        }).then(() => {
+          throw new Error('Not expected')
+        }).catch((err) => {
+          expect(err.response.status).to.be.equal(500)
+          expect(err.response.data).to.deep.equal(htmlDefaultContent)
+        })
+      })
+    })
+
+    describe('Redirect on error', () => {
+      const toModifyCustomActions = [{
+        product: 'ASM',
+        id: 'custom-actions',
+        file: {
+          actions: [
+            {
+              id: 'block',
+              type: 'redirect_request',
+              parameters: {
+                status_code: 301,
+                location: '/error'
+              }
+            }
+          ]
+        }
+      }]
+
+      beforeEach(() => {
+        RuleManager.updateWafFromRC({
+          toUnapply: [],
+          toApply: [],
+          toModify: [...toModify, ...toModifyCustomActions]
+        })
+      })
+
+      afterEach(() => {
+        RuleManager.clearAllRules()
+      })
+
+      it('Should block with redirect', () => {
+        return axios.get(`http://localhost:${port}/`, {
+          headers: {
+            'x-forwarded-for': invalidIp
+          },
+          maxRedirects: 0
+        }).then(() => {
+          throw new Error('Not resolve expected')
+        }).catch((err) => {
+          expect(err.response.status).to.be.equal(301)
+          expect(err.response.headers.location).to.be.equal('/error')
         })
       })
     })

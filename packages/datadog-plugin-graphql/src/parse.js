@@ -25,7 +25,7 @@ class GraphQLParsePlugin extends TracingPlugin {
 
     this.config.hooks.parse(span, source, document)
 
-    span.finish()
+    super.finish()
   }
 }
 

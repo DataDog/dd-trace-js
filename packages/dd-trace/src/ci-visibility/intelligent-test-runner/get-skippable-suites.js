@@ -12,7 +12,8 @@ function getSkippableSuites ({
   osArchitecture,
   runtimeName,
   runtimeVersion,
-  custom
+  custom,
+  testLevel = 'suite'
 }, done) {
   const options = {
     path: '/api/v2/ci/tests/skippable',
@@ -52,7 +53,7 @@ function getSkippableSuites ({
     data: {
       type: 'test_params',
       attributes: {
-        test_level: 'suite',
+        test_level: testLevel,
         configurations: {
           'os.platform': osPlatform,
           'os.version': osVersion,
@@ -77,8 +78,13 @@ function getSkippableSuites ({
       try {
         skippableSuites = JSON.parse(res)
           .data
-          .filter(({ type }) => type === 'suite')
-          .map(({ attributes: { suite } }) => suite)
+          .filter(({ type }) => type === testLevel)
+          .map(({ attributes: { suite, name } }) => {
+            if (testLevel === 'suite') {
+              return suite
+            }
+            return { suite, name }
+          })
         done(null, skippableSuites)
       } catch (err) {
         done(err)

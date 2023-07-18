@@ -2,6 +2,7 @@ import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from 
 import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
+import * as otel from "@opentelemetry/api";
 
 export { SpanOptions };
 
@@ -118,6 +119,8 @@ export declare interface Tracer extends opentracing.Tracer {
   setUser (user: User): Tracer;
 
   appsec: Appsec;
+
+  TracerProvider: opentelemetry.TracerProvider;
 }
 
 export declare interface TraceOptions extends Analyzable {
@@ -553,6 +556,19 @@ export declare interface TracerOptions {
      * Specifies a path to a custom blocking template json file.
      */
     blockedTemplateJson?: string,
+
+    /**
+     * Controls the automated user event tracking configuration
+     */
+    eventTracking?: {
+      /**
+       * Controls the automated user event tracking mode. Possible values are disabled, safe and extended.
+       * On safe mode, any detected Personally Identifiable Information (PII) about the user will be redacted from the event.
+       * On extended mode, no redaction will take place.
+       * @default 'safe'
+       */
+      mode?: 'safe' | 'extended' | 'disabled'
+    }
   };
 
   /**
@@ -746,6 +762,7 @@ interface Plugins {
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
   "fastify": plugins.fastify;
+  "fetch": plugins.fetch;
   "generic-pool": plugins.generic_pool;
   "google-cloud-pubsub": plugins.google_cloud_pubsub;
   "graphql": plugins.graphql;
@@ -1088,6 +1105,12 @@ declare namespace plugins {
    * [fastify](https://www.fastify.io/) module.
    */
   interface fastify extends HttpServer {}
+
+  /**
+   * This plugin automatically instruments the
+   * [fetch](https://nodejs.org/api/globals.html#fetch) global.
+   */
+  interface fetch extends HttpClient {}
 
   /**
    * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
@@ -1442,6 +1465,20 @@ declare namespace plugins {
 
   /**
    * This plugin automatically instruments the
+   * [openai](https://platform.openai.com/docs/api-reference?lang=node.js) module.
+   *
+   * Note that for logs to work you'll need to set the `DD_API_KEY` environment variable.
+   * You'll also need to adjust any firewall settings to allow the tracer to communicate
+   * with `http-intake.logs.datadoghq.com`.
+   *
+   * Note that for metrics to work you'll need to enable
+   * [DogStatsD](https://docs.datadoghq.com/developers/dogstatsd/?tab=hostagent#setup)
+   * in the agent.
+   */
+  interface openai extends Instrumentation {}
+
+  /**
+   * This plugin automatically instruments the
    * [opensearch](https://github.com/opensearch-project/opensearch-js) module.
    */
   interface opensearch extends elasticsearch {}
@@ -1577,6 +1614,277 @@ declare namespace plugins {
    * on the tracer.
    */
   interface winston extends Integration {}
+}
+
+export namespace opentelemetry {
+  /**
+   * A registry for creating named {@link Tracer}s.
+   */
+  export interface TracerProvider extends otel.TracerProvider {
+    /**
+     * Construct a new TracerProvider to register with @opentelemetry/api
+     *
+     * @returns TracerProvider A TracerProvider instance
+     */
+    new(): TracerProvider;
+
+    /**
+     * Returns a Tracer, creating one if one with the given name and version is
+     * not already created.
+     *
+     * This function may return different Tracer types (e.g.
+     * {@link NoopTracerProvider} vs. a functional tracer).
+     *
+     * @param name The name of the tracer or instrumentation library.
+     * @param version The version of the tracer or instrumentation library.
+     * @param options The options of the tracer or instrumentation library.
+     * @returns Tracer A Tracer with the given name and version
+     */
+    getTracer(name: string, version?: string): Tracer;
+
+    /**
+     * Register this tracer provider with @opentelemetry/api
+     */
+    register(): void;
+  }
+
+  /**
+   * Tracer provides an interface for creating {@link Span}s.
+   */
+  export interface Tracer extends otel.Tracer {
+    /**
+     * Starts a new {@link Span}. Start the span without setting it on context.
+     *
+     * This method do NOT modify the current Context.
+     *
+     * @param name The name of the span
+     * @param [options] SpanOptions used for span creation
+     * @param [context] Context to use to extract parent
+     * @returns Span The newly created span
+     * @example
+     *     const span = tracer.startSpan('op');
+     *     span.setAttribute('key', 'value');
+     *     span.end();
+     */
+    startSpan(name: string, options?: SpanOptions, context?: Context): Span;
+
+    /**
+     * Starts a new {@link Span} and calls the given function passing it the
+     * created span as first argument.
+     * Additionally the new span gets set in context and this context is activated
+     * for the duration of the function call.
+     *
+     * @param name The name of the span
+     * @param [options] SpanOptions used for span creation
+     * @param [context] Context to use to extract parent
+     * @param fn function called in the context of the span and receives the newly created span as an argument
+     * @returns return value of fn
+     * @example
+     *     const something = tracer.startActiveSpan('op', span => {
+     *       try {
+     *         do some work
+     *         span.setStatus({code: SpanStatusCode.OK});
+     *         return something;
+     *       } catch (err) {
+     *         span.setStatus({
+     *           code: SpanStatusCode.ERROR,
+     *           message: err.message,
+     *         });
+     *         throw err;
+     *       } finally {
+     *         span.end();
+     *       }
+     *     });
+     *
+     * @example
+     *     const span = tracer.startActiveSpan('op', span => {
+     *       try {
+     *         do some work
+     *         return span;
+     *       } catch (err) {
+     *         span.setStatus({
+     *           code: SpanStatusCode.ERROR,
+     *           message: err.message,
+     *         });
+     *         throw err;
+     *       }
+     *     });
+     *     do some more work
+     *     span.end();
+     */
+    startActiveSpan<F extends (span: Span) => unknown>(name: string, fn: F): ReturnType<F>;
+    startActiveSpan<F extends (span: Span) => unknown>(name: string, options: SpanOptions, fn: F): ReturnType<F>;
+    startActiveSpan<F extends (span: Span) => unknown>(name: string, options: SpanOptions, context: otel.Context, fn: F): ReturnType<F>;
+  }
+
+  /**
+   * An interface that represents a span. A span represents a single operation
+   * within a trace. Examples of span might include remote procedure calls or a
+   * in-process function calls to sub-components. A Trace has a single, top-level
+   * "root" Span that in turn may have zero or more child Spans, which in turn
+   * may have children.
+   *
+   * Spans are created by the {@link Tracer.startSpan} method.
+   */
+  export interface Span extends otel.Span {
+    /**
+     * Returns the {@link SpanContext} object associated with this Span.
+     *
+     * Get an immutable, serializable identifier for this span that can be used
+     * to create new child spans. Returned SpanContext is usable even after the
+     * span ends.
+     *
+     * @returns the SpanContext object associated with this Span.
+     */
+    spanContext(): SpanContext;
+
+    /**
+     * Sets an attribute to the span.
+     *
+     * Sets a single Attribute with the key and value passed as arguments.
+     *
+     * @param key the key for this attribute.
+     * @param value the value for this attribute. Setting a value null or
+     *              undefined is invalid and will result in undefined behavior.
+     */
+    setAttribute(key: string, value: SpanAttributeValue): this;
+
+    /**
+     * Sets attributes to the span.
+     *
+     * @param attributes the attributes that will be added.
+     *                   null or undefined attribute values
+     *                   are invalid and will result in undefined behavior.
+     */
+    setAttributes(attributes: SpanAttributes): this;
+
+    /**
+     * Adds an event to the Span.
+     *
+     * @param name the name of the event.
+     * @param [attributesOrStartTime] the attributes that will be added; these are
+     *     associated with this event. Can be also a start time
+     *     if type is {@type TimeInput} and 3rd param is undefined
+     * @param [startTime] start time of the event.
+     */
+    addEvent(name: string, attributesOrStartTime?: SpanAttributes | TimeInput, startTime?: TimeInput): this;
+
+    /**
+     * Sets a status to the span. If used, this will override the default Span
+     * status. Default is {@link SpanStatusCode.UNSET}. SetStatus overrides the value
+     * of previous calls to SetStatus on the Span.
+     *
+     * @param status the SpanStatus to set.
+     */
+    setStatus(status: SpanStatus): this;
+
+    /**
+     * Updates the Span name.
+     *
+     * This will override the name provided via {@link Tracer.startSpan}.
+     *
+     * Upon this update, any sampling behavior based on Span name will depend on
+     * the implementation.
+     *
+     * @param name the Span name.
+     */
+    updateName(name: string): this;
+
+    /**
+     * Marks the end of Span execution.
+     *
+     * Call to End of a Span MUST not have any effects on child spans. Those may
+     * still be running and can be ended later.
+     *
+     * Do not return `this`. The Span generally should not be used after it
+     * is ended so chaining is not desired in this context.
+     *
+     * @param [endTime] the time to set as Span's end time. If not provided,
+     *     use the current time as the span's end time.
+     */
+    end(endTime?: TimeInput): void;
+
+    /**
+     * Returns the flag whether this span will be recorded.
+     *
+     * @returns true if this Span is active and recording information like events
+     *     with the `AddEvent` operation and attributes using `setAttributes`.
+     */
+    isRecording(): boolean;
+
+    /**
+     * Sets exception as a span event
+     * @param exception the exception the only accepted values are string or Error
+     * @param [time] the time to set as Span's event time. If not provided,
+     *     use the current time.
+     */
+    recordException(exception: Exception, time?: TimeInput): void;
+  }
+
+  /**
+   * A SpanContext represents the portion of a {@link Span} which must be
+   * serialized and propagated along side of a {@link Baggage}.
+   */
+  export interface SpanContext extends otel.SpanContext {
+    /**
+     * The ID of the trace that this span belongs to. It is worldwide unique
+     * with practically sufficient probability by being made as 16 randomly
+     * generated bytes, encoded as a 32 lowercase hex characters corresponding to
+     * 128 bits.
+     */
+    traceId: string;
+
+    /**
+     * The ID of the Span. It is globally unique with practically sufficient
+     * probability by being made as 8 randomly generated bytes, encoded as a 16
+     * lowercase hex characters corresponding to 64 bits.
+     */
+    spanId: string;
+
+    /**
+     * Only true if the SpanContext was propagated from a remote parent.
+     */
+    isRemote?: boolean;
+
+    /**
+     * Trace flags to propagate.
+     *
+     * It is represented as 1 byte (bitmap). Bit to represent whether trace is
+     * sampled or not. When set, the least significant bit documents that the
+     * caller may have recorded trace data. A caller who does not record trace
+     * data out-of-band leaves this flag unset.
+     *
+     * see {@link TraceFlags} for valid flag values.
+     */
+    traceFlags: number;
+
+    /**
+     * Tracing-system-specific info to propagate.
+     *
+     * The tracestate field value is a `list` as defined below. The `list` is a
+     * series of `list-members` separated by commas `,`, and a list-member is a
+     * key/value pair separated by an equals sign `=`. Spaces and horizontal tabs
+     * surrounding `list-members` are ignored. There can be a maximum of 32
+     * `list-members` in a `list`.
+     * More Info: https://www.w3.org/TR/trace-context/#tracestate-field
+     *
+     * Examples:
+     *     Single tracing system (generic format):
+     *         tracestate: rojo=00f067aa0ba902b7
+     *     Multiple tracing systems (with different formatting):
+     *         tracestate: rojo=00f067aa0ba902b7,congo=t61rcWkgMzE
+     */
+    traceState?: TraceState;
+  }
+
+  export type Context = otel.Context;
+  export type Exception = otel.Exception;
+  export type SpanAttributes = otel.SpanAttributes;
+  export type SpanAttributeValue = otel.SpanAttributeValue;
+  export type SpanOptions = otel.SpanOptions;
+  export type SpanStatus = otel.SpanStatus;
+  export type TimeInput = otel.TimeInput;
+  export type TraceState = otel.TraceState;
 }
 
 /**

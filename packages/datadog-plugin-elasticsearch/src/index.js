@@ -8,8 +8,8 @@ class ElasticsearchPlugin extends DatabasePlugin {
   start ({ params }) {
     const body = getBody(params.body || params.bulkBody)
 
-    this.startSpan(`${this.system}.query`, {
-      service: this.config.service,
+    this.startSpan(this.operationName(), {
+      service: this.serviceName(this.config),
       resource: `${params.method} ${quantizePath(params.path)}`,
       type: 'elasticsearch',
       kind: 'client',

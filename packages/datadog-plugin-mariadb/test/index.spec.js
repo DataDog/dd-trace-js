@@ -5,6 +5,8 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
+const namingSchema = require('./naming')
+
 // https://github.com/mariadb-corporation/mariadb-connector-nodejs/commit/0a90b71ab20ab4e8b6a86a77ba291bba8ba6a34e
 const range = semver.gte(process.version, '15.0.0') ? '>=2.5.1' : '>=2'
 
@@ -48,6 +50,11 @@ describe('Plugin', () => {
           })
         })
 
+        withPeerService(
+          () => tracer,
+          (done) => connection.query('SELECT 1', (_) => { done() }),
+          'db', 'db.name')
+
         it('should propagate context to callbacks, with correct callback args', done => {
           const span = tracer.startSpan('test')
 
@@ -86,7 +93,8 @@ describe('Plugin', () => {
         it('should do automatic instrumentation', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test-mariadb')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
@@ -108,7 +116,8 @@ describe('Plugin', () => {
           it('should support prepared statement shorthand', done => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('service', 'test-mariadb')
+                expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+                expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', 'SELECT ? + ? AS solution')
                 expect(traces[0][0]).to.have.property('type', 'sql')
                 expect(traces[0][0].meta).to.have.property('span.kind', 'client')
@@ -129,7 +138,8 @@ describe('Plugin', () => {
           it('should support prepared statements', done => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('service', 'test-mariadb')
+                expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+                expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', 'SELECT ? + ? AS solution')
                 expect(traces[0][0]).to.have.property('type', 'sql')
                 expect(traces[0][0].meta).to.have.property('span.kind', 'client')
@@ -293,7 +303,8 @@ describe('Plugin', () => {
         it('should do automatic instrumentation', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test-mariadb')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
