@@ -5,7 +5,7 @@ const dc = require('../../../diagnostics_channel')
 const os = require('os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
-
+const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
@@ -36,6 +36,23 @@ function getIntegrations () {
   return newIntegrations
 }
 
+function getProducts (config) {
+  const products = {
+    'appsec': {
+      'enabled': config.appsec.enabled
+    },
+    'profiler': {
+      'version': tracerVersion,
+      'enabled': config.profiling.enabled
+    }
+  }
+  if (errors.profilingError) {
+    products.profiler.error = errors.profilingError
+    errors.profilingError = {}
+  }
+  return products
+}
+
 function flatten (input, result = [], prefix = [], traversedObjects = null) {
   traversedObjects = traversedObjects || new WeakSet()
   if (traversedObjects.has(input)) {
@@ -52,13 +69,17 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
   return result
 }
 
-function appStarted () {
-  return {
-    integrations: getIntegrations(),
-    dependencies: [],
+function appStarted (config) {
+  const app = {
+    products: getProducts(),
     configuration: flatten(config),
     additional_payload: []
   }
+  if (errors.agentError) {
+    app.error = errors.agentError
+    errors.agentError = {}
+  }
+  return app
 }
 
 function onBeforeExit () {
@@ -121,12 +142,16 @@ function start (aConfig, thePluginManager) {
   heartbeatInterval = config.telemetry.heartbeatInterval
 
   dependencies.start(config, application, host)
-  sendData(config, application, host, 'app-started', appStarted())
+  sendData(config, application, host, 'app-started', appStarted(config))
   interval = setInterval(() => {
     metricsManager.send(config, application, host)
     sendData(config, application, host, 'app-heartbeat')
   }, heartbeatInterval)
   interval.unref()
+  const extendedHeartbeat = setInterval(() => {
+    sendData(config, application, host, 'app-started', appStarted(config))
+  }, 1000 * 60 * 60 * 24)
+  extendedHeartbeat.unref()
   process.on('beforeExit', onBeforeExit)
 
   telemetryStartChannel.publish(getTelemetryData())

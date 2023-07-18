@@ -44,7 +44,7 @@ function sendData (config, application, host, reqType, payload = {}) {
     headers: getHeaders(config, application, reqType)
   }
   const data = JSON.stringify({
-    api_version: 'v1',
+    api_version: 'v2',
     request_type: reqType,
     tracer_time: Math.floor(Date.now() / 1000),
     runtime_id: config.tags['runtime-id'],

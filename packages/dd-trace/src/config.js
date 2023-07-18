@@ -248,6 +248,10 @@ class Config {
       process.env.DD_TELEMETRY_METRICS_ENABLED,
       false
     )
+    const DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED = coalesce(
+      process.env.DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED,
+      true
+    )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
       options.protocolVersion,
       process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
@@ -585,7 +589,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
       debug: isTrue(DD_TELEMETRY_DEBUG),
-      metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED)
+      metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED),
+      dependencyCollection: DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED
     }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
