@@ -32,10 +32,7 @@ sleep 30
 
 echo "Calling deployed cloud function"
 
-for i in {0..2};
-do
-    curl -s "https://us-east1-datadog-sandbox.cloudfunctions.net/dd-trace-js-sls-mini-agent-integration-test-${STAGE}"
-done
+gcloud functions call "dd-trace-js-sls-mini-agent-integration-test-${STAGE}" --project datadog-sandbox --region us-east1
 
 echo "Waiting 60 seconds before tailing logs"
 sleep 60
