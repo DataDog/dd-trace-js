@@ -27,6 +27,9 @@ gcloud functions deploy dd-trace-js-sls-mini-agent-integration-test-${STAGE} \
     --allow-unauthenticated \
     --env-vars-file "${SERVERLESS_INTEGRATION_DIR_PATH}/test-project/.env.yaml"
 
+echo "Waiting 30 seconds before invoking function"
+sleep 30
+
 echo "Calling deployed cloud function"
 
 for i in {0..2};
@@ -34,8 +37,8 @@ do
     curl -s "https://us-east1-datadog-sandbox.cloudfunctions.net/dd-trace-js-sls-mini-agent-integration-test-${STAGE}"
 done
 
-echo "Waiting 90 seconds before tailing logs"
-sleep 90
+echo "Waiting 60 seconds before tailing logs"
+sleep 60
 
 LOGS=$(gcloud functions logs read dd-trace-js-sls-mini-agent-integration-test-${STAGE} --region us-east1 --gen2 --limit 1000)
 
