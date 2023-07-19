@@ -680,7 +680,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
   _applyDefaults () {
     const defaults = this._defaults = {}
 
-    this._setUnit(defaults, 'sampleRate', 1)
+    this._setUnit(defaults, 'sampleRate', undefined)
     this._setBoolean(defaults, 'logInjection', false)
     this._setArray(defaults, 'headerTags', [])
   }
@@ -724,30 +724,30 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
   _setBoolean (obj, name, value) {
     if (value === undefined || value === null) {
-      this._setOption(obj, name, null)
+      this._setValue(obj, name, value)
     } else if (isTrue(value)) {
-      this._setOption(obj, name, true)
+      this._setValue(obj, name, true)
     } else if (isFalse(value)) {
-      this._setOption(obj, name, false)
+      this._setValue(obj, name, false)
     }
   }
 
   _setUnit (obj, name, value) {
     if (value === null || value === undefined) {
-      return this._setOption(obj, name, null)
+      return this._setValue(obj, name, value)
     }
 
     value = parseFloat(value)
 
     if (!isNaN(value)) {
       // TODO: Ignore out of range values instead of normalizing them.
-      this._setOption(obj, name, Math.min(Math.max(value, 0), 1))
+      this._setValue(obj, name, Math.min(Math.max(value, 0), 1))
     }
   }
 
   _setArray (obj, name, value) {
     if (value === null || value === undefined) {
-      return this._setOption(obj, name, null)
+      return this._setValue(obj, name, null)
     }
 
     if (typeof value === 'string') {
@@ -755,11 +755,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     }
 
     if (Array.isArray(value)) {
-      this._setOption(obj, name, value)
+      this._setValue(obj, name, value)
     }
   }
 
-  _setOption (obj, name, value) {
+  _setValue (obj, name, value) {
     obj[name] = value
   }
 
@@ -776,8 +776,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
         const container = containers[i]
         const origin = origins[i]
 
-        if (container[name] !== null && container[name] !== undefined) {
-          if (this[name] === container[name]) break
+        if ((container[name] !== null && container[name] !== undefined) || container === this._defaults) {
+          if (this[name] === container[name] && this.hasOwnProperty(name)) break
 
           const value = this[name] = container[name]
 

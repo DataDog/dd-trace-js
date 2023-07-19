@@ -81,7 +81,7 @@ describe('Config', () => {
     expect(config).to.have.property('queryStringObfuscation').with.length(626)
     expect(config).to.have.property('clientIpEnabled', false)
     expect(config).to.have.property('clientIpHeader', null)
-    expect(config).to.have.property('sampleRate', 1)
+    expect(config).to.have.property('sampleRate', undefined)
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.have.property('service', 'node')
     expect(config).to.have.property('plugins', true)
@@ -793,7 +793,7 @@ describe('Config', () => {
   it('should sanitize the sample rate to be between 0 and 1', () => {
     expect(new Config({ sampleRate: -1 })).to.have.property('sampleRate', 0)
     expect(new Config({ sampleRate: 2 })).to.have.property('sampleRate', 1)
-    expect(new Config({ sampleRate: NaN })).to.have.property('sampleRate', 1)
+    expect(new Config({ sampleRate: NaN })).to.have.property('sampleRate', undefined)
   })
 
   it('should ignore empty service names', () => {
