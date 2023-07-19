@@ -1,3 +1,9 @@
 * @DataDog/dd-trace-js
 /packages/dd-trace/src/appsec/ @DataDog/appsec-js
 /packages/dd-trace/test/appsec/ @DataDog/appsec-js
+
+/packages/datadog-plugin-(jest|mocha|cucumber|cypress|playwright)/ @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/(jest|mocha|cucumber|cypress|playwright).js @DataDog/ci-app-libraries
+/integration-tests/(ci-visibility|cucumber|cypress|playwright)/ @DataDog/ci-app-libraries
+/integration-tests/(ci-visibility.spec.js|playwright.config.js|playwright.config.ts|test-api-manual.spec.js|cypress-config.json|ci-visibility-intake.js|cypress.config.js) @DataDog/ci-app-libraries
+/packages/dd-trace/src/ci-visibility/ @DataDog/ci-app-libraries
