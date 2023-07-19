@@ -33,4 +33,13 @@ function maybeStartServerlessMiniAgent (config) {
   }
 }
 
-module.exports = { maybeStartServerlessMiniAgent }
+function getIsAzureFunctionConsumptionPlan () {
+  const isAzureFunction =
+    process.env.FUNCTIONS_EXTENSION_VERSION !== undefined && process.env.FUNCTIONS_WORKER_RUNTIME !== undefined
+  const azureWebsiteSKU = process.env.WEBSITE_SKU
+  const isConsumptionPlan = azureWebsiteSKU === undefined || azureWebsiteSKU === 'Dynamic'
+
+  return isAzureFunction && isConsumptionPlan
+}
+
+module.exports = { maybeStartServerlessMiniAgent, getIsAzureFunctionConsumptionPlan }

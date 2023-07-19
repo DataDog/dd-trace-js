@@ -11,6 +11,7 @@ const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties } = require('./git_properties')
+const { getIsAzureFunctionConsumptionPlan } = require('./serverless')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -232,10 +233,9 @@ class Config {
     const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
     const isGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
 
-    const isAzureFunction =
-      process.env.AzureWebJobsScriptRoot !== undefined && process.env.FUNCTIONS_EXTENSION_VERSION !== undefined
+    const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
 
-    const inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunction
+    const inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
 
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED,
@@ -347,7 +347,7 @@ class Config {
     const DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
       options.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
-      isGCPFunction || isAzureFunction
+      isGCPFunction || isAzureFunctionConsumptionPlan
     )
 
     const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
@@ -666,7 +666,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
 
     this.isGCPFunction = isGCPFunction
-    this.isAzureFunction = isAzureFunction
+    this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
 
     tagger.add(this.tags, {
       service: this.service,

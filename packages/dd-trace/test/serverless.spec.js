@@ -55,13 +55,33 @@ describe('Serverless', () => {
     expect(spawnStub).to.have.been.calledOnce
   })
 
-  it('should spawn mini agent when AzureWebJobsScriptRoot and FUNCTIONS_EXTENSION_VERSION env vars are defined', () => {
-    process.env.AzureWebJobsScriptRoot = '/home/site/wwwroot'
+  it('should spawn mini agent when FUNCTIONS_WORKER_RUNTIME, FUNCTIONS_EXTENSION_VERSION env vars are defined', () => {
+    process.env.FUNCTIONS_WORKER_RUNTIME = 'node'
     process.env.FUNCTIONS_EXTENSION_VERSION = '4'
 
     proxy.init()
 
     expect(spawnStub).to.have.been.calledOnce
+  })
+
+  it('should spawn mini agent when Azure Function env vars are defined and SKU is dynamic', () => {
+    process.env.FUNCTIONS_WORKER_RUNTIME = 'node'
+    process.env.FUNCTIONS_EXTENSION_VERSION = '4'
+    process.env.WEBSITE_SKU = 'Dynamic'
+
+    proxy.init()
+
+    expect(spawnStub).to.have.been.calledOnce
+  })
+
+  it('should NOT spawn mini agent when Azure Function env vars are defined but SKU is NOT dynamic', () => {
+    process.env.FUNCTIONS_WORKER_RUNTIME = 'node'
+    process.env.FUNCTIONS_EXTENSION_VERSION = '4'
+    process.env.WEBSITE_SKU = 'Basic'
+
+    proxy.init()
+
+    expect(spawnStub).to.not.have.been.called
   })
 
   it('should log error if mini agent binary path is invalid', () => {

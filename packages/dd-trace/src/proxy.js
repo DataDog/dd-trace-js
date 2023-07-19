@@ -30,7 +30,7 @@ class Tracer extends NoopProxy {
         remoteConfig.enable(config)
       }
 
-      if (config.isGCPFunction || config.isAzureFunction) {
+      if (config.isGCPFunction || config.isAzureFunctionConsumptionPlan) {
         require('./serverless').maybeStartServerlessMiniAgent(config)
       }
 
