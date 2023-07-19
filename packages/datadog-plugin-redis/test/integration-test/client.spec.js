@@ -4,7 +4,8 @@ const {
   FakeAgent,
   spawnProc,
   createSandbox,
-  curlAndAssertMessage
+  curlAndAssertMessage,
+  checkSpansForServiceName
 } = require('../../../../integration-tests/helpers')
 const path = require('path')
 const { assert } = require('chai')
@@ -25,7 +26,7 @@ describe('esm', () => {
   let cwd
 
   before(async () => {
-    sandbox = await createSandbox(['express'], false, `./packages/datadog-plugin-express/test/integration-test/*`)
+    sandbox = await createSandbox(['redis'], false, `./packages/datadog-plugin-redis/test/integration-test/*`)
     cwd = sandbox.folder
   })
 
@@ -42,7 +43,7 @@ describe('esm', () => {
     await agent.stop()
   })
 
-  context('express', () => {
+  context('redis', () => {
     it('is instrumented', async () => {
       proc = await spawnProc(path.join(cwd, 'server.mjs'), {
         cwd,
@@ -51,14 +52,11 @@ describe('esm', () => {
           AGENT_PORT: agent.port
         }
       })
+
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
-        assert.strictEqual(payload.length, 1)
-        assert.isArray(payload[0])
-        assert.strictEqual(payload[0].length, 4)
-        assert.propertyVal(payload[0][0], 'name', 'express.request')
-        assert.propertyVal(payload[0][1], 'name', 'express.middleware')
+        assert.strictEqual(checkSpansForServiceName(payload, 'redis.command'), true)
       })
     })
   })
