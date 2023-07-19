@@ -172,7 +172,7 @@ function spawnProc (filename, options = {}) {
   })
 }
 
-async function createSandbox (dependencies = [], isGitRepo = false, integrationTestsPath = "./integration-tests/*") {
+async function createSandbox (dependencies = [], isGitRepo = false, integrationTestsPath = './integration-tests/*') {
   /* To execute integration tests without a sandbox uncomment the next line
    * and do `yarn link && yarn link dd-trace` */
   // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
@@ -251,6 +251,10 @@ function getCiVisEvpProxyConfig (port) {
   }
 }
 
+function checkSpansForServiceName (spans, name) {
+  return spans.some((span) => span.some((nestedSpan) => nestedSpan.name === name))
+}
+
 module.exports = {
   FakeAgent,
   spawnProc,
@@ -258,5 +262,6 @@ module.exports = {
   curl,
   curlAndAssertMessage,
   getCiVisAgentlessConfig,
-  getCiVisEvpProxyConfig
+  getCiVisEvpProxyConfig,
+  checkSpansForServiceName
 }
