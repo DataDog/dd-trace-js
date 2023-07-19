@@ -166,9 +166,12 @@ class JestPlugin extends CiPlugin {
       this.enter(span, store)
     })
 
-    this.addSub('ci:jest:test:finish', (status) => {
+    this.addSub('ci:jest:test:finish', ({ status, testStartLine }) => {
       const span = storage.getStore().span
       span.setTag(TEST_STATUS, status)
+      if (testStartLine) {
+        span.setTag(TEST_SOURCE_START, testStartLine)
+      }
       span.finish()
       finishAllTraceSpans(span)
     })
@@ -197,8 +200,10 @@ class JestPlugin extends CiPlugin {
     const extraTags = {
       [JEST_TEST_RUNNER]: runner,
       [TEST_PARAMETERS]: testParameters,
-      [TEST_FRAMEWORK_VERSION]: frameworkVersion,
-      [TEST_SOURCE_START]: testStartLine
+      [TEST_FRAMEWORK_VERSION]: frameworkVersion
+    }
+    if (testStartLine) {
+      extraTags[TEST_SOURCE_START] = testStartLine
     }
 
     return super.startTestSpan(name, suite, this.testSuiteSpan, extraTags)
