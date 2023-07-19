@@ -93,7 +93,7 @@ describe('Config', () => {
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
     expect(config).to.have.property('spanComputePeerService', false)
-    expect(config).to.have.property('flattenIntegrationServiceNames', false)
+    expect(config).to.have.property('spanRemoveIntegrationFromService', false)
     expect(config).to.have.deep.property('serviceMapping', {})
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['tracecontext', 'datadog'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext', 'datadog'])
@@ -239,7 +239,7 @@ describe('Config', () => {
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v1')
-    expect(config).to.have.property('flattenIntegrationServiceNames', true)
+    expect(config).to.have.property('spanRemoveIntegrationFromService', true)
     expect(config).to.have.property('spanComputePeerService', true)
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
@@ -378,7 +378,7 @@ describe('Config', () => {
       ],
       spanAttributeSchema: 'v1',
       spanComputePeerService: true,
-      flattenIntegrationServiceNames: true,
+      spanRemoveIntegrationFromService: true,
       peerServiceMapping: {
         d: 'dd'
       },
@@ -447,7 +447,7 @@ describe('Config', () => {
     expect(config).to.have.property('logLevel', logLevel)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
-    expect(config).to.have.property('flattenIntegrationServiceNames', true)
+    expect(config).to.have.property('spanRemoveIntegrationFromService', true)
     expect(config).to.have.property('spanComputePeerService', true)
     expect(config).to.have.deep.property('peerServiceMapping', { d: 'dd' })
     expect(config).to.have.property('tags')
@@ -677,7 +677,7 @@ describe('Config', () => {
       },
       spanAttributeSchema: 'v1',
       spanComputePeerService: true,
-      flattenIntegrationServiceNames: true,
+      spanRemoveIntegrationFromService: true,
       peerServiceMapping: {
         d: 'dd'
       },
@@ -736,7 +736,7 @@ describe('Config', () => {
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
     expect(config).to.have.property('spanAttributeSchema', 'v1')
-    expect(config).to.have.property('flattenIntegrationServiceNames', true)
+    expect(config).to.have.property('spanRemoveIntegrationFromService', true)
     expect(config).to.have.property('spanComputePeerService', true)
     expect(config).to.have.deep.property('peerServiceMapping', { d: 'dd' })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', [])

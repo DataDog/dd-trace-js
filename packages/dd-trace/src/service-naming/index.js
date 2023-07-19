@@ -3,7 +3,7 @@ const { schemaDefinitions } = require('./schemas')
 class SchemaManager {
   constructor () {
     this.schemas = schemaDefinitions
-    this.config = { spanAttributeSchema: 'v0', flattenIntegrationServiceNames: false }
+    this.config = { spanAttributeSchema: 'v0', spanRemoveIntegrationFromService: false }
   }
 
   get schema () {
@@ -15,7 +15,7 @@ class SchemaManager {
   }
 
   get shouldUseConsistentServiceNaming () {
-    return this.config.flattenIntegrationServiceNames && this.version === 'v0'
+    return this.config.spanRemoveIntegrationFromService && this.version === 'v0'
   }
 
   opName (type, kind, plugin, ...opNameArgs) {

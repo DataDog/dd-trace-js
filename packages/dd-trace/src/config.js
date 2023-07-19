@@ -351,7 +351,7 @@ class Config {
     )
 
     const DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = coalesce(
-      options.flattenIntegrationServiceNames,
+      options.spanRemoveIntegrationFromService,
       isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
     )
     const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
@@ -585,7 +585,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     }
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     this.spanComputePeerService = DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
-    this.flattenIntegrationServiceNames = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+    this.spanRemoveIntegrationFromService = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
     this.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
