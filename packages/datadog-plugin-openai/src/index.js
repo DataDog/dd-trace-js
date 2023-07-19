@@ -19,6 +19,8 @@ class OpenApiPlugin extends TracingPlugin {
   constructor (...args) {
     super(...args)
 
+    throw new Error('openai is being tested, right?')
+
     const { metrics, logger } = services.init(this._tracerConfig)
     this.metrics = metrics
     this.logger = logger
