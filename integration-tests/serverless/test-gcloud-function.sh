@@ -21,6 +21,7 @@ gcloud functions deploy dd-trace-js-sls-mini-agent-integration-test-${STAGE} \
     --gen2 \
     --runtime=nodejs18 \
     --region=us-east1 \
+    --project datadog-sandbox \
     --source "${SERVERLESS_INTEGRATION_DIR_PATH}/test-project/" \
     --entry-point=helloGET \
     --trigger-http \
@@ -32,7 +33,7 @@ sleep 30
 
 echo "Calling deployed cloud function"
 
-gcloud functions call "dd-trace-js-sls-mini-agent-integration-test-${STAGE}" --project datadog-sandbox --region us-east1
+gcloud functions call dd-trace-js-sls-mini-agent-integration-test-${STAGE} --project datadog-sandbox --region us-east1 --gen2
 
 echo "Waiting 60 seconds before tailing logs"
 sleep 60
