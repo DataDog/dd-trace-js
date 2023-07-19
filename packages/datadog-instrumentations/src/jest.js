@@ -188,6 +188,27 @@ addHook({
   versions: ['>=24.8.0']
 }, getTestEnvironment)
 
+addHook({
+  name: '@jest/test-sequencer',
+  versions: ['>=24.8.0']
+}, sequencerPackage => {
+  shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function () {
+    const shardedTests = shard.apply(this, arguments)
+
+    if (!shardedTests.length) {
+      return shardedTests
+    }
+    // TODO: could we get the rootDir from each test?
+    const [test] = shardedTests
+    const rootDir = test && test.context && test.context.config && test.context.config.rootDir
+
+    const filteredTests = getJestSuitesToRun(skippableSuites, shardedTests, rootDir || process.cwd())
+
+    return filteredTests
+  })
+  return sequencerPackage
+})
+
 function cliWrapper (cli, jestVersion) {
   const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
     let onDone
@@ -451,7 +472,18 @@ addHook({
       return getTestPaths.apply(this, arguments)
     }
 
-    const [{ rootDir }] = arguments
+    const [{ rootDir, shard }] = arguments
+
+    if (shard && shard.shardIndex) {
+      // If the user is using sharding, we want to apply the filtering of tests in the shard process.
+      // The reason for this is the following:
+      // If sharding is being used, the tests are likely being run in different CI jobs, that is,
+      // Intelligent test runner might be responding slightly different suites to skip, because the
+      // request to skippable might be done at different times.
+      // If we filter the list of tests here, the base of tests for sharding might potentially be different,
+      // causing the shards to potentially run the same suite.
+      return getTestPaths.apply(this, arguments)
+    }
 
     const testPaths = await getTestPaths.apply(this, arguments)
     const { tests } = testPaths

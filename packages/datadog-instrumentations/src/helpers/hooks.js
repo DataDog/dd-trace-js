@@ -50,6 +50,7 @@ module.exports = {
   'jest-config': () => require('../jest'),
   'jest-environment-node': () => require('../jest'),
   'jest-environment-jsdom': () => require('../jest'),
+  '@jest/test-sequencer': () => require('../jest'),
   'jest-jasmine2': () => require('../jest'),
   'jest-worker': () => require('../jest'),
   'koa': () => require('../koa'),
