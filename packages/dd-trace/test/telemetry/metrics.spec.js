@@ -157,6 +157,33 @@ describe('metrics', () => {
           ]
         })
     })
+
+    it('should not send empty metrics', () => {
+      const manager = new metrics.NamespaceManager()
+
+      const ns = manager.namespace('test')
+
+      const metric = ns.count('metric', { bar: 'baz' })
+      metric.inc()
+      metric.reset()
+
+      const config = {
+        hostname: 'localhost',
+        port: 12345,
+        tags: {
+          'runtime-id': 'abc123'
+        }
+      }
+      const application = {
+        language_name: 'nodejs',
+        tracer_version: '1.2.3'
+      }
+      const host = {}
+
+      manager.send(config, application, host)
+
+      expect(sendData).to.not.have.been.called
+    })
   })
 
   describe('Namespace', () => {
@@ -247,6 +274,18 @@ describe('metrics', () => {
             }
           ]
         }
+      })
+    })
+
+    it('should skip empty metrics', () => {
+      const ns = new metrics.Namespace('test')
+      const metric = ns.count('foo', { bar: 'baz' })
+      metric.inc()
+      metric.reset()
+
+      expect(ns.toJSON()).to.deep.equal({
+        distributions: undefined,
+        metrics: undefined
       })
     })
   })
