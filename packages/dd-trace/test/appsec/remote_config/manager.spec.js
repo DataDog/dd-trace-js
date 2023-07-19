@@ -5,7 +5,7 @@ const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../../src/appsec/rem
 
 const noop = () => {}
 
-describe.only('RemoteConfigManager', () => {
+describe('RemoteConfigManager', () => {
   let uuid
   let scheduler
   let Scheduler
