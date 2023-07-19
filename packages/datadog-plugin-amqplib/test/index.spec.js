@@ -53,6 +53,13 @@ describe('Plugin', () => {
           })
 
           describe('when sending commands', () => {
+            withPeerService(
+              () => tracer,
+              () => channel.assertQueue('test', {}, () => {}),
+              'localhost',
+              'out.host'
+            )
+
             it('should do automatic instrumentation for immediate commands', done => {
               agent
                 .use(traces => {
@@ -119,11 +126,19 @@ describe('Plugin', () => {
             withNamingSchema(
               () => channel.assertQueue('test', {}, () => {}),
               () => namingSchema.controlPlane.opName,
-              () => namingSchema.controlPlane.serviceName
+              () => namingSchema.controlPlane.serviceName,
+              'test'
             )
           })
 
           describe('when publishing messages', () => {
+            withPeerService(
+              () => tracer,
+              () => channel.assertQueue('test', {}, () => {}),
+              'localhost',
+              'out.host'
+            )
+
             it('should do automatic instrumentation', done => {
               agent
                 .use(traces => {
@@ -175,7 +190,8 @@ describe('Plugin', () => {
                 channel.publish('exchange', 'routingKey', Buffer.from('content'))
               },
               () => namingSchema.send.opName,
-              () => namingSchema.send.serviceName
+              () => namingSchema.send.serviceName,
+              'test'
             )
           })
 
@@ -263,7 +279,8 @@ describe('Plugin', () => {
                 })
               },
               () => namingSchema.receive.opName,
-              () => namingSchema.receive.serviceName
+              () => namingSchema.receive.serviceName,
+              'test'
             )
           })
         })
@@ -327,7 +344,8 @@ describe('Plugin', () => {
         withNamingSchema(
           () => channel.assertQueue('test', {}, () => {}),
           () => namingSchema.controlPlane.opName,
-          () => 'test-custom-service'
+          () => 'test-custom-service',
+          'test-custom-service'
         )
       })
     })

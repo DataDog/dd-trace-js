@@ -14,6 +14,7 @@ const modules = semver.satisfies(process.versions.node, '>=14')
 describe('Plugin', () => {
   let redis
   let client
+  let tracer
 
   describe('redis', () => {
     withVersions('redis', modules, (version, moduleName) => {
@@ -27,8 +28,9 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
+          tracer = require('../../dd-trace')
           redis = require(`../../../versions/${moduleName}@${version}`).get()
-          client = redis.createClient()
+          client = redis.createClient({ url: 'redis://127.0.0.1:6379' })
 
           await client.connect()
         })
@@ -50,11 +52,18 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
               expect(traces[0][0].meta).to.have.property('component', 'redis')
+              expect(traces[0][0].meta).to.have.property('out.host', '127.0.0.1')
+              expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
             })
 
           await client.get('foo')
           await promise
         })
+
+        withPeerService(
+          () => tracer,
+          (done) => client.get('bar').catch(done),
+          '127.0.0.1', 'out.host')
 
         it('should handle errors', async () => {
           let error
@@ -98,7 +107,8 @@ describe('Plugin', () => {
         withNamingSchema(
           async () => client.get('foo'),
           () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName
+          () => namingSchema.outbound.serviceName,
+          'test'
         )
       })
 
@@ -128,11 +138,18 @@ describe('Plugin', () => {
         it('should be configured with the correct values', async () => {
           const promise = agent.use(traces => {
             expect(traces[0][0]).to.have.property('service', 'custom')
+            expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+            expect(traces[0][0].metrics).to.have.property('network.destination.port', 6379)
           })
 
           await client.get('foo')
           await promise
         })
+
+        withPeerService(
+          () => tracer,
+          (done) => client.get('bar').catch(done),
+          'localhost', 'out.host')
 
         it('should be able to filter commands', async () => {
           const promise = agent.use(traces => {
@@ -146,7 +163,8 @@ describe('Plugin', () => {
         withNamingSchema(
           async () => client.get('foo'),
           () => namingSchema.outbound.opName,
-          () => 'custom'
+          () => 'custom',
+          'custom'
         )
       })
 

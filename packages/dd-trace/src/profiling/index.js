@@ -1,7 +1,6 @@
 'use strict'
 
 const { Profiler, ServerlessProfiler } = require('./profiler')
-const CpuProfiler = require('./profilers/cpu')
 const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
 const { AgentExporter } = require('./exporters/agent')
@@ -14,7 +13,6 @@ module.exports = {
   profiler,
   AgentExporter,
   FileExporter,
-  CpuProfiler,
   WallProfiler,
   SpaceProfiler,
   ConsoleLogger

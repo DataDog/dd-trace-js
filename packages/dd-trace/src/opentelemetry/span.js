@@ -38,6 +38,7 @@ class Span {
       context: spanContext._ddContext,
       startTime,
       hostname: _tracer._hostname,
+      integrationName: 'otel',
       tags: {
         'service.name': _tracer._service
       }

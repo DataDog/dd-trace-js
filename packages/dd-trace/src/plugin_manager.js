@@ -21,13 +21,18 @@ const disabledPlugins = new Set(
   DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())
 )
 
-// TODO actually ... should we be looking at envrionment variables this deep down in the code?
+// TODO actually ... should we be looking at environment variables this deep down in the code?
 
 const pluginClasses = {}
 
 loadChannel.subscribe(({ name }) => {
-  const Plugin = plugins[name]
+  maybeEnable(plugins[name])
+})
 
+// Globals
+maybeEnable(require('../../datadog-plugin-fetch/src'))
+
+function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
     const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
@@ -42,7 +47,7 @@ loadChannel.subscribe(({ name }) => {
       pluginClasses[Plugin.id] = Plugin
     }
   }
-})
+}
 
 // TODO this must always be a singleton.
 module.exports = class PluginManager {
@@ -128,7 +133,9 @@ module.exports = class PluginManager {
       serviceMapping,
       queryStringObfuscation,
       site,
-      url
+      url,
+      dbmPropagationMode,
+      dsmEnabled
     } = this._tracerConfig
 
     const sharedConfig = {}
@@ -140,6 +147,9 @@ module.exports = class PluginManager {
     if (queryStringObfuscation !== undefined) {
       sharedConfig.queryStringObfuscation = queryStringObfuscation
     }
+
+    sharedConfig.dbmPropagationMode = dbmPropagationMode
+    sharedConfig.dsmEnabled = dsmEnabled
 
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]

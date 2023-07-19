@@ -6,6 +6,8 @@ const os = require('os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
 
+const { manager: metricsManager } = require('./metrics')
+
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
 
@@ -121,6 +123,7 @@ function start (aConfig, thePluginManager) {
   dependencies.start(config, application, host)
   sendData(config, application, host, 'app-started', appStarted())
   interval = setInterval(() => {
+    metricsManager.send(config, application, host)
     sendData(config, application, host, 'app-heartbeat')
   }, heartbeatInterval)
   interval.unref()

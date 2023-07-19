@@ -2,6 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const namingSchema = require('./naming')
 
 const hostname = process.env.CI ? 'oracledb' : 'localhost'
 const config = {
@@ -61,12 +62,18 @@ describe('Plugin', () => {
         })
 
         function connectionTests (url) {
+          if (url) {
+            withPeerService(
+              () => tracer,
+              () => connection.execute(dbQuery),
+              url.pathname.slice(1), 'db.instance')
+          }
           it('should be instrumented for promise API', done => {
             agent.use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'oracle.query')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', dbQuery)
               expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
@@ -89,10 +96,10 @@ describe('Plugin', () => {
 
           it('should be instrumented for callback API', done => {
             agent.use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'oracle.query')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', dbQuery)
               expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
@@ -123,10 +130,10 @@ describe('Plugin', () => {
             let error
 
             agent.use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'oracle.query')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'invalid')
               expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
@@ -182,10 +189,10 @@ describe('Plugin', () => {
         function poolTests (url) {
           it('should be instrumented correctly with correct tags', done => {
             agent.use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'oracle.query')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', dbQuery)
               expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
@@ -207,10 +214,10 @@ describe('Plugin', () => {
             let error
 
             const promise = agent.use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'oracle.query')
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'invalid')
               expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('service', 'test')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('component', 'oracledb')
               if (url) {
@@ -230,6 +237,55 @@ describe('Plugin', () => {
             return promise
           })
         }
+      })
+
+      describe('with configuration', () => {
+        describe('with service string', () => {
+          before(async () => {
+            await agent.load('oracledb', { service: 'custom' })
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+            tracer = require('../../dd-trace')
+          })
+          before(async () => {
+            connection = await oracledb.getConnection(config)
+          })
+          after(async () => {
+            await connection.close()
+          })
+          after(async () => {
+            await agent.close({ ritmReset: false })
+          })
+          it('should set the service name', done => {
+            agent.use(traces => {
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', 'custom')
+            }).then(done, done)
+            connection.execute(dbQuery)
+          })
+        })
+        describe('with service function', () => {
+          before(async () => {
+            await agent.load('oracledb', { service: connAttrs => `${connAttrs.connectString}` })
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+            tracer = require('../../dd-trace')
+          })
+          before(async () => {
+            connection = await oracledb.getConnection(config)
+          })
+          after(async () => {
+            await connection.close()
+          })
+          after(async () => {
+            await agent.close({ ritmReset: false })
+          })
+          it('should set the service name', done => {
+            agent.use(traces => {
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', config.connectString)
+            }).then(done, done)
+            connection.execute(dbQuery)
+          })
+        })
       })
     })
   })

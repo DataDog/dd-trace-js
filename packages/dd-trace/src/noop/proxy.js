@@ -75,6 +75,10 @@ class Tracer {
     this.appsec.setUser(user)
     return this
   }
+
+  get TracerProvider () {
+    return require('../opentelemetry/tracer_provider')
+  }
 }
 
 module.exports = Tracer

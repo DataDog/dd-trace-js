@@ -62,7 +62,7 @@ class ContextManager {
   bind (context, target) {
     const self = this
     return function (...args) {
-      return self.with(context, target, this, args)
+      return self.with(context, target, this, ...args)
     }
   }
 

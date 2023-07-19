@@ -3,10 +3,13 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
 const Readable = require('stream').Readable
+
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const nodeMajor = parseInt(process.versions.node.split('.')[0])
 const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
+
+const namingSchema = require('./naming')
 
 describe('Plugin', () => {
   let grpc
@@ -79,6 +82,13 @@ describe('Plugin', () => {
           const client = await buildClient({
             getUnary: (_, callback) => callback()
           })
+
+          withNamingSchema(
+            (done) => client.getUnary({ first: 'foobar' }, () => done()),
+            () => namingSchema.server.opName,
+            () => namingSchema.server.serviceName,
+            'test'
+          )
 
           client.getUnary({ first: 'foobar' }, () => {})
 
@@ -249,6 +259,27 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, 'Error')
               expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
               expect(traces[0][0].meta).to.have.property('component', 'grpc')
+            })
+        })
+
+        it('should handle custom errors', async () => {
+          const client = await buildClient({
+            getUnary: (_, callback) => {
+              const metadata = new grpc.Metadata()
+
+              metadata.set('extra', 'information')
+
+              callback({ message: 'foobar', code: grpc.status.NOT_FOUND }, {}, metadata)
+            }
+          })
+
+          client.getUnary({ first: 'foobar' }, () => {})
+
+          return agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'foobar')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
             })
         })
 

@@ -1,13 +1,13 @@
-const { namingResolver } = require('../../dd-trace/test/plugins/helpers')
+const { resolveNaming } = require('../../dd-trace/test/plugins/helpers')
 
-module.exports = namingResolver({
-  outbound: {
+module.exports = resolveNaming({
+  client: {
     v0: {
       opName: 'tedious.request',
       serviceName: 'test-mssql'
     },
     v1: {
-      opName: 'sqlserver.query',
+      opName: 'mssql.query',
       serviceName: 'test'
     }
   }

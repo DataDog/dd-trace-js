@@ -9,13 +9,14 @@ const externals = require('../plugins/externals.json')
 const slackReport = require('./slack-report')
 const metrics = require('../../src/metrics')
 const agent = require('../plugins/agent')
-const Nomenclature = require('../../../dd-trace/src/service-naming')
+const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { schemaDefinitions } = require('../../src/service-naming/schemas')
 
 global.withVersions = withVersions
 global.withExports = withExports
 global.withNamingSchema = withNamingSchema
+global.withPeerService = withPeerService
 
 const packageVersionFailures = Object.create({})
 
@@ -47,7 +48,7 @@ function loadInstFile (file, instrumentations) {
   })
 }
 
-function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName) {
+function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, expectedShortCircuitName) {
   let fullConfig
 
   describe('service and operation naming', () => {
@@ -74,9 +75,61 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName) 
             })
             .then(done)
             .catch(done)
-          spanProducerFn()
+          spanProducerFn(done)
         })
       })
+    })
+
+    describe('service naming short-circuit in v0', () => {
+      before(() => {
+        fullConfig = Nomenclature.config
+        Nomenclature.configure({
+          spanAttributeSchema: 'v0',
+          service: fullConfig.service,
+          traceRemoveIntegrationServiceNamesEnabled: true
+        })
+      })
+      after(() => {
+        Nomenclature.configure(fullConfig)
+      })
+
+      it('should pass service name through', done => {
+        agent
+          .use(traces => {
+            const span = traces[0][0]
+            expect(span).to.have.property('service', expectedShortCircuitName)
+          })
+          .then(done)
+          .catch(done)
+        spanProducerFn(done)
+      })
+    })
+  })
+}
+
+function withPeerService (tracer, spanGenerationFn, service, serviceSource) {
+  describe('peer service computation', () => {
+    let computePeerServiceSpy
+    beforeEach(() => {
+      // FIXME: workaround due to the evaluation order of mocha beforeEach
+      const tracerObj = typeof tracer === 'function' ? tracer() : tracer
+      computePeerServiceSpy = sinon.stub(tracerObj._tracer, '_computePeerService').value(true)
+    })
+    afterEach(() => {
+      computePeerServiceSpy.restore()
+    })
+
+    it('should compute peer service', done => {
+      agent
+        .use(traces => {
+          const span = traces[0][0]
+          expect(span.meta).to.have.property('peer.service', service)
+          expect(span.meta).to.have.property('_dd.peer.service.source', serviceSource)
+        })
+        .then(done)
+        .catch(done)
+
+      spanGenerationFn(done)
     })
   })
 }

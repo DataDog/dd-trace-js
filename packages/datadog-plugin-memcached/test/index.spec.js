@@ -25,6 +25,12 @@ describe('Plugin', () => {
           Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
         })
 
+        withPeerService(
+          () => tracer,
+          done => memcached.get('test', err => err && done(err)),
+          'localhost',
+          'out.host'
+        )
         it('should do automatic instrumentation when using callbacks', done => {
           memcached = new Memcached('localhost:11211', { retries: 0 })
 
@@ -147,7 +153,8 @@ describe('Plugin', () => {
         withNamingSchema(
           done => memcached.get('test', err => err && done(err)),
           () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName
+          () => namingSchema.outbound.serviceName,
+          'test'
         )
       })
 

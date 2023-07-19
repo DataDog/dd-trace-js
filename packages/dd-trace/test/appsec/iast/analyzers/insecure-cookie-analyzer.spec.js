@@ -9,6 +9,14 @@ describe('insecure cookie analyzer', () => {
   it('Expected vulnerability identifier', () => {
     expect(INSECURE_COOKIE).to.be.equals('INSECURE_COOKIE')
   })
+  // In these test, even when we are having multiple vulnerabilities, all the vulnerabilities
+  // are in the same cookies method, and it is expected to detect both even when the max operations is 1
+  const iastConfig = {
+    enabled: true,
+    requestSampling: 100,
+    maxConcurrentRequests: 1,
+    maxContextOperations: 1
+  }
 
   prepareTestServerForIast('insecure cookie analyzer',
     (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
@@ -42,5 +50,5 @@ describe('insecure cookie analyzer', () => {
       testThatRequestHasNoVulnerability((req, res) => {
         res.setHeader('set-cookie', 'key=')
       }, INSECURE_COOKIE)
-    })
+    }, iastConfig)
 })

@@ -48,7 +48,8 @@ function getCommonRequestOptions (url) {
  */
 function getCommitsToExclude ({ url, isEvpProxy, repositoryUrl }, callback) {
   const latestCommits = getLatestCommits()
-  const [headCommit] = latestCommits
+
+  log.debug(`There were ${latestCommits.length} commits since last month.`)
 
   const commonOptions = getCommonRequestOptions(url)
 
@@ -88,7 +89,7 @@ function getCommitsToExclude ({ url, isEvpProxy, repositoryUrl }, callback) {
     } catch (e) {
       return callback(new Error(`Can't parse commits to exclude response: ${e.message}`))
     }
-    callback(null, commitsToExclude, headCommit)
+    callback(null, commitsToExclude, latestCommits)
   })
 }
 
@@ -152,28 +153,43 @@ function uploadPackFile ({ url, isEvpProxy, packFileToUpload, repositoryUrl, hea
 /**
  * This function uploads git metadata to CI Visibility's backend.
 */
-function sendGitMetadata (url, isEvpProxy, callback) {
-  const repositoryUrl = getRepositoryUrl()
+function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
+  let repositoryUrl = configRepositoryUrl
+  if (!repositoryUrl) {
+    repositoryUrl = getRepositoryUrl()
+  }
+
+  log.debug(`Uploading git history for repository ${repositoryUrl}`)
 
   if (!repositoryUrl) {
     return callback(new Error('Repository URL is empty'))
   }
 
   if (isShallowRepository()) {
+    log.debug('It is shallow clone, unshallowing...')
     unshallowRepository()
   }
 
-  getCommitsToExclude({ url, repositoryUrl, isEvpProxy }, (err, commitsToExclude, headCommit) => {
+  getCommitsToExclude({ url, repositoryUrl, isEvpProxy }, (err, commitsToExclude, latestCommits) => {
     if (err) {
       return callback(err)
     }
-    const commitsToUpload = getCommitsToUpload(commitsToExclude)
+    log.debug(`There are ${commitsToExclude.length} commits to exclude.`)
+    const [headCommit] = latestCommits
+    const commitsToInclude = latestCommits.filter((commit) => !commitsToExclude.includes(commit))
+    log.debug(`There are ${commitsToInclude.length} commits to include.`)
+
+    const commitsToUpload = getCommitsToUpload(commitsToExclude, commitsToInclude)
 
     if (!commitsToUpload.length) {
       log.debug('No commits to upload')
       return callback(null)
     }
+    log.debug(`There are ${commitsToUpload.length} commits to upload`)
+
     const packFilesToUpload = generatePackFilesForCommits(commitsToUpload)
+
+    log.debug(`Uploading ${packFilesToUpload.length} packfiles.`)
 
     if (!packFilesToUpload.length) {
       return callback(new Error('Failed to generate packfiles'))

@@ -31,10 +31,23 @@ function wrapQuery (query) {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     const processId = this.processID
 
-    const pgQuery = arguments[0] && typeof arguments[0] === 'object' ? arguments[0] : { text: arguments[0] }
+    const pgQuery = arguments[0] && typeof arguments[0] === 'object'
+      ? arguments[0]
+      : { text: arguments[0] }
 
-    // shallow clone the existing query to swap out .text field
-    let newQuery = { ...pgQuery }
+    // The query objects passed in can be pretty complex. They can be instances of EventEmitter.
+    //   For this reason we can't make a shallow clone of the object.
+    // Some libraries, such as sql-template-tags, can provide a getter .text property.
+    //   For this reason we can't replace the .text property.
+    // Instead, we create a new object, and set the original query as the prototype.
+    // This allows any existing methods to still work and lets us easily provide a new query.
+    let newQuery = {
+      __ddInjectableQuery: '',
+      get text () {
+        return this.__ddInjectableQuery || Object.getPrototypeOf(this).text
+      }
+    }
+    Object.setPrototypeOf(newQuery, pgQuery)
 
     return asyncResource.runInAsyncScope(() => {
       startCh.publish({

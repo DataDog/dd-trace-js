@@ -42,6 +42,7 @@ const jestItrConfigurationCh = channel('ci:jest:itr-configuration')
 let skippableSuites = []
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
+let isSuitesSkipped = false
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -128,8 +129,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             suite: this.testSuite,
             runner: 'jest-circus',
             testParameters,
-            frameworkVersion: jestVersion,
-            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
+            frameworkVersion: jestVersion
           })
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
@@ -144,7 +144,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             const formattedError = formatJestError(event.test.errors[0])
             testErrCh.publish(formattedError)
           }
-          testRunFinishCh.publish(status)
+          testRunFinishCh.publish({
+            status,
+            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
+          })
           // restore in case it is retried
           event.test.fn = originalTestFns.get(event.test)
         })
@@ -227,7 +230,6 @@ function cliWrapper (cli, jestVersion) {
         log.error(err)
       }
     }
-    const isSuitesSkipped = !!skippableSuites.length
 
     const processArgv = process.argv.slice(2).join(' ')
     sessionAsyncResource.runInAsyncScope(() => {
@@ -430,6 +432,8 @@ addHook({
 
     const filteredTests = getJestSuitesToRun(skippableSuites, tests, rootDir)
 
+    isSuitesSkipped = filteredTests.length !== tests.length
+
     skippableSuites = []
 
     return { ...testPaths, tests: filteredTests }
@@ -469,7 +473,7 @@ function jasmineAsyncInstallWraper (jasmineAsyncInstallExport, jestVersion) {
             const formattedError = formatJestError(spec.result.failedExpectations[0].error)
             testErrCh.publish(formattedError)
           }
-          testRunFinishCh.publish(specStatusToTestStatus[spec.result.status])
+          testRunFinishCh.publish({ status: specStatusToTestStatus[spec.result.status] })
           onComplete.apply(this, arguments)
         })
         arguments[0] = callback

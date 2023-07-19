@@ -26,6 +26,8 @@ class DatadogTracer {
     this._version = config.version
     this._env = config.env
     this._tags = config.tags
+    this._computePeerService = config.spanComputePeerService
+    this._peerServiceMapping = config.peerServiceMapping
     this._logInjection = config.logInjection
     this._debug = config.debug
     this._prioritySampler = new PrioritySampler(config.env, config.sampler)
@@ -60,7 +62,8 @@ class DatadogTracer {
       tags,
       startTime: options.startTime,
       hostname: this._hostname,
-      traceId128BitGenerationEnabled: this._traceId128BitGenerationEnabled
+      traceId128BitGenerationEnabled: this._traceId128BitGenerationEnabled,
+      integrationName: options.integrationName
     }, this._debug)
 
     span.addTags(this._tags)

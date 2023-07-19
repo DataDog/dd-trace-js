@@ -21,7 +21,7 @@ class GraphQLValidatePlugin extends TracingPlugin {
   finish ({ document, errors }) {
     const span = this.activeSpan
     this.config.hooks.validate(span, document, errors)
-    span.finish()
+    super.finish()
   }
 }
 

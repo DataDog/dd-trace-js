@@ -37,7 +37,7 @@ const CYPRESS_STATUS_TO_TEST_STATUS = {
 function getTestSpanMetadata (tracer, testName, testSuite, cypressConfig) {
   const childOf = getTestParentSpan(tracer)
 
-  const commonTags = getTestCommonTags(testName, testSuite, cypressConfig.version)
+  const commonTags = getTestCommonTags(testName, testSuite, cypressConfig.version, TEST_FRAMEWORK_NAME)
 
   return {
     childOf,
@@ -119,6 +119,7 @@ function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) 
 }
 
 module.exports = (on, config) => {
+  let isTestsSkipped = false
   const tracer = require('../../dd-trace')
   const testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
@@ -306,7 +307,7 @@ module.exports = (on, config) => {
         testSessionSpan,
         testModuleSpan,
         {
-          isSuitesSkipped: !!testsToSkip.length,
+          isSuitesSkipped: isTestsSkipped,
           isSuitesSkippingEnabled,
           isCodeCoverageEnabled
         }
@@ -352,6 +353,7 @@ module.exports = (on, config) => {
       if (testsToSkip.find(test => {
         return testName === test.name && testSuite === test.suite
       })) {
+        isTestsSkipped = true
         return { shouldSkip: true }
       }
 

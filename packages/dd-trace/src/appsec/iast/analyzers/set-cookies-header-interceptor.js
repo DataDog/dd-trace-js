@@ -14,24 +14,28 @@ class SetCookiesHeaderInterceptor extends Plugin {
           allCookies = [value]
         }
         const alreadyCheckedCookies = this._getAlreadyCheckedCookiesInResponse(res)
+
+        let location
         allCookies.forEach(cookieString => {
           if (!alreadyCheckedCookies.includes(cookieString)) {
             alreadyCheckedCookies.push(cookieString)
-            setCookieChannel.publish(this._parseCookie(cookieString))
+            const parsedCookie = this._parseCookie(cookieString, location)
+            setCookieChannel.publish(parsedCookie)
+            location = parsedCookie.location
           }
         })
       }
     })
   }
 
-  _parseCookie (cookieString) {
+  _parseCookie (cookieString, location) {
     const cookieParts = cookieString.split(';')
     const nameValueParts = cookieParts[0].split('=')
     const cookieName = nameValueParts[0]
     const cookieValue = nameValueParts.slice(1).join('=')
     const cookieProperties = cookieParts.slice(1).map(part => part.trim())
 
-    return { cookieName, cookieValue, cookieProperties, cookieString }
+    return { cookieName, cookieValue, cookieProperties, cookieString, location }
   }
 
   _getAlreadyCheckedCookiesInResponse (res) {

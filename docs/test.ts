@@ -107,7 +107,10 @@ tracer.init({
     obfuscatorKeyRegex: '.*',
     obfuscatorValueRegex: '.*',
     blockedTemplateHtml: './blocked.html',
-    blockedTemplateJson: './blocked.json'
+    blockedTemplateJson: './blocked.json',
+    eventTracking: {
+      mode: 'safe'
+    }
   }
 });
 
@@ -248,6 +251,8 @@ tracer.use('express');
 tracer.use('express', httpServerOptions);
 tracer.use('fastify');
 tracer.use('fastify', httpServerOptions);
+tracer.use('fetch');
+tracer.use('fetch', httpClientOptions);
 tracer.use('generic-pool');
 tracer.use('google-cloud-pubsub');
 tracer.use('graphql');

@@ -75,6 +75,16 @@ describe('Plugin', () => {
       })
     })
 
+    withPeerService(
+      () => tracer,
+      () => {
+        const socket = new net.Socket()
+        socket.connect(port, 'localhost')
+      },
+      'localhost',
+      'out.host'
+    )
+
     it('should instrument connect with a port', done => {
       const socket = new net.Socket()
       tracer.scope().activate(parent, () => {

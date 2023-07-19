@@ -119,7 +119,8 @@ describe('Tracer', () => {
         },
         startTime: fields.startTime,
         hostname: undefined,
-        traceId128BitGenerationEnabled: undefined
+        traceId128BitGenerationEnabled: undefined,
+        integrationName: undefined
       }, true)
 
       expect(span.addTags).to.have.been.calledWith({
@@ -176,7 +177,8 @@ describe('Tracer', () => {
         },
         startTime: fields.startTime,
         hostname: os.hostname(),
-        traceId128BitGenerationEnabled: undefined
+        traceId128BitGenerationEnabled: undefined,
+        integrationName: undefined
       })
 
       expect(testSpan).to.equal(span)
@@ -246,7 +248,8 @@ describe('Tracer', () => {
         },
         startTime: fields.startTime,
         hostname: undefined,
-        traceId128BitGenerationEnabled: true
+        traceId128BitGenerationEnabled: true,
+        integrationName: undefined
       })
 
       expect(testSpan).to.equal(span)

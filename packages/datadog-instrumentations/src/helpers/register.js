@@ -7,16 +7,26 @@ const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
 
+const { DD_TRACE_DISABLED_INSTRUMENTATIONS = '' } = process.env
+
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
+const disabledInstrumentations = new Set(
+  DD_TRACE_DISABLED_INSTRUMENTATIONS ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',') : []
+)
 
 const loadChannel = channel('dd-trace:instrumentation:load')
+
+// Globals
+require('../fetch')
 
 // TODO: make this more efficient
 
 for (const packageName of names) {
+  if (disabledInstrumentations.has(packageName)) continue
+
   Hook([packageName], (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
 

@@ -92,6 +92,8 @@ describe('Config', () => {
     expect(config).to.have.property('traceId128BitGenerationEnabled', false)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
+    expect(config).to.have.property('spanComputePeerService', false)
+    expect(config).to.have.property('traceRemoveIntegrationServiceNamesEnabled', false)
     expect(config).to.have.deep.property('serviceMapping', {})
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['tracecontext', 'datadog'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext', 'datadog'])
@@ -107,10 +109,13 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
+    expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
+    expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
+    expect(config).to.have.nested.property('iast.telemetryVerbosity', 'INFORMATION')
   })
 
   it('should support logging', () => {
@@ -160,6 +165,7 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
+    process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc, d:dd'
     process.env.DD_VERSION = '1.0.0'
     process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '.*'
     process.env.DD_TRACE_CLIENT_IP_ENABLED = 'true'
@@ -189,6 +195,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
+    process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = true
     process.env.DD_APPSEC_ENABLED = 'true'
     process.env.DD_APPSEC_RULES = RULES_JSON_PATH
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = '42'
@@ -197,6 +204,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_HTML_PATH
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH
+    process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
@@ -205,6 +213,7 @@ describe('Config', () => {
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
     process.env.DD_IAST_DEDUPLICATION_ENABLED = false
     process.env.DD_IAST_REDACTION_ENABLED = false
+    process.env.DD_IAST_TELEMETRY_VERBOSITY = 'DEBUG'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
 
@@ -250,6 +259,10 @@ describe('Config', () => {
       a: 'aa',
       b: 'bb'
     })
+    expect(config).to.have.deep.property('peerServiceMapping', {
+      c: 'cc',
+      d: 'dd'
+    })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['b3', 'tracecontext'])
     expect(config).to.have.nested.property('experimental.runtimeId', true)
@@ -264,6 +277,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
+    expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
+    expect(config).to.have.nested.property('appsec.eventTracking.mode', 'extended')
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -272,6 +287,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
+    expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -384,7 +400,8 @@ describe('Config', () => {
           maxConcurrentRequests: 4,
           maxContextOperations: 5,
           deduplicationEnabled: false,
-          redactionEnabled: false
+          redactionEnabled: false,
+          telemetryVerbosity: 'DEBUG'
         }
       },
       appsec: false,
@@ -437,6 +454,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
+    expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
     expect(config).to.have.deep.nested.property('sampler', {
       sampleRate: 0.5,
       rateLimit: 1000,
@@ -547,6 +565,7 @@ describe('Config', () => {
     process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa'
+    process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc'
     process.env.DD_VERSION = '0.0.0'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
@@ -572,6 +591,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_JSON // note the inversion between
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_HTML // json and html here
+    process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
@@ -600,6 +620,9 @@ describe('Config', () => {
       serviceMapping: {
         b: 'bb'
       },
+      peerServiceMapping: {
+        d: 'dd'
+      },
       tracePropagationStyle: {
         inject: [],
         extract: []
@@ -622,7 +645,10 @@ describe('Config', () => {
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
         blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
-        blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH
+        blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
+        eventTracking: {
+          mode: 'safe'
+        }
       },
       remoteConfig: {
         pollInterval: 42
@@ -651,6 +677,7 @@ describe('Config', () => {
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
+    expect(config).to.have.deep.property('peerServiceMapping', { d: 'dd' })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', [])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', [])
     expect(config).to.have.nested.property('experimental.runtimeId', false)
@@ -665,6 +692,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
+    expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
+    expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
@@ -684,7 +713,10 @@ describe('Config', () => {
         obfuscatorKeyRegex: '.*',
         obfuscatorValueRegex: '.*',
         blockedTemplateHtml: undefined,
-        blockedTemplateJson: undefined
+        blockedTemplateJson: undefined,
+        eventTracking: {
+          mode: 'disabled'
+        }
       },
       experimental: {
         appsec: {
@@ -695,7 +727,10 @@ describe('Config', () => {
           obfuscatorKeyRegex: '^$',
           obfuscatorValueRegex: '^$',
           blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
-          blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH
+          blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
+          eventTracking: {
+            mode: 'safe'
+          }
         }
       }
     })
@@ -709,7 +744,11 @@ describe('Config', () => {
       obfuscatorKeyRegex: '.*',
       obfuscatorValueRegex: '.*',
       blockedTemplateHtml: undefined,
-      blockedTemplateJson: undefined
+      blockedTemplateJson: undefined,
+      eventTracking: {
+        enabled: false,
+        mode: 'disabled'
+      }
     })
   })
 
@@ -825,6 +864,7 @@ describe('Config', () => {
     expect(config.telemetry.heartbeatInterval).to.eq(60000)
     expect(config.telemetry.logCollection).to.be.false
     expect(config.telemetry.debug).to.be.false
+    expect(config.telemetry.metrics).to.be.false
   })
 
   it('should set DD_TELEMETRY_HEARTBEAT_INTERVAL', () => {
@@ -847,6 +887,17 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
 
     process.env.DD_TRACE_TELEMETRY_ENABLED = origTraceTelemetryValue
+  })
+
+  it('should set DD_TELEMETRY_METRICS_ENABLED', () => {
+    const origTelemetryMetricsEnabledValue = process.env.DD_TELEMETRY_METRICS_ENABLED
+    process.env.DD_TELEMETRY_METRICS_ENABLED = 'true'
+
+    const config = new Config()
+
+    expect(config.telemetry.metrics).to.be.true
+
+    process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabledValue
   })
 
   it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
@@ -1058,6 +1109,7 @@ describe('Config', () => {
     beforeEach(() => {
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
+      delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
       options = {}
     })
     context('ci visibility mode is enabled', () => {
@@ -1081,6 +1133,15 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 'false'
         const config = new Config(options)
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
+      })
+      it('should disable manual testing API by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('isManualApiEnabled', false)
+      })
+      it('should enable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is passed', () => {
+        process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'true'
+        const config = new Config(options)
+        expect(config).to.have.property('isManualApiEnabled', true)
       })
     })
     context('ci visibility mode is not enabled', () => {

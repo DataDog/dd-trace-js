@@ -3,6 +3,7 @@
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const namingSchema = require('./naming')
 
 const withTopologies = fn => {
   withVersions('mongodb-core', ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {
@@ -79,8 +80,8 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 const resource = `insert test.${collection}`
 
-                expect(span).to.have.property('name', 'mongodb.query')
-                expect(span).to.have.property('service', 'test-mongodb')
+                expect(span).to.have.property('name', namingSchema.outbound.opName)
+                expect(span).to.have.property('service', namingSchema.outbound.serviceName)
                 expect(span).to.have.property('resource', resource)
                 expect(span).to.have.property('type', 'mongodb')
                 expect(span.meta).to.have.property('span.kind', 'client')
@@ -305,6 +306,13 @@ describe('Plugin', () => {
               error = err
             })
           })
+
+          withNamingSchema(
+            () => server.insert(`test.${collection}`, [{ a: 1 }], () => {}),
+            () => namingSchema.outbound.opName,
+            () => namingSchema.outbound.serviceName,
+            'test'
+          )
         })
       })
 
@@ -335,6 +343,7 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .use(traces => {
+              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', 'custom')
             })
             .then(done)
@@ -342,6 +351,13 @@ describe('Plugin', () => {
 
           server.insert(`test.${collection}`, [{ a: 1 }], () => {})
         })
+
+        withNamingSchema(
+          () => server.insert(`test.${collection}`, [{ a: 1 }], () => {}),
+          () => namingSchema.outbound.opName,
+          () => 'custom',
+          'custom'
+        )
       })
     })
   })

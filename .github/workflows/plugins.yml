@@ -330,6 +330,23 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
+  fetch:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: fetch
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v2
+
   generic-pool:
     runs-on: ubuntu-latest
     env:
@@ -802,7 +819,7 @@ jobs:
           - 5500:5500
       testagent:
         image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
-        env: 
+        env:
           LOG_LEVEL: DEBUG
           TRACE_LANGUAGE: javascript
           DISABLED_CHECKS: trace_content_length
@@ -816,7 +833,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
-      - run: yarn install --ignore-engine
+      - run: yarn install --ignore-engines
       - run: yarn services
       - run: yarn test:plugins
       - uses: codecov/codecov-action@v2

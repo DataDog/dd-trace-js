@@ -72,6 +72,10 @@ describe('Unvalidated Redirect vulnerability', () => {
           const location = newTaintedString(iastCtx, 'http://user@app.com/', 'pathParam', 'Request')
           res.header('X-test', location)
         }, UNVALIDATED_REDIRECT)
+
+        testThatRequestHasNoVulnerability((req, res) => {
+          redirectFunctions.insecureWithResHeaderMethod('location', 'http://user@app.com/', res)
+        }, UNVALIDATED_REDIRECT)
       })
   })
 })

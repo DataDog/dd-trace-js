@@ -47,6 +47,13 @@ describe('Plugin', () => {
           })
 
           describe('sending a message', () => {
+            withPeerService(
+              () => tracer,
+              () => context.sender.send({ body: 'Hello World!' }),
+              'localhost',
+              'out.host'
+            )
+
             it('should automatically instrument', (done) => {
               agent.use(traces => {
                 const span = traces[0][0]
@@ -98,7 +105,9 @@ describe('Plugin', () => {
 
             withNamingSchema(
               () => { context.sender.send({ body: 'Hello World!' }) },
-              () => namingSchema.send.opName, () => namingSchema.send.serviceName
+              () => namingSchema.send.opName,
+              () => namingSchema.send.serviceName,
+              'test'
             )
           })
 
@@ -136,7 +145,8 @@ describe('Plugin', () => {
             withNamingSchema(
               () => { context.sender.send({ body: 'Hello World!' }) },
               () => namingSchema.receive.opName,
-              () => namingSchema.receive.serviceName
+              () => namingSchema.receive.serviceName,
+              'test'
             )
           })
         })
@@ -165,7 +175,9 @@ describe('Plugin', () => {
 
           withNamingSchema(
             () => { context.sender.send({ body: 'Hello World!' }) },
-            () => namingSchema.receive.opName, () => 'a_test_service'
+            () => namingSchema.receive.opName,
+            () => 'a_test_service',
+            'a_test_service'
           )
 
           it('should use the configuration for the receiver', (done) => {

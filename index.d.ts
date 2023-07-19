@@ -556,6 +556,19 @@ export declare interface TracerOptions {
      * Specifies a path to a custom blocking template json file.
      */
     blockedTemplateJson?: string,
+
+    /**
+     * Controls the automated user event tracking configuration
+     */
+    eventTracking?: {
+      /**
+       * Controls the automated user event tracking mode. Possible values are disabled, safe and extended.
+       * On safe mode, any detected Personally Identifiable Information (PII) about the user will be redacted from the event.
+       * On extended mode, no redaction will take place.
+       * @default 'safe'
+       */
+      mode?: 'safe' | 'extended' | 'disabled'
+    }
   };
 
   /**
@@ -749,6 +762,7 @@ interface Plugins {
   "elasticsearch": plugins.elasticsearch;
   "express": plugins.express;
   "fastify": plugins.fastify;
+  "fetch": plugins.fetch;
   "generic-pool": plugins.generic_pool;
   "google-cloud-pubsub": plugins.google_cloud_pubsub;
   "graphql": plugins.graphql;
@@ -1091,6 +1105,12 @@ declare namespace plugins {
    * [fastify](https://www.fastify.io/) module.
    */
   interface fastify extends HttpServer {}
+
+  /**
+   * This plugin automatically instruments the
+   * [fetch](https://nodejs.org/api/globals.html#fetch) global.
+   */
+  interface fetch extends HttpClient {}
 
   /**
    * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
@@ -1442,6 +1462,20 @@ declare namespace plugins {
       request?: (span?: Span, req?: IncomingMessage, res?: ServerResponse) => any;
     };
   }
+
+  /**
+   * This plugin automatically instruments the
+   * [openai](https://platform.openai.com/docs/api-reference?lang=node.js) module.
+   *
+   * Note that for logs to work you'll need to set the `DD_API_KEY` environment variable.
+   * You'll also need to adjust any firewall settings to allow the tracer to communicate
+   * with `http-intake.logs.datadoghq.com`.
+   *
+   * Note that for metrics to work you'll need to enable
+   * [DogStatsD](https://docs.datadoghq.com/developers/dogstatsd/?tab=hostagent#setup)
+   * in the agent.
+   */
+  interface openai extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
