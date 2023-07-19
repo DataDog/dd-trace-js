@@ -29,10 +29,13 @@ gcloud functions deploy dd-trace-js-sls-mini-agent-integration-test-${STAGE} \
 
 echo "Calling deployed cloud function"
 
-curl -s "https://us-east1-datadog-sandbox.cloudfunctions.net/dd-trace-js-sls-mini-agent-integration-test-${STAGE}"
+for i in {0..2};
+do
+    curl -s "https://us-east1-datadog-sandbox.cloudfunctions.net/dd-trace-js-sls-mini-agent-integration-test-${STAGE}"
+done
 
-echo "Waiting 1 minute before tailing logs"
-sleep 60
+echo "Waiting 90 seconds before tailing logs"
+sleep 90
 
 LOGS=$(gcloud functions logs read dd-trace-js-sls-mini-agent-integration-test-${STAGE} --region us-east1 --gen2 --limit 1000)
 
