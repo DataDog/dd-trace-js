@@ -4,7 +4,7 @@ const options = {
   projects: [__dirname],
   testPathIgnorePatterns: ['/node_modules/'],
   cache: false,
-  testRegex: /test\/ci-visibility-test/,
+  testRegex: process.env.TEST_REGEX ? new RegExp(process.env.TEST_REGEX) : /test\/ci-visibility-test/,
   coverage: true,
   runInBand: true
 }
