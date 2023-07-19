@@ -363,6 +363,8 @@ function retrieveModelResponseExtraction (tags, body) {
   tags['openai.response.parent'] = body.parent
   tags['openai.response.root'] = body.root
 
+  if (!body.permission) return
+
   tags['openai.response.permission.id'] = body.permission[0].id
   tags['openai.response.permission.created'] = body.permission[0].created
   tags['openai.response.permission.allow_create_engine'] = body.permission[0].allow_create_engine
@@ -382,10 +384,14 @@ function commonLookupFineTuneRequestExtraction (tags, body) {
 }
 
 function listModelsResponseExtraction (tags, body) {
+  if (!body.data) return
+
   tags['openai.response.count'] = body.data.length
 }
 
 function commonImageResponseExtraction (tags, body) {
+  if (!body.data) return
+
   tags['openai.response.images_count'] = body.data.length
 
   for (let i = 0; i < body.data.length; i++) {
@@ -400,7 +406,7 @@ function createAudioResponseExtraction (tags, body) {
   tags['openai.response.text'] = body.text
   tags['openai.response.language'] = body.language
   tags['openai.response.duration'] = body.duration
-  tags['openai.response.segments_count'] = body.segments.length
+  tags['openai.response.segments_count'] = defensiveArrayLength(body.segments)
 }
 
 function createFineTuneRequestExtraction (tags, body) {
@@ -417,21 +423,24 @@ function createFineTuneRequestExtraction (tags, body) {
 }
 
 function commonFineTuneResponseExtraction (tags, body) {
-  tags['openai.response.events_count'] = body.events.length
+  tags['openai.response.events_count'] = defensiveArrayLength(body.events)
   tags['openai.response.fine_tuned_model'] = body.fine_tuned_model
-  tags['openai.response.hyperparams.n_epochs'] = body.hyperparams.n_epochs
-  tags['openai.response.hyperparams.batch_size'] = body.hyperparams.batch_size
-  tags['openai.response.hyperparams.prompt_loss_weight'] = body.hyperparams.prompt_loss_weight
-  tags['openai.response.hyperparams.learning_rate_multiplier'] = body.hyperparams.learning_rate_multiplier
-  tags['openai.response.training_files_count'] = body.training_files.length
-  tags['openai.response.result_files_count'] = body.result_files.length
-  tags['openai.response.validation_files_count'] = body.validation_files.length
+  if (body.hyperparams) {
+    tags['openai.response.hyperparams.n_epochs'] = body.hyperparams.n_epochs
+    tags['openai.response.hyperparams.batch_size'] = body.hyperparams.batch_size
+    tags['openai.response.hyperparams.prompt_loss_weight'] = body.hyperparams.prompt_loss_weight
+    tags['openai.response.hyperparams.learning_rate_multiplier'] = body.hyperparams.learning_rate_multiplier
+  }
+  tags['openai.response.training_files_count'] = defensiveArrayLength(body.training_files)
+  tags['openai.response.result_files_count'] = defensiveArrayLength(body.result_files)
+  tags['openai.response.validation_files_count'] = defensiveArrayLength(body.validation_files)
   tags['openai.response.updated_at'] = body.updated_at
   tags['openai.response.status'] = body.status
 }
 
 // the OpenAI package appears to stream the content download then provide it all as a singular string
 function downloadFileResponseExtraction (tags, body) {
+  if (!body.file) return
   tags['openai.response.total_bytes'] = body.file.length
 }
 
@@ -472,6 +481,8 @@ function createRetrieveFileResponseExtraction (tags, body) {
 function createEmbeddingResponseExtraction (tags, body) {
   usageExtraction(tags, body)
 
+  if (!body.data) return
+
   tags['openai.response.embeddings_count'] = body.data.length
   for (let i = 0; i < body.data.length; i++) {
     tags[`openai.response.embedding.${i}.embedding_length`] = body.data[i].embedding.length
@@ -479,6 +490,7 @@ function createEmbeddingResponseExtraction (tags, body) {
 }
 
 function commonListCountResponseExtraction (tags, body) {
+  if (!body.data) return
   tags['openai.response.count'] = body.data.length
 }
 
@@ -486,6 +498,9 @@ function commonListCountResponseExtraction (tags, body) {
 function createModerationResponseExtraction (tags, body) {
   tags['openai.response.id'] = body.id
   // tags[`openai.response.model`] = body.model // redundant, already extracted globally
+
+  if (!body.results) return
+
   tags['openai.response.flagged'] = body.results[0].flagged
 
   for (const [category, match] of Object.entries(body.results[0].categories)) {
@@ -500,6 +515,8 @@ function createModerationResponseExtraction (tags, body) {
 // createCompletion, createChatCompletion, createEdit
 function commonCreateResponseExtraction (tags, body, store) {
   usageExtraction(tags, body)
+
+  if (!body.choices) return
 
   tags['openai.response.choices_count'] = body.choices.length
 

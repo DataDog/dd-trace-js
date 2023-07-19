@@ -1,11 +1,13 @@
 'use strict'
 
 const { enableRewriter, disableRewriter } = require('./rewriter')
-const { createTransaction,
+const {
+  createTransaction,
   removeTransaction,
   setMaxTransactions,
   enableTaintOperations,
-  disableTaintOperations } = require('./operations')
+  disableTaintOperations
+} = require('./operations')
 
 const taintTrackingPlugin = require('./plugin')
 

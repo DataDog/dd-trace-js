@@ -55,7 +55,12 @@ describe('Plugin', () => {
       describe('createCompletion()', () => {
         let scope
 
-        before(() => {
+        after(() => {
+          nock.removeInterceptor(scope)
+          scope.done()
+        })
+
+        it('makes a successful call', async () => {
           scope = nock('https://api.openai.com:443')
             .post('/v1/completions')
             .reply(200, {
@@ -87,14 +92,7 @@ describe('Plugin', () => {
               'x-ratelimit-reset-tokens', '3ms',
               'x-request-id', '7df89d8afe7bf24dc04e2c4dd4962d7f'
             ])
-        })
 
-        after(() => {
-          nock.removeInterceptor(scope)
-          scope.done()
-        })
-
-        it('makes a successful call', async () => {
           const checkTraces = agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
@@ -187,6 +185,44 @@ describe('Plugin', () => {
               }
             ]
           })
+        })
+
+        it('should not throw with empty response body', async () => {
+          scope = nock('https://api.openai.com:443')
+            .post('/v1/completions')
+            .reply(200, {}, [
+              'Date', 'Mon, 15 May 2023 17:24:22 GMT',
+              'Content-Type', 'application/json',
+              'Content-Length', '349',
+              'Connection', 'close',
+              'openai-model', 'text-davinci-002',
+              'openai-organization', 'kill-9',
+              'openai-processing-ms', '442',
+              'openai-version', '2020-10-01',
+              'x-ratelimit-limit-requests', '3000',
+              'x-ratelimit-limit-tokens', '250000',
+              'x-ratelimit-remaining-requests', '2999',
+              'x-ratelimit-remaining-tokens', '249984',
+              'x-ratelimit-reset-requests', '20ms',
+              'x-ratelimit-reset-tokens', '3ms',
+              'x-request-id', '7df89d8afe7bf24dc04e2c4dd4962d7f'
+            ])
+
+          const checkTraces = agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('name', 'openai.request')
+            })
+
+          await openai.createCompletion({
+            model: 'text-davinci-002',
+            prompt: 'Hello, ',
+            suffix: 'foo',
+            stream: true
+          })
+
+          await checkTraces
+
+          clock.tick(10 * 1000)
         })
       })
 
@@ -316,7 +352,8 @@ describe('Plugin', () => {
                   'root': 'babbage',
                   'parent': null
                 }
-              ] }, [
+              ]
+            }, [
               'Date', 'Mon, 15 May 2023 23:26:42 GMT',
               'Content-Type', 'application/json',
               'Content-Length', '63979',
@@ -1000,51 +1037,74 @@ describe('Plugin', () => {
               'status': 'succeeded',
               'fine_tuned_model': 'curie:ft-foo:deleteme-2023-05-18-20-44-56',
               'events': [
-                { 'object': 'fine-tune-event',
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
-                  'created_at': 1684442489 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442489
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Fine-tune costs $0.00',
-                  'created_at': 1684442612 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442612
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Fine-tune enqueued. Queue number: 0',
-                  'created_at': 1684442612 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442612
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Fine-tune started',
-                  'created_at': 1684442614 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442614
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Completed epoch 1/4',
-                  'created_at': 1684442677 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442677
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Completed epoch 2/4',
-                  'created_at': 1684442677 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442677
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Completed epoch 3/4',
-                  'created_at': 1684442678 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442678
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Completed epoch 4/4',
-                  'created_at': 1684442679 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442679
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Uploaded model: curie:ft-foo:deleteme-2023-05-18-20-44-56',
-                  'created_at': 1684442696 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442696
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Uploaded result file: file-bJyf8TM0jeSZueBo4jpodZVQ',
-                  'created_at': 1684442697 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442697
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Fine-tune succeeded',
-                  'created_at': 1684442697 }
-              ] }, [
+                  'created_at': 1684442697
+                }
+              ]
+            }, [
               'Date', 'Thu, 18 May 2023 22:11:53 GMT',
               'Content-Type', 'application/json',
               'Content-Length', '2727',
@@ -1177,51 +1237,74 @@ describe('Plugin', () => {
             .reply(200, {
               'object': 'list',
               'data': [
-                { 'object': 'fine-tune-event',
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
-                  'created_at': 1684442489 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442489
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Fine-tune costs $0.00',
-                  'created_at': 1684442612 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442612
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Fine-tune enqueued. Queue number: 0',
-                  'created_at': 1684442612 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442612
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Fine-tune started',
-                  'created_at': 1684442614 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442614
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Completed epoch 1/4',
-                  'created_at': 1684442677 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442677
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Completed epoch 2/4',
-                  'created_at': 1684442677 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442677
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Completed epoch 3/4',
-                  'created_at': 1684442678 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442678
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Completed epoch 4/4',
-                  'created_at': 1684442679 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442679
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Uploaded model: curie:ft-foo:deleteme-2023-05-18-20-44-56',
-                  'created_at': 1684442696 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442696
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Uploaded result file: file-bJyf8TM0jeSZueBo4jpodZVQ',
-                  'created_at': 1684442697 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684442697
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Fine-tune succeeded',
-                  'created_at': 1684442697 }
-              ] }, [
+                  'created_at': 1684442697
+                }
+              ]
+            }, [
               'Date', 'Thu, 18 May 2023 22:47:17 GMT',
               'Content-Type', 'application/json',
               'Content-Length', '1718',
@@ -1341,15 +1424,20 @@ describe('Plugin', () => {
               'status': 'cancelled',
               'fine_tuned_model': 'idk',
               'events': [
-                { 'object': 'fine-tune-event',
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Created fine-tune: ft-TVpNqwlvermMegfRVqSOyPyS',
-                  'created_at': 1684452102 },
-                { 'object': 'fine-tune-event',
+                  'created_at': 1684452102
+                },
+                {
+                  'object': 'fine-tune-event',
                   'level': 'info',
                   'message': 'Fine-tune cancelled',
-                  'created_at': 1684452103 }
-              ] }, [
+                  'created_at': 1684452103
+                }
+              ]
+            }, [
               'Date', 'Thu, 18 May 2023 23:21:43 GMT',
               'Content-Type', 'application/json',
               'Content-Length', '1042',
@@ -1985,7 +2073,8 @@ describe('Plugin', () => {
                   'avg_logprob': -0.7777707236153739,
                   'compression_ratio': 0.6363636363636364,
                   'no_speech_prob': 0.043891049921512604,
-                  'transient': false }],
+                  'transient': false
+                }],
                 'text': 'Hello, friend.'
               }, [
                 'Date', 'Fri, 19 May 2023 03:19:49 GMT',

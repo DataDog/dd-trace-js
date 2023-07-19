@@ -298,7 +298,8 @@ describe('Plugin', () => {
             await consumer.run({
               eachMessage: async ({ topic, partition, message, heartbeat, pause }) => {
                 expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedConsumerHash)
-              } })
+              }
+            })
             setDataStreamsContextSpy.restore()
           })
         })
