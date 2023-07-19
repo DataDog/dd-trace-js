@@ -230,6 +230,28 @@ testFrameworks.forEach(({
             }).catch(done)
         })
       })
+      it('reports timeout error message', (done) => {
+        childProcess = fork('ci-visibility/run-jest.js', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '-r dd-trace/ci/init',
+            RUN_IN_PARALLEL: true,
+            TEST_REGEX: 'timeout-test/timeout-test.js'
+          },
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('message', () => {
+          assert.include(testOutput, 'Exceeded timeout of 100 ms for a test while waiting for `done()` to be called.')
+          done()
+        })
+      })
     }
 
     it('can run tests and report spans', (done) => {
