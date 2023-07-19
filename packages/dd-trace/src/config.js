@@ -11,7 +11,7 @@ const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties } = require('./git_properties')
-const { getIsAzureFunctionConsumptionPlan } = require('./serverless')
+const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -229,10 +229,7 @@ class Config {
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
 
-    const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
-    const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
-    const isGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
-
+    const isGCPFunction = getIsGCPFunction()
     const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
 
     const inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan

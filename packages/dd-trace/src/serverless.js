@@ -33,6 +33,13 @@ function maybeStartServerlessMiniAgent (config) {
   }
 }
 
+function getIsGCPFunction () {
+  const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
+  const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
+
+  return isDeprecatedGCPFunction || isNewerGCPFunction
+}
+
 function getIsAzureFunctionConsumptionPlan () {
   const isAzureFunction =
     process.env.FUNCTIONS_EXTENSION_VERSION !== undefined && process.env.FUNCTIONS_WORKER_RUNTIME !== undefined
@@ -42,4 +49,4 @@ function getIsAzureFunctionConsumptionPlan () {
   return isAzureFunction && isConsumptionPlan
 }
 
-module.exports = { maybeStartServerlessMiniAgent, getIsAzureFunctionConsumptionPlan }
+module.exports = { maybeStartServerlessMiniAgent, getIsGCPFunction, getIsAzureFunctionConsumptionPlan }
