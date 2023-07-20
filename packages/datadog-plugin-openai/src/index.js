@@ -26,7 +26,9 @@ class OpenApiPlugin extends TracingPlugin {
     this.sampler = new Sampler(0.1) // default 10% log sampling
 
     // hoist the max length env var to avoid making all of these functions a class method
-    MAX_TEXT_LEN = this._tracerConfig.openaiSpanCharLimit
+    if (this._tracerConfig) {
+      MAX_TEXT_LEN = this._tracerConfig.openaiSpanCharLimit
+    }
   }
 
   configure (config) {
@@ -547,7 +549,7 @@ function usageExtraction (tags, body) {
 }
 
 function truncateApiKey (apiKey) {
-  return `sk-...${apiKey.substr(apiKey.length - 4)}`
+  return apiKey && `sk-...${apiKey.substr(apiKey.length - 4)}`
 }
 
 /**
