@@ -1,8 +1,6 @@
-import tracer from 'dd-trace'
+import 'dd-trace/init.js'
 import fastify from 'fastify'
 import { createAndStartServer } from './helper.mjs'
-
-tracer.init({ port: process.env.AGENT_PORT })
 
 const app = fastify()
 

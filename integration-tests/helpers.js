@@ -18,6 +18,9 @@ const rimraf = promisify(require('rimraf'))
 const id = require('../packages/dd-trace/src/id')
 const upload = require('multer')()
 
+const hookFile = 'dd-trace/loader-hook.mjs'
+const NODE_MAJOR = parseInt(process.versions.node.split('.')[0])
+
 class FakeAgent extends EventEmitter {
   constructor (port = 0) {
     super()
@@ -172,7 +175,7 @@ function spawnProc (filename, options = {}) {
   })
 }
 
-async function createSandbox (dependencies = [], isGitRepo = false, integrationTestsPath = './integration-tests/*') {
+async function createSandbox (dependencies = [], isGitRepo = false, integrationTestsPaths = ['./integration-tests/*']) {
   /* To execute integration tests without a sandbox uncomment the next line
    * and do `yarn link && yarn link dd-trace` */
   // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
@@ -186,7 +189,11 @@ async function createSandbox (dependencies = [], isGitRepo = false, integrationT
   await mkdir(folder)
   await exec(`yarn pack --filename ${out}`) // TODO: cache this
   await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
-  await exec(`cp -R ${integrationTestsPath} ${folder}`)
+
+  integrationTestsPaths.forEach(async (path) => {
+    await exec(`cp -R ${path} ${folder}`)
+  })
+
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
     await exec('echo "node_modules/" > .gitignore', { cwd: folder })
@@ -255,6 +262,24 @@ function checkSpansForServiceName (spans, name) {
   return spans.some((span) => span.some((nestedSpan) => nestedSpan.name === name))
 }
 
+// TODO: add ESM support for Node 20 in import-in-the-middle
+function skipUnsupportedNodeVersions () {
+  return NODE_MAJOR >= 20
+    ? global.describe.skip
+    : global.describe
+}
+
+async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort) {
+  return spawnProc(path.join(cwd, serverFile), {
+    cwd,
+    env: {
+      NODE_OPTIONS: `--loader=${hookFile}`,
+      DD_TRACE_AGENT_PORT: agentPort,
+      DD_TRACE_DEBUG: 1
+    }
+  })
+}
+
 module.exports = {
   FakeAgent,
   spawnProc,
@@ -263,5 +288,7 @@ module.exports = {
   curlAndAssertMessage,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
-  checkSpansForServiceName
+  checkSpansForServiceName,
+  skipUnsupportedNodeVersions,
+  spawnPluginIntegrationTestProc
 }
