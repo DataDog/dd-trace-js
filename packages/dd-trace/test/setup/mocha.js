@@ -48,7 +48,13 @@ function loadInstFile (file, instrumentations) {
   })
 }
 
-function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, expectedShortCircuitName) {
+function withNamingSchema (
+  spanProducerFn,
+  expectedOpName,
+  expectedServiceName,
+  expectedShortCircuitName,
+  selectSpan = (traces) => traces[0][0]
+) {
   let fullConfig
 
   describe('service and operation naming', () => {
@@ -69,7 +75,7 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
         it(`should conform to the naming schema`, done => {
           agent
             .use(traces => {
-              const span = traces[0][0]
+              const span = selectSpan(traces)
               expect(span).to.have.property('name', expectedOpName())
               expect(span).to.have.property('service', expectedServiceName())
             })
