@@ -6,11 +6,14 @@ const { expect } = require('chai')
 const semver = require('semver')
 const nock = require('nock')
 const sinon = require('sinon')
+const { spawn } = require('child_process')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { DogStatsDClient } = require('../../dd-trace/src/dogstatsd')
-const ExternalLogger = require('../../dd-trace/src/external-logger/src')
+const { NoopExternalLogger } = require('../../dd-trace/src/external-logger/src')
 const Sampler = require('../../dd-trace/src/sampler')
+
+const tracerRequirePath = '../../dd-trace'
 
 describe('Plugin', () => {
   let openai
@@ -20,8 +23,10 @@ describe('Plugin', () => {
 
   describe('openai', () => {
     withVersions('openai', 'openai', version => {
+      const moduleRequirePath = `../../../versions/openai@${version}`
+
       beforeEach(() => {
-        require('../../dd-trace')
+        require(tracerRequirePath)
       })
 
       before(() => {
@@ -34,7 +39,7 @@ describe('Plugin', () => {
 
       beforeEach(() => {
         clock = sinon.useFakeTimers()
-        const { Configuration, OpenAIApi } = require(`../../../versions/openai@${version}`).get()
+        const { Configuration, OpenAIApi } = require(moduleRequirePath).get()
 
         const configuration = new Configuration({
           apiKey: 'sk-DATADOG-ACCEPTANCE-TESTS'
@@ -43,13 +48,27 @@ describe('Plugin', () => {
         openai = new OpenAIApi(configuration)
 
         metricStub = sinon.stub(DogStatsDClient.prototype, '_add')
-        externalLoggerStub = sinon.stub(ExternalLogger.prototype, 'log')
+        externalLoggerStub = sinon.stub(NoopExternalLogger.prototype, 'log')
         sinon.stub(Sampler.prototype, 'isSampled').returns(true)
       })
 
       afterEach(() => {
         clock.restore()
         sinon.restore()
+      })
+
+      describe('without initialization', () => {
+        it('should not error', (done) => {
+          spawn('node', ['no-init'], {
+            cwd: __dirname,
+            stdio: 'inherit',
+            env: {
+              ...process.env,
+              PATH_TO_DDTRACE: tracerRequirePath,
+              PATH_TO_OPENAI: moduleRequirePath
+            }
+          }).on('exit', done) // non-zero exit status fails test
+        })
       })
 
       describe('createCompletion()', () => {
