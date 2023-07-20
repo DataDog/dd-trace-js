@@ -14,8 +14,6 @@ describe('Serverless', () => {
   // so maybeStartServerlessMiniAgent thinks the default mini agent binary path exists
   const existsSyncStub = sinon.stub(fs, 'existsSync').returns(true)
 
-  sinon.stub(process, 'platform').value('linux') // the mini agent will only spawn in linux + windows
-
   let env
   let proxy
 
@@ -23,13 +21,12 @@ describe('Serverless', () => {
     env = process.env
     process.env = {}
     proxy = new Proxy()
-    this.originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
+    sinon.stub(process, 'platform').value('linux') // the mini agent will only spawn in linux + windows
   })
 
   afterEach(() => {
     process.env = env
     spawnStub.resetHistory()
-    Object.defineProperty(process, 'platform', this.originalPlatform)
   })
 
   it('should not spawn mini agent if not in google cloud function or azure function', () => {
