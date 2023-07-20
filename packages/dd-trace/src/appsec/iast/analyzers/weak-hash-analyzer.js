@@ -16,7 +16,10 @@ const EXCLUDED_LOCATIONS = [
   path.join('node_modules', 'redlock', 'dist', 'cjs'),
   path.join('node_modules', 'ws', 'lib', 'websocket-server.js'),
   path.join('node_modules', 'mysql2', 'lib', 'auth_41.js'),
-  path.join('node_modules', '@mikro-orm', 'core', 'utils', 'Utils.js')
+  path.join('node_modules', '@mikro-orm', 'core', 'utils', 'Utils.js'),
+  path.join('node_modules', 'mongodb', 'lib', 'core', 'connection', 'connection.js'),
+  path.join('node_modules', 'sqreen', 'lib', 'package-reader', 'index.js'),
+  path.join('node_modules', 'pusher', 'lib', 'utils.js')
 ]
 
 const EXCLUDED_PATHS_FROM_STACK = [
