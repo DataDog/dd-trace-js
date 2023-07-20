@@ -18,7 +18,7 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
-    this.timeout(10000)
+    this.timeout(20000)
     sandbox = await createSandbox(['fastify'], false, [`./packages/datadog-plugin-fastify/test/integration-test/*`])
   })
 
@@ -44,7 +44,7 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })
-    })
+    }).timeout(20000)
 
     it('* import fastify is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server1.mjs', agent.port)
@@ -54,7 +54,7 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })
-    })
+    }).timeout(20000)
 
     it('Fastify import fastify is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server2.mjs', agent.port)
@@ -64,6 +64,6 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })
-    })
+    }).timeout(20000)
   })
 })

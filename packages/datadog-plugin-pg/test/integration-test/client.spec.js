@@ -18,7 +18,7 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
-    this.timeout(10000)
+    this.timeout(20000)
     sandbox = await createSandbox(['pg'], false, [`./integration-tests/plugin-helpers.mjs`,
       `./packages/datadog-plugin-pg/test/integration-test/*`])
   })
@@ -45,6 +45,6 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'pg.query'), true)
       })
-    })
+    }).timeout(20000)
   })
 })

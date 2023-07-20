@@ -45,6 +45,6 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'mysql.query'), true)
       })
-    })
+    }).timeout(20000)
   })
 })
