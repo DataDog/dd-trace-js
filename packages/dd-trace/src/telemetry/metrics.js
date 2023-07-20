@@ -25,6 +25,10 @@ function mapToJsonArray (map) {
   return Array.from(map.values()).map(v => v.toJSON())
 }
 
+function hasPoints (metric) {
+  return metric.points.length > 0
+}
+
 class Metric {
   constructor (namespace, metric, common, tags) {
     this.namespace = namespace.toString()
@@ -172,10 +176,16 @@ class MetricsCollection extends Map {
 
   toJSON () {
     if (!this.size) return
+
+    const series = mapToJsonArray(this)
+      .filter(hasPoints)
+
+    if (!series.length) return
+
     const { namespace } = this
     return {
       namespace,
-      series: mapToJsonArray(this)
+      series
     }
   }
 }
