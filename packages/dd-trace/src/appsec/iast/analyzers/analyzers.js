@@ -1,6 +1,5 @@
 'use strict'
 
-const { NO_SQL_MONGODB_INJECTION } = require('../vulnerabilities')
 module.exports = {
   'COMMAND_INJECTION_ANALYZER': require('./command-injection-analyzer'),
   'HSTS_HEADER_MISSING_ANALYZER': require('./hsts-header-missing-analyzer'),

@@ -111,6 +111,14 @@ function getRanges (iastContext, string) {
   return result
 }
 
+function addSecureMark (iastContext, string, mark) {
+  if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
+    const transactionId = iastContext[IAST_TRANSACTION_ID]
+    return TaintedUtils.addSecureMarksToTaintedString(transactionId, string, mark)
+  }
+  return string
+}
+
 function enableTaintOperations (telemetryVerbosity) {
   if (isInfoAllowed(telemetryVerbosity)) {
     onRemoveTransaction = onRemoveTransactionInformationTelemetry
@@ -132,6 +140,7 @@ function setMaxTransactions (transactions) {
 }
 
 module.exports = {
+  addSecureMark,
   createTransaction,
   removeTransaction,
   newTaintedString,
