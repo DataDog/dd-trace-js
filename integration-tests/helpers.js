@@ -264,6 +264,7 @@ function checkSpansForServiceName (spans, name) {
 
 // TODO: add ESM support for Node 20 in import-in-the-middle
 function skipUnsupportedNodeVersions () {
+  console.log(12312312321321, 'SKIPPING TEST CUZ VERSION: ', NODE_MAJOR)
   return NODE_MAJOR >= 20
     ? global.describe.skip
     : global.describe
