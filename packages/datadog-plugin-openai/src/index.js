@@ -8,6 +8,10 @@ const services = require('./services')
 const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
 
+// String#replaceAll unavailable on Node.js@v14 (dd-trace@<=v3)
+const RE_NEWLINE = /\n/g
+const RE_TAB = /\t/g
+
 // TODO: In the future we should refactor config.js to make it requirable
 let MAX_TEXT_LEN = 128
 
@@ -85,11 +89,11 @@ class OpenApiPlugin extends TracingPlugin {
       store.prompt = prompt
       if (typeof prompt === 'string' || (Array.isArray(prompt) && typeof prompt[0] === 'number')) {
         // This is a single prompt, either String or [Number]
-        tags[`openai.request.prompt`] = normalizeStringOrTokenArray(prompt)
+        tags[`openai.request.prompt`] = normalizeStringOrTokenArray(prompt, true)
       } else if (Array.isArray(prompt)) {
         // This is multiple prompts, either [String] or [[Number]]
         for (let i = 0; i < prompt.length; i++) {
-          tags[`openai.request.prompt.${i}`] = normalizeStringOrTokenArray(prompt[i])
+          tags[`openai.request.prompt.${i}`] = normalizeStringOrTokenArray(prompt[i], true)
         }
       }
     }
@@ -559,8 +563,8 @@ function truncateText (text) {
   if (!text) return
 
   text = text
-    .replaceAll('\n', '\\n')
-    .replaceAll('\t', '\\t')
+    .replace(RE_NEWLINE, '\\n')
+    .replace(RE_TAB, '\\t')
 
   if (text.length > MAX_TEXT_LEN) {
     return text.substring(0, MAX_TEXT_LEN) + '...'
@@ -690,7 +694,7 @@ function normalizeRequestPayload (methodName, args) {
  * "foo" -> "foo"
  * [1,2,3] -> "[1, 2, 3]"
  */
-function normalizeStringOrTokenArray (input, truncate = true) {
+function normalizeStringOrTokenArray (input, truncate) {
   const normalized = Array.isArray(input)
     ? `[${input.join(', ')}]` // "[1, 2, 999]"
     : input // "foo"
