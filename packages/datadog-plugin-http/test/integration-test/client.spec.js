@@ -17,7 +17,8 @@ describe('esm', () => {
   let sandbox
 
   before(async () => {
-    sandbox = await createSandbox([], false, [`./packages/datadog-plugin-http/test/integration-test/*`])
+    sandbox = await createSandbox([], false, [`./integration-tests/plugin-helpers.mjs`,
+      `./packages/datadog-plugin-http/test/integration-test/*`])
   })
 
   after(async () => {
