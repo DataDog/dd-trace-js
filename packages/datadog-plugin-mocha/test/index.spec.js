@@ -128,7 +128,7 @@ describe('Plugin', () => {
             expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
             expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
             expect(testSpan.meta[TEST_CODE_OWNERS]).to.equal(
-              JSON.stringify(['@DataDog/dd-trace-js']) // reads from dd-trace-js
+              JSON.stringify(['@DataDog/ci-app-libraries']) // reads from dd-trace-js' CODEOWNERS
             )
             expect(testSpan.meta[LIBRARY_VERSION]).to.equal(ddTraceVersion)
             expect(testSpan.meta[COMPONENT]).to.equal('mocha')

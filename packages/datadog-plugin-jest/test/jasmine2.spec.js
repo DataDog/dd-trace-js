@@ -100,7 +100,7 @@ describeFunction('Plugin', function () {
               [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-test.js',
               [TEST_TYPE]: 'test',
               [JEST_TEST_RUNNER]: 'jest-jasmine2',
-              [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/dd-trace-js']), // reads from dd-trace-js
+              [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/ci-app-libraries']), // reads from dd-trace-js' CODEOWNERS
               [LIBRARY_VERSION]: ddTraceVersion,
               [COMPONENT]: 'jest'
             })
