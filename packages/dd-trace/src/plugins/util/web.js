@@ -477,7 +477,7 @@ function addResourceTag (context) {
 function addHeaders (context) {
   const { req, res, config, span } = context
 
-  config.headers.map(h => h.split(':')).forEach(([key, tag]) => {
+  config.headers.forEach(([key, tag]) => {
     const reqHeader = req.headers[key]
     const resHeader = res.getHeader(key)
 
@@ -512,7 +512,9 @@ function getProtocol (req) {
 function getHeadersToRecord (config) {
   if (Array.isArray(config.headers)) {
     try {
-      return config.headers.map(key => key.toLowerCase())
+      return config.headers
+        .map(h => h.split(':'))
+        .map(([key, tag]) => [key.toLowerCase(), tag])
     } catch (err) {
       log.error(err)
     }

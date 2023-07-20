@@ -116,7 +116,7 @@ function addResponseHeaders (res, span, config) {
     ? Object.fromEntries(res.headers.entries())
     : res.headers
 
-  config.headers.map(h => h.split(':')).forEach(([key, tag]) => {
+  config.headers.forEach(([key, tag]) => {
     const value = headers[key]
 
     if (value) {
@@ -130,7 +130,7 @@ function addRequestHeaders (req, span, config) {
     ? Object.fromEntries(req.headers.entries())
     : req.headers || req.getHeaders()
 
-  config.headers.map(h => h.split(':')).forEach(([key, tag]) => {
+  config.headers.forEach(([key, tag]) => {
     const value = Array.isArray(headers[key]) ? headers[key].toString() : headers[key]
 
     if (value) {
@@ -177,7 +177,8 @@ function getHeaders (config) {
 
   return config.headers
     .filter(key => typeof key === 'string')
-    .map(key => key.toLowerCase())
+    .map(h => h.split(':'))
+    .map(([key, tag]) => [key.toLowerCase(), tag])
 }
 
 function getHooks (config) {
