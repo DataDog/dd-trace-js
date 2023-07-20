@@ -12,6 +12,7 @@ const externals = require('../packages/dd-trace/test/plugins/externals')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
+// Can remove couchbase after removing support for couchbase <= 3.2.0
 const excludeList = os.arch() === 'arm64' ? ['couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const versionLists = {}
