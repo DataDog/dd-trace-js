@@ -18,8 +18,8 @@ describe('esm', () => {
   let sandbox
 
   before(async () => {
-    sandbox = await createSandbox(['pg'], false, [`./integration-tests/plugin-helpers.mjs`,
-      `./packages/datadog-plugin-pg/test/integration-test/*`])
+    sandbox = await createSandbox(['mysql'], false, [`./integration-tests/plugin-helpers.mjs`,
+      `./packages/datadog-plugin-mysql/test/integration-test/*`])
   })
 
   after(async () => {
@@ -35,14 +35,14 @@ describe('esm', () => {
     await agent.stop()
   })
 
-  context('pg', () => {
+  context('mysql', () => {
     it('is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'pg.query'), true)
+        assert.strictEqual(checkSpansForServiceName(payload, 'mysql.query'), true)
       })
     })
   })

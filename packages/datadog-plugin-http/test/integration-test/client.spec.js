@@ -2,31 +2,22 @@
 
 const {
   FakeAgent,
-  spawnProc,
   createSandbox,
-  curlAndAssertMessage
+  curlAndAssertMessage,
+  skipUnsupportedNodeVersions,
+  spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const path = require('path')
 const { assert } = require('chai')
 
-const NODE_MAJOR = parseInt(process.versions.node.split('.')[0])
-
-const hookFile = 'dd-trace/loader-hook.mjs'
-
-// TODO: add ESM support for Node 20 in import-in-the-middle
-const describe = NODE_MAJOR >= 20
-  ? global.describe.skip
-  : global.describe
+const describe = skipUnsupportedNodeVersions()
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
-  let cwd
 
   before(async () => {
-    sandbox = await createSandbox([], false, `./packages/datadog-plugin-http/test/integration-test/*`)
-    cwd = sandbox.folder
+    sandbox = await createSandbox([], false, [`./packages/datadog-plugin-http/test/integration-test/*`])
   })
 
   after(async () => {
@@ -44,13 +35,8 @@ describe('esm', () => {
 
   context('http', () => {
     it('is instrumented', async () => {
-      proc = await spawnProc(path.join(cwd, 'server.mjs'), {
-        cwd,
-        env: {
-          NODE_OPTIONS: `--loader=${hookFile}`,
-          AGENT_PORT: agent.port
-        }
-      })
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
