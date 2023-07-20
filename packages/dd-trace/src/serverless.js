@@ -1,24 +1,13 @@
 'use strict'
 
-function maybeStartServerlessMiniAgent (config) {
-  const log = require('./log')
+const log = require('./log')
 
-  let rustBinaryPath
-  if (process.env.DD_MINI_AGENT_PATH !== undefined) {
-    rustBinaryPath = process.env.DD_MINI_AGENT_PATH
-  } else {
-    if (process.platform !== 'win32' && process.platform !== 'linux') {
-      log.error(`Serverless Mini Agent is only supported on Windows and Linux.`)
-      return
-    }
-    const rustBinaryPathRoot = config.isGCPFunction ? '/workspace' : '/home/site/wwwroot'
-    const rustBinaryPathOsFolder =
-      process.platform === 'win32' ? 'datadog-serverless-agent-windows-amd64' : 'datadog-serverless-agent-linux-amd64'
-    rustBinaryPath =
-      `${rustBinaryPathRoot}/node_modules/@datadog/sma/${rustBinaryPathOsFolder}/datadog-serverless-trace-mini-agent`
-  }
+function maybeStartServerlessMiniAgent (config) {
+  const rustBinaryPath = getRustBinaryPath(config)
 
   const fs = require('fs')
+
+  log.debug(`Trying to spawn the Serverless Mini Agent at path: ${rustBinaryPath}`)
 
   // trying to spawn with an invalid path will return a non-descriptive error, so we want to catch
   // invalid paths and log our own error.
@@ -31,6 +20,31 @@ function maybeStartServerlessMiniAgent (config) {
   } catch (err) {
     log.error(`Error spawning mini agent process: ${err}`)
   }
+}
+
+function getRustBinaryPath (config) {
+  let rustBinaryPath
+
+  if (process.env.DD_MINI_AGENT_PATH !== undefined) {
+    rustBinaryPath = process.env.DD_MINI_AGENT_PATH
+  } else {
+    if (process.platform !== 'win32' && process.platform !== 'linux') {
+      log.error(`Serverless Mini Agent is only supported on Windows and Linux.`)
+      return
+    }
+
+    const rustBinaryPathRoot = config.isGCPFunction ? '/workspace' : '/home/site/wwwroot'
+    const rustBinaryPathOsFolder = process.platform === 'win32'
+      ? 'datadog-serverless-agent-windows-amd64' : 'datadog-serverless-agent-linux-amd64'
+
+    const rustBinaryExtension = process.platform === 'win32' ? '.exe' : ''
+
+    rustBinaryPath =
+      `${rustBinaryPathRoot}/node_modules/@datadog/sma/${rustBinaryPathOsFolder}/\
+datadog-serverless-trace-mini-agent${rustBinaryExtension}`
+  }
+
+  return rustBinaryPath
 }
 
 function getIsGCPFunction () {
@@ -49,4 +63,9 @@ function getIsAzureFunctionConsumptionPlan () {
   return isAzureFunction && isConsumptionPlan
 }
 
-module.exports = { maybeStartServerlessMiniAgent, getIsGCPFunction, getIsAzureFunctionConsumptionPlan }
+module.exports = {
+  maybeStartServerlessMiniAgent,
+  getIsGCPFunction,
+  getIsAzureFunctionConsumptionPlan,
+  getRustBinaryPath
+}

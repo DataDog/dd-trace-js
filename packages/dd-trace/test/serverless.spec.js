@@ -3,6 +3,7 @@
 const fs = require('fs')
 const log = require('../src/log')
 const Proxy = require('../src/proxy')
+const { getRustBinaryPath } = require('../src/serverless')
 const childProcess = require('child_process')
 
 require('./setup/tap')
@@ -22,11 +23,13 @@ describe('Serverless', () => {
     env = process.env
     process.env = {}
     proxy = new Proxy()
+    this.originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
   })
 
   afterEach(() => {
     process.env = env
     spawnStub.resetHistory()
+    Object.defineProperty(process, 'platform', this.originalPlatform)
   })
 
   it('should not spawn mini agent if not in google cloud function or azure function', () => {
@@ -100,5 +103,55 @@ describe('Serverless', () => {
       'Serverless Mini Agent did not start. Could not find mini agent binary.'
     )
     existsSyncStub.returns(true)
+  })
+
+  it('should use correct rust binary path in GCP Functions', () => {
+    const config = {
+      isGCPFunction: true
+    }
+
+    Object.defineProperty(process, 'platform', {
+      value: 'linux'
+    })
+
+    const path = getRustBinaryPath(config)
+
+    expect(path).to.be.equal(
+      '/workspace/node_modules/@datadog/sma/datadog-serverless-agent-linux-amd64/datadog-serverless-trace-mini-agent'
+    )
+  })
+
+  it('should use correct rust binary path in Azure Linux Functions (Consumption Plan)', () => {
+    const config = {
+      isGCPFunction: false
+    }
+
+    Object.defineProperty(process, 'platform', {
+      value: 'linux'
+    })
+
+    const path = getRustBinaryPath(config)
+
+    expect(path).to.be.equal(
+      `/home/site/wwwroot/node_modules/@datadog/sma/\
+datadog-serverless-agent-linux-amd64/datadog-serverless-trace-mini-agent`
+    )
+  })
+
+  it('should use correct rust binary path in Azure Windows Functions (Consumption Plan)', () => {
+    const config = {
+      isGCPFunction: false
+    }
+
+    Object.defineProperty(process, 'platform', {
+      value: 'win32'
+    })
+
+    const path = getRustBinaryPath(config)
+
+    expect(path).to.be.equal(
+      `/home/site/wwwroot/node_modules/@datadog/sma/\
+datadog-serverless-agent-windows-amd64/datadog-serverless-trace-mini-agent.exe`
+    )
   })
 })
