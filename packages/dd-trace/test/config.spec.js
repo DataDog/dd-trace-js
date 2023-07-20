@@ -93,7 +93,7 @@ describe('Config', () => {
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
     expect(config).to.have.property('spanComputePeerService', false)
-    expect(config).to.have.property('traceRemoveIntegrationServiceNamesEnabled', false)
+    expect(config).to.have.property('spanRemoveIntegrationFromService', false)
     expect(config).to.have.deep.property('serviceMapping', {})
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext'])
@@ -195,6 +195,8 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
+    process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
+    process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'true'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = true
     process.env.DD_APPSEC_ENABLED = 'true'
     process.env.DD_APPSEC_RULES = RULES_JSON_PATH
@@ -237,6 +239,8 @@ describe('Config', () => {
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v1')
+    expect(config).to.have.property('spanRemoveIntegrationFromService', true)
+    expect(config).to.have.property('spanComputePeerService', true)
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
     expect(config).to.have.deep.nested.property('sampler', {
@@ -372,6 +376,12 @@ describe('Config', () => {
         { service: 'mysql', sampleRate: 1.0 },
         { sampleRate: 0.1 }
       ],
+      spanAttributeSchema: 'v1',
+      spanComputePeerService: true,
+      spanRemoveIntegrationFromService: true,
+      peerServiceMapping: {
+        d: 'dd'
+      },
       serviceMapping: {
         a: 'aa',
         b: 'bb'
@@ -437,6 +447,9 @@ describe('Config', () => {
     expect(config).to.have.property('logLevel', logLevel)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
+    expect(config).to.have.property('spanRemoveIntegrationFromService', true)
+    expect(config).to.have.property('spanComputePeerService', true)
+    expect(config).to.have.deep.property('peerServiceMapping', { d: 'dd' })
     expect(config).to.have.property('tags')
     expect(config.tags).to.have.property('foo', 'bar')
     expect(config.tags).to.have.property('runtime-id')
@@ -536,11 +549,50 @@ describe('Config', () => {
   it('should warn if defaulting to v0 span attribute schema', () => {
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'foo'
 
-    // eslint-disable-next-line no-new
     const config = new Config()
 
     expect(log.warn).to.have.been.calledWith('Unexpected input for config.spanAttributeSchema, picked default v0')
     expect(config).to.have.property('spanAttributeSchema', 'v0')
+  })
+
+  context('peer service tagging', () => {
+    it('should activate peer service only if explicitly true in v0', () => {
+      process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v0'
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
+      let config = new Config()
+      expect(config).to.have.property('spanComputePeerService', true)
+
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'foo'
+      config = new Config()
+      expect(config).to.have.property('spanComputePeerService', false)
+
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
+      config = new Config()
+      expect(config).to.have.property('spanComputePeerService', false)
+
+      delete process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+      config = new Config()
+      expect(config).to.have.property('spanComputePeerService', false)
+    })
+
+    it('should activate peer service in v1 unless explicitly false', () => {
+      process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
+      let config = new Config()
+      expect(config).to.have.property('spanComputePeerService', false)
+
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'foo'
+      config = new Config()
+      expect(config).to.have.property('spanComputePeerService', true)
+
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
+      config = new Config()
+      expect(config).to.have.property('spanComputePeerService', true)
+
+      delete process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+      config = new Config()
+      expect(config).to.have.property('spanComputePeerService', true)
+    })
   })
 
   it('should give priority to the common agent environment variable', () => {
@@ -572,6 +624,9 @@ describe('Config', () => {
     process.env.DD_ENV = 'test'
     process.env.DD_API_KEY = '123'
     process.env.DD_APP_KEY = '456'
+    process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v0'
+    process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
+    process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'false'
     process.env.DD_TRACE_CLIENT_IP_ENABLED = 'false'
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'foo-bar-header'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
@@ -620,6 +675,9 @@ describe('Config', () => {
       serviceMapping: {
         b: 'bb'
       },
+      spanAttributeSchema: 'v1',
+      spanComputePeerService: true,
+      spanRemoveIntegrationFromService: true,
       peerServiceMapping: {
         d: 'dd'
       },
@@ -677,6 +735,9 @@ describe('Config', () => {
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
+    expect(config).to.have.property('spanAttributeSchema', 'v1')
+    expect(config).to.have.property('spanRemoveIntegrationFromService', true)
+    expect(config).to.have.property('spanComputePeerService', true)
     expect(config).to.have.deep.property('peerServiceMapping', { d: 'dd' })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', [])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', [])
