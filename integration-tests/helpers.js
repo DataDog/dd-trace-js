@@ -17,9 +17,9 @@ const path = require('path')
 const rimraf = promisify(require('rimraf'))
 const id = require('../packages/dd-trace/src/id')
 const upload = require('multer')()
+const version = require('../version.js')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
-const NODE_MAJOR = parseInt(process.versions.node.split('.')[0])
 
 class FakeAgent extends EventEmitter {
   constructor (port = 0) {
@@ -264,7 +264,7 @@ function checkSpansForServiceName (spans, name) {
 
 // TODO: add ESM support for Node 20 in import-in-the-middle
 function skipUnsupportedNodeVersions () {
-  return NODE_MAJOR >= 20
+  return version.NODE_MAJOR >= 20
     ? global.describe.skip
     : global.describe
 }
