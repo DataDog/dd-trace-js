@@ -160,7 +160,7 @@ function wrapV3Query (query) {
 }
 
 // semver >=2 <3
-addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Bucket => {
+addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Bucket => {
   const startCh = channel('apm:couchbase:query:start')
   const finishCh = channel('apm:couchbase:query:finish')
   const errorCh = channel('apm:couchbase:query:error')
@@ -208,7 +208,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.5'] }, Buck
   return Bucket
 })
 
-addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Cluster => {
+addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cluster => {
   Cluster.prototype._maybeInvoke = wrapMaybeInvoke(Cluster.prototype._maybeInvoke)
   Cluster.prototype.query = wrapQuery(Cluster.prototype.query)
 
@@ -217,7 +217,7 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.5'] }, Clu
 
 // semver >=3 <3.2.0
 
-addHook({ name: 'couchbase', file: 'lib/collection.js', versions: ['>=3.0.0 <3.2.0'] }, Collection => {
+addHook({ name: 'couchbase', file: 'lib/collection.js', versions: ['^3.0.7', '^3.1.3'] }, Collection => {
   wrapAllNames(['upsert', 'insert', 'replace'], name => {
     shimmer.wrap(Collection.prototype, name, wrapWithName(name))
   })
@@ -225,7 +225,7 @@ addHook({ name: 'couchbase', file: 'lib/collection.js', versions: ['>=3.0.0 <3.2
   return Collection
 })
 
-addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['>=3.0.0 <3.2.0'] }, Cluster => {
+addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^3.0.7', '^3.1.3'] }, Cluster => {
   shimmer.wrap(Cluster.prototype, 'query', wrapV3Query)
   return Cluster
 })
