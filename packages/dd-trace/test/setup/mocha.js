@@ -86,7 +86,7 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName, 
         Nomenclature.configure({
           spanAttributeSchema: 'v0',
           service: fullConfig.service,
-          traceRemoveIntegrationServiceNamesEnabled: true
+          spanRemoveIntegrationFromService: true
         })
       })
       after(() => {
