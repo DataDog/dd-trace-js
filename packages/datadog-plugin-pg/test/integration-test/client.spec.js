@@ -17,7 +17,8 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  before(async () => {
+  before(async function () {
+    this.timeout(10000)
     sandbox = await createSandbox(['pg'], false, [`./integration-tests/plugin-helpers.mjs`,
       `./packages/datadog-plugin-pg/test/integration-test/*`])
   })

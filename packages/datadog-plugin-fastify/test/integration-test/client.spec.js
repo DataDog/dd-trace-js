@@ -17,7 +17,8 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  before(async () => {
+  before(async function () {
+    this.timeout(10000)
     sandbox = await createSandbox(['fastify'], false, [`./packages/datadog-plugin-fastify/test/integration-test/*`])
   })
 

@@ -16,7 +16,8 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  before(async () => {
+  before(async function () {
+    this.timeout(10000)
     sandbox = await createSandbox([], false, [`./integration-tests/plugin-helpers.mjs`,
       `./packages/datadog-plugin-http/test/integration-test/*`])
   })

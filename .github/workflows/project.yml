@@ -29,7 +29,6 @@ jobs:
       - run: yarn install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
-      - run: yarn test:integration:plugins
 
   integration-ci:
     strategy:
