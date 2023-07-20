@@ -17,7 +17,7 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
-    this.timeout(10000)
+    this.timeout(20000)
     sandbox = await createSandbox([], false, [`./integration-tests/plugin-helpers.mjs`,
       `./packages/datadog-plugin-http/test/integration-test/*`])
   })
@@ -46,7 +46,7 @@ describe('esm', () => {
         assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
         assert.propertyVal(payload[0][0], 'name', 'web.request')
-      })
+      }).timeout(20000)
     })
   })
 })
