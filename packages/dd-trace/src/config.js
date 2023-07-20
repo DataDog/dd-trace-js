@@ -321,7 +321,10 @@ class Config {
       false
     )
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
-      process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+      coalesce(
+        options.spanAttributeSchema,
+        process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+      )
     )
     const DD_TRACE_PEER_SERVICE_MAPPING = coalesce(
       options.peerServiceMapping,
@@ -329,11 +332,27 @@ class Config {
         process.env.DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ) : {}
     )
-    const DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+
+    const peerServiceSet = (
+      options.hasOwnProperty('spanComputePeerService') ||
+      process.env.hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
+    )
+    const peerServiceValue = coalesce(
+      options.spanComputePeerService,
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+    )
+
+    const DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = (
+      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA === 'v0'
+        // In v0, peer service is computed only if it is explicitly set to true
+        ? peerServiceSet && isTrue(peerServiceValue)
+        // In >v0, peer service is false only if it is explicitly set to false
+        : (peerServiceSet ? !isFalse(peerServiceValue) : true)
+    )
 
     const DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = coalesce(
-      isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED),
-      false
+      options.spanRemoveIntegrationFromService,
+      isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
     )
     const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
       process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
@@ -565,11 +584,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       exporters: DD_PROFILING_EXPORTERS
     }
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
-    this.spanComputePeerService = (this.spanAttributeSchema === 'v0'
-      ? isTrue(DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED)
-      : true
-    )
-    this.traceRemoveIntegrationServiceNamesEnabled = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+    this.spanComputePeerService = DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+    this.spanRemoveIntegrationFromService = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
     this.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
