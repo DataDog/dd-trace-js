@@ -34,7 +34,6 @@ describe('Serverless', () => {
 
   it('should not spawn mini agent if not in google cloud function or azure function', () => {
     // do not set any GCP or Azure environment variables
-
     proxy.init()
 
     expect(spawnStub).to.not.have.been.called
@@ -106,15 +105,9 @@ describe('Serverless', () => {
   })
 
   it('should use correct rust binary path in GCP Functions', () => {
-    const config = {
+    const path = getRustBinaryPath({
       isGCPFunction: true
-    }
-
-    Object.defineProperty(process, 'platform', {
-      value: 'linux'
     })
-
-    const path = getRustBinaryPath(config)
 
     expect(path).to.be.equal(
       '/workspace/node_modules/@datadog/sma/datadog-serverless-agent-linux-amd64/datadog-serverless-trace-mini-agent'
@@ -122,15 +115,9 @@ describe('Serverless', () => {
   })
 
   it('should use correct rust binary path in Azure Linux Functions (Consumption Plan)', () => {
-    const config = {
+    const path = getRustBinaryPath({
       isGCPFunction: false
-    }
-
-    Object.defineProperty(process, 'platform', {
-      value: 'linux'
     })
-
-    const path = getRustBinaryPath(config)
 
     expect(path).to.be.equal(
       `/home/site/wwwroot/node_modules/@datadog/sma/\
@@ -139,15 +126,11 @@ datadog-serverless-agent-linux-amd64/datadog-serverless-trace-mini-agent`
   })
 
   it('should use correct rust binary path in Azure Windows Functions (Consumption Plan)', () => {
-    const config = {
+    sinon.stub(process, 'platform').value('win32')
+
+    const path = getRustBinaryPath({
       isGCPFunction: false
-    }
-
-    Object.defineProperty(process, 'platform', {
-      value: 'win32'
     })
-
-    const path = getRustBinaryPath(config)
 
     expect(path).to.be.equal(
       `/home/site/wwwroot/node_modules/@datadog/sma/\
