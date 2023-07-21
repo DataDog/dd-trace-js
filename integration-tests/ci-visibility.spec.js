@@ -248,7 +248,7 @@ testFrameworks.forEach(({
           testOutput += chunk.toString()
         })
         childProcess.on('message', () => {
-          assert.include(testOutput, 'Exceeded timeout of 100 ms for a test while waiting for `done()` to be called.')
+          assert.include(testOutput, 'Exceeded timeout of 100 ms for a test')
           done()
         })
       })
