@@ -1,6 +1,6 @@
 const { resolveNaming } = require('../../dd-trace/test/plugins/helpers')
 
-module.exports = resolveNaming({
+const rawExpectedSchema = {
   outbound: {
     v0: {
       opName: 'elasticsearch.query',
@@ -11,4 +11,9 @@ module.exports = resolveNaming({
       serviceName: 'test'
     }
   }
-})
+}
+
+module.exports = {
+  rawExpectedSchema: rawExpectedSchema,
+  expectedSchema: resolveNaming(rawExpectedSchema)
+}

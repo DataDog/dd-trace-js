@@ -3,7 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const namingSchema = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let opensearch
@@ -57,8 +57,8 @@ describe('Plugin', () => {
         it('should set the correct tags', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0].meta).to.have.property('db.type', 'opensearch')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('opensearch.method', 'POST')
@@ -88,8 +88,8 @@ describe('Plugin', () => {
         it('should set the correct tags on msearch', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0].meta).to.have.property('db.type', 'opensearch')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('opensearch.method', 'POST')
@@ -137,8 +137,8 @@ describe('Plugin', () => {
         it('should do automatic instrumentation', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'HEAD /')
               expect(traces[0][0]).to.have.property('type', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('component', 'opensearch')
@@ -198,8 +198,8 @@ describe('Plugin', () => {
         it('should work with userland promises', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'HEAD /')
               expect(traces[0][0]).to.have.property('type', 'elasticsearch')
             })
@@ -213,9 +213,7 @@ describe('Plugin', () => {
 
         withNamingSchema(
           () => client.search({ index: 'logstash-2000.01.01', body: {} }),
-          () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName,
-          'test'
+          rawExpectedSchema.outbound
         )
       })
 
@@ -272,7 +270,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', 'custom')
               expect(traces[0][0].meta).to.have.property('opensearch.params', 'foo')
               expect(traces[0][0].meta).to.have.property('opensearch.method', 'POST')
@@ -286,9 +284,16 @@ describe('Plugin', () => {
 
         withNamingSchema(
           () => client.search({ index: 'logstash-2000.01.01', body: {} }),
-          () => namingSchema.outbound.opName,
-          () => 'custom',
-          'custom'
+          {
+            v0: {
+              opName: 'opensearch.query',
+              serviceName: 'custom'
+            },
+            v1: {
+              opName: 'opensearch.query',
+              serviceName: 'custom'
+            }
+          }
         )
       })
     })

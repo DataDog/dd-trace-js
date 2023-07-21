@@ -1,6 +1,6 @@
 const { resolveNaming } = require('../../dd-trace/test/plugins/helpers')
 
-module.exports = resolveNaming({
+const rawExpectedSchema = {
   server: {
     v0: {
       opName: 'graphql.execute',
@@ -11,4 +11,9 @@ module.exports = resolveNaming({
       serviceName: 'test'
     }
   }
-})
+}
+
+module.exports = {
+  rawExpectedSchema,
+  expectedSchema: resolveNaming(rawExpectedSchema)
+}
