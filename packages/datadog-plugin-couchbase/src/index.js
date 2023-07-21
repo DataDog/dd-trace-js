@@ -1,36 +1,39 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const StoragePlugin = require('../../dd-trace/src/plugins/storage')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-class CouchBasePlugin extends Plugin {
+class CouchBasePlugin extends StoragePlugin {
   static get id () {
     return 'couchbase'
   }
 
-  addSubs (func, start, finish = defaultFinish) {
+  addSubs (func, start) {
     this.addSub(`apm:couchbase:${func}:start`, start)
-    this.addSub(`apm:couchbase:${func}:error`, this.addError)
-    this.addSub(`apm:couchbase:${func}:finish`, finish)
+    this.addSub(`apm:couchbase:${func}:error`, error => this.addError(error))
+    this.addSub(`apm:couchbase:${func}:finish`, message => this.finish(message))
   }
 
   startSpan (operation, customTags, store, { bucket, collection }) {
     const tags = {
       'db.type': 'couchbase',
       'component': 'couchbase',
-      'service.name': this.config.service || `${this.tracer._service}-couchbase`,
+      'service.name': this.serviceName({ pluginConfig: this.config }),
       'resource.name': `couchbase.${operation}`,
-      'span.kind': 'client'
+      'span.kind': this.constructor.kind
     }
 
     for (const tag in customTags) {
       tags[tag] = customTags[tag]
     }
-    const span = this.tracer.startSpan(`couchbase.${operation}`, {
-      childOf: store ? store.span : null,
-      tags
-    })
+    const span = this.tracer.startSpan(
+      this.operationName({ operation }),
+      {
+        childOf: store ? store.span : null,
+        tags
+      }
+    )
 
     if (bucket) span.setTag(`couchbase.bucket.name`, bucket.name)
     if (collection) span.setTag(`couchbase.collection.name`, collection.name)
@@ -62,10 +65,6 @@ class CouchBasePlugin extends Plugin {
       this.enter(span, store)
     })
   }
-}
-
-function defaultFinish () {
-  storage.getStore().span.finish()
 }
 
 module.exports = CouchBasePlugin

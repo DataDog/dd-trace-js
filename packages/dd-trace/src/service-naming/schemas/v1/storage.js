@@ -26,6 +26,10 @@ const storage = {
       opName: () => 'cassandra.query',
       serviceName: configWithFallback
     },
+    couchbase: {
+      opName: () => 'couchbase.query',
+      serviceName: configWithFallback
+    },
     elasticsearch: {
       opName: () => 'elasticsearch.query',
       serviceName: configWithFallback
