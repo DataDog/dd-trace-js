@@ -51,7 +51,7 @@ class HttpClientPlugin extends ClientPlugin {
       metrics: {
         [CLIENT_PORT_KEY]: parseInt(options.port)
       }
-    })
+    }, false)
 
     // TODO: Figure out a better way to do this for any span.
     if (!allowed) {
