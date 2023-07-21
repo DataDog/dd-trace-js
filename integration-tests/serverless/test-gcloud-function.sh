@@ -28,7 +28,10 @@ DEPLOY_OUTPUT=$(gcloud functions deploy dd-trace-js-sls-mini-agent-integration-t
     --allow-unauthenticated \
     --env-vars-file "${SERVERLESS_INTEGRATION_DIR_PATH}/test-project/.env.yaml")
 
-INVOKE_URL=$(echo "$DEPLOY_OUTPUT" | awk 'END {print $NF}')
+INVOKE_URL=$(echo "$DEPLOY_OUTPUT" | awk -F'uri: ' '{print $2}' | xargs)
+
+echo "Waiting 10 seconds before invoking cloud function"
+sleep 10
 
 echo "Calling deployed cloud function"
 
