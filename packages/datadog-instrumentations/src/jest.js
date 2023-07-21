@@ -419,7 +419,12 @@ addHook({
 
   transformPackage.createScriptTransformer = async function (config) {
     const { testEnvironmentOptions, ...restOfConfig } = config
-    const { _ddTestModuleId, _ddTestSessionId, _ddTestCommand, ...restOfTestEnvironmentOptions } = testEnvironmentOptions
+    const {
+      _ddTestModuleId,
+      _ddTestSessionId,
+      _ddTestCommand,
+      ...restOfTestEnvironmentOptions
+    } = testEnvironmentOptions
 
     restOfConfig.testEnvironmentOptions = restOfTestEnvironmentOptions
 
