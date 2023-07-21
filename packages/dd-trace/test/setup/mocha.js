@@ -77,7 +77,6 @@ function withNamingSchema (
 
         beforeEach(async () => {
           await new Promise(resolve => setTimeout(resolve, 30))
-          console.log(expected[versionName].serviceName)
           global.testAgentServiceName = expected[versionName].serviceName
           global.schemaVersionName = versionName
         })
