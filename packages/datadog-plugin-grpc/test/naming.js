@@ -1,7 +1,7 @@
 const { resolveNaming } = require('../../dd-trace/test/plugins/helpers')
 const { DD_MAJOR } = require('../../../version')
 
-module.exports = resolveNaming({
+const rawExpectedSchema = {
   client: {
     v0: {
       opName: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
@@ -22,4 +22,9 @@ module.exports = resolveNaming({
       serviceName: 'test'
     }
   }
-})
+}
+
+module.exports = {
+  rawExpectedSchema: rawExpectedSchema,
+  expectedSchema: resolveNaming(rawExpectedSchema)
+}

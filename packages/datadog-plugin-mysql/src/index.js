@@ -8,7 +8,7 @@ class MySQLPlugin extends DatabasePlugin {
   static get system () { return 'mysql' }
 
   start (payload) {
-    const service = this.serviceName(this.config, payload.conf, this.system)
+    const service = this.serviceName({ pluginConfig: this.config, dbConfig: payload.conf, system: this.system })
     this.startSpan(this.operationName(), {
       service,
       resource: payload.sql,
