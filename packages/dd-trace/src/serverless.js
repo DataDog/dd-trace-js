@@ -3,6 +3,11 @@
 const log = require('./log')
 
 function maybeStartServerlessMiniAgent (config) {
+  if (process.platform !== 'win32' && process.platform !== 'linux') {
+    log.error(`Serverless Mini Agent is only supported on Windows and Linux.`)
+    return
+  }
+
   const rustBinaryPath = getRustBinaryPath(config)
 
   const fs = require('fs')
@@ -25,11 +30,6 @@ function maybeStartServerlessMiniAgent (config) {
 function getRustBinaryPath (config) {
   if (process.env.DD_MINI_AGENT_PATH !== undefined) {
     return process.env.DD_MINI_AGENT_PATH
-  }
-
-  if (process.platform !== 'win32' && process.platform !== 'linux') {
-    log.error(`Serverless Mini Agent is only supported on Windows and Linux.`)
-    return
   }
 
   const rustBinaryPathRoot = config.isGCPFunction ? '/workspace' : '/home/site/wwwroot'
