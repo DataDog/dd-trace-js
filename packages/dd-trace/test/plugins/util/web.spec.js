@@ -90,7 +90,7 @@ describe('plugins/util/web', () => {
         }
       })
 
-      expect(config.headers).to.include('test')
+      expect(config.headers).to.deep.equal([['test', undefined]])
       expect(config.validateStatus(200)).to.equal(false)
       expect(config).to.have.property('hooks')
       expect(config.hooks.request()).to.equal('test')
@@ -253,6 +253,7 @@ describe('plugins/util/web', () => {
         req.headers['req'] = 'incoming'
         req.headers['res'] = 'outgoing'
         config.headers = ['host', 'req:http.req', 'server', 'res:http.res']
+        config = web.normalizeConfig(config)
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
           const tags = span.context()._tags
