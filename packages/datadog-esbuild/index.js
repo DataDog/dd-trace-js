@@ -65,53 +65,59 @@ module.exports.name = 'datadog-esbuild'
 
 module.exports.setup = function (build) {
   build.onResolve({ filter: /.*/ }, args => {
+    /*
+    args = {
+      path: './generic-transformers',
+      importer: '/Users/thomas.hunter/Projects/client-repro/APMS-9740/node_modules/@redis/client/dist/lib/commands/ZPOPMIN_COUNT.js',
+      namespace: 'file',
+      resolveDir: '/Users/thomas.hunter/Projects/client-repro/APMS-9740/node_modules/@redis/client/dist/lib/commands',
+      kind: 'require-call',
+      pluginData: undefined
+    }
+    */
     const fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
     const extracted = extractPackageAndModulePath(fullPathToModule)
     if (extracted.pkg) {
       console.log(extracted.pkg, extracted.path)
     }
-/*
-{
-  path: './generic-transformers',
-  importer: '/Users/thomas.hunter/Projects/client-repro/APMS-9740/node_modules/@redis/client/dist/lib/commands/ZPOPMIN_COUNT.js',
-  namespace: 'file',
-  resolveDir: '/Users/thomas.hunter/Projects/client-repro/APMS-9740/node_modules/@redis/client/dist/lib/commands',
-  kind: 'require-call',
-  pluginData: undefined
-}
-*/
     const packageName = args.path
 
+    const internal = builtins.has(args.path)
+
     if (args.namespace === 'file' && (modulesOfInterest.has(packageName) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))) {
-      console.log('MATCH', packageName, `${extracted.pkg}/${extracted.path}`)
+      console.log('MATCH', packageName, `${extracted.pkg} :: ${extracted.path}`)
       // The file namespace is used when requiring files from disk in userland
 
       let pathToPackageJson
+      // TODO: looks like we're trying to find package.json files for deeply nested modules
       try {
-        pathToPackageJson = require.resolve(`${packageName}/package.json`, { paths: [ args.resolveDir ] })
+        pathToPackageJson = require.resolve(`${extracted.pkg}/package.json`, { paths: [ args.resolveDir ] })
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
-          console.warn(`Unable to open "${packageName}/package.json". Is the "${packageName}" package dead code?`)
+          console.warn(`Unable to open "${extracted.pkg}/package.json". Is the "${extracted.pkg}" package dead code?`)
           return
         } else {
           throw err
         }
       }
 
-      const pkg = require(pathToPackageJson)
+      const packageJson = require(pathToPackageJson)
 
       if (DEBUG) {
-        console.log(`resolve ${packageName}@${pkg.version}`)
+        console.log(`resolve ${packageName}@${packageJson.version}`)
       }
 
       // https://esbuild.github.io/plugins/#on-resolve-arguments
       return {
-        path: packageName,
+        path: fullPathToModule,
         namespace: NAMESPACE,
         pluginData: {
-          version: pkg.version,
-          packageName: extracted.pkg,
-          packagePath: extracted.path
+          version: packageJson.version,
+          pkg: extracted.pkg,
+          path: extracted.path,
+          full: fullPathToModule,
+          raw: packageName,
+          internal
         }
       }
     } else if (args.namespace === NAMESPACE) {
@@ -128,23 +134,30 @@ module.exports.setup = function (build) {
   })
 
   build.onLoad({ filter: /.*/, namespace: NAMESPACE }, args => {
+    const data = args.pluginData
+    const path = args.path
+
     if (DEBUG) {
-      console.log(`LOAD ${args.path}@${args.pluginData.version}, pkg "${args.pluginData.pkg}", path "${args.pluginData.path}"`)
+      console.log(`LOAD ${args.path}@${data.version}, pkg "${data.path}"`)
+      // console.log(data)
     }
 
-    console.log('CHAN', DC_CHANNEL + ':' + args.path)
+    const channelName = DC_CHANNEL + ':' + (data.raw === data.pkg ? data.raw : data.pkg + ':' + data.path)
+    console.log('CHAN', channelName) // TODO getting pkg:index.js instead of pkg
+    // TODO: We'll need channels for deep paths too
+    // TODO: express just stopped working even though the channel names all appear fine
 
     // JSON.stringify adds double quotes. For perf gain could simply add in quotes when we know it's safe.
     const contents = `
       const dc = require('diagnostics_channel');
-      const ch = dc.channel(${JSON.stringify(DC_CHANNEL + ':' + args.path)});
-      const mod = require(${JSON.stringify(args.path)});
+      const ch = dc.channel(${JSON.stringify(channelName)});
+      const mod = require(${JSON.stringify(path)});
       const payload = {
         module: mod,
-        path: ${JSON.stringify(args.path)},
-        version: ${JSON.stringify(args.pluginData.version)}
+        path: ${JSON.stringify(path)},
+        version: ${JSON.stringify(data.version)}
       };
-      console.log('emit channel', ${JSON.stringify(DC_CHANNEL + ':' + args.path)});
+      console.log('emit channel', ${JSON.stringify(channelName)});
       ch.publish(payload);
       payload.module.__datadog = true;
       module.exports = payload.module;

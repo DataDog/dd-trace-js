@@ -40,6 +40,7 @@ function DcitmHook (moduleNames, options, onrequire) {
     payload.module = onrequire(payload.module, payload.path, undefined, payload.version)
   }
 
+  // TODO: need to iterate through addHook module/path combos, not just the module name
   for (const moduleName of moduleNames) {
     // dc.channel(`${CHANNEL_PREFIX}:${moduleName}`).subscribe(onModuleLoad)
     console.log(`subscribe ${CHANNEL_PREFIX}:${moduleName}`)
