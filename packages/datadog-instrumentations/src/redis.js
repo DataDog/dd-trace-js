@@ -67,28 +67,33 @@ function wrapCreateClient (request) {
 }
 
 addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1'] }, redis => {
+  console.log({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1'] })
   redis.default = wrapCommandQueueClass(redis.default)
   shimmer.wrap(redis.default.prototype, 'addCommand', wrapAddCommand)
   return redis
 })
 
 addHook({ name: '@node-redis/client', file: 'dist/lib/client/index.js', versions: ['>=1'] }, redis => {
+  console.log({ name: '@node-redis/client', file: 'dist/lib/client/index.js', versions: ['>=1'] })
   shimmer.wrap(redis.default, 'create', wrapCreateClient)
   return redis
 })
 
 addHook({ name: '@redis/client', file: 'dist/lib/client/index.js', versions: ['>=1.1'] }, redis => {
+  console.log({ name: '@redis/client', file: 'dist/lib/client/index.js', versions: ['>=1.1'] })
   shimmer.wrap(redis.default, 'create', wrapCreateClient)
   return redis
 })
 
 addHook({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1.1'] }, redis => {
+  console.log({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1.1'] })
   redis.default = wrapCommandQueueClass(redis.default)
   shimmer.wrap(redis.default.prototype, 'addCommand', wrapAddCommand)
   return redis
 })
 
 addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
+  console.log({ name: 'redis', versions: ['>=2.6 <4'] })
   shimmer.wrap(redis.RedisClient.prototype, 'internal_send_command', internalSendCommand => function (options) {
     if (!startCh.hasSubscribers) return internalSendCommand.apply(this, arguments)
 
@@ -116,6 +121,7 @@ addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
 })
 
 addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
+  console.log({ name: 'redis', versions: ['>=0.12 <2.6'] })
   shimmer.wrap(redis.RedisClient.prototype, 'send_command', sendCommand => function (command, args, callback) {
     if (!startCh.hasSubscribers) {
       return sendCommand.apply(this, arguments)

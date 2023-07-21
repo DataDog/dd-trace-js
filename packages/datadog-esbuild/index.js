@@ -1,8 +1,37 @@
 'use strict'
 
+const path = require('path')
+const fs = require('fs')
+
+const INS_PATH = path.join(__dirname, '../datadog-instrumentations/src')
+
+// build list of integrations based on each plugin's addHook calls
+// TODO: This has the side effect of subscribing to bundler events. is that OK?
+// I think it's ok. This happens at build time. subscribing only matters at run time
+for (const entry of fs.readdirSync(INS_PATH)) {
+  if (path.extname(entry) !== '.js') continue
+  require(path.join(INS_PATH, entry)) // calls addHook()
+}
+
+const modulesOfInterest = new Set()
+
+const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
+for (let foo of Object.values(instrumentations)) {
+  for (let group of foo) {
+    if (!group.file) {
+      modulesOfInterest.add(group.name)
+    } else {
+      modulesOfInterest.add(`${group.name}/${group.file}`)
+    }
+  }
+}
+
 /* eslint-disable no-console */
 
 const NAMESPACE = 'datadog'
+
+const NM = 'node_modules/'
+const NM_LENGTH = NM.length
 
 const instrumented = Object.keys(require('../datadog-instrumentations/src/helpers/hooks.js'))
 const rawBuiltins = require('module').builtinModules
@@ -16,18 +45,19 @@ for (const builtin of rawBuiltins) {
   builtins.add(`node:${builtin}`)
 }
 
-const packagesOfInterest = new Set()
-
 const DEBUG = !!process.env.DD_TRACE_DEBUG
 
 // We don't want to handle any built-in packages via DCITM
 // Those packages will still be handled via RITM
 // Attempting to instrument them would fail as they have no package.json file
 for (const pkg of instrumented) {
+  console.log('consider', pkg)
   if (builtins.has(pkg)) continue
   if (pkg.startsWith('node:')) continue
-  packagesOfInterest.add(pkg)
+  modulesOfInterest.add(pkg)
 }
+
+console.log('MODS', modulesOfInterest)
 
 const DC_CHANNEL = 'dd-trace:bundledModuleLoadStart'
 
@@ -35,9 +65,25 @@ module.exports.name = 'datadog-esbuild'
 
 module.exports.setup = function (build) {
   build.onResolve({ filter: /.*/ }, args => {
+    const fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
+    const extracted = extractPackageAndModulePath(fullPathToModule)
+    if (extracted.pkg) {
+      console.log(extracted.pkg, extracted.path)
+    }
+/*
+{
+  path: './generic-transformers',
+  importer: '/Users/thomas.hunter/Projects/client-repro/APMS-9740/node_modules/@redis/client/dist/lib/commands/ZPOPMIN_COUNT.js',
+  namespace: 'file',
+  resolveDir: '/Users/thomas.hunter/Projects/client-repro/APMS-9740/node_modules/@redis/client/dist/lib/commands',
+  kind: 'require-call',
+  pluginData: undefined
+}
+*/
     const packageName = args.path
 
-    if (args.namespace === 'file' && packagesOfInterest.has(packageName)) {
+    if (args.namespace === 'file' && (modulesOfInterest.has(packageName) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))) {
+      console.log('MATCH', packageName, `${extracted.pkg}/${extracted.path}`)
       // The file namespace is used when requiring files from disk in userland
 
       let pathToPackageJson
@@ -63,10 +109,12 @@ module.exports.setup = function (build) {
         path: packageName,
         namespace: NAMESPACE,
         pluginData: {
-          version: pkg.version
+          version: pkg.version,
+          packageName: extracted.pkg,
+          packagePath: extracted.path
         }
       }
-    } else if (args.namespace === 'datadog') {
+    } else if (args.namespace === NAMESPACE) {
       // The datadog namespace is used when requiring files that are injected during the onLoad stage
       // see note in onLoad
 
@@ -81,8 +129,10 @@ module.exports.setup = function (build) {
 
   build.onLoad({ filter: /.*/, namespace: NAMESPACE }, args => {
     if (DEBUG) {
-      console.log(`load ${args.path}@${args.pluginData.version}`)
+      console.log(`LOAD ${args.path}@${args.pluginData.version}, pkg "${args.pluginData.pkg}", path "${args.pluginData.path}"`)
     }
+
+    console.log('CHAN', DC_CHANNEL + ':' + args.path)
 
     // JSON.stringify adds double quotes. For perf gain could simply add in quotes when we know it's safe.
     const contents = `
@@ -94,7 +144,9 @@ module.exports.setup = function (build) {
         path: ${JSON.stringify(args.path)},
         version: ${JSON.stringify(args.pluginData.version)}
       };
+      console.log('emit channel', ${JSON.stringify(DC_CHANNEL + ':' + args.path)});
       ch.publish(payload);
+      payload.module.__datadog = true;
       module.exports = payload.module;
     `
     // https://esbuild.github.io/plugins/#on-load-results
@@ -119,5 +171,46 @@ function warnIfUnsupported () {
     console.error(`Expected: Node.js >=v16.17 or >=v18.7. Actual: Node.js = ${process.version}.`)
     console.error('This application may build properly with this version of Node.js, but unless a')
     console.error('more recent version is used at runtime, third party packages won\'t be instrumented.')
+  }
+}
+
+// @see https://github.com/nodejs/node/issues/47000
+function dotFriendlyResolve (path, directory) {
+  if (path === '.') {
+    path = './'
+  } else if (path === '..') {
+    path = '../'
+  }
+
+  return require.resolve(path, { paths: [ directory ] })
+}
+
+/**
+ * For a given full path to a module,
+ *   return the package name it belongs to and the local path to the module
+ *   input: '/foo/node_modules/@co/stuff/foo/bar/baz.js'
+ *   output: { pkg: '@co/stuff', path: 'foo/bar/baz.js' }
+ */
+function extractPackageAndModulePath (fullPath) {
+  const nm = fullPath.lastIndexOf(NM);
+  if (nm < 0) {
+    return { pkg: null, path: null }
+  }
+
+  const subPath = fullPath.substring(nm + NM.length);
+  const firstSlash = subPath.indexOf('/')
+
+  if (subPath[0] === '@') {
+    const secondSlash = subPath.substring(firstSlash + 1).indexOf('/')
+
+    return {
+      pkg: subPath.substring(0, firstSlash + 1 + secondSlash),
+      path: subPath.substring(firstSlash + 1 + secondSlash + 1)
+    }
+  }
+
+  return {
+    pkg: subPath.substring(0, firstSlash),
+    path: subPath.substring(firstSlash + 1)
   }
 }

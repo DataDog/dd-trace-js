@@ -20,6 +20,7 @@ function wrapHandle (handle) {
 const wrapRouterMethod = createWrapRouterMethod('express')
 
 addHook({ name: 'express', versions: ['>=4'] }, express => {
+  console.log({ name: 'express', versions: ['>=4'] })
   shimmer.wrap(express.application, 'handle', wrapHandle)
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
@@ -48,6 +49,11 @@ addHook({
   versions: ['>=4'],
   file: 'lib/middleware/query.js'
 }, query => {
+  console.log({
+  name: 'express',
+  versions: ['>=4'],
+  file: 'lib/middleware/query.js'
+})
   return shimmer.wrap(query, function () {
     const queryMiddleware = query.apply(this, arguments)
 
@@ -72,11 +78,13 @@ const wrapProcessParamsMethod = (requestPositionInArguments) => {
 }
 
 addHook({ name: 'express', versions: ['>=4.0.0 <4.3.0'] }, express => {
+  console.log({ name: 'express', versions: ['>=4.0.0 <4.3.0'] })
   shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(1))
   return express
 })
 
 addHook({ name: 'express', versions: ['>=4.3.0'] }, express => {
+  console.log({ name: 'express', versions: ['>=4.3.0'] })
   shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(2))
   return express
 })

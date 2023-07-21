@@ -36,11 +36,13 @@ function DcitmHook (moduleNames, options, onrequire) {
   if (!(this instanceof DcitmHook)) return new DcitmHook(moduleNames, options, onrequire)
 
   function onModuleLoad (payload) {
+    console.log('intercept module load', payload)
     payload.module = onrequire(payload.module, payload.path, undefined, payload.version)
   }
 
   for (const moduleName of moduleNames) {
     // dc.channel(`${CHANNEL_PREFIX}:${moduleName}`).subscribe(onModuleLoad)
+    console.log(`subscribe ${CHANNEL_PREFIX}:${moduleName}`)
     dc.subscribe(`${CHANNEL_PREFIX}:${moduleName}`, onModuleLoad)
   }
 
