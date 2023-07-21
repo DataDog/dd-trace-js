@@ -64,7 +64,7 @@ if (!Channel.prototype.runStores) {
     this._stores.set(store, transform)
   }
 
-  Channel.prototype.unbindStore = ActiveChannelPrototype.runStores = function (store) {
+  Channel.prototype.unbindStore = ActiveChannelPrototype.unbindStore = function (store) {
     if (!this._stores) return
     this._stores.delete(store)
   }
