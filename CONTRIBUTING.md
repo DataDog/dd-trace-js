@@ -24,6 +24,14 @@ Large refactors should generally be avoided in favour of iterative approaches. F
 
 Sometimes new patterns or new ideas emerge which would be a substantial improvement over the existing state. It can be tempting to want to go all-in on a new way to do something, but the code churn can be hard to manage. It's best to introduce such new things incrementally and advocate for their adoption gradually through the rest of the codebase. As old systems are gradually phased out, the infrastructure which supports them can be deleted or relegated to lazy-loading only if and when that specific part of the system needs to be used.
 
+## Test everything.
+
+It's very difficult to know if a change is valid unless there are tests to prove it. As an extension of that, it's also difficult to know the _use_ of that code is valid if the way it is integrated is not propertly tested. For this reason we generally favour integration tests over unit tests. If an API is expected to be used in different places or in different ways then it should generally include unit tests too for each unique scenario, however great care should be taken to ensure unit tests are actually testing the _logic_ and not just testing the _mocks_. It's a very common mistake to write a unit test that abstracts away the actual use of the interface so much that it doesn't actually test how that interface works in real-world scenarios. Remember to test how it handles failures, how it operates under heavy load, and how it impacts usability of what its purpose is.
+
+## Don't forget benchmarks!
+
+Observability products tend to have quite a bit of their behaviour running in app code hot paths. It's important we extensively benchmark anything we expect to have heavy use to ensure it performs well and we don't cause any significant regressions through future changes. Measuring once at the time of writing is insufficient--a graph with just one data point is not going to tell you much of anything.
+
 ## Always consider backportability
 
 To reduce delta between release lines and make it easier for us to support older versions we try as much as possible to backport every change we can. We should be diligent about keeping breaking changes to a minimum and ensuring we don't use language or runtime features which are too new. This way we can generally be confident that a change can be backported.
@@ -45,3 +53,15 @@ Any addition of new functionality should be labelled as semver-minor and should 
 ### semver-major
 
 In the event that some existing functionality _does_ need to change, as much as possible the non-breaking aspects of that change should be made in a semver-minor PR and the actually breaking aspects should be done via a follow-up PR with only the specific aspects which are breaking. For example, new functionality which would change existing behaviour could be added behind a flag and then that change could be made the default state of that flag in the next major release.
+
+## Indicate intended release targets
+
+When writing major changes we use a series of labels in the form of `dont-land-on-vN.x` where N is the major release line which a PR should not land in. Every PR marked as semver-major should include these tags. These tags allow our [branch-diff](https://github.com/bengl/branch-diff) tooling to work smoothly as we can exclude PRs not intended for the release line we're preparing a release proposal for. The `semver-major` labels on their own are not sufficient as they don't encode any indication of from _which_ releases they are a major change.
+
+For outside contributions we will have the relevant team add these labels when they review and determine when they plan to release it.
+
+## All-Green Policy
+
+For any PR to be merged _all_ tests must be passing. If a test is flaky or failing consistently the owner of that test should make it a priority to fix that test and unblock other teams from landing changes. For outside contributors there are currently several tests which will always fail as full CI permission is required. For these PRs our current process is for the relevant team to copy the PR and resubmit it to run tests as a user with full CI permission.
+
+Eventually we plan to look into putting these permission-required tests behind a label which team members can add to their PRs at creation to run the full CI and can add to outside contributor PRs to trigger the CI from their own user credentials. If the label is not present there will be another action which checks the label is present. Rather than showing a bunch of confusing failures to new contributors it would just show a single job failure which indicates an additional label is required, and we can name it in a way that makes it clear that it's not the responsibility of the outside contributor to add it. Something like `approve-full-ci` is one possible choice there.
