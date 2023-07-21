@@ -2,7 +2,7 @@
 
 const InjectionAnalyzer = require('./injection-analyzer')
 const { NO_SQL_MONGODB_INJECTION } = require('../vulnerabilities')
-const { isTainted, getRanges, addSecureMark } = require('../taint-tracking/operations')
+const { getRanges, addSecureMark } = require('../taint-tracking/operations')
 const { getNodeModulesPaths } = require('../path-line')
 const { getNextSecureMark } = require('../taint-tracking/secure-marks-generator')
 const { storage } = require('../../../../../datadog-core')
@@ -16,7 +16,7 @@ function iterateObjectStrings (target, fn, levelKeys = [], depth = 50) {
       const nextLevelKeys = [...levelKeys, key]
       const val = target[key]
       if (typeof val === 'string') {
-        fn(val, nextLevelKeys)
+        fn(val, nextLevelKeys, target, key)
       } else if (depth > 0) {
         iterateObjectStrings(val, fn, nextLevelKeys, depth - 1)
       }
@@ -61,16 +61,20 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       }
     })
 
-    // this.addSub('datadog:express-mongo-sanitize:sanitize:finish', ({ sanitizedObject }) => {
-    //   const store = storage.getStore()
-    //   const iastContext = getIastContext(store)
-    //
-    //   if (iastContext) { // do nothing if we are not in an iast request
-    //     iterateObjectStrings(sanitizedObject, function (value, levelKeys) {
-    //
-    //     })
-    //   }
-    // })
+    this.addSub('datadog:express-mongo-sanitize:sanitize:finish', ({ sanitizedObject }) => {
+      const store = storage.getStore()
+      const iastContext = getIastContext(store)
+
+      if (iastContext) { // do nothing if we are not in an iast request
+        iterateObjectStrings(sanitizedObject, function (value, levelKeys, parent, lastKey) {
+          try {
+            parent[lastKey] = addSecureMark(iastContext, value, MONGODB_NOSQL_SECURE_MARK)
+          } catch {
+            // if it is a readonly property, do nothing
+          }
+        })
+      }
+    })
   }
 
   _isVulnerable (value, iastContext) {
@@ -92,7 +96,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
         }
       })
 
-       return isVulnerable
+      return isVulnerable
     }
     return false
   }
