@@ -176,8 +176,7 @@ addHook({ name: '@aws-sdk/smithy-client', versions: ['>=3'] }, smithy => {
   return smithy
 })
 
-addHook({ name: 'aws-sdk', file: 'lib/core.js', versions: ['>=2.3.0'] }, AWS => {
-  shimmer.wrap(AWS.Request.prototype, 'promise', wrapRequest)
+addHook({ name: 'aws-sdk', versions: ['>=2.3.0'] }, AWS => {
   shimmer.wrap(AWS.config, 'setPromisesDependency', setPromisesDependency => {
     return function wrappedSetPromisesDependency (dep) {
       const result = setPromisesDependency.apply(this, arguments)
@@ -185,6 +184,11 @@ addHook({ name: 'aws-sdk', file: 'lib/core.js', versions: ['>=2.3.0'] }, AWS => 
       return result
     }
   })
+  return AWS
+})
+
+addHook({ name: 'aws-sdk', file: 'lib/core.js', versions: ['>=2.3.0'] }, AWS => {
+  shimmer.wrap(AWS.Request.prototype, 'promise', wrapRequest)
   return AWS
 })
 
