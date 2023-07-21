@@ -3,18 +3,16 @@
 /* eslint-disable no-fallthrough */
 
 const url = require('url')
-const {
-  channel,
-  addHook,
-  AsyncResource
-} = require('../helpers/instrument')
+const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
 const log = require('../../../dd-trace/src/log')
 
-const startClientCh = channel('apm:http:client:request:start')
-const finishClientCh = channel('apm:http:client:request:finish')
-const errorClientCh = channel('apm:http:client:request:error')
+const startChannel = channel('apm:http:client:request:start')
+const finishChannel = channel('apm:http:client:request:finish')
+const endChannel = channel('apm:http:client:request:end')
+const asyncStartChannel = channel('apm:http:client:request:asyncStart')
+const errorChannel = channel('apm:http:client:request:error')
 
 addHook({ name: 'https' }, hookFn)
 
@@ -32,7 +30,7 @@ function patch (http, methodName) {
 
   function instrumentRequest (request) {
     return function () {
-      if (!startClientCh.hasSubscribers) {
+      if (!startChannel.hasSubscribers) {
         return request.apply(this, arguments)
       }
 
@@ -45,57 +43,68 @@ function patch (http, methodName) {
         return request.apply(this, arguments)
       }
 
-      const callbackResource = new AsyncResource('bound-anonymous-fn')
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
+      const ctx = { args, http }
 
-      return asyncResource.runInAsyncScope(() => {
-        startClientCh.publish({ args, http })
-
+      return startChannel.runStores(ctx, () => {
         let finished = false
         let callback = args.callback
 
         if (callback) {
-          callback = callbackResource.bind(callback)
-        }
-
-        const options = args.options
-        const req = request.call(this, options, callback)
-        const emit = req.emit
-
-        const finish = (req, res) => {
-          if (!finished) {
-            finished = true
-            finishClientCh.publish({ req, res })
+          callback = function () {
+            return asyncStartChannel.runStores(ctx, () => {
+              return args.callback.apply(this, arguments)
+            })
           }
         }
 
-        req.emit = function (eventName, arg) {
-          asyncResource.runInAsyncScope(() => {
+        const options = args.options
+        const finish = () => {
+          if (!finished) {
+            finished = true
+            finishChannel.publish(ctx)
+          }
+        }
+
+        try {
+          const req = request.call(this, options, callback)
+          const emit = req.emit
+
+          ctx.req = req
+
+          req.emit = function (eventName, arg) {
             switch (eventName) {
               case 'response': {
                 const res = arg
-                const listener = asyncResource.bind(() => finish(req, res))
-                res.on('end', listener)
-                res.on('error', listener)
+                ctx.res = res
+                res.on('end', finish)
+                res.on('error', finish)
                 break
               }
               case 'connect':
               case 'upgrade':
-                finish(req, arg)
+                ctx.res = arg
+                finish()
                 break
               case 'error':
               case 'timeout':
-                errorClientCh.publish(arg)
+                ctx.error = arg
+                errorChannel.publish(ctx)
               case 'abort': // deprecated and replaced by `close` in node 17
               case 'close':
-                finish(req)
+                finish()
             }
-          })
 
-          return emit.apply(this, arguments)
+            return emit.apply(this, arguments)
+          }
+
+          return req
+        } catch (e) {
+          ctx.error = e
+          errorChannel.publish(ctx)
+          throw e
+        } finally {
+          endChannel.publish(ctx)
         }
-
-        return req
       })
     }
   }
