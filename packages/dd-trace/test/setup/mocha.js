@@ -126,7 +126,7 @@ function withNamingSchema (
 
       beforeEach(async () => {
         await new Promise(resolve => setTimeout(resolve, 30))
-        global.testAgentServiceName = expected['v1']
+        global.testAgentServiceName = typeof expected['v1'] === 'function' ? expected['v1']() : expected['v1']
         global.schemaVersionName = 'v0'
       })
       after(() => {
