@@ -74,7 +74,6 @@ function startupLog ({ agentError } = {}) {
   out.profiling_enabled = !!(config.profiling || {}).enabled
   Object.assign(out, getIntegrationsAndAnalytics())
 
-  out.clientIpEnabled = !!config.clientIpEnabled
   out.appsec_enabled = !!config.appsec.enabled
 
   // // This next bunch is for features supported by other tracers, but not this
