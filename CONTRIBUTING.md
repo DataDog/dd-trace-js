@@ -62,9 +62,9 @@ When writing major changes we use a series of labels in the form of `dont-land-o
 
 For outside contributions we will have the relevant team add these labels when they review and determine when they plan to release it.
 
-## All-Green Policy
+## Ensure all tests are green
 
-For any PR to be merged _all_ tests must be passing. If a test is flaky or failing consistently the owner of that test should make it a priority to fix that test and unblock other teams from landing changes. For outside contributors there are currently several tests which will always fail as full CI permission is required. For these PRs our current process is for the relevant team to copy the PR and resubmit it to run tests as a user with full CI permission.
+We follow an all-green policy which means that for any PR to be merged _all_ tests must be passing. If a test is flaky or failing consistently the owner of that test should make it a priority to fix that test and unblock other teams from landing changes. For outside contributors there are currently several tests which will always fail as full CI permission is required. For these PRs our current process is for the relevant team to copy the PR and resubmit it to run tests as a user with full CI permission.
 
 Eventually we plan to look into putting these permission-required tests behind a label which team members can add to their PRs at creation to run the full CI and can add to outside contributor PRs to trigger the CI from their own user credentials. If the label is not present there will be another action which checks the label is present. Rather than showing a bunch of confusing failures to new contributors it would just show a single job failure which indicates an additional label is required, and we can name it in a way that makes it clear that it's not the responsibility of the outside contributor to add it. Something like `approve-full-ci` is one possible choice there.
 
