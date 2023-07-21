@@ -75,7 +75,7 @@ describe('Plugin', () => {
 
       it('should support URL input', done => {
         const app = express()
-        app.get('/user', (req, res) => {
+        app.post('/user', (req, res) => {
           res.status(200).send()
         })
         getPort().then(port => {
@@ -83,10 +83,10 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
               expect(traces[0][0]).to.have.property('type', 'http')
-              expect(traces[0][0]).to.have.property('resource', 'GET')
+              expect(traces[0][0]).to.have.property('resource', 'POST')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-              expect(traces[0][0].meta).to.have.property('http.method', 'GET')
+              expect(traces[0][0].meta).to.have.property('http.method', 'POST')
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
               expect(traces[0][0].meta).to.have.property('component', 'fetch')
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
@@ -95,7 +95,7 @@ describe('Plugin', () => {
             .catch(done)
 
           appListener = server(app, port, () => {
-            fetch(new URL(`http://localhost:${port}/user`))
+            fetch(new URL(`http://localhost:${port}/user`), { method: 'POST' })
           })
         })
       })
