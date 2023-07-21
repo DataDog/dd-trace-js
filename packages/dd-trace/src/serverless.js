@@ -23,26 +23,24 @@ function maybeStartServerlessMiniAgent (config) {
 }
 
 function getRustBinaryPath (config) {
-  let rustBinaryPath
-
   if (process.env.DD_MINI_AGENT_PATH !== undefined) {
-    rustBinaryPath = process.env.DD_MINI_AGENT_PATH
-  } else {
-    if (process.platform !== 'win32' && process.platform !== 'linux') {
-      log.error(`Serverless Mini Agent is only supported on Windows and Linux.`)
-      return
-    }
-
-    const rustBinaryPathRoot = config.isGCPFunction ? '/workspace' : '/home/site/wwwroot'
-    const rustBinaryPathOsFolder = process.platform === 'win32'
-      ? 'datadog-serverless-agent-windows-amd64' : 'datadog-serverless-agent-linux-amd64'
-
-    const rustBinaryExtension = process.platform === 'win32' ? '.exe' : ''
-
-    rustBinaryPath =
-      `${rustBinaryPathRoot}/node_modules/@datadog/sma/${rustBinaryPathOsFolder}/\
-datadog-serverless-trace-mini-agent${rustBinaryExtension}`
+    return process.env.DD_MINI_AGENT_PATH
   }
+
+  if (process.platform !== 'win32' && process.platform !== 'linux') {
+    log.error(`Serverless Mini Agent is only supported on Windows and Linux.`)
+    return
+  }
+
+  const rustBinaryPathRoot = config.isGCPFunction ? '/workspace' : '/home/site/wwwroot'
+  const rustBinaryPathOsFolder = process.platform === 'win32'
+    ? 'datadog-serverless-agent-windows-amd64' : 'datadog-serverless-agent-linux-amd64'
+
+  const rustBinaryExtension = process.platform === 'win32' ? '.exe' : ''
+
+  const rustBinaryPath =
+    `${rustBinaryPathRoot}/node_modules/@datadog/sma/${rustBinaryPathOsFolder}/\
+datadog-serverless-trace-mini-agent${rustBinaryExtension}`
 
   return rustBinaryPath
 }
