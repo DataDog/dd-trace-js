@@ -47,8 +47,10 @@ describe('Service naming', () => {
           'messaging',
           'producer',
           'redis',
-          'test-service',
-          extra
+          {
+            tracerService: 'test-service',
+            ...extra
+          }
         )
       })
     })
@@ -89,8 +91,9 @@ describe('Service naming', () => {
     })
     describe('Service name getter', () => {
       it('should add service name and passthrough service name arguments', () => {
-        resolver.getServiceName('messaging', 'inbound', 'kafka', 'test-service', extra)
-        expect(dummySchema.messaging.inbound.kafka.serviceName).to.be.calledWith('test-service', extra)
+        const opts = { tracerService: 'test-service', ...extra }
+        resolver.getServiceName('messaging', 'inbound', 'kafka', opts)
+        expect(dummySchema.messaging.inbound.kafka.serviceName).to.be.calledWith(opts)
       })
     })
   })
