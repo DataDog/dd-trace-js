@@ -14,9 +14,9 @@ There are great benefits to taking a measured and iterative approach to improvem
 
 ## Be descriptive!
 
-Sometimes code can be self-documenting, but often it can't. That is especially true to someone reviewing code they haven't worked on. If you're conscious of writing code in a self-describing way and leave comments anywhere that self-description fails you can go a long way to making even complex code coherent to one not already familiar with that code.
+Sometimes code can be self-documenting, but often it can't. That is especially true to someone reviewing code they haven't worked on. Be conscious of writing code in a self-describing way and leave comments anywhere that self-description fails. This goes a long way towards making even complex code coherent to one not already familiar with it.
 
-Try to write code in a way the describes the intent when read. For example, verbs can be used for function and method names to communicate that they are used to do some specific action. In doing so it becomes clear when referenced by name elsewhere that it is a function and what the function is meant to do. If a function can not be described a simple verb it's probably too complex or does too many things.
+Try to write code in a way the describes the intent when read. For example, verbs can be used for function and method names to communicate that they are used to do some specific action. In doing so it becomes clear when referenced by name elsewhere that it is a function and what the function is meant to do. If a function can not be described with a simple verb it's probably too complex or does too many things.
 
 ## Avoid large refactors
 
@@ -26,7 +26,7 @@ Sometimes new patterns or new ideas emerge which would be a substantial improvem
 
 ## Always consider backportability
 
-To reduce delta between release lines and make it easier for us to support older versions we try as much as possible to backport every change we can. If we are diligent about keeping breaking changes to a minimum and ensuring we don't use language or runtime features which are too new we can generally be confident that a change can be backported.
+To reduce delta between release lines and make it easier for us to support older versions we try as much as possible to backport every change we can. We should be diligent about keeping breaking changes to a minimum and ensuring we don't use language or runtime features which are too new. This way we can generally be confident that a change can be backported.
 
 Currently we do not have CI to test PRs for mergeability to past release lines, but we intend to expand our CI to include that in the future. For the time being, it's recommended when developing locally to try to cherry-pick your changes onto the previous vN.x branches to see if the tests pass there too.
 
