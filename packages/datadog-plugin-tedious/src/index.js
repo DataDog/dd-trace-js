@@ -10,7 +10,7 @@ class TediousPlugin extends DatabasePlugin {
 
   start ({ queryOrProcedure, connectionConfig }) {
     this.startSpan(this.operationName(), {
-      service: this.serviceName(this.config, this.system),
+      service: this.serviceName({ pluginConfig: this.config, system: this.system }),
       resource: queryOrProcedure,
       type: 'sql',
       kind: 'client',

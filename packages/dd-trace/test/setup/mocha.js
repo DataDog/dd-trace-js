@@ -52,14 +52,19 @@ function loadInstFile (file, instrumentations) {
 
 function withNamingSchema (
   spanProducerFn,
-  expectedOpName,
-  expectedServiceName,
-  expectedShortCircuitName,
-  selectSpan = (traces) => traces[0][0]
+  expected,
+  selectSpan = (traces) => traces[0][0],
+  opts = {}
 ) {
+  const {
+    hooks = (version, defaultToGlobalService) => {},
+    desc = ''
+  } = opts
   let fullConfig
 
-  describe('service and operation naming', () => {
+  const testTitle = 'service and operation naming' + (desc !== '' ? ` (${desc})` : '')
+
+  describe(testTitle, () => {
     Object.keys(schemaDefinitions).forEach(versionName => {
       describe(`in version ${versionName}`, () => {
         before(() => {
@@ -84,13 +89,23 @@ function withNamingSchema (
           global.testAgentServiceName = null
           global.schemaVersionName = null
         })
+        hooks(versionName, false)
+
+        const { opName, serviceName } = expected[versionName]
 
         it(`should conform to the naming schema`, done => {
           agent
             .use(traces => {
               const span = selectSpan(traces)
-              expect(span).to.have.property('name', expectedOpName())
-              expect(span).to.have.property('service', expectedServiceName())
+              const expectedOpName = typeof opName === 'function'
+                ? opName()
+                : opName
+              const expectedServiceName = typeof serviceName === 'function'
+                ? serviceName()
+                : serviceName
+
+              expect(span).to.have.property('name', expectedOpName)
+              expect(span).to.have.property('service', expectedServiceName)
             })
             .then(done)
             .catch(done)
@@ -122,15 +137,22 @@ function withNamingSchema (
         global.testAgentServiceName = null
         global.schemaVersionName = 'v0'
       })
+      hooks('v0', true)
+
+      const { serviceName } = expected['v1']
 
       it('should pass service name through', done => {
         agent
           .use(traces => {
             const span = traces[0][0]
-            expect(span).to.have.property('service', expectedShortCircuitName)
+            const expectedServiceName = typeof serviceName === 'function'
+              ? serviceName()
+              : serviceName
+            expect(span).to.have.property('service', expectedServiceName)
           })
           .then(done)
           .catch(done)
+
         spanProducerFn(done)
       })
     })
