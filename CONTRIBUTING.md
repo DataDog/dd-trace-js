@@ -16,6 +16,10 @@ Sometimes code can be self-documenting, but often it can't. That is especially t
 
 Try to write code in a way the describes the intent when read. For example, verbs can be used for function and method names to communicate that they are used to do some specific action. In doing so it becomes clear when referenced by name elsewhere that it is a function and what the function is meant to do. If a function can not be described with a simple verb it's probably too complex or does too many things.
 
+## Give your code space
+
+Very dense code is hard to read. It helps to make use of empty lines to separate logical groupings of statements. Long lines should be split up into multiple lines to make them more readable. Complex objects or arrays should generally be split over several lines. Sometimes it's a good idea to assign a variable only to immediately use it in a call as it can be more descriptive than just using the expression in place. It's not always clear what an argument is for if it doesn't visibly have a name somehow. Remember, lines are free, our time is not.
+
 ## Avoid large refactors
 
 Large refactors should generally be avoided in favour of iterative approaches. For example, rather than rewriting how every plugin works, one might make a special-case plugin that works a bit different for their particular use-case. If several dozen files need to change to add a feature we've probably done something wrong.
