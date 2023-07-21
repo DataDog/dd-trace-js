@@ -5,7 +5,7 @@
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
     },
@@ -28,7 +28,7 @@
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
     },
@@ -51,6 +51,7 @@
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_GIT_SSH_ORIGIN": "git@github.com:DataDog/dummy-example.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
@@ -74,7 +75,7 @@
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/bar~",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
     },
@@ -97,7 +98,7 @@
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/~/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
     },
@@ -120,7 +121,7 @@
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "~/foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo",
       "HOME": "/not-my-home",
@@ -145,7 +146,7 @@
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "~foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
     },
@@ -168,7 +169,7 @@
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "~",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo",
       "HOME": "/not-my-home",
@@ -193,7 +194,7 @@
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
     },
@@ -216,7 +217,7 @@
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
     },
@@ -239,7 +240,7 @@
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
     },
@@ -262,7 +263,7 @@
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
     },
@@ -284,7 +285,7 @@
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo",
       "BITBUCKET_TAG": "origin/tags/0.1.0"
@@ -307,7 +308,7 @@
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo",
       "BITBUCKET_TAG": "refs/heads/tags/0.1.0"
@@ -329,7 +330,7 @@
     {
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo",
       "DD_GIT_BRANCH": "user-supplied-branch",
@@ -366,7 +367,7 @@
     {
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket-repo-url.com/repo.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo",
       "DD_GIT_COMMIT_AUTHOR_DATE": "usersupplied-authordate",
@@ -403,7 +404,7 @@
     {
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
-      "BITBUCKET_GIT_SSH_ORIGIN": "https://user:password@bitbucket.org/DataDog/dogweb.git",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://user:password@bitbucket.org/DataDog/dogweb.git",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
     },
