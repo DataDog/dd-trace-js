@@ -1,5 +1,5 @@
-function identityService (service) {
-  return service
+function identityService ({ tracerService }) {
+  return tracerService
 }
 
 module.exports = { identityService }

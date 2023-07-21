@@ -1,7 +1,7 @@
 const { resolveNaming } = require('../../dd-trace/test/plugins/helpers')
 
-module.exports = resolveNaming({
-  client: {
+const rawExpectedSchema = {
+  outbound: {
     v0: {
       opName: 'tedious.request',
       serviceName: 'test-mssql'
@@ -11,4 +11,9 @@ module.exports = resolveNaming({
       serviceName: 'test'
     }
   }
-})
+}
+
+module.exports = {
+  rawExpectedSchema: rawExpectedSchema,
+  expectedSchema: resolveNaming(rawExpectedSchema)
+}

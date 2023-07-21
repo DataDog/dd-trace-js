@@ -1,6 +1,6 @@
 const { resolveNaming } = require('../../dd-trace/test/plugins/helpers')
 
-module.exports = resolveNaming({
+const rawExpectedSchema = {
   send: {
     v0: {
       opName: 'amqp.send',
@@ -21,4 +21,9 @@ module.exports = resolveNaming({
       serviceName: 'test'
     }
   }
-})
+}
+
+module.exports = {
+  rawExpectedSchema: rawExpectedSchema,
+  expectedSchema: resolveNaming(rawExpectedSchema)
+}
