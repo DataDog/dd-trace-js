@@ -138,26 +138,25 @@ module.exports.setup = function (build) {
     const path = args.path
 
     if (DEBUG) {
-      console.log(`LOAD ${args.path}@${data.version}, pkg "${data.path}"`)
+      console.log(`LOAD ${data.pkg}@${data.version}, pkg "${path}"`)
       // console.log(data)
     }
 
     const channelName = DC_CHANNEL + ':' + (data.raw === data.pkg ? data.raw : data.pkg + ':' + data.path)
-    console.log('CHAN', channelName) // TODO getting pkg:index.js instead of pkg
-    // TODO: We'll need channels for deep paths too
+    console.log('CHAN', channelName)
     // TODO: express just stopped working even though the channel names all appear fine
 
     // JSON.stringify adds double quotes. For perf gain could simply add in quotes when we know it's safe.
     const contents = `
       const dc = require('diagnostics_channel');
-      const ch = dc.channel(${JSON.stringify(channelName)});
-      const mod = require(${JSON.stringify(path)});
+      const ch = dc.channel('${channelName}');
+      const mod = require('${path}');
       const payload = {
         module: mod,
-        path: ${JSON.stringify(path)},
-        version: ${JSON.stringify(data.version)}
+        path: '${data.raw}',
+        version: '${data.version}'
       };
-      console.log('emit channel', ${JSON.stringify(channelName)});
+      console.log('emit channel', '${channelName}');
       ch.publish(payload);
       payload.module.__datadog = true;
       module.exports = payload.module;
