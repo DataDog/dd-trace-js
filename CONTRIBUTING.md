@@ -10,7 +10,7 @@ Changes should be incremental and understandable. As much as possible, large-sca
 
 There are great benefits to taking a measured and iterative approach to improvement. When working on code in fewer places there is far less risk of running into merge conflicts or incompatibilities with other systems. Keeping contributions small makes them easy to review which makes that much quicker to land. Additionally, keeping things small and iterative makes it easier for other teams to review and understand what the code does.
 
-## Be descriptive!
+## Be descriptive
 
 Sometimes code can be self-documenting, but often it can't. That is especially true to someone reviewing code they haven't worked on. Be conscious of writing code in a self-describing way and leave comments anywhere that self-description fails. This goes a long way towards making even complex code coherent to one not already familiar with it.
 
@@ -22,11 +22,11 @@ Large refactors should generally be avoided in favour of iterative approaches. F
 
 Sometimes new patterns or new ideas emerge which would be a substantial improvement over the existing state. It can be tempting to want to go all-in on a new way to do something, but the code churn can be hard to manage. It's best to introduce such new things incrementally and advocate for their adoption gradually through the rest of the codebase. As old systems are gradually phased out, the infrastructure which supports them can be deleted or relegated to lazy-loading only if and when that specific part of the system needs to be used.
 
-## Test everything.
+## Test everything
 
 It's very difficult to know if a change is valid unless there are tests to prove it. As an extension of that, it's also difficult to know the _use_ of that code is valid if the way it is integrated is not propertly tested. For this reason we generally favour integration tests over unit tests. If an API is expected to be used in different places or in different ways then it should generally include unit tests too for each unique scenario, however great care should be taken to ensure unit tests are actually testing the _logic_ and not just testing the _mocks_. It's a very common mistake to write a unit test that abstracts away the actual use of the interface so much that it doesn't actually test how that interface works in real-world scenarios. Remember to test how it handles failures, how it operates under heavy load, and how it impacts usability of what its purpose is.
 
-## Don't forget benchmarks!
+## Don't forget benchmarks
 
 Observability products tend to have quite a bit of their behaviour running in app code hot paths. It's important we extensively benchmark anything we expect to have heavy use to ensure it performs well and we don't cause any significant regressions through future changes. Measuring once at the time of writing is insufficient--a graph with just one data point is not going to tell you much of anything.
 
