@@ -15,7 +15,7 @@ class RedisPlugin extends CachePlugin {
 
     this.startSpan({
       resource,
-      service: this.serviceName(this.config, this.system, connectionName),
+      service: this.serviceName({ pluginConfig: this.config, system: this.system, connectionName }),
       type: 'redis',
       meta: {
         'db.type': 'redis',

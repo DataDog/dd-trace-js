@@ -22,17 +22,24 @@ class TracingPlugin extends Plugin {
     return store && store.span
   }
 
-  serviceName (...serviceArgs) {
-    if (Nomenclature.shouldUseConsistentServiceNaming) {
-      return Nomenclature.shortCircuitServiceName(this.config, ...serviceArgs)
-    }
-    const { type, id, kind } = this.constructor
-    return Nomenclature.serviceName(type, kind, id, ...serviceArgs)
+  serviceName (opts = {}) {
+    const {
+      type = this.constructor.type,
+      id = this.constructor.id,
+      kind = this.constructor.kind
+    } = opts
+
+    return Nomenclature.serviceName(type, kind, id, opts)
   }
 
-  operationName (...opNameArgs) {
-    const { type, id, kind } = this.constructor
-    return Nomenclature.opName(type, kind, id, ...opNameArgs)
+  operationName (opts = {}) {
+    const {
+      type = this.constructor.type,
+      id = this.constructor.id,
+      kind = this.constructor.kind
+    } = opts
+
+    return Nomenclature.opName(type, kind, id, opts)
   }
 
   configure (config) {
