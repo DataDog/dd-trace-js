@@ -102,7 +102,6 @@ class JestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:jest:worker-report:trace', traces => {
-      // we should be able to add test module and test session id here
       const formattedTraces = JSON.parse(traces).map(trace =>
         trace.map(span => ({
           ...span,
