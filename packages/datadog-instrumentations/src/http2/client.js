@@ -42,6 +42,7 @@ function createWrapRequest (authority, options) {
         } catch (e) {
           ctx.error = e
           errorChannel.publish(ctx)
+          throw e
         } finally {
           endChannel.publish(ctx)
         }

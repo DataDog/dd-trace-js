@@ -16,15 +16,11 @@ const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 class HttpClientPlugin extends ClientPlugin {
-  static get id () {
-    return 'http'
-  }
+  static get id () { return 'http' }
+  static get prefix () { return `apm:http:client:request` }
 
-  addTraceSub (eventName, handler) {
-    this.addSub(`apm:${this.constructor.id}:client:${this.operation}:${eventName}`, handler)
-  }
-
-  start ({ args, http = {} }) {
+  bindStart (message) {
+    const { args, http = {} } = message
     const store = storage.getStore()
     const options = args.options
     const agent = options.agent || options._defaultAgent || http.globalAgent || {}
@@ -55,7 +51,7 @@ class HttpClientPlugin extends ClientPlugin {
       metrics: {
         [CLIENT_PORT_KEY]: parseInt(options.port)
       }
-    })
+    }, false)
 
     // TODO: Figure out a better way to do this for any span.
     if (!allowed) {
@@ -67,11 +63,19 @@ class HttpClientPlugin extends ClientPlugin {
     }
 
     analyticsSampler.sample(span, this.config.measured)
-    this.enter(span, store)
+
+    message.span = span
+    message.parentStore = store
+    message.currentStore = { ...store, span }
+
+    return message.currentStore
   }
 
-  finish ({ req, res }) {
-    const span = storage.getStore().span
+  bindAsyncStart ({ parentStore }) {
+    return parentStore
+  }
+
+  finish ({ req, res, span }) {
     if (res) {
       const status = res.status || res.statusCode
 
@@ -87,17 +91,18 @@ class HttpClientPlugin extends ClientPlugin {
     addRequestHeaders(req, span, this.config)
 
     this.config.hooks.request(span, req, res)
-    super.finish()
+
+    this.tagPeerService(span)
+
+    span.finish()
   }
 
-  error (err) {
-    const span = storage.getStore().span
-
-    if (err) {
+  error ({ span, error }) {
+    if (error) {
       span.addTags({
-        [ERROR_TYPE]: err.name,
-        [ERROR_MESSAGE]: err.message || err.code,
-        [ERROR_STACK]: err.stack
+        [ERROR_TYPE]: error.name,
+        [ERROR_MESSAGE]: error.message || error.code,
+        [ERROR_STACK]: error.stack
       })
     } else {
       span.setTag('error', 1)
