@@ -4,8 +4,6 @@ Please reach out before starting work on any major code changes.
 This will ensure we avoid duplicating work, or that your code can't be merged due to a rapidly changing
 base. If you would like support for a module that is not listed, [contact support][1] to share a request.
 
-[1]: https://docs.datadoghq.com/help
-
 ## Keep changes small and incremental
 
 Changes should be incremental and understandable. As much as possible, large-scale efforts should be broken up into many PRs over time for better reviewability. If a feature would require more changes to be "complete" it's fine to land partial changes if they are not wired up to anything yet, so long as tests are included which at least prove those parts work in isolation.
@@ -65,3 +63,5 @@ For outside contributions we will have the relevant team add these labels when t
 For any PR to be merged _all_ tests must be passing. If a test is flaky or failing consistently the owner of that test should make it a priority to fix that test and unblock other teams from landing changes. For outside contributors there are currently several tests which will always fail as full CI permission is required. For these PRs our current process is for the relevant team to copy the PR and resubmit it to run tests as a user with full CI permission.
 
 Eventually we plan to look into putting these permission-required tests behind a label which team members can add to their PRs at creation to run the full CI and can add to outside contributor PRs to trigger the CI from their own user credentials. If the label is not present there will be another action which checks the label is present. Rather than showing a bunch of confusing failures to new contributors it would just show a single job failure which indicates an additional label is required, and we can name it in a way that makes it clear that it's not the responsibility of the outside contributor to add it. Something like `approve-full-ci` is one possible choice there.
+
+[1]: https://docs.datadoghq.com/help
