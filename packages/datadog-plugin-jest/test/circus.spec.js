@@ -148,7 +148,7 @@ describe('Plugin', function () {
                 [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-test.js',
                 [TEST_TYPE]: 'test',
                 [JEST_TEST_RUNNER]: 'jest-circus',
-                [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/ci-app-libraries']), // reads from dd-trace-js' CODEOWNERS
+                [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/dd-trace-js', '@DataDog/ci-app-libraries']), // reads from dd-trace-js' CODEOWNERS
                 [LIBRARY_VERSION]: ddTraceVersion,
                 [COMPONENT]: 'jest'
               })

@@ -2,22 +2,22 @@
 /packages/dd-trace/src/appsec/ @DataDog/appsec-js
 /packages/dd-trace/test/appsec/ @DataDog/appsec-js
 
-/packages/dd-trace/src/ci-visibility/ @DataDog/ci-app-libraries
-/packages/datadog-plugin-jest/ @DataDog/ci-app-libraries
-/packages/datadog-plugin-mocha/ @DataDog/ci-app-libraries
-/packages/datadog-plugin-cucumber/ @DataDog/ci-app-libraries
-/packages/datadog-plugin-cypress/ @DataDog/ci-app-libraries
-/packages/datadog-plugin-playwright/ @DataDog/ci-app-libraries
+/packages/dd-trace/src/ci-visibility/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/packages/datadog-plugin-jest/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/packages/datadog-plugin-mocha/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/packages/datadog-plugin-cucumber/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/packages/datadog-plugin-cypress/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/packages/datadog-plugin-playwright/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
 
-/packages/datadog-instrumentations/src/jest.js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/mocha.js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/cucumber.js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/cypress.js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/playwright.js  @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/jest.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/mocha.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/cucumber.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/cypress.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/playwright.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 
-/integration-tests/ci-visibility/ @DataDog/ci-app-libraries
-/integration-tests/cucumber/ @DataDog/ci-app-libraries
-/integration-tests/cypress/ @DataDog/ci-app-libraries
-/integration-tests/playwright/ @DataDog/ci-app-libraries
-/integration-tests/ci-visibility-spec.js @DataDog/ci-app-libraries
-/integration-tests/test-api-manual.spec.js @DataDog/ci-app-libraries
+/integration-tests/ci-visibility/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/integration-tests/cucumber/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/integration-tests/cypress/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/integration-tests/playwright/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/integration-tests/ci-visibility-spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/integration-tests/test-api-manual.spec.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
