@@ -356,7 +356,7 @@ describe('Plugin', function () {
       })
     })
 
-    withVersions('next', 'next', '>=12.0.0 <13.4.0', version => {
+    withVersions('next', 'next', '>=13.4.0', version => {
       build(version)
 
       describe.only('standalone without configuration', () => {
@@ -365,13 +365,27 @@ describe('Plugin', function () {
           const fileName = `${__dirname}/.next/standalone/server.js`
           const fileData = readFileSync(fileName)
           const file = openSync(fileName, 'w+')
-          const tracerImportStmt = Buffer.from('const tracer = require(\'../../../../..\').init()\n')
+          const lineInjection = `
+            const tracer = require('../../../../..').init({
+              service: 'test',
+              flushInterval: 0,
+              plugins: false
+            }).use('next', process.env.WITH_CONFIG ? {
+              validateStatus: code => false,
+              hooks: {
+                request: (span) => {
+                  span.setTag('foo', 'bar')
+                }
+              }
+            } : true);
+          `
+          const tracerImportStmt = Buffer.from(lineInjection)
 
           writeSync(file, tracerImportStmt, 0, tracerImportStmt.length, 0)
           writeSync(file, fileData, 0, fileData.length, tracerImportStmt.length)
           close(file, err => { if (err) { throw err } })
 
-          // replace package.json/nodules stuff just in case
+          // for problems with Next.js, replace main entrypoint in an ill-copied package.json
           const EMPTY_FILE_TEMPLATE = `"use strict";
           Object.defineProperty(exports, "__esModule", {
               value: true
@@ -382,6 +396,12 @@ describe('Plugin', function () {
           const nextJSPackageJson = JSON.parse(fs.readFileSync(path.join(nextJSPackageDir, 'package.json'), 'utf-8'))
           const mainEntryFile = path.join(nextJSPackageDir, nextJSPackageJson.main)
           if (!fs.existsSync(mainEntryFile)) fs.writeFileSync(mainEntryFile, EMPTY_FILE_TEMPLATE)
+
+          // copy public directory for static files
+          const publicOrigin = `${__dirname}/public`
+          const publicDestination = `${__dirname}/.next/standalone/public`
+          execSync(`mkdir ${publicDestination}`)
+          execSync(`cp ${publicOrigin}/test.txt ${publicDestination}/test.txt`)
         })
 
         startServer({ withConfig: false, standalone: true }, version)

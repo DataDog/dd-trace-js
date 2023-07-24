@@ -15,14 +15,12 @@ const requestResources = new WeakMap()
 
 function wrapHandleRequest (handleRequest) {
   return function (req, res, pathname, query) {
-    console.log('i am in wraphandlerequest function')
     return instrument(req, res, () => handleRequest.apply(this, arguments))
   }
 }
 
 function wrapHandleApiRequest (handleApiRequest) {
   return function (req, res, pathname, query) {
-    console.log('in wraphandleapirequest function')
     return instrument(req, res, () => {
       const promise = handleApiRequest.apply(this, arguments)
 
@@ -114,7 +112,6 @@ function instrument (req, res, handler) {
   requestResources.set(req, requestResource)
 
   return requestResource.runInAsyncScope(() => {
-    console.log('about to publish!')
     startChannel.publish({ req, res })
 
     try {

@@ -17,7 +17,6 @@ class NextPlugin extends ServerPlugin {
   }
 
   start ({ req, res }) {
-    console.log('starting span')
     const store = storage.getStore()
     const childOf = store ? store.span : store
     const span = this.tracer.startSpan('next.request', {
