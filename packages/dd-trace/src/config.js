@@ -11,6 +11,7 @@ const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties } = require('./git_properties')
+const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -189,6 +190,7 @@ class Config {
       process.env.AWS_LAMBDA_FUNCTION_NAME ||
       process.env.FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
       process.env.K_SERVICE || // Google Cloud Function Name set by newer runtimes
+      process.env.WEBSITE_SITE_NAME || // set by Azure Functions
       pkg.name ||
       'node'
     const DD_SERVICE_MAPPING = coalesce(
@@ -227,11 +229,10 @@ class Config {
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
 
-    const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
-    const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
-    const isGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
+    const isGCPFunction = getIsGCPFunction()
+    const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
 
-    const inServerlessEnvironment = inAWSLambda || isGCPFunction
+    const inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
 
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED,
@@ -362,7 +363,7 @@ class Config {
     const DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
       options.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
-      isGCPFunction
+      isGCPFunction || isAzureFunctionConsumptionPlan
     )
 
     const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
@@ -678,6 +679,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
 
     this.isGCPFunction = isGCPFunction
+    this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
 
     tagger.add(this.tags, {
       service: this.service,
