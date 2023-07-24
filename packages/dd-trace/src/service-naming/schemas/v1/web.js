@@ -21,6 +21,10 @@ const web = {
     http2: {
       opName: () => 'http.client.request',
       serviceName: httpPluginClientService
+    },
+    aws: {
+      opName: ({ awsService }) => `aws.${awsService}.request`,
+      serviceName: identityService
     }
   },
   server: {

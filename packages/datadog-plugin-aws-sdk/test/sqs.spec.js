@@ -2,6 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
+const getPort = require('get-port')
 
 const queueOptions = {
   QueueName: 'SQS_QUEUE_NAME',
@@ -50,13 +51,70 @@ describe('Plugin', () => {
           return agent.close({ ritmReset: false })
         })
 
+        const spanProducerFn = (done) => {
+          sqs.sendMessage(
+            {
+              MessageBody: 'test body',
+              QueueUrl
+            },
+            (err) => err && done()
+          )
+        }
+
         withPeerService(
           () => tracer,
-          (done) => sqs.sendMessage({
-            MessageBody: 'test body',
-            QueueUrl
-          }, (err) => err && done()),
-          'SQS_QUEUE_NAME', 'queuename')
+          spanProducerFn,
+          'SQS_QUEUE_NAME',
+          'queuename'
+        )
+
+        withNamingSchema(
+          spanProducerFn,
+          {
+            v0: {
+              serviceName: () => 'test-aws-sqs',
+              opName: () => 'aws.request'
+            },
+            v1: {
+              serviceName: () => 'test',
+              opName: () => 'aws.sqs.send'
+            }
+          },
+          {
+            desc: 'producer'
+          }
+        )
+
+        withNamingSchema(
+          (done) => {
+            sqs.sendMessage({
+              MessageBody: 'test body',
+              QueueUrl
+            }, (err) => {
+              if (err) return done(err)
+
+              sqs.receiveMessage({
+                QueueUrl,
+                MessageAttributeNames: ['.*']
+              }, (err) => {
+                if (err) return done(err)
+              })
+            })
+          },
+          {
+            v0: {
+              serviceName: () => 'test-aws-sqs',
+              opName: () => 'aws.request'
+            },
+            v1: {
+              serviceName: () => 'test',
+              opName: () => 'aws.sqs.process'
+            }
+          },
+          {
+            desc: 'consumer'
+          }
+        )
 
         it('should propagate the tracing context from the producer to the consumer', (done) => {
           let parentId

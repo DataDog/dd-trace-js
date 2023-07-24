@@ -1,4 +1,4 @@
-const { identityService, httpPluginClientService } = require('../util')
+const { identityService, httpPluginClientService, awsServiceV0 } = require('../util')
 const { DD_MAJOR } = require('../../../../../../version')
 
 const web = {
@@ -22,6 +22,10 @@ const web = {
     http2: {
       opName: () => 'http.request',
       serviceName: httpPluginClientService
+    },
+    aws: {
+      opName: () => 'aws.request',
+      serviceName: awsServiceV0
     }
   },
   server: {

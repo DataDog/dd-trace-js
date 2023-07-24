@@ -16,4 +16,8 @@ function httpPluginClientService ({ tracerService, pluginConfig, sessionDetails 
   return tracerService
 }
 
-module.exports = { identityService, httpPluginClientService }
+function awsServiceV0 ({ tracerService, awsService }) {
+  return `${tracerService}-aws-${awsService}`
+}
+
+module.exports = { identityService, httpPluginClientService, awsServiceV0 }
