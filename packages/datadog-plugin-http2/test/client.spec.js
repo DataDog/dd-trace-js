@@ -86,12 +86,12 @@ describe('Plugin', () => {
           spanProducerFn,
           {
             v0: {
-              serviceName: () => 'test',
-              opName: () => 'http.request'
+              serviceName: 'test',
+              opName: 'http.request'
             },
             v1: {
-              serviceName: () => 'test',
-              opName: () => 'http.client.request'
+              serviceName: 'test',
+              opName: 'http.client.request'
             }
           }
         )
@@ -813,11 +813,11 @@ describe('Plugin', () => {
           {
             v0: {
               serviceName: () => `localhost:${serverPort}`,
-              opName: () => 'http.request'
+              opName: 'http.request'
             },
             v1: {
               serviceName: () => `localhost:${serverPort}`,
-              opName: () => 'http.client.request'
+              opName: 'http.client.request'
             }
           }
         )

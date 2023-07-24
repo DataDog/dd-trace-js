@@ -61,12 +61,12 @@ describe('Plugin', () => {
         },
         {
           v0: {
-            serviceName: () => 'test',
-            opName: () => 'http.request'
+            serviceName: 'test',
+            opName: 'http.request'
           },
           v1: {
-            serviceName: () => 'test',
-            opName: () => 'http.client.request'
+            serviceName: 'test',
+            opName: 'http.client.request'
           }
         }
       )

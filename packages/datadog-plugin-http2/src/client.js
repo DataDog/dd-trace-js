@@ -43,7 +43,7 @@ class Http2ClientPlugin extends ClientPlugin {
       meta: {
         [COMPONENT]: this.constructor.id,
         [SPAN_KIND]: CLIENT,
-        'service.name': this.serviceName(this.config, sessionDetails),
+        'service.name': this.serviceName({ pluginConfig: this.config, sessionDetails }),
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,

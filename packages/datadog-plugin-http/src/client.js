@@ -41,7 +41,7 @@ class HttpClientPlugin extends ClientPlugin {
       meta: {
         [COMPONENT]: this.constructor.id,
         'span.kind': 'client',
-        'service.name': this.serviceName(this.config, extractSessionDetails(options)),
+        'service.name': this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }),
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,

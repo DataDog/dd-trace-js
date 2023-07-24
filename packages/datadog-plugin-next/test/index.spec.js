@@ -110,7 +110,9 @@ describe('Plugin', function () {
             opName: () => 'http.server.request'
           }
         },
-        (version, defaultToGlobalService) => startServer(false, version, defaultToGlobalService)
+        {
+          hooks: (version, defaultToGlobalService) => startServer(false, version, defaultToGlobalService)
+        }
       )
 
       describe('without configuration', () => {
