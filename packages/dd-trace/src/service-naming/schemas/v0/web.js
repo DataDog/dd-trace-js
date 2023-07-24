@@ -26,6 +26,10 @@ const web = {
     aws: {
       opName: () => 'aws.request',
       serviceName: awsServiceV0
+    },
+    lambda: {
+      opName: () => 'aws.request',
+      serviceName: awsServiceV0
     }
   },
   server: {

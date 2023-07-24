@@ -60,6 +60,24 @@ describe('Plugin', () => {
           })
         })
 
+        withNamingSchema(
+          (done) => lambda.invoke({
+            FunctionName: 'ironmaiden',
+            Payload: '{}',
+            ClientContext: createClientContext({ custom: { megadeth: 'tornado of souls' } })
+          }, (e, data) => done(e)),
+          {
+            v0: {
+              serviceName: () => 'test-aws-lambda',
+              opName: () => 'aws.request'
+            },
+            v1: {
+              serviceName: () => 'test',
+              opName: () => 'aws.lambda.invoke'
+            }
+          }
+        )
+
         it('should propagate the tracing context with existing ClientContext and `custom` key', (done) => {
           let receivedContext
 

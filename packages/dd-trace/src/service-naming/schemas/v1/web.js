@@ -1,4 +1,4 @@
-const { identityService, httpPluginClientService } = require('../util')
+const { identityService, httpPluginClientService, awsServiceV0 } = require('../util')
 
 const web = {
   client: {
@@ -24,6 +24,10 @@ const web = {
     },
     aws: {
       opName: ({ awsService }) => `aws.${awsService}.request`,
+      serviceName: identityService
+    },
+    lambda: {
+      opName: () => 'aws.lambda.invoke',
       serviceName: identityService
     }
   },

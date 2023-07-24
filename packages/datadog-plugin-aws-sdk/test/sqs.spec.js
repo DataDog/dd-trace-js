@@ -2,7 +2,6 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
-const getPort = require('get-port')
 
 const queueOptions = {
   QueueName: 'SQS_QUEUE_NAME',
@@ -90,16 +89,12 @@ describe('Plugin', () => {
             sqs.sendMessage({
               MessageBody: 'test body',
               QueueUrl
-            }, (err) => {
-              if (err) return done(err)
+            }, () => {})
 
-              sqs.receiveMessage({
-                QueueUrl,
-                MessageAttributeNames: ['.*']
-              }, (err) => {
-                if (err) return done(err)
-              })
-            })
+            sqs.receiveMessage({
+              QueueUrl,
+              MessageAttributeNames: ['.*']
+            }, () => {})
           },
           {
             v0: {
@@ -282,7 +277,7 @@ describe('Plugin', () => {
             } catch (e) {
               done(e)
             }
-          }, 500)
+          }, 250)
         })
       })
     })

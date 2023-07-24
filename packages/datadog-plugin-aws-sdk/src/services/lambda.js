@@ -48,6 +48,23 @@ class Lambda extends BaseAwsSdkPlugin {
       }
     }
   }
+
+  pluginOpName (request) {
+    switch (request.operation) {
+      case 'invoke':
+        return this.operationName({
+          type: 'web',
+          kind: 'client'
+        })
+    }
+
+    return this.operationName({
+      id: 'aws',
+      type: 'web',
+      kind: 'client',
+      awsService: 'lambda'
+    })
+  }
 }
 
 module.exports = Lambda
