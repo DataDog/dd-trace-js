@@ -127,41 +127,36 @@ testFrameworks.forEach(({
 
     if (name === 'jest') {
       it('works when sharding', (done) => {
-        receiver.setSuitesToSkip([{
-          type: 'suite',
-          attributes: {
-            suite: 'ci-visibility/sharding-test/sharding-test-1.js'
-          }
-        }])
         receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(events => {
           const testSuiteEvents = events.payload.events.filter(event => event.type === 'test_suite_end')
-          assert.equal(testSuiteEvents.length, 2)
+          assert.equal(testSuiteEvents.length, 3)
           const testSuites = testSuiteEvents.map(span => span.content.meta[TEST_SUITE])
 
           assert.includeMembers(testSuites,
             [
               'ci-visibility/sharding-test/sharding-test-5.js',
-              'ci-visibility/sharding-test/sharding-test-4.js'
+              'ci-visibility/sharding-test/sharding-test-4.js',
+              'ci-visibility/sharding-test/sharding-test-1.js',
             ]
           )
 
           const testSession = events.payload.events.find(event => event.type === 'test_session_end').content
-          assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
+          assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
 
-          // now we run the second shard
+          // We run the second shard
           receiver.setSuitesToSkip([
-            {
-              type: 'suite',
-              attributes: {
-                suite: 'ci-visibility/sharding-test/sharding-test-1.js',
-              }
-            },
             {
               type: 'suite',
               attributes: {
                 suite: 'ci-visibility/sharding-test/sharding-test-2.js',
               }
             },
+            {
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/sharding-test/sharding-test-3.js',
+              }
+            }
           ])
           childProcess = exec(
             runTestsWithCoverageCommand,
@@ -178,13 +173,12 @@ testFrameworks.forEach(({
 
           receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(secondShardEvents => {
             const testSuiteEvents = secondShardEvents.payload.events.filter(event => event.type === 'test_suite_end')
-            assert.equal(testSuiteEvents.length, 1)
-            const [testSuite] = testSuiteEvents.map(span => span.content.meta[TEST_SUITE])
+
+            // The suites for this shard are to be skipped, so nothing is run.
+            assert.equal(testSuiteEvents.length, 0)
 
             const testSession = secondShardEvents.payload.events.find(event => event.type === 'test_session_end').content
             assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
-
-            assert.equal(testSuite, 'ci-visibility/sharding-test/sharding-test-3.js')
 
             done()
           })
