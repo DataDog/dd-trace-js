@@ -3,12 +3,12 @@
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "master",
       "BUILD_SOURCESDIRECTORY": "/foo/bar",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
       "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id",
@@ -29,23 +29,23 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commit",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "master",
       "BUILD_SOURCESDIRECTORY": "/foo/bar",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
-      "SYSTEM_PULLREQUEST_SOURCEREPOSITORYURI": "https://azure-pipelines-server-uri.com/pull",
+      "SYSTEM_PULLREQUEST_SOURCEREPOSITORYURI": "https://azure-pipelines-server-uri.com/pull.git",
       "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id",
       "SYSTEM_TEAMFOUNDATIONSERVERURI": "https://azure-pipelines-server-uri.com/",
       "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
@@ -64,20 +64,20 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commit",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/pull"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/pull.git"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "origin/master",
       "BUILD_SOURCESDIRECTORY": "foo/bar",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
       "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id",
@@ -98,20 +98,20 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commit",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "origin/master",
       "BUILD_SOURCESDIRECTORY": "/foo/bar~",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "HOME": "/not-my-home",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
@@ -134,20 +134,20 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commit",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "origin/master",
       "BUILD_SOURCESDIRECTORY": "/foo/~/bar",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "HOME": "/not-my-home",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
@@ -170,20 +170,20 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commit",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "origin/master",
       "BUILD_SOURCESDIRECTORY": "~/foo/bar",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "HOME": "/not-my-home",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
@@ -206,20 +206,20 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commit",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "origin/master",
       "BUILD_SOURCESDIRECTORY": "~foo/bar",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "HOME": "/not-my-home",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
@@ -242,20 +242,20 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commit",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "origin/master",
       "BUILD_SOURCESDIRECTORY": "~",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "HOME": "/not-my-home",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
@@ -278,20 +278,20 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commit",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "origin/master",
       "BUILD_SOURCESDIRECTORY": "/foo/bar",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
       "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id",
@@ -312,20 +312,20 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commit",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "refs/heads/master",
       "BUILD_SOURCESDIRECTORY": "/foo/bar",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
       "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id",
@@ -346,20 +346,20 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commit",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "refs/heads/feature/one",
       "BUILD_SOURCESDIRECTORY": "/foo/bar",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
       "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id",
@@ -380,20 +380,20 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commit",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "origin/tags/0.1.0",
       "BUILD_SOURCESDIRECTORY": "/foo/bar",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
       "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id",
@@ -413,8 +413,8 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commit",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git",
       "git.tag": "0.1.0"
     }
   ],
@@ -422,12 +422,12 @@
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "refs/heads/tags/0.1.0",
       "BUILD_SOURCESDIRECTORY": "/foo/bar",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
       "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id",
@@ -447,8 +447,8 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commit",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git",
       "git.tag": "0.1.0"
     }
   ],
@@ -456,16 +456,16 @@
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "origin/master",
       "BUILD_SOURCESDIRECTORY": "/foo/bar",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
       "SYSTEM_PULLREQUEST_SOURCEBRANCH": "origin/pr",
-      "SYSTEM_PULLREQUEST_SOURCECOMMITID": "commitPR",
+      "SYSTEM_PULLREQUEST_SOURCECOMMITID": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id",
       "SYSTEM_TEAMFOUNDATIONSERVERURI": "https://azure-pipelines-server-uri.com/",
       "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
@@ -484,24 +484,24 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commitPR",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "refs/heads/master",
       "BUILD_SOURCESDIRECTORY": "/foo/bar",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
       "SYSTEM_PULLREQUEST_SOURCEBRANCH": "refs/heads/pr",
-      "SYSTEM_PULLREQUEST_SOURCECOMMITID": "commitPR",
+      "SYSTEM_PULLREQUEST_SOURCECOMMITID": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "SYSTEM_STAGEDISPLAYNAME": "azure-pipelines-stage-name",
       "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id",
       "SYSTEM_TEAMFOUNDATIONSERVERURI": "https://azure-pipelines-server-uri.com/",
@@ -522,25 +522,25 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commitPR",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
     }
   ],
   [
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build",
+      "BUILD_REPOSITORY_URI": "https://azure-pipelines-server-uri.com/build.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEBRANCH": "refs/heads/feature/one",
       "BUILD_SOURCESDIRECTORY": "/foo/bar",
-      "BUILD_SOURCEVERSION": "commit",
+      "BUILD_SOURCEVERSION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
       "SYSTEM_JOBDISPLAYNAME": "azure-pipelines-job-name",
       "SYSTEM_JOBID": "azure-pipelines-job-id",
       "SYSTEM_PULLREQUEST_SOURCEBRANCH": "refs/heads/pr",
-      "SYSTEM_PULLREQUEST_SOURCECOMMITID": "commitPR",
+      "SYSTEM_PULLREQUEST_SOURCECOMMITID": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "SYSTEM_TASKINSTANCEID": "azure-pipelines-task-id",
       "SYSTEM_TEAMFOUNDATIONSERVERURI": "https://azure-pipelines-server-uri.com/",
       "SYSTEM_TEAMPROJECTID": "azure-pipelines-project-id",
@@ -560,8 +560,8 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.commit.sha": "commitPR",
-      "git.repository_url": "https://azure-pipelines-server-uri.com/build"
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://azure-pipelines-server-uri.com/build.git"
     }
   ],
   [
@@ -654,7 +654,7 @@
     {
       "BUILD_BUILDID": "azure-pipelines-build-id",
       "BUILD_DEFINITIONNAME": "azure-pipelines-name",
-      "BUILD_REPOSITORY_URI": "https://user:password@dev.azure.com/fabrikamfiber/",
+      "BUILD_REPOSITORY_URI": "https://user:password@dev.azure.com/fabrikamfiber/repo.git",
       "BUILD_REQUESTEDFOREMAIL": "azure-pipelines-commit-author-email@datadoghq.com",
       "BUILD_REQUESTEDFORID": "azure-pipelines-commit-author",
       "BUILD_SOURCEVERSIONMESSAGE": "azure-pipelines-commit-message",
@@ -675,7 +675,7 @@
       "git.commit.author.email": "azure-pipelines-commit-author-email@datadoghq.com",
       "git.commit.author.name": "azure-pipelines-commit-author",
       "git.commit.message": "azure-pipelines-commit-message",
-      "git.repository_url": "https://dev.azure.com/fabrikamfiber/"
+      "git.repository_url": "https://dev.azure.com/fabrikamfiber/repo.git"
     }
   ]
 ]

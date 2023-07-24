@@ -42,6 +42,7 @@ const jestItrConfigurationCh = channel('ci:jest:itr-configuration')
 let skippableSuites = []
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
+let isSuitesSkipped = false
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -128,8 +129,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             suite: this.testSuite,
             runner: 'jest-circus',
             testParameters,
-            frameworkVersion: jestVersion,
-            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
+            frameworkVersion: jestVersion
           })
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
@@ -144,7 +144,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             const formattedError = formatJestError(event.test.errors[0])
             testErrCh.publish(formattedError)
           }
-          testRunFinishCh.publish(status)
+          testRunFinishCh.publish({
+            status,
+            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
+          })
           // restore in case it is retried
           event.test.fn = originalTestFns.get(event.test)
         })
@@ -227,7 +230,6 @@ function cliWrapper (cli, jestVersion) {
         log.error(err)
       }
     }
-    const isSuitesSkipped = !!skippableSuites.length
 
     const processArgv = process.argv.slice(2).join(' ')
     sessionAsyncResource.runInAsyncScope(() => {
@@ -408,6 +410,32 @@ function jestConfigSyncWrapper (jestConfig) {
   return jestConfig
 }
 
+addHook({
+  name: '@jest/transform',
+  versions: ['>=24.8.0'],
+  file: 'build/ScriptTransformer.js'
+}, transformPackage => {
+  const originalCreateScriptTransformer = transformPackage.createScriptTransformer
+
+  transformPackage.createScriptTransformer = async function (config) {
+    const { testEnvironmentOptions, ...restOfConfig } = config
+    const {
+      _ddTestModuleId,
+      _ddTestSessionId,
+      _ddTestCommand,
+      ...restOfTestEnvironmentOptions
+    } = testEnvironmentOptions
+
+    restOfConfig.testEnvironmentOptions = restOfTestEnvironmentOptions
+
+    arguments[0] = restOfConfig
+
+    return originalCreateScriptTransformer.apply(this, arguments)
+  }
+
+  return transformPackage
+})
+
 /**
  * Hook to remove the test paths (test suite) that are part of `skippableSuites`
  */
@@ -429,6 +457,8 @@ addHook({
     const { tests } = testPaths
 
     const filteredTests = getJestSuitesToRun(skippableSuites, tests, rootDir)
+
+    isSuitesSkipped = filteredTests.length !== tests.length
 
     skippableSuites = []
 
@@ -469,7 +499,7 @@ function jasmineAsyncInstallWraper (jasmineAsyncInstallExport, jestVersion) {
             const formattedError = formatJestError(spec.result.failedExpectations[0].error)
             testErrCh.publish(formattedError)
           }
-          testRunFinishCh.publish(specStatusToTestStatus[spec.result.status])
+          testRunFinishCh.publish({ status: specStatusToTestStatus[spec.result.status] })
           onComplete.apply(this, arguments)
         })
         arguments[0] = callback

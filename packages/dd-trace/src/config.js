@@ -247,6 +247,10 @@ class Config {
       process.env.DD_TELEMETRY_DEBUG,
       false
     )
+    const DD_TELEMETRY_METRICS_ENABLED = coalesce(
+      process.env.DD_TELEMETRY_METRICS_ENABLED,
+      false
+    )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
       options.protocolVersion,
       process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
@@ -277,7 +281,7 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
       false
     )
-    const defaultPropagationStyle = ['tracecontext', 'datadog']
+    const defaultPropagationStyle = ['datadog', 'tracecontext']
     if (isTrue(DD_TRACE_B3_ENABLED)) {
       defaultPropagationStyle.push('b3')
       defaultPropagationStyle.push('b3 single header')
@@ -317,13 +321,38 @@ class Config {
       false
     )
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
-      process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+      coalesce(
+        options.spanAttributeSchema,
+        process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+      )
     )
-    const DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+    const DD_TRACE_PEER_SERVICE_MAPPING = coalesce(
+      options.peerServiceMapping,
+      process.env.DD_TRACE_PEER_SERVICE_MAPPING ? fromEntries(
+        process.env.DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
+      ) : {}
+    )
+
+    const peerServiceSet = (
+      options.hasOwnProperty('spanComputePeerService') ||
+      process.env.hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
+    )
+    const peerServiceValue = coalesce(
+      options.spanComputePeerService,
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+    )
+
+    const DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = (
+      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA === 'v0'
+        // In v0, peer service is computed only if it is explicitly set to true
+        ? peerServiceSet && isTrue(peerServiceValue)
+        // In >v0, peer service is false only if it is explicitly set to false
+        : (peerServiceSet ? !isFalse(peerServiceValue) : true)
+    )
 
     const DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = coalesce(
-      isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED),
-      false
+      options.spanRemoveIntegrationFromService,
+      isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
     )
     const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
       process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
@@ -461,6 +490,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       true
     )
 
+    const DD_IAST_TELEMETRY_VERBOSITY = coalesce(
+      iastOptions && iastOptions.telemetryVerbosity,
+      process.env.DD_IAST_TELEMETRY_VERBOSITY,
+      'INFORMATION'
+    )
+
     const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
       true
@@ -549,11 +584,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       exporters: DD_PROFILING_EXPORTERS
     }
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
-    this.spanComputePeerService = (this.spanAttributeSchema === 'v0'
-      ? isTrue(DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED)
-      : true
-    )
-    this.traceRemoveIntegrationServiceNamesEnabled = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+    this.spanComputePeerService = DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+    this.spanRemoveIntegrationFromService = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+    this.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
@@ -561,7 +594,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
       heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
-      debug: isTrue(DD_TELEMETRY_DEBUG)
+      debug: isTrue(DD_TELEMETRY_DEBUG),
+      metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED)
     }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
@@ -590,7 +624,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
       deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
-      redactionEnabled: DD_IAST_REDACTION_ENABLED
+      redactionEnabled: DD_IAST_REDACTION_ENABLED,
+      telemetryVerbosity: DD_IAST_TELEMETRY_VERBOSITY
     }
 
     this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)

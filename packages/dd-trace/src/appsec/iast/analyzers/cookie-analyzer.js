@@ -9,7 +9,13 @@ class CookieAnalyzer extends Analyzer {
   constructor (type, propertyToBeSafe) {
     super(type)
     this.propertyToBeSafe = propertyToBeSafe.toLowerCase()
-    this.addSub('datadog:iast:set-cookie', (cookieInfo) => this.analyze(cookieInfo))
+  }
+
+  onConfigure () {
+    this.addSub(
+      { channelName: 'datadog:iast:set-cookie', moduleName: 'http' },
+      (cookieInfo) => this.analyze(cookieInfo)
+    )
   }
 
   _isVulnerable ({ cookieProperties, cookieValue }) {

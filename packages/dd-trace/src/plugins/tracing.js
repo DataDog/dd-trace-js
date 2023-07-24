@@ -22,14 +22,24 @@ class TracingPlugin extends Plugin {
     return store && store.span
   }
 
-  serviceName (...serviceArgs) {
-    const { type, id, kind } = this.constructor
-    return Nomenclature.serviceName(type, kind, id, ...serviceArgs)
+  serviceName (opts = {}) {
+    const {
+      type = this.constructor.type,
+      id = this.constructor.id,
+      kind = this.constructor.kind
+    } = opts
+
+    return Nomenclature.serviceName(type, kind, id, opts)
   }
 
-  operationName (...opNameArgs) {
-    const { type, id, kind } = this.constructor
-    return Nomenclature.opName(type, kind, id, ...opNameArgs)
+  operationName (opts = {}) {
+    const {
+      type = this.constructor.type,
+      id = this.constructor.id,
+      kind = this.constructor.kind
+    } = opts
+
+    return Nomenclature.opName(type, kind, id, opts)
   }
 
   configure (config) {
@@ -80,9 +90,7 @@ class TracingPlugin extends Plugin {
     this.addBind(`${prefix}:${eventName}`, transform)
   }
 
-  addError (error) {
-    const span = this.activeSpan
-
+  addError (error, span = this.activeSpan) {
     if (!span._spanContext._tags['error']) {
       // Errors may be wrapped in a context.
       error = (error && error.error) || error

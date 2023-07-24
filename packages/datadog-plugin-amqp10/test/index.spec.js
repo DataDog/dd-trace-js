@@ -3,7 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
-const namingSchema = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let tracer
@@ -72,8 +72,8 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
 
-                expect(span).to.have.property('name', namingSchema.send.opName)
-                expect(span).to.have.property('service', namingSchema.send.serviceName)
+                expect(span).to.have.property('name', expectedSchema.send.opName)
+                expect(span).to.have.property('service', expectedSchema.send.serviceName)
                 expect(span).to.have.property('resource', 'send amq.topic')
                 expect(span).to.not.have.property('type')
                 expect(span.meta).to.have.property('span.kind', 'producer')
@@ -134,9 +134,7 @@ describe('Plugin', () => {
 
           withNamingSchema(
             () => sender.send({ key: 'value' }),
-            () => namingSchema.send.opName,
-            () => namingSchema.send.serviceName,
-            'test'
+            rawExpectedSchema.send
           )
         })
 
@@ -145,8 +143,8 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', namingSchema.receive.opName)
-                expect(span).to.have.property('service', namingSchema.receive.serviceName)
+                expect(span).to.have.property('name', expectedSchema.receive.opName)
+                expect(span).to.have.property('service', expectedSchema.receive.serviceName)
                 expect(span).to.have.property('resource', 'receive amq.topic')
                 expect(span).to.have.property('type', 'worker')
                 expect(span.meta).to.have.property('span.kind', 'consumer')
@@ -181,9 +179,7 @@ describe('Plugin', () => {
 
           withNamingSchema(
             () => sender.send({ key: 'value' }),
-            () => namingSchema.receive.opName,
-            () => namingSchema.receive.serviceName,
-            'test'
+            rawExpectedSchema.receive
           )
         })
       })
@@ -224,9 +220,16 @@ describe('Plugin', () => {
 
         withNamingSchema(
           () => sender.send({ key: 'value' }),
-          () => namingSchema.receive.opName,
-          () => 'test-custom-name',
-          'test-custom-name'
+          {
+            v0: {
+              opName: 'amqp.receive',
+              serviceName: 'test-custom-name'
+            },
+            v1: {
+              opName: 'amqp.process',
+              serviceName: 'test-custom-name'
+            }
+          }
         )
       })
     })

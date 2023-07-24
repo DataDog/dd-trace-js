@@ -230,6 +230,28 @@ testFrameworks.forEach(({
             }).catch(done)
         })
       })
+      it('reports timeout error message', (done) => {
+        childProcess = fork('ci-visibility/run-jest.js', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '-r dd-trace/ci/init',
+            RUN_IN_PARALLEL: true,
+            TEST_REGEX: 'timeout-test/timeout-test.js'
+          },
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('message', () => {
+          assert.include(testOutput, 'Exceeded timeout of 100 ms for a test')
+          done()
+        })
+      })
     }
 
     it('can run tests and report spans', (done) => {
@@ -617,6 +639,40 @@ testFrameworks.forEach(({
           }
         )
       })
+      it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test/not-existing-test.js'
+          }
+        }])
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+            assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+            assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+            const testModule = events.find(event => event.type === 'test_module_end').content
+            assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+            assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+            assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          }, 25000)
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
     })
 
     describe('evp proxy', () => {
@@ -920,6 +976,40 @@ testFrameworks.forEach(({
             stdio: 'inherit'
           }
         )
+      })
+      it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test/not-existing-test.js'
+          }
+        }])
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+            assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+            assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+            const testModule = events.find(event => event.type === 'test_module_end').content
+            assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+            assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+            assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          }, 25000)
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getCiVisEvpProxyConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
       })
     })
   })

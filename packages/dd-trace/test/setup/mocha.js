@@ -51,16 +51,20 @@ function loadInstFile (file, instrumentations) {
 function withNamingSchema (
   spanProducerFn,
   expected,
-  hooks = (version, defaultToGlobalService) => {}
+  selectSpan = (traces) => traces[0][0],
+  opts = {}
 ) {
+  const {
+    hooks = (version, defaultToGlobalService) => {},
+    desc = ''
+  } = opts
   let fullConfig
 
-  describe('service and operation naming', () => {
+  const testTitle = 'service and operation naming' + (desc !== '' ? ` (${desc})` : '')
+
+  describe(testTitle, () => {
     Object.keys(schemaDefinitions).forEach(versionName => {
       describe(`in version ${versionName}`, () => {
-        hooks(versionName, false)
-        const { opName, serviceName } = expected[versionName]
-
         before(() => {
           fullConfig = Nomenclature.config
           Nomenclature.configure({
@@ -73,33 +77,38 @@ function withNamingSchema (
           Nomenclature.configure(fullConfig)
         })
 
+        hooks(versionName, false)
+
+        const { opName, serviceName } = expected[versionName]
+
         it(`should conform to the naming schema`, done => {
           agent
             .use(traces => {
-              const span = traces[0][0]
-              expect(span).to.have.property('name', opName())
-              expect(span).to.have.property('service', serviceName())
+              const span = selectSpan(traces)
+              const expectedOpName = typeof opName === 'function'
+                ? opName()
+                : opName
+              const expectedServiceName = typeof serviceName === 'function'
+                ? serviceName()
+                : serviceName
+
+              expect(span).to.have.property('name', expectedOpName)
+              expect(span).to.have.property('service', expectedServiceName)
             })
             .then(done)
             .catch(done)
-
           spanProducerFn(done)
         })
       })
     })
 
     describe('service naming short-circuit in v0', () => {
-      hooks('v0', true)
-
-      // when short-circuit is enabled, we expect the serviceName v1 version to be used.
-      const { serviceName } = expected['v1']
-
       before(() => {
         fullConfig = Nomenclature.config
         Nomenclature.configure({
           spanAttributeSchema: 'v0',
           service: fullConfig.service,
-          traceRemoveIntegrationServiceNamesEnabled: true
+          spanRemoveIntegrationFromService: true
         })
       })
 
@@ -107,11 +116,18 @@ function withNamingSchema (
         Nomenclature.configure(fullConfig)
       })
 
+      hooks('v0', true)
+
+      const { serviceName } = expected['v1']
+
       it('should pass service name through', done => {
         agent
           .use(traces => {
             const span = traces[0][0]
-            expect(span).to.have.property('service', serviceName())
+            const expectedServiceName = typeof serviceName === 'function'
+              ? serviceName()
+              : serviceName
+            expect(span).to.have.property('service', expectedServiceName)
           })
           .then(done)
           .catch(done)

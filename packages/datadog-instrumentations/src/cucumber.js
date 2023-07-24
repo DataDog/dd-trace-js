@@ -37,6 +37,7 @@ const patched = new WeakSet()
 
 let pickleByFile = {}
 const pickleResultByFile = {}
+let isSuitesSkipped = false
 
 function getSuiteStatusFromTestStatuses (testStatuses) {
   if (testStatuses.some(status => status === 'fail')) {
@@ -264,7 +265,9 @@ addHook({
     const { err, skippableSuites } = await skippableSuitesPromise
 
     if (!err) {
-      this.pickleIds = getPicklesToRun(this, skippableSuites)
+      const newPickleIds = getPicklesToRun(this, skippableSuites)
+      isSuitesSkipped = newPickleIds.length !== this.pickleIds.length
+      this.pickleIds = newPickleIds
     }
 
     pickleByFile = getPickleByFile(this)
@@ -292,7 +295,7 @@ addHook({
     asyncResource.runInAsyncScope(() => {
       sessionFinishCh.publish({
         status: success ? 'pass' : 'fail',
-        isSuitesSkipped: skippableSuites ? !!skippableSuites.length : false,
+        isSuitesSkipped,
         testCodeCoverageLinesTotal
       })
     })

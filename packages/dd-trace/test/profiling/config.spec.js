@@ -7,7 +7,6 @@ const os = require('os')
 const path = require('path')
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
-const CpuProfiler = require('../../src/profiling/profilers/cpu')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
@@ -43,6 +42,7 @@ describe('config', () => {
     expect(config.logger).to.be.an.instanceof(ConsoleLogger)
     expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
     expect(config.profilers[0]).to.be.an.instanceof(WallProfiler)
+    expect(config.profilers[0].codeHotspotsEnabled()).false
     expect(config.profilers[1]).to.be.an.instanceof(SpaceProfiler)
   })
 
@@ -58,8 +58,9 @@ describe('config', () => {
         error () { }
       },
       exporters: 'agent,file',
-      profilers: 'wall,cpu-experimental',
-      url: 'http://localhost:1234/'
+      profilers: 'space,wall',
+      url: 'http://localhost:1234/',
+      codeHotspotsEnabled: true
     }
 
     const config = new Config(options)
@@ -80,8 +81,9 @@ describe('config', () => {
     expect(config.exporters[1]).to.be.an.instanceof(FileExporter)
     expect(config.profilers).to.be.an('array')
     expect(config.profilers.length).to.equal(2)
-    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[1]).to.be.an.instanceOf(CpuProfiler)
+    expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
+    expect(config.profilers[1]).to.be.an.instanceOf(WallProfiler)
+    expect(config.profilers[1].codeHotspotsEnabled()).true
   })
 
   it('should filter out invalid profilers', () => {
@@ -129,7 +131,8 @@ describe('config', () => {
 
   it('should support profiler config with DD_PROFILING_PROFILERS', () => {
     process.env = {
-      DD_PROFILING_PROFILERS: 'wall'
+      DD_PROFILING_PROFILERS: 'wall',
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED: '1'
     }
     const options = {
       logger: {
@@ -145,6 +148,7 @@ describe('config', () => {
     expect(config.profilers).to.be.an('array')
     expect(config.profilers.length).to.equal(1)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
+    expect(config.profilers[0].codeHotspotsEnabled()).true
   })
 
   it('should support profiler config with DD_PROFILING_XXX_ENABLED', () => {
@@ -192,7 +196,8 @@ describe('config', () => {
 
   it('should prioritize options over env variables', () => {
     process.env = {
-      DD_PROFILING_PROFILERS: 'wall'
+      DD_PROFILING_PROFILERS: 'space',
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED: '1'
     }
     const options = {
       logger: {
@@ -201,14 +206,16 @@ describe('config', () => {
         warn () {},
         error () {}
       },
-      profilers: ['space']
+      profilers: ['wall'],
+      codeHotspotsEnabled: false
     }
 
     const config = new Config(options)
 
     expect(config.profilers).to.be.an('array')
     expect(config.profilers.length).to.equal(1)
-    expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
+    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
+    expect(config.profilers[0].codeHotspotsEnabled()).false
   })
 
   it('should support tags', () => {
