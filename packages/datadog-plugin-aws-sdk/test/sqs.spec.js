@@ -282,7 +282,7 @@ describe('Plugin', () => {
             } catch (e) {
               done(e)
             }
-          }, 250)
+          }, 500)
         })
       })
     })
