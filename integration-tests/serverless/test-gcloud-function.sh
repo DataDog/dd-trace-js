@@ -30,9 +30,6 @@ DEPLOY_OUTPUT=$(gcloud functions deploy dd-trace-js-sls-mini-agent-integration-t
 
 INVOKE_URL=$(echo "$DEPLOY_OUTPUT" | awk -F'uri: ' '{print $2}' | xargs)
 
-echo "Waiting 10 seconds before invoking cloud function"
-sleep 10
-
 echo "Calling deployed cloud function"
 
 curl -s "${INVOKE_URL}"
