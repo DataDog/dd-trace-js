@@ -477,12 +477,12 @@ addHook({
     const [{ rootDir, shard }] = arguments
 
     if (shard && shard.shardIndex) {
-      // If the user is using sharding, we want to apply the filtering of tests in the shard process.
+      // If the user is using jest sharding, we want to apply the filtering of tests in the shard process.
       // The reason for this is the following:
-      // If sharding is being used, the tests are likely being run in different CI jobs, that is,
-      // Intelligent test runner might be responding slightly different suites to skip, because the
-      // request to skippable might be done at different times.
-      // If we filter the list of tests here, the base of tests for sharding might potentially be different,
+      // The tests for different shards are likely being run in different CI jobs so
+      // the requests to the skippable endpoint might be done at different times and their responses might be different.
+      // If the skippable endpoint is returning different suites and we filter the list of tests here,
+      // the base list of tests that is used for sharding might be different,
       // causing the shards to potentially run the same suite.
       return getTestPaths.apply(this, arguments)
     }

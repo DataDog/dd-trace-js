@@ -136,7 +136,7 @@ testFrameworks.forEach(({
             [
               'ci-visibility/sharding-test/sharding-test-5.js',
               'ci-visibility/sharding-test/sharding-test-4.js',
-              'ci-visibility/sharding-test/sharding-test-1.js',
+              'ci-visibility/sharding-test/sharding-test-1.js'
             ]
           )
 
@@ -148,13 +148,13 @@ testFrameworks.forEach(({
             {
               type: 'suite',
               attributes: {
-                suite: 'ci-visibility/sharding-test/sharding-test-2.js',
+                suite: 'ci-visibility/sharding-test/sharding-test-2.js'
               }
             },
             {
               type: 'suite',
               attributes: {
-                suite: 'ci-visibility/sharding-test/sharding-test-3.js',
+                suite: 'ci-visibility/sharding-test/sharding-test-3.js'
               }
             }
           ])
@@ -177,7 +177,11 @@ testFrameworks.forEach(({
             // The suites for this shard are to be skipped, so nothing is run.
             assert.equal(testSuiteEvents.length, 0)
 
-            const testSession = secondShardEvents.payload.events.find(event => event.type === 'test_session_end').content
+            const testSession = secondShardEvents
+              .payload
+              .events
+              .find(event => event.type === 'test_session_end').content
+
             assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
 
             done()
