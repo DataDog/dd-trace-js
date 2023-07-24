@@ -15,6 +15,8 @@ class FetchPlugin extends HttpClientPlugin {
     const options = new URL(req.url)
     const headers = options.headers = Object.fromEntries(req.headers.entries())
 
+    options.method = req.method
+
     message.args = { options }
 
     const store = super.bindStart(message)
