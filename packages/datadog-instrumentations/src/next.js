@@ -15,12 +15,14 @@ const requestResources = new WeakMap()
 
 function wrapHandleRequest (handleRequest) {
   return function (req, res, pathname, query) {
+    console.log('i am in wraphandlerequest function')
     return instrument(req, res, () => handleRequest.apply(this, arguments))
   }
 }
 
 function wrapHandleApiRequest (handleApiRequest) {
   return function (req, res, pathname, query) {
+    console.log('in wraphandleapirequest function')
     return instrument(req, res, () => {
       const promise = handleApiRequest.apply(this, arguments)
 
@@ -112,6 +114,7 @@ function instrument (req, res, handler) {
   requestResources.set(req, requestResource)
 
   return requestResource.runInAsyncScope(() => {
+    console.log('about to publish!')
     startChannel.publish({ req, res })
 
     try {
@@ -183,4 +186,22 @@ addHook({
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
 
   return nextServer
+})
+
+function wrapCreateServerHandler (createServerHandler) {
+  return function ({ port, hostname, dir, minimalMode }) {
+    return createServerHandler.apply(this, arguments)
+  }
+}
+
+// for Next.js standalone with:
+// const { createServerHandler } = require('next/dist/server/lib/render-server-standalone')
+addHook({
+  name: 'next',
+  versions: ['>=13.4'], // although it was introduced in 13.3.5-canary.9
+  file: 'dist/server/lib/render-server-standalone.js'
+}, renderStandaloneServer => {
+  shimmer.wrap(renderStandaloneServer, 'createServerHandler', wrapCreateServerHandler)
+  // shimmer.wrap(renderStandaloneServer.createServerHandler, wrapCreateServerHandler)
+  return renderStandaloneServer
 })

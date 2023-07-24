@@ -117,6 +117,9 @@ function Hook (modules, options, onrequire) {
         // abort if _resolveLookupPaths return null
         return exports
       }
+      // console.log('name', name)
+      // console.log('basedir', basedir)
+      // console.log('...paths', ...paths)
       const res = Module._findPath(name, [basedir, ...paths])
       if (res !== filename) {
         // this is a module-internal file
