@@ -204,6 +204,8 @@ addHook({
 
     const filteredTests = getJestSuitesToRun(skippableSuites, shardedTests, rootDir || process.cwd())
 
+    isSuitesSkipped = filteredTests.length !== shardedTests.length
+
     return filteredTests
   })
   return sequencerPackage
