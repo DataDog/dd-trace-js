@@ -6,7 +6,8 @@ export function onMessage (handler) {
       await handler()
       res.end('integration test response handler success')
     } catch (err) {
-      res.status(500).end('integration test response handler failure')
+      res.statusCode = 500
+      res.end('integration test response handler failure')
     }
   }).listen(0, () => {
     const port = server.address().port
