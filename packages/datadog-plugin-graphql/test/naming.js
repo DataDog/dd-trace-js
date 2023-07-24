@@ -1,19 +1,19 @@
 const { resolveNaming } = require('../../dd-trace/test/plugins/helpers')
 
 const rawExpectedSchema = {
-  outbound: {
+  server: {
     v0: {
-      opName: 'redis.command',
-      serviceName: 'test-redis'
+      opName: 'graphql.execute',
+      serviceName: 'test'
     },
     v1: {
-      opName: 'redis.command',
+      opName: 'graphql.server.request',
       serviceName: 'test'
     }
   }
 }
 
 module.exports = {
-  rawExpectedSchema: rawExpectedSchema,
+  rawExpectedSchema,
   expectedSchema: resolveNaming(rawExpectedSchema)
 }

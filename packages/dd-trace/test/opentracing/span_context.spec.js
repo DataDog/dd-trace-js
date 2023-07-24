@@ -45,6 +45,7 @@ describe('SpanContext', () => {
       _isFinished: true,
       _tags: {},
       _sampling: { priority: 2 },
+      _spanSampling: undefined,
       _baggageItems: { foo: 'bar' },
       _noop: noop,
       _trace: {
@@ -71,6 +72,7 @@ describe('SpanContext', () => {
       _isFinished: false,
       _tags: {},
       _sampling: {},
+      _spanSampling: undefined,
       _baggageItems: {},
       _noop: null,
       _trace: {
@@ -83,16 +85,16 @@ describe('SpanContext', () => {
     })
   })
 
-  it('should clone sampling object', () => {
+  it('should share sampling object between contexts', () => {
     const first = new SpanContext({
       sampling: { priority: 1 }
     })
     const second = new SpanContext({
-      sampling: first.sampling
+      sampling: first._sampling
     })
     second._sampling.priority = 2
 
-    expect(first._sampling).to.have.property('priority', 1)
+    expect(first._sampling).to.have.property('priority', 2)
   })
 
   describe('toTraceId()', () => {
