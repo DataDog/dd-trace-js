@@ -410,6 +410,32 @@ function jestConfigSyncWrapper (jestConfig) {
   return jestConfig
 }
 
+addHook({
+  name: '@jest/transform',
+  versions: ['>=24.8.0'],
+  file: 'build/ScriptTransformer.js'
+}, transformPackage => {
+  const originalCreateScriptTransformer = transformPackage.createScriptTransformer
+
+  transformPackage.createScriptTransformer = async function (config) {
+    const { testEnvironmentOptions, ...restOfConfig } = config
+    const {
+      _ddTestModuleId,
+      _ddTestSessionId,
+      _ddTestCommand,
+      ...restOfTestEnvironmentOptions
+    } = testEnvironmentOptions
+
+    restOfConfig.testEnvironmentOptions = restOfTestEnvironmentOptions
+
+    arguments[0] = restOfConfig
+
+    return originalCreateScriptTransformer.apply(this, arguments)
+  }
+
+  return transformPackage
+})
+
 /**
  * Hook to remove the test paths (test suite) that are part of `skippableSuites`
  */
