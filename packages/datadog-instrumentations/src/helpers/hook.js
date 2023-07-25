@@ -3,7 +3,6 @@
 const path = require('path')
 const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
-const dcitm = require('../../../dd-trace/src/dcitm')
 
 /**
  * This is called for every package that dd-trace supports instrumentation for.
@@ -42,13 +41,11 @@ function Hook (modules, onrequire) {
       return safeHook(moduleExports, moduleName, moduleBaseDir)
     }
   })
-  this._dcitmHook = dcitm(modules, {}, safeHook)
 }
 
 Hook.prototype.unhook = function () {
   this._ritmHook.unhook()
   this._iitmHook.unhook()
-  this._dcitmHook.unhook()
   this._patched = Object.create(null)
 }
 
