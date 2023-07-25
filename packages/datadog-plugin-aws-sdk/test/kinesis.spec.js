@@ -54,12 +54,12 @@ describe('Kinesis', () => {
     })
 
     withNamingSchema(
-      (done) => kinesis.describeStreamSummary({
+      (done) => kinesis.describeStream({
         StreamName: 'MyStream'
       }, (err) => err && done()),
       {
         v0: {
-          serviceName: () => 'test-aws-lambda',
+          serviceName: () => 'test-aws-kinesis',
           opName: () => 'aws.request'
         },
         v1: {
