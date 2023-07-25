@@ -41,7 +41,12 @@ dc.subscribe('dd-trace-esbuild', (payload) => {
     moduleName += '/' + payload.relPath
   }
 
-  hooks[payload.package]()
+  try {
+    hooks[payload.package]()
+  } catch (err) {
+    log.error(`esbuild-wrapped ${payload.package} missing in list of hooks`)
+    throw err
+  }
 
   if (!instrumentations[payload.package]) {
     log.error(`esbuild-wrapped ${payload.package} missing in list of instrumentations`)
