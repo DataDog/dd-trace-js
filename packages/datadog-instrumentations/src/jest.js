@@ -44,6 +44,8 @@ let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
 let isSuitesSkipped = false
 
+const SESSION_FINISH_FLUSH_TIMEOUT = 10000
+
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 const specStatusToTestStatus = {
@@ -247,6 +249,21 @@ function cliWrapper (cli, jestVersion) {
     } catch (e) {
       // ignore errors
     }
+    let timeoutId
+
+    const finishPromise = new Promise((resolve) => {
+      onDone = () => {
+        clearTimeout(timeoutId)
+        resolve()
+      }
+    })
+
+
+    const timeoutPromise = new Promise(resolve => {
+      timeoutId = setTimeout(() => {
+        resolve()
+      }, SESSION_FINISH_FLUSH_TIMEOUT)
+    })
 
     sessionAsyncResource.runInAsyncScope(() => {
       testSessionFinishCh.publish({
@@ -254,9 +271,12 @@ function cliWrapper (cli, jestVersion) {
         isSuitesSkipped,
         isSuitesSkippingEnabled,
         isCodeCoverageEnabled,
-        testCodeCoverageLinesTotal
+        testCodeCoverageLinesTotal,
+        onDone
       })
     })
+
+    await Promise.race([finishPromise, timeoutPromise])
 
     return result
   })
