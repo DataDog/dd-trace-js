@@ -52,6 +52,7 @@ module.exports = {
   'jest-environment-jsdom': () => require('../jest'),
   'jest-jasmine2': () => require('../jest'),
   'jest-worker': () => require('../jest'),
+  'knex': () => require('../knex'),
   'koa': () => require('../koa'),
   'koa-router': () => require('../koa'),
   'kafkajs': () => require('../kafkajs'),
