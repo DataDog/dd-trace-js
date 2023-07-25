@@ -57,7 +57,13 @@ module.exports.name = 'datadog-esbuild'
 
 module.exports.setup = function (build) {
   build.onResolve({ filter: /.*/ }, args => {
-    const fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
+    let fullPathToModule
+    try {
+      fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
+    } catch (err) {
+      console.warn(`Unable to find "${args.path}". Is the package dead code?`)
+      return
+    }
     const extracted = extractPackageAndModulePath(fullPathToModule)
     const packageName = args.path
 
@@ -74,9 +80,7 @@ module.exports.setup = function (build) {
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
           if (!internal) {
-            console.warn(
-              `Unable to open "${extracted.pkg}/package.json". Is the "${extracted.pkg}" package dead code?`
-            )
+            console.warn(`Unable to find "${extracted.pkg}/package.json". Is the package dead code?`)
           }
           return
         } else {
