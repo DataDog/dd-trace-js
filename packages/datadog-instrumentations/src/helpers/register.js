@@ -45,7 +45,8 @@ dc.subscribe('dd-trace-esbuild', (payload) => {
   const moduleBaseDir = null // unused, for version stuff
   const moduleVersion = payload.version
 
-  if (payload.relPath) {
+  // if path === package then we're loading a package directly
+  if (payload.path !== payload.package) {
     moduleName += '/' + payload.relPath
   }
 
@@ -96,7 +97,11 @@ dc.subscribe('dd-trace-esbuild', (payload) => {
     }
   }
 
-  if (!debug_match) console.error('NO MATCH', moduleName)
+  if (!debug_match) {
+    console.error('NO MATCH', moduleName)
+  } else {
+    console.log('YES MATCH', moduleName)
+  }
 
   payload.module = moduleExports
   return
