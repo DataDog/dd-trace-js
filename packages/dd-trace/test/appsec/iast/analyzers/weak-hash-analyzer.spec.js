@@ -113,6 +113,30 @@ describe('weak-hash-analyzer', () => {
       }
       expect(weakHashAnalyzer._isExcluded(location)).to.be.true
     })
+
+    it('mongodb host address hash', () => {
+      const location = {
+        path: path.join(locationPrefix, 'node_modules', 'mongodb', 'lib', 'core', 'connection', 'connection.js'),
+        line: 137
+      }
+      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+    })
+
+    it('sqreen package list fingerprint', () => {
+      const location = {
+        path: path.join(locationPrefix, 'node_modules', 'sqreen', 'lib', 'package-reader', 'index.js'),
+        line: 135
+      }
+      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+    })
+
+    it('pusher request body fingerprint', () => {
+      const location = {
+        path: path.join(locationPrefix, 'node_modules', 'pusher', 'lib', 'utils.js'),
+        line: 23
+      }
+      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+    })
   })
 
   describe('full feature', () => {
