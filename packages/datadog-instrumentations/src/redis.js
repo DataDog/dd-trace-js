@@ -66,6 +66,7 @@ function wrapCreateClient (request) {
   }
 }
 
+console.log('ADD HOOK CALL')
 addHook({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1'] }, redis => {
   console.log({ name: '@node-redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1'] })
   redis.default = wrapCommandQueueClass(redis.default)

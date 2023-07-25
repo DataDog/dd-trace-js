@@ -6,18 +6,6 @@ const dc = require('diagnostics_channel')
 
 const CHANNEL_PREFIX = 'dd-trace:bundledModuleLoadStart'
 
-if (!dc.subscribe) {
-  dc.subscribe = (channel, cb) => {
-    dc.channel(channel).subscribe(cb)
-  }
-}
-if (!dc.unsubscribe) {
-  dc.unsubscribe = (channel, cb) => {
-    if (dc.channel(channel).hasSubscribers) {
-      dc.channel(channel).unsubscribe(cb)
-    }
-  }
-}
 
 module.exports = DcitmHook
 
@@ -32,8 +20,8 @@ module.exports = DcitmHook
  * This function runs many times at startup, once for every module that dd-trace may trace.
  * As it runs on a per-module basis we're creating per-module channels.
  */
-function DcitmHook (moduleNames, options, onrequire) {
-  if (!(this instanceof DcitmHook)) return new DcitmHook(moduleNames, options, onrequire)
+function DcitmHook (packageNames, options, onrequire) {
+  if (!(this instanceof DcitmHook)) return new DcitmHook(packageNames, options, onrequire)
 
   function onModuleLoad (payload) {
     console.log('intercept module load', payload)
@@ -41,16 +29,17 @@ function DcitmHook (moduleNames, options, onrequire) {
   }
 
   // TODO: need to iterate through addHook module/path combos, not just the module name
-  for (const moduleName of moduleNames) {
-    // dc.channel(`${CHANNEL_PREFIX}:${moduleName}`).subscribe(onModuleLoad)
-    console.log(`subscribe ${CHANNEL_PREFIX}:${moduleName}`)
-    dc.subscribe(`${CHANNEL_PREFIX}:${moduleName}`, onModuleLoad)
+  // TODO: none of the addHook calls have run at this point :'(
+  for (const packageName of packageNames) {
+    // dc.channel(`${CHANNEL_PREFIX}:${packageName}`).subscribe(onModuleLoad)
+    console.log(`subscribe ${CHANNEL_PREFIX}:${packageName}`)
+    dc.subscribe(`${CHANNEL_PREFIX}:${packageName}`, onModuleLoad)
   }
 
   this.unhook = function dcitmUnload () {
-    for (const moduleName of moduleNames) {
-      // dc.channel(`${CHANNEL_PREFIX}:${moduleName}`).unsubscribe(onModuleLoad)
-      dc.unsubscribe(`${CHANNEL_PREFIX}:${moduleName}`, onModuleLoad)
+    for (const packageName of packageNames) {
+      // dc.channel(`${CHANNEL_PREFIX}:${packageName}`).unsubscribe(onModuleLoad)
+      dc.unsubscribe(`${CHANNEL_PREFIX}:${packageName}`, onModuleLoad)
     }
   }
 }

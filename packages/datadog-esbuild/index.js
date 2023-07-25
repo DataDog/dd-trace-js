@@ -19,9 +19,9 @@ const instrumentations = require('../datadog-instrumentations/src/helpers/instru
 for (let foo of Object.values(instrumentations)) {
   for (let group of foo) {
     if (!group.file) {
-      modulesOfInterest.add(group.name)
+      modulesOfInterest.add(group.name) // redis
     } else {
-      modulesOfInterest.add(`${group.name}/${group.file}`)
+      modulesOfInterest.add(`${group.name}/${group.file}`) // redis/my/file.js
     }
   }
 }
@@ -142,25 +142,35 @@ module.exports.setup = function (build) {
       // console.log(data)
     }
 
-    const channelName = DC_CHANNEL + ':' + (data.raw === data.pkg ? data.raw : data.pkg + ':' + data.path)
+    // Package entrypoint uses PACKAGE
+    // Deeply nested files use PACKAGE:path/to/file.js
+    const channelName = DC_CHANNEL + ':' + (
+      data.raw === data.pkg
+      ? data.raw
+      : `${data.pkg}:${data.path}`
+    )
     console.log('CHAN', channelName)
-    // TODO: express just stopped working even though the channel names all appear fine
 
     // JSON.stringify adds double quotes. For perf gain could simply add in quotes when we know it's safe.
     const contents = `
       const dc = require('diagnostics_channel');
       const ch = dc.channel('${channelName}');
+      const ch2 = dc.channel('dd-trace-esbuild');
       const mod = require('${path}');
       const payload = {
         module: mod,
         path: '${data.raw}',
-        version: '${data.version}'
+        version: '${data.version}',
+        package: '${data.pkg}',
+        relPath: '${data.path}'
       };
-      console.log('emit channel', '${channelName}');
+      console.log('EMIT CHANNEL', '${channelName}');
       ch.publish(payload);
-      payload.module.__datadog = true;
+      ch2.publish(payload);
+      payload.module.__datadog = true; // TODO: no commit
       module.exports = payload.module;
     `
+
     // https://esbuild.github.io/plugins/#on-load-results
     return {
       contents,

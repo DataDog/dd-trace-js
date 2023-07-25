@@ -1,5 +1,5 @@
 'use strict'
-
+console.log('hooks.js')
 module.exports = {
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
   '@cucumber/cucumber': () => require('../cucumber'),
@@ -38,6 +38,7 @@ module.exports = {
   'find-my-way': () => require('../find-my-way'),
   'fs': () => require('../fs'),
   'node:fs': () => require('../fs'),
+  'generic-pool': () => require('../generic-pool'),
   'graphql': () => require('../graphql'),
   'grpc': () => require('../grpc'),
   'hapi': () => require('../hapi'),
