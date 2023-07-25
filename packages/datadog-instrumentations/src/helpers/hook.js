@@ -5,9 +5,8 @@ const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
 
 /**
- * This is called for every package that dd-trace supports instrumentation for.
+ * This is called for every package/internal-module that dd-trace supports instrumentation for
  * In practice, `modules` is always an array with a single entry.
- * TODO: `modules` should be renamed `packages`.
  *
  * @param {string[]} modules list of modules to hook into
  * @param {Function} onrequire callback to be executed upon encountering module

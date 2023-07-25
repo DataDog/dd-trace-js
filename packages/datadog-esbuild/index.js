@@ -1,77 +1,63 @@
 'use strict'
 
+/* eslint-disable no-console */
+
 const path = require('path')
 const fs = require('fs')
+const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
 
-const INS_PATH = path.join(__dirname, '../datadog-instrumentations/src')
+warnIfUnsupported()
 
-// build list of integrations based on each plugin's addHook calls
-// TODO: This has the side effect of subscribing to bundler events. is that OK?
-// I think it's ok. This happens at build time. subscribing only matters at run time
-for (const entry of fs.readdirSync(INS_PATH)) {
-  if (path.extname(entry) !== '.js') continue
-  require(path.join(INS_PATH, entry)) // calls addHook()
+{
+  // run each instrumentation so that `instrumentations` gets populated
+  const INS_PATH = path.join(__dirname, '../datadog-instrumentations/src')
+
+  for (const entry of fs.readdirSync(INS_PATH)) {
+    if (path.extname(entry) !== '.js') continue
+    require(path.join(INS_PATH, entry))
+  }
 }
 
 const modulesOfInterest = new Set()
 
-const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
-for (let foo of Object.values(instrumentations)) {
-  for (let group of foo) {
-    if (!group.file) {
-      modulesOfInterest.add(group.name) // redis
+for (let instrumentation of Object.values(instrumentations)) {
+  for (let entry of instrumentation) {
+    if (!entry.file) {
+      modulesOfInterest.add(entry.name) // redis
     } else {
-      modulesOfInterest.add(`${group.name}/${group.file}`) // redis/my/file.js
+      modulesOfInterest.add(`${entry.name}/${entry.file}`) // redis/my/file.js
     }
   }
 }
 
-/* eslint-disable no-console */
-
 const NAMESPACE = 'datadog'
-
 const NM = 'node_modules/'
 const NM_LENGTH = NM.length
-
-const instrumented = Object.keys(require('../datadog-instrumentations/src/helpers/hooks.js'))
-const rawBuiltins = require('module').builtinModules
-
-warnIfUnsupported()
+const INSTRUMENTED = Object.keys(require('../datadog-instrumentations/src/helpers/hooks.js'))
+const RAW_BUILTINS = require('module').builtinModules
 
 const builtins = new Set()
 
-for (const builtin of rawBuiltins) {
+for (const builtin of RAW_BUILTINS) {
   builtins.add(builtin)
   builtins.add(`node:${builtin}`)
 }
 
 const DEBUG = !!process.env.DD_TRACE_DEBUG
 
-// We don't want to handle any built-in packages via DCITM
+// We don't want to handle any built-in packages
 // Those packages will still be handled via RITM
 // Attempting to instrument them would fail as they have no package.json file
-for (const pkg of instrumented) {
+for (const pkg of INSTRUMENTED) {
   if (builtins.has(pkg)) continue
   if (pkg.startsWith('node:')) continue
   modulesOfInterest.add(pkg)
 }
 
-const DC_CHANNEL = 'dd-trace:bundledModuleLoadStart'
-
 module.exports.name = 'datadog-esbuild'
 
 module.exports.setup = function (build) {
   build.onResolve({ filter: /.*/ }, args => {
-    /*
-    args = {
-      path: './generic-transformers',
-      importer: '/Users/thomas.hunter/Projects/client-repro/APMS-9740/node_modules/@redis/client/dist/lib/commands/ZPOPMIN_COUNT.js',
-      namespace: 'file',
-      resolveDir: '/Users/thomas.hunter/Projects/client-repro/APMS-9740/node_modules/@redis/client/dist/lib/commands',
-      kind: 'require-call',
-      pluginData: undefined
-    }
-    */
     const fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
     const extracted = extractPackageAndModulePath(fullPathToModule)
     const packageName = args.path
@@ -82,7 +68,6 @@ module.exports.setup = function (build) {
       // The file namespace is used when requiring files from disk in userland
 
       let pathToPackageJson
-      // TODO: looks like we're trying to find package.json files for deeply nested modules
       try {
         pathToPackageJson = require.resolve(`${extracted.pkg}/package.json`, { paths: [ args.resolveDir ] })
       } catch (err) {
@@ -113,7 +98,6 @@ module.exports.setup = function (build) {
       }
     } else if (args.namespace === NAMESPACE) {
       // The datadog namespace is used when requiring files that are injected during the onLoad stage
-      // see note in onLoad
 
       if (builtins.has(packageName)) return
 
@@ -130,7 +114,6 @@ module.exports.setup = function (build) {
 
     if (DEBUG) console.log(`LOAD ${data.pkg}@${data.version}, pkg "${path}"`)
 
-    // JSON.stringify adds double quotes. For perf gain could simply add in quotes when we know it's safe.
     const contents = `
       const dc = require('diagnostics_channel');
       const ch = dc.channel('dd-trace-esbuild');

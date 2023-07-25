@@ -93,7 +93,6 @@ for (const packageName of names) {
     }
 
     for (const { name, file, versions, hook } of instrumentations[packageName]) {
-      // TODO: Sadly we can't subscribe on the channels here as the code runs AFTER modules are loaded
       const modulePathIncludingPackageName = filename(name, file) // @redis/client/dist/lib/client/index.js
 
       if (moduleName === modulePathIncludingPackageName) {
