@@ -1,4 +1,4 @@
-const { identityService, httpPluginClientService, awsServiceV0 } = require('../util')
+const { identityService, httpPluginClientService } = require('../util')
 
 const web = {
   client: {

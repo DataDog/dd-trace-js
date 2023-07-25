@@ -1,4 +1,4 @@
-const { identityService, awsServiceV0 } = require('../util')
+const { identityService } = require('../util')
 
 const amqpInbound = {
   opName: () => 'amqp.process',
