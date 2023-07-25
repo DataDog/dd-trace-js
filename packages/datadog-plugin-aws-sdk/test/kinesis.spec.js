@@ -53,6 +53,22 @@ describe('Kinesis', () => {
       })
     })
 
+    withNamingSchema(
+      (done) => kinesis.describeStreamSummary({
+        StreamName: 'MyStream'
+      }, (err) => err && done()),
+      {
+        v0: {
+          serviceName: () => 'test-aws-lambda',
+          opName: () => 'aws.request'
+        },
+        v1: {
+          serviceName: () => 'test',
+          opName: () => 'aws.kinesis.request'
+        }
+      }
+    )
+
     it('injects trace context to Kinesis putRecord', done => {
       helpers.putTestRecord(kinesis, helpers.dataBuffer, (err, data) => {
         if (err) return done(err)

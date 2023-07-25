@@ -63,6 +63,24 @@ describe('Plugin', () => {
           }, (err) => err && done()),
           bucketName, 'bucketname')
 
+        withNamingSchema(
+          (done) => s3.putObject({
+            Bucket: bucketName,
+            Key: 'test-key',
+            Body: 'test body'
+          }, (err) => err && done()),
+          {
+            v0: {
+              serviceName: () => 'test-aws-s3',
+              opName: () => 'aws.request'
+            },
+            v1: {
+              serviceName: () => 'test',
+              opName: () => 'aws.s3.request'
+            }
+          }
+        )
+
         it('should allow disabling a specific span kind of a service', (done) => {
           let total = 0
 

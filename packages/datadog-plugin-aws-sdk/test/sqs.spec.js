@@ -50,25 +50,21 @@ describe('Plugin', () => {
           return agent.close({ ritmReset: false })
         })
 
-        const spanProducerFn = (done) => {
-          sqs.sendMessage(
-            {
-              MessageBody: 'test body',
-              QueueUrl
-            },
-            (err) => err && done()
-          )
-        }
-
         withPeerService(
           () => tracer,
-          spanProducerFn,
+          (done) => sqs.sendMessage({
+            MessageBody: 'test body',
+            QueueUrl
+          }, (err) => err && done()),
           'SQS_QUEUE_NAME',
           'queuename'
         )
 
         withNamingSchema(
-          spanProducerFn,
+          (done) => sqs.sendMessage({
+            MessageBody: 'test body',
+            QueueUrl
+          }, (err) => err && done()),
           {
             v0: {
               serviceName: () => 'test-aws-sqs',
@@ -85,17 +81,17 @@ describe('Plugin', () => {
         )
 
         withNamingSchema(
-          (done) => {
-            sqs.sendMessage({
-              MessageBody: 'test body',
-              QueueUrl
-            }, () => {})
+          (done) => sqs.sendMessage({
+            MessageBody: 'test body',
+            QueueUrl
+          }, (err) => {
+            if (err) return done(err)
 
             sqs.receiveMessage({
               QueueUrl,
               MessageAttributeNames: ['.*']
-            }, () => {})
-          },
+            }, (err) => err && done())
+          }),
           {
             v0: {
               serviceName: () => 'test-aws-sqs',
@@ -108,6 +104,25 @@ describe('Plugin', () => {
           },
           {
             desc: 'consumer'
+          }
+        )
+
+        withNamingSchema(
+          (done) => sqs.listQueues({
+            MaxResults: 1
+          }, (err) => err && done()),
+          {
+            v0: {
+              serviceName: () => 'test-aws-sqs',
+              opName: () => 'aws.request'
+            },
+            v1: {
+              serviceName: () => 'test',
+              opName: () => 'aws.sqs.request'
+            }
+          },
+          {
+            desc: 'client'
           }
         )
 

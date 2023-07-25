@@ -129,6 +129,26 @@ describe('Sns', () => {
       }
     )
 
+    withNamingSchema(
+      (done) => sns.getTopicAttributes(
+        { TopicArn },
+        (err) => err && done()
+      ),
+      {
+        v0: {
+          serviceName: () => 'test-aws-sns',
+          opName: () => 'aws.request'
+        },
+        v1: {
+          serviceName: () => 'test',
+          opName: () => 'aws.sns.request'
+        }
+      },
+      {
+        desc: 'client'
+      }
+    )
+
     it('injects trace context to SNS publish', done => {
       assertPropagation(done)
 
