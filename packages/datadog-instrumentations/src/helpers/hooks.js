@@ -1,5 +1,5 @@
 'use strict'
-console.log('hooks.js')
+
 module.exports = {
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
   '@cucumber/cucumber': () => require('../cucumber'),

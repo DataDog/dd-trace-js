@@ -51,13 +51,10 @@ const DEBUG = !!process.env.DD_TRACE_DEBUG
 // Those packages will still be handled via RITM
 // Attempting to instrument them would fail as they have no package.json file
 for (const pkg of instrumented) {
-  console.log('consider', pkg)
   if (builtins.has(pkg)) continue
   if (pkg.startsWith('node:')) continue
   modulesOfInterest.add(pkg)
 }
-
-console.log('MODS', modulesOfInterest)
 
 const DC_CHANNEL = 'dd-trace:bundledModuleLoadStart'
 
@@ -77,15 +74,11 @@ module.exports.setup = function (build) {
     */
     const fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
     const extracted = extractPackageAndModulePath(fullPathToModule)
-    if (extracted.pkg) {
-      console.log(extracted.pkg, extracted.path)
-    }
     const packageName = args.path
 
     const internal = builtins.has(args.path)
 
     if (args.namespace === 'file' && (modulesOfInterest.has(packageName) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))) {
-      console.log('MATCH', packageName, `${extracted.pkg} :: ${extracted.path}`)
       // The file namespace is used when requiring files from disk in userland
 
       let pathToPackageJson
@@ -94,7 +87,7 @@ module.exports.setup = function (build) {
         pathToPackageJson = require.resolve(`${extracted.pkg}/package.json`, { paths: [ args.resolveDir ] })
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
-          console.warn(`Unable to open "${extracted.pkg}/package.json". Is the "${extracted.pkg}" package dead code?`)
+          if (!internal) console.warn(`Unable to open "${extracted.pkg}/package.json". Is the "${extracted.pkg}" package dead code?`)
           return
         } else {
           throw err
@@ -103,9 +96,7 @@ module.exports.setup = function (build) {
 
       const packageJson = require(pathToPackageJson)
 
-      if (DEBUG) {
-        console.log(`resolve ${packageName}@${packageJson.version}`)
-      }
+      if (DEBUG) console.log(`RESOLVE ${packageName}@${packageJson.version}`)
 
       // https://esbuild.github.io/plugins/#on-resolve-arguments
       return {
@@ -137,25 +128,12 @@ module.exports.setup = function (build) {
     const data = args.pluginData
     const path = args.path
 
-    if (DEBUG) {
-      console.log(`LOAD ${data.pkg}@${data.version}, pkg "${path}"`)
-      // console.log(data)
-    }
-
-    // Package entrypoint uses PACKAGE
-    // Deeply nested files use PACKAGE:path/to/file.js
-    const channelName = DC_CHANNEL + ':' + (
-      data.raw === data.pkg
-      ? data.raw
-      : `${data.pkg}:${data.path}`
-    )
-    console.log('CHAN', channelName)
+    if (DEBUG) console.log(`LOAD ${data.pkg}@${data.version}, pkg "${path}"`)
 
     // JSON.stringify adds double quotes. For perf gain could simply add in quotes when we know it's safe.
     const contents = `
       const dc = require('diagnostics_channel');
-      const ch = dc.channel('${channelName}');
-      const ch2 = dc.channel('dd-trace-esbuild');
+      const ch = dc.channel('dd-trace-esbuild');
       const mod = require('${path}');
       const payload = {
         module: mod,
@@ -164,10 +142,7 @@ module.exports.setup = function (build) {
         package: '${data.pkg}',
         relPath: '${data.path}'
       };
-      console.log('EMIT CHANNEL', '${channelName}');
       ch.publish(payload);
-      ch2.publish(payload);
-      payload.module.__datadog = true; // TODO: no commit
       module.exports = payload.module;
     `
 

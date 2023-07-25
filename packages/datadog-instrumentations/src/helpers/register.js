@@ -34,73 +34,40 @@ if (!dc.unsubscribe) {
 }
 
 dc.subscribe('dd-trace-esbuild', (payload) => {
-  // path: '@redis/client', AKA Ignore, more of an ESBuild convention
-  // version: '1.5.8', // AKA moduleVersion
-  // package: '@redis/client',
-  // relPath: 'dist/index.js'
-  // module: Module AKA moduleExports
   const packageName = payload.package
   let moduleExports = payload.module
   let moduleName = payload.package.replace(pathSepExpr, '/')
   const moduleBaseDir = null // unused, for version stuff
   const moduleVersion = payload.version
+  const loadingPackageExternally = payload.path === payload.package
 
-  // if path === package then we're loading a package directly
-  if (payload.path !== payload.package) {
+  if (!loadingPackageExternally) {
     moduleName += '/' + payload.relPath
   }
 
-  console.log('UNIVERSAL', payload)
-  // console.log('INS', payload.package, payload.relPath, instrumentations)
-
-  // COPYPASTA from the Hook call in the loop
-
-  console.log('ESBUILD Hook()', packageName)
-
-  // This executes the integration file thus adding its entries to `instrumentations`
-  try {
-    hooks[packageName]()
-  } catch (err) {
-    console.error('UNABLE TO RUN HOOK FOR ', packageName)
-    console.error(hooks)
-    process.exit()
-    throw err
-  }
+  hooks[packageName]()
 
   if (!instrumentations[packageName]) {
-    // this should never happen
-    console.error('UNABLE TO FIND ESBUILD INSTRUMENTATION', packageName)
-    payload.module = payload.module
+    log.error(`esbuild-wrapped ${packageName} missing in list of instrumentations`)
     return
   }
 
-  let debug_match = false
   for (const { name, file, versions, hook } of instrumentations[packageName]) {
     const modulePathIncludingPackageName = filename(name, file) // @redis/client/dist/lib/client/index.js
-    console.log('ESFF', modulePathIncludingPackageName, moduleName)
 
-    console.log('COMPARE', moduleName, modulePathIncludingPackageName)
     if (moduleName === modulePathIncludingPackageName) {
       const version = moduleVersion || getVersion(moduleBaseDir)
 
-      console.log('COMPARE', version, versions)
       if (matchVersion(version, versions)) {
         try {
           loadChannel.publish({ name, version, file })
 
           moduleExports = hook(moduleExports, version)
-          debug_match = true
         } catch (e) {
           log.error(e)
         }
       }
     }
-  }
-
-  if (!debug_match) {
-    console.error('NO MATCH', moduleName)
-  } else {
-    console.log('YES MATCH', moduleName)
   }
 
   payload.module = moduleExports
@@ -116,7 +83,6 @@ for (const packageName of names) {
   if (disabledInstrumentations.has(packageName)) continue
 
   Hook([packageName], (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
-    console.log('Hook()', packageName)
     moduleName = moduleName.replace(pathSepExpr, '/')
 
     // This executes the integration file thus adding its entries to `instrumentations`
@@ -129,7 +95,6 @@ for (const packageName of names) {
     for (const { name, file, versions, hook } of instrumentations[packageName]) {
       // TODO: Sadly we can't subscribe on the channels here as the code runs AFTER modules are loaded
       const modulePathIncludingPackageName = filename(name, file) // @redis/client/dist/lib/client/index.js
-      console.log('FF', modulePathIncludingPackageName, moduleName)
 
       if (moduleName === modulePathIncludingPackageName) {
         const version = moduleVersion || getVersion(moduleBaseDir)
