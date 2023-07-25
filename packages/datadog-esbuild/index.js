@@ -2,20 +2,13 @@
 
 /* eslint-disable no-console */
 
-const path = require('path')
-const fs = require('fs')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
+const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
 
 warnIfUnsupported()
 
-{
-  // run each instrumentation so that `instrumentations` gets populated
-  const INS_PATH = path.join(__dirname, '../datadog-instrumentations/src')
-
-  for (const entry of fs.readdirSync(INS_PATH)) {
-    if (path.extname(entry) !== '.js') continue
-    require(path.join(INS_PATH, entry))
-  }
+for (const hook of Object.values(hooks)) {
+  hook()
 }
 
 const modulesOfInterest = new Set()
@@ -23,17 +16,18 @@ const modulesOfInterest = new Set()
 for (const instrumentation of Object.values(instrumentations)) {
   for (const entry of instrumentation) {
     if (!entry.file) {
-      modulesOfInterest.add(entry.name) // redis
+      modulesOfInterest.add(entry.name) // e.g. "redis"
     } else {
-      modulesOfInterest.add(`${entry.name}/${entry.file}`) // redis/my/file.js
+      modulesOfInterest.add(`${entry.name}/${entry.file}`) // e.g. "redis/my/file.js"
     }
   }
 }
 
 const NAMESPACE = 'datadog'
 const NM = 'node_modules/'
-const INSTRUMENTED = Object.keys(require('../datadog-instrumentations/src/helpers/hooks.js'))
+const INSTRUMENTED = Object.keys(instrumentations)
 const RAW_BUILTINS = require('module').builtinModules
+const CHANNEL = 'dd-trace:bundler:load'
 
 const builtins = new Set()
 
@@ -119,20 +113,22 @@ module.exports.setup = function (build) {
 
   build.onLoad({ filter: /.*/, namespace: NAMESPACE }, args => {
     const data = args.pluginData
-    const path = args.path
 
-    if (DEBUG) console.log(`LOAD ${data.pkg}@${data.version}, pkg "${path}"`)
+    if (DEBUG) console.log(`LOAD ${data.pkg}@${data.version}, pkg "${data.path}"`)
+
+    const path = data.raw !== data.pkg
+      ? `${data.pkg}/${data.path}`
+      : data.pkg
 
     const contents = `
       const dc = require('diagnostics_channel');
-      const ch = dc.channel('dd-trace-esbuild');
-      const mod = require('${path}');
+      const ch = dc.channel('${CHANNEL}');
+      const mod = require('${args.path}');
       const payload = {
         module: mod,
-        path: '${data.raw}',
         version: '${data.version}',
         package: '${data.pkg}',
-        relPath: '${data.path}'
+        path: '${path}'
       };
       ch.publish(payload);
       module.exports = payload.module;
