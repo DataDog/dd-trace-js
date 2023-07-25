@@ -35,43 +35,30 @@ if (!dc.unsubscribe) {
 }
 
 dc.subscribe('dd-trace-esbuild', (payload) => {
-  const packageName = payload.package
-  let moduleExports = payload.module
   let moduleName = payload.package.replace(pathSepExpr, '/')
-  const moduleBaseDir = null // unused, for version stuff
-  const moduleVersion = payload.version
-  const loadingPackageExternally = payload.path === payload.package
 
-  if (!loadingPackageExternally) {
+  if (payload.path !== payload.package) {
     moduleName += '/' + payload.relPath
   }
 
-  hooks[packageName]()
+  hooks[payload.package]()
 
-  if (!instrumentations[packageName]) {
-    log.error(`esbuild-wrapped ${packageName} missing in list of instrumentations`)
+  if (!instrumentations[payload.package]) {
+    log.error(`esbuild-wrapped ${payload.package} missing in list of instrumentations`)
     return
   }
 
-  for (const { name, file, versions, hook } of instrumentations[packageName]) {
-    const modulePathIncludingPackageName = filename(name, file) // @redis/client/dist/lib/client/index.js
+  for (const { name, file, versions, hook } of instrumentations[payload.package]) {
+    if (moduleName !== filename(name, file)) continue
+    if (!matchVersion(payload.version, versions)) continue
 
-    if (moduleName === modulePathIncludingPackageName) {
-      const version = moduleVersion || getVersion(moduleBaseDir)
-
-      if (matchVersion(version, versions)) {
-        try {
-          loadChannel.publish({ name, version, file })
-
-          moduleExports = hook(moduleExports, version)
-        } catch (e) {
-          log.error(e)
-        }
-      }
+    try {
+      loadChannel.publish({ name, version: payload.version, file })
+      payload.module = hook(payload.module, payload.version)
+    } catch (e) {
+      log.error(e)
     }
   }
-
-  payload.module = moduleExports
 })
 
 // Globals
@@ -93,9 +80,9 @@ for (const packageName of names) {
     }
 
     for (const { name, file, versions, hook } of instrumentations[packageName]) {
-      const modulePathIncludingPackageName = filename(name, file) // @redis/client/dist/lib/client/index.js
+      const fullFilename = filename(name, file)
 
-      if (moduleName === modulePathIncludingPackageName) {
+      if (moduleName === fullFilename) {
         const version = moduleVersion || getVersion(moduleBaseDir)
 
         if (matchVersion(version, versions)) {
