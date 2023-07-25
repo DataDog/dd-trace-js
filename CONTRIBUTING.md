@@ -38,6 +38,8 @@ Observability products tend to have quite a bit of their behaviour running in ap
 
 To reduce delta between release lines and make it easier for us to support older versions we try as much as possible to backport every change we can. We should be diligent about keeping breaking changes to a minimum and ensuring we don't use language or runtime features which are too new. This way we can generally be confident that a change can be backported.
 
+To reduce the surface area of a breaking change, the breaking aspects could be placed behind a flag which is disabled by default or isolated to a function. In the next major the change would then be just to change the default of the flag or to start or stop calling the isolated function. By isolating the breaking logic it also becomes easier to delete later when it's no longer relevant on any release line.
+
 Currently we do not have CI to test PRs for mergeability to past release lines, but we intend to expand our CI to include that in the future. For the time being, it's recommended when developing locally to try to cherry-pick your changes onto the previous vN.x branches to see if the tests pass there too.
 
 ## Respect semantic versioning
@@ -54,7 +56,7 @@ Any addition of new functionality should be labelled as semver-minor and should 
 
 ### semver-major
 
-In the event that some existing functionality _does_ need to change, as much as possible the non-breaking aspects of that change should be made in a semver-minor PR and the actually breaking aspects should be done via a follow-up PR with only the specific aspects which are breaking. For example, new functionality which would change existing behaviour could be added behind a flag and then that change could be made the default state of that flag in the next major release.
+In the event that some existing functionality _does_ need to change, as much as possible the non-breaking aspects of that change should be made in a semver-minor PR and the actually breaking aspects should be done via a follow-up PR with only the specific aspects which are breaking. Remember to [always consider backportability](#always-consider-backportability).
 
 ## Indicate intended release targets
 
