@@ -19,8 +19,8 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['moleculer', 'get-port'], false, [`./integration-tests/plugin-helpers.mjs`,
-      `./packages/datadog-plugin-moleculer/test/integration-test/*`])
+    sandbox = await createSandbox(['mongodb', 'mongodb-core'], false, [`./integration-tests/plugin-helpers.mjs`,
+      `./packages/datadog-plugin-mongodb-core/test/integration-test/*`])
   })
 
   after(async () => {
@@ -36,14 +36,25 @@ describe('esm', () => {
     await agent.stop()
   })
 
-  context('moleculer', () => {
+  context('mongodb-core', () => {
     it('is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'moleculer.action'), true)
+        assert.strictEqual(checkSpansForServiceName(payload, 'mongodb.query'), true)
+      })
+    }).timeout(20000)
+  })
+  context('mongodb', () => {
+    it('is instrumented', async () => {
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server2.mjs', agent.port)
+
+      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+        assert.isArray(payload)
+        assert.strictEqual(checkSpansForServiceName(payload, 'mongodb.query'), true)
       })
     }).timeout(20000)
   })
