@@ -20,8 +20,8 @@ warnIfUnsupported()
 
 const modulesOfInterest = new Set()
 
-for (let instrumentation of Object.values(instrumentations)) {
-  for (let entry of instrumentation) {
+for (const instrumentation of Object.values(instrumentations)) {
+  for (const entry of instrumentation) {
     if (!entry.file) {
       modulesOfInterest.add(entry.name) // redis
     } else {
@@ -32,7 +32,6 @@ for (let instrumentation of Object.values(instrumentations)) {
 
 const NAMESPACE = 'datadog'
 const NM = 'node_modules/'
-const NM_LENGTH = NM.length
 const INSTRUMENTED = Object.keys(require('../datadog-instrumentations/src/helpers/hooks.js'))
 const RAW_BUILTINS = require('module').builtinModules
 
@@ -64,7 +63,9 @@ module.exports.setup = function (build) {
 
     const internal = builtins.has(args.path)
 
-    if (args.namespace === 'file' && (modulesOfInterest.has(packageName) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))) {
+    if (args.namespace === 'file' && (
+      modulesOfInterest.has(packageName) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
+    ) {
       // The file namespace is used when requiring files from disk in userland
 
       let pathToPackageJson
@@ -72,7 +73,11 @@ module.exports.setup = function (build) {
         pathToPackageJson = require.resolve(`${extracted.pkg}/package.json`, { paths: [ args.resolveDir ] })
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
-          if (!internal) console.warn(`Unable to open "${extracted.pkg}/package.json". Is the "${extracted.pkg}" package dead code?`)
+          if (!internal) {
+            console.warn(
+              `Unable to open "${extracted.pkg}/package.json". Is the "${extracted.pkg}" package dead code?`
+            )
+          }
           return
         } else {
           throw err
@@ -172,12 +177,12 @@ function dotFriendlyResolve (path, directory) {
  *   output: { pkg: '@co/stuff', path: 'foo/bar/baz.js' }
  */
 function extractPackageAndModulePath (fullPath) {
-  const nm = fullPath.lastIndexOf(NM);
+  const nm = fullPath.lastIndexOf(NM)
   if (nm < 0) {
     return { pkg: null, path: null }
   }
 
-  const subPath = fullPath.substring(nm + NM.length);
+  const subPath = fullPath.substring(nm + NM.length)
   const firstSlash = subPath.indexOf('/')
 
   if (subPath[0] === '@') {

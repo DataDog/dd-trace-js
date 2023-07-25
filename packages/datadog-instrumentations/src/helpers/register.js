@@ -6,6 +6,7 @@ const semver = require('semver')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
+// eslint-disable-next-line n/no-restricted-require
 const dc = require('diagnostics_channel')
 
 const { DD_TRACE_DISABLED_INSTRUMENTATIONS = '' } = process.env
@@ -71,7 +72,6 @@ dc.subscribe('dd-trace-esbuild', (payload) => {
   }
 
   payload.module = moduleExports
-  return
 })
 
 // Globals
