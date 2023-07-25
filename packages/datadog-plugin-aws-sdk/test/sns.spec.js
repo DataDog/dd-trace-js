@@ -130,10 +130,9 @@ describe('Sns', () => {
     )
 
     withNamingSchema(
-      (done) => sns.getTopicAttributes(
-        { TopicArn },
-        (err) => err && done()
-      ),
+      (done) => sns.getTopicAttributes({
+        TopicArn
+      }, (err) => err && done(err)),
       {
         v0: {
           serviceName: () => 'test-aws-sns',

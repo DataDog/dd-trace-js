@@ -55,7 +55,7 @@ describe('Plugin', () => {
           (done) => sqs.sendMessage({
             MessageBody: 'test body',
             QueueUrl
-          }, (err) => err && done()),
+          }, (err) => err && done(err)),
           'SQS_QUEUE_NAME',
           'queuename'
         )
@@ -64,7 +64,7 @@ describe('Plugin', () => {
           (done) => sqs.sendMessage({
             MessageBody: 'test body',
             QueueUrl
-          }, (err) => err && done()),
+          }, (err) => err && done(err)),
           {
             v0: {
               serviceName: () => 'test-aws-sqs',
@@ -90,7 +90,7 @@ describe('Plugin', () => {
             sqs.receiveMessage({
               QueueUrl,
               MessageAttributeNames: ['.*']
-            }, (err) => err && done())
+            }, (err) => err && done(err))
           }),
           {
             v0: {
@@ -108,9 +108,7 @@ describe('Plugin', () => {
         )
 
         withNamingSchema(
-          (done) => sqs.listQueues({
-            MaxResults: 1
-          }, (err) => err && done()),
+          (done) => sqs.listQueues({}, (err) => err && done(err)),
           {
             v0: {
               serviceName: () => 'test-aws-sqs',

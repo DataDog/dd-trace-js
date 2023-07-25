@@ -65,7 +65,7 @@ describe('Plugin', () => {
             FunctionName: 'ironmaiden',
             Payload: '{}',
             ClientContext: createClientContext({ custom: { megadeth: 'tornado of souls' } })
-          }, (err) => err && done()),
+          }, (err) => err && done(err)),
           {
             v0: {
               serviceName: () => 'test-aws-lambda',
@@ -82,9 +82,7 @@ describe('Plugin', () => {
         )
 
         withNamingSchema(
-          (done) => lambda.getFunction({
-            FunctionName: 'ironmaiden'
-          }, (err) => err && done()),
+          (done) => lambda.listFunctions({}, (err) => err && done(err)),
           {
             v0: {
               serviceName: () => 'test-aws-lambda',

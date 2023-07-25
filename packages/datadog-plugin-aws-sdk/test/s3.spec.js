@@ -60,7 +60,7 @@ describe('Plugin', () => {
             Bucket: bucketName,
             Key: 'test-key',
             Body: 'test body'
-          }, (err) => err && done()),
+          }, (err) => err && done(err)),
           bucketName, 'bucketname')
 
         withNamingSchema(
@@ -68,7 +68,7 @@ describe('Plugin', () => {
             Bucket: bucketName,
             Key: 'test-key',
             Body: 'test body'
-          }, (err) => err && done()),
+          }, (err) => err && done(err)),
           {
             v0: {
               serviceName: () => 'test-aws-s3',
