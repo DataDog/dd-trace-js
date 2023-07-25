@@ -175,7 +175,7 @@ function wrapExecute (execute) {
           docSource: documentSources.get(document)
         })
 
-        const context = { source, asyncResource, fields: {} }
+        const context = { source, asyncResource, fields: {}, resolvers: {} }
 
         contexts.set(contextValue, context)
 
@@ -188,9 +188,31 @@ function wrapExecute (execute) {
             executeErrorCh.publish(error)
           }
 
-          finishExecuteCh.publish({ res, args })
+          finishExecuteCh.publish({ res, args, resolvers: context.resolvers })
         })
       })
+    }
+  }
+}
+
+function addResolver (resolvers, info, args) {
+  if (!resolvers || !info) {
+    return
+  }
+
+  if (info.rootValue && !info.rootValue[info.fieldName]) {
+    return
+  }
+
+  if (!resolvers[info.fieldName]) {
+    if (args && Object.keys(args).length) {
+      resolvers[info.fieldName] = [args]
+    } else {
+      resolvers[info.fieldName] = []
+    }
+  } else {
+    if (args && Object.keys(args).length) {
+      resolvers[info.fieldName].push(args)
     }
   }
 }
@@ -204,6 +226,10 @@ function wrapResolve (resolve) {
     const context = contexts.get(contextValue)
 
     if (!context) return resolve.apply(this, arguments)
+
+    const resolvers = context.resolvers
+
+    addResolver(resolvers, info, args)
 
     const field = assertField(context, info)
 
