@@ -145,6 +145,15 @@ function finish (req, res, result, err) {
   return result
 }
 
+function wrapCreateServerHandler (createServerHandler) {
+  return async function () { // ({ port , hostname , dir , minimalMode })
+    const handler = await createServerHandler.apply(this, arguments)
+    return async function (req, res) { // req, res
+      instrument(req, res, async () => handler.apply(this, arguments))
+    }
+  }
+}
+
 addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
@@ -185,20 +194,16 @@ addHook({
   return nextServer
 })
 
-function wrapCreateServerHandler (createServerHandler) {
-  return function ({ port, hostname, dir, minimalMode }) {
-    return createServerHandler.apply(this, arguments)
-  }
-}
-
 // for Next.js standalone with:
 // const { createServerHandler } = require('next/dist/server/lib/render-server-standalone')
 addHook({
   name: 'next',
   versions: ['>=13.4'], // although it was introduced in 13.3.5-canary.9
   file: 'dist/server/lib/render-server-standalone.js'
-}, renderStandaloneServer => {
-  shimmer.wrap(renderStandaloneServer, 'createServerHandler', wrapCreateServerHandler)
-  // shimmer.wrap(renderStandaloneServer.createServerHandler, wrapCreateServerHandler)
-  return renderStandaloneServer
+}, renderServerStandalone => {
+  const createServerHandler = renderServerStandalone.createServerHandler
+  const wrapped = shimmer.wrap(createServerHandler, wrapCreateServerHandler(createServerHandler))
+  return {
+    createServerHandler: wrapped
+  }
 })
