@@ -43,8 +43,11 @@ function getRewriter (telemetryVerbosity) {
       getPrepareStackTrace = iastRewriter.getPrepareStackTrace
 
       const chainSourceMap = isEnableSourceMapsFlagPresent()
-      getRewriterOriginalPathAndLineFromSourceMap =
-        getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, iastRewriter.getOriginalPathAndLineFromSourceMap)
+      const getOriginalPathAndLineFromSourceMap = iastRewriter.getOriginalPathAndLineFromSourceMap
+      if (getOriginalPathAndLineFromSourceMap) {
+        getRewriterOriginalPathAndLineFromSourceMap =
+          getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, getOriginalPathAndLineFromSourceMap)
+      }
 
       rewriter = new Rewriter({ csiMethods, chainSourceMap, telemetryVerbosity: getName(telemetryVerbosity) })
     } catch (e) {
