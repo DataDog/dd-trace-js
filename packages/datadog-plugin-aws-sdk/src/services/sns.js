@@ -27,7 +27,7 @@ class Sns extends BaseAwsSdkPlugin {
     // for example if it contains a phone number?
   }
 
-  pluginOpName (request) {
+  operationFromRequest (request) {
     switch (request.operation) {
       case 'publish':
       case 'publishBatch':

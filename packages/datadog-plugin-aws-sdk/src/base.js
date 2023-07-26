@@ -34,7 +34,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       const childOf = this.tracer.scope().active()
       const tags = {
         'span.kind': 'client',
-        'service.name': this.pluginServiceName(),
+        'service.name': this.serviceName(),
         'aws.operation': operation,
         'aws.region': awsRegion,
         'region': awsRegion,
@@ -44,7 +44,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       }
       if (this.requestTags) this.requestTags.set(request, tags)
 
-      const span = this.tracer.startSpan(this.pluginOpName(request), { childOf, tags })
+      const span = this.tracer.startSpan(this.operationFromRequest(request), { childOf, tags })
 
       analyticsSampler.sample(span, this.config.measured)
 
@@ -78,7 +78,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     // implemented by subclasses, or not
   }
 
-  pluginOpName (request) {
+  operationFromRequest (request) {
     // can be overriden by subclasses
     return this.operationName({
       id: 'aws',
@@ -88,9 +88,9 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     })
   }
 
-  pluginServiceName () {
+  serviceName () {
     return this.config.service ||
-      this.serviceName({
+      super.serviceName({
         id: 'aws',
         type: 'web',
         kind: 'client',

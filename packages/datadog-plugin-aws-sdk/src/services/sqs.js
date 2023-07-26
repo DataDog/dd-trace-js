@@ -41,7 +41,7 @@ class Sqs extends BaseAwsSdkPlugin {
     })
   }
 
-  pluginOpName (request) {
+  operationFromRequest (request) {
     switch (request.operation) {
       case 'receiveMessage':
         return this.operationName({
