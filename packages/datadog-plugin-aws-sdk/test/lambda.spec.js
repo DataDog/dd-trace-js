@@ -3,6 +3,7 @@
 const JSZip = require('jszip')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
+const { rawExpectedSchema } = require('./lambda-naming')
 
 const zip = new JSZip()
 
@@ -66,16 +67,7 @@ describe('Plugin', () => {
             Payload: '{}',
             ClientContext: createClientContext({ custom: { megadeth: 'tornado of souls' } })
           }, (err) => err && done(err)),
-          {
-            v0: {
-              serviceName: () => 'test-aws-lambda',
-              opName: () => 'aws.request'
-            },
-            v1: {
-              serviceName: () => 'test',
-              opName: () => 'aws.lambda.invoke'
-            }
-          },
+          rawExpectedSchema.invoke,
           {
             desc: 'invoke'
           }
@@ -83,16 +75,7 @@ describe('Plugin', () => {
 
         withNamingSchema(
           (done) => lambda.listFunctions({}, (err) => err && done(err)),
-          {
-            v0: {
-              serviceName: () => 'test-aws-lambda',
-              opName: () => 'aws.request'
-            },
-            v1: {
-              serviceName: () => 'test',
-              opName: () => 'aws.lambda.request'
-            }
-          },
+          rawExpectedSchema.client,
           {
             desc: 'client'
           }

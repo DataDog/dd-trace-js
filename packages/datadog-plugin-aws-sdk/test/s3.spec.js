@@ -3,6 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const axios = require('axios')
+const { rawExpectedSchema } = require('./s3-naming')
 
 const bucketName = 's3-bucket-name-test'
 
@@ -69,16 +70,7 @@ describe('Plugin', () => {
             Key: 'test-key',
             Body: 'test body'
           }, (err) => err && done(err)),
-          {
-            v0: {
-              serviceName: () => 'test-aws-s3',
-              opName: () => 'aws.request'
-            },
-            v1: {
-              serviceName: () => 'test',
-              opName: () => 'aws.s3.request'
-            }
-          }
+          rawExpectedSchema.outbound
         )
 
         it('should allow disabling a specific span kind of a service', (done) => {

@@ -3,6 +3,7 @@
 const { EventEmitter } = require('events')
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { rawExpectedSchema } = require('./naming')
 
 class MockAbortController {
   constructor () {
@@ -143,16 +144,7 @@ describe('Plugin', () => {
 
       withNamingSchema(
         spanProducerFn,
-        {
-          v0: {
-            serviceName: 'test',
-            opName: 'http.request'
-          },
-          v1: {
-            serviceName: 'test',
-            opName: 'http.server.request'
-          }
-        }
+        rawExpectedSchema.server
       )
 
       it('should do automatic instrumentation', done => {

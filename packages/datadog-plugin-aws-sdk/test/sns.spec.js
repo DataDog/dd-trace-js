@@ -4,6 +4,7 @@
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
+const { rawExpectedSchema } = require('./sns-naming')
 
 describe('Sns', () => {
   setup()
@@ -114,16 +115,7 @@ describe('Sns', () => {
         TopicArn,
         Message: 'message 1'
       }, (err) => err && done()),
-      {
-        v0: {
-          serviceName: () => 'test-aws-sns',
-          opName: () => 'aws.request'
-        },
-        v1: {
-          serviceName: () => 'test',
-          opName: () => 'aws.sns.send'
-        }
-      },
+      rawExpectedSchema.producer,
       {
         desc: 'producer'
       }
@@ -133,16 +125,7 @@ describe('Sns', () => {
       (done) => sns.getTopicAttributes({
         TopicArn
       }, (err) => err && done(err)),
-      {
-        v0: {
-          serviceName: () => 'test-aws-sns',
-          opName: () => 'aws.request'
-        },
-        v1: {
-          serviceName: () => 'test',
-          opName: () => 'aws.sns.request'
-        }
-      },
+      rawExpectedSchema.client,
       {
         desc: 'client'
       }

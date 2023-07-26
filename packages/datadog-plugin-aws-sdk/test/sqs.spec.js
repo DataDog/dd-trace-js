@@ -2,6 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
+const { rawExpectedSchema } = require('./sqs-naming')
 
 const queueOptions = {
   QueueName: 'SQS_QUEUE_NAME',
@@ -65,16 +66,7 @@ describe('Plugin', () => {
             MessageBody: 'test body',
             QueueUrl
           }, (err) => err && done(err)),
-          {
-            v0: {
-              serviceName: () => 'test-aws-sqs',
-              opName: () => 'aws.request'
-            },
-            v1: {
-              serviceName: () => 'test',
-              opName: () => 'aws.sqs.send'
-            }
-          },
+          rawExpectedSchema.producer,
           {
             desc: 'producer'
           }
@@ -92,16 +84,7 @@ describe('Plugin', () => {
               MessageAttributeNames: ['.*']
             }, (err) => err && done(err))
           }),
-          {
-            v0: {
-              serviceName: () => 'test-aws-sqs',
-              opName: () => 'aws.request'
-            },
-            v1: {
-              serviceName: () => 'test',
-              opName: () => 'aws.sqs.process'
-            }
-          },
+          rawExpectedSchema.consumer,
           {
             desc: 'consumer'
           }
@@ -109,16 +92,7 @@ describe('Plugin', () => {
 
         withNamingSchema(
           (done) => sqs.listQueues({}, (err) => err && done(err)),
-          {
-            v0: {
-              serviceName: () => 'test-aws-sqs',
-              opName: () => 'aws.request'
-            },
-            v1: {
-              serviceName: () => 'test',
-              opName: () => 'aws.sqs.request'
-            }
-          },
+          rawExpectedSchema.client,
           {
             desc: 'client'
           }

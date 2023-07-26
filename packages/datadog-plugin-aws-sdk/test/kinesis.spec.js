@@ -4,6 +4,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
+const { rawExpectedSchema } = require('./kinesis-naming')
 
 describe('Kinesis', () => {
   setup()
@@ -57,16 +58,7 @@ describe('Kinesis', () => {
       (done) => kinesis.describeStream({
         StreamName: 'MyStream'
       }, (err) => err && done(err)),
-      {
-        v0: {
-          serviceName: () => 'test-aws-kinesis',
-          opName: () => 'aws.request'
-        },
-        v1: {
-          serviceName: () => 'test',
-          opName: () => 'aws.kinesis.request'
-        }
-      }
+      rawExpectedSchema.outbound
     )
 
     it('injects trace context to Kinesis putRecord', done => {

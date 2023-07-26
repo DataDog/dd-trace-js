@@ -9,6 +9,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { writeFileSync } = require('fs')
 const { satisfies } = require('semver')
 const { DD_MAJOR } = require('../../../version')
+const { rawExpectedSchema } = require('./naming')
 
 describe('Plugin', function () {
   let server
@@ -100,16 +101,7 @@ describe('Plugin', function () {
             .get(`http://localhost:${port}/api/hello/world`)
             .catch(done)
         },
-        {
-          v0: {
-            serviceName: () => 'test',
-            opName: () => 'next.request'
-          },
-          v1: {
-            serviceName: () => 'test',
-            opName: () => 'http.server.request'
-          }
-        },
+        rawExpectedSchema.server,
         {
           hooks: (version, defaultToGlobalService) => startServer(false, version, defaultToGlobalService)
         }
