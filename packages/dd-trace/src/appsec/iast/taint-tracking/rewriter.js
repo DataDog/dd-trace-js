@@ -73,7 +73,7 @@ function getCompileMethodFn (compileMethod) {
   const rewriteFn = getRewriteFunction(rewriter)
   return function (content, filename) {
     try {
-      if (isPrivateModule(filename) && isNotLibraryFile(filename) && !filename.includes('versions')) {
+      if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
         const rewritten = rewriteFn(content, filename)
         if (rewritten && rewritten.content) {
           return compileMethod.apply(this, [rewritten.content, filename])
