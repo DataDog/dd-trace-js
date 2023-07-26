@@ -190,6 +190,31 @@ describe('Plugin', () => {
         })
       })
 
+      it('should inject its parent span in the existing headers', done => {
+        const app = express()
+
+        app.get('/user', (req, res) => {
+          expect(req.get('foo')).to.be.a('string')
+          expect(req.get('x-datadog-trace-id')).to.be.a('string')
+          expect(req.get('x-datadog-parent-id')).to.be.a('string')
+
+          res.status(200).send()
+        })
+
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port, () => {
+            fetch(`http://localhost:${port}/user?foo=bar`, { headers: { 'foo': 'bar' } })
+          })
+        })
+      })
+
       it('should skip injecting if the Authorization header contains an AWS signature', done => {
         const app = express()
 
