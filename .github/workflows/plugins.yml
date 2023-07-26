@@ -800,7 +800,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       opensearch:
-        image: opensearchproject/opensearch:2
+        image: opensearchproject/opensearch:2.8.0
         env:
           plugins.security.disabled: 'true'
           discovery.type: single-node
