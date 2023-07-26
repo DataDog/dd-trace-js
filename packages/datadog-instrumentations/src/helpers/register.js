@@ -30,6 +30,7 @@ for (const packageName of names) {
   Hook([packageName], (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
 
+    // This executes the integration file thus adding its entries to `instrumentations`
     hooks[packageName]()
 
     if (!instrumentations[packageName]) {
@@ -74,5 +75,7 @@ function filename (name, file) {
 
 module.exports = {
   filename,
-  pathSepExpr
+  pathSepExpr,
+  loadChannel,
+  matchVersion
 }
