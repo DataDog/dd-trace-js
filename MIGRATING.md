@@ -29,20 +29,6 @@ switching to `jest-circus` to anyone still using `jest-jasmine2`.
 
 We now support only Next.js 10.2 and up.
 
-### W3C headers are now prioritized over Datadog headers
-
-As we move towards open standards, we have decided to prioritize W3C Trace
-Context headers over our own vendor-specific headers for context propagation
-across services. For most applications this shouldn't change anything and
-distributed tracing should continue to work seamlessly.
-
-In some rare cases it's possible that some of the services involved in a trace
-are not instrumented by Datadog at all which can cause spans within the trace to
-become disconnected. While the data would still be available in the UI, the
-relationship between spans would no longer be visible. This can be addressed by
-restoring the previous behaviour using
-`DD_TRACE_PROPAGATION_STYLE='datadog,tracecontext'`.
-
 ## 2.0 to 3.0
 
 ### Node 12 is no longer supported
