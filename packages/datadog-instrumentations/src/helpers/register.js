@@ -20,7 +20,9 @@ const disabledInstrumentations = new Set(
 const loadChannel = channel('dd-trace:instrumentation:load')
 
 // Globals
-require('../fetch')
+if (!disabledInstrumentations.has('fetch')) {
+  require('../fetch')
+}
 
 // TODO: make this more efficient
 
