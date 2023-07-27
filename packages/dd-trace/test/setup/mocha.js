@@ -97,7 +97,7 @@ function withNamingSchema (
               expect(span).to.have.property('service', expectedServiceName)
             })
             .then(done)
-            .catch(err => err && done(err))
+            .catch(done)
           spanProducerFn(done)
         })
       })
@@ -131,7 +131,7 @@ function withNamingSchema (
             expect(span).to.have.property('service', expectedServiceName)
           })
           .then(done)
-          .catch(err => err && done(err))
+          .catch(done)
 
         spanProducerFn(done)
       })

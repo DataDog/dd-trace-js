@@ -174,7 +174,7 @@ describe('Plugin', () => {
               cluster = _cluster
               bucket = cluster.bucket('datadog-test')
               collection = bucket.defaultCollection()
-            }).then(done).catch(err => err && done(err))
+            }).then(done).catch(done)
           })
         })
 
