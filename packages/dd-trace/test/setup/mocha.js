@@ -97,7 +97,7 @@ function withNamingSchema (
               expect(span).to.have.property('service', expectedServiceName)
             })
             .then(done)
-            .catch(done)
+            .catch(err => err && done(err))
           spanProducerFn(done)
         })
       })
@@ -131,7 +131,7 @@ function withNamingSchema (
             expect(span).to.have.property('service', expectedServiceName)
           })
           .then(done)
-          .catch(done)
+          .catch(err => err && done(err))
 
         spanProducerFn(done)
       })
@@ -139,8 +139,8 @@ function withNamingSchema (
   })
 }
 
-function withPeerService (tracer, spanGenerationFn, service, serviceSource) {
-  describe('peer service computation', () => {
+function withPeerService (tracer, spanGenerationFn, service, serviceSource, opts = {}) {
+  describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), () => {
     let computePeerServiceSpy
     beforeEach(() => {
       // FIXME: workaround due to the evaluation order of mocha beforeEach
