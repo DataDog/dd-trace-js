@@ -58,7 +58,7 @@ class AgentExporter {
   }
 
   flush (done = () => {}) {
-    this._writer.flush(this._awaitAgentInitToFlush, done)
+    this._writer.flush(done, this._awaitAgentInitToFlush)
   }
 }
 
