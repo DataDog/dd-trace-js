@@ -69,6 +69,7 @@ function withNamingSchema (
           fullConfig = Nomenclature.config
           Nomenclature.configure({
             spanAttributeSchema: versionName,
+            spanRemoveIntegrationFromService: false,
             service: fullConfig.service // Hack: only way to retrieve the test agent configuration
           })
         })
