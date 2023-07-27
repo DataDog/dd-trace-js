@@ -57,7 +57,7 @@ function truncate (input) {
 }
 
 function shouldSimplify (input) {
-  return !isObject(input)
+  return !isObject(input) || typeof input.toJSON === 'function'
 }
 
 function shouldHide (input) {
