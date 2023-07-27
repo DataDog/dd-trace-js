@@ -302,7 +302,8 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort) {
     env: {
       NODE_OPTIONS: `--loader=${hookFile}`,
       DD_TRACE_AGENT_PORT: agentPort
-    }
+    },
+    stdio: 'pipe'
   })
 }
 
