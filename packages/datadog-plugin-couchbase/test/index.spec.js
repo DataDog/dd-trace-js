@@ -42,7 +42,7 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => cluster.query(N1qlQuery.fromString('SELECT 1+1'), err => {}),
+          done => cluster.query(N1qlQuery.fromString('SELECT 1+1'), err => err && done(err)),
           rawExpectedSchema.query
         )
 
@@ -174,7 +174,7 @@ describe('Plugin', () => {
               cluster = _cluster
               bucket = cluster.bucket('datadog-test')
               collection = bucket.defaultCollection()
-            }).then(done).catch(done)
+            }).then(done).catch(err => err && done(err))
           })
         })
 
@@ -187,7 +187,7 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => cluster.query('SELECT 1+1'),
+          done => cluster.query('SELECT 1+1').catch(done),
           rawExpectedSchema.query
         )
 
