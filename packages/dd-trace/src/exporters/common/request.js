@@ -117,9 +117,6 @@ function request (data, options, callback) {
   }
 
   const makeRequest = onError => {
-    // console.log('tracing ------------------------')
-    // console.trace()
-    // console.log('--------------------------------')
     if (!request.writable) {
       log.debug('Maximum number of active requests reached: payload is discarded.')
       return callback(null)
