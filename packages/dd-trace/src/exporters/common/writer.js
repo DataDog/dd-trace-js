@@ -33,18 +33,14 @@ class Writer {
     } else if (count > 0) {
       const payload = this._encoder.makePayload()
 
-      try {
-        if (awaitAgentInitToFlush) {
-          while (!(await isAgentInitialized())) {
-            log.debug('Agent is not initialized yet. Waiting to flush traces')
-            await new Promise(resolve => setTimeout(resolve, 500))
-          }
-          log.debug('Agent is initialized. Flushing traces')
+      if (awaitAgentInitToFlush) {
+        while (!(await isAgentInitialized())) {
+          log.debug('Agent is not initialized yet. Waiting to flush traces')
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
-        this._sendPayload(payload, count, done)
-      } catch (e) {
-        log.error(e)
+        log.debug('Agent is initialized. Flushing traces')
       }
+      this._sendPayload(payload, count, done)
     } else {
       done()
     }
