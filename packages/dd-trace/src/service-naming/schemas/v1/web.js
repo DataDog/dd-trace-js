@@ -1,4 +1,4 @@
-const { identityService } = require('../util')
+const { identityService, httpPluginClientService } = require('../util')
 
 const web = {
   client: {
@@ -9,6 +9,26 @@ const web = {
     moleculer: {
       opName: () => 'moleculer.client.request',
       serviceName: identityService
+    },
+    http: {
+      opName: () => 'http.client.request',
+      serviceName: httpPluginClientService
+    },
+    fetch: {
+      opName: () => 'http.client.request',
+      serviceName: httpPluginClientService
+    },
+    http2: {
+      opName: () => 'http.client.request',
+      serviceName: httpPluginClientService
+    },
+    aws: {
+      opName: ({ awsService }) => `aws.${awsService}.request`,
+      serviceName: identityService
+    },
+    lambda: {
+      opName: () => 'aws.lambda.invoke',
+      serviceName: identityService
     }
   },
   server: {
@@ -18,6 +38,18 @@ const web = {
     },
     moleculer: {
       opName: () => 'moleculer.server.request',
+      serviceName: identityService
+    },
+    http: {
+      opName: () => 'http.server.request',
+      serviceName: identityService
+    },
+    http2: {
+      opName: () => 'http.server.request',
+      serviceName: identityService
+    },
+    next: {
+      opName: () => 'http.server.request',
       serviceName: identityService
     }
   }

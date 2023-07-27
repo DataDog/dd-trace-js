@@ -9,6 +9,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { writeFileSync } = require('fs')
 const { satisfies } = require('semver')
 const { DD_MAJOR } = require('../../../version')
+const { rawExpectedSchema } = require('./naming')
 
 describe('Plugin', function () {
   let server
@@ -17,7 +18,7 @@ describe('Plugin', function () {
   describe('next', () => {
     // TODO: Figure out why 10.x tests are failing.
     withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
-      const startServer = withConfig => {
+      const startServer = (withConfig = false, schemaVersion = 'v0', defaultToGlobalService = false) => {
         before(async () => {
           port = await getPort()
 
@@ -34,7 +35,9 @@ describe('Plugin', function () {
               VERSION: version,
               PORT: port,
               DD_TRACE_AGENT_PORT: agent.server.address().port,
-              WITH_CONFIG: withConfig
+              WITH_CONFIG: withConfig,
+              DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
+              DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService
             }
           })
 
@@ -92,6 +95,18 @@ describe('Plugin', function () {
         execSync(`rm -rf ${paths.join(' ')}`)
       })
 
+      withNamingSchema(
+        (done) => {
+          axios
+            .get(`http://localhost:${port}/api/hello/world`)
+            .catch(done)
+        },
+        rawExpectedSchema.server,
+        {
+          hooks: (version, defaultToGlobalService) => startServer(false, version, defaultToGlobalService)
+        }
+      )
+
       describe('without configuration', () => {
         startServer()
 
@@ -124,7 +139,7 @@ describe('Plugin', function () {
             ['/api/hello/other', '/api/hello/other']
           ]
           pathTests.forEach(([url, expectedPath]) => {
-            it(`should infer the corrrect resource path (${expectedPath})`, done => {
+            it(`should infer the correct resource path (${expectedPath})`, done => {
               agent
                 .use(traces => {
                   const spans = traces[0]
