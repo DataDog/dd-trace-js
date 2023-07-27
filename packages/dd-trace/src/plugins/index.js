@@ -10,6 +10,7 @@ module.exports = {
   get '@grpc/grpc-js' () { return require('../../../datadog-plugin-grpc/src') },
   get '@hapi/hapi' () { return require('../../../datadog-plugin-hapi/src') },
   get '@jest/core' () { return require('../../../datadog-plugin-jest/src') },
+  get '@jest/test-sequencer' () { return require('../../../datadog-plugin-jest/src') },
   get '@jest/transform' () { return require('../../../datadog-plugin-jest/src') },
   get '@koa/router' () { return require('../../../datadog-plugin-koa/src') },
   get '@node-redis/client' () { return require('../../../datadog-plugin-redis/src') },
