@@ -24,7 +24,7 @@ class Writer {
     this._url = url
   }
 
-  async flush (waitForAgentInitialization = false, done = () => {}) {
+  async flush (awaitAgentInitToFlush = false, done = () => {}) {
     const count = this._encoder.count()
 
     if (!request.writable) {
@@ -33,7 +33,7 @@ class Writer {
     } else if (count > 0) {
       const payload = this._encoder.makePayload()
       try {
-        if (waitForAgentInitialization) {
+        if (awaitAgentInitToFlush) {
           while (!(await isAgentInitialized())) {
             log.debug('Agent is not initialized yet. Waiting to flush traces')
             await new Promise(resolve => setTimeout(resolve, 500))
