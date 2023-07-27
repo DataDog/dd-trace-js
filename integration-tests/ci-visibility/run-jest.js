@@ -6,7 +6,8 @@ const options = {
   cache: false,
   testRegex: process.env.TEST_REGEX ? new RegExp(process.env.TEST_REGEX) : /test\/ci-visibility-test/,
   coverage: true,
-  runInBand: true
+  runInBand: true,
+  shard: process.env.TEST_SHARD || undefined
 }
 
 if (process.env.RUN_IN_PARALLEL) {
