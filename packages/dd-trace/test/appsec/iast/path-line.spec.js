@@ -4,12 +4,16 @@ const os = require('os')
 const { expect } = require('chai')
 
 class CallSiteMock {
-  constructor (fileName, lineNumber) {
+  constructor (fileName, lineNumber, columnNumber = 0) {
     this.fileName = fileName
     this.lineNumber = lineNumber
+    this.columnNumber = columnNumber
   }
   getLineNumber () {
     return this.lineNumber
+  }
+  getColumnNumber () {
+    return this.columnNumber
   }
   getFileName () {
     return this.fileName
@@ -110,10 +114,11 @@ describe('path-line', function () {
           callsites.push(new CallSiteMock(PATH_AND_LINE_PATH, PATH_AND_LINE_LINE))
           callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'other', 'file', 'in', 'dd.js'), 89))
           callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'other', 'file', 'in', 'dd.js'), 5))
-          callsites.push(new CallSiteMock(firstFileOutOfDD, firstFileOutOfDDLineNumber))
+          callsites.push(new CallSiteMock(firstFileOutOfDD, firstFileOutOfDDLineNumber, 42))
           const pathAndLine = pathLine.getFirstNonDDPathAndLineFromCallsites(callsites)
           expect(pathAndLine.path).to.be.equals(expectedFirstFileOutOfDD)
           expect(pathAndLine.line).to.be.equals(firstFileOutOfDDLineNumber)
+          expect(pathAndLine.column).to.be.equals(42)
         })
 
       it('should return null when all stack is in dd trace', () => {
@@ -135,10 +140,11 @@ describe('path-line', function () {
           callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'other', 'file', 'in', 'dd.js'), 89))
           callsites.push(new CallSiteMock(dcPath, 25))
           callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'other', 'file', 'in', 'dd.js'), 5))
-          callsites.push(new CallSiteMock(firstFileOutOfDD, firstFileOutOfDDLineNumber))
+          callsites.push(new CallSiteMock(firstFileOutOfDD, firstFileOutOfDDLineNumber, 42))
           const pathAndLine = pathLine.getFirstNonDDPathAndLineFromCallsites(callsites)
           expect(pathAndLine.path).to.be.equals(expectedFirstFileOutOfDD)
           expect(pathAndLine.line).to.be.equals(firstFileOutOfDDLineNumber)
+          expect(pathAndLine.column).to.be.equals(42)
         })
       })
     })
@@ -169,10 +175,11 @@ describe('path-line', function () {
         callsites.push(new CallSiteMock(PATH_AND_LINE_PATH, PATH_AND_LINE_LINE))
         callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'other', 'file', 'in', 'dd.js'), 89))
         callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'other', 'file', 'in', 'dd.js'), 5))
-        callsites.push(new CallSiteMock(firstFileOutOfDD, firstFileOutOfDDLineNumber))
+        callsites.push(new CallSiteMock(firstFileOutOfDD, firstFileOutOfDDLineNumber, 42))
         const pathAndLine = pathLine.getFirstNonDDPathAndLineFromCallsites(callsites)
         expect(pathAndLine.path).to.be.equals(expectedFilePath)
         expect(pathAndLine.line).to.be.equals(firstFileOutOfDDLineNumber)
+        expect(pathAndLine.column).to.be.equals(42)
       })
 
       DIAGNOSTICS_CHANNEL_PATHS.forEach((dcPath) => {
@@ -185,10 +192,11 @@ describe('path-line', function () {
           callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'other', 'file', 'in', 'dd.js'), 89))
           callsites.push(new CallSiteMock(dcPath, 25))
           callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'other', 'file', 'in', 'dd.js'), 5))
-          callsites.push(new CallSiteMock(firstFileOutOfDD, firstFileOutOfDDLineNumber))
+          callsites.push(new CallSiteMock(firstFileOutOfDD, firstFileOutOfDDLineNumber, 42))
           const pathAndLine = pathLine.getFirstNonDDPathAndLineFromCallsites(callsites)
           expect(pathAndLine.path).to.be.equals(expectedFilePath)
           expect(pathAndLine.line).to.be.equals(firstFileOutOfDDLineNumber)
+          expect(pathAndLine.column).to.be.equals(42)
         })
       })
     })
