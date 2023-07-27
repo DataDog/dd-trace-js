@@ -42,6 +42,10 @@ const storage = {
       serviceName: ({ tracerService, pluginConfig, system }) =>
         pluginConfig.service || fromSystem(tracerService, system)
     },
+    couchbase: {
+      opName: ({ operation }) => `couchbase.${operation}`,
+      serviceName: ({ tracerService, pluginConfig }) => pluginConfig.service || `${tracerService}-couchbase`
+    },
     elasticsearch: {
       opName: () => 'elasticsearch.query',
       serviceName: ({ tracerService, pluginConfig }) =>
