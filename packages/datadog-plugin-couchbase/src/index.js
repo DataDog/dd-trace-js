@@ -2,7 +2,6 @@
 
 const StoragePlugin = require('../../dd-trace/src/plugins/storage')
 const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
 class CouchBasePlugin extends StoragePlugin {
   static get id () {
@@ -24,22 +23,20 @@ class CouchBasePlugin extends StoragePlugin {
       'span.kind': this.constructor.kind
     }
 
+    if (bucket) tags['couchbase.bucket.name'] = bucket.name
+    if (collection) tags['couchbase.collection.name'] = collection.name
+
     for (const tag in customTags) {
       tags[tag] = customTags[tag]
     }
-    const span = this.tracer.startSpan(
+
+    return super.startSpan(
       this.operationName({ operation }),
       {
-        childOf: store ? store.span : null,
-        tags
+        service: this.serviceName({ pluginConfig: this.config }),
+        meta: tags
       }
     )
-
-    if (bucket) span.setTag(`couchbase.bucket.name`, bucket.name)
-    if (collection) span.setTag(`couchbase.collection.name`, collection.name)
-
-    analyticsSampler.sample(span, this.config.measured)
-    return span
   }
 
   constructor (...args) {
@@ -47,8 +44,13 @@ class CouchBasePlugin extends StoragePlugin {
 
     this.addSubs('query', ({ resource, bucket }) => {
       const store = storage.getStore()
-      const span = this.startSpan('query', { 'span.type': 'sql', 'resource.name': resource },
         store, { bucket })
+      const span = this.startSpan(
+        'query', {
+          'span.type': 'sql',
+          'resource.name': resource,
+          'span.kind': this.constructor.kind
+        },
       this.enter(span, store)
     })
 
