@@ -29,7 +29,7 @@ class AgentExporter {
     })
 
     this._timer = undefined
-    process.once('beforeExit', () => this._writer.flush(this._awaitAgentInitToFlush))
+    process.once('beforeExit', () => this._writer.flush(undefined, this._awaitAgentInitToFlush))
   }
 
   setUrl (url) {
@@ -48,10 +48,10 @@ class AgentExporter {
     const { flushInterval } = this._config
 
     if (flushInterval === 0) {
-      this._writer.flush(this._awaitAgentInitToFlush)
+      this._writer.flush(undefined, this._awaitAgentInitToFlush)
     } else if (flushInterval > 0 && !this._timer) {
       this._timer = setTimeout(() => {
-        this._writer.flush(this._awaitAgentInitToFlush)
+        this._writer.flush(undefined, this._awaitAgentInitToFlush)
         this._timer = clearTimeout(this._timer)
       }, flushInterval).unref()
     }

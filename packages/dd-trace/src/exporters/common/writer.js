@@ -24,7 +24,7 @@ class Writer {
     this._url = url
   }
 
-  async flush (awaitAgentInitToFlush = false, done = () => {}) {
+  async flush (done = () => {}, awaitAgentInitToFlush = false) {
     const count = this._encoder.count()
 
     if (!request.writable) {
