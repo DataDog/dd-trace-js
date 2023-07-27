@@ -206,6 +206,8 @@ addHook({
 
     isSuitesSkipped = filteredTests.length !== shardedTests.length
 
+    skippableSuites = []
+
     return filteredTests
   })
   return sequencerPackage
