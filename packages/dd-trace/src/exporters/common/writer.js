@@ -32,6 +32,7 @@ class Writer {
       done()
     } else if (count > 0) {
       const payload = this._encoder.makePayload()
+
       try {
         if (awaitAgentInitToFlush) {
           while (!(await isAgentInitialized())) {
