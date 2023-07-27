@@ -233,6 +233,26 @@ describe('Plugin', () => {
             }).toArray()
           })
 
+          it('should use the toJSON method of objects if it exists', done => {
+            const id = '123456781234567812345678'
+
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                const resource = `find test.${collectionName}`
+                const query = `{"_id":"${id}"}`
+
+                expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
+              })
+              .then(done)
+              .catch(done)
+
+            collection.find({
+              _id: { toJSON: () => id }
+            }).toArray()
+          })
+
           it('should run the callback in the parent context', done => {
             const insertPromise = collection.insertOne({ a: 1 }, {}, () => {
               expect(tracer.scope().active()).to.be.null
