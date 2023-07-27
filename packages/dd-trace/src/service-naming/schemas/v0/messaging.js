@@ -1,4 +1,4 @@
-const { identityService } = require('../util')
+const { identityService, awsServiceV0 } = require('../util')
 
 function amqpServiceName ({ tracerService }) {
   return `${tracerService}-amqp`
@@ -25,6 +25,14 @@ const messaging = {
     rhea: {
       opName: () => 'amqp.send',
       serviceName: ({ tracerService }) => `${tracerService}-amqp-producer`
+    },
+    sqs: {
+      opName: () => 'aws.request',
+      serviceName: awsServiceV0
+    },
+    sns: {
+      opName: () => 'aws.request',
+      serviceName: awsServiceV0
     }
   },
   consumer: {
@@ -47,6 +55,10 @@ const messaging = {
     rhea: {
       opName: () => 'amqp.receive',
       serviceName: identityService
+    },
+    sqs: {
+      opName: () => 'aws.request',
+      serviceName: awsServiceV0
     }
   },
   client: {

@@ -9,6 +9,7 @@ const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DD_MAJOR } = require('../../../version')
+const { rawExpectedSchema } = require('./naming')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -54,29 +55,37 @@ describe('Plugin', () => {
             })
         })
 
+        const spanProducerFn = (done) => {
+          getPort().then(port => {
+            const app = (stream, headers) => {
+              stream.respond({
+                ':status': 200
+              })
+              stream.end()
+            }
+            appListener = server(app, port, () => {
+              const client = http2
+                .connect(`${protocol}://localhost:${port}`)
+                .on('error', done)
+
+              const req = client.request({ ':path': '/user', ':method': 'GET' })
+              req.on('error', done)
+
+              req.end()
+            })
+          })
+        }
+
         withPeerService(
           () => tracer,
-          done => {
-            getPort().then(port => {
-              const app = (stream, headers) => {
-                stream.respond({
-                  ':status': 200
-                })
-                stream.end()
-              }
-              appListener = server(app, port, () => {
-                const client = http2
-                  .connect(`${protocol}://localhost:${port}`)
-                  .on('error', done)
+          spanProducerFn,
+          'localhost',
+          'out.host'
+        )
 
-                const req = client.request({ ':path': '/user', ':method': 'GET' })
-                req.on('error', done)
-
-                req.end()
-              })
-            })
-          },
-          'localhost', 'out.host'
+        withNamingSchema(
+          spanProducerFn,
+          rawExpectedSchema.client
         )
 
         it('should do automatic instrumentation', done => {
@@ -755,6 +764,7 @@ describe('Plugin', () => {
 
       describe('with splitByDomain configuration', () => {
         let config
+        let serverPort
 
         beforeEach(() => {
           config = {
@@ -769,6 +779,40 @@ describe('Plugin', () => {
               http2 = require('http2')
             })
         })
+
+        withNamingSchema(
+          (done) => {
+            getPort().then(port => {
+              serverPort = port
+              const app = (stream, headers) => {
+                stream.respond({
+                  ':status': 200
+                })
+                stream.end()
+              }
+              appListener = server(app, port, () => {
+                const client = http2
+                  .connect(`${protocol}://localhost:${port}`)
+                  .on('error', done)
+
+                const req = client.request({ ':path': '/user', ':method': 'GET' })
+                req.on('error', done)
+
+                req.end()
+              })
+            })
+          },
+          {
+            v0: {
+              serviceName: () => `localhost:${serverPort}`,
+              opName: 'http.request'
+            },
+            v1: {
+              serviceName: () => `localhost:${serverPort}`,
+              opName: 'http.client.request'
+            }
+          }
+        )
 
         it('should use the remote endpoint as the service name', done => {
           const app = (stream, headers) => {
