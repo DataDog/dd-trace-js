@@ -1,5 +1,6 @@
 'use strict'
 
+const proxyquire = require('proxyquire')
 const waf = require('../../src/appsec/waf')
 const RuleManager = require('../../src/appsec/rule_manager')
 const appsec = require('../../src/appsec')
@@ -18,6 +19,7 @@ const axios = require('axios')
 const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
+const addresses = require('../../src/appsec/addresses')
 
 describe('AppSec Index', () => {
   let config
@@ -548,17 +550,6 @@ describe('AppSec Index', () => {
         expect(waf.run).not.to.have.been.called
       })
 
-      it('Should not call waf if rootSpan is unavailable', () => {
-        const resolvers = { user: [ { id: '1234' } ] }
-        sinon.stub(waf, 'run')
-        sinon.stub(storage, 'getStore').returns({ req: {} })
-        web.root.returns(undefined)
-
-        graphqlFinishExecute.publish({ resolvers })
-
-        expect(waf.run).not.to.have.been.called
-      })
-
       it('Should call waf if resolvers is well formatted', () => {
         const resolvers = { user: [ { id: '1234' } ] }
         const rootSpan = {}
@@ -571,7 +562,7 @@ describe('AppSec Index', () => {
 
         expect(waf.run).to.have.been.calledOnceWithExactly(
           {
-            'server.graphql.all_resolvers': resolvers
+            [addresses.HTTP_INCOMING_GRAPHQL_RESOLVERS]: resolvers
           },
           {}
         )

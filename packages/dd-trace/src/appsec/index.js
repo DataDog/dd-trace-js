@@ -163,9 +163,8 @@ function onPassportVerify ({ credentials, user }) {
 function onGraphqlFinishExecute ({ resolvers }) {
   const store = storage.getStore()
   const req = store && store.req
-  const rootSpan = req && web.root(store.req)
 
-  if (!rootSpan) return
+  if (!req) return
 
   if (!resolvers || typeof resolvers !== 'object') return
 

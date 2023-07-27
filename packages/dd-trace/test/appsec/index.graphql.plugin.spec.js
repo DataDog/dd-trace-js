@@ -6,7 +6,6 @@ const Config = require('../../src/config')
 const axios = require('axios')
 const getPort = require('get-port')
 const path = require('path')
-const {expect} = require('chai')
 
 withVersions('graphql', 'graphql', '>=14.7.0', version => {
   describe('graphql instrumentation', () => {
