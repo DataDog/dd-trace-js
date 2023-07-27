@@ -2,73 +2,105 @@
 
 /* eslint-disable no-console */
 
-const NAMESPACE = 'datadog'
-
-const instrumented = Object.keys(require('../datadog-instrumentations/src/helpers/hooks.js'))
-const rawBuiltins = require('module').builtinModules
+const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
+const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
 
 warnIfUnsupported()
 
+for (const hook of Object.values(hooks)) {
+  hook()
+}
+
+const modulesOfInterest = new Set()
+
+for (const instrumentation of Object.values(instrumentations)) {
+  for (const entry of instrumentation) {
+    if (!entry.file) {
+      modulesOfInterest.add(entry.name) // e.g. "redis"
+    } else {
+      modulesOfInterest.add(`${entry.name}/${entry.file}`) // e.g. "redis/my/file.js"
+    }
+  }
+}
+
+const NAMESPACE = 'datadog'
+const NM = 'node_modules/'
+const INSTRUMENTED = Object.keys(instrumentations)
+const RAW_BUILTINS = require('module').builtinModules
+const CHANNEL = 'dd-trace:bundler:load'
+
 const builtins = new Set()
 
-for (const builtin of rawBuiltins) {
+for (const builtin of RAW_BUILTINS) {
   builtins.add(builtin)
   builtins.add(`node:${builtin}`)
 }
 
-const packagesOfInterest = new Set()
-
 const DEBUG = !!process.env.DD_TRACE_DEBUG
 
-// We don't want to handle any built-in packages via DCITM
+// We don't want to handle any built-in packages
 // Those packages will still be handled via RITM
 // Attempting to instrument them would fail as they have no package.json file
-for (const pkg of instrumented) {
+for (const pkg of INSTRUMENTED) {
   if (builtins.has(pkg)) continue
   if (pkg.startsWith('node:')) continue
-  packagesOfInterest.add(pkg)
+  modulesOfInterest.add(pkg)
 }
-
-const DC_CHANNEL = 'dd-trace:bundledModuleLoadStart'
 
 module.exports.name = 'datadog-esbuild'
 
 module.exports.setup = function (build) {
   build.onResolve({ filter: /.*/ }, args => {
+    let fullPathToModule
+    try {
+      fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
+    } catch (err) {
+      console.warn(`Unable to find "${args.path}". Is the package dead code?`)
+      return
+    }
+    const extracted = extractPackageAndModulePath(fullPathToModule)
     const packageName = args.path
 
-    if (args.namespace === 'file' && packagesOfInterest.has(packageName)) {
+    const internal = builtins.has(args.path)
+
+    if (args.namespace === 'file' && (
+      modulesOfInterest.has(packageName) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
+    ) {
       // The file namespace is used when requiring files from disk in userland
 
       let pathToPackageJson
       try {
-        pathToPackageJson = require.resolve(`${packageName}/package.json`, { paths: [ args.resolveDir ] })
+        pathToPackageJson = require.resolve(`${extracted.pkg}/package.json`, { paths: [ args.resolveDir ] })
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
-          console.warn(`Unable to open "${packageName}/package.json". Is the "${packageName}" package dead code?`)
+          if (!internal) {
+            console.warn(`Unable to find "${extracted.pkg}/package.json". Is the package dead code?`)
+          }
           return
         } else {
           throw err
         }
       }
 
-      const pkg = require(pathToPackageJson)
+      const packageJson = require(pathToPackageJson)
 
-      if (DEBUG) {
-        console.log(`resolve ${packageName}@${pkg.version}`)
-      }
+      if (DEBUG) console.log(`RESOLVE ${packageName}@${packageJson.version}`)
 
       // https://esbuild.github.io/plugins/#on-resolve-arguments
       return {
-        path: packageName,
+        path: fullPathToModule,
         namespace: NAMESPACE,
         pluginData: {
-          version: pkg.version
+          version: packageJson.version,
+          pkg: extracted.pkg,
+          path: extracted.path,
+          full: fullPathToModule,
+          raw: packageName,
+          internal
         }
       }
-    } else if (args.namespace === 'datadog') {
+    } else if (args.namespace === NAMESPACE) {
       // The datadog namespace is used when requiring files that are injected during the onLoad stage
-      // see note in onLoad
 
       if (builtins.has(packageName)) return
 
@@ -80,23 +112,28 @@ module.exports.setup = function (build) {
   })
 
   build.onLoad({ filter: /.*/, namespace: NAMESPACE }, args => {
-    if (DEBUG) {
-      console.log(`load ${args.path}@${args.pluginData.version}`)
-    }
+    const data = args.pluginData
 
-    // JSON.stringify adds double quotes. For perf gain could simply add in quotes when we know it's safe.
+    if (DEBUG) console.log(`LOAD ${data.pkg}@${data.version}, pkg "${data.path}"`)
+
+    const path = data.raw !== data.pkg
+      ? `${data.pkg}/${data.path}`
+      : data.pkg
+
     const contents = `
       const dc = require('diagnostics_channel');
-      const ch = dc.channel(${JSON.stringify(DC_CHANNEL + ':' + args.path)});
-      const mod = require(${JSON.stringify(args.path)});
+      const ch = dc.channel('${CHANNEL}');
+      const mod = require('${args.path}');
       const payload = {
         module: mod,
-        path: ${JSON.stringify(args.path)},
-        version: ${JSON.stringify(args.pluginData.version)}
+        version: '${data.version}',
+        package: '${data.pkg}',
+        path: '${path}'
       };
       ch.publish(payload);
       module.exports = payload.module;
     `
+
     // https://esbuild.github.io/plugins/#on-load-results
     return {
       contents,
@@ -119,5 +156,46 @@ function warnIfUnsupported () {
     console.error(`Expected: Node.js >=v16.17 or >=v18.7. Actual: Node.js = ${process.version}.`)
     console.error('This application may build properly with this version of Node.js, but unless a')
     console.error('more recent version is used at runtime, third party packages won\'t be instrumented.')
+  }
+}
+
+// @see https://github.com/nodejs/node/issues/47000
+function dotFriendlyResolve (path, directory) {
+  if (path === '.') {
+    path = './'
+  } else if (path === '..') {
+    path = '../'
+  }
+
+  return require.resolve(path, { paths: [ directory ] })
+}
+
+/**
+ * For a given full path to a module,
+ *   return the package name it belongs to and the local path to the module
+ *   input: '/foo/node_modules/@co/stuff/foo/bar/baz.js'
+ *   output: { pkg: '@co/stuff', path: 'foo/bar/baz.js' }
+ */
+function extractPackageAndModulePath (fullPath) {
+  const nm = fullPath.lastIndexOf(NM)
+  if (nm < 0) {
+    return { pkg: null, path: null }
+  }
+
+  const subPath = fullPath.substring(nm + NM.length)
+  const firstSlash = subPath.indexOf('/')
+
+  if (subPath[0] === '@') {
+    const secondSlash = subPath.substring(firstSlash + 1).indexOf('/')
+
+    return {
+      pkg: subPath.substring(0, firstSlash + 1 + secondSlash),
+      path: subPath.substring(firstSlash + 1 + secondSlash + 1)
+    }
+  }
+
+  return {
+    pkg: subPath.substring(0, firstSlash),
+    path: subPath.substring(firstSlash + 1)
   }
 }

@@ -21,6 +21,7 @@ class FetchPlugin extends HttpClientPlugin {
 
     const store = super.bindStart(message)
 
+    message.headers = headers
     message.req = new globalThis.Request(req, { headers })
 
     return store
