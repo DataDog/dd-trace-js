@@ -71,7 +71,9 @@ for D in *; do
   if [ -d "${D}" ]; then
     if [[ ${BENCH_INDEX} -ge ${BENCH_START} && ${BENCH_INDEX} -lt ${BENCH_END} ]]; then
       cd "${D}"
+      set +e
       run_all_variants $D
+      set -e
       cd ..
     fi
 
