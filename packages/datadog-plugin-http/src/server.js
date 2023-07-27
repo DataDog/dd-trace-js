@@ -23,8 +23,16 @@ class HttpServerPlugin extends ServerPlugin {
 
   start ({ req, res, abortController }) {
     const store = storage.getStore()
-    const span = web.startSpan(this.tracer, this.config, req, res, 'web.request')
-
+    const span = web.startSpan(
+      this.tracer,
+      {
+        ...this.config,
+        service: this.config.service || this.serviceName()
+      },
+      req,
+      res,
+      this.operationName()
+    )
     span.setTag(COMPONENT, this.constructor.id)
 
     this._parentStore = store

@@ -51,12 +51,12 @@ function loadInstFile (file, instrumentations) {
 function withNamingSchema (
   spanProducerFn,
   expected,
-  selectSpan = (traces) => traces[0][0],
   opts = {}
 ) {
   const {
     hooks = (version, defaultToGlobalService) => {},
-    desc = ''
+    desc = '',
+    selectSpan = (traces) => traces[0][0]
   } = opts
   let fullConfig
 
