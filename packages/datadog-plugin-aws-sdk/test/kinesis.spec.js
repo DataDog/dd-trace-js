@@ -4,6 +4,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
+const { rawExpectedSchema } = require('./kinesis-naming')
 
 describe('Kinesis', () => {
   setup()
@@ -52,6 +53,13 @@ describe('Kinesis', () => {
         helpers.waitForDeletedStream(kinesis, done)
       })
     })
+
+    withNamingSchema(
+      (done) => kinesis.describeStream({
+        StreamName: 'MyStream'
+      }, (err) => err && done(err)),
+      rawExpectedSchema.outbound
+    )
 
     it('injects trace context to Kinesis putRecord', done => {
       helpers.putTestRecord(kinesis, helpers.dataBuffer, (err, data) => {

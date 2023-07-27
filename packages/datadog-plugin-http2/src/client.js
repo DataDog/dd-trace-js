@@ -38,12 +38,12 @@ class Http2ClientPlugin extends ClientPlugin {
 
     const store = storage.getStore()
     const childOf = store && allowed ? store.span : null
-    const span = this.startSpan('http.request', {
+    const span = this.startSpan(this.operationName(), {
       childOf,
       meta: {
         [COMPONENT]: this.constructor.id,
         [SPAN_KIND]: CLIENT,
-        'service.name': getServiceName(this.tracer, this.config, sessionDetails),
+        'service.name': this.serviceName({ pluginConfig: this.config, sessionDetails }),
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
@@ -131,20 +131,6 @@ function extractSessionDetails (authority, options) {
   }
 
   return { protocol, port, host }
-}
-
-function getFormattedHostString (host, port) {
-  return [host, port].filter(val => val).join(':')
-}
-
-function getServiceName (tracer, config, sessionDetails) {
-  if (config.splitByDomain) {
-    return getFormattedHostString(sessionDetails.host, sessionDetails.port)
-  } else if (config.service) {
-    return config.service
-  }
-
-  return tracer._service
 }
 
 function hasAmazonSignature (headers, path) {

@@ -183,9 +183,11 @@ describe('Plugin', () => {
             graphql.graphql({ schema, source, variableValues })
           },
           rawExpectedSchema.server,
-          (traces) => {
-            const spans = sort(traces[0])
-            return spans[0]
+          {
+            selectSpan: (traces) => {
+              const spans = sort(traces[0])
+              return spans[0]
+            }
           }
         )
 
