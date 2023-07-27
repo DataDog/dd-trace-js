@@ -41,6 +41,29 @@ class Sqs extends BaseAwsSdkPlugin {
     })
   }
 
+  operationFromRequest (request) {
+    switch (request.operation) {
+      case 'receiveMessage':
+        return this.operationName({
+          type: 'messaging',
+          kind: 'consumer'
+        })
+      case 'sendMessage':
+      case 'sendMessageBatch':
+        return this.operationName({
+          type: 'messaging',
+          kind: 'producer'
+        })
+    }
+
+    return this.operationName({
+      id: 'aws',
+      type: 'web',
+      kind: 'client',
+      awsService: 'sqs'
+    })
+  }
+
   isEnabled (request) {
     // TODO(bengl) Figure out a way to make separate plugins for consumer and producer so that
     // config can be isolated to `.configure()` instead of this whole isEnabled() thing.

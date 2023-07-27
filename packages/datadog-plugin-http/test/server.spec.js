@@ -5,6 +5,7 @@ const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios')
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
+const { rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let http
@@ -97,6 +98,13 @@ describe('Plugin', () => {
         appListener = server
           .listen(port, 'localhost', () => done())
       })
+
+      withNamingSchema(
+        done => {
+          axios.get(`http://localhost:${port}/user`).catch(done)
+        },
+        rawExpectedSchema.server
+      )
 
       it('should do automatic instrumentation', done => {
         agent
