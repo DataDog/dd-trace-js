@@ -74,7 +74,7 @@ function wrap (prefix, fn) {
     return asyncResource.runInAsyncScope(() => {
       const cb = callbackResource.bind(arguments[callbackIndex])
 
-      startCh.publish({ bucket: { name: this.name || this._name } })
+      startCh.publish({ bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts })
 
       arguments[callbackIndex] = asyncResource.bind(function (error, result) {
         if (error) {
@@ -146,7 +146,8 @@ function wrapWithName (name) {
     return function () { // no arguments used by us
       return wrapCBandPromise(operation, name, {
         collection: { name: this._name || '_default' },
-        bucket: { name: this._scope._bucket._name }
+        bucket: { name: this._scope._bucket._name },
+        seedNodes: this._dd_connStr
       }, this, arguments)
     }
   }
@@ -155,7 +156,7 @@ function wrapWithName (name) {
 function wrapV3Query (query) {
   return function (q) {
     const resource = getQueryResource(q)
-    return wrapCBandPromise(query, 'query', { resource }, this, arguments)
+    return wrapCBandPromise(query, 'query', { resource, seedNodes: this._connStr }, this, arguments)
   }
 }
 
@@ -179,7 +180,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
-      startCh.publish({ resource: n1qlQuery, bucket: { name: this.name || this._name } })
+      startCh.publish({ resource: n1qlQuery, bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts })
 
       emitter.once('rows', asyncResource.bind(() => {
         finishCh.publish(undefined)
@@ -212,10 +213,31 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cl
   Cluster.prototype._maybeInvoke = wrapMaybeInvoke(Cluster.prototype._maybeInvoke)
   Cluster.prototype.query = wrapQuery(Cluster.prototype.query)
 
+  shimmer.wrap(Cluster.prototype, 'openBucket', openBucket => {
+    return function () {
+      const bucket = openBucket.apply(this, arguments)
+      const hosts = this.dsnObj.hosts
+      bucket._dd_hosts = hosts.map(hostAndPort => hostAndPort.join(':')).join(',')
+      return bucket
+    }
+  })
   return Cluster
 })
 
 // semver >=3 <3.2.0
+
+addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^3.0.7', '^3.1.3'] }, Bucket => {
+  shimmer.wrap(Bucket.prototype, 'collection', getCollection => {
+    return function () {
+      const collection = getCollection.apply(this, arguments)
+      const connStr = this._cluster._connStr
+      collection._dd_connStr = connStr
+      return collection
+    }
+  })
+
+  return Bucket
+})
 
 addHook({ name: 'couchbase', file: 'lib/collection.js', versions: ['^3.0.7', '^3.1.3'] }, Collection => {
   wrapAllNames(['upsert', 'insert', 'replace'], name => {
@@ -242,7 +264,21 @@ addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.0'] }
   return collection
 })
 
-addHook({ name: 'couchbase', file: 'dist/cluster.js', versions: ['3.2.0 - 3.2.1', '>=3.2.2'] }, cluster => {
+addHook({ name: 'couchbase', file: 'dist/bucket.js', versions: ['>=3.2.0'] }, bucket => {
+  const Bucket = bucket.Bucket
+  shimmer.wrap(Bucket.prototype, 'collection', getCollection => {
+    return function () {
+      const collection = getCollection.apply(this, arguments)
+      const connStr = this._cluster._connStr
+      collection._dd_connStr = connStr
+      return collection
+    }
+  })
+
+  return bucket
+})
+
+addHook({ name: 'couchbase', file: 'dist/cluster.js', versions: ['3.2.0 - 3.2.1', '>=3.2.2'] }, (cluster) => {
   const Cluster = cluster.Cluster
 
   shimmer.wrap(Cluster.prototype, 'query', wrapV3Query)
