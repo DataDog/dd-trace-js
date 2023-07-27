@@ -18,7 +18,8 @@ const {
   TEST_CODE_COVERAGE_ENABLED,
   TEST_ITR_SKIPPING_ENABLED,
   TEST_ITR_TESTS_SKIPPED,
-  TEST_CODE_COVERAGE_LINES_PCT
+  TEST_CODE_COVERAGE_LINES_PCT,
+  TEST_SUITE
 } = require('../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
@@ -125,6 +126,80 @@ testFrameworks.forEach(({
     }
 
     if (name === 'jest') {
+      it('works when sharding', (done) => {
+        receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(events => {
+          const testSuiteEvents = events.payload.events.filter(event => event.type === 'test_suite_end')
+          assert.equal(testSuiteEvents.length, 3)
+          const testSuites = testSuiteEvents.map(span => span.content.meta[TEST_SUITE])
+
+          assert.includeMembers(testSuites,
+            [
+              'ci-visibility/sharding-test/sharding-test-5.js',
+              'ci-visibility/sharding-test/sharding-test-4.js',
+              'ci-visibility/sharding-test/sharding-test-1.js'
+            ]
+          )
+
+          const testSession = events.payload.events.find(event => event.type === 'test_session_end').content
+          assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+
+          // We run the second shard
+          receiver.setSuitesToSkip([
+            {
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/sharding-test/sharding-test-2.js'
+              }
+            },
+            {
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/sharding-test/sharding-test-3.js'
+              }
+            }
+          ])
+          childProcess = exec(
+            runTestsWithCoverageCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_REGEX: 'sharding-test/sharding-test',
+                TEST_SHARD: '2/2'
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(secondShardEvents => {
+            const testSuiteEvents = secondShardEvents.payload.events.filter(event => event.type === 'test_suite_end')
+
+            // The suites for this shard are to be skipped, so nothing is run.
+            assert.equal(testSuiteEvents.length, 0)
+
+            const testSession = secondShardEvents
+              .payload
+              .events
+              .find(event => event.type === 'test_session_end').content
+
+            assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
+
+            done()
+          })
+        })
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_REGEX: 'sharding-test/sharding-test',
+              TEST_SHARD: '1/2'
+            },
+            stdio: 'inherit'
+          }
+        )
+      })
       it('does not crash when jest is badly initialized', (done) => {
         childProcess = fork('ci-visibility/run-jest-bad-init.js', {
           cwd,
