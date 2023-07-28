@@ -3,7 +3,6 @@
 const {
   FakeAgent,
   createSandbox,
-  curlAndAssertMessage,
   skipUnsupportedNodeVersions,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')

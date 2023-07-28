@@ -1,7 +1,5 @@
 'use strict'
 
-const { fork } = require('child_process')
-const path = require('path')
 const {
   FakeAgent,
   createSandbox,
