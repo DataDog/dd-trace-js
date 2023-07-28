@@ -42,8 +42,7 @@ describe('esm', () => {
         (data) => {
           const jsonObject = JSON.parse(data.toString())
           expect(jsonObject).to.have.property('dd')
-        },
-        true
+        }
       )
     }).timeout(20000)
   })

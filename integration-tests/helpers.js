@@ -159,12 +159,12 @@ class FakeAgent extends EventEmitter {
   }
 }
 
-function spawnProc (filename, options = {}, stdioHandler, resolveOnExit = false) {
+function spawnProc (filename, options = {}, stdioHandler) {
   const proc = fork(filename, options)
   return new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
-        // checking for an actual port number or indication for graceful exit
+        // checking for an actual port number or indication of graceful exit
         if (port !== -1) {
           proc.url = `http://localhost:${port}`
         }
@@ -174,9 +174,6 @@ function spawnProc (filename, options = {}, stdioHandler, resolveOnExit = false)
       .on('exit', code => {
         if (code !== 0) {
           reject(new Error(`Process exited with status code ${code}.`))
-        }
-        if (resolveOnExit) {
-          resolve(proc)
         }
       })
     if (stdioHandler) {
@@ -307,7 +304,7 @@ function skipUnsupportedNodeVersions () {
     : global.describe
 }
 
-async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, resolveOnExit = false) {
+async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler) {
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
     env: {
@@ -315,7 +312,7 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
       DD_TRACE_AGENT_PORT: agentPort
     },
     stdio: 'pipe'
-  }, stdioHandler, resolveOnExit)
+  }, stdioHandler)
 }
 
 module.exports = {
