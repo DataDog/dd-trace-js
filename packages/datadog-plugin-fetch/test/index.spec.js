@@ -7,6 +7,7 @@ const { expect } = require('chai')
 const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DD_MAJOR } = require('../../../version')
+const { rawExpectedSchema } = require('./naming')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -45,6 +46,22 @@ describe('Plugin', () => {
             fetch = globalThis.fetch
           })
       })
+
+      withNamingSchema(
+        () => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            appListener = server(app, port, () => {
+              fetch(`http://localhost:${port}/user`)
+            })
+          })
+        },
+        rawExpectedSchema.client
+      )
 
       it('should do automatic instrumentation', done => {
         const app = express()

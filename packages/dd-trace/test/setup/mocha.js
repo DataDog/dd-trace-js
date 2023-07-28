@@ -51,12 +51,12 @@ function loadInstFile (file, instrumentations) {
 function withNamingSchema (
   spanProducerFn,
   expected,
-  selectSpan = (traces) => traces[0][0],
   opts = {}
 ) {
   const {
     hooks = (version, defaultToGlobalService) => {},
-    desc = ''
+    desc = '',
+    selectSpan = (traces) => traces[0][0]
   } = opts
   let fullConfig
 
@@ -69,6 +69,7 @@ function withNamingSchema (
           fullConfig = Nomenclature.config
           Nomenclature.configure({
             spanAttributeSchema: versionName,
+            spanRemoveIntegrationFromService: false,
             service: fullConfig.service // Hack: only way to retrieve the test agent configuration
           })
         })
@@ -138,8 +139,8 @@ function withNamingSchema (
   })
 }
 
-function withPeerService (tracer, spanGenerationFn, service, serviceSource) {
-  describe('peer service computation', () => {
+function withPeerService (tracer, spanGenerationFn, service, serviceSource, opts = {}) {
+  describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), () => {
     let computePeerServiceSpy
     beforeEach(() => {
       // FIXME: workaround due to the evaluation order of mocha beforeEach
