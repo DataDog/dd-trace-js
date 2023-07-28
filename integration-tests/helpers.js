@@ -164,7 +164,10 @@ function spawnProc (filename, options = {}, stdioHandler, resolveOnExit = false)
   return new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
-        proc.url = `http://localhost:${port}`
+        // checking for an actual port number or indication for graceful exit
+        if (port !== -1) {
+          proc.url = `http://localhost:${port}`
+        }
         resolve(proc)
       })
       .on('error', reject)
