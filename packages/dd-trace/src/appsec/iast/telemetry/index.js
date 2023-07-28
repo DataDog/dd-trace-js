@@ -5,11 +5,19 @@ const telemetryLogs = require('./log')
 const { Verbosity, getVerbosity } = require('./verbosity')
 const { initRequestNamespace, finalizeRequestNamespace, globalNamespace } = require('./namespaces')
 
+function isMetricsEnabled (metrics) {
+  return process.env.DD_TELEMETRY_METRICS_ENABLED !== undefined ? metrics : true
+}
+
 class Telemetry {
   configure (config, verbosity) {
-    // in order to telemetry be enabled, tracer telemetry and metrics collection have to be enabled
-    this.enabled = config && config.telemetry && config.telemetry.enabled && config.telemetry.metrics
-    this.verbosity = this.enabled ? getVerbosity(verbosity) : Verbosity.OFF
+    const telemetryAndMetricsEnabled = config &&
+      config.telemetry &&
+      config.telemetry.enabled &&
+      isMetricsEnabled(config.telemetry.metrics)
+
+    this.verbosity = telemetryAndMetricsEnabled ? getVerbosity(verbosity) : Verbosity.OFF
+    this.enabled = this.verbosity !== Verbosity.OFF
 
     if (this.enabled) {
       telemetryMetrics.manager.set('iast', globalNamespace)
@@ -30,13 +38,13 @@ class Telemetry {
   }
 
   onRequestStart (context) {
-    if (this.isEnabled() && this.verbosity !== Verbosity.OFF) {
+    if (this.isEnabled()) {
       initRequestNamespace(context)
     }
   }
 
   onRequestEnd (context, rootSpan) {
-    if (this.isEnabled() && this.verbosity !== Verbosity.OFF) {
+    if (this.isEnabled()) {
       finalizeRequestNamespace(context, rootSpan)
     }
   }
