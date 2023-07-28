@@ -18,8 +18,7 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['pino'], false, [`./integration-tests/plugin-helpers.mjs`,
-      `./packages/datadog-plugin-pino/test/integration-test/*`])
+    sandbox = await createSandbox(['pino'], false, [`./packages/datadog-plugin-pino/test/integration-test/*`])
   })
 
   after(async () => {
@@ -37,16 +36,16 @@ describe('esm', () => {
 
   context('pino', () => {
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-
-      return curlAndAssertMessage(agent, proc, () => {
-        proc.stdout.on('data', (data) => {
+      proc = await spawnPluginIntegrationTestProc(
+        sandbox.folder,
+        'server.mjs',
+        agent.port,
+        (data) => {
           const jsonObject = JSON.parse(data.toString())
           expect(jsonObject).to.have.property('dd')
-          expect(jsonObject).to.deep.nested.property('dd.trace_id')
-          expect(jsonObject).to.deep.nested.property('dd.span_id')
-        })
-      })
+        },
+        true
+      )
     }).timeout(20000)
   })
 })

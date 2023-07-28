@@ -1,5 +1,4 @@
 import ddtrace from 'dd-trace'
-import * as pluginHelpers from './plugin-helpers.mjs'
 import winston from 'winston'
 
 ddtrace.init({
@@ -15,6 +14,4 @@ const logger = winston.createLogger({
   ]
 })
 
-pluginHelpers.onMessage(async () => {
-  logger.info('test xyz')
-})
+logger.info('test xyz')

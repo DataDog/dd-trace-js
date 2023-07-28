@@ -159,7 +159,7 @@ class FakeAgent extends EventEmitter {
   }
 }
 
-function spawnProc (filename, options = {}) {
+function spawnProc (filename, options = {}, stdioHandler, resolveOnExit = false) {
   const proc = fork(filename, options)
   return new Promise((resolve, reject) => {
     proc
@@ -172,7 +172,15 @@ function spawnProc (filename, options = {}) {
         if (code !== 0) {
           reject(new Error(`Process exited with status code ${code}.`))
         }
+        if (resolveOnExit) {
+          resolve(proc)
+        }
       })
+    if (stdioHandler) {
+      proc.stdout.on('data', (data) => {
+        stdioHandler(data)
+      })
+    }
   })
 }
 
@@ -296,7 +304,7 @@ function skipUnsupportedNodeVersions () {
     : global.describe
 }
 
-async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort) {
+async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, resolveOnExit = false) {
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
     env: {
@@ -304,7 +312,7 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort) {
       DD_TRACE_AGENT_PORT: agentPort
     },
     stdio: 'pipe'
-  })
+  }, stdioHandler, resolveOnExit)
 }
 
 module.exports = {

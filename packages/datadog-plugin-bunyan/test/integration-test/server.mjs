@@ -1,5 +1,4 @@
 import ddtrace from 'dd-trace'
-import * as pluginHelpers from './plugin-helpers.mjs'
 import bunyan from 'bunyan'
 
 ddtrace.init({
@@ -8,6 +7,4 @@ ddtrace.init({
 
 const logger = bunyan.createLogger({ name: 'test-logger' })
 
-pluginHelpers.onMessage(async () => {
-  logger.info('test xyz')
-})
+logger.info('test xyz')

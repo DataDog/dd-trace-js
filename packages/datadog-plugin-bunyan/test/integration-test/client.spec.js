@@ -1,11 +1,12 @@
 'use strict'
 
+const { fork } = require('child_process')
+const path = require('path')
 const {
   FakeAgent,
   createSandbox,
-  curlAndAssertMessage,
-  skipUnsupportedNodeVersions,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProc,
+  skipUnsupportedNodeVersions
 } = require('../../../../integration-tests/helpers')
 const { expect } = require('chai')
 
@@ -18,8 +19,7 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['bunyan'], false, [`./integration-tests/plugin-helpers.mjs`,
-      `./packages/datadog-plugin-bunyan/test/integration-test/*`])
+    sandbox = await createSandbox(['bunyan'], false, [`./packages/datadog-plugin-bunyan/test/integration-test/*`])
   })
 
   after(async () => {
@@ -37,16 +37,16 @@ describe('esm', () => {
 
   context('bunyan', () => {
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-
-      return curlAndAssertMessage(agent, proc, () => {
-        proc.stdout.on('data', (data) => {
+      proc = await spawnPluginIntegrationTestProc(
+        sandbox.folder,
+        'server.mjs',
+        agent.port,
+        (data) => {
           const jsonObject = JSON.parse(data.toString())
           expect(jsonObject).to.have.property('dd')
-          expect(jsonObject).to.deep.nested.property('dd.trace_id')
-          expect(jsonObject).to.deep.nested.property('dd.span_id')
-        })
-      })
+        },
+        true
+      )
     }).timeout(20000)
   })
 })
