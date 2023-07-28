@@ -1,5 +1,4 @@
 import 'dd-trace/init.js'
-import * as pluginHelpers from './plugin-helpers.mjs'
 import amqplib from 'amqplib'
 
 const amqpServerEndpoint = 'amqp://localhost:5672'
@@ -15,7 +14,7 @@ function connectToAMQP (endpoint) {
     })
 }
 
-pluginHelpers.onMessage(async () => {
-  await connectToAMQP(amqpServerEndpoint)
-  channel.assertQueue('test', {}, () => {})
-})
+await connectToAMQP(amqpServerEndpoint)
+channel.assertQueue('test', {}, () => {})
+
+process.send({ port: -1 })

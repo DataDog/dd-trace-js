@@ -3,7 +3,6 @@
 const {
   FakeAgent,
   createSandbox,
-  curlAndAssertMessage,
   checkSpansForServiceName,
   skipUnsupportedNodeVersions,
   spawnPluginIntegrationTestProc
@@ -19,7 +18,7 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['rhea'], false, [`./integration-tests/plugin-helpers.mjs`,
+    sandbox = await createSandbox(['rhea'], false, [
       `./packages/datadog-plugin-rhea/test/integration-test/*`])
   })
 
@@ -38,13 +37,15 @@ describe('esm', () => {
 
   context('rhea', () => {
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-
-      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+      const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'amqp.send'), true)
-      })
+      }, undefined)
+
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined)
+
+      await res
     }).timeout(20000)
   })
 })

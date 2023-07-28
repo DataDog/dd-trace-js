@@ -1,6 +1,5 @@
 import 'dd-trace/init.js'
 import graphql from 'graphql'
-import * as pluginHelpers from './plugin-helpers.mjs'
 
 const schema = new graphql.GraphQLSchema({
   query: new graphql.GraphQLObjectType({
@@ -16,8 +15,8 @@ const schema = new graphql.GraphQLSchema({
   })
 })
 
-pluginHelpers.onMessage(async () => {
-  const source = `query MyQuery { hello(name: "world") }`
-  const variableValues = { who: 'world' }
-  await graphql.graphql({ schema, source, variableValues })
-})
+const source = `query MyQuery { hello(name: "world") }`
+const variableValues = { who: 'world' }
+await graphql.graphql({ schema, source, variableValues })
+
+process.send({ port: -1 })

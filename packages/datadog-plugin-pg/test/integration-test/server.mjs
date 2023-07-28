@@ -1,5 +1,4 @@
 import 'dd-trace/init.js'
-import * as pluginHelpers from './plugin-helpers.mjs'
 import pg from 'pg'
 
 const conn = {
@@ -13,7 +12,7 @@ const conn = {
 const client = new pg.Client(conn)
 client.connect()
 
-pluginHelpers.onMessage(async () => {
-  await client.query('SELECT NOW() AS now')
-  client.end()
-})
+await client.query('SELECT NOW() AS now')
+client.end()
+
+process.send({ port: -1 })

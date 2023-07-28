@@ -1,11 +1,8 @@
 import 'dd-trace/init.js'
-import * as pluginHelpers from './plugin-helpers.mjs'
 import Redis from 'ioredis'
 
-const client = new Redis()
+const client = new Redis({ connectionName: 'test' })
+await client.get('foo')
+client.quit()
 
-pluginHelpers.onMessage(async () => {
-  await client.connect()
-  await client.get('foo')
-  await client.quit()
-})
+process.send({ port: -1 }) 

@@ -3,7 +3,6 @@
 const {
   FakeAgent,
   createSandbox,
-  curlAndAssertMessage,
   checkSpansForServiceName,
   skipUnsupportedNodeVersions,
   spawnPluginIntegrationTestProc
@@ -19,8 +18,7 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['amqplib'], false, [`./integration-tests/plugin-helpers.mjs`,
-      `./packages/datadog-plugin-amqplib/test/integration-test/*`])
+    sandbox = await createSandbox(['amqplib'], false, [`./packages/datadog-plugin-amqplib/test/integration-test/*`])
   })
 
   after(async () => {
@@ -38,13 +36,15 @@ describe('esm', () => {
 
   context('amqplib', () => {
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-
-      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+      const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'amqp.command'), true)
-      })
+      }, undefined)
+
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined)
+
+      await res
     }).timeout(20000)
   })
 })

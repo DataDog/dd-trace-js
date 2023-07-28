@@ -1,17 +1,19 @@
 import 'dd-trace/init.js'
-import * as pluginHelpers from './plugin-helpers.mjs'
 import net from 'net'
 import getPort from 'get-port'
 
-pluginHelpers.onMessage(async () => {
-  const client = net.createConnection(await getPort(), () => {})
-  client.on('data', (data) => {})
+const port = await getPort()
 
-  client.on('end', () => {
-    client.end()
-  })
+const client = net.createConnection(port, () => {})
 
-  client.on('error', (err) => {
-    client.end()
-  })
+client.on('data', (data) => {})
+
+client.on('end', () => {
+  client.end()
 })
+
+client.on('error', (err) => {
+  client.end()
+})
+
+process.send({ port: -1 })

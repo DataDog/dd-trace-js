@@ -43,7 +43,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'amqp.send'), true)
       }, undefined)
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined, true)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined)
 
       await res
     }).timeout(20000)

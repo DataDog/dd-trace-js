@@ -1,5 +1,4 @@
 import 'dd-trace/init.js'
-import * as pluginHelpers from './plugin-helpers.mjs'
 import rhea from 'rhea'
 
 const connection = rhea.connect({
@@ -26,7 +25,7 @@ function connectToAMQP () {
   })
 }
 
-pluginHelpers.onMessage(async () => {
-  await connectToAMQP()
-  sender.send({ body: 'Hello World!' })
-})
+await connectToAMQP()
+sender.send({ body: 'Hello World!' })
+
+process.send({ port: -1 })
