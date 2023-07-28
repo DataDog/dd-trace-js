@@ -41,6 +41,16 @@
       "versions": [">=1.4.6"]
     }
   ],
+  "express-mongo-sanitize": [
+    {
+      "name": "mongodb",
+      "versions": [">=3.3"]
+    },
+    {
+      "name": "express",
+      "versions": [">=4"]
+    }
+  ],
   "fastify": [
     {
       "name": "fastify",
@@ -200,15 +210,14 @@
      }
    ],
    "passport-local": [
-    {
-      "name": "passport",
-      "versions": [">=0.4.1"]
-    },
+     {
+       "name": "passport",
+       "versions": [">=0.4.1"]
+     },
      {
        "name": "express",
        "versions": [">=4.16.2"]
      }
-
   ],
   "pg": [
     {

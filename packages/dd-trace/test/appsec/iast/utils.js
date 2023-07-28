@@ -145,11 +145,12 @@ function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest
     .then(done)
     .catch(done)
   if (makeRequest) {
-    makeRequest(done)
+    makeRequest(done, config)
   } else {
     axios.get(`http://localhost:${config.port}/`).catch(done)
   }
 }
+
 function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb, makeRequest, config, done) {
   let location
   let occurrences = occurrencesAndLocation
@@ -200,7 +201,7 @@ function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb,
     .then(done)
     .catch(done)
   if (makeRequest) {
-    makeRequest(done)
+    makeRequest(done, config)
   } else {
     axios.get(`http://localhost:${config.port}/`).catch(done)
   }
@@ -269,7 +270,12 @@ function prepareTestServerForIast (description, tests, iastConfig) {
   })
 }
 
-function prepareTestServerForIastInExpress (description, expressVersion, tests) {
+function prepareTestServerForIastInExpress (description, expressVersion, loadMiddlewares, tests) {
+  if (arguments.length === 3) {
+    tests = loadMiddlewares
+    loadMiddlewares = undefined
+  }
+
   describe(description, () => {
     const config = {}
     let listener, app, server
@@ -288,6 +294,9 @@ function prepareTestServerForIastInExpress (description, expressVersion, tests) 
       const express = require(`../../../../../versions/express@${expressVersion}`).get()
       const bodyParser = require(`../../../../../versions/body-parser`).get()
       const expressApp = express()
+
+      if (loadMiddlewares) loadMiddlewares(expressApp)
+
       expressApp.use(bodyParser.json())
 
       expressApp.all('/', listener)
@@ -312,6 +321,14 @@ function prepareTestServerForIastInExpress (description, expressVersion, tests) 
     })
 
     function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb, makeRequest) {
+      if (typeof fn === 'object') {
+        const obj = fn
+        fn = obj.fn
+        vulnerability = obj.vulnerability
+        occurrences = obj.occurrences
+        cb = obj.cb
+        makeRequest = obj.makeRequest
+      }
       it(`should have ${vulnerability} vulnerability`, function (done) {
         this.timeout(5000)
         app = fn
@@ -319,10 +336,16 @@ function prepareTestServerForIastInExpress (description, expressVersion, tests) 
       })
     }
 
-    function testThatRequestHasNoVulnerability (fn, vulnerability) {
+    function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest) {
+      if (typeof fn === 'object') {
+        const obj = fn
+        fn = obj.fn
+        vulnerability = obj.vulnerability
+        makeRequest = obj.makeRequest
+      }
       it(`should not have ${vulnerability} vulnerability`, function (done) {
         app = fn
-        checkNoVulnerabilityInRequest(vulnerability, config, done)
+        checkNoVulnerabilityInRequest(vulnerability, config, done, makeRequest)
       })
     }
 
