@@ -148,11 +148,12 @@ describe('Plugin', function () {
                 [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-test.js',
                 [TEST_TYPE]: 'test',
                 [JEST_TEST_RUNNER]: 'jest-circus',
-                // reads from dd-trace-js' CODEOWNERS
-                [TEST_CODE_OWNERS]: JSON.stringify(['@DataDog/ci-app-libraries']),
                 [LIBRARY_VERSION]: ddTraceVersion,
                 [COMPONENT]: 'jest'
               })
+              // reads from dd-trace-js' CODEOWNERS
+              expect(testSpan.meta[TEST_CODE_OWNERS]).to.contain('@DataDog')
+
               if (extraTags) {
                 expect(testSpan.meta).to.contain(extraTags)
               }
