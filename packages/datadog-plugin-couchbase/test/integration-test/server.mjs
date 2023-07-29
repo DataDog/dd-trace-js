@@ -1,11 +1,5 @@
 import 'dd-trace/init.js'
-import {
-  Bucket,
-  Cluster,
-  Collection,
-  connect,
-  GetResult
-} from 'couchbase'
+import { connect } from 'couchbase'
 
 async function main () {
   const cluster = await connect(
@@ -20,11 +14,4 @@ async function main () {
   await coll.upsert('testdoc', { name: 'Frank' })
 }
 
-// Run the main function
-main()
-  .then((_) => {
-    console.log('Success!')
-  })
-  .catch((err) => {
-    console.log('ERR:', err)
-  })
+main().then((_) => {}).catch((err) => {})

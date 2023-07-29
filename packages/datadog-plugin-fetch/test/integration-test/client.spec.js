@@ -9,7 +9,8 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 
-const describe = skipUnsupportedNodeVersions()
+let describe = skipUnsupportedNodeVersions()
+describe = globalThis.fetch ? globalThis.describe : globalThis.describe.skip
 
 describe('esm', () => {
   let agent
