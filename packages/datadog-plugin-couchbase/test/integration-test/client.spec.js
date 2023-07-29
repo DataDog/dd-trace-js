@@ -41,7 +41,7 @@ describe('esm', () => {
         console.log(headers, payload)
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'couchbase.query'), true)
+        assert.strictEqual(checkSpansForServiceName(payload, 'couchbase.upsert'), true)
       }, undefined)
 
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined)

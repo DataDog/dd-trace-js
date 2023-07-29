@@ -15,12 +15,9 @@ async function main () {
       password: 'password'
     })
 
-  const bucket = cluster.bucket('default')
+  const bucket = cluster.bucket('datadog-test')
   const coll = bucket.defaultCollection()
-  await coll.upsert('testdoc', { foo: 'bar' })
-
-  const res = await coll.get('testdoc')
-  console.log(res.content)
+  await coll.upsert('testdoc', { name: 'Frank' })
 }
 
 // Run the main function
