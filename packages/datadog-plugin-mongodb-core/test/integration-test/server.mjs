@@ -6,5 +6,3 @@ await client.connect()
 const db = client.db('test_db')
 await db.collection('test_collection').insertOne({ a: 1 })
 await client.close()
-
-process.send({ port: -1 }) 

@@ -14,5 +14,3 @@ client.connect()
 
 await client.query('SELECT NOW() AS now')
 client.end()
-
-process.send({ port: -1 })

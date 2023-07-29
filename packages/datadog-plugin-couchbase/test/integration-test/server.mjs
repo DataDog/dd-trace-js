@@ -1,10 +1,11 @@
 import 'dd-trace/init.js'
 import couchbase from 'couchbase'
 
-const cluster = new couchbase.Cluster('localhost:8091')
-cluster.authenticate('Administrator', 'password')
-const bucket = cluster.bucket('datadog-test')
-const collection = bucket.defaultCollection();
+N1qlQuery = couchbase.N1qlQuery
+            cluster = new couchbase.Cluster('localhost:8091')
+            cluster.authenticate('Administrator', 'password')
+            cluster.enableCbas('localhost:8095')
+            bucket = cluster.openBucket('datadog-test', (err) => done(err))
 
 await collection.get('foo')
 

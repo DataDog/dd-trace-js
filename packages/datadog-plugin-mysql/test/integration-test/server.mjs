@@ -13,4 +13,4 @@ connection.connect()
 
 connection.query('SELECT NOW() AS now')
 
-process.send({ port: -1 })
+connection.end()

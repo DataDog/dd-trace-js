@@ -23,5 +23,3 @@ broker.createService({
 await broker.start()
 await broker.call('greeter.sayHello', { name: 'test' })
 await broker.stop()
-
-process.send({ port: -1 }) 

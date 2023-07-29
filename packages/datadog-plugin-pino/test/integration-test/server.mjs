@@ -8,5 +8,3 @@ ddtrace.init({
 const logger = pino({ name: 'test-logger' })
 
 logger.info('test xyz')
-
-process.send({ port: -1 })

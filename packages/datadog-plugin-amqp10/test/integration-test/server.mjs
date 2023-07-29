@@ -12,6 +12,10 @@ async function connectToAMQP () {
 
 await connectToAMQP()
 sender.send({ key: 'value' })
-sender.detach()
 
-process.send({ port: -1 })
+if (sender) {
+  await sender.detach()
+}
+if (client) {
+  await client.disconnect()
+}

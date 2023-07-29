@@ -15,5 +15,3 @@ const logger = winston.createLogger({
 })
 
 logger.info('test xyz')
-
-process.send({ port: -1 })

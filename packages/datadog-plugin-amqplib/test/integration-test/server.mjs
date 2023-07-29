@@ -3,18 +3,19 @@ import amqplib from 'amqplib'
 
 const amqpServerEndpoint = 'amqp://localhost:5672'
 let channel
+let connection
 
-function connectToAMQP (endpoint) {
-  return amqplib.connect(endpoint)
-    .then(conn => {
-      return conn.createChannel()
-    })
-    .then(ch => {
-      channel = ch
-    })
+async function connectToAMQP (endpoint) {
+  connection = await amqplib.connect(endpoint)
+  channel = await connection.createChannel()
 }
 
 await connectToAMQP(amqpServerEndpoint)
-channel.assertQueue('test', {}, () => {})
+await channel.assertQueue('test', {})
 
-process.send({ port: -1 })
+if (channel) {
+  await channel.close()
+}
+if (connection) {
+  await connection.close()
+}

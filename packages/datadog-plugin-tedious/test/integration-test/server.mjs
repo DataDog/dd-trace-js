@@ -1,5 +1,5 @@
 import 'dd-trace/init.js'
-import tedious from 'tedious'
+import tds from 'tedious'
 
 const config = {
   server: 'localhost',
@@ -16,14 +16,35 @@ const config = {
   }
 }
 
-const connection = new tedious.Connection(config)
+let connection
+let connectionIsClosed = false
 
-connection.on('connect', () => {
-  const sql = 'SELECT 1 + 1 AS solution'
-  const request = new tedious.Request(sql, () => {})
-  connection.execSql(request)
+function connectToDatabase (done) {
+  connection = new tds.Connection(config)
+  connection = new tds.Connection(config)
+
+  connection.on('connect', () => {
+    const sql = 'SELECT 1 + 1 AS solution'
+    const request = new tds.Request(sql, () => {})
+    connection.execSql(request)
+    connectionIsClosed = false
+    done()
+  })
+
+  connection.connect()
+}
+
+function closeConnection (done) {
+  if (!connectionIsClosed && connection) {
+    connection.on('end', () => {
+      connectionIsClosed = true
+      done()
+    })
+    connection.close()
+  } else {
+    done()
+  }
+}
+connectToDatabase(() => {
+  closeConnection(() => {})
 })
-
-connection.connect()
-
-process.send({ port: -1 })

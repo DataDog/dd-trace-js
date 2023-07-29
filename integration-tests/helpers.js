@@ -164,10 +164,7 @@ function spawnProc (filename, options = {}, stdioHandler) {
   return new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
-        // checking for an actual port number or indication of graceful exit
-        if (port !== -1) {
-          proc.url = `http://localhost:${port}`
-        }
+        proc.url = `http://localhost:${port}`
         resolve(proc)
       })
       .on('error', reject)
@@ -175,6 +172,7 @@ function spawnProc (filename, options = {}, stdioHandler) {
         if (code !== 0) {
           reject(new Error(`Process exited with status code ${code}.`))
         }
+        resolve()
       })
     if (stdioHandler) {
       proc.stdout.on('data', (data) => {
@@ -311,7 +309,7 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
       NODE_OPTIONS: `--loader=${hookFile}`,
       DD_TRACE_AGENT_PORT: agentPort
     },
-    stdio: 'pipe'
+    stdio: stdioHandler ? 'pipe' : 'inherit'
   }, stdioHandler)
 }
 

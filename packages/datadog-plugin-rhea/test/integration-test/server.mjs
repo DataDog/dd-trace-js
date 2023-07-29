@@ -1,31 +1,47 @@
 import 'dd-trace/init.js'
 import rhea from 'rhea'
 
-const connection = rhea.connect({
-  username: 'admin',
-  password: 'admin',
-  host: 'localhost',
-  port: 5673
-})
-let sender = connection.open_sender('amq.topic')
-
-function connectToAMQP () {
+async function connectToAMQP () {
   return new Promise((resolve, reject) => {
-    connection.on('connection_open', (context) => {
-      sender = context.connection.open_sender('amq.topic')
+    const connection = rhea.connect({
+      username: 'admin',
+      password: 'admin',
+      host: 'localhost',
+      port: 5673
     })
 
-    connection.on('sendable', () => {
-      resolve()
+    connection.on('connection_open', (context) => {
+      const sender = context.connection.open_sender('amq.topic')
+      const receiver = context.connection.open_receiver('amq.topic')
+
+      context.sender = sender
+      context.receiver = receiver
+      resolve(context)
     })
 
     connection.on('error', (error) => {
       reject(error)
     })
+
+    connection.on('connection_close', () => {
+      if (!connection._closing) {
+        connection._closing = true
+        resolve()
+      }
+    })
   })
 }
 
-await connectToAMQP()
-sender.send({ body: 'Hello World!' })
+async function runIntegrationTest () {
+  const context = await connectToAMQP()
+  context.sender.send({ body: 'Hello World!' })
 
-process.send({ port: -1 })
+  await new Promise((resolve) => {
+    context.connection.once('connection_close', () => {
+      resolve()
+    })
+    context.connection.close()
+  })
+}
+
+runIntegrationTest()

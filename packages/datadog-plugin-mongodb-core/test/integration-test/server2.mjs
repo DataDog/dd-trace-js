@@ -21,5 +21,3 @@ server.insert(`test.your_collection_name`, [{ a: 1 }], {}, (err) => {
   }
   server.destroy(() => {})
 })
-
-process.send({ port: -1 })

@@ -10,5 +10,3 @@ const client = new Client({
 await client.connect()
 await client.execute('SELECT now() FROM local;')
 await client.shutdown()
-
-process.send({ port: -1 })

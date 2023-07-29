@@ -7,8 +7,5 @@ const pool = mariadb.createPool({
   database: 'db',
   port: 3306
 })
-const conn = await pool.getConnection()
-await conn.query('SELECT NOW() AS now')
-conn.release()
-
-process.send({ port: -1 }) 
+await pool.query('SELECT 1 + 1 AS solution')
+await pool.end()
