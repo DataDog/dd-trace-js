@@ -136,7 +136,8 @@ module.exports = class PluginManager {
       url,
       headerTags,
       dbmPropagationMode,
-      dsmEnabled
+      dsmEnabled,
+      clientIpEnabled
     } = this._tracerConfig
 
     const sharedConfig = {}
@@ -154,6 +155,10 @@ module.exports = class PluginManager {
 
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
+    }
+
+    if (clientIpEnabled !== undefined) {
+      sharedConfig.clientIpEnabled = clientIpEnabled
     }
 
     sharedConfig.site = site

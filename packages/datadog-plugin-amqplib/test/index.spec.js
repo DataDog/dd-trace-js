@@ -3,7 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
-const namingSchema = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let tracer
@@ -64,8 +64,8 @@ describe('Plugin', () => {
               agent
                 .use(traces => {
                   const span = traces[0][0]
-                  expect(span).to.have.property('name', namingSchema.controlPlane.opName)
-                  expect(span).to.have.property('service', namingSchema.controlPlane.serviceName)
+                  expect(span).to.have.property('name', expectedSchema.controlPlane.opName)
+                  expect(span).to.have.property('service', expectedSchema.controlPlane.serviceName)
                   expect(span).to.have.property('resource', 'queue.declare test')
                   expect(span).to.not.have.property('type')
                   expect(span.meta).to.have.property('span.kind', 'client')
@@ -84,8 +84,8 @@ describe('Plugin', () => {
                 .use(traces => {
                   const span = traces[0][0]
 
-                  expect(span).to.have.property('name', namingSchema.controlPlane.opName)
-                  expect(span).to.have.property('service', namingSchema.controlPlane.serviceName)
+                  expect(span).to.have.property('name', expectedSchema.controlPlane.opName)
+                  expect(span).to.have.property('service', expectedSchema.controlPlane.serviceName)
                   expect(span).to.have.property('resource', 'queue.delete test')
                   expect(span).to.not.have.property('type')
                   expect(span.meta).to.have.property('span.kind', 'client')
@@ -125,9 +125,7 @@ describe('Plugin', () => {
 
             withNamingSchema(
               () => channel.assertQueue('test', {}, () => {}),
-              () => namingSchema.controlPlane.opName,
-              () => namingSchema.controlPlane.serviceName,
-              'test'
+              rawExpectedSchema.controlPlane
             )
           })
 
@@ -144,8 +142,8 @@ describe('Plugin', () => {
                 .use(traces => {
                   const span = traces[0][0]
 
-                  expect(span).to.have.property('name', namingSchema.send.opName)
-                  expect(span).to.have.property('service', namingSchema.send.serviceName)
+                  expect(span).to.have.property('name', expectedSchema.send.opName)
+                  expect(span).to.have.property('service', expectedSchema.send.serviceName)
                   expect(span).to.have.property('resource', 'basic.publish exchange routingKey')
                   expect(span).to.not.have.property('type')
                   expect(span.meta).to.have.property('out.host', 'localhost')
@@ -189,9 +187,7 @@ describe('Plugin', () => {
                 channel.assertExchange('exchange', 'direct', {}, () => {})
                 channel.publish('exchange', 'routingKey', Buffer.from('content'))
               },
-              () => namingSchema.send.opName,
-              () => namingSchema.send.serviceName,
-              'test'
+              rawExpectedSchema.send
             )
           })
 
@@ -203,8 +199,8 @@ describe('Plugin', () => {
               agent
                 .use(traces => {
                   const span = traces[0][0]
-                  expect(span).to.have.property('name', namingSchema.receive.opName)
-                  expect(span).to.have.property('service', namingSchema.receive.serviceName)
+                  expect(span).to.have.property('name', expectedSchema.receive.opName)
+                  expect(span).to.have.property('service', expectedSchema.receive.serviceName)
                   expect(span).to.have.property('resource', `basic.deliver ${queue}`)
                   expect(span).to.have.property('type', 'worker')
                   expect(span.meta).to.have.property('span.kind', 'consumer')
@@ -278,9 +274,7 @@ describe('Plugin', () => {
                   channel.consume(ok.queue, () => {}, {}, (err, ok) => {})
                 })
               },
-              () => namingSchema.receive.opName,
-              () => namingSchema.receive.serviceName,
-              'test'
+              rawExpectedSchema.receive
             )
           })
         })
@@ -343,9 +337,16 @@ describe('Plugin', () => {
 
         withNamingSchema(
           () => channel.assertQueue('test', {}, () => {}),
-          () => namingSchema.controlPlane.opName,
-          () => 'test-custom-service',
-          'test-custom-service'
+          {
+            v0: {
+              opName: 'amqp.command',
+              serviceName: 'test-custom-service'
+            },
+            v1: {
+              opName: 'amqp.command',
+              serviceName: 'test-custom-service'
+            }
+          }
         )
       })
     })

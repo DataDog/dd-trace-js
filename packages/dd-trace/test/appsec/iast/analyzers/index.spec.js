@@ -25,9 +25,10 @@ describe('Analyzers index', () => {
   })
 
   it('should enable all analyzers', () => {
-    analyzers.enableAllAnalyzers()
-    expect(fakeAnalyzers.analyzerA.configure).to.have.been.calledOnceWith(true)
-    expect(fakeAnalyzers.analyzerB.configure).to.have.been.calledOnceWith(true)
+    const tracerConfig = {}
+    analyzers.enableAllAnalyzers(tracerConfig)
+    expect(fakeAnalyzers.analyzerA.configure).to.have.been.calledOnceWith({ enabled: true, tracerConfig })
+    expect(fakeAnalyzers.analyzerB.configure).to.have.been.calledOnceWith({ enabled: true, tracerConfig })
   })
 
   it('should disable all analyzers', () => {

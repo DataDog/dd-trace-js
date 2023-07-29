@@ -31,11 +31,10 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       if (!this.isEnabled(request)) {
         return
       }
-      const serviceName = this.getServiceName()
       const childOf = this.tracer.scope().active()
       const tags = {
         'span.kind': 'client',
-        'service.name': serviceName,
+        'service.name': this.serviceName(),
         'aws.operation': operation,
         'aws.region': awsRegion,
         'region': awsRegion,
@@ -45,7 +44,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       }
       if (this.requestTags) this.requestTags.set(request, tags)
 
-      const span = this.tracer.startSpan('aws.request', { childOf, tags })
+      const span = this.tracer.startSpan(this.operationFromRequest(request), { childOf, tags })
 
       analyticsSampler.sample(span, this.config.measured)
 
@@ -77,6 +76,26 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
   requestInject (span, request) {
     // implemented by subclasses, or not
+  }
+
+  operationFromRequest (request) {
+    // can be overriden by subclasses
+    return this.operationName({
+      id: 'aws',
+      type: 'web',
+      kind: 'client',
+      awsService: this.serviceIdentifier
+    })
+  }
+
+  serviceName () {
+    return this.config.service ||
+      super.serviceName({
+        id: 'aws',
+        type: 'web',
+        kind: 'client',
+        awsService: this.serviceIdentifier
+      })
   }
 
   isEnabled (request) {
@@ -121,13 +140,6 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
   configure (config) {
     super.configure(normalizeConfig(config, this.serviceIdentifier))
-  }
-
-  // TODO: test splitByAwsService when the test suite is fixed
-  getServiceName () {
-    return this.config.service
-      ? this.config.service
-      : `${this.tracer._service}-aws-${this.serviceIdentifier}`
   }
 }
 

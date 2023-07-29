@@ -4,6 +4,7 @@
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
+const { rawExpectedSchema } = require('./sns-naming')
 
 describe('Sns', () => {
   setup()
@@ -108,6 +109,27 @@ describe('Sns', () => {
         Message: 'message 1'
       }, (err) => err && done()),
       'TestTopic', 'topicname')
+
+    withNamingSchema(
+      (done) => sns.publish({
+        TopicArn,
+        Message: 'message 1'
+      }, (err) => err && done()),
+      rawExpectedSchema.producer,
+      {
+        desc: 'producer'
+      }
+    )
+
+    withNamingSchema(
+      (done) => sns.getTopicAttributes({
+        TopicArn
+      }, (err) => err && done(err)),
+      rawExpectedSchema.client,
+      {
+        desc: 'client'
+      }
+    )
 
     it('injects trace context to SNS publish', done => {
       assertPropagation(done)

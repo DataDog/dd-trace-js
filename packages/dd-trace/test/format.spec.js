@@ -129,7 +129,7 @@ describe('format', () => {
     })
 
     it('should always add single span ingestion tags from options if present', () => {
-      spanContext._sampling.spanSampling = {
+      spanContext._spanSampling = {
         maxPerSecond: 5,
         sampleRate: 1.0
       }

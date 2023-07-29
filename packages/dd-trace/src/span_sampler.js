@@ -82,7 +82,7 @@ class SpanSampler {
 
       const rule = this.findRule(service, name)
       if (rule && rule.sample()) {
-        span.context()._sampling.spanSampling = {
+        span.context()._spanSampling = {
           sampleRate: rule.sampleRate,
           maxPerSecond: rule.maxPerSecond
         }

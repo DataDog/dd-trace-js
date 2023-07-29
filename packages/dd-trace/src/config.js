@@ -12,6 +12,7 @@ const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
+const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -185,6 +186,7 @@ class Config {
       process.env.AWS_LAMBDA_FUNCTION_NAME ||
       process.env.FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
       process.env.K_SERVICE || // Google Cloud Function Name set by newer runtimes
+      process.env.WEBSITE_SITE_NAME || // set by Azure Functions
       pkg.name ||
       'node'
     const DD_SERVICE_MAPPING = coalesce(
@@ -223,11 +225,10 @@ class Config {
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
 
-    const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
-    const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
-    const isGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
+    const isGCPFunction = getIsGCPFunction()
+    const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
 
-    const inServerlessEnvironment = inAWSLambda || isGCPFunction
+    const inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
 
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED,
@@ -277,7 +278,7 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
       false
     )
-    const defaultPropagationStyle = ['tracecontext', 'datadog']
+    const defaultPropagationStyle = ['datadog', 'tracecontext']
     if (isTrue(DD_TRACE_B3_ENABLED)) {
       defaultPropagationStyle.push('b3')
       defaultPropagationStyle.push('b3 single header')
@@ -317,7 +318,10 @@ class Config {
       false
     )
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
-      process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+      coalesce(
+        options.spanAttributeSchema,
+        process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+      )
     )
     const DD_TRACE_PEER_SERVICE_MAPPING = coalesce(
       options.peerServiceMapping,
@@ -325,11 +329,27 @@ class Config {
         process.env.DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ) : {}
     )
-    const DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+
+    const peerServiceSet = (
+      options.hasOwnProperty('spanComputePeerService') ||
+      process.env.hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
+    )
+    const peerServiceValue = coalesce(
+      options.spanComputePeerService,
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+    )
+
+    const DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = (
+      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA === 'v0'
+        // In v0, peer service is computed only if it is explicitly set to true
+        ? peerServiceSet && isTrue(peerServiceValue)
+        // In >v0, peer service is false only if it is explicitly set to false
+        : (peerServiceSet ? !isFalse(peerServiceValue) : true)
+    )
 
     const DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = coalesce(
-      isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED),
-      false
+      options.spanRemoveIntegrationFromService,
+      isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
     )
     const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
       process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
@@ -339,7 +359,7 @@ class Config {
     const DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
       options.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
-      isGCPFunction
+      isGCPFunction || isAzureFunctionConsumptionPlan
     )
 
     const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
@@ -509,7 +529,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       })
     }
 
-    const defaultFlushInterval = inServerlessEnvironment ? 0 : 2000
+    const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
@@ -554,11 +574,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       exporters: DD_PROFILING_EXPORTERS
     }
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
-    this.spanComputePeerService = (this.spanAttributeSchema === 'v0'
-      ? isTrue(DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED)
-      : true
-    )
-    this.traceRemoveIntegrationServiceNamesEnabled = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+    this.spanComputePeerService = DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+    this.spanRemoveIntegrationFromService = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
     this.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
@@ -651,6 +668,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
 
     this.isGCPFunction = isGCPFunction
+    this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
 
     tagger.add(this.tags, {
       service: this.service,

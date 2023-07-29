@@ -129,8 +129,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             suite: this.testSuite,
             runner: 'jest-circus',
             testParameters,
-            frameworkVersion: jestVersion,
-            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
+            frameworkVersion: jestVersion
           })
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
@@ -145,7 +144,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             const formattedError = formatJestError(event.test.errors[0])
             testErrCh.publish(formattedError)
           }
-          testRunFinishCh.publish(status)
+          testRunFinishCh.publish({
+            status,
+            testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
+          })
           // restore in case it is retried
           event.test.fn = originalTestFns.get(event.test)
         })
@@ -185,6 +187,31 @@ addHook({
   name: 'jest-environment-jsdom',
   versions: ['>=24.8.0']
 }, getTestEnvironment)
+
+addHook({
+  name: '@jest/test-sequencer',
+  versions: ['>=24.8.0']
+}, sequencerPackage => {
+  shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function () {
+    const shardedTests = shard.apply(this, arguments)
+
+    if (!shardedTests.length) {
+      return shardedTests
+    }
+    // TODO: could we get the rootDir from each test?
+    const [test] = shardedTests
+    const rootDir = test && test.context && test.context.config && test.context.config.rootDir
+
+    const filteredTests = getJestSuitesToRun(skippableSuites, shardedTests, rootDir || process.cwd())
+
+    isSuitesSkipped = filteredTests.length !== shardedTests.length
+
+    skippableSuites = []
+
+    return filteredTests
+  })
+  return sequencerPackage
+})
 
 function cliWrapper (cli, jestVersion) {
   const wrapped = shimmer.wrap(cli, 'runCLI', runCLI => async function () {
@@ -408,6 +435,32 @@ function jestConfigSyncWrapper (jestConfig) {
   return jestConfig
 }
 
+addHook({
+  name: '@jest/transform',
+  versions: ['>=24.8.0'],
+  file: 'build/ScriptTransformer.js'
+}, transformPackage => {
+  const originalCreateScriptTransformer = transformPackage.createScriptTransformer
+
+  transformPackage.createScriptTransformer = async function (config) {
+    const { testEnvironmentOptions, ...restOfConfig } = config
+    const {
+      _ddTestModuleId,
+      _ddTestSessionId,
+      _ddTestCommand,
+      ...restOfTestEnvironmentOptions
+    } = testEnvironmentOptions
+
+    restOfConfig.testEnvironmentOptions = restOfTestEnvironmentOptions
+
+    arguments[0] = restOfConfig
+
+    return originalCreateScriptTransformer.apply(this, arguments)
+  }
+
+  return transformPackage
+})
+
 /**
  * Hook to remove the test paths (test suite) that are part of `skippableSuites`
  */
@@ -423,7 +476,18 @@ addHook({
       return getTestPaths.apply(this, arguments)
     }
 
-    const [{ rootDir }] = arguments
+    const [{ rootDir, shard }] = arguments
+
+    if (shard && shard.shardIndex) {
+      // If the user is using jest sharding, we want to apply the filtering of tests in the shard process.
+      // The reason for this is the following:
+      // The tests for different shards are likely being run in different CI jobs so
+      // the requests to the skippable endpoint might be done at different times and their responses might be different.
+      // If the skippable endpoint is returning different suites and we filter the list of tests here,
+      // the base list of tests that is used for sharding might be different,
+      // causing the shards to potentially run the same suite.
+      return getTestPaths.apply(this, arguments)
+    }
 
     const testPaths = await getTestPaths.apply(this, arguments)
     const { tests } = testPaths
@@ -471,7 +535,7 @@ function jasmineAsyncInstallWraper (jasmineAsyncInstallExport, jestVersion) {
             const formattedError = formatJestError(spec.result.failedExpectations[0].error)
             testErrCh.publish(formattedError)
           }
-          testRunFinishCh.publish(specStatusToTestStatus[spec.result.status])
+          testRunFinishCh.publish({ status: specStatusToTestStatus[spec.result.status] })
           onComplete.apply(this, arguments)
         })
         arguments[0] = callback

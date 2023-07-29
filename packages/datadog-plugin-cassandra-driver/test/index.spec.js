@@ -3,7 +3,7 @@
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const namingSchema = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let cassandra
@@ -53,8 +53,8 @@ describe('Plugin', () => {
           const query = 'SELECT now() FROM local;'
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', query)
               expect(traces[0][0]).to.have.property('type', 'cassandra')
               expect(traces[0][0].meta).to.have.property('db.type', 'cassandra')
@@ -154,9 +154,7 @@ describe('Plugin', () => {
 
         withNamingSchema(
           done => client.execute('SELECT now() FROM local;', err => err && done(err)),
-          () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName,
-          'test'
+          rawExpectedSchema.outbound
         )
       })
 
@@ -200,9 +198,16 @@ describe('Plugin', () => {
 
         withNamingSchema(
           done => client.execute('SELECT now() FROM local;', err => err && done(err)),
-          () => namingSchema.outbound.opName,
-          () => 'custom',
-          'custom'
+          {
+            v0: {
+              opName: 'cassandra.query',
+              serviceName: 'custom'
+            },
+            v1: {
+              opName: 'cassandra.query',
+              serviceName: 'custom'
+            }
+          }
         )
       })
 
@@ -242,8 +247,8 @@ describe('Plugin', () => {
 
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-                expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+                expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+                expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', query)
                 expect(traces[0][0]).to.have.property('type', 'cassandra')
                 expect(traces[0][0].meta).to.have.property('db.type', 'cassandra')
