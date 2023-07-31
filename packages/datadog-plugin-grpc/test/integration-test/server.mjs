@@ -24,6 +24,7 @@ async function buildClient (service, port) {
     service
   )
 
+  console.log(4)
   const protoPath = resolve(__dirname, '../test.proto')
   const definition = loader.loadSync(protoPath)
   const TestService = grpc.loadPackageDefinition(definition).test.TestService
@@ -31,19 +32,22 @@ async function buildClient (service, port) {
   server = new grpc.Server()
 
   return new Promise((resolve, reject) => {
+    console.log(5)
     if (server.bindAsync) {
+      console.log(6)
       server.bindAsync(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure(), (err) => {
         if (err) return reject(err)
 
         server.addService(TestService.service, service)
         server.start()
-
+        console.log(7)
         resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
       })
     } else {
       server.bind(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure())
       server.addService(TestService.service, service)
       server.start()
+      console.log(8)
 
       resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
     }
@@ -53,6 +57,7 @@ async function buildClient (service, port) {
 async function runTest () {
   try {
     const port = await getPort()
+    console.log(1)
     const client = await buildClient(
       {
         getUnary: (_, callback) => callback()
@@ -60,9 +65,12 @@ async function runTest () {
       port
     )
 
+    console.log(2)
+
     client.getUnary({ first: 'foobar' }, () => {})
 
     // client.close()
+    console.log(3)
 
     server.forceShutdown()
 
