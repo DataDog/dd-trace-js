@@ -72,4 +72,8 @@ async function runTest () {
   }
 }
 
+process.on('uncaughtException', function (err) {
+  console.log(err)
+})
+
 runTest()
