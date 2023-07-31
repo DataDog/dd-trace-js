@@ -29,14 +29,17 @@ const DEFAULT_KEY = 'service:,env:'
 const defaultSampler = new Sampler(AUTO_KEEP)
 
 class PrioritySampler {
-  constructor (env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
+  constructor (env, config) {
+    this.configure(env, config)
+    this.update({})
+  }
+
+  configure (env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
     this._env = env
     this._rules = this._normalizeRules(rules, sampleRate)
     this._limiter = new RateLimiter(rateLimit)
 
     setSamplingRules(this._rules)
-
-    this.update({})
   }
 
   isSampled (span) {
