@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { resolve, dirname } from 'path';
 import getPort from 'get-port'
 
+
 // Get the current module's URL
 const __filename = fileURLToPath(import.meta.url);
 
@@ -46,7 +47,7 @@ function buildClient (service, callback) {
     }
   })
 }
-
+try {
 
 const client = await buildClient({
   getUnary: (_, callback) => callback()
@@ -54,4 +55,9 @@ const client = await buildClient({
 
 client.getUnary({ first: 'foobar' }, () => {})
 
-server.forceShutdown()
+await server.forceShutdown()
+
+} catch(error) {
+  console.log('happened')
+  console.log(error)
+}
