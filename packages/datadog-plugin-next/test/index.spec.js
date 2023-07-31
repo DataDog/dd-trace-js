@@ -29,7 +29,7 @@ describe('Plugin', function () {
           : __dirname
 
         const serverStartCmd =
-          startViaNodeOptions ? ['--require', `${__dirname}/tracer.js`, 'server'] : ['server']
+          startViaNodeOptions ? ['--require', `${__dirname}/datadog.js`, 'server'] : ['server']
 
         server = spawn('node', serverStartCmd, {
           cwd,
