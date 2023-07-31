@@ -43,7 +43,8 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'oracle.query'), true)
       }, undefined)
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined,
+        { CI: process.env.CI })
 
       await res
     }).timeout(20000)
