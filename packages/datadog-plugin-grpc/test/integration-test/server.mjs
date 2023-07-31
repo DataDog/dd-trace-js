@@ -5,10 +5,7 @@ import { fileURLToPath } from 'url'
 import { resolve, dirname } from 'path'
 import getPort from 'get-port'
 
-// Get the current module's URL
 const __filename = fileURLToPath(import.meta.url)
-
-// Get the directory name from the URL
 const __dirname = dirname(__filename)
 
 let server
@@ -48,25 +45,14 @@ function buildClient (service, callback) {
   })
 }
 
-async function runTest () {
-  try {
-    
-    const client = await buildClient({
-      getUnary: (_, callback) => callback()
-    })
+const client = await buildClient({
+  getUnary: (_, callback) => callback()
+})
 
-    client.getUnary({ first: 'foobar' }, () => {})
+client.getUnary({ first: 'foobar' }, () => {})
 
-    client.close()
+client.close()
 
-    if (server) {
-      server.forceShutdown();
-    }
-
-    console.log('Client connection closed gracefully.')
-  } catch (error) {
-    console.error('Error occurred during the test:', error)
-  }
+if (server) {
+  server.forceShutdown();
 }
-
-runTest()
