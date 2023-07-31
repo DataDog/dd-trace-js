@@ -22,8 +22,8 @@ function buildClient (service, callback) {
     getUnary: () => {}
   }, service)
 
-  const loader = require('../../../versions/@grpc/proto-loader').get()
-  const definition = loader.loadSync(`${__dirname}/test.proto`)
+  const protoPath = resolve(__dirname, '../test.proto');
+  const definition = loader.loadSync(protoPath);
   const TestService = grpc.loadPackageDefinition(definition).test.TestService
 
   server = new grpc.Server()
