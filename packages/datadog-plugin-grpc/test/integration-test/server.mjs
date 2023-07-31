@@ -57,9 +57,11 @@ async function runTest () {
 
     client.getUnary({ first: 'foobar' }, () => {})
 
-    // client.close()
+    client.close()
 
-    server.forceShutdown()
+    if (server) {
+      server.forceShutdown();
+    }
 
     console.log('Client connection closed gracefully.')
   } catch (error) {
