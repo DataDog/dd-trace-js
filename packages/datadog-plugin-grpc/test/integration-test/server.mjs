@@ -11,6 +11,8 @@ const __filename = fileURLToPath(import.meta.url)
 // Get the directory name from the URL
 const __dirname = dirname(__filename)
 
+let server
+
 async function buildClient (service, port) {
   service = Object.assign(
     {
@@ -26,7 +28,7 @@ async function buildClient (service, port) {
   const definition = loader.loadSync(protoPath)
   const TestService = grpc.loadPackageDefinition(definition).test.TestService
 
-  const server = new grpc.Server()
+  server = new grpc.Server()
 
   return new Promise((resolve, reject) => {
     if (server.bindAsync) {
@@ -60,7 +62,9 @@ async function runTest () {
 
     client.getUnary({ first: 'foobar' }, () => {})
 
-    client.close()
+    // client.close()
+
+    server.forceShutdown()
 
     console.log('Client connection closed gracefully.')
   } catch (error) {
