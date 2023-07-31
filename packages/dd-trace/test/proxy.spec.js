@@ -1,5 +1,7 @@
 'use strict'
 
+const EventEmitter = require('events')
+
 require('./setup/tap')
 
 describe('TracerProxy', () => {
@@ -22,7 +24,10 @@ describe('TracerProxy', () => {
   let appsec
   let telemetry
   let iast
+  let PluginManager
+  let pluginManager
   let remoteConfig
+  let rc
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
@@ -33,6 +38,10 @@ describe('TracerProxy', () => {
       trackCustomEvent: sinon.stub()
     }
 
+    pluginManager = {
+      configure: sinon.spy()
+    }
+
     tracer = {
       use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('test'),
@@ -40,7 +49,8 @@ describe('TracerProxy', () => {
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
-      setUrl: sinon.stub()
+      setUrl: sinon.stub(),
+      configure: sinon.spy()
     }
 
     noop = {
@@ -50,7 +60,8 @@ describe('TracerProxy', () => {
       startSpan: sinon.stub().returns('span'),
       inject: sinon.stub().returns('noop'),
       extract: sinon.stub().returns('spanContext'),
-      setUrl: sinon.stub()
+      setUrl: sinon.stub(),
+      configure: sinon.spy()
     }
 
     noopAppsecSdk = {
@@ -67,6 +78,7 @@ describe('TracerProxy', () => {
     NoopTracer = sinon.stub().returns(noop)
     AppsecSdk = sinon.stub().returns(appsecSdk)
     NoopAppsecSdk = sinon.stub().returns(noopAppsecSdk)
+    PluginManager = sinon.stub().returns(pluginManager)
 
     config = {
       tracing: true,
@@ -78,7 +90,8 @@ describe('TracerProxy', () => {
       iast: {},
       remoteConfig: {
         enabled: true
-      }
+      },
+      configure: sinon.spy()
     }
     Config = sinon.stub().returns(config)
 
@@ -103,8 +116,12 @@ describe('TracerProxy', () => {
     }
 
     remoteConfig = {
-      enable: sinon.spy()
+      enable: sinon.stub()
     }
+
+    rc = new EventEmitter()
+
+    remoteConfig.enable.returns(rc)
 
     NoopProxy = proxyquire('../src/noop/proxy', {
       './tracer': NoopTracer,
@@ -115,6 +132,7 @@ describe('TracerProxy', () => {
       './tracer': DatadogTracer,
       './noop/proxy': NoopProxy,
       './config': Config,
+      './plugin_manager': PluginManager,
       './metrics': metrics,
       './log': log,
       './profiler': profiler,
@@ -173,6 +191,18 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(metrics.start).to.not.have.been.called
+      })
+
+      it('should support applying remote config', () => {
+        const conf = {}
+
+        proxy.init()
+
+        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+
+        expect(config.configure).to.have.been.calledWith(conf)
+        expect(tracer.configure).to.have.been.calledWith(config)
+        expect(pluginManager.configure).to.have.been.calledWith(config)
       })
 
       it('should start capturing metrics when configured', () => {

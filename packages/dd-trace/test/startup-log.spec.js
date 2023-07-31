@@ -33,7 +33,9 @@ describe('startup logging', () => {
       hostname: 'example.com',
       port: 4321,
       debug: true,
-      sampleRate: 1,
+      sampler: {
+        sampleRate: 1
+      },
       tags: { version: '1.2.3' },
       logInjection: true,
       runtimeMetrics: true,
