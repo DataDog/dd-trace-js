@@ -1,5 +1,6 @@
 'use strict'
 
+const { URL, format } = require('url')
 const uuid = require('crypto-randomuuid')
 const { EventEmitter } = require('events')
 const Scheduler = require('./scheduler')
@@ -22,13 +23,17 @@ class RemoteConfigManager extends EventEmitter {
   constructor (config) {
     super()
 
-    const pollInterval = config.remoteConfig.pollInterval * 1000
+    const pollInterval = Math.floor(config.remoteConfig.pollInterval * 1000)
+    const url = config.url || new URL(format({
+      protocol: 'http:',
+      hostname: config.hostname || 'localhost',
+      port: config.port
+    }))
+
     this.scheduler = new Scheduler((cb) => this.poll(cb), pollInterval)
 
     this.requestOptions = {
-      url: config.url,
-      hostname: config.hostname,
-      port: config.port,
+      url,
       method: 'POST',
       path: '/v0.7/config'
     }

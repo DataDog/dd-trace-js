@@ -81,7 +81,7 @@ describe('Config', () => {
     expect(config).to.have.property('queryStringObfuscation').with.length(626)
     expect(config).to.have.property('clientIpEnabled', false)
     expect(config).to.have.property('clientIpHeader', null)
-    expect(config).to.have.property('sampleRate', 1)
+    expect(config).to.have.property('sampleRate', undefined)
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.have.property('service', 'node')
     expect(config).to.have.property('plugins', true)
@@ -244,7 +244,7 @@ describe('Config', () => {
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
     expect(config).to.have.deep.nested.property('sampler', {
-      sampleRate: '0.5',
+      sampleRate: 0.5,
       rateLimit: '-1',
       rules: [
         { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
@@ -854,7 +854,7 @@ describe('Config', () => {
   it('should sanitize the sample rate to be between 0 and 1', () => {
     expect(new Config({ sampleRate: -1 })).to.have.property('sampleRate', 0)
     expect(new Config({ sampleRate: 2 })).to.have.property('sampleRate', 1)
-    expect(new Config({ sampleRate: NaN })).to.have.property('sampleRate', 1)
+    expect(new Config({ sampleRate: NaN })).to.have.property('sampleRate', undefined)
   })
 
   it('should ignore empty service names', () => {

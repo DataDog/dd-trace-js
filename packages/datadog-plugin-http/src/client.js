@@ -121,11 +121,11 @@ function addResponseHeaders (res, span, config) {
     ? Object.fromEntries(res.headers.entries())
     : res.headers
 
-  config.headers.forEach(key => {
+  config.headers.forEach(([key, tag]) => {
     const value = headers[key]
 
     if (value) {
-      span.setTag(`${HTTP_RESPONSE_HEADERS}.${key}`, value)
+      span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, value)
     }
   })
 }
@@ -135,11 +135,11 @@ function addRequestHeaders (req, span, config) {
     ? Object.fromEntries(req.headers.entries())
     : req.headers || req.getHeaders()
 
-  config.headers.forEach(key => {
-    const value = headers[key]
+  config.headers.forEach(([key, tag]) => {
+    const value = Array.isArray(headers[key]) ? headers[key].toString() : headers[key]
 
     if (value) {
-      span.setTag(`${HTTP_REQUEST_HEADERS}.${key}`, Array.isArray(value) ? value.toString() : value)
+      span.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, value)
     }
   })
 }
@@ -182,7 +182,8 @@ function getHeaders (config) {
 
   return config.headers
     .filter(key => typeof key === 'string')
-    .map(key => key.toLowerCase())
+    .map(h => h.split(':'))
+    .map(([key, tag]) => [key.toLowerCase(), tag])
 }
 
 function getHooks (config) {
