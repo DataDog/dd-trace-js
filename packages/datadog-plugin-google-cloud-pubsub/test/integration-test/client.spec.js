@@ -3,14 +3,13 @@
 const {
   FakeAgent,
   createSandbox,
-  curlAndAssertMessage,
+  checkSpansForServiceName,
   skipUnsupportedNodeVersions,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 
-const describe = (globalThis.fetch && skipUnsupportedNodeVersions() === globalThis.describe)
-  ? globalThis.describe : globalThis.describe.skip
+const describe = skipUnsupportedNodeVersions()
 
 describe('esm', () => {
   let agent
@@ -19,8 +18,8 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['express'], false, [`./integration-tests/plugin-helpers.mjs`,
-      `./packages/datadog-plugin-fetch/test/integration-test/*`])
+    sandbox = await createSandbox(['@google-cloud/pubsub'], false, [ './packages/dd-trace/src/id.js',
+      `./packages/datadog-plugin-google-cloud-pubsub/test/integration-test/*`])
   })
 
   after(async () => {
@@ -36,16 +35,18 @@ describe('esm', () => {
     await agent.stop()
   })
 
-  context('fetch', () => {
+  context('google-cloud-pubsub', () => {
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-
-      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+      const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
-        const isFetch = payload.some((span) => span.some((nestedSpan) => nestedSpan.meta.component === 'fetch'))
-        assert.strictEqual(isFetch, true)
-      })
+        assert.strictEqual(checkSpansForServiceName(payload, 'pubsub.request'), true)
+      }, undefined)
+
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined,
+        { PUBSUB_EMULATOR_HOST: 'localhost:8081' })
+
+      await res
     }).timeout(20000)
   })
 })

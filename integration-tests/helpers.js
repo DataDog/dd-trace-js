@@ -302,13 +302,15 @@ function skipUnsupportedNodeVersions () {
     : global.describe
 }
 
-async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler) {
+async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs = {}) {
+  let env = {
+    NODE_OPTIONS: `--loader=${hookFile}`,
+    DD_TRACE_AGENT_PORT: agentPort
+  }
+  env = { ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
-    env: {
-      NODE_OPTIONS: `--loader=${hookFile}`,
-      DD_TRACE_AGENT_PORT: agentPort
-    },
+    env,
     stdio: stdioHandler ? 'pipe' : 'inherit'
   }, stdioHandler)
 }
