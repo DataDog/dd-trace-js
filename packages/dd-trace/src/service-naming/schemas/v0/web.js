@@ -1,4 +1,4 @@
-const { identityService } = require('../util')
+const { identityService, httpPluginClientService, awsServiceV0 } = require('../util')
 const { DD_MAJOR } = require('../../../../../../version')
 
 const web = {
@@ -10,6 +10,26 @@ const web = {
     moleculer: {
       opName: () => 'moleculer.call',
       serviceName: identityService
+    },
+    http: {
+      opName: () => 'http.request',
+      serviceName: httpPluginClientService
+    },
+    fetch: {
+      opName: () => 'http.request',
+      serviceName: httpPluginClientService
+    },
+    http2: {
+      opName: () => 'http.request',
+      serviceName: httpPluginClientService
+    },
+    aws: {
+      opName: () => 'aws.request',
+      serviceName: awsServiceV0
+    },
+    lambda: {
+      opName: () => 'aws.request',
+      serviceName: awsServiceV0
     }
   },
   server: {
@@ -19,6 +39,18 @@ const web = {
     },
     moleculer: {
       opName: () => 'moleculer.action',
+      serviceName: identityService
+    },
+    http: {
+      opName: () => 'web.request',
+      serviceName: identityService
+    },
+    http2: {
+      opName: () => 'web.request',
+      serviceName: identityService
+    },
+    next: {
+      opName: () => 'next.request',
       serviceName: identityService
     }
   }

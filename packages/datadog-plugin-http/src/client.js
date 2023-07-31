@@ -8,23 +8,19 @@ const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const log = require('../../dd-trace/src/log')
-const url = require('url')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { URL } = require('url')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 class HttpClientPlugin extends ClientPlugin {
-  static get id () {
-    return 'http'
-  }
+  static get id () { return 'http' }
+  static get prefix () { return `apm:http:client:request` }
 
-  addTraceSub (eventName, handler) {
-    this.addSub(`apm:${this.constructor.id}:client:${this.operation}:${eventName}`, handler)
-  }
-
-  start ({ args, http = {} }) {
+  bindStart (message) {
+    const { args, http = {} } = message
     const store = storage.getStore()
     const options = args.options
     const agent = options.agent || options._defaultAgent || http.globalAgent || {}
@@ -40,12 +36,12 @@ class HttpClientPlugin extends ClientPlugin {
     const method = (options.method || 'GET').toUpperCase()
     const childOf = store && allowed ? store.span : null
     // TODO delegate to super.startspan
-    const span = this.startSpan('http.request', {
+    const span = this.startSpan(this.operationName(), {
       childOf,
       meta: {
         [COMPONENT]: this.constructor.id,
         'span.kind': 'client',
-        'service.name': getServiceName(this.tracer, this.config, options),
+        'service.name': this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }),
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
@@ -55,7 +51,7 @@ class HttpClientPlugin extends ClientPlugin {
       metrics: {
         [CLIENT_PORT_KEY]: parseInt(options.port)
       }
-    })
+    }, false)
 
     // TODO: Figure out a better way to do this for any span.
     if (!allowed) {
@@ -67,11 +63,19 @@ class HttpClientPlugin extends ClientPlugin {
     }
 
     analyticsSampler.sample(span, this.config.measured)
-    this.enter(span, store)
+
+    message.span = span
+    message.parentStore = store
+    message.currentStore = { ...store, span }
+
+    return message.currentStore
   }
 
-  finish ({ req, res }) {
-    const span = storage.getStore().span
+  bindAsyncStart ({ parentStore }) {
+    return parentStore
+  }
+
+  finish ({ req, res, span }) {
     if (res) {
       const status = res.status || res.statusCode
 
@@ -87,17 +91,18 @@ class HttpClientPlugin extends ClientPlugin {
     addRequestHeaders(req, span, this.config)
 
     this.config.hooks.request(span, req, res)
-    super.finish()
+
+    this.tagPeerService(span)
+
+    span.finish()
   }
 
-  error (err) {
-    const span = storage.getStore().span
-
-    if (err) {
+  error ({ span, error }) {
+    if (error) {
       span.addTags({
-        [ERROR_TYPE]: err.name,
-        [ERROR_MESSAGE]: err.message || err.code,
-        [ERROR_STACK]: err.stack
+        [ERROR_TYPE]: error.name,
+        [ERROR_MESSAGE]: error.message || error.code,
+        [ERROR_STACK]: error.stack
       })
     } else {
       span.setTag('error', 1)
@@ -212,25 +217,15 @@ function hasAmazonSignature (options) {
   return search && search.toLowerCase().indexOf('x-amz-signature=') !== -1
 }
 
-function getServiceName (tracer, config, options) {
-  if (config.splitByDomain) {
-    return getHost(options)
-  } else if (config.service) {
-    return config.service
-  }
-
-  return tracer._service
-}
-
-function getHost (options) {
+function extractSessionDetails (options) {
   if (typeof options === 'string') {
-    return url.parse(options).host
+    return new URL(options).host
   }
 
-  const hostname = options.hostname || options.host || 'localhost'
+  const host = options.hostname || options.host || 'localhost'
   const port = options.port
 
-  return [hostname, port].filter(val => val).join(':')
+  return { host, port }
 }
 
 function startsWith (searchString) {

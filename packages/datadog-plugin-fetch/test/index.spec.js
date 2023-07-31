@@ -7,6 +7,7 @@ const { expect } = require('chai')
 const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DD_MAJOR } = require('../../../version')
+const { rawExpectedSchema } = require('./naming')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -46,6 +47,22 @@ describe('Plugin', () => {
           })
       })
 
+      withNamingSchema(
+        () => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          getPort().then(port => {
+            appListener = server(app, port, () => {
+              fetch(`http://localhost:${port}/user`)
+            })
+          })
+        },
+        rawExpectedSchema.client
+      )
+
       it('should do automatic instrumentation', done => {
         const app = express()
         app.get('/user', (req, res) => {
@@ -75,7 +92,7 @@ describe('Plugin', () => {
 
       it('should support URL input', done => {
         const app = express()
-        app.get('/user', (req, res) => {
+        app.post('/user', (req, res) => {
           res.status(200).send()
         })
         getPort().then(port => {
@@ -83,10 +100,10 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
               expect(traces[0][0]).to.have.property('type', 'http')
-              expect(traces[0][0]).to.have.property('resource', 'GET')
+              expect(traces[0][0]).to.have.property('resource', 'POST')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-              expect(traces[0][0].meta).to.have.property('http.method', 'GET')
+              expect(traces[0][0].meta).to.have.property('http.method', 'POST')
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
               expect(traces[0][0].meta).to.have.property('component', 'fetch')
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
@@ -95,7 +112,7 @@ describe('Plugin', () => {
             .catch(done)
 
           appListener = server(app, port, () => {
-            fetch(new URL(`http://localhost:${port}/user`))
+            fetch(new URL(`http://localhost:${port}/user`), { method: 'POST' })
           })
         })
       })
@@ -186,6 +203,31 @@ describe('Plugin', () => {
 
           appListener = server(app, port, () => {
             fetch(`http://localhost:${port}/user?foo=bar`)
+          })
+        })
+      })
+
+      it('should inject its parent span in the existing headers', done => {
+        const app = express()
+
+        app.get('/user', (req, res) => {
+          expect(req.get('foo')).to.be.a('string')
+          expect(req.get('x-datadog-trace-id')).to.be.a('string')
+          expect(req.get('x-datadog-parent-id')).to.be.a('string')
+
+          res.status(200).send()
+        })
+
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+            })
+            .then(done)
+            .catch(done)
+
+          appListener = server(app, port, () => {
+            fetch(`http://localhost:${port}/user?foo=bar`, { headers: { 'foo': 'bar' } })
           })
         })
       })
