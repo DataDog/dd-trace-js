@@ -24,10 +24,23 @@ class Tracer extends NoopProxy {
     this._initialized = true
 
     try {
-      const config = new Config(options) // TODO: support dynamic config
+      const config = new Config(options) // TODO: support dynamic code config
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        remoteConfig.enable(config)
+        const rc = remoteConfig.enable(config)
+
+        rc.on('APM_TRACING', (action, conf) => {
+          if (action === 'unapply') {
+            config.configure({}, true)
+          } else {
+            config.configure(conf.lib_config, true)
+          }
+
+          if (config.tracing) {
+            this._tracer.configure(config)
+            this._pluginManager.configure(config)
+          }
+        })
       }
 
       if (config.isGCPFunction || config.isAzureFunctionConsumptionPlan) {
@@ -49,6 +62,9 @@ class Tracer extends NoopProxy {
       }
 
       if (config.tracing) {
+        // TODO: This should probably not require tracing to be enabled.
+        telemetry.start(config, this._pluginManager)
+
         // dirty require for now so zero appsec code is executed unless explicitly enabled
         if (config.appsec.enabled) {
           require('./appsec').enable(config)
@@ -63,7 +79,6 @@ class Tracer extends NoopProxy {
 
         this._pluginManager.configure(config)
         setStartupLogPluginManager(this._pluginManager)
-        telemetry.start(config, this._pluginManager)
 
         if (config.isManualApiEnabled) {
           const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
