@@ -221,7 +221,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load('pg', { service: 'custom' })
+          return agent.load('pg', { service: 'custom', truncate: 12 })
         })
 
         after(() => {
@@ -245,6 +245,7 @@ describe('Plugin', () => {
           agent.use(traces => {
             expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', 'custom')
+            expect(traces[0][0]).to.have.property('resource', 'SELECT $1...')
           })
             .then(done)
             .catch(done)
