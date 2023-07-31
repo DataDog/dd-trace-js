@@ -3,6 +3,7 @@ import grpc from 'grpc'
 import loader from '@grpc/proto-loader'
 import { fileURLToPath } from 'url';
 import { resolve, dirname } from 'path';
+import getPort from 'get-port'
 
 // Get the current module's URL
 const __filename = fileURLToPath(import.meta.url);
