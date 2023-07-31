@@ -62,7 +62,7 @@ function startupLog ({ agentError } = {}) {
     out.agent_error = agentError.message
   }
   out.debug = !!config.debug
-  out.sample_rate = config.sampleRate
+  out.sample_rate = config.sampler.sampleRate
   out.sampling_rules = samplingRules
   out.tags = config.tags
   if (config.tags && config.tags.version) {
