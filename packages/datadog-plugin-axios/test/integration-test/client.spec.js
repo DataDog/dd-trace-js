@@ -3,7 +3,6 @@
 const {
   FakeAgent,
   createSandbox,
-  curlAndAssertMessage,
   checkSpansForServiceName,
   skipUnsupportedNodeVersions,
   spawnPluginIntegrationTestProc
@@ -19,8 +18,8 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['limitd-client'], false, [
-      `./packages/datadog-plugin-limitd-client/test/integration-test/*`])
+    sandbox = await createSandbox(['axios'], false, [
+      `./packages/datadog-plugin-axios/test/integration-test/*`])
   })
 
   after(async () => {
@@ -36,13 +35,12 @@ describe('esm', () => {
     await agent.stop()
   })
 
-  context('limitd-client', () => {
+  context('axios', () => {
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        console.log(headers, payload[0][0].meta)
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'redis.command'), true)
+        assert.strictEqual(checkSpansForServiceName(payload, 'http.request'), true)
       }, undefined)
 
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined)
