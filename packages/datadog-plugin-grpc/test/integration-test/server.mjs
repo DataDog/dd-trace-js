@@ -1,32 +1,32 @@
 import 'dd-trace/init.js'
 import grpc from 'grpc'
 import loader from '@grpc/proto-loader'
-import { fileURLToPath } from 'url';
-import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url'
+import { resolve, dirname } from 'path'
 import getPort from 'get-port'
 
-
 // Get the current module's URL
-const __filename = fileURLToPath(import.meta.url);
+const __filename = fileURLToPath(import.meta.url)
 
 // Get the directory name from the URL
-const __dirname = dirname(__filename);
+const __dirname = dirname(__filename)
 
-const port = await getPort()
+async function buildClient (service, port) {
+  service = Object.assign(
+    {
+      getBidi: () => {},
+      getServerStream: () => {},
+      getClientStream: () => {},
+      getUnary: () => {}
+    },
+    service
+  )
 
-function buildClient (service, callback) {
-  service = Object.assign({
-    getBidi: () => {},
-    getServerStream: () => {},
-    getClientStream: () => {},
-    getUnary: () => {}
-  }, service)
-
-  const protoPath = resolve(__dirname, '../test.proto');
+  const protoPath = resolve(__dirname, '../test.proto')
   const definition = loader.loadSync(protoPath)
   const TestService = grpc.loadPackageDefinition(definition).test.TestService
 
-  server = new grpc.Server()
+  const server = new grpc.Server()
 
   return new Promise((resolve, reject) => {
     if (server.bindAsync) {
@@ -47,17 +47,25 @@ function buildClient (service, callback) {
     }
   })
 }
-try {
 
-const client = await buildClient({
-  getUnary: (_, callback) => callback()
-})
+async function runTest () {
+  try {
+    const port = await getPort()
+    const client = await buildClient(
+      {
+        getUnary: (_, callback) => callback()
+      },
+      port
+    )
 
-client.getUnary({ first: 'foobar' }, () => {})
+    client.getUnary({ first: 'foobar' }, () => {})
 
-await server.forceShutdown()
+    client.close()
 
-} catch(error) {
-  console.log('happened')
-  console.log(error)
+    console.log('Client connection closed gracefully.')
+  } catch (error) {
+    console.error('Error occurred during the test:', error)
+  }
 }
+
+runTest()
