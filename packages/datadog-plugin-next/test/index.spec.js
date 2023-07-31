@@ -6,18 +6,17 @@ const axios = require('axios')
 const getPort = require('get-port')
 const { execSync, spawn } = require('child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { writeSync, writeFileSync, readFileSync, openSync, close } = require('fs')
+const { writeSync, writeFileSync, readFileSync, openSync, close, existsSync } = require('fs')
 const { satisfies } = require('semver')
 const { DD_MAJOR } = require('../../../version')
 const path = require('path')
-const fs = require('fs')
 
 describe('Plugin', function () {
   let server
   let port
 
   describe('next', () => {
-    const startServer = ({ withConfig, standalone }, version, startViaOptions) => {
+    const startServer = ({ withConfig, standalone, startViaNodeOptions }, version) => {
       before(async () => {
         port = await getPort()
 
@@ -30,7 +29,7 @@ describe('Plugin', function () {
           : __dirname
 
         const serverStartCmd =
-          startViaOptions ? ['--require', `${__dirname}/datadog.js`, 'server'] : ['server']
+          startViaNodeOptions ? ['--require', `${__dirname}/tracer.js`, 'server'] : ['server']
 
         server = spawn('node', serverStartCmd, {
           cwd,
@@ -136,9 +135,9 @@ describe('Plugin', function () {
         exports.default = void 0;
         `
         const nextJSPackageDir = path.resolve(__dirname, '.next/standalone/node_modules/next')
-        const nextJSPackageJson = JSON.parse(fs.readFileSync(path.join(nextJSPackageDir, 'package.json'), 'utf-8'))
+        const nextJSPackageJson = JSON.parse(readFileSync(path.join(nextJSPackageDir, 'package.json'), 'utf-8'))
         const mainEntryFile = path.join(nextJSPackageDir, nextJSPackageJson.main)
-        if (!fs.existsSync(mainEntryFile)) fs.writeFileSync(mainEntryFile, EMPTY_FILE_TEMPLATE)
+        if (!existsSync(mainEntryFile)) writeFileSync(mainEntryFile, EMPTY_FILE_TEMPLATE)
 
         // copy public directory for static files
         const publicOrigin = `${__dirname}/public`
@@ -153,7 +152,7 @@ describe('Plugin', function () {
       build(version)
 
       describe('without configuration', () => {
-        startServer({ withConfig: false, standalone: false }, version)
+        startServer({ withConfig: false, standalone: false, startViaNodeOptions: false }, version)
 
         describe('for api routes', () => {
           it('should do automatic instrumentation', done => {
@@ -343,7 +342,7 @@ describe('Plugin', function () {
       })
 
       describe('with configuration', () => {
-        startServer({ withConfig: true, standalone: false }, version)
+        startServer({ withConfig: true, standalone: false, startViaNodeOptions: false }, version)
 
         it('should execute the hook and validate the status', done => {
           agent
@@ -378,7 +377,7 @@ describe('Plugin', function () {
       initStandaloneFiles()
 
       describe('standalone without configuration', () => {
-        startServer({ withConfig: false, standalone: true }, version)
+        startServer({ withConfig: false, standalone: true, startViaNodeOptions: false }, version)
 
         it('should do automatic instrumentation for pages', done => {
           agent
@@ -448,7 +447,7 @@ describe('Plugin', function () {
       })
 
       describe('standalone with configuration', () => {
-        startServer({ withConfig: true, standalone: true }, version)
+        startServer({ withConfig: true, standalone: true, startViaNodeOptions: false }, version)
 
         it('should execute the hook and validate the status', done => {
           agent
@@ -481,7 +480,7 @@ describe('Plugin', function () {
       initStandaloneFiles()
 
       describe(`standalone version with worker without config`, () => {
-        startServer({ withConfig: false, standalone: true }, version, true)
+        startServer({ withConfig: false, standalone: true, startViaNodeOptions: true }, version)
 
         it('should do automatic instrumentation for pages', done => {
           agent
@@ -551,7 +550,7 @@ describe('Plugin', function () {
       })
 
       describe(`standalone version with worker with config`, () => {
-        startServer({ withConfig: false, standalone: true }, version, true)
+        startServer({ withConfig: false, standalone: true, startViaNodeOptions: true }, version)
 
         it('should execute the hook and validate the status', done => {
           agent
