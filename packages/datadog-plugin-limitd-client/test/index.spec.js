@@ -34,8 +34,6 @@ describe('Plugin', () => {
             if (err) return done(err)
 
             try {
-              console.log(3, storage.getStore())
-              console.log(5, span)
               expect(storage.getStore()).to.equal(span)
               done()
             } catch (e) {

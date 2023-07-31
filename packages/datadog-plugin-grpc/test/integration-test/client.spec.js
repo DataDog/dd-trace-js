@@ -3,7 +3,6 @@
 const {
   FakeAgent,
   createSandbox,
-  curlAndAssertMessage,
   checkSpansForServiceName,
   skipUnsupportedNodeVersions,
   spawnPluginIntegrationTestProc
