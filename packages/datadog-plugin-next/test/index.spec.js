@@ -57,57 +57,49 @@ describe('Plugin', function () {
       })
     }
 
-    const build = version => before(async function () {
-      this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
+    const build = version => {
+      before(async function () {
+        this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
 
-      const cwd = __dirname
-      // const nodules = `${__dirname}/../../../versions/next@${version}/node_modules`
-      const pkg = require(`${__dirname}/../../../versions/next@${version}/package.json`)
-      const realVersion = require(`${__dirname}/../../../versions/next@${version}`).version()
+        const cwd = __dirname
+        const pkg = require(`${__dirname}/../../../versions/next@${version}/package.json`)
+        const realVersion = require(`${__dirname}/../../../versions/next@${version}`).version()
 
-      if (realVersion.startsWith('10')) {
-        return this.skip() // TODO: Figure out why 10.x tests fail.
-      }
+        if (realVersion.startsWith('10')) {
+          return this.skip() // TODO: Figure out why 10.x tests fail.
+        }
 
-      delete pkg.workspaces
+        delete pkg.workspaces
 
-      // execSync(`cp -R '${nodules}' ./`, { cwd })
+        writeFileSync(`${__dirname}/package.json`, JSON.stringify(pkg, null, 2))
 
-      writeFileSync(`${__dirname}/package.json`, JSON.stringify(pkg, null, 2))
+        // installing here for standalone purposes, copying `nodules` above was not generating the server file properly
+        // if there is a way to re-use nodules from somewhere in the versions folder, this `execSync` will be reverted
+        execSync('yarn install', { cwd })
 
-      // installing here for standalone purposes, copying `nodules` above was not generating the server file properly
-      // if there is a way to re-use nodules from somewhere in the versions folder, this `execSync` will be reverted
-      execSync('yarn install', {
-        cwd,
-        env: {
-          ...process.env,
-          version
-        },
-        stdio: ['pipe', 'ignore', 'pipe']
+        // building in-process makes tests fail for an unknown reason
+        execSync('yarn exec next build', {
+          cwd,
+          env: {
+            ...process.env,
+            version
+          },
+          stdio: ['pipe', 'ignore', 'pipe']
+        })
       })
 
-      // building in-process makes tests fail for an unknown reason
-      execSync('yarn exec next build', {
-        cwd,
-        env: {
-          ...process.env,
-          version
-        },
-        stdio: ['pipe', 'ignore', 'pipe']
+      after(function () {
+        this.timeout(5000)
+        const files = [
+          'package.json',
+          'node_modules',
+          '.next',
+          'yarn.lock'
+        ]
+        const paths = files.map(file => `${__dirname}/${file}`)
+        execSync(`rm -rf ${paths.join(' ')}`)
       })
-    })
-
-    after(function () {
-      this.timeout(5000)
-      const files = [
-        'package.json',
-        'node_modules',
-        '.next',
-        'yarn.lock'
-      ]
-      const paths = files.map(file => `${__dirname}/${file}`)
-      execSync(`rm -rf ${paths.join(' ')}`)
-    })
+    }
 
     const initStandaloneFiles = () => {
       before(() => {
@@ -136,6 +128,7 @@ describe('Plugin', function () {
         close(file, err => { if (err) { throw err } })
 
         // for problems with Next.js, replace main entrypoint in an ill-copied package.json
+        // https://github.com/vercel/next.js/issues/40735#issuecomment-1314151000
         const EMPTY_FILE_TEMPLATE = `"use strict";
         Object.defineProperty(exports, "__esModule", {
             value: true
