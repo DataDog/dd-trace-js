@@ -1,5 +1,5 @@
 import 'dd-trace/init.js'
-import grpc from 'grpc'
+import grpc from '@grpc/grpc-js'
 import loader from '@grpc/proto-loader'
 import { fileURLToPath } from 'url'
 import { resolve, dirname } from 'path'
