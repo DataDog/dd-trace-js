@@ -59,7 +59,7 @@ async function runTest () {
 
     // client.close()
 
-    await server.forceShutdown()
+    server.forceShutdown()
 
     console.log('Client connection closed gracefully.')
   } catch (error) {
