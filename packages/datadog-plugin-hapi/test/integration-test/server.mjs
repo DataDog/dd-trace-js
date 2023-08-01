@@ -20,17 +20,26 @@ const init = async () => {
 
   server.route({
     method: 'GET',
-    path: '/',
+    path: '/user/{id}',
     handler: (request, h) => {
       return handler(request, h)
     }
-  }) 
+  })
+  
+  server.route({
+    method: 'POST',
+    path: '/user/{id}',
+    handler: (request, h) => {
+
+      return handler(request, h)
+    }
+  })
 }
 
 try {
   await init()
   
-  await axios.get(`http://localhost:${port}/`)
+  await axios.get(`http://localhost:${port}/user/3213`)
 
   server.stop()
   console.log('Server stopped gracefully.')
