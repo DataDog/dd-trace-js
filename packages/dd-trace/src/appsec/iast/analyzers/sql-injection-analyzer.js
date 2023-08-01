@@ -8,7 +8,7 @@ const { getIastContext } = require('../iast-context')
 const { addVulnerability } = require('../vulnerability-reporter')
 const { getNodeModulesPaths } = require('../path-line')
 
-const EXCLUDED_PATHS = getNodeModulesPaths('mysql2', 'sequelize', 'pg-pool')
+const EXCLUDED_PATHS = getNodeModulesPaths('mysql', 'mysql2', 'sequelize', 'pg-pool')
 
 class SqlInjectionAnalyzer extends InjectionAnalyzer {
   constructor () {
@@ -20,37 +20,33 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
     this.addSub('apm:mysql2:query:start', ({ sql }) => this.analyze(sql, 'MYSQL'))
     this.addSub('apm:pg:query:start', ({ query }) => this.analyze(query.text, 'POSTGRES'))
 
-    this.addSub('datadog:sequelize:query:start', ({ sql, dialect }) => {
-      const parentStore = storage.getStore()
-      if (parentStore) {
-        this.analyze(sql, dialect.toUpperCase(), parentStore)
+    this.addSub(
+      'datadog:sequelize:query:start',
+      ({ sql, dialect }) => this.getStoreAndAnalyze(sql, dialect.toUpperCase())
+    )
+    this.addSub('datadog:sequelize:query:finish', this.returnToParentStore)
 
-        storage.enterWith({ ...parentStore, sqlAnalyzed: true, sequelizeParentStore: parentStore })
-      }
-    })
+    this.addSub('datadog:pg:pool:query:start', ({ query }) => this.getStoreAndAnalyze(query.text, 'POSTGRES'))
+    this.addSub('datadog:pg:pool:query:finish', this.returnToParentStore)
 
-    this.addSub('datadog:sequelize:query:finish', () => {
-      const store = storage.getStore()
-      if (store && store.sequelizeParentStore) {
-        storage.enterWith(store.sequelizeParentStore)
-      }
-    })
+    this.addSub('datadog:mysql:pool:query:start', ({ sql }) => this.getStoreAndAnalyze(sql, 'MYSQL'))
+    this.addSub('datadog:mysql:pool:query:finish', this.returnToParentStore)
+  }
 
-    this.addSub('datadog:pg:pool:query:start', ({ query }) => {
-      const parentStore = storage.getStore()
-      if (parentStore) {
-        this.analyze(query.text, 'POSTGRES', parentStore)
+  getStoreAndAnalyze (query, dialect) {
+    const parentStore = storage.getStore()
+    if (parentStore) {
+      this.analyze(query, dialect, parentStore)
 
-        storage.enterWith({ ...parentStore, sqlAnalyzed: true, pgPoolParentStore: parentStore })
-      }
-    })
+      storage.enterWith({ ...parentStore, sqlAnalyzed: true, sqlParentStore: parentStore })
+    }
+  }
 
-    this.addSub('datadog:pg:pool:query:finish', () => {
-      const store = storage.getStore()
-      if (store && store.pgPoolParentStore) {
-        storage.enterWith(store.pgPoolParentStore)
-      }
-    })
+  returnToParentStore () {
+    const store = storage.getStore()
+    if (store && store.sqlParentStore) {
+      storage.enterWith(store.sqlParentStore)
+    }
   }
 
   _getEvidence (value, iastContext, dialect) {

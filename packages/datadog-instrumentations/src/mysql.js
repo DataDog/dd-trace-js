@@ -66,9 +66,49 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 })
 
 addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
+  const startPoolQueryCh = channel('datadog:mysql:pool:query:start')
+  const finishPoolQueryCh = channel('datadog:mysql:pool:query:finish')
   shimmer.wrap(Pool.prototype, 'getConnection', getConnection => function (cb) {
     arguments[0] = AsyncResource.bind(cb)
     return getConnection.apply(this, arguments)
+  })
+
+  shimmer.wrap(Pool.prototype, 'query', query => function () {
+    if (!startPoolQueryCh.hasSubscribers) {
+      return query.apply(this, arguments)
+    }
+
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+    const sql = arguments[0].sql ? arguments[0].sql : arguments[0]
+
+    return asyncResource.runInAsyncScope(() => {
+      startPoolQueryCh.publish({ sql })
+
+      const finish = asyncResource.bind(function () {
+        finishPoolQueryCh.publish()
+      })
+
+      const cb = arguments[arguments.length - 1]
+      if (typeof cb === 'function') {
+        arguments[arguments.length - 1] = shimmer.wrap(cb, function () {
+          finish()
+          return cb.apply(this, arguments)
+        })
+      }
+
+      const retval = query.apply(this, arguments)
+
+      if (retval && retval.then) {
+        retval.then(() => {
+          finish()
+        }).catch(() => {
+          finish()
+        })
+      }
+
+      return retval
+    })
   })
   return Pool
 })
