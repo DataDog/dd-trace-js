@@ -17,14 +17,14 @@ describe('Plugin', function () {
   let port
 
   describe('next', () => {
-    const startServer = ({ withConfig, standalone, startViaNodeOptions }, 
+    const startServer = ({ withConfig, standalone, startViaNodeOptions },
       version, schemaVersion = 'v0', defaultToGlobalService = false) => {
       before(async () => {
         port = await getPort()
 
         return agent.load('next')
       })
-        
+
       before(function (done) {
         const cwd = standalone
           ? `${__dirname}/.next/standalone`
@@ -33,18 +33,18 @@ describe('Plugin', function () {
         const serverStartCmd =
           startViaNodeOptions ? ['--require', `${__dirname}/datadog.js`, 'server'] : ['server']
 
-          server = spawn('node', ['server'], {
-            cwd,
-            env: {
-              ...process.env,
-              VERSION: version,
-              PORT: port,
-              DD_TRACE_AGENT_PORT: agent.server.address().port,
-              WITH_CONFIG: withConfig,
-              DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
-              DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService
-            }
-          })
+        server = spawn('node', serverStartCmd, {
+          cwd,
+          env: {
+            ...process.env,
+            VERSION: version,
+            PORT: port,
+            DD_TRACE_AGENT_PORT: agent.server.address().port,
+            WITH_CONFIG: withConfig,
+            DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
+            DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService
+          }
+        })
 
         server.once('error', done)
         server.stdout.once('data', () => done())
