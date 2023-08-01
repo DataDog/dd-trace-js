@@ -197,6 +197,13 @@ async function createSandbox (dependencies = [], isGitRepo = false, integrationT
   await exec(`yarn pack --filename ${out}`) // TODO: cache this
   await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
 
+  let output = await exec(`ls`, { cwd: folder, env: restOfEnv })
+
+  output = await exec(`cat package.json`, { cwd: folder, env: restOfEnv })
+
+  console.log('chickenasdasdasdasd')
+  console.log(output)
+
   integrationTestsPaths.forEach(async (path) => {
     await exec(`cp -R ${path} ${folder}`)
   })

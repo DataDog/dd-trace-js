@@ -19,7 +19,7 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['next', 'react', 'react-dom'], false, ['./packages/datadog-plugin-next/test/*'])
+    sandbox = await createSandbox(['next', 'react', 'react-dom', 'global-modules'], false, ['./packages/datadog-plugin-next/test/*'])
   })
 
   after(async () => {
