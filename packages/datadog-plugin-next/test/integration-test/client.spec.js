@@ -20,25 +20,30 @@ describe('esm', () => {
   before(async function () {
     this.timeout(20000)
     // TODO: Figure out why 10.x tests are failing.
-    sandbox = await createSandbox(['next@^13.0.0', 'react', 'react-dom'], false,
+    console.log(1)
+    sandbox = await createSandbox(['next', 'react', 'react-dom'], false,
       ['./packages/datadog-plugin-next/test/*'])
   })
 
   after(async () => {
+    console.log(2)
     await sandbox.remove()
   })
 
   beforeEach(async () => {
+    console.log(3)
     agent = await new FakeAgent().start()
   })
 
   afterEach(async () => {
+    console.log(5)
     proc && proc.kill()
     await agent.stop()
   })
 
   context('next', () => {
     it('is instrumented', async () => {
+      console.log(4)
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'integration-test/server.mjs', agent.port)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
