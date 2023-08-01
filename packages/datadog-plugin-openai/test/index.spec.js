@@ -6,11 +6,14 @@ const { expect } = require('chai')
 const semver = require('semver')
 const nock = require('nock')
 const sinon = require('sinon')
+const { spawn } = require('child_process')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { DogStatsDClient } = require('../../dd-trace/src/dogstatsd')
-const ExternalLogger = require('../../dd-trace/src/external-logger/src')
+const { NoopExternalLogger } = require('../../dd-trace/src/external-logger/src')
 const Sampler = require('../../dd-trace/src/sampler')
+
+const tracerRequirePath = '../../dd-trace'
 
 describe('Plugin', () => {
   let openai
@@ -20,8 +23,10 @@ describe('Plugin', () => {
 
   describe('openai', () => {
     withVersions('openai', 'openai', version => {
+      const moduleRequirePath = `../../../versions/openai@${version}`
+
       beforeEach(() => {
-        require('../../dd-trace')
+        require(tracerRequirePath)
       })
 
       before(() => {
@@ -34,7 +39,7 @@ describe('Plugin', () => {
 
       beforeEach(() => {
         clock = sinon.useFakeTimers()
-        const { Configuration, OpenAIApi } = require(`../../../versions/openai@${version}`).get()
+        const { Configuration, OpenAIApi } = require(moduleRequirePath).get()
 
         const configuration = new Configuration({
           apiKey: 'sk-DATADOG-ACCEPTANCE-TESTS'
@@ -43,13 +48,27 @@ describe('Plugin', () => {
         openai = new OpenAIApi(configuration)
 
         metricStub = sinon.stub(DogStatsDClient.prototype, '_add')
-        externalLoggerStub = sinon.stub(ExternalLogger.prototype, 'log')
+        externalLoggerStub = sinon.stub(NoopExternalLogger.prototype, 'log')
         sinon.stub(Sampler.prototype, 'isSampled').returns(true)
       })
 
       afterEach(() => {
         clock.restore()
         sinon.restore()
+      })
+
+      describe('without initialization', () => {
+        it('should not error', (done) => {
+          spawn('node', ['no-init'], {
+            cwd: __dirname,
+            stdio: 'inherit',
+            env: {
+              ...process.env,
+              PATH_TO_DDTRACE: tracerRequirePath,
+              PATH_TO_OPENAI: moduleRequirePath
+            }
+          }).on('exit', done) // non-zero exit status fails test
+        })
       })
 
       describe('createCompletion()', () => {
@@ -106,7 +125,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('openai.api_base', 'https://api.openai.com/v1')
               expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
               expect(traces[0][0].meta).to.have.property('openai.request.model', 'text-davinci-002')
-              expect(traces[0][0].meta).to.have.property('openai.request.prompt', 'Hello, ')
+              expect(traces[0][0].meta).to.have.property('openai.request.prompt', 'Hello, \\n\\nFriend\\t\\tHi')
               expect(traces[0][0].meta).to.have.property('openai.request.stop', 'time')
               expect(traces[0][0].meta).to.have.property('openai.request.suffix', 'foo')
               expect(traces[0][0].meta).to.have.property('openai.request.user', 'hunter2')
@@ -132,7 +151,7 @@ describe('Plugin', () => {
 
           const result = await openai.createCompletion({
             model: 'text-davinci-002',
-            prompt: 'Hello, ',
+            prompt: 'Hello, \n\nFriend\t\tHi',
             suffix: 'foo',
             max_tokens: 7,
             temperature: 1.01,
@@ -175,7 +194,7 @@ describe('Plugin', () => {
           expect(externalLoggerStub).to.have.been.calledWith({
             status: 'info',
             message: 'sampled createCompletion',
-            prompt: 'Hello, ',
+            prompt: 'Hello, \n\nFriend\t\tHi',
             choices: [
               {
                 text: 'FOO BAR BAZ',

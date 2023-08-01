@@ -1,7 +1,7 @@
-const { identityService } = require('../util')
+const { identityService, awsServiceV0 } = require('../util')
 
-function amqpServiceName (service) {
-  return `${service}-amqp`
+function amqpServiceName ({ tracerService }) {
+  return `${tracerService}-amqp`
 }
 
 const messaging = {
@@ -16,15 +16,23 @@ const messaging = {
     },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
-      serviceName: service => `${service}-pubsub`
+      serviceName: ({ tracerService }) => `${tracerService}-pubsub`
     },
     kafkajs: {
       opName: () => 'kafka.produce',
-      serviceName: service => `${service}-kafka`
+      serviceName: ({ tracerService }) => `${tracerService}-kafka`
     },
     rhea: {
       opName: () => 'amqp.send',
-      serviceName: service => `${service}-amqp-producer`
+      serviceName: ({ tracerService }) => `${tracerService}-amqp-producer`
+    },
+    sqs: {
+      opName: () => 'aws.request',
+      serviceName: awsServiceV0
+    },
+    sns: {
+      opName: () => 'aws.request',
+      serviceName: awsServiceV0
     }
   },
   consumer: {
@@ -42,11 +50,15 @@ const messaging = {
     },
     kafkajs: {
       opName: () => 'kafka.consume',
-      serviceName: service => `${service}-kafka`
+      serviceName: ({ tracerService }) => `${tracerService}-kafka`
     },
     rhea: {
       opName: () => 'amqp.receive',
       serviceName: identityService
+    },
+    sqs: {
+      opName: () => 'aws.request',
+      serviceName: awsServiceV0
     }
   },
   client: {
@@ -56,7 +68,7 @@ const messaging = {
     },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
-      serviceName: service => `${service}-pubsub`
+      serviceName: ({ tracerService }) => `${tracerService}-pubsub`
     }
   }
 }

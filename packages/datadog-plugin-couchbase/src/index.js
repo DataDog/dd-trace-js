@@ -1,51 +1,57 @@
 'use strict'
 
-const Plugin = require('../../dd-trace/src/plugins/plugin')
+const StoragePlugin = require('../../dd-trace/src/plugins/storage')
 const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 
-class CouchBasePlugin extends Plugin {
-  static get id () {
-    return 'couchbase'
-  }
+class CouchBasePlugin extends StoragePlugin {
+  static get id () { return 'couchbase' }
+  static get peerServicePrecursors () { return ['db.couchbase.seed.nodes'] }
 
-  addSubs (func, start, finish = defaultFinish) {
+  addSubs (func, start) {
     this.addSub(`apm:couchbase:${func}:start`, start)
-    this.addSub(`apm:couchbase:${func}:error`, this.addError)
-    this.addSub(`apm:couchbase:${func}:finish`, finish)
+    this.addSub(`apm:couchbase:${func}:error`, error => this.addError(error))
+    this.addSub(`apm:couchbase:${func}:finish`, message => this.finish(message))
   }
 
-  startSpan (operation, customTags, store, { bucket, collection }) {
+  startSpan (operation, customTags, store, { bucket, collection, seedNodes }) {
     const tags = {
       'db.type': 'couchbase',
       'component': 'couchbase',
-      'service.name': this.config.service || `${this.tracer._service}-couchbase`,
       'resource.name': `couchbase.${operation}`,
-      'span.kind': 'client'
+      'span.kind': this.constructor.kind,
+      'db.couchbase.seed.nodes': seedNodes
     }
+
+    if (bucket) tags['couchbase.bucket.name'] = bucket.name
+    if (collection) tags['couchbase.collection.name'] = collection.name
 
     for (const tag in customTags) {
       tags[tag] = customTags[tag]
     }
-    const span = this.tracer.startSpan(`couchbase.${operation}`, {
-      childOf: store ? store.span : null,
-      tags
-    })
 
-    if (bucket) span.setTag(`couchbase.bucket.name`, bucket.name)
-    if (collection) span.setTag(`couchbase.collection.name`, collection.name)
-
-    analyticsSampler.sample(span, this.config.measured)
-    return span
+    return super.startSpan(
+      this.operationName({ operation }),
+      {
+        service: this.serviceName({ pluginConfig: this.config }),
+        meta: tags
+      }
+    )
   }
 
   constructor (...args) {
     super(...args)
 
-    this.addSubs('query', ({ resource, bucket }) => {
+    this.addSubs('query', ({ resource, bucket, seedNodes }) => {
       const store = storage.getStore()
-      const span = this.startSpan('query', { 'span.type': 'sql', 'resource.name': resource },
-        store, { bucket })
+      const span = this.startSpan(
+        'query', {
+          'span.type': 'sql',
+          'resource.name': resource,
+          'span.kind': this.constructor.kind
+        },
+        store,
+        { bucket, seedNodes }
+      )
       this.enter(span, store)
     })
 
@@ -56,16 +62,12 @@ class CouchBasePlugin extends Plugin {
     this._addCommandSubs('prepend')
   }
   _addCommandSubs (name) {
-    this.addSubs(name, ({ bucket, collection }) => {
+    this.addSubs(name, ({ bucket, collection, seedNodes }) => {
       const store = storage.getStore()
-      const span = this.startSpan(name, {}, store, { bucket, collection })
+      const span = this.startSpan(name, {}, store, { bucket, collection, seedNodes })
       this.enter(span, store)
     })
   }
-}
-
-function defaultFinish () {
-  storage.getStore().span.finish()
 }
 
 module.exports = CouchBasePlugin

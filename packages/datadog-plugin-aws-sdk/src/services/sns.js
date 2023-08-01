@@ -27,6 +27,24 @@ class Sns extends BaseAwsSdkPlugin {
     // for example if it contains a phone number?
   }
 
+  operationFromRequest (request) {
+    switch (request.operation) {
+      case 'publish':
+      case 'publishBatch':
+        return this.operationName({
+          type: 'messaging',
+          kind: 'producer'
+        })
+    }
+
+    return this.operationName({
+      id: 'aws',
+      type: 'web',
+      kind: 'client',
+      awsService: 'sns'
+    })
+  }
+
   requestInject (span, request) {
     const { operation, params } = request
 

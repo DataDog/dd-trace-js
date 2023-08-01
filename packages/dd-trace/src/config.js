@@ -11,6 +11,8 @@ const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties } = require('./git_properties')
+const { updateConfig } = require('./telemetry')
+const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -129,11 +131,6 @@ class Config {
       'agent'
     )
     const DD_PROFILING_SOURCE_MAP = process.env.DD_PROFILING_SOURCE_MAP
-    const DD_LOGS_INJECTION = coalesce(
-      options.logInjection,
-      process.env.DD_LOGS_INJECTION,
-      false
-    )
     const DD_RUNTIME_METRICS_ENABLED = coalesce(
       options.runtimeMetrics, // TODO: remove when enabled by default
       process.env.DD_RUNTIME_METRICS_ENABLED,
@@ -189,6 +186,7 @@ class Config {
       process.env.AWS_LAMBDA_FUNCTION_NAME ||
       process.env.FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
       process.env.K_SERVICE || // Google Cloud Function Name set by newer runtimes
+      process.env.WEBSITE_SITE_NAME || // set by Azure Functions
       pkg.name ||
       'node'
     const DD_SERVICE_MAPPING = coalesce(
@@ -227,18 +225,17 @@ class Config {
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
 
-    const isDeprecatedGCPFunction = process.env.FUNCTION_NAME !== undefined && process.env.GCP_PROJECT !== undefined
-    const isNewerGCPFunction = process.env.K_SERVICE !== undefined && process.env.FUNCTION_TARGET !== undefined
-    const isGCPFunction = isDeprecatedGCPFunction || isNewerGCPFunction
+    const isGCPFunction = getIsGCPFunction()
+    const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
 
-    const inServerlessEnvironment = inAWSLambda || isGCPFunction
+    const inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
 
     const DD_TRACE_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED,
       !inServerlessEnvironment
     )
     const DD_TELEMETRY_HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
-      ? parseInt(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000
+      ? Math.floor(parseFloat(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000)
       : 60000
     const DD_OPENAI_SPAN_CHAR_LIMIT = process.env.DD_OPENAI_SPAN_CHAR_LIMIT
       ? parseInt(process.env.DD_OPENAI_SPAN_CHAR_LIMIT)
@@ -281,7 +278,7 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
       false
     )
-    const defaultPropagationStyle = ['tracecontext', 'datadog']
+    const defaultPropagationStyle = ['datadog', 'tracecontext']
     if (isTrue(DD_TRACE_B3_ENABLED)) {
       defaultPropagationStyle.push('b3')
       defaultPropagationStyle.push('b3 single header')
@@ -321,7 +318,10 @@ class Config {
       false
     )
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
-      process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+      coalesce(
+        options.spanAttributeSchema,
+        process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+      )
     )
     const DD_TRACE_PEER_SERVICE_MAPPING = coalesce(
       options.peerServiceMapping,
@@ -329,11 +329,27 @@ class Config {
         process.env.DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ) : {}
     )
-    const DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+
+    const peerServiceSet = (
+      options.hasOwnProperty('spanComputePeerService') ||
+      process.env.hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
+    )
+    const peerServiceValue = coalesce(
+      options.spanComputePeerService,
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+    )
+
+    const DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = (
+      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA === 'v0'
+        // In v0, peer service is computed only if it is explicitly set to true
+        ? peerServiceSet && isTrue(peerServiceValue)
+        // In >v0, peer service is false only if it is explicitly set to false
+        : (peerServiceSet ? !isFalse(peerServiceValue) : true)
+    )
 
     const DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = coalesce(
-      isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED),
-      false
+      options.spanRemoveIntegrationFromService,
+      isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
     )
     const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
       process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
@@ -343,7 +359,7 @@ class Config {
     const DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
       options.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
-      isGCPFunction
+      isGCPFunction || isAzureFunctionConsumptionPlan
     )
 
     const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
@@ -421,8 +437,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       !inServerlessEnvironment
     )
     const DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = coalesce(
-      parseInt(remoteConfigOptions.pollInterval),
-      parseInt(process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS),
+      parseFloat(remoteConfigOptions.pollInterval),
+      parseFloat(process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS),
       5 // seconds
     )
 
@@ -490,11 +506,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
     const sampler = {
-      sampleRate: coalesce(
-        options.sampleRate,
-        process.env.DD_TRACE_SAMPLE_RATE,
-        ingestion.sampleRate
-      ),
       rateLimit: coalesce(options.rateLimit, process.env.DD_TRACE_RATE_LIMIT, ingestion.rateLimit),
       rules: coalesce(
         options.samplingRules,
@@ -518,14 +529,13 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       })
     }
 
-    const defaultFlushInterval = inServerlessEnvironment ? 0 : 2000
+    const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
     this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
     this.dsmEnabled = isTrue(DD_DATA_STREAMS_ENABLED)
     this.openAiLogsEnabled = DD_OPENAI_LOGS_ENABLED
     this.apiKey = DD_API_KEY
-    this.logInjection = isTrue(DD_LOGS_INJECTION)
     this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
@@ -534,7 +544,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
-    this.sampleRate = coalesce(Math.min(Math.max(sampler.sampleRate, 0), 1), 1)
     this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
     this.clientIpEnabled = DD_TRACE_CLIENT_IP_ENABLED
     this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
@@ -565,11 +574,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       exporters: DD_PROFILING_EXPORTERS
     }
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
-    this.spanComputePeerService = (this.spanAttributeSchema === 'v0'
-      ? isTrue(DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED)
-      : true
-    )
-    this.traceRemoveIntegrationServiceNamesEnabled = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+    this.spanComputePeerService = DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+    this.spanRemoveIntegrationFromService = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
     this.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
@@ -662,6 +668,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
 
     this.isGCPFunction = isGCPFunction
+    this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
 
     tagger.add(this.tags, {
       service: this.service,
@@ -669,6 +676,139 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       version: this.version,
       'runtime-id': uuid()
     })
+
+    this._applyDefaults()
+    this._applyEnvironment()
+    this._applyOptions(options)
+    this._applyRemote({})
+    this._merge()
+  }
+
+  // Supports only a subset of options for now.
+  configure (options, remote) {
+    if (remote) {
+      this._applyRemote(options)
+    } else {
+      this._applyOptions(options)
+    }
+
+    this._merge()
+  }
+
+  _applyDefaults () {
+    const defaults = this._defaults = {}
+
+    this._setUnit(defaults, 'sampleRate', undefined)
+    this._setBoolean(defaults, 'logInjection', false)
+    this._setArray(defaults, 'headerTags', [])
+  }
+
+  _applyEnvironment () {
+    const {
+      DD_TRACE_SAMPLE_RATE,
+      DD_LOGS_INJECTION,
+      DD_TRACE_HEADER_TAGS
+    } = process.env
+
+    const env = this._env = {}
+
+    this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE)
+    this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
+    this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
+  }
+
+  _applyOptions (options) {
+    const opts = this._options = this._options || {}
+
+    options = Object.assign({ ingestion: {} }, options, opts)
+
+    this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
+    this._setBoolean(opts, 'logInjection', options.logInjection)
+    this._setArray(opts, 'headerTags', options.headerTags)
+  }
+
+  _applyRemote (options) {
+    const opts = this._remote = this._remote || {}
+    const headerTags = options.tracing_header_tags
+      ? options.tracing_header_tags.map(tag => {
+        return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
+      })
+      : undefined
+
+    this._setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
+    this._setBoolean(opts, 'logInjection', options.log_injection_enabled)
+    this._setArray(opts, 'headerTags', headerTags)
+  }
+
+  _setBoolean (obj, name, value) {
+    if (value === undefined || value === null) {
+      this._setValue(obj, name, value)
+    } else if (isTrue(value)) {
+      this._setValue(obj, name, true)
+    } else if (isFalse(value)) {
+      this._setValue(obj, name, false)
+    }
+  }
+
+  _setUnit (obj, name, value) {
+    if (value === null || value === undefined) {
+      return this._setValue(obj, name, value)
+    }
+
+    value = parseFloat(value)
+
+    if (!isNaN(value)) {
+      // TODO: Ignore out of range values instead of normalizing them.
+      this._setValue(obj, name, Math.min(Math.max(value, 0), 1))
+    }
+  }
+
+  _setArray (obj, name, value) {
+    if (value === null || value === undefined) {
+      return this._setValue(obj, name, null)
+    }
+
+    if (typeof value === 'string') {
+      value = value && value.split(',')
+    }
+
+    if (Array.isArray(value)) {
+      this._setValue(obj, name, value)
+    }
+  }
+
+  _setValue (obj, name, value) {
+    obj[name] = value
+  }
+
+  // TODO: Report origin changes and errors to telemetry.
+  // TODO: Deeply merge configurations.
+  // TODO: Move change tracking to telemetry.
+  _merge () {
+    const containers = [this._remote, this._options, this._env, this._defaults]
+    const origins = ['remote_config', 'code', 'env_var', 'default']
+    const changes = []
+
+    for (const name in this._defaults) {
+      for (let i = 0; i < containers.length; i++) {
+        const container = containers[i]
+        const origin = origins[i]
+
+        if ((container[name] !== null && container[name] !== undefined) || container === this._defaults) {
+          if (this[name] === container[name] && this.hasOwnProperty(name)) break
+
+          const value = this[name] = container[name]
+
+          changes.push({ name, value, origin })
+
+          break
+        }
+      }
+    }
+
+    this.sampler.sampleRate = this.sampleRate
+
+    updateConfig(changes, this)
   }
 }
 

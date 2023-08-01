@@ -10,19 +10,21 @@ const { writeSync, writeFileSync, readFileSync, openSync, close, existsSync } = 
 const { satisfies } = require('semver')
 const { DD_MAJOR } = require('../../../version')
 const path = require('path')
+const { rawExpectedSchema } = require('./naming')
 
 describe('Plugin', function () {
   let server
   let port
 
   describe('next', () => {
-    const startServer = ({ withConfig, standalone, startViaNodeOptions }, version) => {
+    const startServer = ({ withConfig, standalone, startViaNodeOptions }, 
+      version, schemaVersion = 'v0', defaultToGlobalService = false) => {
       before(async () => {
         port = await getPort()
 
         return agent.load('next')
       })
-
+        
       before(function (done) {
         const cwd = standalone
           ? `${__dirname}/.next/standalone`
@@ -31,16 +33,18 @@ describe('Plugin', function () {
         const serverStartCmd =
           startViaNodeOptions ? ['--require', `${__dirname}/datadog.js`, 'server'] : ['server']
 
-        server = spawn('node', serverStartCmd, {
-          cwd,
-          env: {
-            ...process.env,
-            VERSION: version,
-            PORT: port,
-            DD_TRACE_AGENT_PORT: agent.server.address().port,
-            WITH_CONFIG: withConfig
-          }
-        })
+          server = spawn('node', ['server'], {
+            cwd,
+            env: {
+              ...process.env,
+              VERSION: version,
+              PORT: port,
+              DD_TRACE_AGENT_PORT: agent.server.address().port,
+              WITH_CONFIG: withConfig,
+              DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
+              DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService
+            }
+          })
 
         server.once('error', done)
         server.stdout.once('data', () => done())
@@ -151,6 +155,22 @@ describe('Plugin', function () {
     withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
       build(version)
 
+      withNamingSchema(
+        (done) => {
+          axios
+            .get(`http://localhost:${port}/api/hello/world`)
+            .catch(done)
+        },
+        rawExpectedSchema.server,
+        {
+          hooks: (schemaVersion, defaultToGlobalService) => startServer({
+            withConfig: false,
+            standalone: false,
+            startViaNodeOptions: false
+          }, version, schemaVersion, defaultToGlobalService)
+        }
+      )
+
       describe('without configuration', () => {
         startServer({ withConfig: false, standalone: false, startViaNodeOptions: false }, version)
 
@@ -183,7 +203,7 @@ describe('Plugin', function () {
             ['/api/hello/other', '/api/hello/other']
           ]
           pathTests.forEach(([url, expectedPath]) => {
-            it(`should infer the corrrect resource path (${expectedPath})`, done => {
+            it(`should infer the correct resource path (${expectedPath})`, done => {
               agent
                 .use(traces => {
                   const spans = traces[0]
@@ -479,7 +499,7 @@ describe('Plugin', function () {
       build(version)
       initStandaloneFiles()
 
-      describe(`standalone version with worker without config`, () => {
+      describe('standalone version with worker without config', () => {
         startServer({ withConfig: false, standalone: true, startViaNodeOptions: true }, version)
 
         it('should do automatic instrumentation for pages', done => {
@@ -549,7 +569,7 @@ describe('Plugin', function () {
         })
       })
 
-      describe(`standalone version with worker with config`, () => {
+      describe('standalone version with worker with config', () => {
         startServer({ withConfig: false, standalone: true, startViaNodeOptions: true }, version)
 
         it('should execute the hook and validate the status', done => {

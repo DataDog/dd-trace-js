@@ -8,6 +8,62 @@ const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/c
 describe('Plugin', () => {
   // TODO: use the Request class directly for generic tests
   // TODO: add test files for every service
+  describe('aws-sdk direct import', function () {
+    setup()
+
+    withVersions('aws-sdk', ['aws-sdk'], (version) => {
+      if (semver.intersects(version, '>2.3.0')) {
+        const S3 = require(`../../../versions/aws-sdk@${version}`).get('aws-sdk/clients/s3')
+        const s3 = new S3({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', s3ForcePathStyle: true })
+        require('../../dd-trace')
+        before(() => {
+          return agent.load(['aws-sdk', 'http'], [{}, { server: false }])
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false, wipe: true })
+        })
+
+        it('should instrument service methods with a callback', (done) => {
+          agent.use(traces => {
+            const span = sort(traces[0])[0]
+
+            expect(span).to.include({
+              name: 'aws.request',
+              resource: 'listBuckets',
+              service: 'test-aws-s3'
+            })
+
+            expect(span.meta).to.include({
+              'component': 'aws-sdk',
+              'aws.region': 'us-east-1',
+              'region': 'us-east-1',
+              'aws.service': 'S3',
+              'aws_service': 'S3',
+              'aws.operation': 'listBuckets'
+            })
+          }).then(done, done)
+
+          s3.listBuckets({}, e => e && done(e))
+        })
+
+        it('should instrument service methods using promise()', (done) => {
+          agent.use(traces => {
+            const span = sort(traces[0])[0]
+
+            expect(span).to.include({
+              name: 'aws.request',
+              resource: 'listBuckets',
+              service: 'test-aws-s3'
+            })
+          }).then(done, done)
+
+          s3.listBuckets().promise().catch(done)
+        })
+      }
+    })
+  })
+
   describe('aws-sdk', function () {
     setup()
 

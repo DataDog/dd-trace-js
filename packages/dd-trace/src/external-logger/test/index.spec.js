@@ -15,7 +15,7 @@ describe('External Logger', () => {
   beforeEach(() => {
     errorLog = sinon.spy(tracerLogger, 'error')
 
-    const ExternalLogger = proxyquire('../src', {
+    const { ExternalLogger } = proxyquire('../src', {
       '../../log': {
         error: errorLog
       }
