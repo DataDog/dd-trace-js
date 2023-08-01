@@ -1,6 +1,7 @@
 'use strict'
 
 const { PORT, WITH_CONFIG } = process.env
+const storage = require('./storage')
 
 require('../../..').init({
   service: 'test',
@@ -9,7 +10,9 @@ require('../../..').init({
 }).use('next', WITH_CONFIG ? {
   validateStatus: code => false,
   hooks: {
-    request: (span) => {
+    request: (span, req) => {
+      span.setTag('req', req.constructor.name)
+      span.setTag('ctx', storage.getStore())
       span.setTag('foo', 'bar')
     }
   }
