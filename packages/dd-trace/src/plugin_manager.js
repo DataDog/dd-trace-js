@@ -134,6 +134,7 @@ module.exports = class PluginManager {
       queryStringObfuscation,
       site,
       url,
+      headerTags,
       dbmPropagationMode,
       dsmEnabled,
       clientIpEnabled
@@ -162,6 +163,7 @@ module.exports = class PluginManager {
 
     sharedConfig.site = site
     sharedConfig.url = url
+    sharedConfig.headers = headerTags || []
 
     return sharedConfig
   }

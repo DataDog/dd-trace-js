@@ -10,7 +10,7 @@ class PGPlugin extends DatabasePlugin {
 
   start ({ params = {}, query, processId }) {
     const service = this.serviceName({ pluginConfig: this.config, params })
-    const originalStatement = query.text
+    const originalStatement = this.maybeTruncate(query.text)
 
     this.startSpan(this.operationName(), {
       service,

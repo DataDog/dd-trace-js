@@ -29,6 +29,8 @@ function enable (config) {
       }
     })
   }
+
+  return rc
 }
 
 function enableWafUpdate (appsecConfig) {

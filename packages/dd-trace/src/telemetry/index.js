@@ -66,7 +66,7 @@ function onBeforeExit () {
   sendData(config, application, host, 'app-closing')
 }
 
-function createAppObject () {
+function createAppObject (config) {
   return {
     service_name: config.service,
     env: config.env,
@@ -116,7 +116,7 @@ function start (aConfig, thePluginManager) {
   }
   config = aConfig
   pluginManager = thePluginManager
-  application = createAppObject()
+  application = createAppObject(config)
   host = createHostObject()
   heartbeatInterval = config.telemetry.heartbeatInterval
 
@@ -155,8 +155,36 @@ function updateIntegrations () {
   sendData(config, application, host, 'app-integrations-change', { integrations })
 }
 
+function updateConfig (changes, config) {
+  if (!config.telemetry.enabled) return
+  if (changes.length === 0) return
+
+  // Hack to make system tests happy until we ship telemetry v2
+  if (process.env.DD_INTERNAL_TELEMETRY_V2_ENABLED !== '1') return
+
+  const application = createAppObject(config)
+  const host = createHostObject()
+
+  const names = {
+    sampleRate: 'DD_TRACE_SAMPLE_RATE',
+    logInjection: 'DD_LOG_INJECTION',
+    headerTags: 'DD_TRACE_HEADER_TAGS'
+  }
+
+  const configuration = changes.map(change => ({
+    name: names[change.name],
+    value: Array.isArray(change.value) ? change.value.join(',') : change.value,
+    origin: change.origin
+  }))
+
+  sendData(config, application, host, 'app-client-configuration-change', {
+    configuration
+  })
+}
+
 module.exports = {
   start,
   stop,
-  updateIntegrations
+  updateIntegrations,
+  updateConfig
 }

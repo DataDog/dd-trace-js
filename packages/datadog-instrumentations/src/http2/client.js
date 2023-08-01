@@ -30,6 +30,8 @@ function createWrapEmit (ctx) {
 function createWrapRequest (authority, options) {
   return function wrapRequest (request) {
     return function (headers) {
+      if (!startChannel.hasSubscribers) return request.apply(this, arguments)
+
       const ctx = { headers, authority, options }
 
       return startChannel.runStores(ctx, () => {

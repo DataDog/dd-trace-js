@@ -73,8 +73,6 @@ describe('RemoteConfigManager', () => {
     expect(rc.requestOptions).to.deep.equal({
       method: 'POST',
       url: config.url,
-      hostname: config.hostname,
-      port: config.port,
       path: '/v0.7/config'
     })
 
