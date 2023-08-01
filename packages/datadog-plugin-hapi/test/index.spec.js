@@ -142,6 +142,7 @@ describe('Plugin', () => {
               expect(tracer.scope().active()).to.not.be.null
               done()
             } catch (e) {
+              console.log(12312312, e)
               done(e)
             }
 
@@ -151,7 +152,10 @@ describe('Plugin', () => {
 
         axios
           .post(`http://localhost:${port}/user/123`, {})
-          .catch(done)
+          .catch((err) => {
+            console.error(1313132, err)
+            done(err) // Call done with the error as an argument to signal a test failure.
+          })
       })
 
       it('should run pre-handlers in the request scope', done => {
