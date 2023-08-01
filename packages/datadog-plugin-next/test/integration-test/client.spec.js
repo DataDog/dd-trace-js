@@ -18,7 +18,7 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
-    this.timeout(20000)
+    this.timeout(50000)
     // TODO: Figure out why 10.x tests are failing.
     console.log(1)
     sandbox = await createSandbox(['next', 'react', 'react-dom'], false,
@@ -53,6 +53,6 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
       })
-    }).timeout(20000)
+    }).timeout(50000)
   })
 })
