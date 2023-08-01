@@ -32,7 +32,7 @@ try {
   
   await axios.get(`http://localhost:${port}/`)
 
-  await server.stop()
+  server.stop()
   console.log('Server stopped gracefully.')
 } catch (error) {
   console.error('Error occurred:', error)
