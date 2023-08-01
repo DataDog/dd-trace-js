@@ -17,6 +17,11 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
+    this.timeout(65000)
+    return new Promise((resolve) => setTimeout(resolve, 60000))
+  })
+
+  before(async function () {
     this.timeout(20000)
     sandbox = await createSandbox(['@hapi/hapi', 'axios', 'get-port'], false, [
       `./packages/datadog-plugin-hapi/test/integration-test/*`])
