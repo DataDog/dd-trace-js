@@ -21,7 +21,7 @@ describe('esm', () => {
     this.timeout(50000)
     // TODO: Figure out why 10.x tests are failing.
     console.log(1)
-    sandbox = await createSandbox(['next', 'react', 'react-dom'], false,
+    sandbox = await createSandbox(['next', 'react', 'react-dom', 'axios', 'get-port'], false,
       ['./packages/datadog-plugin-next/test/*'])
     console.log(33223)
     console.log(sandbox)
@@ -55,7 +55,10 @@ describe('esm', () => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
         payloads.push(...payload)
+        assert.strictEqual(checkSpansForServiceName(payloads, 'next.request'), true)
       }, 10000)
+
+      await new Promise((resolve) => setTimeout(resolve, 5000))
 
       assert.strictEqual(checkSpansForServiceName(payloads, 'next.request'), true)
     }).timeout(50000)
