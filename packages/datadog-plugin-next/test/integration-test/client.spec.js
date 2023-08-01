@@ -23,6 +23,8 @@ describe('esm', () => {
     console.log(1)
     sandbox = await createSandbox(['next', 'react', 'react-dom'], false,
       ['./packages/datadog-plugin-next/test/*'])
+    console.log(33223)
+    console.log(sandbox)
   })
 
   after(async () => {
