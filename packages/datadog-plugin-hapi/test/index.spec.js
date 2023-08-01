@@ -50,6 +50,7 @@ describe('Plugin', () => {
           return getPort()
             .then(_port => {
               port = _port
+              console.log('another port log', port)
               server = Hapi.server({
                 address: '127.0.0.1',
                 port
