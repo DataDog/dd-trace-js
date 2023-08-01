@@ -8,6 +8,8 @@ const port = await getPort()
 
 console.log('PORT is ', port)
 
+const handler = (request, h, body) => h.response ? h.response(body) : h(body)
+
 const init = async () => {
   server = Hapi.server({
     address: '127.0.0.1',
