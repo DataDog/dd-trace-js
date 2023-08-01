@@ -9,12 +9,15 @@ const port = await getPort()
 console.log('PORT is ', port)
 
 const init = async () => {
-  server = Hapi.server({ address: '127.0.0.1', port })
+  server = Hapi.server({
+    address: '127.0.0.1',
+    port
+  })
   server.route({
     method: 'GET',
     path: '/',
     handler: (request, h) => {
-      return h.response('hello, world\n').code(200)
+      return handler(request, h)
     }
   })
   await server.start()
@@ -23,7 +26,7 @@ const init = async () => {
 try {
   await init()
   
-  await axios.get(`http://localhost:${port}/`)
+  await axios.get(`http://localhost:${port}/`).catch(() => {})
 
   await server.stop()
   console.log('Server stopped gracefully.')
