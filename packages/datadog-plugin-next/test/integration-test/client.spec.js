@@ -51,7 +51,7 @@ describe('esm', () => {
       const payloads = []
 
       await curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        console.log(headers, payload)
+        console.log(headers, payload, 4)
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
         payloads.push(...payload)
