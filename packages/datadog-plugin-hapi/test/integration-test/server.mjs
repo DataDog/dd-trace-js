@@ -20,7 +20,7 @@ const init = async () => {
 
   server.route({
     method: 'GET',
-    path: '/',
+    path: '/user/{id}',
     handler: (request, h) => {
       return handler(request, h)
     }
@@ -30,9 +30,9 @@ const init = async () => {
 try {
   await init()
   
-  await axios.get(`http://localhost:${port}/`)
+  await axios.get(`http://localhost:${port}/user/5`)
 
-  server.stop()
+  await server.stop()
   console.log('Server stopped gracefully.')
 } catch (error) {
   console.error('Error occurred:', error)
