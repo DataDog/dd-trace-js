@@ -10,7 +10,8 @@ const {
   TEST_PARAMETERS,
   TEST_COMMAND,
   TEST_FRAMEWORK_VERSION,
-  TEST_SOURCE_START
+  TEST_SOURCE_START,
+  TEST_SKIPPED_BY_ITR
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -49,7 +50,8 @@ class JestPlugin extends CiPlugin {
       isSuitesSkipped,
       isSuitesSkippingEnabled,
       isCodeCoverageEnabled,
-      testCodeCoverageLinesTotal
+      testCodeCoverageLinesTotal,
+      numSkippedSuites
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
@@ -57,7 +59,14 @@ class JestPlugin extends CiPlugin {
       addIntelligentTestRunnerSpanTags(
         this.testSessionSpan,
         this.testModuleSpan,
-        { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled, testCodeCoverageLinesTotal }
+        {
+          isSuitesSkipped,
+          isSuitesSkippingEnabled,
+          isCodeCoverageEnabled,
+          testCodeCoverageLinesTotal,
+          skippingType: 'suite',
+          numSkippedSuites
+        }
       )
 
       this.testModuleSpan.finish()
@@ -191,6 +200,24 @@ class JestPlugin extends CiPlugin {
       const span = this.startTestSpan(test)
       span.setTag(TEST_STATUS, 'skip')
       span.finish()
+    })
+
+    this.addSub('ci:jest:test-suite:itr:skipped-suites', ({ skippedSuites, frameworkVersion }) => {
+      const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+      skippedSuites.forEach(({ path: testSuite }) => {
+        const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest')
+
+        this.tracer.startSpan('jest.test_suite', {
+          childOf: this.testModuleSpan,
+          tags: {
+            [COMPONENT]: this.constructor.id,
+            ...this.testEnvironmentMetadata,
+            ...testSuiteMetadata,
+            [TEST_STATUS]: 'skip',
+            [TEST_SKIPPED_BY_ITR]: 'true'
+          }
+        }).finish()
+      })
     })
   }
 
