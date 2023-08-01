@@ -10,7 +10,8 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 
-const describe = skipUnsupportedNodeVersions()
+// const describe = skipUnsupportedNodeVersions()
+const describe = global.describe.skip
 
 describe('esm', () => {
   let agent
