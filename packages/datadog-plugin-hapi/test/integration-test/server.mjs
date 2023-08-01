@@ -30,7 +30,7 @@ const init = async () => {
 try {
   await init()
   
-  await axios.get(`http://localhost:${port}/`).catch(() => {})
+  await axios.get(`http://localhost:${port}/`)
 
   await server.stop()
   console.log('Server stopped gracefully.')
