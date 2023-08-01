@@ -363,20 +363,20 @@ function addIntelligentTestRunnerSpanTags (
     isSuitesSkippingEnabled,
     isCodeCoverageEnabled,
     testCodeCoverageLinesTotal,
-    numSkippedSuites,
+    skippingCount,
     skippingType = 'suite'
   }
 ) {
   testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
   testSessionSpan.setTag(TEST_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
   testSessionSpan.setTag(TEST_ITR_SKIPPING_TYPE, skippingType)
-  testSessionSpan.setTag(TEST_ITR_SKIPPING_COUNT, numSkippedSuites)
+  testSessionSpan.setTag(TEST_ITR_SKIPPING_COUNT, skippingCount)
   testSessionSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
 
   testModuleSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
   testModuleSpan.setTag(TEST_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
   testModuleSpan.setTag(TEST_ITR_SKIPPING_TYPE, skippingType)
-  testModuleSpan.setTag(TEST_ITR_SKIPPING_COUNT, numSkippedSuites)
+  testModuleSpan.setTag(TEST_ITR_SKIPPING_COUNT, skippingCount)
   testModuleSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
 
   // If suites have been skipped we don't want to report the total coverage, as it will be wrong

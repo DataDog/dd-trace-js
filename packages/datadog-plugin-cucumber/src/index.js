@@ -10,9 +10,7 @@ const {
   finishAllTraceSpans,
   getTestSuitePath,
   getTestSuiteCommonTags,
-  addIntelligentTestRunnerSpanTags,
-  TEST_COMMAND,
-  TEST_SKIPPED_BY_ITR
+  addIntelligentTestRunnerSpanTags
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -42,7 +40,7 @@ class CucumberPlugin extends CiPlugin {
           isSuitesSkippingEnabled,
           isCodeCoverageEnabled,
           testCodeCoverageLinesTotal,
-          numSkippedSuites,
+          skippingCount: numSkippedSuites,
           skippingType: 'suite'
         }
       )
@@ -142,24 +140,6 @@ class CucumberPlugin extends CiPlugin {
         const span = storage.getStore().span
         span.setTag('error', err)
       }
-    })
-
-    this.addSub('ci:cucumber:test-suite:itr:skipped-suites', ({ skippedSuites, frameworkVersion }) => {
-      const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
-      skippedSuites.forEach((testSuite) => {
-        const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'cucumber')
-
-        this.tracer.startSpan('cucumber.test_suite', {
-          childOf: this.testModuleSpan,
-          tags: {
-            [COMPONENT]: this.constructor.id,
-            ...this.testEnvironmentMetadata,
-            ...testSuiteMetadata,
-            [TEST_STATUS]: 'skip',
-            [TEST_SKIPPED_BY_ITR]: 'true'
-          }
-        }).finish()
-      })
     })
   }
 

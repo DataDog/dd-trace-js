@@ -39,7 +39,7 @@ const testErrCh = channel('ci:jest:test:err')
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const jestItrConfigurationCh = channel('ci:jest:itr-configuration')
 
-const itrSkippedSuitesCh = channel('ci:jest:test-suite:itr:skipped-suites')
+const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
 let skippableSuites = []
 let isCodeCoverageEnabled = false

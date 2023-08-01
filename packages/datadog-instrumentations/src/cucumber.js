@@ -21,7 +21,7 @@ const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
 
-const itrSkippedSuitesCh = channel('ci:cucumber:test-suite:itr:skipped-suites')
+const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 
 const {
   getCoveredFilenamesFromCoverage,

@@ -30,6 +30,8 @@ const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 const testSuiteCodeCoverageCh = channel('ci:mocha:test-suite:code-coverage')
 
+const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
+
 // TODO: remove when root hooks and fixtures are implemented
 const patched = new WeakSet()
 
@@ -47,6 +49,7 @@ const originalCoverageMap = createCoverageMap()
 let suitesToSkip = []
 let frameworkVersion
 let isSuitesSkipped = false
+let numSkippedSuites = 0
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -98,9 +101,16 @@ function getTestAsyncResource (test) {
 }
 
 function getSuitesToRun (originalSuites) {
-  return originalSuites.filter(suite =>
-    !suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
-  )
+  return originalSuites.reduce((acc, suite) => {
+    const testPath = getTestSuitePath(suite.file, process.cwd())
+    const shouldSkip = suitesToSkip.includes(testPath)
+    if (shouldSkip) {
+      acc.skippedSuites.add(testPath)
+    } else {
+      acc.suitesToRun.push(suite)
+    }
+    return acc
+  }, { suitesToRun: [], skippedSuites: new Set() })
 }
 
 function mochaHook (Runner) {
@@ -137,7 +147,7 @@ function mochaHook (Runner) {
         global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
       }
 
-      testSessionFinishCh.publish({ status, isSuitesSkipped, testCodeCoverageLinesTotal })
+      testSessionFinishCh.publish({ status, isSuitesSkipped, testCodeCoverageLinesTotal, numSkippedSuites })
     }))
 
     this.once('start', testRunAsyncResource.bind(function () {
@@ -359,9 +369,14 @@ addHook({
         suitesToSkip = skippableSuites
       }
       // We remove the suites that we skip through ITR
-      const newSuites = getSuitesToRun(runner.suite.suites)
-      isSuitesSkipped = newSuites.length !== runner.suite.suites.length
-      runner.suite.suites = newSuites
+      const { suitesToRun, skippedSuites } = getSuitesToRun(runner.suite.suites)
+      isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
+      runner.suite.suites = suitesToRun
+      numSkippedSuites = skippedSuites.length
+
+      if (numSkippedSuites) {
+        itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
+      }
 
       global.run()
     }

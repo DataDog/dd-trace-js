@@ -52,7 +52,7 @@ function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
     const relativePath = getTestSuitePath(test.path, rootDir)
     const shouldBeSkipped = skippableSuites.includes(relativePath)
     if (shouldBeSkipped) {
-      acc.skippedSuites.push(test)
+      acc.skippedSuites.push(test.path)
     } else {
       acc.suitesToRun.push(test)
     }

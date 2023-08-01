@@ -65,7 +65,7 @@ class JestPlugin extends CiPlugin {
           isCodeCoverageEnabled,
           testCodeCoverageLinesTotal,
           skippingType: 'suite',
-          numSkippedSuites
+          skippingCount: numSkippedSuites
         }
       )
 
