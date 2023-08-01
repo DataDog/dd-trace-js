@@ -2,17 +2,16 @@
 
 // TODO: either instrument all or none of the render functions
 
-const { AsyncLocalStorage } = require('../../datadog-core')
 const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const { DD_MAJOR } = require('../../../version')
-
-const storage = new AsyncLocalStorage()
 
 const startChannel = channel('apm:next:request:start')
 const finishChannel = channel('apm:next:request:finish')
 const errorChannel = channel('apm:next:request:error')
 const pageLoadChannel = channel('apm:next:page:load')
+
+const requests = new WeakSet()
 
 function wrapHandleRequest (handleRequest) {
   return function (req, res, pathname, query) {
@@ -106,32 +105,30 @@ function getPageFromPath (page, dynamicRoutes = []) {
 }
 
 function instrument (req, res, handler) {
-  const originalRequest = storage.getStore()
+  req = req.originalRequest || req
+  res = res.originalResponse || res
 
-  if (originalRequest) return handler()
+  if (requests.has(req)) return handler()
 
-  const ctx = {
-    req: req.originalRequest || req,
-    res: res.originalResponse || res
-  }
+  requests.add(req)
 
-  return storage.run(ctx.req, () => {
-    return startChannel.runStores(ctx, () => {
-      try {
-        const promise = handler(ctx)
+  const ctx = { req, res }
 
-        // promise should only reject when propagateError is true:
-        // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L547
-        return promise.then(
-          result => finish(ctx, result),
-          err => finish(ctx, null, err)
-        )
-      } catch (e) {
-        // this will probably never happen as the handler caller is an async function:
-        // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L420
-        return finish(ctx, null, e)
-      }
-    })
+  return startChannel.runStores(ctx, () => {
+    try {
+      const promise = handler(ctx)
+
+      // promise should only reject when propagateError is true:
+      // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L547
+      return promise.then(
+        result => finish(ctx, result),
+        err => finish(ctx, null, err)
+      )
+    } catch (e) {
+      // this will probably never happen as the handler caller is an async function:
+      // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L420
+      return finish(ctx, null, e)
+    }
   })
 }
 

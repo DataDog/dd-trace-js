@@ -1,7 +1,7 @@
 'use strict'
 
-const AsyncLocalStorage = require('./src/storage')
+const LocalStorage = require('./src/storage')
 
-const storage = new AsyncLocalStorage()
+const storage = new LocalStorage()
 
-module.exports = { storage, AsyncLocalStorage }
+module.exports = { storage }
