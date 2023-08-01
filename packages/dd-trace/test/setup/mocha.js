@@ -19,6 +19,7 @@ global.withNamingSchema = withNamingSchema
 global.withPeerService = withPeerService
 global.testAgentServiceName = null
 global.schemaVersionName = null
+global.tracePromises = []
 
 const packageVersionFailures = Object.create({})
 
@@ -77,7 +78,6 @@ function withNamingSchema (
         })
 
         beforeEach(async () => {
-          await new Promise(resolve => setTimeout(resolve, 30))
           global.testAgentServiceName = expected[versionName].serviceName
           global.schemaVersionName = versionName
         })
@@ -126,7 +126,6 @@ function withNamingSchema (
       })
 
       beforeEach(async () => {
-        await new Promise(resolve => setTimeout(resolve, 30))
         global.testAgentServiceName = typeof expected['v1'] === 'function' ? expected['v1']() : expected['v1']
         global.schemaVersionName = 'v0'
       })
