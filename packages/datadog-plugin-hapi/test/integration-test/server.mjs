@@ -6,6 +6,8 @@ import axios from 'axios'
 let server
 const port = await getPort()
 
+console.log('PORT is ', port)
+
 const init = async () => {
   server = Hapi.server({ port, host: 'localhost' })
   server.route({

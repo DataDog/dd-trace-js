@@ -132,6 +132,7 @@ describe('Plugin', () => {
       })
 
       it('should run the request handler in the request scope with a payload', done => {
+        console.log('port ISSSS ', port)
         server.route({
           method: 'POST',
           path: '/user/{id}',
