@@ -53,7 +53,7 @@ describe('esm', () => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
-      })
+      }, 10000)
     }).timeout(50000)
   })
 })
