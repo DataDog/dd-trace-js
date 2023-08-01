@@ -15,14 +15,16 @@ const init = async () => {
     address: '127.0.0.1',
     port
   })
+
+  await server.start()
+
   server.route({
     method: 'GET',
     path: '/',
     handler: (request, h) => {
       return handler(request, h)
     }
-  })
-  await server.start()
+  }) 
 }
 
 try {
