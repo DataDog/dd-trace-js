@@ -1,8 +1,13 @@
 import 'dd-trace/init.js'
 import Hapi from '@hapi/hapi'
+import getPort from 'get-port'
+import axios from 'axios'
+
+let server
+const port = await getPort()
 
 const init = async () => {
-  const server = Hapi.server({ port: 0, host: 'localhost' })
+  server = Hapi.server({ port, host: 'localhost' })
   server.route({
     method: 'GET',
     path: '/',
@@ -11,7 +16,15 @@ const init = async () => {
     }
   })
   await server.start()
-  process.send({ port: server.info.port })
 }
 
-init()
+try {
+  await init()
+  
+  await axios.get(`http://localhost:${port}/`)
+
+  await server.stop()
+  console.log('Server stopped gracefully.')
+} catch (error) {
+  console.error('Error occurred:', error)
+}

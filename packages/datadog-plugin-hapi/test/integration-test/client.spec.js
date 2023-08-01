@@ -3,15 +3,13 @@
 const {
   FakeAgent,
   createSandbox,
-  curlAndAssertMessage,
   checkSpansForServiceName,
   skipUnsupportedNodeVersions,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 
-// const describe = skipUnsupportedNodeVersions()
-const describe = global.describe.skip
+const describe = skipUnsupportedNodeVersions()
 
 describe('esm', () => {
   let agent
@@ -20,7 +18,7 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['@hapi/hapi'], false, [`./integration-tests/plugin-helpers.mjs`,
+    sandbox = await createSandbox(['@hapi/hapi', 'axios', 'get-port'], false, [
       `./packages/datadog-plugin-hapi/test/integration-test/*`])
   })
 
@@ -39,13 +37,15 @@ describe('esm', () => {
 
   context('hapi', () => {
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-
-      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+      const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'hapi.request'), true)
-      })
+      }, undefined)
+
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined)
+
+      await res
     }).timeout(20000)
   })
 })
