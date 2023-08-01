@@ -53,10 +53,10 @@ function addEnvironmentVariablesToHeaders (headers) {
       // check for plugin level service name configuration
       const pluginConfig = tracer._pluginManager._configsByName[pluginName]
       if (pluginConfig && pluginConfig.service) {
-          let pluginService = pluginConfig.service
-          if (typeof pluginConfig.service === 'function') {
-            pluginService = pluginService()
-          }
+        let pluginService = pluginConfig.service
+        if (typeof pluginConfig.service === 'function') {
+          pluginService = pluginService()
+        }
         ddEnvVars.set(`DD_${pluginName.toUpperCase()}_SERVICE`, pluginService)
       }
     }
