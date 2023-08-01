@@ -1,6 +1,8 @@
 'use strict'
 
 module.exports = {
+  HARCODED_SECRET: 'hardcoded.secret',
+
   HTTP_INCOMING_BODY: 'server.request.body',
   HTTP_INCOMING_QUERY: 'server.request.query',
   HTTP_INCOMING_HEADERS: 'server.request.headers.no_cookies',

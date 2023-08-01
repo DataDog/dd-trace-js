@@ -7,7 +7,9 @@ const { isPrivateModule, isNotLibraryFile } = require('./filter')
 const { csiMethods } = require('./csi-methods')
 const { getName } = require('../telemetry/verbosity')
 const { getRewriteFunction } = require('./rewriter-telemetry')
+const dc = require('../../../../../diagnostics_channel')
 
+const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 let rewriter
 let getPrepareStackTrace
 
@@ -50,7 +52,15 @@ function getRewriter (telemetryVerbosity) {
           getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, getOriginalPathAndLineFromSourceMap)
       }
 
-      rewriter = new Rewriter({ csiMethods, telemetryVerbosity: getName(telemetryVerbosity), chainSourceMap })
+      // TODO: remove this
+      const hardcodedSecret = process.env.DD_HARDCODED_SECRET_ENABLED !== '0'
+
+      rewriter = new Rewriter({
+        csiMethods,
+        telemetryVerbosity: getName(telemetryVerbosity),
+        chainSourceMap,
+        hardcodedSecret
+      })
     } catch (e) {
       iastLog.error('Unable to initialize TaintTracking Rewriter')
         .errorAndPublish(e)
@@ -80,7 +90,12 @@ function getCompileMethodFn (compileMethod) {
     try {
       if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
         const rewritten = rewriteFn(content, filename)
-        if (rewritten && rewritten.content) {
+
+        if (rewritten?.hardcodedSecretResult && hardcodedSecretCh.hasSubscribers) {
+          hardcodedSecretCh.publish(rewritten.hardcodedSecretResult)
+        }
+
+        if (rewritten?.content) {
           return compileMethod.apply(this, [rewritten.content, filename])
         }
       }
