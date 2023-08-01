@@ -3,6 +3,12 @@ import Hapi from '@hapi/hapi';
 import getPort from 'get-port';
 import http from 'http'; // Import the http module
 
+
+if (Hapi.Server.prototype.connection) {
+  console.log('yessidsadasd', 1321321)
+} else {
+  console.log('asdasdasdasd', 12321312)
+}
 let server;
 const port = await getPort();
 
