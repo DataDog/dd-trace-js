@@ -6,7 +6,7 @@ const axios = require('axios')
 const getPort = require('get-port')
 const { execSync, spawn } = require('child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { writeSync, writeFileSync, readFileSync, openSync, close, existsSync } = require('fs')
+const { writeFileSync, readFileSync, existsSync } = require('fs')
 const { satisfies } = require('semver')
 const { DD_MAJOR } = require('../../../version')
 const path = require('path')
@@ -17,50 +17,75 @@ describe('Plugin', function () {
   let port
 
   describe('next', () => {
-    const startServer = ({ withConfig, standalone, startViaNodeOptions },
-      version, schemaVersion = 'v0', defaultToGlobalService = false) => {
-      before(async () => {
-        port = await getPort()
+    const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
-        return agent.load('next')
-      })
+    const initStandaloneFiles = () => {
+      // for problems with Next.js, replace main entrypoint in an ill-copied package.json
+      // https://github.com/vercel/next.js/issues/40735#issuecomment-1314151000
+      const EMPTY_FILE_TEMPLATE = `"use strict";
+        Object.defineProperty(exports, "__esModule", {
+            value: true
+        });
+        exports.default = void 0;
+        `
+      const nextJSPackageDir = path.resolve(__dirname, '.next/standalone/node_modules/next')
+      const nextJSPackageJson = JSON.parse(readFileSync(path.join(nextJSPackageDir, 'package.json'), 'utf-8'))
+      const mainEntryFile = path.join(nextJSPackageDir, nextJSPackageJson.main)
+      if (!existsSync(mainEntryFile)) writeFileSync(mainEntryFile, EMPTY_FILE_TEMPLATE)
 
-      before(function (done) {
-        const cwd = standalone
-          ? `${__dirname}/.next/standalone`
-          : __dirname
-
-        const serverStartCmd =
-          startViaNodeOptions ? ['--require', `${__dirname}/datadog.js`, 'server'] : ['server']
-
-        server = spawn('node', serverStartCmd, {
-          cwd,
-          env: {
-            ...process.env,
-            VERSION: version,
-            PORT: port,
-            DD_TRACE_AGENT_PORT: agent.server.address().port,
-            WITH_CONFIG: withConfig,
-            DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
-            DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService
-          }
-        })
-
-        server.once('error', done)
-        server.stdout.once('data', () => done())
-        server.stderr.on('data', chunk => process.stderr.write(chunk))
-        server.stdout.on('data', chunk => process.stdout.write(chunk))
-      })
-
-      after(async function () {
-        this.timeout(5000)
-        server.kill()
-        await axios.get(`http://localhost:${port}/api/hello/world`).catch(() => {})
-        await agent.close({ ritmReset: false })
-      })
+      // copy public directory for static files
+      const publicOrigin = `${__dirname}/public`
+      const publicDestination = `${__dirname}/.next/standalone/public`
+      execSync(`mkdir ${publicDestination}`)
+      execSync(`cp ${publicOrigin}/test.txt ${publicDestination}/test.txt`)
     }
 
-    const build = version => {
+    // TODO: Figure out why 10.x tests are failing.
+    withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
+      const pkg = require(`${__dirname}/../../../versions/next@${version}/node_modules/next/package.json`)
+
+      const startServer = ({ withConfig, standalone }, schemaVersion = 'v0', defaultToGlobalService = false) => {
+        before(async () => {
+          port = await getPort()
+
+          return agent.load('next')
+        })
+
+        before(function (done) {
+          const cwd = standalone
+            ? `${__dirname}/.next/standalone`
+            : __dirname
+
+          const serverStartCmd =
+            standalone ? ['--require', `${__dirname}/datadog.js`, 'server'] : ['server']
+
+          server = spawn('node', serverStartCmd, {
+            cwd,
+            env: {
+              ...process.env,
+              VERSION: version,
+              PORT: port,
+              DD_TRACE_AGENT_PORT: agent.server.address().port,
+              WITH_CONFIG: withConfig,
+              DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
+              DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService
+            }
+          })
+
+          server.once('error', done)
+          server.stdout.once('data', () => done())
+          server.stderr.on('data', chunk => process.stderr.write(chunk))
+          server.stdout.on('data', chunk => process.stdout.write(chunk))
+        })
+
+        after(async function () {
+          this.timeout(5000)
+          server.kill()
+          await axios.get(`http://localhost:${port}/api/hello/world`).catch(() => {})
+          await agent.close({ ritmReset: false })
+        })
+      }
+
       before(async function () {
         this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
 
@@ -89,6 +114,9 @@ describe('Plugin', function () {
           },
           stdio: ['pipe', 'ignore', 'pipe']
         })
+
+        // init standalone files
+        if (satisfiesStandalone(realVersion)) initStandaloneFiles()
       })
 
       after(function () {
@@ -102,58 +130,6 @@ describe('Plugin', function () {
         const paths = files.map(file => `${__dirname}/${file}`)
         execSync(`rm -rf ${paths.join(' ')}`)
       })
-    }
-
-    const initStandaloneFiles = () => {
-      before(() => {
-        // insert tracer init into auto-generated server.js
-        const fileName = `${__dirname}/.next/standalone/server.js`
-        const fileData = readFileSync(fileName)
-        const file = openSync(fileName, 'w+')
-        const lineInjection = `
-          const tracer = require('../../../../..').init({
-            service: 'test',
-            flushInterval: 0,
-            plugins: false
-          }).use('next', process.env.WITH_CONFIG ? {
-            validateStatus: code => false,
-            hooks: {
-              request: (span) => {
-                span.setTag('foo', 'bar')
-              }
-            }
-          } : true);
-        `
-        const tracerImportStmt = Buffer.from(lineInjection)
-
-        writeSync(file, tracerImportStmt, 0, tracerImportStmt.length, 0)
-        writeSync(file, fileData, 0, fileData.length, tracerImportStmt.length)
-        close(file, err => { if (err) { throw err } })
-
-        // for problems with Next.js, replace main entrypoint in an ill-copied package.json
-        // https://github.com/vercel/next.js/issues/40735#issuecomment-1314151000
-        const EMPTY_FILE_TEMPLATE = `"use strict";
-        Object.defineProperty(exports, "__esModule", {
-            value: true
-        });
-        exports.default = void 0;
-        `
-        const nextJSPackageDir = path.resolve(__dirname, '.next/standalone/node_modules/next')
-        const nextJSPackageJson = JSON.parse(readFileSync(path.join(nextJSPackageDir, 'package.json'), 'utf-8'))
-        const mainEntryFile = path.join(nextJSPackageDir, nextJSPackageJson.main)
-        if (!existsSync(mainEntryFile)) writeFileSync(mainEntryFile, EMPTY_FILE_TEMPLATE)
-
-        // copy public directory for static files
-        const publicOrigin = `${__dirname}/public`
-        const publicDestination = `${__dirname}/.next/standalone/public`
-        execSync(`mkdir ${publicDestination}`)
-        execSync(`cp ${publicOrigin}/test.txt ${publicDestination}/test.txt`)
-      })
-    }
-
-    // TODO: Figure out why 10.x tests are failing.
-    withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
-      build(version)
 
       withNamingSchema(
         (done) => {
@@ -165,14 +141,13 @@ describe('Plugin', function () {
         {
           hooks: (schemaVersion, defaultToGlobalService) => startServer({
             withConfig: false,
-            standalone: false,
-            startViaNodeOptions: false
-          }, version, schemaVersion, defaultToGlobalService)
+            standalone: false
+          }, schemaVersion, defaultToGlobalService)
         }
       )
 
       describe('without configuration', () => {
-        startServer({ withConfig: false, standalone: false, startViaNodeOptions: false }, version)
+        startServer({ withConfig: false, standalone: false })
 
         describe('for api routes', () => {
           it('should do automatic instrumentation', done => {
@@ -274,7 +249,27 @@ describe('Plugin', function () {
         })
 
         describe('for pages', () => {
-          const pkg = require(`${__dirname}/../../../versions/next@${version}/node_modules/next/package.json`)
+          it('should do automatic instrumentation', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[0]).to.have.property('name', 'next.request')
+                expect(spans[0]).to.have.property('service', 'test')
+                expect(spans[0]).to.have.property('type', 'web')
+                expect(spans[0]).to.have.property('resource', 'GET /hello/[name]')
+                expect(spans[0].meta).to.have.property('span.kind', 'server')
+                expect(spans[0].meta).to.have.property('http.method', 'GET')
+                expect(spans[0].meta).to.have.property('http.status_code', '200')
+                expect(spans[0].meta).to.have.property('component', 'next')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/hello/world`)
+              .catch(done)
+          })
 
           const pathTests = [
             ['/hello', '/hello'],
@@ -362,7 +357,7 @@ describe('Plugin', function () {
       })
 
       describe('with configuration', () => {
-        startServer({ withConfig: true, standalone: false, startViaNodeOptions: false }, version)
+        startServer({ withConfig: true, standalone: false })
 
         it('should execute the hook and validate the status', done => {
           agent
@@ -388,214 +383,43 @@ describe('Plugin', function () {
             .catch(done)
         })
       })
-    })
 
-    // Next.js run in standalone
-    // Since it uses `next-server`, only testing automatic instrumentation
-    withVersions('next', 'next', '>=12.0.0 <13.4.0', version => {
-      build(version)
-      initStandaloneFiles()
+      if (satisfiesStandalone(pkg.version)) {
+        describe('with standalone', () => {
+          startServer({ withConfig: false, standalone: true })
 
-      describe('standalone without configuration', () => {
-        startServer({ withConfig: false, standalone: true, startViaNodeOptions: false }, version)
+          // testing basic instrumentation between api, pages, static files since standalone still uses `next-server`
+          const standaloneTests = [
+            ['api', '/api/hello/world', 'GET /api/hello/[name]'],
+            ['pages', '/hello/world', 'GET /hello/[name]'],
+            ['static files', '/test.txt', 'GET']
+          ]
 
-        it('should do automatic instrumentation for pages', done => {
-          agent
-            .use(traces => {
-              const spans = traces[0]
+          standaloneTests.forEach(([test, resource, expectedResource]) => {
+            it(`should do automatic instrumentation for ${test}`, done => {
+              agent
+                .use(traces => {
+                  const spans = traces[0]
 
-              expect(spans[0]).to.have.property('name', 'next.request')
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-              expect(spans[0].meta).to.have.property('component', 'next')
+                  expect(spans[0]).to.have.property('name', 'next.request')
+                  expect(spans[0]).to.have.property('service', 'test')
+                  expect(spans[0]).to.have.property('type', 'web')
+                  expect(spans[0]).to.have.property('resource', expectedResource)
+                  expect(spans[0].meta).to.have.property('span.kind', 'server')
+                  expect(spans[0].meta).to.have.property('http.method', 'GET')
+                  expect(spans[0].meta).to.have.property('http.status_code', '200')
+                  expect(spans[0].meta).to.have.property('component', 'next')
+                })
+                .then(done)
+                .catch(done)
+
+              axios
+                .get(`http://localhost:${port}${resource}`)
+                .catch(done)
             })
-            .then(done)
-            .catch(done)
-
-          axios
-            .get(`http://localhost:${port}/api/hello/world`)
-            .catch(done)
+          })
         })
-
-        it('should do automatic instrumentation for pages', done => {
-          agent
-            .use(traces => {
-              const spans = traces[0]
-
-              expect(spans[0]).to.have.property('name', 'next.request')
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET /hello/[name]')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-              expect(spans[0].meta).to.have.property('component', 'next')
-            })
-            .then(done)
-            .catch(done)
-
-          axios
-            .get(`http://localhost:${port}/hello/world`)
-            .catch(done)
-        })
-
-        it('should do automatic instrumentation for static files', done => {
-          agent
-            .use(traces => {
-              const spans = traces[0]
-
-              expect(spans[0]).to.have.property('name', 'next.request')
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-              expect(spans[0].meta).to.have.property('component', 'next')
-            })
-            .then(done)
-            .catch(done)
-
-          axios
-            .get(`http://localhost:${port}/test.txt`)
-            .catch(done)
-        })
-      })
-
-      describe('standalone with configuration', () => {
-        startServer({ withConfig: true, standalone: true, startViaNodeOptions: false }, version)
-
-        it('should execute the hook and validate the status', done => {
-          agent
-            .use(traces => {
-              const spans = traces[0]
-
-              expect(spans[0]).to.have.property('name', 'next.request')
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
-              expect(spans[0]).to.have.property('error', 1)
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-              expect(spans[0].meta).to.have.property('foo', 'bar')
-              expect(spans[0].meta).to.have.property('component', 'next')
-            })
-            .then(done)
-            .catch(done)
-
-          axios
-            .get(`http://localhost:${port}/api/hello/world`)
-            .catch(done)
-        })
-      })
-    })
-
-    withVersions('next', 'next', '>=13.4.0', version => {
-      build(version)
-      initStandaloneFiles()
-
-      describe('standalone version with worker without config', () => {
-        startServer({ withConfig: false, standalone: true, startViaNodeOptions: true }, version)
-
-        it('should do automatic instrumentation for pages', done => {
-          agent
-            .use(traces => {
-              const spans = traces[0]
-
-              expect(spans[0]).to.have.property('name', 'next.request')
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-              expect(spans[0].meta).to.have.property('component', 'next')
-            })
-            .then(done)
-            .catch(done)
-
-          axios
-            .get(`http://localhost:${port}/api/hello/world`)
-            .catch(done)
-        })
-
-        it('should do automatic instrumentation for pages', done => {
-          agent
-            .use(traces => {
-              const spans = traces[0]
-
-              expect(spans[0]).to.have.property('name', 'next.request')
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET /hello/[name]')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-              expect(spans[0].meta).to.have.property('component', 'next')
-            })
-            .then(done)
-            .catch(done)
-
-          axios
-            .get(`http://localhost:${port}/hello/world`)
-            .catch(done)
-        })
-
-        it('should do automatic instrumentation for static files', done => {
-          agent
-            .use(traces => {
-              const spans = traces[0]
-
-              expect(spans[0]).to.have.property('name', 'next.request')
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-              expect(spans[0].meta).to.have.property('component', 'next')
-            })
-            .then(done)
-            .catch(done)
-
-          axios
-            .get(`http://localhost:${port}/test.txt`)
-            .catch(done)
-        })
-      })
-
-      describe('standalone version with worker with config', () => {
-        startServer({ withConfig: false, standalone: true, startViaNodeOptions: true }, version)
-
-        it('should execute the hook and validate the status', done => {
-          agent
-            .use(traces => {
-              const spans = traces[0]
-
-              expect(spans[0]).to.have.property('name', 'next.request')
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
-              expect(spans[0]).to.have.property('error', 1)
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-              expect(spans[0].meta).to.have.property('foo', 'bar')
-              expect(spans[0].meta).to.have.property('component', 'next')
-            })
-            .then(done)
-            .catch(done)
-
-          axios
-            .get(`http://localhost:${port}/api/hello/world`)
-            .catch(done)
-        })
-      })
+      }
     })
   })
 })

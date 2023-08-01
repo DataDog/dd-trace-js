@@ -1,19 +1,8 @@
 'use strict'
 
-const { PORT, WITH_CONFIG } = process.env
+const { PORT } = process.env
 
-require('../../..').init({
-  service: 'test',
-  flushInterval: 0,
-  plugins: false
-}).use('next', WITH_CONFIG ? {
-  validateStatus: code => false,
-  hooks: {
-    request: (span) => {
-      span.setTag('foo', 'bar')
-    }
-  }
-} : true)
+require('./datadog')
 
 const { createServer } = require('http')
 const { parse } = require('url')
