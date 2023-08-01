@@ -48,12 +48,16 @@ describe('esm', () => {
       console.log(4)
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'integration-test/server.mjs', agent.port)
 
-      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+      const payloads = []
+
+      await curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         console.log(headers, payload)
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
+        payloads.push(...payload)
       }, 10000)
+
+      assert.strictEqual(checkSpansForServiceName(payloads, 'next.request'), true)
     }).timeout(50000)
   })
 })
