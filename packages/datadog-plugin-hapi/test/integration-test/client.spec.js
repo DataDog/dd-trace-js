@@ -4,6 +4,7 @@ const {
   FakeAgent,
   createSandbox,
   checkSpansForServiceName,
+  curlAndAssertMessage,
   skipUnsupportedNodeVersions,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -18,7 +19,7 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['@hapi/hapi', 'get-port'], false, [
+    sandbox = await createSandbox(['@hapi/hapi'], false, [
       `./packages/datadog-plugin-hapi/test/integration-test/*`])
   })
 
@@ -37,15 +38,13 @@ describe('esm', () => {
 
   context('hapi', () => {
     it('is instrumented', async () => {
-      const res = agent.assertMessageReceived(({ headers, payload }) => {
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+
+      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'hapi.request'), true)
-      }, undefined)
-
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined)
-
-      await res
+      })
     }).timeout(20000)
   })
 })

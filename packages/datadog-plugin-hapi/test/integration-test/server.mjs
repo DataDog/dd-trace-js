@@ -1,81 +1,17 @@
-import 'dd-trace/init.js';
-import Hapi from '@hapi/hapi';
-import getPort from 'get-port';
-import http from 'http'; // Import the http module
-
-
-if (Hapi.Server.prototype.connection) {
-  console.log('yessidsadasd', 1321321)
-} else {
-  console.log('asdasdasdasd', 12321312)
-}
-let server;
-const port = await getPort();
-
-console.log('PORT is ', port);
-
-const handler = (request, h, body) => h.response ? h.response(body) : h(body);
+import 'dd-trace/init.js'
+import Hapi from '@hapi/hapi'
 
 const init = async () => {
-  server = Hapi.server({
-    address: '127.0.0.1',
-    port,
-  });
-
-  await server.start();
-
+  const server = Hapi.server({ port: 0, host: 'localhost' })
   server.route({
     method: 'GET',
-    path: '/user/{id}',
+    path: '/',
     handler: (request, h) => {
-      return handler(request, h);
-    },
-  });
-
-  server.route({
-    method: 'POST',
-    path: '/user/{id}',
-    handler: (request, h) => {
-      return handler(request, h);
-    },
-  });
-};
-
-try {
-  await init();
-
-  // Make the GET request using http
-  const options = {
-    hostname: 'localhost',
-    port,
-    path: '/user/3213',
-    method: 'GET',
-  };
-
-  const data = await new Promise((resolve, reject) => {
-    const req = http.request(options, (res) => {
-      let data = '';
-
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-
-      res.on('end', () => {
-        resolve(data);
-      });
-    });
-
-    req.on('error', (error) => {
-      reject(error);
-    });
-
-    req.end();
-  });
-
-  console.log('Response:', data);
-
-  server.stop();
-  console.log('Server stopped gracefully.');
-} catch (error) {
-  console.error('Error occurred:', error);
+      return h.response('hello, world\n').code(200)
+    }
+  })
+  await server.start()
+  process.send({ port: server.info.port })
 }
+
+init()

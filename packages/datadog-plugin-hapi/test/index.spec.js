@@ -205,7 +205,7 @@ describe('Plugin', () => {
       })
 
       if (semver.intersects(version, '>=11')) {
-        it('should run extension events in the request scope', async () => {
+        it('should run extension events in the request scope', done => {
           server.route({
             method: 'POST',
             path: '/user/{id}',
@@ -216,44 +216,46 @@ describe('Plugin', () => {
 
           server.ext({
             type: 'onPostAuth',
-            method: async (request, h) => {
-              await tracer.scope().activate(null, reply(request, h))
+            method: (request, h) => {
+              return tracer.scope().activate(null, reply(request, h))
             }
           })
 
           server.ext({
             type: 'onPreHandler',
-            method: async (request, h) => {
+            method: (request, h) => {
               expect(tracer.scope().active()).to.not.be.null
+              done()
+
               return reply(request, h)
             }
           })
 
-          try {
-            await axios.post(`http://localhost:${port}/user/123`, {})
-          } catch (err) {
-            console.error(1313132, err)
-          }
+          axios
+            .post(`http://localhost:${port}/user/123`, {})
+            .catch(done)
         })
       }
 
-      it('should run request extensions in the request scope', done => {
+      it('should run request extensions in the request scope', async () => {
         server.route({
           method: 'GET',
           path: '/user/{id}',
           handler
         })
 
-        server.ext('onRequest', (request, h) => {
+        server.ext('onRequest', async (request, h) => {
           expect(tracer.scope().active()).to.not.be.null
-          done()
-
           return reply(request, h)
         })
 
-        axios
-          .get(`http://localhost:${port}/user/123`)
-          .catch(done)
+        try {
+          await axios.get(`http://localhost:${port}/user/123`)
+          console.log('Test success')
+        } catch (err) {
+          console.error(err)
+          throw err
+        }
       })
 
       it('should extract its parent span from the headers', done => {
