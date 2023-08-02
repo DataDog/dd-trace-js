@@ -69,9 +69,10 @@ function addEnvironmentVariablesToHeaders (headers) {
 
     // add the serialized DD environment variables to the header
     // to send with trace to the final agent destination
-    headers['X-Datadog-Trace-Env-Variables'] = serializedEnvVars
-
-    resolve(headers)
+    if (headers) {
+      headers['X-Datadog-Trace-Env-Variables'] = serializedEnvVars
+      resolve(headers)
+    }
   })
 }
 

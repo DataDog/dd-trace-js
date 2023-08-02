@@ -93,7 +93,8 @@ function withNamingSchema (
             spanRemoveIntegrationFromService: false,
             service: fullConfig.service // Hack: only way to retrieve the test agent configuration
           })
-          global.testAgentServiceName = serviceName
+          var testAgentServiceName = expected[versionName].serviceName
+          global.testAgentServiceName = testAgentServiceName === 'function' ? testAgentServiceName() : testAgentServiceName
           global.schemaVersionName = versionName
         })
 
@@ -135,8 +136,9 @@ function withNamingSchema (
           service: fullConfig.service,
           spanRemoveIntegrationFromService: true
         })
-        global.testAgentServiceName = serviceName
-        global.schemaVersionName = 'v1'
+        testAgentServiceName = expected['v1'].serviceName
+        global.testAgentServiceName = testAgentServiceName === 'function' ? testAgentServiceName() : testAgentServiceName
+        global.schemaVersionName = 'v0'
       })
       after(() => {
         Nomenclature.configure(fullConfig)
