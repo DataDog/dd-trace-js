@@ -156,7 +156,7 @@ describe('Plugin', () => {
               done(e)
             }
 
-            return handler(request, h)
+            return handler(request, h).catch(done)
           }
         })
 
