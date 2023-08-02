@@ -50,12 +50,18 @@ for (const pkg of INSTRUMENTED) {
 module.exports.name = 'datadog-esbuild'
 
 module.exports.setup = function (build) {
+  const externalModules = new Set(build.initialOptions.external || [])
   build.onResolve({ filter: /.*/ }, args => {
+    if (externalModules.has(args.path)) {
+      if (DEBUG) console.log(`EXTERNAL: ${args.path}`)
+      return
+    }
+
     let fullPathToModule
     try {
       fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
     } catch (err) {
-      console.warn(`Unable to find "${args.path}". Is the package dead code?`)
+      console.warn(`MISSING: Unable to find "${args.path}". Is the package dead code?`)
       return
     }
     const extracted = extractPackageAndModulePath(fullPathToModule)
@@ -74,7 +80,7 @@ module.exports.setup = function (build) {
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
           if (!internal) {
-            console.warn(`Unable to find "${extracted.pkg}/package.json". Is the package dead code?`)
+            console.warn(`MISSING: Unable to find "${extracted.pkg}/package.json". Is the package dead code?`)
           }
           return
         } else {
@@ -84,7 +90,7 @@ module.exports.setup = function (build) {
 
       const packageJson = require(pathToPackageJson)
 
-      if (DEBUG) console.log(`RESOLVE ${packageName}@${packageJson.version}`)
+      if (DEBUG) console.log(`RESOLVE: ${packageName}@${packageJson.version}`)
 
       // https://esbuild.github.io/plugins/#on-resolve-arguments
       return {
@@ -114,7 +120,7 @@ module.exports.setup = function (build) {
   build.onLoad({ filter: /.*/, namespace: NAMESPACE }, args => {
     const data = args.pluginData
 
-    if (DEBUG) console.log(`LOAD ${data.pkg}@${data.version}, pkg "${data.path}"`)
+    if (DEBUG) console.log(`LOAD: ${data.pkg}@${data.version}, pkg "${data.path}"`)
 
     const path = data.raw !== data.pkg
       ? `${data.pkg}/${data.path}`
