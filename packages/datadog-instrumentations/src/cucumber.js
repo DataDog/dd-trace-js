@@ -217,13 +217,13 @@ addHook({
   file: 'lib/runtime/test_case_runner.js'
 }, testCaseHook)
 
-function getPicklesToRun (runtime, suitesToSkip) {
+function getFilteredPickles (runtime, suitesToSkip) {
   return runtime.pickleIds.reduce((acc, pickleId) => {
     const test = runtime.eventDataCollector.getPickle(pickleId)
     const testSuitePath = getTestSuitePath(test.uri, process.cwd())
     const isSkipped = suitesToSkip.includes(testSuitePath)
     if (isSkipped) {
-      acc.skippableSuites.add(testSuitePath)
+      acc.skippedSuites.add(testSuitePath)
     } else {
       acc.picklesToRun.push(pickleId)
     }
@@ -273,12 +273,13 @@ addHook({
     const { err, skippableSuites } = await skippableSuitesPromise
     let numSkippedSuites = 0
     let isSuitesSkipped = false
+    let skippedSuites = []
 
     if (!err) {
-      const { picklesToRun, skippedSuites } = getPicklesToRun(this, skippableSuites)
-      isSuitesSkipped = picklesToRun.length !== this.pickleIds.length
-      this.pickleIds = picklesToRun
-      itrSkippedSuitesCh.publish({ skippedSuites: Array.from(skippedSuites), frameworkVersion })
+      const filteredPickles = getFilteredPickles(this, skippableSuites)
+      isSuitesSkipped = filteredPickles.picklesToRun.length !== this.pickleIds.length
+      this.pickleIds = filteredPickles.picklesToRun
+      skippedSuites = filteredPickles.skippedSuites
       numSkippedSuites = skippedSuites.size
     }
 
@@ -290,6 +291,11 @@ addHook({
     asyncResource.runInAsyncScope(() => {
       sessionStartCh.publish({ command, frameworkVersion })
     })
+
+    if (!err && numSkippedSuites) {
+      itrSkippedSuitesCh.publish({ skippedSuites: Array.from(skippedSuites), frameworkVersion })
+    }
+
     const success = await start.apply(this, arguments)
 
     let testCodeCoverageLinesTotal

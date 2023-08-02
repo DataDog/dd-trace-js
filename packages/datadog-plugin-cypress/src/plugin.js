@@ -262,7 +262,7 @@ module.exports = (on, config) => {
       const isSkippedByItr = testsToSkip.find(test =>
         cypressTestName === test.name && spec.relative === test.suite
       )
-      const skippedTestSpan = getTestSpan(title.join(' '), spec.relative)
+      const skippedTestSpan = getTestSpan(cypressTestName, spec.relative)
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
       if (isSkippedByItr) {
         skippedTestSpan.setTag(TEST_SKIPPED_BY_ITR, 'true')
