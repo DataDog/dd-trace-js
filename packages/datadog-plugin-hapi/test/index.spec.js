@@ -5,11 +5,18 @@ const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { assert } = require('chai')
 
 const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
   ? '<17 || >18'
   : ''
+
+function startServer (version, server) {
+  if (semver.intersects(version, '>=17')) {
+    return server.start()
+  } else {
+    return server.start()
+  }
+}
 
 describe('Plugin', () => {
   let tracer
@@ -51,12 +58,11 @@ describe('Plugin', () => {
           return getPort()
             .then(_port => {
               port = _port
-              console.log('another port log', port)
               server = Hapi.server({
                 address: '127.0.0.1',
                 port
               })
-              return server.start()
+              // return server.start()
             })
         })
 
@@ -75,9 +81,10 @@ describe('Plugin', () => {
               } else {
                 server = new Hapi.Server('127.0.0.1', port)
               }
-
-              server.start(done)
+              done()
+              // server.start(done)
             })
+            .catch(done)
         })
 
         afterEach(done => {
@@ -95,6 +102,8 @@ describe('Plugin', () => {
           path: '/user/{id}',
           handler
         })
+
+        startServer(version, server, done).catch(done)
 
         agent
           .use(traces => {
@@ -128,35 +137,34 @@ describe('Plugin', () => {
           }
         })
 
+        startServer(version, server, done).catch(done).catch(done)
+
         axios
           .get(`http://localhost:${port}/user/123`)
           .catch(done)
       })
 
-      it('should run the request handler in the request scope with a payload', async () => {
-        console.log('port ISSSS ', port)
-        console.log('port ISSSS ', port)
+      it('should run the request handler in the request scope with a payload', done => {
         server.route({
           method: 'POST',
           path: '/user/{id}',
-          handler: async (request, h) => {
+          handler: (request, h) => {
             try {
               expect(tracer.scope().active()).to.not.be.null
+              done()
             } catch (e) {
-              console.log(12312312, e)
-              throw e
+              done(e)
             }
 
-            return h.continue()
+            return handler(request, h)
           }
         })
 
-        try {
-          await axios.post(`http://localhost:${port}/user/123`, {})
-          console.log('Test success')
-        } catch (err) {
-          console.error(1313132, err)
-        }
+        startServer(version, server, done).catch(done)
+
+        axios
+          .post(`http://localhost:${port}/user/123`, {})
+          .catch(done)
       })
 
       it('should run pre-handlers in the request scope', done => {
@@ -175,12 +183,14 @@ describe('Plugin', () => {
           }
         })
 
+        startServer(version, server, done).catch(done)
+
         axios
           .get(`http://localhost:${port}/user/123`)
           .catch(done)
       })
 
-      it('should run extension methods in the request scope', async () => {
+      it('should run extension methods in the request scope', done => {
         server.route({
           method: 'POST',
           path: '/user/{id}',
@@ -189,27 +199,26 @@ describe('Plugin', () => {
           }
         })
 
-        server.ext('onPostAuth', async (request, h) => {
+        server.ext('onPostAuth', (request, h) => {
           return tracer.scope().activate(null, reply(request, h))
         })
 
-        server.ext('onPreHandler', async (request, h) => {
-          // expect(tracer.scope().active()).to.not.be.null
-          assert.isNotNull(tracer.scope().active())
-          // No need for the "done()" callback here as we are using async/await.
+        server.ext('onPreHandler', (request, h) => {
+          expect(tracer.scope().active()).to.not.be.null
+          done()
+
           return reply(request, h)
         })
 
-        try {
-          await axios.post(`http://localhost:${port}/user/123`, {})
-          console.log('Test success')
-        } catch (err) {
-          console.error(err)
-        }
+        startServer(version, server, done).catch(done)
+
+        axios
+          .post(`http://localhost:${port}/user/123`, {})
+          .catch(done)
       })
 
       if (semver.intersects(version, '>=11')) {
-        it('should run extension events in the request scope', async () => {
+        it('should run extension events in the request scope', done => {
           server.route({
             method: 'POST',
             path: '/user/{id}',
@@ -220,48 +229,48 @@ describe('Plugin', () => {
 
           server.ext({
             type: 'onPostAuth',
-            method: async (request, h) => {
+            method: (request, h) => {
               return tracer.scope().activate(null, reply(request, h))
             }
           })
 
           server.ext({
             type: 'onPreHandler',
-            method: async (request, h) => {
-              // expect(tracer.scope().active()).to.not.be.null
-              assert.isNotNull(tracer.scope().active())
-              // No need for the "done()" callback here as we are using async/await.
+            method: (request, h) => {
+              expect(tracer.scope().active()).to.not.be.null
+              done()
+
               return reply(request, h)
             }
           })
 
-          try {
-            await axios.post(`http://localhost:${port}/user/123`, {})
-            console.log('Test success')
-          } catch (err) {
-            console.error(err)
-          }
+          startServer(version, server, done).catch(done)
+
+          axios
+            .post(`http://localhost:${port}/user/123`, {})
+            .catch(done)
         })
       }
 
-      it('should run request extensions in the request scope', async () => {
+      it('should run request extensions in the request scope', done => {
         server.route({
           method: 'GET',
           path: '/user/{id}',
           handler
         })
 
-        server.ext('onRequest', async (request, h) => {
+        server.ext('onRequest', (request, h) => {
           expect(tracer.scope().active()).to.not.be.null
+          done()
+
           return reply(request, h)
         })
 
-        try {
-          await axios.get(`http://localhost:${port}/user/123`)
-          console.log('Test success')
-        } catch (err) {
-          console.error(err)
-        }
+        startServer(version, server, done).catch(done)
+
+        axios
+          .get(`http://localhost:${port}/user/123`)
+          .catch(done)
       })
 
       it('should extract its parent span from the headers', done => {
@@ -270,6 +279,8 @@ describe('Plugin', () => {
           path: '/user/{id}',
           handler
         })
+
+        startServer(version, server, done).catch(done)
 
         agent
           .use(traces => {
@@ -291,6 +302,7 @@ describe('Plugin', () => {
       })
 
       it('should instrument the default route handler', done => {
+        startServer(version, server, done).catch(done)
         agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('name', 'hapi.request')
@@ -317,6 +329,8 @@ describe('Plugin', () => {
             }
           }
         })
+
+        startServer(version, server, done).catch(done)
 
         agent
           .use(traces => {
@@ -349,6 +363,8 @@ describe('Plugin', () => {
             }
           }
         })
+
+        startServer(version, server, done).catch(done)
 
         agent
           .use(traces => {
