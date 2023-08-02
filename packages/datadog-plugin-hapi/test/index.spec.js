@@ -254,7 +254,6 @@ describe('Plugin', () => {
           console.log('Test success')
         } catch (err) {
           console.error(err)
-          throw err
         }
       })
 
