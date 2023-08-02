@@ -8,6 +8,7 @@ const getPort = require('get-port')
 const express = require('express')
 const path = require('path')
 const ritm = require('../../src/ritm')
+const sinon = require('sinon')
 const { storage } = require('../../../datadog-core')
 
 const handlers = new Set()
@@ -85,23 +86,22 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
     delete req.headers['content-type']
     delete req.headers['content-length']
 
-    addEnvironmentVariablesToHeaders(req.headers).then(async (reqHeaders) => {
-      await new Promise((resolve, reject) => {
-        const testAgentReq = http.request(
-          `${testAgentUrl}/v0.4/traces`, {
-            method: 'PUT',
-            headers: {
-              ...reqHeaders,
-              'X-Datadog-Agent-Proxy-Disabled': 'True',
-              'Content-Type': 'application/json'
-            }
-          })
+    await new Promise((resolve, reject) => {
+      const testAgentReq = http.request(
+        `${testAgentUrl}/v0.4/traces`, {
+          method: 'PUT',
+          headers: {
+            ...req.headers,
+            'X-Datadog-Agent-Proxy-Disabled': 'True',
+            'Content-Type': 'application/json'
+          }
+        })
         testAgentReq.on('response', resolve)
         testAgentReq.on('error', reject)
         testAgentReq.write(JSON.stringify(req.body))
         testAgentReq.end()
-      })
-    })
+      }
+    )
   }
 
   handlers.forEach(({ handler, spanResourceMatch }) => {
@@ -138,6 +138,7 @@ const DEFAULT_AVAILABLE_ENDPOINTS = ['/evp_proxy/v2']
 let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
 
 module.exports = {
+  addEnvironmentVariablesToHeaders: addEnvironmentVariablesToHeaders,
   // Load the plugin on the tracer with an optional config and start a mock agent.
   async load (pluginName, config, tracerConfig = {}) {
     tracer = require('../..')
@@ -151,12 +152,12 @@ module.exports = {
       next()
     })
 
-    let useTestAgent
+    global.useTestAgent = false
 
     try {
-      useTestAgent = await checkAgentStatus()
+      global.useTestAgent = await checkAgentStatus()
     } catch (error) {
-      useTestAgent = false
+      global.useTestAgent = false
     }
 
     agent.get('/info', (req, res) => {
@@ -170,7 +171,7 @@ module.exports = {
     })
 
     agent.put('/v0.4/traces', async (req, res) => {
-      await handleTraceRequest(req, res, useTestAgent)
+      await handleTraceRequest(req, res, global.useTestAgent)
     })
 
     // CI Visibility Agentless intake

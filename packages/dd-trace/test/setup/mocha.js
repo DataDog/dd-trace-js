@@ -12,6 +12,7 @@ const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { schemaDefinitions } = require('../../src/service-naming/schemas')
+const writer  = require('../../src/exporters/agent/writer.js')
 
 global.withVersions = withVersions
 global.withExports = withExports
@@ -19,7 +20,24 @@ global.withNamingSchema = withNamingSchema
 global.withPeerService = withPeerService
 global.testAgentServiceName = null
 global.schemaVersionName = null
-global.tracePromises = []
+
+// create stub on the writer class method
+global.mockedSend = writer.prototype._sendPayload
+var sendPayloadMock = function(data, count, done) {
+  if (global.useTestAgent) {
+    // Update the headers with additional values
+    agent.addEnvironmentVariablesToHeaders(global.stub.lastCall.thisValue._headers).then(async (reqHeaders) => {
+      global.stub.lastCall.thisValue._headers = reqHeaders
+      // call original method
+      global.mockedSend.call(global.stub.lastCall.thisValue, data, count, done)
+    }) 
+  } else {
+    global.mockedSend.call(global.stub.lastCall.thisValue, data, count, done)
+  }
+}
+global.stub = sinon.stub(writer.prototype, '_sendPayload').callsFake((data, count, any) => {
+  sendPayloadMock(data, count, any)
+})
 
 const packageVersionFailures = Object.create({})
 
@@ -75,18 +93,12 @@ function withNamingSchema (
             spanRemoveIntegrationFromService: false,
             service: fullConfig.service // Hack: only way to retrieve the test agent configuration
           })
-        })
-
-        beforeEach(async () => {
-          global.testAgentServiceName = expected[versionName].serviceName
+          global.testAgentServiceName = serviceName
           global.schemaVersionName = versionName
         })
 
         after(() => {
           Nomenclature.configure(fullConfig)
-        })
-
-        afterEach(() => {
           global.testAgentServiceName = null
           global.schemaVersionName = null
         })
@@ -123,19 +135,13 @@ function withNamingSchema (
           service: fullConfig.service,
           spanRemoveIntegrationFromService: true
         })
-      })
-
-      beforeEach(async () => {
-        global.testAgentServiceName = typeof expected['v1'] === 'function' ? expected['v1']() : expected['v1']
-        global.schemaVersionName = 'v0'
+        global.testAgentServiceName = serviceName
+        global.schemaVersionName = 'v1'
       })
       after(() => {
         Nomenclature.configure(fullConfig)
-      })
-
-      afterEach(() => {
         global.testAgentServiceName = null
-        global.schemaVersionName = 'v0'
+        global.schemaVersionName = null
       })
       hooks('v0', true)
 
@@ -172,7 +178,7 @@ function withPeerService (tracer, spanGenerationFn, service, serviceSource, opts
     })
     afterEach(() => {
       computePeerServiceSpy.restore()
-      global.schemaVersionName = 'v0'
+      global.schemaVersionName = null
     })
 
     it('should compute peer service', done => {
