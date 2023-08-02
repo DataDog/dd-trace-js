@@ -10,14 +10,6 @@ const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
   ? '<17 || >18'
   : ''
 
-function startServer (version, server) {
-  if (semver.intersects(version, '>=17')) {
-    return server.start()
-  } else {
-    return server.start()
-  }
-}
-
 describe('Plugin', () => {
   let tracer
   let Hapi
@@ -62,7 +54,7 @@ describe('Plugin', () => {
                 address: '127.0.0.1',
                 port
               })
-              // return server.start()
+              return server.start()
             })
         })
 
@@ -81,10 +73,9 @@ describe('Plugin', () => {
               } else {
                 server = new Hapi.Server('127.0.0.1', port)
               }
-              done()
-              // server.start(done)
+
+              server.start(done)
             })
-            .catch(done)
         })
 
         afterEach(done => {
@@ -102,8 +93,6 @@ describe('Plugin', () => {
           path: '/user/{id}',
           handler
         })
-
-        startServer(version, server, done).catch(done)
 
         agent
           .use(traces => {
@@ -137,8 +126,6 @@ describe('Plugin', () => {
           }
         })
 
-        startServer(version, server, done).catch(done).catch(done)
-
         axios
           .get(`http://localhost:${port}/user/123`)
           .catch(done)
@@ -156,11 +143,9 @@ describe('Plugin', () => {
               done(e)
             }
 
-            return handler(request, h).catch(done)
+            return handler(request, h)
           }
         })
-
-        startServer(version, server, done).catch(done)
 
         axios
           .post(`http://localhost:${port}/user/123`, {})
@@ -182,8 +167,6 @@ describe('Plugin', () => {
             handler
           }
         })
-
-        startServer(version, server, done).catch(done)
 
         axios
           .get(`http://localhost:${port}/user/123`)
@@ -209,8 +192,6 @@ describe('Plugin', () => {
 
           return reply(request, h)
         })
-
-        startServer(version, server, done).catch(done)
 
         axios
           .post(`http://localhost:${port}/user/123`, {})
@@ -244,8 +225,6 @@ describe('Plugin', () => {
             }
           })
 
-          startServer(version, server, done).catch(done)
-
           axios
             .post(`http://localhost:${port}/user/123`, {})
             .catch(done)
@@ -266,8 +245,6 @@ describe('Plugin', () => {
           return reply(request, h)
         })
 
-        startServer(version, server, done).catch(done)
-
         axios
           .get(`http://localhost:${port}/user/123`)
           .catch(done)
@@ -279,8 +256,6 @@ describe('Plugin', () => {
           path: '/user/{id}',
           handler
         })
-
-        startServer(version, server, done).catch(done)
 
         agent
           .use(traces => {
@@ -302,7 +277,6 @@ describe('Plugin', () => {
       })
 
       it('should instrument the default route handler', done => {
-        startServer(version, server, done).catch(done)
         agent
           .use(traces => {
             expect(traces[0][0]).to.have.property('name', 'hapi.request')
@@ -329,8 +303,6 @@ describe('Plugin', () => {
             }
           }
         })
-
-        startServer(version, server, done).catch(done)
 
         agent
           .use(traces => {
@@ -363,8 +335,6 @@ describe('Plugin', () => {
             }
           }
         })
-
-        startServer(version, server, done).catch(done)
 
         agent
           .use(traces => {
