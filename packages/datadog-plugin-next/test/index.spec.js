@@ -6,10 +6,9 @@ const axios = require('axios')
 const getPort = require('get-port')
 const { execSync, spawn } = require('child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { writeFileSync, readFileSync, existsSync } = require('fs')
+const { writeFileSync } = require('fs')
 const { satisfies } = require('semver')
 const { DD_MAJOR } = require('../../../version')
-const path = require('path')
 const { rawExpectedSchema } = require('./naming')
 
 describe('Plugin', function () {
@@ -18,27 +17,6 @@ describe('Plugin', function () {
 
   describe('next', () => {
     const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
-
-    const initStandaloneFiles = () => {
-      // for problems with Next.js, replace main entrypoint in an ill-copied package.json
-      // https://github.com/vercel/next.js/issues/40735#issuecomment-1314151000
-      const EMPTY_FILE_TEMPLATE = `"use strict";
-        Object.defineProperty(exports, "__esModule", {
-            value: true
-        });
-        exports.default = void 0;
-        `
-      const nextJSPackageDir = path.resolve(__dirname, '.next/standalone/node_modules/next')
-      const nextJSPackageJson = JSON.parse(readFileSync(path.join(nextJSPackageDir, 'package.json'), 'utf-8'))
-      const mainEntryFile = path.join(nextJSPackageDir, nextJSPackageJson.main)
-      if (!existsSync(mainEntryFile)) writeFileSync(mainEntryFile, EMPTY_FILE_TEMPLATE)
-
-      // copy public directory for static files
-      const publicOrigin = `${__dirname}/public`
-      const publicDestination = `${__dirname}/.next/standalone/public`
-      execSync(`mkdir ${publicDestination}`)
-      execSync(`cp ${publicOrigin}/test.txt ${publicDestination}/test.txt`)
-    }
 
     // TODO: Figure out why 10.x tests are failing.
     withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
@@ -115,8 +93,13 @@ describe('Plugin', function () {
           stdio: ['pipe', 'ignore', 'pipe']
         })
 
-        // init standalone files
-        if (satisfiesStandalone(realVersion)) initStandaloneFiles()
+        if (satisfiesStandalone(realVersion)) {
+          // copy public and static files to the `standalone` folder
+          const publicOrigin = `${__dirname}/public`
+          const publicDestination = `${__dirname}/.next/standalone/public`
+          execSync(`mkdir ${publicDestination}`)
+          execSync(`cp ${publicOrigin}/test.txt ${publicDestination}/test.txt`)
+        }
       })
 
       after(function () {
