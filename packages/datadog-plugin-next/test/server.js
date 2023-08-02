@@ -9,7 +9,8 @@ require('../../..').init({
 }).use('next', WITH_CONFIG ? {
   validateStatus: code => false,
   hooks: {
-    request: (span) => {
+    request: (span, req) => {
+      span.setTag('req', req.constructor.name)
       span.setTag('foo', 'bar')
     }
   }

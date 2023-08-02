@@ -2,7 +2,7 @@
 
 // TODO: either instrument all or none of the render functions
 
-const { channel, addHook, AsyncResource } = require('./helpers/instrument')
+const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const { DD_MAJOR } = require('../../../version')
 
@@ -11,7 +11,7 @@ const finishChannel = channel('apm:next:request:finish')
 const errorChannel = channel('apm:next:request:error')
 const pageLoadChannel = channel('apm:next:page:load')
 
-const requestResources = new WeakMap()
+const requests = new WeakSet()
 
 function wrapHandleRequest (handleRequest) {
   return function (req, res, pathname, query) {
@@ -105,38 +105,40 @@ function getPageFromPath (page, dynamicRoutes = []) {
 }
 
 function instrument (req, res, handler) {
-  if (requestResources.has(req)) return handler()
+  req = req.originalRequest || req
+  res = res.originalResponse || res
 
-  const requestResource = new AsyncResource('bound-anonymous-fn')
+  if (requests.has(req)) return handler()
 
-  requestResources.set(req, requestResource)
+  requests.add(req)
 
-  return requestResource.runInAsyncScope(() => {
-    startChannel.publish({ req, res })
+  const ctx = { req, res }
 
+  return startChannel.runStores(ctx, () => {
     try {
-      const promise = handler()
+      const promise = handler(ctx)
 
       // promise should only reject when propagateError is true:
       // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L547
       return promise.then(
-        result => finish(req, res, result),
-        err => finish(req, res, null, err)
+        result => finish(ctx, result),
+        err => finish(ctx, null, err)
       )
     } catch (e) {
       // this will probably never happen as the handler caller is an async function:
       // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L420
-      return finish(req, res, null, e)
+      return finish(ctx, null, e)
     }
   })
 }
 
-function finish (req, res, result, err) {
+function finish (ctx, result, err) {
   if (err) {
-    errorChannel.publish(err)
+    ctx.error = err
+    errorChannel.publish(ctx)
   }
 
-  finishChannel.publish({ req, res })
+  finishChannel.publish(ctx)
 
   if (err) {
     throw err
