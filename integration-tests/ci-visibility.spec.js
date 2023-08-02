@@ -973,15 +973,17 @@ testFrameworks.forEach(({
           assert.notProperty(eventsRequest.headers, 'dd-api-key')
           assert.propertyVal(eventsRequest.headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
-          const skippedTest = eventsRequest.payload.events.find(event =>
-            event.content.resource === 'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests'
-          )
-          assert.notExists(skippedTest)
+          const skippedSuite = eventsRequest.payload.events.find(event =>
+            event.content.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
+          ).content
+          assert.propertyVal(skippedSuite.meta, TEST_STATUS, 'skip')
+          assert.propertyVal(skippedSuite.meta, TEST_SKIPPED_BY_ITR, 'true')
+
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
           const numSuites = eventTypes.reduce(
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
-          assert.equal(numSuites, 1)
+          assert.equal(numSuites, 2)
           done()
         }).catch(done)
 
