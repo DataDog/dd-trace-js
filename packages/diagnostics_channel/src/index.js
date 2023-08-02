@@ -9,7 +9,6 @@ const [major, minor] = process.versions.node.split('.')
 const channels = new WeakSet()
 
 // Our own DC with a limited subset of functionality stable across Node versions.
-// TODO: Move the rest of the polyfill here.
 // TODO: Switch to using global subscribe/unsubscribe/hasSubscribers.
 const dc = { channel }
 

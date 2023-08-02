@@ -1,7 +1,6 @@
 'use strict'
 
-// eslint-disable-next-line n/no-restricted-require
-const dc = require('diagnostics_channel')
+const dc = require('../../../diagnostics_channel')
 
 const {
   filename,
@@ -13,19 +12,6 @@ const instrumentations = require('./instrumentations')
 const log = require('../../../dd-trace/src/log')
 
 const CHANNEL = 'dd-trace:bundler:load'
-
-if (!dc.subscribe) {
-  dc.subscribe = (channel, cb) => {
-    dc.channel(channel).subscribe(cb)
-  }
-}
-if (!dc.unsubscribe) {
-  dc.unsubscribe = (channel, cb) => {
-    if (dc.channel(channel).hasSubscribers) {
-      dc.channel(channel).unsubscribe(cb)
-    }
-  }
-}
 
 dc.subscribe(CHANNEL, (payload) => {
   try {

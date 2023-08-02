@@ -12,6 +12,7 @@
 !README.md
 !index.d.ts
 !index.js
+!diagnostics_channel.js
 !esbuild.js
 !init.js
 !loader-hook.mjs
