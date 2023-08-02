@@ -140,7 +140,7 @@ class SensitiveHandler {
         const _length = nextSensitive.end - nextSensitive.start
         this.writeRedactedValuePart(valueParts, _length)
 
-        start = i + (nextSensitive.end - nextSensitive.start)
+        start = i + _length
         i = start - 1
         nextSensitive = sensitive.shift()
       }
@@ -200,15 +200,18 @@ class SensitiveHandler {
       } else {
         let _value = partValue
         const dedupedSourceRedactionContexts = []
+
         sourceRedactionContext.forEach(_sourceRedactionContext => {
           const isPresentInDeduped = dedupedSourceRedactionContexts.some(_dedupedSourceRedactionContext =>
             _dedupedSourceRedactionContext.start === _sourceRedactionContext.start &&
             _dedupedSourceRedactionContext.end === _sourceRedactionContext.end
           )
+
           if (!isPresentInDeduped) {
             dedupedSourceRedactionContexts.push(_sourceRedactionContext)
           }
         })
+
         let offset = 0
         dedupedSourceRedactionContexts.forEach((_sourceRedactionContext) => {
           if (_sourceRedactionContext.start > 0) {
@@ -216,9 +219,11 @@ class SensitiveHandler {
               source: sourceIndex,
               value: _value.substring(0, _sourceRedactionContext.start - offset)
             })
+
             _value = _value.substring(_sourceRedactionContext.start - offset)
             offset = _sourceRedactionContext.start
           }
+
           const sensitive =
             _value.substring(_sourceRedactionContext.start - offset, _sourceRedactionContext.end - offset)
           const indexOfPartValueInPattern = source.value.indexOf(sensitive)
@@ -232,6 +237,7 @@ class SensitiveHandler {
             source: sourceIndex,
             pattern
           })
+
           _value = _value.substring(pattern.length)
           offset += pattern.length
         })
