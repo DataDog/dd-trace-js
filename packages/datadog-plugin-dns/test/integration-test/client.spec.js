@@ -42,9 +42,9 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'dns.lookup'), true)
         assert.strictEqual(payload[0][0].resource, 'fakedomain.faketld')
-      }, undefined)
+      })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       await res
     }).timeout(20000)

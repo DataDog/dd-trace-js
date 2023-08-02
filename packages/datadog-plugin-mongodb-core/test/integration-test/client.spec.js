@@ -41,9 +41,9 @@ describe('esm', () => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'mongodb.query'), true)
-      }, undefined)
+      })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       await res
     }).timeout(20000)
@@ -54,9 +54,9 @@ describe('esm', () => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'mongodb.query'), true)
-      }, undefined)
+      })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server2.mjs', agent.port, undefined)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server2.mjs', agent.port)
 
       await res
     }).timeout(20000)

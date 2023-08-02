@@ -43,9 +43,9 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'tcp.connect'), true)
         const metaContainsNet = payload.some((span) => span.some((nestedSpan) => nestedSpan.meta.component === 'net'))
         assert.strictEqual(metaContainsNet, true)
-      }, undefined)
+      })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       await res
     }).timeout(20000)
