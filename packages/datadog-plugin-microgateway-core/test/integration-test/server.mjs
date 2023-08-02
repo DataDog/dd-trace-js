@@ -3,19 +3,15 @@ import os from 'os'
 import Gateway from 'microgateway-core'
 import getPort from 'get-port'
 
-const startServer = async () => {
-  const port = await getPort()
-  const gateway = Gateway({
-    edgemicro: {
-      port: port,
-      logging: { level: 'info', dir: os.tmpdir() }
-    },
-    proxies: []
-  })
+const port = await getPort()
+const gateway = Gateway({
+  edgemicro: {
+    port: port,
+    logging: { level: 'info', dir: os.tmpdir() }
+  },
+  proxies: []
+})
 
-  gateway.start(() => {
-    process.send({ port })
-  })
-}
-
-startServer()
+gateway.start(() => {
+  process.send({ port })
+})

@@ -15,6 +15,8 @@ const schema = new graphql.GraphQLSchema({
   })
 })
 
-const source = `query MyQuery { hello(name: "world") }`
-const variableValues = { who: 'world' }
-await graphql.graphql({ schema, source, variableValues })
+await graphql.graphql({ 
+  schema, 
+  source: `query MyQuery { hello(name: "world") }`, 
+  variableValues: { who: 'world' }
+})

@@ -11,12 +11,6 @@ function defaultErrorHandler (req, res) {
   }
 }
 
-function createServer (router, errorHandler = defaultErrorHandler) {
-  return http.createServer((req, res) => {
-    return router(req, res, errorHandler(req, res))
-  })
-}
-
 app.use((req, res, next) => {
   return next('route')
 })
@@ -25,7 +19,9 @@ app.get('/foo', (req, res) => {
   res.end()
 })
 
-const server = createServer(app)
+const server = http.createServer((req, res) => {
+  return app(req, res, defaultErrorHandler(req, res))
+})
 
 server.listen(0, () => {
   const port = server.address().port

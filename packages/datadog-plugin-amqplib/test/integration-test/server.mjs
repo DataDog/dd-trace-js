@@ -1,16 +1,9 @@
 import 'dd-trace/init.js'
 import amqplib from 'amqplib'
 
-const amqpServerEndpoint = 'amqp://localhost:5672'
-let channel
-let connection
+const connection = await amqplib.connect('amqp://localhost:5672')
+const channel = await connection.createChannel()
 
-async function connectToAMQP (endpoint) {
-  connection = await amqplib.connect(endpoint)
-  channel = await connection.createChannel()
-}
-
-await connectToAMQP(amqpServerEndpoint)
 await channel.assertQueue('test', {})
 
 if (channel) {
