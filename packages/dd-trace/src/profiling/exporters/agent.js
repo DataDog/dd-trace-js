@@ -8,7 +8,7 @@ const { request: httpsRequest } = require('https')
 const docker = require('../../exporters/common/docker')
 const FormData = require('../../exporters/common/form-data')
 const { storage } = require('../../../../datadog-core')
-const version = require('../../../../../package.json').version
+const { DD_FULL, NODE_FULL } = require('../../../../../version')
 
 const containerId = docker.id()
 
@@ -68,14 +68,14 @@ class AgentExporter {
       ['recording-end', end.toISOString()],
       ['language', 'javascript'],
       ['runtime', 'nodejs'],
-      ['runtime_version', process.version],
-      ['profiler_version', version],
+      ['runtime_version', `v${NODE_FULL}`],
+      ['profiler_version', DD_FULL],
       ['format', 'pprof'],
 
       ['tags[]', 'language:javascript'],
       ['tags[]', 'runtime:nodejs'],
-      ['tags[]', `runtime_version:${process.version}`],
-      ['tags[]', `profiler_version:${version}`],
+      ['tags[]', `runtime_version:v${NODE_FULL}`],
+      ['tags[]', `profiler_version:${DD_FULL}`],
       ['tags[]', 'format:pprof'],
       ...Object.entries(tags).map(([key, value]) => ['tags[]', `${key}:${value}`])
     ]

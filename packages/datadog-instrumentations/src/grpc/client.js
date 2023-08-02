@@ -4,7 +4,7 @@ const types = require('./types')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
-const nodeMajor = parseInt(process.versions.node.split('.')[0])
+const { NODE_MAJOR } = require('../../../../version')
 
 const patched = new WeakSet()
 const instances = new WeakMap()
@@ -236,7 +236,7 @@ function patch (grpc) {
   return grpc
 }
 
-if (nodeMajor <= 14) {
+if (NODE_MAJOR <= 14) {
   addHook({ name: 'grpc', versions: ['>=1.24.3'] }, patch)
 
   addHook({ name: 'grpc', versions: ['>=1.24.3'], file: 'src/client.js' }, client => {

@@ -5,8 +5,9 @@ const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { NODE_MAJOR } = require('../../../version')
 
-const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
+const versionRange = NODE_MAJOR > 14
   ? '<17 || >18'
   : ''
 

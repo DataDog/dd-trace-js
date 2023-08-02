@@ -4,7 +4,7 @@ const request = require('../common/request')
 const { startupLog } = require('../../startup-log')
 const metrics = require('../../metrics')
 const log = require('../../log')
-const tracerVersion = require('../../../../../package.json').version
+const { DD_FULL, NODE_FULL } = require('../../../../../version')
 const BaseWriter = require('../common/writer')
 
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
@@ -82,7 +82,7 @@ function makeRequest (version, data, count, url, headers, lookup, needsStartupLo
     headers: {
       ...headers,
       'Content-Type': 'application/msgpack',
-      'Datadog-Meta-Tracer-Version': tracerVersion,
+      'Datadog-Meta-Tracer-Version': DD_FULL,
       'X-Datadog-Trace-Count': String(count)
     },
     lookup,
@@ -90,7 +90,7 @@ function makeRequest (version, data, count, url, headers, lookup, needsStartupLo
   }
 
   setHeader(options.headers, 'Datadog-Meta-Lang', 'nodejs')
-  setHeader(options.headers, 'Datadog-Meta-Lang-Version', process.version)
+  setHeader(options.headers, 'Datadog-Meta-Lang-Version', `v${NODE_FULL}`)
   setHeader(options.headers, 'Datadog-Meta-Lang-Interpreter', process.jsEngine || 'v8')
 
   log.debug(() => `Request to the agent: ${JSON.stringify(options)}`)

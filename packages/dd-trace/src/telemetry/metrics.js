@@ -1,6 +1,6 @@
 'use strict'
 
-const { version } = require('../../../../package.json')
+const { DD_FULL, NODE_FULL } = require('../../../../version')
 
 const { sendData } = require('./send-data')
 
@@ -36,9 +36,9 @@ class Metric {
     this.tags = tagArray(tags)
     if (common) {
       this.tags.push('lib_language:nodejs')
-      this.tags.push(`version:${process.version}`)
+      this.tags.push(`version:${NODE_FULL}`)
     } else {
-      this.tags.push(`lib_version:${version}`)
+      this.tags.push(`lib_version:${DD_FULL}`)
     }
     this.common = common
 

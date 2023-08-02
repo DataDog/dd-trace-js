@@ -5,7 +5,8 @@ const {
   channel
 } = require('diagnostics_channel') // eslint-disable-line n/no-restricted-require
 
-const [major, minor] = process.versions.node.split('.')
+const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
+
 const channels = new WeakSet()
 
 // Our own DC with a limited subset of functionality stable across Node versions.
@@ -15,7 +16,7 @@ const dc = { channel }
 
 // Prevent going to 0 subscribers to avoid bug in Node.
 // See https://github.com/nodejs/node/pull/47520
-if (major === '19' && minor === '9') {
+if (NODE_MAJOR === '19' && NODE_MINOR === '9') {
   dc.channel = function () {
     const ch = channel.apply(this, arguments)
 

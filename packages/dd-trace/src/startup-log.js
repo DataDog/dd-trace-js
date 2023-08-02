@@ -4,7 +4,7 @@ const { info, warn } = require('./log/writer')
 
 const os = require('os')
 const { inspect } = require('util')
-const tracerVersion = require('../../../package.json').version
+const { DD_FULL, NODE_FULL } = require('../../../version')
 
 let config
 let pluginManager
@@ -51,9 +51,9 @@ function startupLog ({ agentError } = {}) {
   out.os_name = os.type()
   out.os_version = os.release()
   out.architecture = os.arch()
-  out.version = tracerVersion
+  out.version = DD_FULL
   out.lang = 'nodejs'
-  out.lang_version = process.versions.node
+  out.lang_version = NODE_FULL
   out.env = config.env
   out.enabled = config.enabled
   out.service = config.service

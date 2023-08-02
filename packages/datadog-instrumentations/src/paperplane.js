@@ -7,9 +7,9 @@ const logChannel = channel('apm:paperplane:log')
 const handleChannel = channel('apm:paperplane:request:handle')
 const routeChannel = channel('apm:paperplane:request:route')
 
-const nodeMajor = Number(process.versions.node.split('.')[0])
+const { NODE_MAJOR } = require('../../../version')
 const name = 'paperplane'
-const versions = nodeMajor <= 12 ? ['>=2.3.2'] : nodeMajor <= 14 ? ['>=3.1.1'] : []
+const versions = NODE_MAJOR <= 12 ? ['>=2.3.2'] : NODE_MAJOR <= 14 ? ['>=3.1.1'] : []
 
 const wrapRoute = handler => req => {
   const { original, route } = req
@@ -67,7 +67,7 @@ addHook({ name, versions, file: 'lib/routes.js' }, exports => {
   return exports
 })
 
-if (nodeMajor <= 12) {
+if (NODE_MAJOR <= 12) {
   addHook({ name, versions: ['2.3.0 - 2.3.1'] }, paperplane => {
     shimmer.wrap(paperplane, 'mount', wrapMount)
     shimmer.wrap(paperplane, 'routes', wrapRoutes)

@@ -1,5 +1,7 @@
 const os = require('os')
 
+const { NODE_FULL } = require('../../../../../version')
+
 const OS_PLATFORM = 'os.platform'
 const OS_VERSION = 'os.version'
 const OS_ARCHITECTURE = 'os.architecture'
@@ -8,7 +10,7 @@ const RUNTIME_VERSION = 'runtime.version'
 
 function getRuntimeAndOSMetadata () {
   return {
-    [RUNTIME_VERSION]: process.version,
+    [RUNTIME_VERSION]: `v${NODE_FULL}`,
     [OS_ARCHITECTURE]: process.arch,
     [OS_PLATFORM]: process.platform,
     [RUNTIME_NAME]: 'node',

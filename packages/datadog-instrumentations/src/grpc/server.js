@@ -4,7 +4,7 @@ const types = require('./types')
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
-const nodeMajor = parseInt(process.versions.node.split('.')[0])
+const { NODE_MAJOR } = require('../../../../version')
 
 const startChannel = channel('apm:grpc:server:request:start')
 const asyncStartChannel = channel('apm:grpc:server:request:asyncStart')
@@ -150,7 +150,7 @@ function isEmitter (obj) {
   return typeof obj.emit === 'function' && typeof obj.once === 'function'
 }
 
-if (nodeMajor <= 14) {
+if (NODE_MAJOR <= 14) {
   addHook({ name: 'grpc', versions: ['>=1.24.3'], file: 'src/server.js' }, server => {
     shimmer.wrap(server.Server.prototype, 'register', wrapRegister)
 

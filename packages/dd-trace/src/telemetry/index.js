@@ -1,10 +1,11 @@
 'use strict'
 
-const tracerVersion = require('../../../../package.json').version
 const dc = require('../../../diagnostics_channel')
 const os = require('os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
+
+const { DD_FULL, NODE_FULL } = require('../../../../version')
 
 const { manager: metricsManager } = require('./metrics')
 
@@ -71,9 +72,9 @@ function createAppObject (config) {
     service_name: config.service,
     env: config.env,
     service_version: config.version,
-    tracer_version: tracerVersion,
+    tracer_version: DD_FULL,
     language_name: 'nodejs',
-    language_version: process.versions.node
+    language_version: NODE_FULL
   }
 }
 
