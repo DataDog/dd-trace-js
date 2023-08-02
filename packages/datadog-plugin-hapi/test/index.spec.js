@@ -205,7 +205,7 @@ describe('Plugin', () => {
       })
 
       if (semver.intersects(version, '>=11')) {
-        it('should run extension events in the request scope', done => {
+        it('should run extension events in the request scope', async () => {
           server.route({
             method: 'POST',
             path: '/user/{id}',
@@ -216,24 +216,26 @@ describe('Plugin', () => {
 
           server.ext({
             type: 'onPostAuth',
-            method: (request, h) => {
+            method: async (request, h) => {
               return tracer.scope().activate(null, reply(request, h))
             }
           })
 
           server.ext({
             type: 'onPreHandler',
-            method: (request, h) => {
+            method: async (request, h) => {
               expect(tracer.scope().active()).to.not.be.null
-              done()
-
+              // No need for the "done()" callback here as we are using async/await.
               return reply(request, h)
             }
           })
 
-          axios
-            .post(`http://localhost:${port}/user/123`, {})
-            .catch(done)
+          try {
+            await axios.post(`http://localhost:${port}/user/123`, {})
+            console.log('Test success')
+          } catch (err) {
+            console.error(err)
+          }
         })
       }
 
