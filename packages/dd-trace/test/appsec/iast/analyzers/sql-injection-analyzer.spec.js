@@ -29,12 +29,14 @@ describe('sql-injection-analyzer', () => {
   sqlInjectionAnalyzer.configure(true)
 
   it('should subscribe to mysql, mysql2 and pg start query channel', () => {
-    expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(5)
+    expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(7)
     expect(sqlInjectionAnalyzer._subscriptions[0]._channel.name).to.equals('apm:mysql:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[1]._channel.name).to.equals('apm:mysql2:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[2]._channel.name).to.equals('apm:pg:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[3]._channel.name).to.equals('datadog:sequelize:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[4]._channel.name).to.equals('datadog:sequelize:query:finish')
+    expect(sqlInjectionAnalyzer._subscriptions[5]._channel.name).to.equals('datadog:pg:pool:query:start')
+    expect(sqlInjectionAnalyzer._subscriptions[6]._channel.name).to.equals('datadog:pg:pool:query:finish')
   })
 
   it('should not detect vulnerability when no query', () => {
