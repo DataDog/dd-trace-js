@@ -5,7 +5,8 @@ const telemetryLogs = require('./log')
 const { Verbosity, getVerbosity } = require('./verbosity')
 const { initRequestNamespace, finalizeRequestNamespace, globalNamespace } = require('./namespaces')
 
-function isMetricsEnabled (metrics) {
+function isIastMetricsEnabled (metrics) {
+  // TODO: let DD_TELEMETRY_METRICS_ENABLED as undefined in config.js to avoid read here the env property
   return process.env.DD_TELEMETRY_METRICS_ENABLED !== undefined ? metrics : true
 }
 
@@ -14,7 +15,7 @@ class Telemetry {
     const telemetryAndMetricsEnabled = config &&
       config.telemetry &&
       config.telemetry.enabled &&
-      isMetricsEnabled(config.telemetry.metrics)
+      isIastMetricsEnabled(config.telemetry.metrics)
 
     this.verbosity = telemetryAndMetricsEnabled ? getVerbosity(verbosity) : Verbosity.OFF
     this.enabled = this.verbosity !== Verbosity.OFF
