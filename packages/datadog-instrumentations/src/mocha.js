@@ -50,6 +50,7 @@ let suitesToSkip = []
 let frameworkVersion
 let isSuitesSkipped = false
 let numSkippedSuites = 0
+let skippedSuites = []
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -100,7 +101,7 @@ function getTestAsyncResource (test) {
   return testToAr.get(originalFn)
 }
 
-function getSuitesToRun (originalSuites) {
+function getFilteredSuites (originalSuites) {
   return originalSuites.reduce((acc, suite) => {
     const testPath = getTestSuitePath(suite.file, process.cwd())
     const shouldSkip = suitesToSkip.includes(testPath)
@@ -154,6 +155,9 @@ function mochaHook (Runner) {
       const processArgv = process.argv.slice(2).join(' ')
       const command = `mocha ${processArgv}`
       testSessionStartCh.publish({ command, frameworkVersion })
+      if (numSkippedSuites) {
+        itrSkippedSuitesCh.publish({ skippedSuites: Array.from(skippedSuites), frameworkVersion })
+      }
     }))
 
     this.on('suite', function (suite) {
@@ -369,14 +373,11 @@ addHook({
         suitesToSkip = skippableSuites
       }
       // We remove the suites that we skip through ITR
-      const { suitesToRun, skippedSuites } = getSuitesToRun(runner.suite.suites)
-      isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
-      runner.suite.suites = suitesToRun
+      const filteredSuites = getFilteredSuites(runner.suite.suites)
+      isSuitesSkipped = filteredSuites.suitesToRun.length !== runner.suite.suites.length
+      runner.suite.suites = filteredSuites.suitesToRun
+      skippedSuites = Array.from(filteredSuites.skippedSuites)
       numSkippedSuites = skippedSuites.length
-
-      if (numSkippedSuites) {
-        itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
-      }
 
       global.run()
     }
