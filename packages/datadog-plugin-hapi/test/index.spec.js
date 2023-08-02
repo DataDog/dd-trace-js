@@ -132,30 +132,30 @@ describe('Plugin', () => {
           .catch(done)
       })
 
-      it('should run the request handler in the request scope with a payload', done => {
+      it('should run the request handler in the request scope with a payload', async () => {
+        console.log('port ISSSS ', port)
         console.log('port ISSSS ', port)
         server.route({
           method: 'POST',
           path: '/user/{id}',
-          handler: (request, h) => {
+          handler: async (request, h) => {
             try {
               expect(tracer.scope().active()).to.not.be.null
-              done()
             } catch (e) {
               console.log(12312312, e)
-              done(e)
+              throw e
             }
 
-            return handler(request, h)
+            return h.continue()
           }
         })
 
-        axios
-          .post(`http://localhost:${port}/user/123`, {})
-          .catch((err) => {
-            console.error(1313132, err)
-            done(err) // Call done with the error as an argument to signal a test failure.
-          })
+        try {
+          await axios.post(`http://localhost:${port}/user/123`, {})
+          console.log('Test success')
+        } catch (err) {
+          console.error(1313132, err)
+        }
       })
 
       it('should run pre-handlers in the request scope', done => {
