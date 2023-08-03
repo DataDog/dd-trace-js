@@ -39,21 +39,33 @@ var sendPayloadMock = function(data, count, done) {
 
 // create stub on the writer class method
 var startSpanMock = function(name, { childOf, kind, meta, metrics, service, resource, type } = {}, enter = true) {
+  let span
   if (global.useTestAgent) {
     // Update the headers with additional values
-    meta["Trace-Schema-Version"] = global.schemaVersionName ? global.schemaVersionName : "v0"
-    meta["ExpectedServiceName"] = global.testAgentServiceName
-    global.mockedStartSpan.call(global.stubStartSpan.lastCall.thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter)
+    try {
+      meta = meta ? meta : {}
+      if (typeof global.testAgentServiceName === "string") {
+        meta["Trace-Schema-Version"] = global.schemaVersionName ? global.schemaVersionName : "v0"
+        meta["ExpectedServiceName"] = global.testAgentServiceName
+      } else if (typeof global.testAgentServiceName === "function") {
+        meta["Trace-Schema-Version"] = global.schemaVersionName ? global.schemaVersionName : "v0"
+        meta["ExpectedServiceName"] = global.testAgentServiceName()
+      }
+    } catch (e) {
+      console.log(e)
+    }
+    span = global.mockedStartSpan.call(global.stubStartSpan.lastCall.thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter)
   } else {
-    global.mockedStartSpan.call(global.stubStartSpan.lastCall.thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter)
+    span = global.mockedStartSpan.call(global.stubStartSpan.lastCall.thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter)
   }
+  return span
 }
 
 function stubStartSpan() {
   debugger
   global.mockedStartSpan = tracingPlugin.prototype.startSpan
   global.stubStartSpan = sinon.stub(tracingPlugin.prototype, 'startSpan').callsFake((name, { childOf, kind, meta, metrics, service, resource, type }, enter) => {
-    startSpanMock(name, { childOf, kind, meta, metrics, service, resource, type }, enter)
+    return startSpanMock(name, { childOf, kind, meta, metrics, service, resource, type }, enter)
   })
 }
 stubStartSpan()
