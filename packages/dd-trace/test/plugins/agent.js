@@ -39,6 +39,7 @@ function ciVisRequestHandler (request, response) {
 function addEnvironmentVariablesToHeaders (headers) {
   return new Promise((resolve, reject) => {
     // get all environment variables that start with "DD_"
+    headers = headers ? headers : {}
     const ddEnvVars = new Map(
       Object.entries(process.env)
         .filter(([key]) => key.startsWith('DD_'))
@@ -55,10 +56,9 @@ function addEnvironmentVariablesToHeaders (headers) {
       const pluginConfig = tracer._pluginManager._configsByName[pluginName]
       if (pluginConfig && pluginConfig.service) {
         let pluginService = pluginConfig.service
-        if (typeof pluginConfig.service === 'function') {
-          pluginService = pluginService()
+        if (typeof pluginConfig.service !== 'function') {
+          ddEnvVars.set(`DD_${pluginName.toUpperCase()}_SERVICE`, pluginService)
         }
-        ddEnvVars.set(`DD_${pluginName.toUpperCase()}_SERVICE`, pluginService)
       }
     }
 
