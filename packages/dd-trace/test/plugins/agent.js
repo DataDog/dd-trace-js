@@ -87,22 +87,17 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
     delete req.headers['content-type']
     delete req.headers['content-length']
 
-    await new Promise((resolve, reject) => {
-      const testAgentReq = http.request(
-        `${testAgentUrl}/v0.4/traces`, {
-          method: 'PUT',
-          headers: {
-            ...req.headers,
-            'X-Datadog-Agent-Proxy-Disabled': 'True',
-            'Content-Type': 'application/json'
-          }
-        })
-        testAgentReq.on('response', resolve)
-        testAgentReq.on('error', reject)
-        testAgentReq.write(JSON.stringify(req.body))
-        testAgentReq.end()
-      }
-    )
+    const testAgentReq = http.request(
+      `${testAgentUrl}/v0.4/traces`, {
+        method: 'PUT',
+        headers: {
+          ...req.headers,
+          'X-Datadog-Agent-Proxy-Disabled': 'True',
+          'Content-Type': 'application/json'
+        }
+      })
+    testAgentReq.write(JSON.stringify(req.body))
+    testAgentReq.end()
   }
 
   handlers.forEach(({ handler, spanResourceMatch }) => {
