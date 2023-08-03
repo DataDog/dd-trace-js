@@ -40,6 +40,7 @@ function addEnvironmentVariablesToHeaders (headers) {
   return new Promise((resolve, reject) => {
     // get all environment variables that start with "DD_"
     headers = headers ? headers : {}
+    delete headers['X-Datadog-Trace-Env-Variables']
     const ddEnvVars = new Map(
       Object.entries(process.env)
         .filter(([key]) => key.startsWith('DD_'))
@@ -49,6 +50,9 @@ function addEnvironmentVariablesToHeaders (headers) {
     }
     if (global.schemaVersionName) {
       ddEnvVars.set('DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', global.schemaVersionName)
+    }
+    if (global.sessionToken) {
+      headers["X-Datadog-Test-Session-Token"] = global.sessionToken
     }
 
     for (const pluginName of plugins) {

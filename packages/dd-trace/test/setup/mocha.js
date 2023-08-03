@@ -20,6 +20,7 @@ global.withNamingSchema = withNamingSchema
 global.withPeerService = withPeerService
 global.testAgentServiceName = null
 global.schemaVersionName = null
+global.sessionToken = null
 
 // create stub on the writer class method
 global.mockedSend = writer.prototype._sendPayload
@@ -85,7 +86,8 @@ function withNamingSchema (
 
   describe(testTitle, () => {
     Object.keys(schemaDefinitions).forEach(versionName => {
-      describe(`in version ${versionName}`, () => {
+      const testCase = (version) => {return `in version ${version}`}
+      describe(testCase(versionName), () => {
         before(() => {
           fullConfig = Nomenclature.config
           Nomenclature.configure({
@@ -93,15 +95,21 @@ function withNamingSchema (
             spanRemoveIntegrationFromService: false,
             service: fullConfig.service // Hack: only way to retrieve the test agent configuration
           })
+        })
+        beforeEach(() => {
           var testAgentServiceName = expected[versionName].serviceName
           global.testAgentServiceName = testAgentServiceName === 'function' ? testAgentServiceName() : testAgentServiceName
           global.schemaVersionName = versionName
+          global.sessionToken = `${new Date().toISOString()}/${testTitle}/Version:${versionName}/ExpectedServiceName:${testAgentServiceName}`
         })
 
         after(() => {
           Nomenclature.configure(fullConfig)
+        })
+        afterEach(() => {
           global.testAgentServiceName = null
           global.schemaVersionName = null
+          global.sessionToken = null
         })
         hooks(versionName, false)
 
@@ -136,14 +144,23 @@ function withNamingSchema (
           service: fullConfig.service,
           spanRemoveIntegrationFromService: true
         })
+      })
+      beforeEach(() => {
         testAgentServiceName = expected['v1'].serviceName
         global.testAgentServiceName = testAgentServiceName === 'function' ? testAgentServiceName() : testAgentServiceName
-        global.schemaVersionName = 'v0'
+        global.schemaVersionName = 'v1'
+        global.sessionToken = `${new Date().toISOString()}/service naming short-circuit in v0/ExpectedServiceName:${testAgentServiceName}`
       })
       after(() => {
         Nomenclature.configure(fullConfig)
         global.testAgentServiceName = null
         global.schemaVersionName = null
+        global.sessionToken = null
+      })
+      afterEach(() => {
+        global.testAgentServiceName = null
+        global.schemaVersionName = null
+        global.sessionToken = null
       })
       hooks('v0', true)
 
@@ -168,7 +185,8 @@ function withNamingSchema (
 }
 
 function withPeerService (tracer, spanGenerationFn, service, serviceSource, opts = {}) {
-  describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), () => {
+  let testTitle = 'peer service computation' + (opts.desc ? ` ${opts.desc}` : '')
+  describe(testTitle, () => {
     let computePeerServiceSpy
     beforeEach(() => {
       // FIXME: workaround due to the evaluation order of mocha beforeEach
@@ -177,10 +195,12 @@ function withPeerService (tracer, spanGenerationFn, service, serviceSource, opts
       // set to something other than v0 to allow peer.service check to run, but also don't set to v1
       // to prevent service naming checks from running as we don't know the expected service name
       global.schemaVersionName = 'v0.5'
+      global.sessionToken = `${new Date().toISOString()}/${testTitle} ${global.schemaVersionName}`
     })
     afterEach(() => {
       computePeerServiceSpy.restore()
       global.schemaVersionName = null
+      global.sessionToken = null
     })
 
     it('should compute peer service', done => {
