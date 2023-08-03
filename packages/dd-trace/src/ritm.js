@@ -117,8 +117,16 @@ function Hook (modules, options, onrequire) {
         // abort if _resolveLookupPaths return null
         return exports
       }
-      const res = Module._findPath(name, [basedir, ...paths])
-      if (res !== filename) {
+
+      let res
+      try {
+        res = Module._findPath(name, [basedir, ...paths])
+      } catch (e) {
+        // case where the file specified in package.json "main" doesn't exist
+        // in this case, the file is treated as module-internal
+      }
+
+      if (!res || res !== filename) {
         // this is a module-internal file
         // use the module-relative path to the file, prefixed by original module name
         name = name + path.sep + path.relative(basedir, filename)
