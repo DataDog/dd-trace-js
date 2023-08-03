@@ -37,6 +37,7 @@
     "test:integration:cypress": "mocha --colors --timeout 30000 \"integration-tests/cypress/*.spec.js\"",
     "test:integration:playwright": "mocha --colors --timeout 30000 \"integration-tests/playwright/*.spec.js\"",
     "test:integration:serverless": "mocha --colors --timeout 30000 \"integration-tests/serverless/*.spec.js\"",
+    "test:integration:plugins": "mocha --colors --timeout 30000 \"packages/datadog-plugin-*/test/integration-test/*.spec.js\"",
     "test:shimmer": "mocha --colors 'packages/datadog-shimmer/test/**/*.spec.js'",
     "test:shimmer:ci": "nyc --no-clean --include 'packages/datadog-shimmer/src/**/*.js' -- npm run test:shimmer",
     "leak:core": "node ./scripts/install_plugin_modules && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'",
