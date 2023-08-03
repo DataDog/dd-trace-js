@@ -11,6 +11,6 @@ const conn = {
 const connection = mysql.createConnection(conn)
 connection.connect()
 
-connection.query('SELECT NOW() AS now')
+connection.query('SELECT NOW() AS now', function (error, results, fields) {})
 
 connection.end()
