@@ -40,6 +40,8 @@ describe('esm', () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
+        // not asserting for a limitd-client trace,
+        // just asserting that we're not completely breaking when loading limitd-client with esm
         assert.strictEqual(checkSpansForServiceName(payload, 'tcp.connect'), true)
       })
 
