@@ -54,5 +54,5 @@ await client.getUnary({ first: 'foobar' }, () => {})
 await client.close()
 
 if (server) {
-  server.forceShutdown();
+  await server.forceShutdown();
 }
