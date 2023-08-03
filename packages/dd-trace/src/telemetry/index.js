@@ -18,6 +18,7 @@ let application
 let host
 let interval
 let heartbeatInterval
+let integrations
 const sentIntegrations = new Set()
 
 function getIntegrations () {
@@ -130,7 +131,41 @@ function createHostObject () {
 function getTelemetryData () {
   return { config, application, host, heartbeatInterval }
 }
+// function beat () {
+//   let timer = Date.now()
 
+//   let nextDay = timer + 1000 * 60 * 60 * 24
+
+//   return () => {
+//     setInterval(() => {
+//       metricsManager.send(config, application, host)
+//       sendData(config, application, host, 'app-heartbeat')
+
+//       timer += heartbeatInterval
+
+//       if (timer >= nextDay) {
+//         timer = Date.now()
+//         nextDay = timer + 1000 * 60 * 60 * 24
+
+//         sendData(config, application, host, 'app-extendedHeartbeat', appStarted(config))
+//       }
+//     }, heartbeatInterval)
+//   }
+// }
+
+function heartbeat () {
+  return setTimeout(() => {
+    metricsManager.send(config, application, host)
+    sendData(config, application, host, 'app-heartbeat')
+    heartbeat()
+  }, heartbeatInterval)
+}
+
+function extendedHeartbeat () {
+  return setInterval(() => {
+    sendData(config, application, host, 'app-extendedHeartbeat', appStarted(config))
+  }, 1000 * 60 * 60 * 24)
+}
 function start (aConfig, thePluginManager) {
   if (!aConfig.telemetry.enabled) {
     return
@@ -140,20 +175,17 @@ function start (aConfig, thePluginManager) {
   application = createAppObject(config)
   host = createHostObject()
   heartbeatInterval = config.telemetry.heartbeatInterval
+  integrations = getIntegrations()
 
   dependencies.start(config, application, host)
-  sendData(config, application, host, 'app-started', appStarted(config))
-  interval = setInterval(() => {
-    metricsManager.send(config, application, host)
-    sendData(config, application, host, 'app-heartbeat')
-  }, heartbeatInterval)
-  interval.unref()
-  const extendedHeartbeat = setInterval(() => {
-    sendData(config, application, host, 'app-started', appStarted(config))
-  }, 1000 * 60 * 60 * 24)
-  extendedHeartbeat.unref()
-  process.on('beforeExit', onBeforeExit)
 
+  sendData(config, application, host, 'app-started', appStarted(config))
+  sendData(config, application, host, 'app-integrations', { integrations })
+
+  heartbeat()
+
+  extendedHeartbeat()
+  process.on('beforeExit', onBeforeExit)
   telemetryStartChannel.publish(getTelemetryData())
 }
 
