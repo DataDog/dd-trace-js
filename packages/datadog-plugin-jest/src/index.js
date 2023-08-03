@@ -10,8 +10,7 @@ const {
   TEST_PARAMETERS,
   TEST_COMMAND,
   TEST_FRAMEWORK_VERSION,
-  TEST_SOURCE_START,
-  TEST_SKIPPED_BY_ITR
+  TEST_SOURCE_START
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
