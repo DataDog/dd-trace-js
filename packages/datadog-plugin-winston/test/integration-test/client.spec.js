@@ -3,12 +3,12 @@
 const {
   FakeAgent,
   createSandbox,
-  skipUnsupportedNodeVersions,
+  esmTestSkipper,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { expect } = require('chai')
 
-const describe = skipUnsupportedNodeVersions()
+const describe = esmTestSkipper()
 
 describe('esm', () => {
   let agent

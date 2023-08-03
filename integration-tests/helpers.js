@@ -270,7 +270,7 @@ function checkSpansForServiceName (spans, name) {
 }
 
 // TODO: add ESM support for Node 20 in import-in-the-middle
-function skipUnsupportedNodeVersions () {
+function esmTestSkipper () {
   return version.NODE_MAJOR >= 20
     ? global.describe.skip
     : global.describe
@@ -298,6 +298,6 @@ module.exports = {
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   checkSpansForServiceName,
-  skipUnsupportedNodeVersions,
+  esmTestSkipper,
   spawnPluginIntegrationTestProc
 }
