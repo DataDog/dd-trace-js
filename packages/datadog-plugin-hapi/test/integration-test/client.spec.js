@@ -38,8 +38,9 @@ describe('esm', () => {
 
   context('hapi', () => {
     it('is instrumented', async () => {
+      console.log('integration', 1)
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-
+      console.log('integration', 2)
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
