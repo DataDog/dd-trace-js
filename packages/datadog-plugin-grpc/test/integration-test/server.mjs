@@ -49,9 +49,9 @@ const client = await buildClient({
   getUnary: (_, callback) => callback()
 })
 
-client.getUnary({ first: 'foobar' }, () => {})
+await client.getUnary({ first: 'foobar' }, () => {})
 
-client.close()
+await client.close()
 
 if (server) {
   server.forceShutdown();
