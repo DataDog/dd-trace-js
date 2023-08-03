@@ -271,16 +271,16 @@ addHook({
     })
 
     const { err, skippableSuites } = await skippableSuitesPromise
-    let numSkippedSuites = 0
-    let isSuitesSkipped = false
     let skippedSuites = []
+    let isSuitesSkipped = false
 
     if (!err) {
       const filteredPickles = getFilteredPickles(this, skippableSuites)
-      isSuitesSkipped = filteredPickles.picklesToRun.length !== this.pickleIds.length
-      this.pickleIds = filteredPickles.picklesToRun
-      skippedSuites = filteredPickles.skippedSuites
-      numSkippedSuites = skippedSuites.size
+      const { picklesToRun } = filteredPickles
+      isSuitesSkipped = picklesToRun.length !== this.pickleIds.length
+      this.pickleIds = picklesToRun
+
+      skippedSuites = Array.from(filteredPickles.skippedSuites)
     }
 
     pickleByFile = getPickleByFile(this)
@@ -292,8 +292,8 @@ addHook({
       sessionStartCh.publish({ command, frameworkVersion })
     })
 
-    if (!err && numSkippedSuites) {
-      itrSkippedSuitesCh.publish({ skippedSuites: Array.from(skippedSuites), frameworkVersion })
+    if (!err && skippedSuites.length) {
+      itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
     }
 
     const success = await start.apply(this, arguments)
@@ -315,7 +315,7 @@ addHook({
         status: success ? 'pass' : 'fail',
         isSuitesSkipped,
         testCodeCoverageLinesTotal,
-        numSkippedSuites
+        numSkippedSuites: skippedSuites.length
       })
     })
     return success

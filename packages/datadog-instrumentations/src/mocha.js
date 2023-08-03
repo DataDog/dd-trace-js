@@ -49,7 +49,6 @@ const originalCoverageMap = createCoverageMap()
 let suitesToSkip = []
 let frameworkVersion
 let isSuitesSkipped = false
-let numSkippedSuites = 0
 let skippedSuites = []
 
 function getSuitesByTestFile (root) {
@@ -148,15 +147,20 @@ function mochaHook (Runner) {
         global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
       }
 
-      testSessionFinishCh.publish({ status, isSuitesSkipped, testCodeCoverageLinesTotal, numSkippedSuites })
+      testSessionFinishCh.publish({
+        status,
+        isSuitesSkipped,
+        testCodeCoverageLinesTotal,
+        numSkippedSuites: skippedSuites.length
+      })
     }))
 
     this.once('start', testRunAsyncResource.bind(function () {
       const processArgv = process.argv.slice(2).join(' ')
       const command = `mocha ${processArgv}`
       testSessionStartCh.publish({ command, frameworkVersion })
-      if (numSkippedSuites) {
-        itrSkippedSuitesCh.publish({ skippedSuites: Array.from(skippedSuites), frameworkVersion })
+      if (skippedSuites.length) {
+        itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
       }
     }))
 
@@ -374,10 +378,12 @@ addHook({
       }
       // We remove the suites that we skip through ITR
       const filteredSuites = getFilteredSuites(runner.suite.suites)
-      isSuitesSkipped = filteredSuites.suitesToRun.length !== runner.suite.suites.length
-      runner.suite.suites = filteredSuites.suitesToRun
+      const { suitesToRun } = filteredSuites
+
+      isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
+      runner.suite.suites = suitesToRun
+
       skippedSuites = Array.from(filteredSuites.skippedSuites)
-      numSkippedSuites = skippedSuites.length
 
       global.run()
     }

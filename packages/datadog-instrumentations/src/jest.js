@@ -208,13 +208,11 @@ addHook({
     const { skippedSuites, suitesToRun } = getJestSuitesToRun(skippableSuites, shardedTests, rootDir || process.cwd())
 
     isSuitesSkipped = suitesToRun.length !== shardedTests.length
-
     numSkippedSuites = skippedSuites.length
-
-    skippableSuites = []
 
     itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
 
+    skippableSuites = []
     return suitesToRun
   })
   return sequencerPackage
@@ -505,12 +503,11 @@ addHook({
     const { skippedSuites, suitesToRun } = getJestSuitesToRun(skippableSuites, tests, rootDir)
 
     isSuitesSkipped = suitesToRun.length !== tests.length
-
     numSkippedSuites = skippedSuites.length
 
-    skippableSuites = []
-
     itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
+
+    skippableSuites = []
 
     return { ...testPaths, tests: suitesToRun }
   })

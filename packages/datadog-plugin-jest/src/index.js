@@ -201,24 +201,6 @@ class JestPlugin extends CiPlugin {
       span.setTag(TEST_STATUS, 'skip')
       span.finish()
     })
-
-    this.addSub('ci:jest:test-suite:itr:skipped-suites', ({ skippedSuites, frameworkVersion }) => {
-      const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
-      skippedSuites.forEach(({ path: testSuite }) => {
-        const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest')
-
-        this.tracer.startSpan('jest.test_suite', {
-          childOf: this.testModuleSpan,
-          tags: {
-            [COMPONENT]: this.constructor.id,
-            ...this.testEnvironmentMetadata,
-            ...testSuiteMetadata,
-            [TEST_STATUS]: 'skip',
-            [TEST_SKIPPED_BY_ITR]: 'true'
-          }
-        }).finish()
-      })
-    })
   }
 
   startTestSpan (test) {
