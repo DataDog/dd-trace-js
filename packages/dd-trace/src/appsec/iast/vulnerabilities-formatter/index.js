@@ -28,7 +28,6 @@ class VulnerabilityFormatter {
       const { redactedValueParts, redactedSources } = scrubbingResult
       redactedSources.forEach(i => {
         delete sources[i].value
-        sources[i].redacted = true
       })
       return { valueParts: redactedValueParts }
     }
