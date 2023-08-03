@@ -336,6 +336,7 @@ describe('Plugin', function () {
               expect(spans[0].meta).to.have.property('http.method', 'GET')
               expect(spans[0].meta).to.have.property('http.status_code', '200')
               expect(spans[0].meta).to.have.property('foo', 'bar')
+              expect(spans[0].meta).to.have.property('req', 'IncomingMessage')
               expect(spans[0].meta).to.have.property('component', 'next')
             })
             .then(done)
