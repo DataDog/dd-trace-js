@@ -82,7 +82,6 @@ describe('Plugin', () => {
           try {
             server.stop()
           } finally {
-            console.log('afterEach done called')
             done()
           }
         })
@@ -139,10 +138,8 @@ describe('Plugin', () => {
           handler: (request, h) => {
             try {
               expect(tracer.scope().active()).to.not.be.null
-              console.log(1)
               done()
             } catch (e) {
-              console.log(2)
               done(e)
             }
 
@@ -152,14 +149,7 @@ describe('Plugin', () => {
 
         axios
           .post(`http://localhost:${port}/user/123`, {})
-          .then(() => {
-            console.log(3)
-            done()
-          })
-          .catch((err) => {
-            console.log(4)
-            done(err)
-          })
+          .catch(done)
       })
 
       it('should run pre-handlers in the request scope', done => {
