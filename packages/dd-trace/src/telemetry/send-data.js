@@ -54,7 +54,7 @@ function sendData (config, application, host, reqType, payload = {}) {
     host
   })
 
-  request(data, options, () => {
+  request(data, options, (res) => {
     // ignore errors
   })
 }
