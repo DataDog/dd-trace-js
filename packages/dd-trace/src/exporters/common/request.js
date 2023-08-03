@@ -57,7 +57,7 @@ function request (data, options, callback) {
     const url = typeof options.url === 'object' ? urlToOptions(options.url) : fromUrlString(options.url)
     if (url.protocol === 'unix:') {
       if (typeof options.url === 'string') {
-        options.socketPath = options.url.replace(/^unix:/, '');
+        options.socketPath = options.url.replace(/^unix:/, '')
       } else {
         options.socketPath = url.pathname
       }
