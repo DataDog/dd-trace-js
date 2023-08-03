@@ -12,7 +12,8 @@ const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { schemaDefinitions } = require('../../src/service-naming/schemas')
-const writer  = require('../../src/exporters/agent/writer.js')
+const writer = require('../../src/exporters/agent/writer.js')
+const tracingPlugin = require('../../src/plugins/tracing.js')
 
 global.withVersions = withVersions
 global.withExports = withExports
@@ -23,7 +24,6 @@ global.schemaVersionName = null
 global.sessionToken = null
 
 // create stub on the writer class method
-global.mockedSend = writer.prototype._sendPayload
 var sendPayloadMock = function(data, count, done) {
   if (global.useTestAgent) {
     // Update the headers with additional values
@@ -36,9 +36,41 @@ var sendPayloadMock = function(data, count, done) {
     global.mockedSend.call(global.stub.lastCall.thisValue, data, count, done)
   }
 }
-global.stub = sinon.stub(writer.prototype, '_sendPayload').callsFake((data, count, any) => {
-  sendPayloadMock(data, count, any)
-})
+
+// create stub on the writer class method
+var startSpanMock = function(name, { childOf, kind, meta, metrics, service, resource, type } = {}, enter = true) {
+  if (global.useTestAgent) {
+    // Update the headers with additional values
+    meta["Trace-Schema-Version"] = global.schemaVersionName ? global.schemaVersionName : "v0"
+    meta["ExpectedServiceName"] = global.testAgentServiceName
+    global.mockedStartSpan.call(global.stubStartSpan.lastCall.thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter)
+  } else {
+    global.mockedStartSpan.call(global.stubStartSpan.lastCall.thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter)
+  }
+}
+
+function stubStartSpan() {
+  debugger
+  global.mockedStartSpan = tracingPlugin.prototype.startSpan
+  global.stubStartSpan = sinon.stub(tracingPlugin.prototype, 'startSpan').callsFake((name, { childOf, kind, meta, metrics, service, resource, type }, enter) => {
+    startSpanMock(name, { childOf, kind, meta, metrics, service, resource, type }, enter)
+  })
+}
+stubStartSpan()
+
+function stubSendPayload() {
+  global.mockedSend = writer.prototype._sendPayload
+  global.stub = sinon.stub(writer.prototype, '_sendPayload').callsFake((data, count, any) => {
+    sendPayloadMock(data, count, any)
+  })
+}
+stubSendPayload()
+
+function unStubSendPayload() {
+  global.mockedSend = null
+  global.stub.restore()
+  global.stub = null
+}
 
 const packageVersionFailures = Object.create({})
 
@@ -153,11 +185,6 @@ function withNamingSchema (
       })
       after(() => {
         Nomenclature.configure(fullConfig)
-        global.testAgentServiceName = null
-        global.schemaVersionName = null
-        global.sessionToken = null
-      })
-      afterEach(() => {
         global.testAgentServiceName = null
         global.schemaVersionName = null
         global.sessionToken = null

@@ -45,12 +45,6 @@ function addEnvironmentVariablesToHeaders (headers) {
       Object.entries(process.env)
         .filter(([key]) => key.startsWith('DD_'))
     )
-    if (global.testAgentServiceName) {
-      ddEnvVars.set('DD_SERVICE', global.testAgentServiceName)
-    }
-    if (global.schemaVersionName) {
-      ddEnvVars.set('DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', global.schemaVersionName)
-    }
     if (global.sessionToken) {
       headers["X-Datadog-Test-Session-Token"] = global.sessionToken
     }
@@ -85,6 +79,25 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
   // handles the received trace request and sends trace to Test Agent if bool enabled.
   if (sendToTestAgent) {
     const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
+    let schemaVersion
+    let expectedServiceName
+    let traceEnvHeader
+    try {
+      if (req.body[0][0].meta["Trace-Schema-Version"])
+        schemaVersion = req.body[0][0].meta["Trace-Schema-Version"] || null
+        expectedServiceName = req.body[0][0].meta["ExpectedServiceName"] ?? null
+        traceEnvHeader = req.headers["x-datadog-trace-env-variables"] ?? null
+        if (traceEnvHeader) {
+          traceEnvHeader += `,DD_TRACE_SPAN_ATTRIBUTE_SCHEMA=${schemaVersion}`
+        } else {
+          traceEnvHeader = `DD_TRACE_SPAN_ATTRIBUTE_SCHEMA=${schemaVersion}`
+        }
+        if (expectedServiceName) {
+          traceEnvHeader += `,DD_SERVICE=${expectedServiceName}`
+        }
+    } catch (e) {
+      console.log(e)
+    }
 
     // remove incorrect headers
     delete req.headers['host']
@@ -97,7 +110,8 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
         headers: {
           ...req.headers,
           'X-Datadog-Agent-Proxy-Disabled': 'True',
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          "X-Datadog-Trace-Env-Variables": traceEnvHeader
         }
       })
     testAgentReq.write(JSON.stringify(req.body))
