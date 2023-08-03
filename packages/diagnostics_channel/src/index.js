@@ -3,9 +3,26 @@
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
 
 if (NODE_MAJOR >= 20) {
+  // Node.js v20 is the only version with a fully functional DC implementation
   module.exports = require('diagnostics_channel')
   return
 }
+
+if (NODE_MAJOR < 14 || (NODE_MAJOR === 14 && NODE_MINOR < 17)) {
+  // TODO: This version of Node.js does not provide diagnostics_channel at all
+  module.exports = require('./polyfill')
+  return
+}
+
+if (
+  (NODE_MAJOR === 16 && NODE_MINOR < 17) ||
+  (NODE_MAJOR === 18 && NODE_MINOR < 7)
+) {
+  // These versions of Node.js do not provide DC.subscribe or DC.unsubscribe
+}
+
+// For any remaining version, the following is broken due to a garbage collection bug:
+// require('diagnostics_channel').channel('foo').unsubscribe();
 
 const {
   Channel,
@@ -16,7 +33,7 @@ const {
 // TODO: Switch to using global subscribe/unsubscribe/hasSubscribers.
 const dc = { channel }
 
-// Prevent going to 0 subscribers to avoid bug in Node.
+// Prevent going to 0 subscribers to avoid bug in Node.js
 // See https://github.com/nodejs/node/pull/47520
 if (NODE_MAJOR === 19 && NODE_MINOR === 9) {
   const channels = new WeakSet()
