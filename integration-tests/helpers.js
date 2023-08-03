@@ -17,6 +17,9 @@ const path = require('path')
 const rimraf = promisify(require('rimraf'))
 const id = require('../packages/dd-trace/src/id')
 const upload = require('multer')()
+const version = require('../version.js')
+
+const hookFile = 'dd-trace/loader-hook.mjs'
 
 class FakeAgent extends EventEmitter {
   constructor (port = 0) {
@@ -155,7 +158,7 @@ class FakeAgent extends EventEmitter {
   }
 }
 
-function spawnProc (filename, options = {}) {
+function spawnProc (filename, options = {}, stdioHandler) {
   const proc = fork(filename, options)
   return new Promise((resolve, reject) => {
     proc
@@ -168,11 +171,17 @@ function spawnProc (filename, options = {}) {
         if (code !== 0) {
           reject(new Error(`Process exited with status code ${code}.`))
         }
+        resolve()
       })
+    if (stdioHandler) {
+      proc.stdout.on('data', (data) => {
+        stdioHandler(data)
+      })
+    }
   })
 }
 
-async function createSandbox (dependencies = [], isGitRepo = false) {
+async function createSandbox (dependencies = [], isGitRepo = false, integrationTestsPaths = ['./integration-tests/*']) {
   /* To execute integration tests without a sandbox uncomment the next line
    * and do `yarn link && yarn link dd-trace` */
   // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
@@ -186,7 +195,11 @@ async function createSandbox (dependencies = [], isGitRepo = false) {
   await mkdir(folder)
   await exec(`yarn pack --filename ${out}`) // TODO: cache this
   await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
-  await exec(`cp -R ./integration-tests/* ${folder}`)
+
+  integrationTestsPaths.forEach(async (path) => {
+    await exec(`cp -R ${path} ${folder}`)
+  })
+
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
     await exec('echo "node_modules/" > .gitignore', { cwd: folder })
@@ -205,13 +218,14 @@ async function createSandbox (dependencies = [], isGitRepo = false) {
   }
 }
 
-async function curl (url) {
+async function curl (url, useHttp2 = false) {
   if (typeof url === 'object') {
     if (url.then) {
       return curl(await url)
     }
     url = url.url
   }
+
   return new Promise((resolve, reject) => {
     http.get(url, res => {
       const bufs = []
@@ -251,6 +265,30 @@ function getCiVisEvpProxyConfig (port) {
   }
 }
 
+function checkSpansForServiceName (spans, name) {
+  return spans.some((span) => span.some((nestedSpan) => nestedSpan.name === name))
+}
+
+// TODO: add ESM support for Node 20 in import-in-the-middle
+function esmTestSkipper () {
+  return version.NODE_MAJOR >= 20
+    ? global.describe.skip
+    : global.describe
+}
+
+async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs = {}) {
+  let env = {
+    NODE_OPTIONS: `--loader=${hookFile}`,
+    DD_TRACE_AGENT_PORT: agentPort
+  }
+  env = { ...env, ...additionalEnvArgs }
+  return spawnProc(path.join(cwd, serverFile), {
+    cwd,
+    env,
+    stdio: stdioHandler ? 'pipe' : 'inherit'
+  }, stdioHandler)
+}
+
 module.exports = {
   FakeAgent,
   spawnProc,
@@ -258,5 +296,8 @@ module.exports = {
   curl,
   curlAndAssertMessage,
   getCiVisAgentlessConfig,
-  getCiVisEvpProxyConfig
+  getCiVisEvpProxyConfig,
+  checkSpansForServiceName,
+  esmTestSkipper,
+  spawnPluginIntegrationTestProc
 }
