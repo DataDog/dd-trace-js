@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
 import { Configuration, OpenAIApi } from 'openai'
-import nock from 'nock';
+import nock from 'nock'
 
 nock('https://api.openai.com:443')
   .post('/v1/completions')
