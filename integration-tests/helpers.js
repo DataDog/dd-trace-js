@@ -18,7 +18,6 @@ const rimraf = promisify(require('rimraf'))
 const id = require('../packages/dd-trace/src/id')
 const upload = require('multer')()
 const version = require('../version.js')
-const http2 = require('http2')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -227,31 +226,6 @@ async function curl (url, useHttp2 = false) {
     url = url.url
   }
 
-  if (useHttp2) {
-    const urlObject = new URL(url)
-    return new Promise((resolve, reject) => {
-      const client = http2.connect(urlObject.origin)
-      client.on('error', reject)
-
-      const req = client.request({
-        ':path': urlObject.pathname,
-        ':method': 'GET'
-      })
-      req.on('error', reject)
-
-      const chunks = []
-      req.on('data', (chunk) => {
-        chunks.push(chunk)
-      })
-
-      req.on('end', () => {
-        resolve(Buffer.concat(chunks))
-      })
-
-      req.end()
-    })
-  }
-
   return new Promise((resolve, reject) => {
     http.get(url, res => {
       const bufs = []
@@ -265,9 +239,9 @@ async function curl (url, useHttp2 = false) {
   })
 }
 
-async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, useHttp2 = false) {
+async function curlAndAssertMessage (agent, procOrUrl, fn, timeout) {
   const resultPromise = agent.assertMessageReceived(fn, timeout)
-  await curl(procOrUrl, useHttp2)
+  await curl(procOrUrl)
   return resultPromise
 }
 
