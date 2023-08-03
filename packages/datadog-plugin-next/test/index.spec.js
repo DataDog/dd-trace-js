@@ -16,9 +16,13 @@ describe('Plugin', function () {
   let port
 
   describe('next', () => {
+    const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
+
     // TODO: Figure out why 10.x tests are failing.
     withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
-      const startServer = (withConfig = false, schemaVersion = 'v0', defaultToGlobalService = false) => {
+      const pkg = require(`${__dirname}/../../../versions/next@${version}/node_modules/next/package.json`)
+
+      const startServer = ({ withConfig, standalone }, schemaVersion = 'v0', defaultToGlobalService = false) => {
         before(async () => {
           port = await getPort()
 
@@ -26,9 +30,14 @@ describe('Plugin', function () {
         })
 
         before(function (done) {
-          const cwd = __dirname
+          const cwd = standalone
+            ? `${__dirname}/.next/standalone`
+            : __dirname
 
-          server = spawn('node', ['server'], {
+          const serverStartCmd =
+            standalone ? ['--require', `${__dirname}/datadog.js`, 'server'] : ['server']
+
+          server = spawn('node', serverStartCmd, {
             cwd,
             env: {
               ...process.env,
@@ -59,7 +68,6 @@ describe('Plugin', function () {
         this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
 
         const cwd = __dirname
-        const nodules = `${__dirname}/../../../versions/next@${version}/node_modules`
         const pkg = require(`${__dirname}/../../../versions/next@${version}/package.json`)
         const realVersion = require(`${__dirname}/../../../versions/next@${version}`).version()
 
@@ -69,9 +77,11 @@ describe('Plugin', function () {
 
         delete pkg.workspaces
 
-        execSync(`cp -R '${nodules}' ./`, { cwd })
-
         writeFileSync(`${__dirname}/package.json`, JSON.stringify(pkg, null, 2))
+
+        // installing here for standalone purposes, copying `nodules` above was not generating the server file properly
+        // if there is a way to re-use nodules from somewhere in the versions folder, this `execSync` will be reverted
+        execSync('yarn install', { cwd })
 
         // building in-process makes tests fail for an unknown reason
         execSync('yarn exec next build', {
@@ -82,6 +92,14 @@ describe('Plugin', function () {
           },
           stdio: ['pipe', 'ignore', 'pipe']
         })
+
+        if (satisfiesStandalone(realVersion)) {
+          // copy public and static files to the `standalone` folder
+          const publicOrigin = `${__dirname}/public`
+          const publicDestination = `${__dirname}/.next/standalone/public`
+          execSync(`mkdir ${publicDestination}`)
+          execSync(`cp ${publicOrigin}/test.txt ${publicDestination}/test.txt`)
+        }
       })
 
       after(function () {
@@ -89,7 +107,8 @@ describe('Plugin', function () {
         const files = [
           'package.json',
           'node_modules',
-          '.next'
+          '.next',
+          'yarn.lock'
         ]
         const paths = files.map(file => `${__dirname}/${file}`)
         execSync(`rm -rf ${paths.join(' ')}`)
@@ -103,12 +122,15 @@ describe('Plugin', function () {
         },
         rawExpectedSchema.server,
         {
-          hooks: (version, defaultToGlobalService) => startServer(false, version, defaultToGlobalService)
+          hooks: (schemaVersion, defaultToGlobalService) => startServer({
+            withConfig: false,
+            standalone: false
+          }, schemaVersion, defaultToGlobalService)
         }
       )
 
       describe('without configuration', () => {
-        startServer()
+        startServer({ withConfig: false, standalone: false })
 
         describe('for api routes', () => {
           it('should do automatic instrumentation', done => {
@@ -232,8 +254,6 @@ describe('Plugin', function () {
               .catch(done)
           })
 
-          const pkg = require(`${__dirname}/../../../versions/next@${version}/node_modules/next/package.json`)
-
           const pathTests = [
             ['/hello', '/hello'],
             ['/hello/world', '/hello/[name]'],
@@ -320,7 +340,7 @@ describe('Plugin', function () {
       })
 
       describe('with configuration', () => {
-        startServer(true)
+        startServer({ withConfig: true, standalone: false })
 
         it('should execute the hook and validate the status', done => {
           agent
@@ -347,6 +367,43 @@ describe('Plugin', function () {
             .catch(done)
         })
       })
+
+      if (satisfiesStandalone(pkg.version)) {
+        describe('with standalone', () => {
+          startServer({ withConfig: false, standalone: true })
+
+          // testing basic instrumentation between api, pages, static files since standalone still uses `next-server`
+          const standaloneTests = [
+            ['api', '/api/hello/world', 'GET /api/hello/[name]'],
+            ['pages', '/hello/world', 'GET /hello/[name]'],
+            ['static files', '/test.txt', 'GET']
+          ]
+
+          standaloneTests.forEach(([test, resource, expectedResource]) => {
+            it(`should do automatic instrumentation for ${test}`, done => {
+              agent
+                .use(traces => {
+                  const spans = traces[0]
+
+                  expect(spans[0]).to.have.property('name', 'next.request')
+                  expect(spans[0]).to.have.property('service', 'test')
+                  expect(spans[0]).to.have.property('type', 'web')
+                  expect(spans[0]).to.have.property('resource', expectedResource)
+                  expect(spans[0].meta).to.have.property('span.kind', 'server')
+                  expect(spans[0].meta).to.have.property('http.method', 'GET')
+                  expect(spans[0].meta).to.have.property('http.status_code', '200')
+                  expect(spans[0].meta).to.have.property('component', 'next')
+                })
+                .then(done)
+                .catch(done)
+
+              axios
+                .get(`http://localhost:${port}${resource}`)
+                .catch(done)
+            })
+          })
+        })
+      }
     })
   })
 })
