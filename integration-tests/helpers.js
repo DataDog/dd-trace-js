@@ -17,7 +17,6 @@ const path = require('path')
 const rimraf = promisify(require('rimraf'))
 const id = require('../packages/dd-trace/src/id')
 const upload = require('multer')()
-const version = require('../version.js')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -269,13 +268,6 @@ function checkSpansForServiceName (spans, name) {
   return spans.some((span) => span.some((nestedSpan) => nestedSpan.name === name))
 }
 
-// TODO: add ESM support for Node 20 in import-in-the-middle
-function esmTestSkipper () {
-  return version.NODE_MAJOR >= 20
-    ? global.describe.skip
-    : global.describe
-}
-
 async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
@@ -298,6 +290,5 @@ module.exports = {
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   checkSpansForServiceName,
-  esmTestSkipper,
   spawnPluginIntegrationTestProc
 }
