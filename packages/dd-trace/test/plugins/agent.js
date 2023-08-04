@@ -6,10 +6,12 @@ const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const getPort = require('get-port')
 const express = require('express')
-const mochaSetup = require('../setup/mocha.js')
 const path = require('path')
 const ritm = require('../../src/ritm')
 const { storage } = require('../../../datadog-core')
+const sinon = require('sinon')
+const writer = require('../../src/exporters/agent/writer.js')
+const tracingPlugin = require('../../src/plugins/tracing.js')
 
 const handlers = new Set()
 let sockets = []
@@ -33,6 +35,59 @@ function ciVisRequestHandler (request, response) {
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(request.body, request)
     }
+  })
+}
+
+// create stub on the writer class method to update headers at time of trace send
+const sendPayloadMock = function (data, count, done) {
+  if (global.useTestAgent) {
+    // Update the headers with additional values
+    addEnvironmentVariablesToHeaders(global.stub.lastCall.thisValue._headers).then(async (reqHeaders) => {
+      global.stub.lastCall.thisValue._headers = reqHeaders
+      // call original method
+      global.mockedSend.call(global.stub.lastCall.thisValue, data, count, done)
+    })
+  } else {
+    global.mockedSend.call(global.stub.lastCall.thisValue, data, count, done)
+  }
+}
+
+// create stub on the startSpan method to inject schema version and other tags
+const startSpanMock = function (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enter = true) {
+  if (global.useTestAgent) {
+    // Update the headers with additional values
+    try {
+      meta = meta ?? {}
+      meta['_schema_version'] = global.schemaVersionName ?? 'v0'
+      if (typeof global.testAgentServiceName === 'string') {
+        meta['_expected_service_name'] = global.testAgentServiceName
+      } else if (typeof global.testAgentServiceName === 'function') {
+        meta['_expected_service_name'] = global.testAgentServiceName()
+      }
+      if (global.sessionToken) {
+        meta['_session_token'] = global.sessionToken
+      }
+    } catch (e) {
+      // do something
+    }
+  }
+  return global.mockedStartSpan.call(
+    global.stubStartSpan.lastCall.thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter
+  )
+}
+
+function stubStartSpan () {
+  global.mockedStartSpan = tracingPlugin.prototype.startSpan
+  global.stubStartSpan = sinon.stub(tracingPlugin.prototype, 'startSpan')
+    .callsFake((name, { childOf, kind, meta, metrics, service, resource, type }, enter) => {
+      return startSpanMock(name, { childOf, kind, meta, metrics, service, resource, type }, enter)
+    })
+}
+
+function stubSendPayload () {
+  global.mockedSend = writer.prototype._sendPayload
+  global.stub = sinon.stub(writer.prototype, '_sendPayload').callsFake((data, count, any) => {
+    sendPayloadMock(data, count, any)
   })
 }
 
@@ -153,7 +208,6 @@ const DEFAULT_AVAILABLE_ENDPOINTS = ['/evp_proxy/v2']
 let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
 
 module.exports = {
-  addEnvironmentVariablesToHeaders: addEnvironmentVariablesToHeaders,
   // Load the plugin on the tracer with an optional config and start a mock agent.
   async load (pluginName, config, tracerConfig = {}) {
     tracer = require('../..')
@@ -167,9 +221,10 @@ module.exports = {
       next()
     })
 
+    debugger
     if (tracerConfig.stubForTestAgent !== false) {
-      mochaSetup.stubSendPayload()
-      mochaSetup.stubStartSpan()
+      stubSendPayload()
+      stubStartSpan()
     }
     global.useTestAgent = false
 
@@ -321,7 +376,8 @@ module.exports = {
   // Stop the mock agent, reset all expectations and wipe the require cache.
   close (opts = {}) {
     const { ritmReset, wipe } = opts
-
+    global.stub.restore()
+    global.stubStartSpan.restore()
     listener.close()
     listener = null
     sockets.forEach(socket => socket.end())

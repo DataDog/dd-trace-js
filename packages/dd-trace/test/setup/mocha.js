@@ -12,8 +12,6 @@ const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { schemaDefinitions } = require('../../src/service-naming/schemas')
-const writer = require('../../src/exporters/agent/writer.js')
-const tracingPlugin = require('../../src/plugins/tracing.js')
 
 global.withVersions = withVersions
 global.withExports = withExports
@@ -22,59 +20,6 @@ global.withPeerService = withPeerService
 global.testAgentServiceName = null
 global.schemaVersionName = null
 global.sessionToken = null
-
-// create stub on the writer class method to update headers at time of trace send
-const sendPayloadMock = function (data, count, done) {
-  if (global.useTestAgent) {
-    // Update the headers with additional values
-    agent.addEnvironmentVariablesToHeaders(global.stub.lastCall.thisValue._headers).then(async (reqHeaders) => {
-      global.stub.lastCall.thisValue._headers = reqHeaders
-      // call original method
-      global.mockedSend.call(global.stub.lastCall.thisValue, data, count, done)
-    })
-  } else {
-    global.mockedSend.call(global.stub.lastCall.thisValue, data, count, done)
-  }
-}
-
-// create stub on the startSpan method to inject schema version and other tags
-const startSpanMock = function (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enter = true) {
-  if (global.useTestAgent) {
-    // Update the headers with additional values
-    try {
-      meta = meta ?? {}
-      meta['_schema_version'] = global.schemaVersionName ?? 'v0'
-      if (typeof global.testAgentServiceName === 'string') {
-        meta['_expected_service_name'] = global.testAgentServiceName
-      } else if (typeof global.testAgentServiceName === 'function') {
-        meta['_expected_service_name'] = global.testAgentServiceName()
-      }
-      if (global.sessionToken) {
-        meta['_session_token'] = global.sessionToken
-      }
-    } catch (e) {
-      // do something
-    }
-  }
-  return global.mockedStartSpan.call(
-    global.stubStartSpan.lastCall.thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter
-  )
-}
-
-function stubStartSpan () {
-  global.mockedStartSpan = tracingPlugin.prototype.startSpan
-  global.stubStartSpan = sinon.stub(tracingPlugin.prototype, 'startSpan')
-    .callsFake((name, { childOf, kind, meta, metrics, service, resource, type }, enter) => {
-      return startSpanMock(name, { childOf, kind, meta, metrics, service, resource, type }, enter)
-    })
-}
-
-function stubSendPayload () {
-  global.mockedSend = writer.prototype._sendPayload
-  global.stub = sinon.stub(writer.prototype, '_sendPayload').callsFake((data, count, any) => {
-    sendPayloadMock(data, count, any)
-  })
-}
 
 const packageVersionFailures = Object.create({})
 
@@ -353,19 +298,15 @@ function withExports (moduleName, version, exportNames, versionRange, fn) {
   }
 }
 
-exports = {
-  stubSendPayload: stubSendPayload,
-  stubStartSpan: stubStartSpan,
-  mochaHooks: {
-    // TODO: Figure out how to do this with tap too.
-    async afterAll () {
-      await slackReport(packageVersionFailures)
-    },
-  
-    afterEach () {
-      agent.reset()
-      metrics.stop()
-      storage.enterWith(undefined)
-    }
+exports.mochaHooks = {
+  // TODO: Figure out how to do this with tap too.
+  async afterAll () {
+    await slackReport(packageVersionFailures)
+  },
+
+  afterEach () {
+    agent.reset()
+    metrics.stop()
+    storage.enterWith(undefined)
   }
 }
