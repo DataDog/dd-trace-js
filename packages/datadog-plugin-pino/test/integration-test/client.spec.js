@@ -3,7 +3,6 @@
 const {
   FakeAgent,
   createSandbox,
-
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { expect } = require('chai')

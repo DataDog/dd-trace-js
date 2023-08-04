@@ -4,7 +4,6 @@ const {
   FakeAgent,
   createSandbox,
   curlAndAssertMessage,
-
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')

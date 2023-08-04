@@ -4,7 +4,6 @@ const {
   FakeAgent,
   createSandbox,
   checkSpansForServiceName,
-
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')

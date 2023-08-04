@@ -5,7 +5,6 @@ const {
   createSandbox,
   curlAndAssertMessage,
   checkSpansForServiceName,
-
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
