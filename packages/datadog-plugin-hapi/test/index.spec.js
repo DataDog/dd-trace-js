@@ -131,8 +131,8 @@ describe('Plugin', () => {
           .catch(done)
       })
 
-      // Hapi does not reply to POST requests on Node 14
-      if (semver.intersects(version, '>=16')) {
+      // Hapi does not reply to POST requests on Node <=16
+      if (semver.intersects(version, '>=17')) {
         it('should propagate the async context properly', done => {
           server.route({
             method: 'POST',
