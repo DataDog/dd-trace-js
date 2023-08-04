@@ -43,11 +43,10 @@ const startSpanMock = function (name, { childOf, kind, meta, metrics, service, r
     // Update the headers with additional values
     try {
       meta = meta ?? {}
+      meta['_schema_version'] = global.schemaVersionName ?? 'v0'
       if (typeof global.testAgentServiceName === 'string') {
-        meta['_schema_version'] = global.schemaVersionName ?? 'v0'
         meta['_expected_service_name'] = global.testAgentServiceName
       } else if (typeof global.testAgentServiceName === 'function') {
-        meta['_schema_version'] = global.schemaVersionName ?? 'v0'
         meta['_expected_service_name'] = global.testAgentServiceName()
       }
       if (global.sessionToken) {

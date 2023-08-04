@@ -67,7 +67,7 @@ describe('Plugin', () => {
     withVersions('grpc', pkgs, (version, pkg) => {
       describe('without configuration', () => {
         before(() => {
-          return agent.load('grpc', { client: false })
+          return agent.load('grpc', { client: false }, { stubForTestAgent: false })
             .then(() => {
               tracer = require('../../dd-trace')
               grpc = require(`../../../versions/${pkg}@${version}`).get()
@@ -362,7 +362,7 @@ describe('Plugin', () => {
             client: false
           }
 
-          return agent.load('grpc', config)
+          return agent.load('grpc', config, { stubForTestAgent: false })
             .then(() => {
               grpc = require(`../../../versions/${pkg}@${version}`).get()
             })
@@ -397,7 +397,7 @@ describe('Plugin', () => {
             client: false
           }
 
-          return agent.load('grpc', config)
+          return agent.load('grpc', config, { stubForTestAgent: false })
             .then(() => {
               grpc = require(`../../../versions/${pkg}@${version}`).get()
             })

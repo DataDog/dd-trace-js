@@ -165,7 +165,8 @@ module.exports = {
       }
       next()
     })
-
+    
+    global.stubForTestAgent = tracerConfig.stubForTestAgent
     global.useTestAgent = false
 
     try {

@@ -23,7 +23,7 @@ describe('Plugin', () => {
       let N1qlQuery
       describe('without configuration', () => {
         beforeEach(done => {
-          agent.load('couchbase').then(() => {
+          agent.load('couchbase', null, { stubTestAgent: false }).then(() => {
             couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
             N1qlQuery = couchbase.N1qlQuery
             cluster = new couchbase.Cluster('localhost:8091')
@@ -165,7 +165,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(done => {
-          agent.load('couchbase').then(() => {
+          agent.load('couchbase', null, { stubTestAgent: false }).then(() => {
             couchbase = proxyquire(`../../../versions/couchbase@${version}`, {}).get()
             couchbase.connect('couchbase://localhost', {
               username: 'Administrator',
