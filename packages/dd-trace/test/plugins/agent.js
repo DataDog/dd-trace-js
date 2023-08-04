@@ -8,7 +8,6 @@ const getPort = require('get-port')
 const express = require('express')
 const path = require('path')
 const ritm = require('../../src/ritm')
-const sinon = require('sinon')
 const { storage } = require('../../../datadog-core')
 
 const handlers = new Set()
@@ -38,24 +37,19 @@ function ciVisRequestHandler (request, response) {
 
 function addEnvironmentVariablesToHeaders (headers) {
   return new Promise((resolve, reject) => {
-    // get all environment variables that start with "DD_"
-    headers = headers ? headers : {}
+    // get all environment variables that start with 'DD_'
+    headers = headers ?? {}
     delete headers['X-Datadog-Trace-Env-Variables']
     const ddEnvVars = new Map(
       Object.entries(process.env)
         .filter(([key]) => key.startsWith('DD_'))
     )
-    if (global.sessionToken) {
-      headers["X-Datadog-Test-Session-Token"] = global.sessionToken
-    }
-
     for (const pluginName of plugins) {
       // check for plugin level service name configuration
       const pluginConfig = tracer._pluginManager._configsByName[pluginName]
       if (pluginConfig && pluginConfig.service) {
-        let pluginService = pluginConfig.service
         if (typeof pluginConfig.service !== 'function') {
-          ddEnvVars.set(`DD_${pluginName.toUpperCase()}_SERVICE`, pluginService)
+          ddEnvVars.set(`DD_${pluginName.toUpperCase()}_SERVICE`, pluginConfig.service)
         }
       }
     }
@@ -81,13 +75,14 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
     const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
     let schemaVersion
     let expectedServiceName
-    let traceEnvHeader
+    let traceEnvHeader = ''
     try {
-      if (req.body[0][0].meta["Trace-Schema-Version"])
-        schemaVersion = req.body[0][0].meta["Trace-Schema-Version"] || null
-        expectedServiceName = req.body[0][0].meta["ExpectedServiceName"] ?? null
-        traceEnvHeader = req.headers["x-datadog-trace-env-variables"] ?? null
+      if (req.body[0][0].meta) {
+        schemaVersion = req.body[0][0].meta['_schema_version'] ?? 'v0'
+        expectedServiceName = req.body[0][0].meta['_expected_service_name'] ?? null
+        traceEnvHeader = req.headers['x-datadog-trace-env-variables'] ?? null
         if (traceEnvHeader) {
+          delete req.headers['x-datadog-trace-env-variables']
           traceEnvHeader += `,DD_TRACE_SPAN_ATTRIBUTE_SCHEMA=${schemaVersion}`
         } else {
           traceEnvHeader = `DD_TRACE_SPAN_ATTRIBUTE_SCHEMA=${schemaVersion}`
@@ -95,8 +90,13 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
         if (expectedServiceName) {
           traceEnvHeader += `,DD_SERVICE=${expectedServiceName}`
         }
+      }
     } catch (e) {
-      console.log(e)
+      // do something
+    }
+
+    if (req.body[0][0].meta['_session_token']) {
+      req.headers['X-Datadog-Test-Session-Token'] = global.sessionToken
     }
 
     // remove incorrect headers
@@ -111,7 +111,7 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
           ...req.headers,
           'X-Datadog-Agent-Proxy-Disabled': 'True',
           'Content-Type': 'application/json',
-          "X-Datadog-Trace-Env-Variables": traceEnvHeader
+          'X-Datadog-Trace-Env-Variables': traceEnvHeader
         }
       })
     testAgentReq.write(JSON.stringify(req.body))

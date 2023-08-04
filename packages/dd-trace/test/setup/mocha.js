@@ -23,65 +23,63 @@ global.testAgentServiceName = null
 global.schemaVersionName = null
 global.sessionToken = null
 
-// create stub on the writer class method
-var sendPayloadMock = function(data, count, done) {
+// create stub on the writer class method to update headers at time of trace send
+const sendPayloadMock = function (data, count, done) {
   if (global.useTestAgent) {
     // Update the headers with additional values
     agent.addEnvironmentVariablesToHeaders(global.stub.lastCall.thisValue._headers).then(async (reqHeaders) => {
       global.stub.lastCall.thisValue._headers = reqHeaders
       // call original method
       global.mockedSend.call(global.stub.lastCall.thisValue, data, count, done)
-    }) 
+    })
   } else {
     global.mockedSend.call(global.stub.lastCall.thisValue, data, count, done)
   }
 }
 
-// create stub on the writer class method
-var startSpanMock = function(name, { childOf, kind, meta, metrics, service, resource, type } = {}, enter = true) {
-  let span
+// create stub on the startSpan method to inject schema version and other tags
+const startSpanMock = function (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enter = true) {
   if (global.useTestAgent) {
     // Update the headers with additional values
     try {
-      meta = meta ? meta : {}
-      if (typeof global.testAgentServiceName === "string") {
-        meta["Trace-Schema-Version"] = global.schemaVersionName ? global.schemaVersionName : "v0"
-        meta["ExpectedServiceName"] = global.testAgentServiceName
-      } else if (typeof global.testAgentServiceName === "function") {
-        meta["Trace-Schema-Version"] = global.schemaVersionName ? global.schemaVersionName : "v0"
-        meta["ExpectedServiceName"] = global.testAgentServiceName()
+      meta = meta ?? {}
+      if (typeof global.testAgentServiceName === 'string') {
+        meta['_schema_version'] = global.schemaVersionName ?? 'v0'
+        meta['_expected_service_name'] = global.testAgentServiceName
+      } else if (typeof global.testAgentServiceName === 'function') {
+        meta['_schema_version'] = global.schemaVersionName ?? 'v0'
+        meta['_expected_service_name'] = global.testAgentServiceName()
+      }
+      if (global.sessionToken) {
+        meta['_session_token'] = global.sessionToken
       }
     } catch (e) {
-      console.log(e)
+      // do something
     }
-    span = global.mockedStartSpan.call(global.stubStartSpan.lastCall.thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter)
-  } else {
-    span = global.mockedStartSpan.call(global.stubStartSpan.lastCall.thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter)
   }
-  return span
+  return global.mockedStartSpan.call(
+    global.stubStartSpan.lastCall.thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter
+  )
 }
 
-function stubStartSpan() {
-  debugger
+function stubStartSpan () {
   global.mockedStartSpan = tracingPlugin.prototype.startSpan
-  global.stubStartSpan = sinon.stub(tracingPlugin.prototype, 'startSpan').callsFake((name, { childOf, kind, meta, metrics, service, resource, type }, enter) => {
-    return startSpanMock(name, { childOf, kind, meta, metrics, service, resource, type }, enter)
-  })
+  global.stubStartSpan = sinon.stub(tracingPlugin.prototype, 'startSpan')
+    .callsFake((name, { childOf, kind, meta, metrics, service, resource, type }, enter) => {
+      return startSpanMock(name, { childOf, kind, meta, metrics, service, resource, type }, enter)
+    })
 }
-stubStartSpan()
 
-function stubSendPayload() {
+function stubSendPayload () {
   global.mockedSend = writer.prototype._sendPayload
   global.stub = sinon.stub(writer.prototype, '_sendPayload').callsFake((data, count, any) => {
     sendPayloadMock(data, count, any)
   })
 }
-stubSendPayload()
 
-function unStubSendPayload() {
-  global.mockedSend = null
-  global.stub.restore()
-  global.stub = null
+if (global.stubForTestAgent !== false) {
+  stubSendPayload()
+  stubStartSpan()
 }
 
 const packageVersionFailures = Object.create({})
@@ -130,7 +128,7 @@ function withNamingSchema (
 
   describe(testTitle, () => {
     Object.keys(schemaDefinitions).forEach(versionName => {
-      const testCase = (version) => {return `in version ${version}`}
+      const testCase = (version) => { return `in version ${version}` }
       describe(testCase(versionName), () => {
         before(() => {
           fullConfig = Nomenclature.config
@@ -141,10 +139,12 @@ function withNamingSchema (
           })
         })
         beforeEach(() => {
-          var testAgentServiceName = expected[versionName].serviceName
-          global.testAgentServiceName = testAgentServiceName === 'function' ? testAgentServiceName() : testAgentServiceName
+          const testAgentServiceName = expected[versionName].serviceName
+          global.testAgentServiceName = testAgentServiceName === 'function'
+            ? testAgentServiceName() : testAgentServiceName
           global.schemaVersionName = versionName
-          global.sessionToken = `${new Date().toISOString()}/${testTitle}/Version:${versionName}/ExpectedServiceName:${testAgentServiceName}`
+          global.sessionToken = `${new Date().toISOString()}/${testTitle}/Version:${versionName}/` +
+            `ExpectedServiceName:${testAgentServiceName}`
         })
 
         after(() => {
@@ -190,10 +190,12 @@ function withNamingSchema (
         })
       })
       beforeEach(() => {
-        testAgentServiceName = expected['v1'].serviceName
-        global.testAgentServiceName = testAgentServiceName === 'function' ? testAgentServiceName() : testAgentServiceName
+        const testAgentServiceName = expected['v1'].serviceName
+        global.testAgentServiceName = testAgentServiceName === 'function'
+          ? testAgentServiceName() : testAgentServiceName
         global.schemaVersionName = 'v1'
-        global.sessionToken = `${new Date().toISOString()}/service naming short-circuit in v0/ExpectedServiceName:${testAgentServiceName}`
+        global.sessionToken = `${new Date().toISOString()}/service naming short-circuit in v0` +
+          `/ExpectedServiceName:${testAgentServiceName}`
       })
       after(() => {
         Nomenclature.configure(fullConfig)
@@ -224,7 +226,7 @@ function withNamingSchema (
 }
 
 function withPeerService (tracer, spanGenerationFn, service, serviceSource, opts = {}) {
-  let testTitle = 'peer service computation' + (opts.desc ? ` ${opts.desc}` : '')
+  const testTitle = 'peer service computation' + (opts.desc ? ` ${opts.desc}` : '')
   describe(testTitle, () => {
     let computePeerServiceSpy
     beforeEach(() => {
