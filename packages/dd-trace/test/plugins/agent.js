@@ -19,6 +19,11 @@ let agent = null
 let listener = null
 let tracer = null
 let plugins = []
+let useTestAgent = false
+const stubs = {
+  originalMethods: {},
+  stubbedMethods: {}
+}
 
 function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
@@ -40,21 +45,21 @@ function ciVisRequestHandler (request, response) {
 
 // create stub on the writer class method to update headers at time of trace send
 const sendPayloadMock = function (data, count, done) {
-  if (global.useTestAgent) {
+  if (useTestAgent) {
     // Update the headers with additional values
-    addEnvironmentVariablesToHeaders(global.stub.lastCall.thisValue._headers).then(async (reqHeaders) => {
-      global.stub.lastCall.thisValue._headers = reqHeaders
+    addEnvironmentVariablesToHeaders(stubs.stubbedMethods._sendPayload.lastCall.thisValue._headers).then(async (reqHeaders) => {
+      stubs.stubbedMethods._sendPayload.lastCall.thisValue._headers = reqHeaders
       // call original method
-      global.mockedSend.call(global.stub.lastCall.thisValue, data, count, done)
+      stubs.originalMethods._sendPayload.call(stubs.stubbedMethods._sendPayload.lastCall.thisValue, data, count, done)
     })
   } else {
-    global.mockedSend.call(global.stub.lastCall.thisValue, data, count, done)
+    stubs.originalMethods._sendPayload.call(stubs.stubbedMethods._sendPayload.lastCall.thisValue, data, count, done)
   }
 }
 
 // create stub on the startSpan method to inject schema version and other tags
 const startSpanMock = function (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enter = true) {
-  if (global.useTestAgent) {
+  if (useTestAgent) {
     // Update the headers with additional values
     try {
       meta = meta ?? {}
@@ -71,32 +76,32 @@ const startSpanMock = function (name, { childOf, kind, meta, metrics, service, r
       // do something
     }
   }
-  return global.mockedStartSpan.call(
-    global.stubStartSpan.lastCall.thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter
+  return stubs.originalMethods.startSpan.call(
+    stubs.stubbedMethods.startSpan.lastCall.thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter
   )
 }
 
 function stubStartSpan () {
-  global.mockedStartSpan = tracingPlugin.prototype.startSpan
-  global.stubStartSpan = sinon.stub(tracingPlugin.prototype, 'startSpan')
+  stubs.originalMethods.startSpan = tracingPlugin.prototype.startSpan
+  stubs.stubbedMethods.startSpan = sinon.stub(tracingPlugin.prototype, 'startSpan')
     .callsFake((name, { childOf, kind, meta, metrics, service, resource, type }, enter) => {
       return startSpanMock(name, { childOf, kind, meta, metrics, service, resource, type }, enter)
     })
 }
 
 function stubSendPayload () {
-  global.mockedSend = writer.prototype._sendPayload
-  global.stub = sinon.stub(writer.prototype, '_sendPayload').callsFake((data, count, any) => {
+  stubs.originalMethods._sendPayload = writer.prototype._sendPayload
+  stubs.stubbedMethods._sendPayload = sinon.stub(writer.prototype, '_sendPayload').callsFake((data, count, any) => {
     sendPayloadMock(data, count, any)
   })
 }
 
 function unstubMethods () {
-  if (global.stub) {
-    global.stub.restore()
-    global.stubStartSpan.restore()
-    global.stub = null
-    global.stubStartSpan = null
+  if (stubs.stubbedMethods._sendPayload) {
+    stubs.stubbedMethods._sendPayload.restore()
+    stubs.stubbedMethods.startSpan.restore()
+    delete stubs.stubbedMethods['_sendPayload']
+    delete stubs.stubbedMethods['startSpan']
   }
 }
 
@@ -230,17 +235,15 @@ module.exports = {
       next()
     })
 
-    debugger
-    if (tracerConfig.stubForTestAgent !== false && !global.stub) {
+    if (tracerConfig.stubForTestAgent !== false && !stubs.stubbedMethods._sendPayload) {
       stubSendPayload()
       stubStartSpan()
     }
-    global.useTestAgent = false
 
     try {
-      global.useTestAgent = await checkAgentStatus()
+      useTestAgent = await checkAgentStatus()
     } catch (error) {
-      global.useTestAgent = false
+      useTestAgent = false
     }
 
     agent.get('/info', (req, res) => {
@@ -254,7 +257,7 @@ module.exports = {
     })
 
     agent.put('/v0.4/traces', async (req, res) => {
-      await handleTraceRequest(req, res, global.useTestAgent)
+      await handleTraceRequest(req, res, useTestAgent)
     })
 
     // CI Visibility Agentless intake
