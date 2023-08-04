@@ -131,26 +131,29 @@ describe('Plugin', () => {
           .catch(done)
       })
 
-      it('should run the request handler in the request scope with a payload', done => {
-        server.route({
-          method: 'POST',
-          path: '/user/{id}',
-          handler: (request, h) => {
-            try {
-              expect(tracer.scope().active()).to.not.be.null
-              done()
-            } catch (e) {
-              done(e)
+      // Hapi does not reply to POST requests on Node 14
+      if (semver.intersects(version, '>=16')) {
+        it('should propagate the async context properly', done => {
+          server.route({
+            method: 'POST',
+            path: '/user/{id}',
+            handler: (request, h) => {
+              try {
+                expect(tracer.scope().active()).to.not.be.null
+                done()
+              } catch (e) {
+                done(e)
+              }
+
+              return handler(request, h)
             }
+          })
 
-            return handler(request, h)
-          }
+          axios
+            .post(`http://localhost:${port}/user/123`, {})
+            .catch(done)
         })
-
-        axios
-          .post(`http://localhost:${port}/user/123`, {})
-          .catch(done)
-      })
+      }
 
       it('should run pre-handlers in the request scope', done => {
         server.route({
@@ -175,7 +178,7 @@ describe('Plugin', () => {
 
       it('should run extension methods in the request scope', done => {
         server.route({
-          method: 'POST',
+          method: 'GET',
           path: '/user/{id}',
           config: {
             handler
@@ -194,14 +197,14 @@ describe('Plugin', () => {
         })
 
         axios
-          .post(`http://localhost:${port}/user/123`, {})
+          .get(`http://localhost:${port}/user/123`)
           .catch(done)
       })
 
       if (semver.intersects(version, '>=11')) {
         it('should run extension events in the request scope', done => {
           server.route({
-            method: 'POST',
+            method: 'GET',
             path: '/user/{id}',
             config: {
               handler
@@ -226,7 +229,7 @@ describe('Plugin', () => {
           })
 
           axios
-            .post(`http://localhost:${port}/user/123`, {})
+            .get(`http://localhost:${port}/user/123`)
             .catch(done)
         })
       }
