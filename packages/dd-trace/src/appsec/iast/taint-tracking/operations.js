@@ -66,7 +66,7 @@ function taintObject (iastContext, object, type, keyTainting, keyType) {
               const taintedProperty = TaintedUtils.newTaintedString(transactionId, key, property, keyType)
               parent[taintedProperty] = tainted
             } else {
-              parent[property] = tainted
+              parent[key] = tainted
             }
           }
         } else if (typeof value === 'object' && !visited.has(value)) {
