@@ -8,7 +8,7 @@ const { getNextSecureMark } = require('../taint-tracking/secure-marks-generator'
 const { storage } = require('../../../../../datadog-core')
 const { getIastContext } = require('../iast-context')
 
-const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb')
+const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose')
 const MONGODB_NOSQL_SECURE_MARK = getNextSecureMark()
 function iterateObjectStrings (target, fn, levelKeys = [], depth = 50) {
   if (target && typeof target === 'object') {
@@ -27,6 +27,9 @@ function iterateObjectStrings (target, fn, levelKeys = [], depth = 50) {
 class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   constructor () {
     super(NO_SQL_MONGODB_INJECTION)
+  }
+  onConfigure () {
+    this.configureSanitizers()
 
     this.addSub('datadog:mongodb:collection:filter:start', ({ filters, methodName }) => {
       if (filters && filters.length) {
@@ -35,7 +38,10 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
         })
       }
     })
+  }
 
+  configureSanitizers () {
+    // TODO => this is not a sinkpoint, speak to Igor about how to prevent to add the sinkpoint
     this.addSub('datadog:express-mongo-sanitize:filter:finish', ({ sanitizedProperties, req }) => {
       const store = storage.getStore()
       const iastContext = getIastContext(store)
@@ -61,6 +67,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       }
     })
 
+    // TODO => this is not a sinkpoint, speak to Igor about how to prevent to add the sinkpoint
     this.addSub('datadog:express-mongo-sanitize:sanitize:finish', ({ sanitizedObject }) => {
       const store = storage.getStore()
       const iastContext = getIastContext(store)

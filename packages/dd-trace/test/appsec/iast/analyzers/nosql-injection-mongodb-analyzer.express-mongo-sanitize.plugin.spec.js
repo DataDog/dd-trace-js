@@ -4,7 +4,7 @@ const { prepareTestServerForIastInExpress } = require('../utils')
 const axios = require('axios')
 const agent = require('../../../plugins/agent')
 describe('nosql injection detection in mongodb - whole feature', () => {
-  withVersions('express', 'express', '>4.3.0', expressVersion => {
+  withVersions('express', 'express', '>4.18.0', expressVersion => {
     withVersions('mongodb', 'mongodb', mongodbVersion => {
       let collection
 

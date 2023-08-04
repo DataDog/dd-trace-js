@@ -32,6 +32,7 @@ addHook({ name: 'mongodb', versions: ['>=3.3'] }, mongodb => {
   [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters].forEach(methodName => {
     try {
       const useTwoArguments = collectionMethodsWithTwoFilters.includes(methodName)
+
       shimmer.wrap(mongodb.Collection.prototype, methodName, method => {
         return function () {
           if (!startCh.hasSubscribers) {
