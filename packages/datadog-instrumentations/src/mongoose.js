@@ -31,6 +31,7 @@ addHook({
 
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
+
 const collectionMethodsWithFilter = [
   'count',
   'countDocuments',
@@ -43,6 +44,7 @@ const collectionMethodsWithFilter = [
   'replaceOne',
   'remove'
 ]
+
 const collectionMethodsWithTwoFilters = [
   'findOneAndUpdate',
   'updateMany',
@@ -71,12 +73,6 @@ addHook({
             filters.push(arguments[1])
           }
 
-          const start = asyncResource.bind(function () {
-            startCh.publish({
-              filters,
-              methodName
-            })
-          })
           const finish = asyncResource.bind(function () {
             finishCh.publish()
           })
@@ -97,9 +93,10 @@ addHook({
           }
 
           return asyncResource.runInAsyncScope(() => {
-            if (callbackWrapped) {
-              start()
-            }
+            startCh.publish({
+              filters,
+              methodName
+            })
 
             const res = method.apply(this, arguments)
             if (!callbackWrapped) {
@@ -107,8 +104,6 @@ addHook({
               const originalExec = res.exec
 
               res.exec = shimmer.wrap(originalExec, function () {
-                start()
-
                 const execResult = originalExec.apply(this, arguments)
 
                 // wrap them method, wrap resolve and reject methods

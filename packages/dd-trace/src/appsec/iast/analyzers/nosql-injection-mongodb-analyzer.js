@@ -31,11 +31,30 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   onConfigure () {
     this.configureSanitizers()
 
-    this.addSub('datadog:mongodb:collection:filter:start', ({ filters, methodName }) => {
+    this.addSub('datadog:mongodb:collection:filter:start', ({ filters }) => {
+      const store = storage.getStore()
+      if (store && !store.nosqlAnalyzed && filters && filters.length) {
+        filters.forEach(filter => {
+          this.analyze(filter, store)
+        })
+      }
+    })
+
+    this.addSub('datadog:mongoose:model:filter:start', ({ filters }) => {
+      const store = storage.getStore()
       if (filters && filters.length) {
         filters.forEach(filter => {
-          this.analyze(filter)
+          this.analyze(filter, store)
         })
+      }
+
+      storage.enterWith({ ...store, nosqlAnalyzed: true, mongooseParentStore: store })
+    })
+
+    this.addSub('datadog:mongoose:model:filter:finish', ({ filters }) => {
+      const store = storage.getStore()
+      if (store && store.mongooseParentStore) {
+        storage.enterWith(store.mongooseParentStore)
       }
     })
   }

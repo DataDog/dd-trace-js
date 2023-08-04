@@ -195,6 +195,14 @@
     {
       "name": "mongodb-core",
       "versions": ["3.2.7"]
+    },
+    {
+      "name": "express",
+      "versions": [">=4", ">=4.0.0 <4.3.0", ">=4.3.0"]
+    },
+    {
+      "name": "body-parser",
+      "versions": ["1.20.1"]
     }
   ],
   "next": [
