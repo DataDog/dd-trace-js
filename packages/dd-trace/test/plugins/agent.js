@@ -91,6 +91,15 @@ function stubSendPayload () {
   })
 }
 
+function unstubMethods () {
+  if (global.stub) {
+    global.stub.restore()
+    global.stubStartSpan.restore()
+    global.stub = null
+    global.stubStartSpan = null
+  }
+}
+
 function addEnvironmentVariablesToHeaders (headers) {
   return new Promise((resolve, reject) => {
     // get all environment variables that start with 'DD_'
@@ -222,7 +231,7 @@ module.exports = {
     })
 
     debugger
-    if (tracerConfig.stubForTestAgent !== false) {
+    if (tracerConfig.stubForTestAgent !== false && !global.stub) {
       stubSendPayload()
       stubStartSpan()
     }
@@ -376,8 +385,7 @@ module.exports = {
   // Stop the mock agent, reset all expectations and wipe the require cache.
   close (opts = {}) {
     const { ritmReset, wipe } = opts
-    global.stub.restore()
-    global.stubStartSpan.restore()
+    unstubMethods()
     listener.close()
     listener = null
     sockets.forEach(socket => socket.end())
