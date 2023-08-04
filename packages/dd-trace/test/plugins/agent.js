@@ -6,6 +6,7 @@ const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const getPort = require('get-port')
 const express = require('express')
+const mochaSetup = require('../setup/mocha.js')
 const path = require('path')
 const ritm = require('../../src/ritm')
 const { storage } = require('../../../datadog-core')
@@ -165,8 +166,11 @@ module.exports = {
       }
       next()
     })
-    
-    global.stubForTestAgent = tracerConfig.stubForTestAgent
+
+    if (tracerConfig.stubForTestAgent !== false) {
+      mochaSetup.stubSendPayload()
+      mochaSetup.stubStartSpan()
+    }
     global.useTestAgent = false
 
     try {

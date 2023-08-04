@@ -76,11 +76,6 @@ function stubSendPayload () {
   })
 }
 
-if (global.stubForTestAgent !== false) {
-  stubSendPayload()
-  stubStartSpan()
-}
-
 const packageVersionFailures = Object.create({})
 
 function loadInst (plugin) {
@@ -358,15 +353,19 @@ function withExports (moduleName, version, exportNames, versionRange, fn) {
   }
 }
 
-exports.mochaHooks = {
-  // TODO: Figure out how to do this with tap too.
-  async afterAll () {
-    await slackReport(packageVersionFailures)
-  },
-
-  afterEach () {
-    agent.reset()
-    metrics.stop()
-    storage.enterWith(undefined)
+exports = {
+  stubSendPayload: stubSendPayload,
+  stubStartSpan: stubStartSpan,
+  mochaHooks: {
+    // TODO: Figure out how to do this with tap too.
+    async afterAll () {
+      await slackReport(packageVersionFailures)
+    },
+  
+    afterEach () {
+      agent.reset()
+      metrics.stop()
+      storage.enterWith(undefined)
+    }
   }
 }
