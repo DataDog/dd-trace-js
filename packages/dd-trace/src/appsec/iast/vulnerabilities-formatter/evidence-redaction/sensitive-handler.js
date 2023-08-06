@@ -5,6 +5,7 @@ const vulnerabilities = require('../../vulnerabilities')
 const { contains, intersects, remove } = require('./range-utils')
 
 const CommandSensitiveAnalyzer = require('./sensitive-analyzers/command-sensitive-analyzer')
+const JsonSensitiveAnalyzer = require('./sensitive-analyzers/json-sensitive-analyzer')
 const LdapSensitiveAnalyzer = require('./sensitive-analyzers/ldap-sensitive-analyzer')
 const SqlSensitiveAnalyzer = require('./sensitive-analyzers/sql-sensitive-analyzer')
 const UrlSensitiveAnalyzer = require('./sensitive-analyzers/url-sensitive-analyzer')
@@ -12,7 +13,7 @@ const UrlSensitiveAnalyzer = require('./sensitive-analyzers/url-sensitive-analyz
 // eslint-disable-next-line max-len
 const DEFAULT_IAST_REDACTION_NAME_PATTERN = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)'
 // eslint-disable-next-line max-len
-const DEFAULT_IAST_REDACTION_VALUE_PATTERN = '(?:bearer\\s+[a-z0-9\\._\\-]+|glpat-[\\w\\-]{20}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=\\-]+\\.ey[I-L][\\w=\\-]+(?:\\.[\\w.+/=\\-]+)?|(?:[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY[\\-]{5}|ssh-rsa\\s*[a-z0-9/\\.+]{100,}))'
+const DEFAULT_IAST_REDACTION_VALUE_PATTERN = 'bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}'
 
 const REDACTED_SOURCE_BUFFER = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
@@ -23,6 +24,7 @@ class SensitiveHandler {
 
     this._sensitiveAnalyzers = new Map()
     this._sensitiveAnalyzers.set(vulnerabilities.COMMAND_INJECTION, new CommandSensitiveAnalyzer())
+    this._sensitiveAnalyzers.set(vulnerabilities.NOSQL_MONGODB_INJECTION, new JsonSensitiveAnalyzer())
     this._sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, new LdapSensitiveAnalyzer())
     this._sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, new SqlSensitiveAnalyzer())
     const urlSensitiveAnalyzer = new UrlSensitiveAnalyzer()

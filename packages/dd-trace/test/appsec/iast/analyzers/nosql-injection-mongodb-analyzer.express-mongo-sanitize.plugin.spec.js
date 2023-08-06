@@ -30,7 +30,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               })
               res.end()
             },
-            vulnerability: 'NO_SQL_MONGODB_INJECTION',
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
             }
@@ -41,7 +41,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               key: 'test'
             })
             res.end()
-          }, 'NO_SQL_MONGODB_INJECTION')
+          }, 'NOSQL_MONGODB_INJECTION')
         })
 
       withVersions('express-mongo-sanitize', 'express-mongo-sanitize', expressMongoSanitizeVersion => {
@@ -57,7 +57,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               })
               res.end()
             },
-            vulnerability: 'NO_SQL_MONGODB_INJECTION',
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
             }

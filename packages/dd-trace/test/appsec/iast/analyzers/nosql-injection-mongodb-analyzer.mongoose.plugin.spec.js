@@ -34,12 +34,30 @@ describe('nosql injection detection in mongodb - whole feature', () => {
           testThatRequestHasVulnerability({
             fn: async (req, res) => {
               Test.find({
-                name: req.query.key
+                name: req.query.key,
+                value: [1, 2,
+                  'value',
+                  false, req.query.key ]
               }).then(() => {
                 res.end()
               })
             },
-            vulnerability: 'NO_SQL_MONGODB_INJECTION',
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
+            makeRequest: (done, config) => {
+              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            }
+          })
+          testThatRequestHasVulnerability({
+            fn: async (req, res) => {
+              Test.find({
+                name: {
+                  child: [req.query.key]
+                }
+              }).then(() => {
+                res.end()
+              })
+            },
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
             }
@@ -51,7 +69,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             }).then(() => {
               res.end()
             })
-          }, 'NO_SQL_MONGODB_INJECTION')
+          }, 'NOSQL_MONGODB_INJECTION')
         })
     })
   })
