@@ -2,7 +2,7 @@
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
-const metrics = require('./metrics')
+const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
@@ -58,7 +58,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.runtimeMetrics) {
-        metrics.start(config)
+        runtimeMetrics.start(config)
       }
 
       if (config.tracing) {

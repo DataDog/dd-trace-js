@@ -18,7 +18,7 @@ describe('TracerProxy', () => {
   let noopAppsecSdk
   let Config
   let config
-  let metrics
+  let runtimeMetrics
   let log
   let profiler
   let appsec
@@ -95,7 +95,7 @@ describe('TracerProxy', () => {
     }
     Config = sinon.stub().returns(config)
 
-    metrics = {
+    runtimeMetrics = {
       start: sinon.spy()
     }
 
@@ -133,7 +133,7 @@ describe('TracerProxy', () => {
       './noop/proxy': NoopProxy,
       './config': Config,
       './plugin_manager': PluginManager,
-      './metrics': metrics,
+      './runtime_metrics': runtimeMetrics,
       './log': log,
       './profiler': profiler,
       './appsec': appsec,
@@ -187,10 +187,10 @@ describe('TracerProxy', () => {
         expect(DatadogTracer).to.not.have.been.called
       })
 
-      it('should not capture metrics by default', () => {
+      it('should not capture runtimeMetrics by default', () => {
         proxy.init()
 
-        expect(metrics.start).to.not.have.been.called
+        expect(runtimeMetrics.start).to.not.have.been.called
       })
 
       it('should support applying remote config', () => {
@@ -205,12 +205,12 @@ describe('TracerProxy', () => {
         expect(pluginManager.configure).to.have.been.calledWith(config)
       })
 
-      it('should start capturing metrics when configured', () => {
+      it('should start capturing runtimeMetrics when configured', () => {
         config.runtimeMetrics = true
 
         proxy.init()
 
-        expect(metrics.start).to.have.been.called
+        expect(runtimeMetrics.start).to.have.been.called
       })
 
       it('should enable appsec when explicitly configured to true', () => {
@@ -276,7 +276,7 @@ describe('TracerProxy', () => {
           './tracer': DatadogTracer,
           './noop/tracer': NoopTracer,
           './config': Config,
-          './metrics': metrics,
+          './runtime_metrics': runtimeMetrics,
           './log': log,
           './profiler': null, // this will cause the import failure error
           './appsec': appsec,
