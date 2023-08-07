@@ -35,12 +35,16 @@ class DogStatsDClient {
     this._udp6 = this._socket('udp6')
   }
 
-  gauge (stat, value, tags) {
-    this._add(stat, value, TYPE_GAUGE, tags)
+  increment (stat, value = 1, tags) {
+    this._add(stat, value, TYPE_COUNTER, tags)
   }
 
-  increment (stat, value, tags) {
-    this._add(stat, value, TYPE_COUNTER, tags)
+  decrement (stat, value = 1, tags) {
+    this._add(stat, value * -1, TYPE_COUNTER, tags)
+  }
+
+  gauge (stat, value, tags) {
+    this._add(stat, value, TYPE_GAUGE, tags)
   }
 
   distribution (stat, value, tags) {

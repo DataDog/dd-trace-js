@@ -9,6 +9,7 @@ const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
+const { DogStatsDClient, NoopDogStatsDClient } = require('./dogstatsd')
 
 class Tracer extends NoopProxy {
   constructor () {
@@ -16,6 +17,7 @@ class Tracer extends NoopProxy {
 
     this._initialized = false
     this._pluginManager = new PluginManager(this)
+    this.metrics = new NoopDogStatsDClient()
   }
 
   init (options) {
@@ -25,6 +27,25 @@ class Tracer extends NoopProxy {
 
     try {
       const config = new Config(options) // TODO: support dynamic code config
+
+      // TODO: Should this be more explicit? Such as an environment variable?
+      // Or, a LazyDogStatsDClient, one that self-initializes upon first method call?
+      if (config.dogstatsd) {
+        // Custom Metrics
+        this.metrics = new DogStatsDClient({
+          host: config.dogstatsd.hostname,
+          port: config.dogstatsd.port,
+          tags: [
+            `service:${config.tags.service}`,
+            `env:${config.tags.env}`,
+            `version:${config.tags.version}`
+          ]
+        })
+
+        setInterval(() => {
+          this.metrics.flush()
+        }, 10 * 1000).unref()
+      }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         const rc = remoteConfig.enable(config)

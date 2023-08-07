@@ -121,6 +121,8 @@ export declare interface Tracer extends opentracing.Tracer {
   appsec: Appsec;
 
   TracerProvider: opentelemetry.TracerProvider;
+
+  metrics: Metrics;
 }
 
 export declare interface TraceOptions extends Analyzable {
@@ -640,6 +642,51 @@ export declare interface User {
    * Custom fields to attach to the user (RBAC, Oauth, etc…).
    */
   [key: string]: string | undefined
+}
+
+// TODO: metrics is [ 'key:val', 'k2:v2' ] which is kinda lame
+// should this instead by { key: 'val', k2: 'v2' }?
+// while it would be more developer-friendly, it would be slower
+// probably it's most important to remain consistent with other interfaces
+export declare interface Metrics {
+  /**
+   * Increments a metric by the specified value, optionally specifying tags.
+   * @param {string} stat The dot-separated metric name.
+   * @param {number} value The amount to increment the stat by.
+   * @param {string[]} tags Tags to pass along, such as `[ 'foo:bar' ]`. Values are combined with config.tags.
+   */
+  increment(stat: string, value?: number, tags?: string[]): void
+
+  /**
+   * Decrements a metric by the specified value, optionally specifying tags.
+   * @param {string} stat The dot-separated metric name.
+   * @param {number} value The amount to decrement the stat by.
+   * @param {string[]} tags Tags to pass along, such as `[ 'foo:bar' ]`. Values are combined with config.tags.
+   */
+  decrement(stat: string, value?: number, tags?: string[]): void
+
+  /**
+   * Sets a distribution value, optionally specifying tags.
+   * @param {string} stat The dot-separated metric name.
+   * @param {number} value The amount to increment the stat by.
+   * @param {string[]} tags Tags to pass along, such as `[ 'foo:bar' ]`. Values are combined with config.tags.
+   */
+  distribution(stat: string, value: number, tags: string[]): void
+
+  /**
+   * Sets a gauge value, optionally specifying tags.
+   * @param {string} stat The dot-separated metric name.
+   * @param {number} value The amount to increment the stat by.
+   * @param {string[]} tags Tags to pass along, such as `[ 'foo:bar' ]`. Values are combined with config.tags.
+   */
+  gauge(stat: string, value: number, tags: string[]): void
+
+  /**
+   * Forces any unsent metrics to be sent
+   *
+   * @beta This method is experimental and could be removed in future versions.
+   */
+  flush(): void
 }
 
 export declare interface Appsec {
