@@ -62,6 +62,7 @@ let originalPrepareStackTrace = Error.prepareStackTrace
 function getPrepareStackTraceAccessor () {
   let actual = getPrepareStackTrace(originalPrepareStackTrace)
   return {
+    configurable: true,
     get () {
       return actual
     },
