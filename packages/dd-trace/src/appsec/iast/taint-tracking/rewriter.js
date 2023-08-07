@@ -42,7 +42,7 @@ function getRewriter (telemetryVerbosity) {
       const Rewriter = iastRewriter.Rewriter
       getPrepareStackTrace = iastRewriter.getPrepareStackTrace
 
-      const chainSourceMap = isEnableSourceMapsFlagPresent()
+      const chainSourceMap = false // isEnableSourceMapsFlagPresent()
       const getOriginalPathAndLineFromSourceMap = iastRewriter.getOriginalPathAndLineFromSourceMap
       if (getOriginalPathAndLineFromSourceMap) {
         getRewriterOriginalPathAndLineFromSourceMap =
