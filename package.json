@@ -78,7 +78,7 @@
     "crypto-randomuuid": "^1.0.0",
     "diagnostics_channel": "^1.1.0",
     "ignore": "^5.2.4",
-    "import-in-the-middle": "^1.4.1",
+    "import-in-the-middle": "^1.4.2",
     "int64-buffer": "^0.1.9",
     "ipaddr.js": "^2.1.0",
     "istanbul-lib-coverage": "3.2.0",
