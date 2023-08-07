@@ -2,8 +2,8 @@
 
 // TODO: Get correlation IDs from the context and not from the event.
 
-const path = require('path')
-const { Worker } = require('node:worker_threads')
+// const collector = require('../../../../../dd-trace-collector/node/index.node')
+const collector = require('./index.node')
 const Chunk = require('../../../../packages/dd-trace/src/encode/chunk')
 const { zeroId } = require('../id')
 
@@ -17,7 +17,8 @@ const eventTypes = {
   FINISH_SPAN: 5,
   ADD_TAGS: 6,
   STRINGS: 7,
-  MYSQL_START_SPAN: 8
+  MYSQL_START_SPAN: 8,
+  CONFIG: 9
 }
 
 const float64Array = new Float64Array(1)
@@ -29,13 +30,16 @@ const bigEndian = uInt8Float64Array[7] === 0
 
 class Encoder {
   constructor ({ limit = SOFT_LIMIT, host, flushInterval }) {
-    this._host = host
     this._flushInterval = flushInterval
     this._limit = limit
     this._metadataBytes = new Chunk(1024)
     this._eventBytes = new Chunk()
     this._stringBytes = new Chunk()
     this._reset()
+
+    this.setHost(host)
+
+    collector.init()
 
     process.once('beforeExit', () => this.flush())
   }
@@ -45,7 +49,14 @@ class Encoder {
   }
 
   setHost (host) {
-    this._host = host
+    this.encodeConfig({ host })
+  }
+
+  encodeConfig (options) {
+    const bytes = this._eventBytes
+
+    this._encodeShort(bytes, eventTypes.CONFIG)
+    this._encodeMap(bytes, options)
   }
 
   encodeSpanStart (event) {
@@ -147,12 +158,7 @@ class Encoder {
 
       this._timer = clearTimeout(this._timer)
 
-      const worker = new Worker(path.join(__dirname, 'worker.js'), {
-        workerData: { host: this._host }
-      })
-
-      worker.on('exit', (code) => done())
-      worker.postMessage(data)
+      collector.submit(data)
 
       done()
     } catch (e) {

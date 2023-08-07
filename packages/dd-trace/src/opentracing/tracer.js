@@ -47,7 +47,7 @@ class DatadogTracer {
       this._hostname = os.hostname()
     }
 
-    if (process.env.DD_COLLECTOR_ENABLED === 'true') {
+    if (process.env.DD_COLLECTOR_ENABLED !== 'false') {
       this._collector = new CollectorExporter(config)
       this._collector.start()
     }
