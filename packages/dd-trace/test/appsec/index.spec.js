@@ -26,6 +26,7 @@ describe('AppSec Index', () => {
   let blocking
   let passport
   let log
+  let appsecTelemetry
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -65,11 +66,17 @@ describe('AppSec Index', () => {
       error: sinon.stub()
     }
 
+    appsecTelemetry = {
+      enable: sinon.stub(),
+      disable: sinon.stub()
+    }
+
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
       '../plugins/util/web': web,
       './blocking': blocking,
-      './passport': passport
+      './passport': passport,
+      './telemetry': appsecTelemetry
     })
 
     sinon.stub(waf, 'init').callThrough()
@@ -132,6 +139,16 @@ describe('AppSec Index', () => {
 
       expect(passportVerify.hasSubscribers).to.be.false
     })
+
+    it('should call appsec telemetry enable', () => {
+      config.telemetry = {
+        enabled: true,
+        metrics: true
+      }
+      AppSec.enable(config)
+
+      expect(appsecTelemetry.enable).to.be.calledOnceWithExactly(config.telemetry)
+    })
   })
 
   describe('disable', () => {
@@ -172,6 +189,14 @@ describe('AppSec Index', () => {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
+    })
+
+    it('should call appsec telemetry disable', () => {
+      AppSec.enable(config)
+
+      AppSec.disable()
+
+      expect(appsecTelemetry.disable).to.be.calledOnce
     })
   })
 
@@ -506,6 +531,47 @@ describe('AppSec Index', () => {
         expect(log.warn).to.have.been.calledOnceWithExactly('No rootSpan found in onPassportVerify')
         expect(passport.passportTrackEvent).not.to.have.been.called
       })
+    })
+  })
+
+  describe('handleResults', () => {
+    const req = {
+      headers: []
+    }
+    const res = {
+      setHeader: () => {},
+      end: () => {}
+    }
+    const rootSpan = {}
+    const abortController = {
+      abort: () => {}
+    }
+
+    beforeEach(() => {
+      AppSec.enable(config)
+
+      const rootSpan = {
+        addTags: sinon.stub()
+      }
+      web.root.returns(rootSpan)
+
+      sinon.stub(Reporter, 'reportBlock')
+    })
+
+    it('should call reportBlock if waf blocked the req', () => {
+      sinon.stub(waf, 'run').returns('block')
+
+      AppSec.incomingHttpStartTranslator({ req, res, abortController })
+
+      expect(Reporter.reportBlock).to.have.been.calledOnceWithExactly(req)
+    })
+
+    it('should not call reportBlock if waf did not block the req', () => {
+      sinon.stub(waf, 'run').returns('pass')
+
+      AppSec.incomingHttpStartTranslator({ req, res, rootSpan, abortController })
+
+      expect(Reporter.reportBlock).to.not.have.been.called
     })
   })
 })

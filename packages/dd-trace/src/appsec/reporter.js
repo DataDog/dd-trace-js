@@ -3,6 +3,7 @@
 const Limiter = require('../rate_limiter')
 const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
+const { incWafInitMetric, updateWafRequestsTag, incWafUpdatesMetric, incWafRequestsMetric } = require('./telemetry')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -63,6 +64,18 @@ function formatHeaderName (name) {
     .toLowerCase()
 }
 
+function reportInitMetrics ({ wafVersion, eventRules }) {
+  metricsQueue.set('_dd.appsec.waf.version', wafVersion)
+
+  metricsQueue.set('_dd.appsec.event_rules.loaded', eventRules.loaded)
+  metricsQueue.set('_dd.appsec.event_rules.error_count', eventRules.failed)
+  if (eventRules.failed) metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(eventRules.errors))
+
+  metricsQueue.set('manual.keep', 'true')
+
+  incWafInitMetric(wafVersion, eventRules.version)
+}
+
 function reportMetrics (metrics) {
   // TODO: metrics should be incremental, there already is an RFC to report metrics
   const store = storage.getStore()
@@ -80,6 +93,8 @@ function reportMetrics (metrics) {
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
+
+  updateWafRequestsTag(metrics, store.req)
 }
 
 function reportAttack (attackData) {
@@ -122,6 +137,14 @@ function reportAttack (attackData) {
   rootSpan.addTags(newTags)
 }
 
+function reportBlock (req) {
+  updateWafRequestsTag({ requestBlocked: true }, req)
+}
+
+function reportUpdateRuleData (wafVersion, eventRulesVersion) {
+  incWafUpdatesMetric(wafVersion, eventRulesVersion)
+}
+
 function finishRequest (req, res) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
@@ -131,6 +154,8 @@ function finishRequest (req, res) {
 
     metricsQueue.clear()
   }
+
+  incWafRequestsMetric(req)
 
   if (!rootSpan.context()._tags['appsec.event']) return
 
@@ -151,8 +176,11 @@ module.exports = {
   metricsQueue,
   filterHeaders,
   formatHeaderName,
+  reportInitMetrics,
   reportMetrics,
   reportAttack,
+  reportBlock,
+  reportUpdateRuleData,
   finishRequest,
   setRateLimit
 }

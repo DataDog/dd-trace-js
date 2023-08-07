@@ -29,15 +29,7 @@ class WAFManager {
   }
 
   _reportMetrics () {
-    Reporter.metricsQueue.set('_dd.appsec.waf.version', this.ddwaf.constructor.version())
-
-    const { loaded, failed, errors } = this.ddwaf.rulesInfo
-
-    Reporter.metricsQueue.set('_dd.appsec.event_rules.loaded', loaded)
-    Reporter.metricsQueue.set('_dd.appsec.event_rules.error_count', failed)
-    if (failed) Reporter.metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(errors))
-
-    Reporter.metricsQueue.set('manual.keep', 'true')
+    Reporter.reportInitMetrics({ wafVersion: this.getWAFVersion(), eventRules: this.ddwaf.rulesInfo })
   }
 
   getWAFContext (req) {
@@ -48,12 +40,23 @@ class WAFManager {
         this.ddwaf.createContext(),
         this.ddwaf.requiredAddresses,
         this.wafTimeout,
-        this.ddwaf.rulesInfo
+        this.ddwaf.rulesInfo,
+        this.getWAFVersion()
       )
       contexts.set(req, wafContext)
     }
 
     return wafContext
+  }
+
+  getWAFVersion () {
+    return this.ddwaf.constructor.version()
+  }
+
+  update (newRules) {
+    this.ddwaf.update(newRules)
+
+    Reporter.reportUpdateRuleData(this.getWAFVersion(), this.ddwaf.rulesInfo.version)
   }
 
   destroy () {
