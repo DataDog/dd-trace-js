@@ -26,6 +26,7 @@ addHook({
   }
 
   shimmer.wrap(mongoose.Collection.prototype, 'addQueue', wrapAddQueue)
+
   return mongoose
 })
 
@@ -143,4 +144,22 @@ addHook({
   })
 
   return Model
+})
+
+const sanitizeFilterFinishCh = channel('datadog:mongoose:sanitize-filter:finish')
+
+addHook({
+  name: 'mongoose',
+  versions: ['>=6'],
+  file: 'lib/helpers/query/sanitizeFilter.js'
+}, sanitizeFilter => {
+  return shimmer.wrap(sanitizeFilter, function () {
+    const sanitizedObject = sanitizeFilter.apply(this, arguments)
+
+    sanitizeFilterFinishCh.publish({
+      sanitizedObject
+    })
+
+    return sanitizedObject
+  })
 })

@@ -6,6 +6,8 @@ const semver = require('semver')
 
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
+
+const sanitizeFilterFinishCh = channel('datadog:mongoose:sanitize-filter:finish')
 describe('mongoose instrumentations', () => {
   // hack to be able to exclude cb test executions in >=7
   const iterationRanges = ['>4.0.0 <=6', '>=7']
@@ -113,7 +115,7 @@ describe('mongoose instrumentations', () => {
           })
         }
 
-        describe('Methods ', () => {
+        describe('Model methods', () => {
           describe('count', () => {
             if (range !== '>=7') {
               it('continue working as expected with cb', (done) => {
@@ -470,6 +472,39 @@ describe('mongoose instrumentations', () => {
             })
           }
         })
+        if (semver.intersects(version, '>=6')) {
+          describe('sanitizeFilter', () => {
+            it('continues working as expected without sanitization', () => {
+              const source = { 'username': 'test' }
+              const expected = { 'username': 'test' }
+
+              const sanitizedObject = mongoose.sanitizeFilter(source)
+
+              expect(sanitizedObject).to.be.deep.equal(expected)
+            })
+
+            it('continues working as expected without sanitization', () => {
+              const source = { 'username': { '$ne': 'test' } }
+              const expected = { 'username': { '$eq': { '$ne': 'test' } } }
+
+              const sanitizedObject = mongoose.sanitizeFilter(source)
+
+              expect(sanitizedObject).to.be.deep.equal(expected)
+            })
+
+            it('channel is published with the result object', () => {
+              const source = { 'username': { '$ne': 'test' } }
+
+              const listener = sinon.stub()
+              sanitizeFilterFinishCh.subscribe(listener)
+              const sanitizedObject = mongoose.sanitizeFilter(source)
+
+              sanitizeFilterFinishCh.unsubscribe(listener)
+
+              expect(listener).to.have.been.calledOnceWith({ sanitizedObject })
+            })
+          })
+        }
       })
     })
   })

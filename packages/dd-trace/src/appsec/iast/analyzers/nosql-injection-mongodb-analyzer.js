@@ -32,6 +32,7 @@ function iterateObjectStrings (target, fn, levelKeys = [], depth = 50) {
 class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   constructor () {
     super(NOSQL_MONGODB_INJECTION)
+    this.sanitizedObjects = new WeakSet()
   }
   onConfigure () {
     this.configureSanitizers()
@@ -106,11 +107,20 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
         })
       }
     })
+
+    this.addSub('datadog:mongoose:sanitize-filter:finish', ({ sanitizedObject }) => {
+      this.sanitizedObjects.add(sanitizedObject)
+    })
   }
 
   _isVulnerable (value, iastContext) {
     if (value && value.filter && iastContext) {
       let isVulnerable = false
+
+      if (this.sanitizedObjects.has(value.filter)) {
+        return false
+      }
+
       const allRanges = {}
       let counter = 0
       let filterString = JSON.stringify(value.filter, function (key, val) {

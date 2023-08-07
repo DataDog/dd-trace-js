@@ -14,7 +14,6 @@ const collectionMethodsWithFilter = [
   'countDocuments',
   'deleteMany',
   'deleteOne',
-  // 'distinct', // filter in the second parameter
   'find',
   'findOneAndDelete',
   'findOneAndReplace',
