@@ -46,7 +46,7 @@ class DatadogSpan {
     this._spanContext = this._createContext(parent, fields)
     this._startTime = fields.startTime || this._getTime()
 
-    if (DD_COLLECTOR_ENABLED === 'true') {
+    if (DD_COLLECTOR_ENABLED !== 'false') {
       startChannel.publish({
         time: this._startTime * 1e6,
         traceId: this._spanContext._traceId,
@@ -66,16 +66,16 @@ class DatadogSpan {
       this._spanContext._name = operationName
       this._spanContext._tags = tags
       this._spanContext._hostname = hostname
+    }
 
-      if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
-        metrics.increment('runtime.node.spans.unfinished')
-        metrics.increment('runtime.node.spans.unfinished.by.name', `span_name:${operationName}`)
+    if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
+      metrics.increment('runtime.node.spans.unfinished')
+      metrics.increment('runtime.node.spans.unfinished.by.name', `span_name:${operationName}`)
 
-        metrics.increment('runtime.node.spans.open') // unfinished for real
-        metrics.increment('runtime.node.spans.open.by.name', `span_name:${operationName}`)
+      metrics.increment('runtime.node.spans.open') // unfinished for real
+      metrics.increment('runtime.node.spans.open.by.name', `span_name:${operationName}`)
 
-        unfinishedRegistry.register(this, operationName, this)
-      }
+      unfinishedRegistry.register(this, operationName, this)
     }
   }
 
@@ -142,7 +142,7 @@ class DatadogSpan {
 
     finishTime = parseFloat(finishTime) || this._getTime()
 
-    if (DD_COLLECTOR_ENABLED === 'true') {
+    if (DD_COLLECTOR_ENABLED !== 'false') {
       finishChannel.publish({
         time: finishTime * 1e6,
         traceId: this._spanContext._traceId,
@@ -155,22 +155,22 @@ class DatadogSpan {
         }
       }
 
-      if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
-        metrics.decrement('runtime.node.spans.unfinished')
-        metrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
-        metrics.increment('runtime.node.spans.finished')
-        metrics.increment('runtime.node.spans.finished.by.name', `span_name:${this._name}`)
-
-        metrics.decrement('runtime.node.spans.open') // unfinished for real
-        metrics.decrement('runtime.node.spans.open.by.name', `span_name:${this._name}`)
-
-        unfinishedRegistry.unregister(this)
-        finishedRegistry.register(this, this._name)
-      }
-
       this._duration = finishTime - this._startTime
       this._spanContext._trace.finished.push(this)
       this._processor.process(this)
+    }
+
+    if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
+      metrics.decrement('runtime.node.spans.unfinished')
+      metrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
+      metrics.increment('runtime.node.spans.finished')
+      metrics.increment('runtime.node.spans.finished.by.name', `span_name:${this._name}`)
+
+      metrics.decrement('runtime.node.spans.open') // unfinished for real
+      metrics.decrement('runtime.node.spans.open.by.name', `span_name:${this._name}`)
+
+      unfinishedRegistry.unregister(this)
+      finishedRegistry.register(this, this._name)
     }
   }
 
@@ -222,7 +222,7 @@ class DatadogSpan {
   _addTags (keyValuePairs) {
     if (!keyValuePairs) return
 
-    if (DD_COLLECTOR_ENABLED === 'true') {
+    if (DD_COLLECTOR_ENABLED !== 'false') {
       tagsChannel.publish({
         traceId: this._spanContext._traceId,
         spanId: this._spanContext._spanId,

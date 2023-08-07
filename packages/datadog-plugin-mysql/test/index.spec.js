@@ -201,9 +201,8 @@ describe('Plugin', () => {
           })
         })
 
-        it.only('should do automatic instrumentation', done => {
+        it('should do automatic instrumentation', done => {
           agent.use(traces => {
-            console.log(traces)
             expect(traces[0][0]).to.have.property('service', 'test-mysql')
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
             expect(traces[0][0]).to.have.property('type', 'sql')

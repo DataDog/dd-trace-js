@@ -106,7 +106,7 @@ class DatadogTracer extends Tracer {
   }
 
   setUrl (url) {
-    if (process.env.DD_COLLECTOR_ENABLED === 'true') {
+    if (process.env.DD_COLLECTOR_ENABLED !== 'false') {
       this._collector.setUrl(url)
     } else {
       this._exporter.setUrl(url)

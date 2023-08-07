@@ -13,7 +13,6 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
   const errorCh = channel('apm:mysql:query:error')
 
   shimmer.wrap(Connection.prototype, 'query', query => function () {
-    console.log('mysql.start')
     if (!startCh.hasSubscribers) {
       return query.apply(this, arguments)
     }
