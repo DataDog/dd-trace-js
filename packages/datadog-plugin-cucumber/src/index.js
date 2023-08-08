@@ -25,12 +25,24 @@ class CucumberPlugin extends CiPlugin {
 
     this.sourceRoot = process.cwd()
 
-    this.addSub('ci:cucumber:session:finish', ({ status, isSuitesSkipped, testCodeCoverageLinesTotal }) => {
+    this.addSub('ci:cucumber:session:finish', ({
+      status,
+      isSuitesSkipped,
+      numSkippedSuites,
+      testCodeCoverageLinesTotal
+    }) => {
       const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
       addIntelligentTestRunnerSpanTags(
         this.testSessionSpan,
         this.testModuleSpan,
-        { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled, testCodeCoverageLinesTotal }
+        {
+          isSuitesSkipped,
+          isSuitesSkippingEnabled,
+          isCodeCoverageEnabled,
+          testCodeCoverageLinesTotal,
+          skippingCount: numSkippedSuites,
+          skippingType: 'suite'
+        }
       )
 
       this.testSessionSpan.setTag(TEST_STATUS, status)

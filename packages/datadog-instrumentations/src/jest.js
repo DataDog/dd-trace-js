@@ -39,10 +39,13 @@ const testErrCh = channel('ci:jest:test:err')
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const jestItrConfigurationCh = channel('ci:jest:itr-configuration')
 
+const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
+
 let skippableSuites = []
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
 let isSuitesSkipped = false
+let numSkippedSuites = 0
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -191,7 +194,7 @@ addHook({
 addHook({
   name: '@jest/test-sequencer',
   versions: ['>=24.8.0']
-}, sequencerPackage => {
+}, (sequencerPackage, frameworkVersion) => {
   shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function () {
     const shardedTests = shard.apply(this, arguments)
 
@@ -202,13 +205,15 @@ addHook({
     const [test] = shardedTests
     const rootDir = test && test.context && test.context.config && test.context.config.rootDir
 
-    const filteredTests = getJestSuitesToRun(skippableSuites, shardedTests, rootDir || process.cwd())
+    const { skippedSuites, suitesToRun } = getJestSuitesToRun(skippableSuites, shardedTests, rootDir || process.cwd())
 
-    isSuitesSkipped = filteredTests.length !== shardedTests.length
+    isSuitesSkipped = suitesToRun.length !== shardedTests.length
+    numSkippedSuites = skippedSuites.length
+
+    itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
 
     skippableSuites = []
-
-    return filteredTests
+    return suitesToRun
   })
   return sequencerPackage
 })
@@ -279,9 +284,12 @@ function cliWrapper (cli, jestVersion) {
         isSuitesSkipped,
         isSuitesSkippingEnabled,
         isCodeCoverageEnabled,
-        testCodeCoverageLinesTotal
+        testCodeCoverageLinesTotal,
+        numSkippedSuites
       })
     })
+
+    numSkippedSuites = 0
 
     return result
   })
@@ -468,7 +476,7 @@ addHook({
   name: '@jest/core',
   versions: ['>=24.8.0'],
   file: 'build/SearchSource.js'
-}, searchSourcePackage => {
+}, (searchSourcePackage, frameworkVersion) => {
   const SearchSource = searchSourcePackage.default ? searchSourcePackage.default : searchSourcePackage
 
   shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
@@ -492,13 +500,16 @@ addHook({
     const testPaths = await getTestPaths.apply(this, arguments)
     const { tests } = testPaths
 
-    const filteredTests = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    const { skippedSuites, suitesToRun } = getJestSuitesToRun(skippableSuites, tests, rootDir)
 
-    isSuitesSkipped = filteredTests.length !== tests.length
+    isSuitesSkipped = suitesToRun.length !== tests.length
+    numSkippedSuites = skippedSuites.length
+
+    itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
 
     skippableSuites = []
 
-    return { ...testPaths, tests: filteredTests }
+    return { ...testPaths, tests: suitesToRun }
   })
 
   return searchSourcePackage

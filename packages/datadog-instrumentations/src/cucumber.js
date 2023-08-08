@@ -21,6 +21,8 @@ const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
 
+const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
+
 const {
   getCoveredFilenamesFromCoverage,
   resetCoverage,
@@ -37,7 +39,6 @@ const patched = new WeakSet()
 
 let pickleByFile = {}
 const pickleResultByFile = {}
-let isSuitesSkipped = false
 
 function getSuiteStatusFromTestStatuses (testStatuses) {
   if (testStatuses.some(status => status === 'fail')) {
@@ -216,11 +217,18 @@ addHook({
   file: 'lib/runtime/test_case_runner.js'
 }, testCaseHook)
 
-function getPicklesToRun (runtime, suitesToSkip) {
-  return runtime.pickleIds.filter((pickleId) => {
+function getFilteredPickles (runtime, suitesToSkip) {
+  return runtime.pickleIds.reduce((acc, pickleId) => {
     const test = runtime.eventDataCollector.getPickle(pickleId)
-    return !suitesToSkip.includes(getTestSuitePath(test.uri, process.cwd()))
-  }, {})
+    const testSuitePath = getTestSuitePath(test.uri, process.cwd())
+    const isSkipped = suitesToSkip.includes(testSuitePath)
+    if (isSkipped) {
+      acc.skippedSuites.add(testSuitePath)
+    } else {
+      acc.picklesToRun.push(pickleId)
+    }
+    return acc
+  }, { skippedSuites: new Set(), picklesToRun: [] })
 }
 
 function getPickleByFile (runtime) {
@@ -239,7 +247,7 @@ addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.0.0'],
   file: 'lib/runtime/index.js'
-}, (runtimePackage, cucumberVersion) => {
+}, (runtimePackage, frameworkVersion) => {
   shimmer.wrap(runtimePackage.default.prototype, 'start', start => async function () {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     let onDone
@@ -263,11 +271,16 @@ addHook({
     })
 
     const { err, skippableSuites } = await skippableSuitesPromise
+    let skippedSuites = []
+    let isSuitesSkipped = false
 
     if (!err) {
-      const newPickleIds = getPicklesToRun(this, skippableSuites)
-      isSuitesSkipped = newPickleIds.length !== this.pickleIds.length
-      this.pickleIds = newPickleIds
+      const filteredPickles = getFilteredPickles(this, skippableSuites)
+      const { picklesToRun } = filteredPickles
+      isSuitesSkipped = picklesToRun.length !== this.pickleIds.length
+      this.pickleIds = picklesToRun
+
+      skippedSuites = Array.from(filteredPickles.skippedSuites)
     }
 
     pickleByFile = getPickleByFile(this)
@@ -276,8 +289,13 @@ addHook({
     const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
 
     asyncResource.runInAsyncScope(() => {
-      sessionStartCh.publish({ command, frameworkVersion: cucumberVersion })
+      sessionStartCh.publish({ command, frameworkVersion })
     })
+
+    if (!err && skippedSuites.length) {
+      itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
+    }
+
     const success = await start.apply(this, arguments)
 
     let testCodeCoverageLinesTotal
@@ -296,7 +314,8 @@ addHook({
       sessionFinishCh.publish({
         status: success ? 'pass' : 'fail',
         isSuitesSkipped,
-        testCodeCoverageLinesTotal
+        testCodeCoverageLinesTotal,
+        numSkippedSuites: skippedSuites.length
       })
     })
     return success
