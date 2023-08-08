@@ -9,7 +9,7 @@ const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
-const { DogStatsDClient, NoopDogStatsDClient } = require('./dogstatsd')
+const dogstatsd = require('./dogstatsd')
 
 class Tracer extends NoopProxy {
   constructor () {
@@ -17,7 +17,7 @@ class Tracer extends NoopProxy {
 
     this._initialized = false
     this._pluginManager = new PluginManager(this)
-    this.metrics = new NoopDogStatsDClient()
+    this.metrics = new dogstatsd.NoopDogStatsDClient()
   }
 
   init (options) {
@@ -32,7 +32,7 @@ class Tracer extends NoopProxy {
       // Or, a LazyDogStatsDClient, one that self-initializes upon first method call?
       if (config.dogstatsd) {
         // Custom Metrics
-        this.metrics = new DogStatsDClient({
+        this.metrics = new dogstatsd.DogStatsDClient({
           host: config.dogstatsd.hostname,
           port: config.dogstatsd.port,
           tags: [
