@@ -3,6 +3,8 @@
 const { storage } = require('../../../../datadog-core')
 
 const dc = require('../../../../diagnostics_channel')
+const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../../../ext/tags')
+const { WEB } = require('../../../../../ext/types')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
@@ -41,13 +43,13 @@ function getSpanContextTags (span) {
 }
 
 function isWebServerSpan (tags) {
-  return tags['span.type'] === 'web'
+  return tags[SPAN_TYPE] === WEB
 }
 
 function endpointNameFromTags (tags) {
-  return tags['resource.name'] || [
-    tags['http.method'],
-    tags['http.route']
+  return tags[RESOURCE_NAME] || [
+    tags[HTTP_METHOD],
+    tags[HTTP_ROUTE]
   ].filter(v => v).join(' ')
 }
 
@@ -99,7 +101,7 @@ class NativeWallProfiler {
 
     if (this._codeHotspotsEnabled && !this._emittedFFMessage && this._logger) {
       this._logger.debug(
-        `Wall profiler: Enable config_trace_show_breakdown_profiling_for_node feature flag to see code hotspots.`)
+        `Wall profiler: Enable trace_show_breakdown_profiling_for_node feature flag to see code hotspots.`)
       this._emittedFFMessage = true
     }
 
