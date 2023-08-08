@@ -1,6 +1,7 @@
 'use strict'
 
 require('./mongodb-core')
+
 const {
   channel,
   addHook,

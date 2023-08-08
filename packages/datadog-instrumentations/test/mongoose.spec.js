@@ -62,6 +62,8 @@ describe('mongoose instrumentations', () => {
           const deleteFilter = {
             type: 'test'
           }
+
+          // some versions have deleteMany methods and others just delete
           if (typeof Test.deleteMany === 'function') {
             Test.deleteMany(deleteFilter).then(() => done())
           } else {
@@ -103,7 +105,7 @@ describe('mongoose instrumentations', () => {
             startCh.subscribe(start)
             finishCh.subscribe(finish)
 
-            Test[methodName](...filters, ...args).then(()=> {
+            Test[methodName](...filters, ...args).then(() => {
               startCh.unsubscribe(start)
               finishCh.unsubscribe(finish)
 
@@ -472,6 +474,7 @@ describe('mongoose instrumentations', () => {
             })
           }
         })
+
         if (semver.intersects(version, '>=6')) {
           describe('sanitizeFilter', () => {
             it('continues working as expected without sanitization', () => {

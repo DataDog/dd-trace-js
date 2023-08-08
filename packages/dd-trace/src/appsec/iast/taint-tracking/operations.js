@@ -116,6 +116,7 @@ function addSecureMark (iastContext, string, mark) {
     const transactionId = iastContext[IAST_TRANSACTION_ID]
     return TaintedUtils.addSecureMarksToTaintedString(transactionId, string, mark)
   }
+
   return string
 }
 

@@ -142,6 +142,7 @@ describe('express-mongo-sanitize', () => {
 
           expect(sanitizedObject.safeKey).to.be.equal(objectToSanitize.safeKey)
         })
+
         it('it works as expected with modifications', () => {
           expect(sanitizeFinished.hasSubscribers).to.be.false
           const objectToSanitize = {

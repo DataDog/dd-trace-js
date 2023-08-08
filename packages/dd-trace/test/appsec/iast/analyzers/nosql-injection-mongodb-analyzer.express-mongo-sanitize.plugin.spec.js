@@ -56,6 +56,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
                 key: req.query.key
               }
               await require(tmpFilePath)(collection, filter)
+
               res.end()
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
@@ -75,6 +76,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             await collection.find({
               key: 'test'
             })
+
             res.end()
           }, 'NOSQL_MONGODB_INJECTION')
         })
@@ -90,6 +92,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               await collection.find({
                 key: req.query.key
               })
+
               res.end()
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',

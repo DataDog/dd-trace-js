@@ -87,6 +87,7 @@ addHook({
 
             arguments[lastArgumentIndex] = shimmer.wrap(originalCb, function () {
               finish()
+
               originalCb.apply(this, arguments)
             })
 
@@ -116,6 +117,7 @@ addHook({
                   // not using shimmer here because resolve/reject could be empty
                   arguments[0] = function () {
                     finish()
+
                     if (resolve) {
                       resolve.apply(this, arguments)
                     }
@@ -123,6 +125,7 @@ addHook({
 
                   arguments[1] = function () {
                     finish()
+
                     if (reject) {
                       reject.apply(this, arguments)
                     }

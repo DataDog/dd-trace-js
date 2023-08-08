@@ -331,9 +331,11 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
         makeRequest = obj.makeRequest
         testDescription = obj.testDescription || testDescription
       }
+
       it(testDescription, function (done) {
         this.timeout(5000)
         app = fn
+
         checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done)
       })
     }
@@ -347,6 +349,7 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
         makeRequest = obj.makeRequest
         testDescription = obj.testDescription || testDescription
       }
+
       it(testDescription, function (done) {
         app = fn
         checkNoVulnerabilityInRequest(vulnerability, config, done, makeRequest)

@@ -31,6 +31,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
         Test = mongoose.model('Test', { name: String })
 
         const src = path.join(__dirname, 'resources', vulnerableMethodFilename)
+
         tmpFilePath = path.join(os.tmpdir(), vulnerableMethodFilename)
         try {
           fs.unlinkSync(tmpFilePath)
@@ -39,7 +40,6 @@ describe('nosql injection detection in mongodb - whole feature', () => {
         }
         fs.copyFileSync(src, tmpFilePath)
       })
-
 
       after(() => {
         fs.unlinkSync(tmpFilePath)
@@ -54,7 +54,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
                 name: req.query.key,
                 value: [1, 2,
                   'value',
-                  false, req.query.key ]
+                  false, req.query.key]
               }).then(() => {
                 res.end()
               })
