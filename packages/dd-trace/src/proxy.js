@@ -21,6 +21,9 @@ class Tracer extends NoopProxy {
   init (options) {
     if (this._initialized) return this
 
+    process.emitWarning('The dd-trace@v2.x release line reached end of life on ' +
+      '2023-08-15 and will no longer receive updates. Please upgrade.')
+
     this._initialized = true
 
     try {
