@@ -98,6 +98,8 @@ class HttpClientPlugin extends ClientPlugin {
   }
 
   error ({ span, error }) {
+    if (!span) return
+
     if (error) {
       span.addTags({
         [ERROR_TYPE]: error.name,
