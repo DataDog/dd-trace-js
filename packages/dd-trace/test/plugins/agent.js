@@ -63,14 +63,14 @@ const startSpanMock = function (name, { childOf, kind, meta, metrics, service, r
     // Update the headers with additional values
     try {
       meta = meta ?? {}
-      meta['_schema_version'] = global.schemaVersionName ?? 'v0'
-      if (typeof global.testAgentServiceName === 'string') {
-        meta['_expected_service_name'] = global.testAgentServiceName
-      } else if (typeof global.testAgentServiceName === 'function') {
+      meta['_schema_version'] = global.testAgent.schemaVersionName ?? 'v0'
+      if (typeof global.testAgent.expectedServiceName === 'string') {
+        meta['_expected_service_name'] = global.testAgent.expectedServiceName
+      } else if (typeof global.testAgent.expectedServiceName === 'function') {
         meta['_expected_service_name'] = global.testAgentServiceName()
       }
-      if (global.sessionToken) {
-        meta['_session_token'] = global.sessionToken
+      if (global.testAgent.sessionToken) {
+        meta['_session_token'] = global.testAgent.sessionToken
       }
     } catch (e) {
       // do something
@@ -166,7 +166,7 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
     }
 
     if (req.body[0][0].meta['_session_token']) {
-      req.headers['X-Datadog-Test-Session-Token'] = global.sessionToken
+      req.headers['X-Datadog-Test-Session-Token'] = global.testAgent.sessionToken
     }
 
     // remove incorrect headers
