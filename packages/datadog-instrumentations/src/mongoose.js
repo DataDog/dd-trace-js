@@ -54,7 +54,7 @@ const collectionMethodsWithTwoFilters = [
 
 addHook({
   name: 'mongoose',
-  versions: ['>=4'],
+  versions: ['>=4.6.4 <5', '5', '6', '>=7'],
   file: 'lib/model.js'
 }, Model => {
   [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters].forEach(methodName => {
@@ -153,7 +153,7 @@ const sanitizeFilterFinishCh = channel('datadog:mongoose:sanitize-filter:finish'
 
 addHook({
   name: 'mongoose',
-  versions: ['>=6'],
+  versions: ['6', '>=7'],
   file: 'lib/helpers/query/sanitizeFilter.js'
 }, sanitizeFilter => {
   return shimmer.wrap(sanitizeFilter, function () {
