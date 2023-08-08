@@ -48,10 +48,16 @@ function getJestTestName (test) {
 }
 
 function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
-  return originalTests.filter(({ path: testPath }) => {
-    const relativePath = getTestSuitePath(testPath, rootDir)
-    return !skippableSuites.includes(relativePath)
-  })
+  return originalTests.reduce((acc, test) => {
+    const relativePath = getTestSuitePath(test.path, rootDir)
+    const shouldBeSkipped = skippableSuites.includes(relativePath)
+    if (shouldBeSkipped) {
+      acc.skippedSuites.push(relativePath)
+    } else {
+      acc.suitesToRun.push(test)
+    }
+    return acc
+  }, { skippedSuites: [], suitesToRun: [] })
 }
 
 module.exports = { getFormattedJestTestParameters, getJestTestName, getJestSuitesToRun }

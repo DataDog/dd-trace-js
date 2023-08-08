@@ -1,7 +1,5 @@
-import tracer from 'dd-trace'
+import 'dd-trace/init.js'
 import express from 'express'
-
-tracer.init({ port: process.env.AGENT_PORT })
 
 const app = express()
 
