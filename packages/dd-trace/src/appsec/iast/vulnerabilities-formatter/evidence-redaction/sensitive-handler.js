@@ -10,10 +10,7 @@ const LdapSensitiveAnalyzer = require('./sensitive-analyzers/ldap-sensitive-anal
 const SqlSensitiveAnalyzer = require('./sensitive-analyzers/sql-sensitive-analyzer')
 const UrlSensitiveAnalyzer = require('./sensitive-analyzers/url-sensitive-analyzer')
 
-// eslint-disable-next-line max-len
-const DEFAULT_IAST_REDACTION_NAME_PATTERN = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)'
-// eslint-disable-next-line max-len
-const DEFAULT_IAST_REDACTION_VALUE_PATTERN = 'bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}'
+const { DEFAULT_IAST_REDACTION_NAME_PATTERN, DEFAULT_IAST_REDACTION_VALUE_PATTERN } = require('./sensitive-regex')
 
 const REDACTED_SOURCE_BUFFER = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 

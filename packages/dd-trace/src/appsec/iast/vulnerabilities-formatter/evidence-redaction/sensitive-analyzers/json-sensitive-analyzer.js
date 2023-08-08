@@ -1,5 +1,7 @@
 'use strict'
 
+const { DEFAULT_IAST_REDACTION_VALUE_PATTERN } = require('../sensitive-regex')
+
 const JSON_OBJECT_START = '{'
 const JSON_OBJECT_END = '}'
 const JSON_ARRAY_START = '['
@@ -22,9 +24,6 @@ const JSON_PARSER_STATUS_FINDING_COLON = 6
 
 const JSON_STRUCT_OBJECT = 0
 const JSON_STRUCT_ARRAY = 1
-
-// eslint-disable-next-line max-len
-const DEFAULT_IAST_REDACTION_VALUE_PATTERN = 'bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}'
 
 class JsonSensitiveAnalyzer {
   constructor () {
