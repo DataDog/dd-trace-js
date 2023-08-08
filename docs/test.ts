@@ -127,6 +127,20 @@ tracer.init({
   }
 })
 
+tracer.metrics.increment('foo')
+tracer.metrics.increment('foo', 2)
+tracer.metrics.increment('foo', 2, ['a:b'])
+tracer.metrics.decrement('foo')
+tracer.metrics.decrement('foo', 2)
+tracer.metrics.decrement('foo', 2, ['a:b'])
+tracer.metrics.distribution('foo')
+tracer.metrics.distribution('foo', 2)
+tracer.metrics.distribution('foo', 2, ['a:b'])
+tracer.metrics.gauge('foo')
+tracer.metrics.gauge('foo', 2)
+tracer.metrics.gauge('foo', 2, ['a:b'])
+tracer.metrics.flush()
+
 const httpOptions = {
   service: 'test',
   allowlist: ['url', /url/, url => true],

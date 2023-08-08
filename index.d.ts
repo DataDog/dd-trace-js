@@ -671,7 +671,7 @@ export declare interface Metrics {
    * @param {number} value The amount to increment the stat by.
    * @param {string[]} tags Tags to pass along, such as `[ 'foo:bar' ]`. Values are combined with config.tags.
    */
-  distribution(stat: string, value: number, tags: string[]): void
+  distribution(stat: string, value?: number, tags?: string[]): void
 
   /**
    * Sets a gauge value, optionally specifying tags.
@@ -679,7 +679,7 @@ export declare interface Metrics {
    * @param {number} value The amount to increment the stat by.
    * @param {string[]} tags Tags to pass along, such as `[ 'foo:bar' ]`. Values are combined with config.tags.
    */
-  gauge(stat: string, value: number, tags: string[]): void
+  gauge(stat: string, value?: number, tags?: string[]): void
 
   /**
    * Forces any unsent metrics to be sent
