@@ -20,7 +20,8 @@ const {
   finishAllTraceSpans,
   getCoveredFilenamesFromCoverage,
   getTestSuitePath,
-  addIntelligentTestRunnerSpanTags
+  addIntelligentTestRunnerSpanTags,
+  TEST_SKIPPED_BY_ITR
 } = require('../../dd-trace/src/plugins/util/test')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
@@ -120,6 +121,7 @@ function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) 
 
 module.exports = (on, config) => {
   let isTestsSkipped = false
+  const skippedTests = []
   const tracer = require('../../dd-trace')
   const testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
@@ -248,19 +250,23 @@ module.exports = (on, config) => {
     const cypressTests = tests || []
     const finishedTests = finishedTestsByFile[spec.relative] || []
 
-    // Get tests that didn't go through `dd:afterEach` and haven't been skipped by ITR
+    // Get tests that didn't go through `dd:afterEach`
     // and create a skipped test span for each of them
     cypressTests.filter(({ title }) => {
+      const cypressTestName = title.join(' ')
+      const isTestFinished = finishedTests.find(({ testName }) => cypressTestName === testName)
+
+      return !isTestFinished
+    }).forEach(({ title }) => {
       const cypressTestName = title.join(' ')
       const isSkippedByItr = testsToSkip.find(test =>
         cypressTestName === test.name && spec.relative === test.suite
       )
-      const isTestFinished = finishedTests.find(({ testName }) => cypressTestName === testName)
-
-      return !isSkippedByItr && !isTestFinished
-    }).forEach(({ title }) => {
-      const skippedTestSpan = getTestSpan(title.join(' '), spec.relative)
+      const skippedTestSpan = getTestSpan(cypressTestName, spec.relative)
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
+      if (isSkippedByItr) {
+        skippedTestSpan.setTag(TEST_SKIPPED_BY_ITR, 'true')
+      }
       skippedTestSpan.finish()
     })
 
@@ -309,7 +315,9 @@ module.exports = (on, config) => {
         {
           isSuitesSkipped: isTestsSkipped,
           isSuitesSkippingEnabled,
-          isCodeCoverageEnabled
+          isCodeCoverageEnabled,
+          skippingType: 'test',
+          skippingCount: skippedTests.length
         }
       )
 
@@ -353,6 +361,7 @@ module.exports = (on, config) => {
       if (testsToSkip.find(test => {
         return testName === test.name && testSuite === test.suite
       })) {
+        skippedTests.push(test)
         isTestsSkipped = true
         return { shouldSkip: true }
       }

@@ -19,7 +19,11 @@ const {
   TEST_ITR_SKIPPING_ENABLED,
   TEST_ITR_TESTS_SKIPPED,
   TEST_CODE_COVERAGE_LINES_PCT,
-  TEST_SUITE
+  TEST_SUITE,
+  TEST_STATUS,
+  TEST_SKIPPED_BY_ITR,
+  TEST_ITR_SKIPPING_TYPE,
+  TEST_ITR_SKIPPING_COUNT
 } = require('../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
@@ -174,8 +178,13 @@ testFrameworks.forEach(({
           receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(secondShardEvents => {
             const testSuiteEvents = secondShardEvents.payload.events.filter(event => event.type === 'test_suite_end')
 
-            // The suites for this shard are to be skipped, so nothing is run.
-            assert.equal(testSuiteEvents.length, 0)
+            // The suites for this shard are to be skipped
+            assert.equal(testSuiteEvents.length, 2)
+
+            testSuiteEvents.forEach(testSuite => {
+              assert.propertyVal(testSuite.content.meta, TEST_STATUS, 'skip')
+              assert.propertyVal(testSuite.content.meta, TEST_SKIPPED_BY_ITR, 'true')
+            })
 
             const testSession = secondShardEvents
               .payload
@@ -183,6 +192,8 @@ testFrameworks.forEach(({
               .find(event => event.type === 'test_session_end').content
 
             assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
+            assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_TYPE, 'suite')
+            assert.propertyVal(testSession.metrics, TEST_ITR_SKIPPING_COUNT, 2)
 
             done()
           })
@@ -604,23 +615,29 @@ testFrameworks.forEach(({
 
           assert.propertyVal(eventsRequest.headers, 'dd-api-key', '1')
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
-          const skippedTest = eventsRequest.payload.events.find(event =>
-            event.content.resource === 'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests'
-          )
-          assert.notExists(skippedTest)
+          const skippedSuite = eventsRequest.payload.events.find(event =>
+            event.content.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
+          ).content
+          assert.propertyVal(skippedSuite.meta, TEST_STATUS, 'skip')
+          assert.propertyVal(skippedSuite.meta, TEST_SKIPPED_BY_ITR, 'true')
+
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
           const numSuites = eventTypes.reduce(
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
-          assert.equal(numSuites, 1)
+          assert.equal(numSuites, 2)
           const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
           assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
           assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
           assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_TYPE, 'suite')
+          assert.propertyVal(testSession.metrics, TEST_ITR_SKIPPING_COUNT, 1)
           const testModule = eventsRequest.payload.events.find(event => event.type === 'test_module_end').content
           assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'true')
           assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
           assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_TYPE, 'suite')
+          assert.propertyVal(testModule.metrics, TEST_ITR_SKIPPING_COUNT, 1)
           done()
         }).catch(done)
 
@@ -956,15 +973,17 @@ testFrameworks.forEach(({
           assert.notProperty(eventsRequest.headers, 'dd-api-key')
           assert.propertyVal(eventsRequest.headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
-          const skippedTest = eventsRequest.payload.events.find(event =>
-            event.content.resource === 'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests'
-          )
-          assert.notExists(skippedTest)
+          const skippedSuite = eventsRequest.payload.events.find(event =>
+            event.content.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
+          ).content
+          assert.propertyVal(skippedSuite.meta, TEST_STATUS, 'skip')
+          assert.propertyVal(skippedSuite.meta, TEST_SKIPPED_BY_ITR, 'true')
+
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
           const numSuites = eventTypes.reduce(
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
-          assert.equal(numSuites, 1)
+          assert.equal(numSuites, 2)
           done()
         }).catch(done)
 
