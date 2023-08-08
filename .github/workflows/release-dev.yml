@@ -3,7 +3,7 @@ name: Release dev release line
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   dev_release:

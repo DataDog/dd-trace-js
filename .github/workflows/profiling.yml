@@ -3,7 +3,7 @@ name: Profiling
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [main]
   schedule:
     - cron: '0 4 * * *'
 

@@ -3,7 +3,7 @@ name: "Lib Injection Test"
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [main]
   schedule:
     - cron: '0 4 * * *'
 
@@ -39,7 +39,7 @@ jobs:
       - name: Push snapshot image
         run: |
           docker buildx build --platform=linux/amd64,linux/arm/v7,linux/arm64/v8 -t ghcr.io/datadog/dd-trace-js/dd-lib-js-init:latest_snapshot --push lib-injection
-        if: ${{ steps.set_names.outputs.image_name }} == 'master'
+        if: ${{ steps.set_names.outputs.image_name }} == 'main'
 
   lib-injection-tests:
     needs:

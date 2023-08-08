@@ -4,7 +4,7 @@
 [![npm v3](https://img.shields.io/npm/v/dd-trace/latest-node14?color=blue&label=dd-trace%40v3&logo=npm)](https://www.npmjs.com/package/dd-trace/v/latest-node12)
 [![npm v2](https://img.shields.io/npm/v/dd-trace/latest-node12?color=blue&label=dd-trace%40v2&logo=npm)](https://www.npmjs.com/package/dd-trace/v/latest-node12)
 [![npm dev](https://img.shields.io/npm/v/dd-trace/dev?color=orange&label=dd-trace%40dev&logo=npm)](https://www.npmjs.com/package/dd-trace/v/dev)
-[![codecov](https://codecov.io/gh/DataDog/dd-trace-js/branch/master/graph/badge.svg)](https://codecov.io/gh/DataDog/dd-trace-js)
+[![codecov](https://codecov.io/gh/DataDog/dd-trace-js/branch/main/graph/badge.svg)](https://codecov.io/gh/DataDog/dd-trace-js)
 
 <img align="right" src="https://user-images.githubusercontent.com/551402/208212084-1d0c07e2-4135-4c61-b2da-8f2fddbc66ed.png" alt="Bits the dog  JavaScript" width="200px"/>
 
@@ -67,7 +67,7 @@ Changes associated with each individual release are documented on the [GitHub Re
 
 ## Development
 
-Before contributing to this open source project, read our [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/master/CONTRIBUTING.md).
+Before contributing to this open source project, read our [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/main/CONTRIBUTING.md).
 
 
 ## Requirements

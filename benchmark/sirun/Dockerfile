@@ -1,4 +1,4 @@
-# The version of this file in master is used across all PRs regardless of upstream branch
+# The version of this file in main is used across all PRs regardless of upstream branch
 FROM --platform=linux/amd64 ubuntu:22.04
 
 RUN apt-get update && apt-get install --no-install-recommends -y \

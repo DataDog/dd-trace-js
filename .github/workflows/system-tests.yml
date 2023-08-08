@@ -5,7 +5,7 @@ on:
     branches:
       - "**"
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch: {}
   schedule:
     - cron:  '00 04 * * 2-6'
@@ -72,9 +72,9 @@ jobs:
         run: ./build.sh -i runner
       - name: Run
         run: ./run.sh PARAMETRIC
-        
+
       - name: Compress artifact
-        if: ${{ always() }}  
+        if: ${{ always() }}
         run: tar -czvf artifact.tar.gz $(ls | grep logs)
       - name: Upload artifact
         uses: actions/upload-artifact@v3
