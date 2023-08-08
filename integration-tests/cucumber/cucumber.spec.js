@@ -14,12 +14,15 @@ const {
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
   TEST_STATUS,
+  TEST_SKIPPED_BY_ITR,
   TEST_COMMAND,
   TEST_MODULE,
   TEST_TOOLCHAIN,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_ITR_SKIPPING_ENABLED,
   TEST_ITR_TESTS_SKIPPED,
+  TEST_ITR_SKIPPING_TYPE,
+  TEST_ITR_SKIPPING_COUNT,
   TEST_CODE_COVERAGE_LINES_PCT
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
@@ -377,23 +380,30 @@ versions.forEach(version => {
 
               const eventTypes = eventsRequest.payload.events.map(event => event.type)
 
-              const skippedTest = eventsRequest.payload.events.find(event =>
-                event.content.resource === 'ci-visibility/features/farewell.feature.Say farewell'
-              )
-              assert.notExists(skippedTest)
+              const skippedSuite = eventsRequest.payload.events.find(event =>
+                event.content.resource === 'test_suite.ci-visibility/features/farewell.feature'
+              ).content
+              assert.propertyVal(skippedSuite.meta, TEST_STATUS, 'skip')
+              assert.propertyVal(skippedSuite.meta, TEST_SKIPPED_BY_ITR, 'true')
+
               assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
               const numSuites = eventTypes.reduce(
                 (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
               )
-              assert.equal(numSuites, 1)
+              assert.equal(numSuites, 2)
               const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
               assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
               assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
               assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+              assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_TYPE, 'suite')
+              assert.propertyVal(testSession.metrics, TEST_ITR_SKIPPING_COUNT, 1)
+
               const testModule = eventsRequest.payload.events.find(event => event.type === 'test_module_end').content
               assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'true')
               assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
               assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+              assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_TYPE, 'suite')
+              assert.propertyVal(testModule.metrics, TEST_ITR_SKIPPING_COUNT, 1)
               done()
             }).catch(done)
 
@@ -499,10 +509,12 @@ versions.forEach(version => {
                 assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
                 assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
                 assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+                assert.propertyVal(testSession.metrics, TEST_ITR_SKIPPING_COUNT, 0)
                 const testModule = events.find(event => event.type === 'test_module_end').content
                 assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
                 assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
                 assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+                assert.propertyVal(testModule.metrics, TEST_ITR_SKIPPING_COUNT, 0)
               }, 25000)
 
             childProcess = exec(
