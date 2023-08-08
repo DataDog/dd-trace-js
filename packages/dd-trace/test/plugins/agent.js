@@ -67,7 +67,7 @@ const startSpanMock = function (name, { childOf, kind, meta, metrics, service, r
       if (typeof global.testAgent.expectedServiceName === 'string') {
         meta['_expected_service_name'] = global.testAgent.expectedServiceName
       } else if (typeof global.testAgent.expectedServiceName === 'function') {
-        meta['_expected_service_name'] = global.testAgent.testAgentServiceName()
+        meta['_expected_service_name'] = global.testAgent.expectedServiceName()
       }
       if (global.testAgent.sessionToken) {
         meta['_session_token'] = global.testAgent.sessionToken
