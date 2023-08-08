@@ -96,29 +96,39 @@ describe('Plugin', () => {
               return agent.close({ ritmReset: false })
             })
 
+            withPeerService(
+              () => tracer,
+              async () => {
+                const client = await buildClient({
+                  getUnary: (_, callback) => callback()
+                })
+                client.getUnary({ first: 'foobar' }, () => {})
+              },
+              'test.TestService', 'rpc.service')
+
+            withNamingSchema(
+              async () => {
+                const client = await buildClient({
+                  getUnary: (_, callback) => callback()
+                })
+                client.getUnary({ first: 'foobar' }, () => {})
+              },
+              {
+                v0: {
+                  opName: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
+                  serviceName: 'test'
+                },
+                v1: {
+                  opName: 'grpc.client.request',
+                  serviceName: 'test'
+                }
+              }
+            )
+
             it('should handle `unary` calls', async () => {
               const client = await buildClient({
                 getUnary: (_, callback) => callback()
               })
-
-              withPeerService(
-                () => tracer,
-                (done) => client.getUnary({ first: 'foobar' }, () => done()),
-                'test.TestService', 'rpc.service')
-
-              withNamingSchema(
-                (done) => client.getUnary({ first: 'foobar' }, () => done()),
-                {
-                  v0: {
-                    opName: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
-                    serviceName: 'test'
-                  },
-                  v1: {
-                    opName: 'grpc.client.request',
-                    serviceName: 'test'
-                  }
-                }
-              )
 
               client.getUnary({ first: 'foobar' }, () => {})
               return agent
