@@ -1,4 +1,5 @@
 'use strict'
+
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
@@ -50,6 +51,7 @@ describe('sql-injection-analyzer with mysql', () => {
             const iastCtx = iastContextFunctions.getIastContext(store)
             let sql = 'SELECT 1'
             sql = newTaintedString(iastCtx, sql, 'param', 'Request')
+
             queryMethods.executeQueryWithCallback(sql, connection, function (err) {
               if (err) {
                 reject(err)
@@ -99,6 +101,7 @@ describe('sql-injection-analyzer with mysql', () => {
             const iastCtx = iastContextFunctions.getIastContext(store)
             let sql = 'SELECT 1'
             sql = newTaintedString(iastCtx, sql, 'param', 'Request')
+
             queryMethods.executeQueryWithCallback(sql, pool, function (err) {
               if (err) {
                 reject(err)

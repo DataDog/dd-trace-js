@@ -68,6 +68,7 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
   const startPoolQueryCh = channel('datadog:mysql:pool:query:start')
   const finishPoolQueryCh = channel('datadog:mysql:pool:query:finish')
+
   shimmer.wrap(Pool.prototype, 'getConnection', getConnection => function (cb) {
     arguments[0] = AsyncResource.bind(cb)
     return getConnection.apply(this, arguments)
@@ -110,5 +111,6 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
       return retval
     })
   })
+
   return Pool
 })
