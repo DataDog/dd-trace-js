@@ -47,10 +47,11 @@ function fromUrlString (urlString) {
   ? urlToOptions(new URL(urlString))
   : urlParse(urlString)
 
-  // Add the leading characters back if we're using named pipes
-  if (url.protocol === 'unix:' && !urlString.endsWith('.sock')) {
-    url.path = '//.' + url.path
-    url.pathname = '//.' + url.pathname
+  // Add the 'hostname' back if we're using UDS
+  if (url.protocol === 'unix:') {
+    const udsPath = urlString.replace(/^unix:/, '')
+    url.path = udsPath
+    url.pathname = udsPath
   }
 
   return url
