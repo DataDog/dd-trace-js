@@ -10,6 +10,7 @@ const { timeInputToHrTime } = require('@opentelemetry/core')
 const tracer = require('../../')
 const DatadogSpan = require('../opentracing/span')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../constants')
+const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 
 const SpanContext = require('./span_context')
 
@@ -40,7 +41,8 @@ class Span {
       hostname: _tracer._hostname,
       integrationName: 'otel',
       tags: {
-        'service.name': _tracer._service
+        [SERVICE_NAME]: _tracer._service,
+        [RESOURCE_NAME]: spanName
       }
     }, _tracer._debug)
 

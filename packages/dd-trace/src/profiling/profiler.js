@@ -23,7 +23,7 @@ class Profiler extends EventEmitter {
   }
 
   start (options) {
-    this._start(options).catch(() => {})
+    this._start(options).catch((err) => { if (options.logger) options.logger.error(err) })
     return this
   }
 

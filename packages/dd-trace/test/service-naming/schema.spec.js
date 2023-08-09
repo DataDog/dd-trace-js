@@ -1,3 +1,6 @@
+require('../setup/tap')
+
+const { expect } = require('chai')
 const SchemaDefinition = require('../../src/service-naming/schemas/definition')
 
 describe('Service naming', () => {
@@ -35,12 +38,20 @@ describe('Service naming', () => {
 
       it('should forward additional args to opName', () => {
         singleton.opName('messaging', 'producer', 'redis', extra)
-        expect(versions.v0.getOpName).to.be.calledWith('messaging', 'outbound', 'redis', extra)
+        expect(versions.v0.getOpName).to.have.been.calledWith('messaging', 'producer', 'redis', extra)
       })
 
       it('should forward additional args to serviceName and add configured service', () => {
         singleton.serviceName('messaging', 'producer', 'redis', extra)
-        expect(versions.v0.getServiceName).to.be.calledWith('messaging', 'outbound', 'redis', 'test-service', extra)
+        expect(versions.v0.getServiceName).to.have.been.calledWith(
+          'messaging',
+          'producer',
+          'redis',
+          {
+            tracerService: 'test-service',
+            ...extra
+          }
+        )
       })
     })
   })
@@ -80,8 +91,9 @@ describe('Service naming', () => {
     })
     describe('Service name getter', () => {
       it('should add service name and passthrough service name arguments', () => {
-        resolver.getServiceName('messaging', 'inbound', 'kafka', 'test-service', extra)
-        expect(dummySchema.messaging.inbound.kafka.serviceName).to.be.calledWith('test-service', extra)
+        const opts = { tracerService: 'test-service', ...extra }
+        resolver.getServiceName('messaging', 'inbound', 'kafka', opts)
+        expect(dummySchema.messaging.inbound.kafka.serviceName).to.be.calledWith(opts)
       })
     })
   })

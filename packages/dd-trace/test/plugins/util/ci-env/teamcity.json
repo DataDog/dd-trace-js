@@ -1,19 +1,19 @@
 [
   [
     {
-      "BUILD_URL": "the-build-url",
+      "BUILD_URL": "https://teamcity.com/repo",
       "TEAMCITY_BUILDCONF_NAME": "Test 1",
       "TEAMCITY_VERSION": "2022.10 (build 116751)"
     },
     {
       "ci.job.name": "Test 1",
-      "ci.job.url": "the-build-url",
+      "ci.job.url": "https://teamcity.com/repo",
       "ci.provider.name": "teamcity"
     }
   ],
   [
     {
-      "BUILD_URL": "the-build-url",
+      "BUILD_URL": "https://teamcity.com/repo",
       "DD_GIT_BRANCH": "user-supplied-branch",
       "DD_GIT_COMMIT_AUTHOR_DATE": "usersupplied-authordate",
       "DD_GIT_COMMIT_AUTHOR_EMAIL": "usersupplied-authoremail",
@@ -29,7 +29,7 @@
     },
     {
       "ci.job.name": "Test 1",
-      "ci.job.url": "the-build-url",
+      "ci.job.url": "https://teamcity.com/repo",
       "ci.provider.name": "teamcity",
       "git.branch": "user-supplied-branch",
       "git.commit.author.date": "usersupplied-authordate",
@@ -45,7 +45,7 @@
   ],
   [
     {
-      "BUILD_URL": "the-build-url",
+      "BUILD_URL": "https://teamcity.com/repo",
       "DD_GIT_COMMIT_AUTHOR_DATE": "usersupplied-authordate",
       "DD_GIT_COMMIT_AUTHOR_EMAIL": "usersupplied-authoremail",
       "DD_GIT_COMMIT_AUTHOR_NAME": "usersupplied-authorname",
@@ -61,7 +61,7 @@
     },
     {
       "ci.job.name": "Test 1",
-      "ci.job.url": "the-build-url",
+      "ci.job.url": "https://teamcity.com/repo",
       "ci.provider.name": "teamcity",
       "git.commit.author.date": "usersupplied-authordate",
       "git.commit.author.email": "usersupplied-authoremail",

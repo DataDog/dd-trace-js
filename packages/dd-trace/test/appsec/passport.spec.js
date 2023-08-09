@@ -65,7 +65,7 @@ describe('Passport', () => {
       expect(setUser.setUserTags).not.to.have.been.called
       expect(events.trackEvent).to.have.been.calledOnceWithExactly(
         'users.login.failure',
-        { 'usr.id': ' ' },
+        { 'usr.id': '' },
         'passportTrackEvent',
         undefined,
         'safe'
@@ -93,7 +93,7 @@ describe('Passport', () => {
       }
       passportModule.passportTrackEvent(loginLocal, user, rootSpan, 'safe')
 
-      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly({ id: ' ' }, rootSpan)
+      expect(setUser.setUserTags).to.have.been.calledOnceWithExactly({ id: '' }, rootSpan)
       expect(events.trackEvent).to.have.been.calledOnceWithExactly(
         'users.login.success',
         null,

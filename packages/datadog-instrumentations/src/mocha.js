@@ -30,6 +30,8 @@ const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 const testSuiteCodeCoverageCh = channel('ci:mocha:test-suite:code-coverage')
 
+const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
+
 // TODO: remove when root hooks and fixtures are implemented
 const patched = new WeakSet()
 
@@ -46,6 +48,8 @@ const originalCoverageMap = createCoverageMap()
 
 let suitesToSkip = []
 let frameworkVersion
+let isSuitesSkipped = false
+let skippedSuites = []
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -96,10 +100,17 @@ function getTestAsyncResource (test) {
   return testToAr.get(originalFn)
 }
 
-function getSuitesToRun (originalSuites) {
-  return originalSuites.filter(suite =>
-    !suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
-  )
+function getFilteredSuites (originalSuites) {
+  return originalSuites.reduce((acc, suite) => {
+    const testPath = getTestSuitePath(suite.file, process.cwd())
+    const shouldSkip = suitesToSkip.includes(testPath)
+    if (shouldSkip) {
+      acc.skippedSuites.add(testPath)
+    } else {
+      acc.suitesToRun.push(suite)
+    }
+    return acc
+  }, { suitesToRun: [], skippedSuites: new Set() })
 }
 
 function mochaHook (Runner) {
@@ -125,8 +136,6 @@ function mochaHook (Runner) {
       }
       testFileToSuiteAr.clear()
 
-      const isSuitesSkipped = !!suitesToSkip.length
-
       let testCodeCoverageLinesTotal
       if (global.__coverage__) {
         try {
@@ -138,13 +147,21 @@ function mochaHook (Runner) {
         global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
       }
 
-      testSessionFinishCh.publish({ status, isSuitesSkipped, testCodeCoverageLinesTotal })
+      testSessionFinishCh.publish({
+        status,
+        isSuitesSkipped,
+        testCodeCoverageLinesTotal,
+        numSkippedSuites: skippedSuites.length
+      })
     }))
 
     this.once('start', testRunAsyncResource.bind(function () {
       const processArgv = process.argv.slice(2).join(' ')
       const command = `mocha ${processArgv}`
       testSessionStartCh.publish({ command, frameworkVersion })
+      if (skippedSuites.length) {
+        itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
+      }
     }))
 
     this.on('suite', function (suite) {
@@ -360,7 +377,14 @@ addHook({
         suitesToSkip = skippableSuites
       }
       // We remove the suites that we skip through ITR
-      runner.suite.suites = getSuitesToRun(runner.suite.suites)
+      const filteredSuites = getFilteredSuites(runner.suite.suites)
+      const { suitesToRun } = filteredSuites
+
+      isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
+      runner.suite.suites = suitesToRun
+
+      skippedSuites = Array.from(filteredSuites.skippedSuites)
+
       global.run()
     }
 

@@ -6,6 +6,7 @@ const { storage } = require('../../../datadog-core')
 
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
+  static get peerServicePrecursors () { return ['queuename'] }
 
   constructor (...args) {
     super(...args)
@@ -37,6 +38,29 @@ class Sqs extends BaseAwsSdkPlugin {
     this.addSub('apm:aws:response:finish:sqs', err => {
       const { span } = storage.getStore()
       this.finish(span, null, err)
+    })
+  }
+
+  operationFromRequest (request) {
+    switch (request.operation) {
+      case 'receiveMessage':
+        return this.operationName({
+          type: 'messaging',
+          kind: 'consumer'
+        })
+      case 'sendMessage':
+      case 'sendMessageBatch':
+        return this.operationName({
+          type: 'messaging',
+          kind: 'producer'
+        })
+    }
+
+    return this.operationName({
+      id: 'aws',
+      type: 'web',
+      kind: 'client',
+      awsService: 'sqs'
     })
   }
 

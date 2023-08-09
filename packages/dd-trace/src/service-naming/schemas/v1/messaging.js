@@ -22,7 +22,15 @@ const messaging = {
       opName: () => 'kafka.send',
       serviceName: identityService
     },
-    rhea: amqpOutbound
+    rhea: amqpOutbound,
+    sqs: {
+      opName: () => 'aws.sqs.send',
+      serviceName: identityService
+    },
+    sns: {
+      opName: () => 'aws.sns.send',
+      serviceName: identityService
+    }
   },
   consumer: {
     amqplib: amqpInbound,
@@ -35,7 +43,11 @@ const messaging = {
       opName: () => 'kafka.process',
       serviceName: identityService
     },
-    rhea: amqpInbound
+    rhea: amqpInbound,
+    sqs: {
+      opName: () => 'aws.sqs.process',
+      serviceName: identityService
+    }
   },
   client: {
     amqplib: {

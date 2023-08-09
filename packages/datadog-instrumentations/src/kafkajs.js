@@ -16,10 +16,19 @@ const consumerFinishCh = channel('apm:kafkajs:consume:finish')
 const consumerErrorCh = channel('apm:kafkajs:consume:error')
 
 addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
-  const Kafka = obj.Kafka
+  class Kafka extends obj.Kafka {
+    constructor (options) {
+      super(options)
+      this._brokers = (options.brokers && typeof options.brokers !== 'function')
+        ? options.brokers.join(',') : undefined
+    }
+  }
+  obj.Kafka = Kafka
+
   shimmer.wrap(Kafka.prototype, 'producer', createProducer => function () {
     const producer = createProducer.apply(this, arguments)
     const send = producer.send
+    const bootstrapServers = this._brokers
 
     producer.send = function () {
       const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -36,7 +45,7 @@ addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
               message.headers = message.headers || {}
             }
           }
-          producerStartCh.publish({ topic, messages })
+          producerStartCh.publish({ topic, messages, bootstrapServers })
 
           const result = send.apply(this, arguments)
 
@@ -69,6 +78,7 @@ addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
     const consumer = createConsumer.apply(this, arguments)
     const run = consumer.run
 
+    const groupId = arguments[0].groupId
     consumer.run = function ({ eachMessage, ...runArgs }) {
       if (typeof eachMessage !== 'function') return run({ eachMessage, ...runArgs })
 
@@ -77,10 +87,9 @@ addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
           const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
           return innerAsyncResource.runInAsyncScope(() => {
             const { topic, partition, message } = eachMessageArgs[0]
-            consumerStartCh.publish({ topic, partition, message })
+            consumerStartCh.publish({ topic, partition, message, groupId })
             try {
               const result = eachMessage.apply(this, eachMessageArgs)
-
               if (result && typeof result.then === 'function') {
                 result.then(
                   innerAsyncResource.bind(() => consumerFinishCh.publish(undefined)),

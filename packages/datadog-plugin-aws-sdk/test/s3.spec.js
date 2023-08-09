@@ -3,6 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const axios = require('axios')
+const { rawExpectedSchema } = require('./s3-naming')
 
 const bucketName = 's3-bucket-name-test'
 
@@ -53,6 +54,24 @@ describe('Plugin', () => {
           await resetLocalStackS3()
           return agent.close({ ritmReset: false })
         })
+
+        withPeerService(
+          () => tracer,
+          (done) => s3.putObject({
+            Bucket: bucketName,
+            Key: 'test-key',
+            Body: 'test body'
+          }, (err) => err && done(err)),
+          bucketName, 'bucketname')
+
+        withNamingSchema(
+          (done) => s3.putObject({
+            Bucket: bucketName,
+            Key: 'test-key',
+            Body: 'test body'
+          }, (err) => err && done(err)),
+          rawExpectedSchema.outbound
+        )
 
         it('should allow disabling a specific span kind of a service', (done) => {
           let total = 0

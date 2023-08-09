@@ -48,16 +48,28 @@ function loadInstFile (file, instrumentations) {
   })
 }
 
-function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName) {
+function withNamingSchema (
+  spanProducerFn,
+  expected,
+  opts = {}
+) {
+  const {
+    hooks = (version, defaultToGlobalService) => {},
+    desc = '',
+    selectSpan = (traces) => traces[0][0]
+  } = opts
   let fullConfig
 
-  describe('service and operation naming', () => {
+  const testTitle = 'service and operation naming' + (desc !== '' ? ` (${desc})` : '')
+
+  describe(testTitle, () => {
     Object.keys(schemaDefinitions).forEach(versionName => {
       describe(`in version ${versionName}`, () => {
         before(() => {
           fullConfig = Nomenclature.config
           Nomenclature.configure({
             spanAttributeSchema: versionName,
+            spanRemoveIntegrationFromService: false,
             service: fullConfig.service // Hack: only way to retrieve the test agent configuration
           })
         })
@@ -66,24 +78,69 @@ function withNamingSchema (spanProducerFn, expectedOpName, expectedServiceName) 
           Nomenclature.configure(fullConfig)
         })
 
+        hooks(versionName, false)
+
+        const { opName, serviceName } = expected[versionName]
+
         it(`should conform to the naming schema`, done => {
           agent
             .use(traces => {
-              const span = traces[0][0]
-              expect(span).to.have.property('name', expectedOpName())
-              expect(span).to.have.property('service', expectedServiceName())
+              const span = selectSpan(traces)
+              const expectedOpName = typeof opName === 'function'
+                ? opName()
+                : opName
+              const expectedServiceName = typeof serviceName === 'function'
+                ? serviceName()
+                : serviceName
+
+              expect(span).to.have.property('name', expectedOpName)
+              expect(span).to.have.property('service', expectedServiceName)
             })
             .then(done)
             .catch(done)
-          spanProducerFn()
+          spanProducerFn(done)
         })
+      })
+    })
+
+    describe('service naming short-circuit in v0', () => {
+      before(() => {
+        fullConfig = Nomenclature.config
+        Nomenclature.configure({
+          spanAttributeSchema: 'v0',
+          service: fullConfig.service,
+          spanRemoveIntegrationFromService: true
+        })
+      })
+
+      after(() => {
+        Nomenclature.configure(fullConfig)
+      })
+
+      hooks('v0', true)
+
+      const { serviceName } = expected['v1']
+
+      it('should pass service name through', done => {
+        agent
+          .use(traces => {
+            const span = traces[0][0]
+            const expectedServiceName = typeof serviceName === 'function'
+              ? serviceName()
+              : serviceName
+            expect(span).to.have.property('service', expectedServiceName)
+          })
+          .then(done)
+          .catch(done)
+
+        spanProducerFn(done)
       })
     })
   })
 }
 
-function withPeerService (tracer, spanGenerationFn, service, serviceSource) {
-  describe('peer service computation', () => {
+function withPeerService (tracer, spanGenerationFn, service, serviceSource, opts = {}) {
+  describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), () => {
     let computePeerServiceSpy
     beforeEach(() => {
       // FIXME: workaround due to the evaluation order of mocha beforeEach

@@ -127,4 +127,12 @@ class ExternalLogger {
   }
 }
 
-module.exports = ExternalLogger
+class NoopExternalLogger {
+  log () { }
+  enqueue () { }
+  shutdown () { }
+  flush () { }
+}
+
+module.exports.ExternalLogger = ExternalLogger
+module.exports.NoopExternalLogger = NoopExternalLogger

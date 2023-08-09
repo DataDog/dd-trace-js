@@ -3,7 +3,7 @@
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const namingSchema = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let cassandra
@@ -43,12 +43,18 @@ describe('Plugin', () => {
           client.shutdown(done)
         })
 
+        withPeerService(
+          () => tracer,
+          (done) => client.execute('SELECT now() FROM local;', err => err && done(err)),
+          '127.0.0.1', 'db.cassandra.contact.points'
+        )
+
         it('should do automatic instrumentation', done => {
           const query = 'SELECT now() FROM local;'
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', query)
               expect(traces[0][0]).to.have.property('type', 'cassandra')
               expect(traces[0][0].meta).to.have.property('db.type', 'cassandra')
@@ -58,6 +64,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('cassandra.keyspace', 'system')
               expect(traces[0][0].meta).to.have.property('component', 'cassandra-driver')
               expect(traces[0][0].meta).to.have.property('network.destination.port', '9042')
+              expect(traces[0][0].meta).to.have.property('db.cassandra.contact.points', '127.0.0.1')
             })
             .then(done)
             .catch(done)
@@ -147,8 +154,7 @@ describe('Plugin', () => {
 
         withNamingSchema(
           done => client.execute('SELECT now() FROM local;', err => err && done(err)),
-          () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName
+          rawExpectedSchema.outbound
         )
       })
 
@@ -192,8 +198,16 @@ describe('Plugin', () => {
 
         withNamingSchema(
           done => client.execute('SELECT now() FROM local;', err => err && done(err)),
-          () => namingSchema.outbound.opName,
-          () => 'custom'
+          {
+            v0: {
+              opName: 'cassandra.query',
+              serviceName: 'custom'
+            },
+            v1: {
+              opName: 'cassandra.query',
+              serviceName: 'custom'
+            }
+          }
         )
       })
 
@@ -233,8 +247,8 @@ describe('Plugin', () => {
 
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-                expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+                expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+                expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', query)
                 expect(traces[0][0]).to.have.property('type', 'cassandra')
                 expect(traces[0][0].meta).to.have.property('db.type', 'cassandra')

@@ -69,7 +69,7 @@ function parseUser (login, passportUser, mode) {
   if (mode === 'safe') {
     // Remove PII in safe mode
     if (!regexUsername.test(user['usr.id'])) {
-      user['usr.id'] = ' '
+      user['usr.id'] = ''
     }
   }
 

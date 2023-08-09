@@ -4,6 +4,7 @@ const BaseAwsSdkPlugin = require('../base')
 
 class Sns extends BaseAwsSdkPlugin {
   static get id () { return 'sns' }
+  static get peerServicePrecursors () { return ['topicname'] }
 
   generateTags (params, operation, response) {
     if (!params) return {}
@@ -24,6 +25,24 @@ class Sns extends BaseAwsSdkPlugin {
 
     // TODO: should arn be sanitized or quantized in some way here,
     // for example if it contains a phone number?
+  }
+
+  operationFromRequest (request) {
+    switch (request.operation) {
+      case 'publish':
+      case 'publishBatch':
+        return this.operationName({
+          type: 'messaging',
+          kind: 'producer'
+        })
+    }
+
+    return this.operationName({
+      id: 'aws',
+      type: 'web',
+      kind: 'client',
+      awsService: 'sns'
+    })
   }
 
   requestInject (span, request) {

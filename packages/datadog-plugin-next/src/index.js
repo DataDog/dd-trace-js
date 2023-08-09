@@ -16,14 +16,14 @@ class NextPlugin extends ServerPlugin {
     this.addSub('apm:next:page:load', message => this.pageLoad(message))
   }
 
-  start ({ req, res }) {
+  bindStart ({ req, res }) {
     const store = storage.getStore()
     const childOf = store ? store.span : store
-    const span = this.tracer.startSpan('next.request', {
+    const span = this.tracer.startSpan(this.operationName(), {
       childOf,
       tags: {
         [COMPONENT]: this.constructor.id,
-        'service.name': this.config.service || this.tracer._service,
+        'service.name': this.config.service || this.serviceName(),
         'resource.name': req.method,
         'span.type': 'web',
         'span.kind': 'server',
@@ -33,9 +33,13 @@ class NextPlugin extends ServerPlugin {
 
     analyticsSampler.sample(span, this.config.measured, true)
 
-    this.enter(span, store)
-
     this._requests.set(span, req)
+
+    return { ...store, span }
+  }
+
+  error ({ span, error }) {
+    this.addError(error, span)
   }
 
   finish ({ req, res }) {

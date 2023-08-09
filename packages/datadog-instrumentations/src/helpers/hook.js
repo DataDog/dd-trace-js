@@ -3,10 +3,9 @@
 const path = require('path')
 const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
-const dcitm = require('../../../dd-trace/src/dcitm')
 
 /**
- * This is called for every module that dd-trace supports instrumentation for.
+ * This is called for every package/internal-module that dd-trace supports instrumentation for
  * In practice, `modules` is always an array with a single entry.
  *
  * @param {string[]} modules list of modules to hook into
@@ -41,13 +40,11 @@ function Hook (modules, onrequire) {
       return safeHook(moduleExports, moduleName, moduleBaseDir)
     }
   })
-  this._dcitmHook = dcitm(modules, {}, safeHook)
 }
 
 Hook.prototype.unhook = function () {
   this._ritmHook.unhook()
   this._iitmHook.unhook()
-  this._dcitmHook.unhook()
   this._patched = Object.create(null)
 }
 

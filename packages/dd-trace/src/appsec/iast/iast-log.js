@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('../../log')
-const telemetryLogs = require('./telemetry/logs')
+const telemetryLogs = require('./telemetry/log')
 const { calculateDDBasePath } = require('../../util')
 
 const ddBasePath = calculateDDBasePath(__dirname)

@@ -39,7 +39,7 @@ class DatabasePlugin extends StoragePlugin {
   }
 
   injectDbmQuery (query, serviceName, isPreparedStatement = false) {
-    const mode = this.config.dbmPropagationMode || this._tracerConfig.dbmPropagationMode
+    const mode = this.config.dbmPropagationMode
 
     if (mode === 'disabled') {
       return query
@@ -54,6 +54,18 @@ class DatabasePlugin extends StoragePlugin {
       const traceparent = this.activeSpan._spanContext.toTraceparent()
       return `/*${servicePropagation},traceparent='${traceparent}'*/ ${query}`
     }
+  }
+
+  maybeTruncate (query) {
+    const maxLength = typeof this.config.truncate === 'number'
+      ? this.config.truncate
+      : 5000 // same as what the agent does
+
+    if (this.config.truncate && query && query.length > maxLength) {
+      query = `${query.slice(0, maxLength - 3)}...`
+    }
+
+    return query
   }
 }
 

@@ -28,7 +28,6 @@ class VulnerabilityFormatter {
       const { redactedValueParts, redactedSources } = scrubbingResult
       redactedSources.forEach(i => {
         delete sources[i].value
-        sources[i].redacted = true
       })
       return { valueParts: redactedValueParts }
     }
@@ -54,7 +53,11 @@ class VulnerabilityFormatter {
 
   formatEvidence (type, evidence, sourcesIndexes, sources) {
     if (!evidence.ranges) {
-      return { value: evidence.value }
+      if (typeof evidence.value === 'undefined') {
+        return undefined
+      } else {
+        return { value: evidence.value }
+      }
     }
 
     return this._redactVulnearbilities

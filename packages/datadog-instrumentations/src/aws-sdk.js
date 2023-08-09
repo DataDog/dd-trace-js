@@ -166,13 +166,17 @@ function getChannelSuffix (name) {
   ].includes(name) ? name : 'default'
 }
 
+addHook({ name: '@smithy/smithy-client', versions: ['>=1.0.3'] }, smithy => {
+  shimmer.wrap(smithy.Client.prototype, 'send', wrapSmithySend)
+  return smithy
+})
+
 addHook({ name: '@aws-sdk/smithy-client', versions: ['>=3'] }, smithy => {
   shimmer.wrap(smithy.Client.prototype, 'send', wrapSmithySend)
   return smithy
 })
 
 addHook({ name: 'aws-sdk', versions: ['>=2.3.0'] }, AWS => {
-  shimmer.wrap(AWS.Request.prototype, 'promise', wrapRequest)
   shimmer.wrap(AWS.config, 'setPromisesDependency', setPromisesDependency => {
     return function wrappedSetPromisesDependency (dep) {
       const result = setPromisesDependency.apply(this, arguments)
@@ -183,9 +187,14 @@ addHook({ name: 'aws-sdk', versions: ['>=2.3.0'] }, AWS => {
   return AWS
 })
 
+addHook({ name: 'aws-sdk', file: 'lib/core.js', versions: ['>=2.3.0'] }, AWS => {
+  shimmer.wrap(AWS.Request.prototype, 'promise', wrapRequest)
+  return AWS
+})
+
 // <2.1.35 has breaking changes for instrumentation
 // https://github.com/aws/aws-sdk-js/pull/629
-addHook({ name: 'aws-sdk', versions: ['>=2.1.35'] }, AWS => {
+addHook({ name: 'aws-sdk', file: 'lib/core.js', versions: ['>=2.1.35'] }, AWS => {
   shimmer.wrap(AWS.Request.prototype, 'send', wrapRequest)
   return AWS
 })
