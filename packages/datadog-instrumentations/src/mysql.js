@@ -17,7 +17,7 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
       return query.apply(this, arguments)
     }
 
-    const sql = arguments[0].sql ? arguments[0].sql : arguments[0]
+    const sql = arguments[0].sql || arguments[0]
     const conf = this.config
     const payload = { sql, conf }
 
