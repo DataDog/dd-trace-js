@@ -81,7 +81,7 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    const sql = arguments[0].sql ? arguments[0].sql : arguments[0]
+    const sql = arguments[0].sql || arguments[0]
 
     return asyncResource.runInAsyncScope(() => {
       startPoolQueryCh.publish({ sql })
@@ -101,11 +101,7 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
       const retval = query.apply(this, arguments)
 
       if (retval && retval.then) {
-        retval.then(() => {
-          finish()
-        }).catch(() => {
-          finish()
-        })
+        retval.then(finish).catch(finish)
       }
 
       return retval
