@@ -73,6 +73,10 @@
       "versions": ["3.1.1"]
     },
     {
+      "name": "express",
+      "versions": [">=4.16.2"]
+    },
+    {
       "name": "express-graphql",
       "versions": ["0.12.0"]
     }
