@@ -133,7 +133,7 @@ describe('Plugin', () => {
 
       // Hapi does not reply to POST requests on Node <=16
       if (semver.intersects(version, '>=17')) {
-        it('should propagate the async context properly', done => {
+        it('should run the request handler in the request scope with a payload', done => {
           server.route({
             method: 'POST',
             path: '/user/{id}',
