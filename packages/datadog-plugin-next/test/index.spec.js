@@ -34,8 +34,8 @@ describe('Plugin', function () {
             ? `${__dirname}/.next/standalone`
             : __dirname
 
-          const serverStartCmd =
-            standalone ? ['--require', `${__dirname}/datadog.js`, 'server'] : ['server']
+          // always start server via node options due to Next using workers in different
+          const serverStartCmd = ['--require', `${__dirname}/datadog.js`, 'server']
 
           server = spawn('node', serverStartCmd, {
             cwd,

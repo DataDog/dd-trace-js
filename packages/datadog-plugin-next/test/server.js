@@ -2,7 +2,7 @@
 
 const { PORT } = process.env
 
-require('./datadog')
+// require('./datadog')
 
 const { createServer } = require('http')
 const { parse } = require('url')
