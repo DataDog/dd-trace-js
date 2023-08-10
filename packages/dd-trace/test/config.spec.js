@@ -78,7 +78,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.port', '8125')
     expect(config).to.have.property('flushInterval', 2000)
     expect(config).to.have.property('flushMinSpans', 1000)
-    expect(config).to.have.property('queryStringObfuscation').with.length(626)
+    expect(config).to.have.property('queryStringObfuscation').with.length(789)
     expect(config).to.have.property('clientIpEnabled', false)
     expect(config).to.have.property('clientIpHeader', null)
     expect(config).to.have.property('sampleRate', undefined)
