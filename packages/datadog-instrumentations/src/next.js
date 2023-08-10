@@ -132,6 +132,15 @@ function instrument (req, res, handler) {
   })
 }
 
+function wrapSetupServerWorker (setupServerWorker) {
+  return function (requestHandler) {
+    arguments[0] = shimmer.wrap(requestHandler, function (req, res) {
+      return instrument(req, res, () => requestHandler.apply(this, arguments))
+    })
+    return setupServerWorker.apply(this, arguments)
+  }
+}
+
 function finish (ctx, result, err) {
   if (err) {
     ctx.error = err
@@ -146,6 +155,19 @@ function finish (ctx, result, err) {
 
   return result
 }
+
+addHook({
+  name: 'next',
+  versions: ['>=13.4.13'], // versions below have this as well, but it is called within `next-server`
+  file: 'dist/server/lib/setup-server-worker.js'
+}, setupServerWorker => {
+  const exported = Object.getOwnPropertyDescriptors(setupServerWorker)
+  const original = exported.initializeServerWorker.get()
+  return Object.defineProperty(exported, 'initializeServerWorker', {
+    enumerable: true,
+    get: function () { return wrapSetupServerWorker(original) }
+  })
+})
 
 addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
