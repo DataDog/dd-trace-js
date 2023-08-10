@@ -4,12 +4,9 @@ const {
   FakeAgent,
   createSandbox,
   checkSpansForServiceName,
-  esmTestSkipper,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
-
-const describe = esmTestSkipper()
 
 describe('esm', () => {
   let agent
