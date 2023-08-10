@@ -88,10 +88,6 @@ describe('telemetry', () => {
   it('should send app-started', () => {
     return testSeq(1, 'app-started', payload => {
       expect(payload).to.deep.include({
-        integrations: [
-          { name: 'foo2', enabled: true, auto_enabled: true },
-          { name: 'bar2', enabled: false, auto_enabled: true }
-        ],
         dependencies: []
       }).and.to.have.property('configuration').that.include.members([
         { name: 'telemetry.enabled', value: true },
@@ -120,6 +116,8 @@ describe('telemetry', () => {
     return testSeq(3, 'app-integrations-change', payload => {
       expect(payload).to.deep.equal({
         integrations: [
+          { name: 'foo2', enabled: true, auto_enabled: true },
+          { name: 'bar2', enabled: false, auto_enabled: true },
           { name: 'baz2', enabled: true, auto_enabled: true }
         ]
       })
@@ -243,7 +241,7 @@ async function testSeq (seqId, reqType, validatePayload) {
     }
   }
   expect(req.body).to.deep.include({
-    api_version: 'v1',
+    api_version: 'v2',
     request_type: reqType,
     runtime_id: '1a2b3c',
     seq_id: seqId,

@@ -43,8 +43,17 @@ function sendData (config, application, host, reqType, payload = {}) {
     path: '/telemetry/proxy/api/v2/apmtelemetry',
     headers: getHeaders(config, application, reqType)
   }
+
+  let namingSchemaVer
+  if (config.namingSchemaVer) {
+    namingSchemaVer = parseInt(config.namingSchemaVer.charAt(1))
+  } else {
+    namingSchemaVer = ''
+  }
+
   const data = JSON.stringify({
     api_version: 'v2',
+    naming_schema_version: namingSchemaVer,
     request_type: reqType,
     tracer_time: Math.floor(Date.now() / 1000),
     runtime_id: config.tags['runtime-id'],
@@ -54,8 +63,16 @@ function sendData (config, application, host, reqType, payload = {}) {
     host
   })
 
-  request(data, options, (res) => {
-    // ignore errors
+  request(data, options, (error) => {
+    if (error && process.env.DD_API_KEY) {
+      const backendHeader = { 'DD-API-KEY': process.env.DD_API_KEY, ...options.headers }
+      const backendOptions = {
+        url: 'https://all-http-intake.logs.datad0g.com/api/v2/apmtelemetry',
+        headers: backendHeader,
+        ...options
+      }
+      request(data, backendOptions, () => {})
+    }
   })
 }
 
