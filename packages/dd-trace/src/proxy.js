@@ -30,7 +30,7 @@ class Tracer extends NoopProxy {
 
       if (config.dogstatsd) {
         // Custom Metrics
-        this.dogstatsd = new dogstatsd.DogStatsDClient({
+        this.dogstatsd = new dogstatsd.CustomMetrics({
           host: config.dogstatsd.hostname,
           port: config.dogstatsd.port,
           tags: [

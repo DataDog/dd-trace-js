@@ -72,23 +72,20 @@ describe('TracerProxy', () => {
     }
 
     {
-      let dogstatsdIncrements = 0
-      let dogstatsdConfig = {}
+      let dogstatsdIncrements = []
+      let dogstatsdConfig
 
-      const NoopDogStatsDClientReturner = () => {
-        return class NoopDogStatsDClient {
-          constructor (cfg) {
-            dogstatsdConfig = cfg
-          }
-          increment () {
-            dogstatsdIncrements++
-          }
+      class FauxDogStatsDClient {
+        constructor (cfg) {
+          dogstatsdConfig = cfg
+        }
+        increment () {
+          dogstatsdIncrements.push(arguments)
         }
       }
 
       noopDogStatsD = {
-        NoopDogStatsDClient: NoopDogStatsDClientReturner(),
-        DogStatsDClient: NoopDogStatsDClientReturner(),
+        CustomMetrics: FauxDogStatsDClient,
         _increments: () => dogstatsdIncrements,
         _config: () => dogstatsdConfig
       }
@@ -240,7 +237,7 @@ describe('TracerProxy', () => {
       })
 
       it('should expose noop metrics methods prior to initialization', () => {
-        proxy.metrics.increment('foo')
+        proxy.dogstatsd.increment('foo')
       })
 
       it('should expose noop metrics methods after init when unconfigured', () => {
@@ -248,7 +245,7 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        proxy.metrics.increment('foo')
+        proxy.dogstatsd.increment('foo')
       })
 
       it('should expose real metrics methods after init when configured', () => {
@@ -266,8 +263,12 @@ describe('TracerProxy', () => {
 
         expect(noopDogStatsD._config().host).to.equal('localhost')
 
-        proxy.metrics.increment('foo')
-        expect(noopDogStatsD._increments()).to.equal(1)
+        proxy.dogstatsd.increment('foo', 10, { alpha: 'bravo' })
+        const incs = noopDogStatsD._increments()
+        expect(incs.length).to.equal(1)
+        expect(incs[0][0]).to.equal('foo')
+        expect(incs[0][1]).to.equal(10)
+        expect(incs[0][2]).to.deep.equal({ alpha: 'bravo' })
       })
 
       it('should enable appsec when explicitly configured to true', () => {
