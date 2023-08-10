@@ -45,15 +45,17 @@ function ciVisRequestHandler (request, response) {
 
 // create stub on the writer class method to update headers at time of trace send
 const sendPayloadMock = function (data, count, done) {
+  const thisValue = stubs.stubbedMethods._sendPayload.lastCall.thisValue
   if (useTestAgent) {
     // Update the headers with additional values
-    addEnvironmentVariablesToHeaders(stubs.stubbedMethods._sendPayload.lastCall.thisValue._headers).then(async (reqHeaders) => {
+    const headers = stubs.stubbedMethods._sendPayload.lastCall.thisValue._headers
+    addEnvironmentVariablesToHeaders(headers).then(async (reqHeaders) => {
       stubs.stubbedMethods._sendPayload.lastCall.thisValue._headers = reqHeaders
       // call original method
-      stubs.originalMethods._sendPayload.call(stubs.stubbedMethods._sendPayload.lastCall.thisValue, data, count, done)
+      stubs.originalMethods._sendPayload.call(thisValue, data, count, done)
     })
   } else {
-    stubs.originalMethods._sendPayload.call(stubs.stubbedMethods._sendPayload.lastCall.thisValue, data, count, done)
+    stubs.originalMethods._sendPayload.call(thisValue, data, count, done)
   }
 }
 
@@ -76,8 +78,9 @@ const startSpanMock = function (name, { childOf, kind, meta, metrics, service, r
       // do something
     }
   }
+  const thisValue = stubs.stubbedMethods.startSpan.lastCall.thisValue
   return stubs.originalMethods.startSpan.call(
-    stubs.stubbedMethods.startSpan.lastCall.thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter
+    thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter
   )
 }
 
@@ -235,7 +238,7 @@ module.exports = {
       next()
     })
 
-    if (tracerConfig.stubForTestAgent !== false && !stubs.stubbedMethods._sendPayload) {
+    if (!stubs.stubbedMethods._sendPayload) {
       stubSendPayload()
       stubStartSpan()
     }
