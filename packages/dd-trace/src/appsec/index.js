@@ -36,11 +36,11 @@ function enable (_config) {
 
     Reporter.setRateLimit(_config.appsec.rateLimit)
 
-    bodyParser.subscribe(onRequestBodyParsed)
-    graphqlFinishExecute.subscribe(onGraphqlFinishExecute)
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
+    bodyParser.subscribe(onRequestBodyParsed)
     queryParser.subscribe(onRequestQueryParsed)
+    graphqlFinishExecute.subscribe(onGraphqlFinishExecute)
 
     if (_config.appsec.eventTracking.enabled) {
       passportVerify.subscribe(onPassportVerify)
