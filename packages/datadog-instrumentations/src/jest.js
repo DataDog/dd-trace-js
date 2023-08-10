@@ -105,7 +105,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         await super.handleTestEvent(event, state)
       }
 
-      const setNameToParams = (name, params) => { this.nameToParams[name] = params }
+      const setNameToParams = (name, params) => { this.nameToParams[name] = [...params] }
 
       if (event.name === 'setup') {
         if (this.global.test) {
