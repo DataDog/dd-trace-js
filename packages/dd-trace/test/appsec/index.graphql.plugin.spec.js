@@ -46,7 +46,6 @@ const imagesData = [
   }
 ]
 
-
 withVersions('graphql', 'graphql', '>=16.7.1', version => {
   describe('graphql instrumentation', () => {
     let server
@@ -60,6 +59,9 @@ withVersions('graphql', 'graphql', '>=16.7.1', version => {
       const graphql = require(`../../../../versions/graphql@${version}`).get()
       const { buildSchema } = graphql
       const express = require('../../../../versions/express').get()
+
+      // Somehow express-graphql ist not picking the right version of graphql so it's been
+      // worked around using proxyquire.
       const { graphqlHTTP } = proxyquire('../../../../versions/node_modules/express-graphql', {
         'graphql': graphql
       })
@@ -235,9 +237,14 @@ withVersions('graphql', 'graphql', '>=16.7.1', version => {
       })
 
       before(() => {
-        const { ApolloServer } = require(`../../../../versions/@apollo/server@${apolloVersion}`).get()
-        const { startStandaloneServer } = require(
-          `../../../../versions/node_modules/@apollo/server/standalone`)
+        const module = '@apollo'
+        const apolloPath = require(`../../../../versions/@apollo/server@${apolloVersion}`).getPath()
+        const { ApolloServer } = require(apolloPath)
+
+        // Including @apollo/server/standalone in externals led to an error while instaling the dependencies so it'so
+        // computed from the module base path
+        const standalonePath = apolloPath.substr(0, apolloPath.indexOf(module) + module.length) + '/server/standalone'
+        const { startStandaloneServer } = require(standalonePath)
 
         const typeDefs = `#graphql
             type Image {
@@ -336,6 +343,7 @@ withVersions('graphql', 'graphql', '>=16.7.1', version => {
           expect(span.meta).not.to.haveOwnProperty('_dd.appsec.json')
         })
       })
+
       it('should report an attack', async () => {
         const result = {
           triggers: [
