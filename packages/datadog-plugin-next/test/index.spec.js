@@ -308,7 +308,7 @@ describe('Plugin', function () {
                 expect(spans[0]).to.have.property('name', 'next.request')
                 expect(spans[0]).to.have.property('service', 'test')
                 expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET /test.txt')
+                expect(spans[0]).to.have.property('resource', 'GET')
                 expect(spans[0].meta).to.have.property('span.kind', 'server')
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
                 expect(spans[0].meta).to.have.property('http.status_code', '200')
