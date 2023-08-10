@@ -42,8 +42,12 @@ describe('jest-test-suite', () => {
   // only run for jest-circus tests
   // eslint-disable-next-line
   if (jest.retryTimes) {
-    it.each([[1, 2, 3], [2, 3, 5]])('can do parameterized test', (a, b, expected) => {
+    const parameters = [[1, 2, 3], [2, 3, 5]]
+    it.each(parameters)('can do parameterized test', (a, b, expected) => {
       expect(a + b).toEqual(expected)
+      // They are not modified by dd-trace reading the parameters
+      expect(parameters[0]).toEqual([1, 2, 3])
+      expect(parameters[1]).toEqual([2, 3, 5])
     })
   }
   it('promise passes', () => {
