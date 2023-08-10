@@ -1,5 +1,5 @@
 import 'dd-trace/init.js'
-import { Configuration, OpenAIApi } from 'openai'
+import openai from 'openai'
 import nock from 'nock'
 
 nock('https://api.openai.com:443')
@@ -22,11 +22,11 @@ nock('https://api.openai.com:443')
     'x-request-id', '7df89d8afe7bf24dc04e2c4dd4962d7f'
   ])
 
-const openai = new OpenAIApi(new Configuration({
+const openaiApp = new openai.OpenAIApi(new openai.Configuration({
   apiKey: 'sk-DATADOG-ACCEPTANCE-TESTS',
 }))
 
-await openai.createCompletion({
+await openaiApp.createCompletion({
   model: 'text-davinci-002',
   prompt: 'Hello, ',
   suffix: 'foo',
