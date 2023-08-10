@@ -132,12 +132,13 @@ function instrument (req, res, handler) {
   })
 }
 
-function wrapSetupServerWorker (setupServerWorker) {
-  return function (requestHandler) {
-    arguments[0] = shimmer.wrap(requestHandler, function (req, res) {
-      return instrument(req, res, () => requestHandler.apply(this, arguments))
+function wrapServeStatic (serveStatic) {
+  return function (req, res, page) {
+    return instrument(req, res, () => {
+      if (pageLoadChannel.hasSubscribers) pageLoadChannel.publish({ page })
+
+      return serveStatic.apply(this, arguments)
     })
-    return setupServerWorker.apply(this, arguments)
   }
 }
 
@@ -159,13 +160,13 @@ function finish (ctx, result, err) {
 addHook({
   name: 'next',
   versions: ['>=13.4.13'], // versions below have this as well, but it is called within `next-server`
-  file: 'dist/server/lib/setup-server-worker.js'
-}, setupServerWorker => {
-  const exported = Object.getOwnPropertyDescriptors(setupServerWorker)
-  const original = exported.initializeServerWorker.get()
-  return Object.defineProperty(exported, 'initializeServerWorker', {
+  file: 'dist/server/serve-static.js'
+}, serveStatic => {
+  const exported = Object.getOwnPropertyDescriptors(serveStatic)
+  const original = exported.serveStatic.get()
+  return Object.defineProperty(exported, 'serveStatic', {
     enumerable: true,
-    get: function () { return wrapSetupServerWorker(original) }
+    get: function () { return shimmer.wrap(original, wrapServeStatic(original)) }
   })
 })
 
