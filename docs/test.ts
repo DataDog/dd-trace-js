@@ -127,19 +127,19 @@ tracer.init({
   }
 })
 
-tracer.metrics.increment('foo')
-tracer.metrics.increment('foo', 2)
-tracer.metrics.increment('foo', 2, ['a:b'])
-tracer.metrics.decrement('foo')
-tracer.metrics.decrement('foo', 2)
-tracer.metrics.decrement('foo', 2, ['a:b'])
-tracer.metrics.distribution('foo')
-tracer.metrics.distribution('foo', 2)
-tracer.metrics.distribution('foo', 2, ['a:b'])
-tracer.metrics.gauge('foo')
-tracer.metrics.gauge('foo', 2)
-tracer.metrics.gauge('foo', 2, ['a:b'])
-tracer.metrics.flush()
+tracer.dogstatsd.increment('foo')
+tracer.dogstatsd.increment('foo', 2)
+tracer.dogstatsd.increment('foo', 2, ['a:b'])
+tracer.dogstatsd.decrement('foo')
+tracer.dogstatsd.decrement('foo', 2)
+tracer.dogstatsd.decrement('foo', 2, ['a:b'])
+tracer.dogstatsd.distribution('foo')
+tracer.dogstatsd.distribution('foo', 2)
+tracer.dogstatsd.distribution('foo', 2, ['a:b'])
+tracer.dogstatsd.gauge('foo')
+tracer.dogstatsd.gauge('foo', 2)
+tracer.dogstatsd.gauge('foo', 2, ['a:b'])
+tracer.dogstatsd.flush()
 
 const httpOptions = {
   service: 'test',

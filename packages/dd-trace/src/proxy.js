@@ -17,7 +17,7 @@ class Tracer extends NoopProxy {
 
     this._initialized = false
     this._pluginManager = new PluginManager(this)
-    this.metrics = new dogstatsd.NoopDogStatsDClient()
+    this.dogstatsd = new dogstatsd.NoopDogStatsDClient()
   }
 
   init (options) {
@@ -28,14 +28,14 @@ class Tracer extends NoopProxy {
     try {
       const config = new Config(options) // TODO: support dynamic code config
 
-      // TODO: Should this be more explicit? Such as an environment variable?
-      // Or, a LazyDogStatsDClient, one that self-initializes upon first method call?
       if (config.dogstatsd) {
         // Custom Metrics
-        this.metrics = new dogstatsd.DogStatsDClient({
+        this.dogstatsd = new dogstatsd.DogStatsDClient({
           host: config.dogstatsd.hostname,
           port: config.dogstatsd.port,
           tags: [
+            // these are the Runtime Metrics default tags
+            // Python also uses these as default Custom Metrics tags
             `service:${config.tags.service}`,
             `env:${config.tags.env}`,
             `version:${config.tags.version}`
@@ -43,7 +43,7 @@ class Tracer extends NoopProxy {
         })
 
         setInterval(() => {
-          this.metrics.flush()
+          this.dogstatsd.flush()
         }, 10 * 1000).unref()
       }
 

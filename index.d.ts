@@ -122,7 +122,7 @@ export declare interface Tracer extends opentracing.Tracer {
 
   TracerProvider: opentelemetry.TracerProvider;
 
-  metrics: Metrics;
+  dogstatsd: DogStatsD;
 }
 
 export declare interface TraceOptions extends Analyzable {
@@ -648,7 +648,7 @@ export declare interface User {
 // should this instead by { key: 'val', k2: 'v2' }?
 // while it would be more developer-friendly, it would be slower
 // probably it's most important to remain consistent with other interfaces
-export declare interface Metrics {
+export declare interface DogStatsD {
   /**
    * Increments a metric by the specified value, optionally specifying tags.
    * @param {string} stat The dot-separated metric name.

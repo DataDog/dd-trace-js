@@ -152,6 +152,8 @@ class NoopDogStatsDClient {
 
   increment () { }
 
+  decrement () { }
+
   distribution () { }
 
   flush () { }
