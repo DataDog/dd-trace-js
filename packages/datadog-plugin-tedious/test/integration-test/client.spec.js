@@ -4,12 +4,15 @@ const {
   FakeAgent,
   createSandbox,
   checkSpansForServiceName,
-  esmTestSkipper,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
+const version = require('../../../../version.js')
 
-const describe = esmTestSkipper()
+// tedious does not support node 20
+const describe = version.NODE_MAJOR >= 20
+  ? global.describe.skip
+  : global.describe
 
 describe('esm', () => {
   let agent
