@@ -74,6 +74,7 @@ describe('TracerProxy', () => {
     {
       const dogstatsdIncrements = []
       let dogstatsdConfig
+      let dogstatsdFlushes = 0
 
       class FauxDogStatsDClient {
         constructor (cfg) {
@@ -82,12 +83,16 @@ describe('TracerProxy', () => {
         increment () {
           dogstatsdIncrements.push(arguments)
         }
+        flush () {
+          dogstatsdFlushes++
+        }
       }
 
       noopDogStatsD = {
         CustomMetrics: FauxDogStatsDClient,
         _increments: () => dogstatsdIncrements,
-        _config: () => dogstatsdConfig
+        _config: () => dogstatsdConfig,
+        _flushes: () => dogstatsdFlushes
       }
     }
 
@@ -246,6 +251,28 @@ describe('TracerProxy', () => {
         proxy.init()
 
         proxy.dogstatsd.increment('foo')
+      })
+
+      it('should call custom metrics flush via interval', () => {
+        const clock = sinon.useFakeTimers()
+
+        config.dogstatsd = {
+          hostname: 'localhost',
+          port: 9876
+        }
+        config.tags = {
+          service: 'photos',
+          env: 'prod',
+          version: '1.2.3'
+        }
+
+        proxy.init()
+
+        expect(noopDogStatsD._flushes()).to.equal(0)
+
+        clock.tick(10000)
+
+        expect(noopDogStatsD._flushes()).to.equal(1)
       })
 
       it('should expose real metrics methods after init when configured', () => {
