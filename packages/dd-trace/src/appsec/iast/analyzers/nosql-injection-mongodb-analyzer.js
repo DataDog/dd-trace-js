@@ -16,6 +16,7 @@ function iterateObjectStrings (target, fn, levelKeys = [], depth = 50) {
     Object.keys(target).forEach((key) => {
       const nextLevelKeys = [...levelKeys, key]
       const val = target[key]
+
       if (typeof val === 'string') {
         fn(val, nextLevelKeys, target, key)
       } else if (depth > 0) {
@@ -63,8 +64,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   }
 
   configureSanitizers () {
-    // TODO => this is not a sinkpoint, speak to Igor about how to prevent to add the sinkpoint
-    this.addSub('datadog:express-mongo-sanitize:filter:finish', ({ sanitizedProperties, req }) => {
+    this.addNotSinkSub('datadog:express-mongo-sanitize:filter:finish', ({ sanitizedProperties, req }) => {
       const store = storage.getStore()
       const iastContext = getIastContext(store)
 
@@ -77,6 +77,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
               for (let i = 0; i < levelsLength; i++) {
                 const currentLevelKey = levelKeys[i]
+
                 if (i === levelsLength - 1) {
                   parentObj[currentLevelKey] = addSecureMark(iastContext, value, MONGODB_NOSQL_SECURE_MARK)
                 } else {
@@ -89,8 +90,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       }
     })
 
-    // TODO => this is not a sinkpoint, speak to Igor about how to prevent to add the sinkpoint
-    this.addSub('datadog:express-mongo-sanitize:sanitize:finish', ({ sanitizedObject }) => {
+    this.addNotSinkSub('datadog:express-mongo-sanitize:sanitize:finish', ({ sanitizedObject }) => {
       const store = storage.getStore()
       const iastContext = getIastContext(store)
 
@@ -105,7 +105,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       }
     })
 
-    this.addSub('datadog:mongoose:sanitize-filter:finish', ({ sanitizedObject }) => {
+    this.addNotSinkSub('datadog:mongoose:sanitize-filter:finish', ({ sanitizedObject }) => {
       this.sanitizedObjects.add(sanitizedObject)
     })
   }
