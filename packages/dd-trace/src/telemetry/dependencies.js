@@ -79,6 +79,13 @@ function start (_config, _application, _host) {
   application = _application
   host = _host
   moduleLoadStartChannel.subscribe(onModuleLoad)
+
+  if (require.cache) {
+    const filenames = Object.keys(require.cache)
+    filenames.forEach(filename => {
+      onModuleLoad({ filename })
+    })
+  }
 }
 
 function isDependency (filename, request) {
