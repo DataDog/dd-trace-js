@@ -3,6 +3,7 @@ const path = require('path')
 
 tracer.init({
   debug: true,
+  port: process.env.AGENT_PORT,
   appsec: {
     enabled: true,
     rules: path.join(__dirname, 'graphql-rules.json')
@@ -96,11 +97,9 @@ async function main () {
     resolvers
   })
 
-  const { url } = await startStandaloneServer(server, { listen: { port: 3000 } })
-
-  process.send({ port: 3000 })
-
-  console.log(`🚀  Server ready at: ${url}`)
+  const port = process.env.APP_PORT
+  const { url } = await startStandaloneServer(server, { listen: { port } })
+  process.send({ port })
 }
 
 main()
