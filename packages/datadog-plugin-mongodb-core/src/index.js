@@ -5,23 +5,34 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 class MongodbCorePlugin extends DatabasePlugin {
   static get id () { return 'mongodb-core' }
   static get component () { return 'mongodb' }
-
+  // avoid using db.name for peer.service since it includes the collection name
+  // should be removed if one day this will be fixed
+  static get peerServicePrecursors () { return [] }
   start ({ ns, ops, options = {}, name }) {
     const query = getQuery(ops)
     const resource = truncate(getResource(this, ns, query, name))
-
     this.startSpan(this.operationName(), {
-      service: this.serviceName(this.config),
+      service: this.serviceName({ pluginConfig: this.config }),
       resource,
       type: 'mongodb',
       kind: 'client',
       meta: {
+        // this is not technically correct since it includes the collection but we changing will break customer stuff
         'db.name': ns,
         'mongodb.query': query,
         'out.host': options.host,
         'out.port': options.port
       }
     })
+  }
+
+  getPeerService (tags) {
+    const ns = tags['db.name']
+    if (ns && tags['peer.service'] === undefined) {
+      // the mongo ns is either dbName either dbName.collection. So we keep the first part
+      tags['peer.service'] = ns.split('.', 1)[0]
+    }
+    return super.getPeerService(tags)
   }
 }
 
@@ -46,7 +57,7 @@ function truncate (input) {
 }
 
 function shouldSimplify (input) {
-  return !isObject(input)
+  return !isObject(input) || typeof input.toJSON === 'function'
 }
 
 function shouldHide (input) {

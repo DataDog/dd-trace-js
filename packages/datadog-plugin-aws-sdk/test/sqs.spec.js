@@ -2,6 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
+const { rawExpectedSchema } = require('./sqs-naming')
 
 const queueOptions = {
   QueueName: 'SQS_QUEUE_NAME',
@@ -49,6 +50,53 @@ describe('Plugin', () => {
         after(() => {
           return agent.close({ ritmReset: false })
         })
+
+        withPeerService(
+          () => tracer,
+          (done) => sqs.sendMessage({
+            MessageBody: 'test body',
+            QueueUrl
+          }, (err) => err && done(err)),
+          'SQS_QUEUE_NAME',
+          'queuename'
+        )
+
+        withNamingSchema(
+          (done) => sqs.sendMessage({
+            MessageBody: 'test body',
+            QueueUrl
+          }, (err) => err && done(err)),
+          rawExpectedSchema.producer,
+          {
+            desc: 'producer'
+          }
+        )
+
+        withNamingSchema(
+          (done) => sqs.sendMessage({
+            MessageBody: 'test body',
+            QueueUrl
+          }, (err) => {
+            if (err) return done(err)
+
+            sqs.receiveMessage({
+              QueueUrl,
+              MessageAttributeNames: ['.*']
+            }, (err) => err && done(err))
+          }),
+          rawExpectedSchema.consumer,
+          {
+            desc: 'consumer'
+          }
+        )
+
+        withNamingSchema(
+          (done) => sqs.listQueues({}, (err) => err && done(err)),
+          rawExpectedSchema.client,
+          {
+            desc: 'client'
+          }
+        )
 
         it('should propagate the tracing context from the producer to the consumer', (done) => {
           let parentId

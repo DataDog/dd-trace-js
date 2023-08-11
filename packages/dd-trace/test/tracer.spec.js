@@ -38,6 +38,17 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
     tracer._exporter.setUrl = sinon.stub()
+    tracer._prioritySampler.configure = sinon.stub()
+  })
+
+  describe('configure', () => {
+    it('should pass the sampling options to the priority sampler', () => {
+      const env = 'test'
+      const sampler = { sampleRate: 0.5 }
+      const options = { env, sampler }
+      tracer.configure(options)
+      expect(tracer._prioritySampler.configure).to.have.been.calledWith(env, sampler)
+    })
   })
 
   describe('setUrl', () => {

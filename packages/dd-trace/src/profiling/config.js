@@ -7,19 +7,17 @@ const { URL, format, pathToFileURL } = require('url')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
-const CpuProfiler = require('./profilers/cpu')
 const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { tagger } = require('./tagger')
-const { isTrue } = require('../util')
+const { isFalse, isTrue } = require('../util')
 
 class Config {
   constructor (options = {}) {
     const {
       DD_PROFILING_ENABLED,
       DD_PROFILING_PROFILERS,
-      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
       DD_ENV,
       DD_TAGS,
       DD_SERVICE,
@@ -32,10 +30,14 @@ class Config {
       DD_PROFILING_SOURCE_MAP,
       DD_PROFILING_UPLOAD_PERIOD,
       DD_PROFILING_PPROF_PREFIX,
+      DD_PROFILING_HEAP_ENABLED,
+      DD_PROFILING_WALLTIME_ENABLED,
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
-      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES
+      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED
     } = process.env
 
     const enabled = isTrue(coalesce(options.enabled, DD_PROFILING_ENABLED, true))
@@ -50,8 +52,8 @@ class Config {
       Number(DD_PROFILING_UPLOAD_TIMEOUT), 60 * 1000)
     const sourceMap = coalesce(options.sourceMap,
       DD_PROFILING_SOURCE_MAP, true)
-    const endpointCollection = coalesce(options.endpointCollection,
-      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED, false)
+    const endpointCollectionEnabled = coalesce(options.endpointCollection,
+      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, false)
     const pprofPrefix = coalesce(options.pprofPrefix,
       DD_PROFILING_PPROF_PREFIX, '')
 
@@ -72,7 +74,7 @@ class Config {
     this.uploadTimeout = uploadTimeout
     this.sourceMap = sourceMap
     this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
-    this.endpointCollection = endpointCollection
+    this.endpointCollectionEnabled = endpointCollectionEnabled
     this.pprofPrefix = pprofPrefix
 
     const hostname = coalesce(options.hostname, DD_AGENT_HOST) || 'localhost'
@@ -106,16 +108,43 @@ class Config {
       exportCommand
     }
 
-    const profilers = coalesce(options.profilers, DD_PROFILING_PROFILERS, [
-      new WallProfiler(this),
-      new SpaceProfiler(this)
-    ])
+    const profilers = options.profilers
+      ? options.profilers
+      : getProfilers({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS })
+    this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, false))
 
     this.profilers = ensureProfilers(profilers, this)
   }
 }
 
 module.exports = { Config }
+
+function getProfilers ({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS }) {
+  // First consider "legacy" DD_PROFILING_PROFILERS env variable, defaulting to wall + space
+  // Use a Set to avoid duplicates
+  const profilers = new Set(coalesce(DD_PROFILING_PROFILERS, 'wall,space').split(','))
+
+  // Add/remove wall depending on the value of DD_PROFILING_WALLTIME_ENABLED
+  if (DD_PROFILING_WALLTIME_ENABLED != null) {
+    if (isTrue(DD_PROFILING_WALLTIME_ENABLED)) {
+      profilers.add('wall')
+    } else if (isFalse(DD_PROFILING_WALLTIME_ENABLED)) {
+      profilers.delete('wall')
+    }
+  }
+
+  // Add/remove wall depending on the value of DD_PROFILING_HEAP_ENABLED
+  if (DD_PROFILING_HEAP_ENABLED != null) {
+    if (isTrue(DD_PROFILING_HEAP_ENABLED)) {
+      profilers.add('space')
+    } else if (isFalse(DD_PROFILING_HEAP_ENABLED)) {
+      profilers.delete('space')
+    }
+  }
+
+  return [...profilers]
+}
 
 function getExportStrategy (name, options) {
   const strategy = Object.values(oomExportStrategies).find(value => value === name)
@@ -175,8 +204,6 @@ function getProfiler (name, options) {
       return new WallProfiler(options)
     case 'space':
       return new SpaceProfiler(options)
-    case 'cpu-experimental':
-      return new CpuProfiler(options)
     default:
       options.logger.error(`Unknown profiler "${name}"`)
   }

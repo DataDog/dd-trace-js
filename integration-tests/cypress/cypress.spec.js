@@ -21,7 +21,10 @@ const {
   TEST_TOOLCHAIN,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_ITR_SKIPPING_ENABLED,
-  TEST_ITR_TESTS_SKIPPED
+  TEST_ITR_TESTS_SKIPPED,
+  TEST_SKIPPED_BY_ITR,
+  TEST_ITR_SKIPPING_COUNT,
+  TEST_ITR_SKIPPING_TYPE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { NODE_MAJOR } = require('../../version')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -364,7 +367,7 @@ describe(`cypress@${version}`, function () {
         }).catch(done)
       })
     })
-    it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
+    it('can skip tests received by the intelligent test runner API and still reports code coverage', (done) => {
       receiver.setSuitesToSkip([{
         type: 'test',
         attributes: {
@@ -379,19 +382,31 @@ describe(`cypress@${version}`, function () {
 
           const skippedTest = events.find(event =>
             event.content.resource === 'cypress/e2e/other.cy.js.context passes'
-          )
-          assert.notExists(skippedTest)
+          ).content
+          assert.propertyVal(skippedTest.meta, TEST_STATUS, 'skip')
+          assert.propertyVal(skippedTest.meta, TEST_SKIPPED_BY_ITR, 'true')
+
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
 
           const testSession = events.find(event => event.type === 'test_session_end').content
           assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
           assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
           assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          assert.propertyVal(testSession.metrics, TEST_ITR_SKIPPING_COUNT, 1)
+          assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_TYPE, 'test')
           const testModule = events.find(event => event.type === 'test_module_end').content
           assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'true')
           assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
           assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          assert.propertyVal(testModule.metrics, TEST_ITR_SKIPPING_COUNT, 1)
+          assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_TYPE, 'test')
         }, 25000)
+
+      const coverageRequestPromise = receiver
+        .payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'))
+        .then(coverageRequest => {
+          assert.propertyVal(coverageRequest.headers, 'dd-api-key', '1')
+        })
 
       const skippableRequestPromise = receiver
         .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
@@ -417,7 +432,7 @@ describe(`cypress@${version}`, function () {
         }
       )
       childProcess.on('exit', () => {
-        Promise.all([eventsPromise, skippableRequestPromise]).then(() => {
+        Promise.all([eventsPromise, skippableRequestPromise, coverageRequestPromise]).then(() => {
           done()
         }).catch(done)
       })
@@ -469,6 +484,58 @@ describe(`cypress@${version}`, function () {
 
       childProcess.on('exit', () => {
         receiverPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+    it('sets _dd.ci.itr.tests_skipped to false if the received test is not skipped', (done) => {
+      receiver.setSuitesToSkip([{
+        type: 'test',
+        attributes: {
+          name: 'fake name',
+          suite: 'i/dont/exist.spec.js'
+        }
+      }])
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+          assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+          assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          assert.propertyVal(testSession.metrics, TEST_ITR_SKIPPING_COUNT, 0)
+          const testModule = events.find(event => event.type === 'test_module_end').content
+          assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+          assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+          assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          assert.propertyVal(testModule.metrics, TEST_ITR_SKIPPING_COUNT, 0)
+        }, 25000)
+
+      const skippableRequestPromise = receiver
+        .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
+        .then(skippableRequest => {
+          assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
+          assert.propertyVal(skippableRequest.headers, 'dd-application-key', '1')
+        })
+
+      const {
+        NODE_OPTIONS,
+        ...restEnvVars
+      } = getCiVisAgentlessConfig(receiver.port)
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+          },
+          stdio: 'pipe'
+        }
+      )
+      childProcess.on('exit', () => {
+        Promise.all([eventsPromise, skippableRequestPromise]).then(() => {
           done()
         }).catch(done)
       })

@@ -14,6 +14,9 @@ const INSECURE_CIPHERS = new Set([
 class WeakCipherAnalyzer extends Analyzer {
   constructor () {
     super(WEAK_CIPHER)
+  }
+
+  onConfigure () {
     this.addSub('datadog:crypto:cipher:start', ({ algorithm }) => this.analyze(algorithm))
   }
 

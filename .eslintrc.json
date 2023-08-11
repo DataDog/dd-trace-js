@@ -33,6 +33,7 @@
     "mocha/no-global-tests": 0,
     "mocha/no-exports": 0,
     "mocha/no-skipped-tests": 0,
-    "n/no-restricted-require": [2, ["diagnostics_channel"]]
+    "n/no-restricted-require": [2, ["diagnostics_channel"]],
+    "object-curly-newline": ["error", {"multiline": true, "consistent": true }]
   }
 }

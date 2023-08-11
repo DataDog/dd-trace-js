@@ -3,7 +3,7 @@
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
-const namingSchema = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let elasticsearch
@@ -55,16 +55,33 @@ describe('Plugin', () => {
           }, hasCallbackSupport ? () => {} : undefined)
         })
 
+        withPeerService(
+          () => tracer,
+          () => client.search({
+            index: 'docs',
+            sort: 'name',
+            size: 100,
+            body: {
+              query: {
+                match_all: {}
+              }
+            }
+          }, hasCallbackSupport ? () => {} : undefined),
+          'localhost', 'out.host'
+        )
+
         it('should set the correct tags', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('db.type', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
               expect(traces[0][0].meta).to.have.property('elasticsearch.url', '/docs/_search')
+              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+
               if (hasCallbackSupport) {
                 expect(traces[0][0].meta).to.have.property('elasticsearch.body', '{"query":{"match_all":{}}}')
                 expect(traces[0][0].meta).to.have.property('elasticsearch.params', '{"sort":"name","size":100}')
@@ -93,8 +110,8 @@ describe('Plugin', () => {
         it('should set the correct tags on msearch', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('db.type', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
@@ -148,8 +165,8 @@ describe('Plugin', () => {
             it('should do automatic instrumentation', done => {
               agent
                 .use(traces => {
-                  expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-                  expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+                  expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+                  expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                   expect(traces[0][0]).to.have.property('resource', 'HEAD /')
                   expect(traces[0][0]).to.have.property('type', 'elasticsearch')
                 })
@@ -212,8 +229,8 @@ describe('Plugin', () => {
           it('should do automatic instrumentation', done => {
             agent
               .use(traces => {
-                expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-                expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+                expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+                expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', 'HEAD /')
                 expect(traces[0][0]).to.have.property('type', 'elasticsearch')
               })
@@ -289,8 +306,7 @@ describe('Plugin', () => {
               { index: 'logstash-2000.01.01', body: {} },
               hasCallbackSupport ? () => {} : undefined
             ),
-            () => namingSchema.outbound.opName,
-            () => namingSchema.outbound.serviceName
+            rawExpectedSchema.outbound
           )
         })
       })
@@ -301,9 +317,11 @@ describe('Plugin', () => {
         before(() => {
           return agent.load('elasticsearch', {
             service: 'custom',
-            hooks: { query: (span, params) => {
-              span.addTags({ 'elasticsearch.params': 'foo', 'elasticsearch.method': params.method })
-            } }
+            hooks: {
+              query: (span, params) => {
+                span.addTags({ 'elasticsearch.params': 'foo', 'elasticsearch.method': params.method })
+              }
+            }
           })
         })
 
@@ -332,7 +350,7 @@ describe('Plugin', () => {
 
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', 'custom')
               expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('elasticsearch.params', 'foo')
@@ -353,8 +371,16 @@ describe('Plugin', () => {
             { index: 'logstash-2000.01.01', body: {} },
             hasCallbackSupport ? () => {} : undefined
           ),
-          () => namingSchema.outbound.opName,
-          () => 'custom'
+          {
+            v0: {
+              opName: 'elasticsearch.query',
+              serviceName: 'custom'
+            },
+            v1: {
+              opName: 'elasticsearch.query',
+              serviceName: 'custom'
+            }
+          }
         )
       })
     })

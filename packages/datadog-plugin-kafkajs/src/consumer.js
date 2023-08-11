@@ -6,7 +6,12 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'kafkajs' }
   static get operation () { return 'consume' }
 
-  start ({ topic, partition, message }) {
+  start ({ topic, partition, message, groupId }) {
+    if (this.config.dsmEnabled) {
+      this.tracer.decodeDataStreamsContext(message.headers['dd-pathway-ctx'])
+      this.tracer
+        .setCheckpoint(['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka'])
+    }
     const childOf = extract(this.tracer, message.headers)
     this.startSpan({
       childOf,

@@ -11,6 +11,7 @@ const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DD_MAJOR } = require('../../../version')
+const { rawExpectedSchema } = require('./naming')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -58,24 +59,31 @@ describe('Plugin', () => {
             })
         })
 
+        const spanProducerFn = () => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+          getPort().then(port => {
+            appListener = server(app, port, () => {
+              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                res.on('data', () => {})
+              })
+              req.end()
+            })
+          })
+        }
+
         withPeerService(
           () => tracer,
-          () => {
-            const app = express()
-            app.get('/user', (req, res) => {
-              res.status(200).send()
-            })
-            getPort().then(port => {
-              appListener = server(app, port, () => {
-                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                  res.on('data', () => {})
-                })
-                req.end()
-              })
-            })
-          },
+          spanProducerFn,
           'localhost',
           'out.host'
+        )
+
+        withNamingSchema(
+          spanProducerFn,
+          rawExpectedSchema.client
         )
 
         it('should do automatic instrumentation', done => {
@@ -1045,6 +1053,7 @@ describe('Plugin', () => {
 
       describe('with splitByDomain configuration', () => {
         let config
+        let serverPort
 
         beforeEach(() => {
           config = {
@@ -1060,6 +1069,34 @@ describe('Plugin', () => {
               express = require('express')
             })
         })
+
+        withNamingSchema(
+          () => {
+            const app = express()
+            app.get('/user', (req, res) => {
+              res.status(200).send()
+            })
+            getPort().then(port => {
+              serverPort = port
+              appListener = server(app, port, () => {
+                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                  res.on('data', () => {})
+                })
+                req.end()
+              })
+            })
+          },
+          {
+            v0: {
+              serviceName: () => `localhost:${serverPort}`,
+              opName: 'http.request'
+            },
+            v1: {
+              serviceName: () => `localhost:${serverPort}`,
+              opName: 'http.client.request'
+            }
+          }
+        )
 
         it('should use the remote endpoint as the service name', done => {
           const app = express()
@@ -1094,7 +1131,7 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              headers: ['host', 'x-foo']
+              headers: ['host', 'x-foo', 'x-bar:http.bar', 'x-baz:http.baz']
             }
           }
 
@@ -1109,7 +1146,8 @@ describe('Plugin', () => {
           const app = express()
 
           app.get('/user', (req, res) => {
-            res.setHeader('x-foo', 'bar')
+            res.setHeader('x-foo', 'foo')
+            res.setHeader('x-bar', 'bar')
             res.status(200).send()
           })
 
@@ -1119,13 +1157,17 @@ describe('Plugin', () => {
                 const meta = traces[0][0].meta
 
                 expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.host`, `localhost:${port}`)
-                expect(meta).to.have.property(`${HTTP_RESPONSE_HEADERS}.x-foo`, 'bar')
+                expect(meta).to.have.property(`http.baz`, 'baz')
+                expect(meta).to.have.property(`${HTTP_RESPONSE_HEADERS}.x-foo`, 'foo')
+                expect(meta).to.have.property(`http.bar`, 'bar')
               })
               .then(done)
               .catch(done)
 
             appListener = server(app, port, () => {
-              const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              const url = `${protocol}://localhost:${port}/user`
+              const headers = { 'x-baz': 'baz' }
+              const req = http.request(url, { headers }, res => {
                 res.on('data', () => {})
               })
 

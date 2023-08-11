@@ -9,6 +9,8 @@ describe('weak-hash-analyzer', () => {
   const VULNERABLE_ALGORITHM = 'sha1'
   const NON_VULNERABLE_ALGORITHM = 'sha512'
 
+  weakHashAnalyzer.configure(true)
+
   it('should subscribe to crypto hashing channel', () => {
     expect(weakHashAnalyzer._subscriptions).to.have.lengthOf(1)
     expect(weakHashAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:crypto:hashing:start')
@@ -108,6 +110,30 @@ describe('weak-hash-analyzer', () => {
       const location = {
         path: path.join(locationPrefix, 'node_modules', '@mikro-orm', 'core', 'utils', 'Utils.js'),
         line: 30
+      }
+      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+    })
+
+    it('mongodb host address hash', () => {
+      const location = {
+        path: path.join(locationPrefix, 'node_modules', 'mongodb', 'lib', 'core', 'connection', 'connection.js'),
+        line: 137
+      }
+      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+    })
+
+    it('sqreen package list fingerprint', () => {
+      const location = {
+        path: path.join(locationPrefix, 'node_modules', 'sqreen', 'lib', 'package-reader', 'index.js'),
+        line: 135
+      }
+      expect(weakHashAnalyzer._isExcluded(location)).to.be.true
+    })
+
+    it('pusher request body fingerprint', () => {
+      const location = {
+        path: path.join(locationPrefix, 'node_modules', 'pusher', 'lib', 'utils.js'),
+        line: 23
       }
       expect(weakHashAnalyzer._isExcluded(location)).to.be.true
     })

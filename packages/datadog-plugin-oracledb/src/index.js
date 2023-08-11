@@ -7,9 +7,10 @@ const log = require('../../dd-trace/src/log')
 class OracledbPlugin extends DatabasePlugin {
   static get id () { return 'oracledb' }
   static get system () { return 'oracle' }
+  static get peerServicePrecursors () { return ['db.instance', 'db.hostname'] }
 
   start ({ query, connAttrs }) {
-    const service = this.serviceName(this.config, connAttrs)
+    const service = this.serviceName({ pluginConfig: this.config, params: connAttrs })
     const url = getUrl(connAttrs.connectString)
 
     this.startSpan(this.operationName(), {

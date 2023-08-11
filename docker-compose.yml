@@ -1,7 +1,7 @@
 version: "2"
 services:
   couchbase:
-    image: sabrenner/couchbase-server-sandbox:latest
+    image: ghcr.io/datadog/couchbase-server-sandbox:latest
     ports:
       - "127.0.0.1:8091-8095:8091-8095"
       - "127.0.0.1:11210:11210"
@@ -15,11 +15,10 @@ services:
   # A working MSSQL server is not available on ARM.
   # This image provides _most_ of sqlserver functionalities, but
   # does not support stored procedures (corresponding tests will fail)
-    image: mcr.microsoft.com/mssql/azure-sql-edge
+    image: mcr.microsoft.com/azure-sql-edge
     environment:
       - "ACCEPT_EULA=Y"
       - "SA_PASSWORD=DD_HUNTER2"
-      - "MSSQL_PID=Express"
     ports:
       - "127.0.0.1:1433:1433"
   mysql:

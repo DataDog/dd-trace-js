@@ -9,6 +9,8 @@ class NoopTracer {
     this._span = new Span(this)
   }
 
+  configure (options) {}
+
   trace (name, options, fn) {
     return fn(this._span, () => {})
   }

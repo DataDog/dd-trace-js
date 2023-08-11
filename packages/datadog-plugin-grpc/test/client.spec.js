@@ -7,6 +7,7 @@ const getService = require('./service')
 const loader = require('../../../versions/@grpc/proto-loader').get()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
+const { DD_MAJOR } = require('../../../version')
 const nodeMajor = parseInt(process.versions.node.split('.')[0])
 const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
@@ -95,17 +96,45 @@ describe('Plugin', () => {
               return agent.close({ ritmReset: false })
             })
 
+            withPeerService(
+              () => tracer,
+              async () => {
+                const client = await buildClient({
+                  getUnary: (_, callback) => callback()
+                })
+                client.getUnary({ first: 'foobar' }, () => {})
+              },
+              'test.TestService', 'rpc.service')
+
+            withNamingSchema(
+              async () => {
+                const client = await buildClient({
+                  getUnary: (_, callback) => callback()
+                })
+                client.getUnary({ first: 'foobar' }, () => {})
+              },
+              {
+                v0: {
+                  opName: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
+                  serviceName: 'test'
+                },
+                v1: {
+                  opName: 'grpc.client.request',
+                  serviceName: 'test'
+                }
+              }
+            )
+
             it('should handle `unary` calls', async () => {
               const client = await buildClient({
                 getUnary: (_, callback) => callback()
               })
 
               client.getUnary({ first: 'foobar' }, () => {})
-
               return agent
                 .use(traces => {
                   expect(traces[0][0]).to.deep.include({
-                    name: 'grpc.client',
+                    name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
                     service: 'test',
                     resource: '/test.TestService/getUnary',
                     type: 'http'
@@ -117,6 +146,7 @@ describe('Plugin', () => {
                     'grpc.method.package': 'test',
                     'grpc.method.path': '/test.TestService/getUnary',
                     'grpc.method.kind': 'unary',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client',
                     'component': 'grpc'
                   })
@@ -141,7 +171,7 @@ describe('Plugin', () => {
               return agent
                 .use(traces => {
                   expect(traces[0][0]).to.deep.include({
-                    name: 'grpc.client',
+                    name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
                     service: 'test',
                     resource: '/test.TestService/getServerStream',
                     type: 'http'
@@ -153,6 +183,7 @@ describe('Plugin', () => {
                     'grpc.method.package': 'test',
                     'grpc.method.path': '/test.TestService/getServerStream',
                     'grpc.method.kind': 'server_streaming',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client',
                     'component': 'grpc'
                   })
@@ -175,7 +206,7 @@ describe('Plugin', () => {
               return agent
                 .use(traces => {
                   expect(traces[0][0]).to.deep.include({
-                    name: 'grpc.client',
+                    name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
                     service: 'test',
                     resource: '/test.TestService/getClientStream',
                     type: 'http'
@@ -187,6 +218,7 @@ describe('Plugin', () => {
                     'grpc.method.package': 'test',
                     'grpc.method.path': '/test.TestService/getClientStream',
                     'grpc.method.kind': 'client_streaming',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client',
                     'component': 'grpc'
                   })
@@ -209,7 +241,7 @@ describe('Plugin', () => {
               return agent
                 .use(traces => {
                   expect(traces[0][0]).to.deep.include({
-                    name: 'grpc.client',
+                    name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
                     service: 'test',
                     resource: '/test.TestService/getBidi',
                     type: 'http'
@@ -218,6 +250,7 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
                   expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getBidi')
                   expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'bidi_streaming')
+                  expect(traces[0][0].meta).to.have.property('rpc.service', 'test.TestService')
                   expect(traces[0][0].meta).to.have.property('span.kind', 'client')
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
                   expect(traces[0][0].meta).to.have.property('component', 'grpc')
@@ -288,6 +321,7 @@ describe('Plugin', () => {
                     'grpc.method.package': 'test',
                     'grpc.method.path': '/test.TestService/getUnary',
                     'grpc.method.kind': 'unary',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client',
                     'component': 'grpc'
                   })
@@ -315,6 +349,7 @@ describe('Plugin', () => {
                     'grpc.method.package': 'test',
                     'grpc.method.path': '/test.TestService/getUnary',
                     'grpc.method.kind': 'unary',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client',
                     'component': 'grpc'
                   })
@@ -342,7 +377,7 @@ describe('Plugin', () => {
               return agent
                 .use(traces => {
                   expect(traces[0][0]).to.deep.include({
-                    name: 'grpc.client',
+                    name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
                     service: 'test',
                     resource: '/test.TestService/getUnary'
                   })
@@ -352,6 +387,7 @@ describe('Plugin', () => {
                     'grpc.method.service': 'TestService',
                     'grpc.method.package': 'test',
                     'grpc.method.path': '/test.TestService/getUnary',
+                    'rpc.service': 'test.TestService',
                     'grpc.method.kind': 'unary',
                     'span.kind': 'client',
                     'component': 'grpc'
@@ -373,7 +409,7 @@ describe('Plugin', () => {
               return agent
                 .use(traces => {
                   expect(traces[0][0]).to.deep.include({
-                    name: 'grpc.client',
+                    name: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
                     service: 'test',
                     resource: '/test.TestService/getUnary'
                   })
@@ -384,6 +420,7 @@ describe('Plugin', () => {
                     'grpc.method.package': 'test',
                     'grpc.method.path': '/test.TestService/getUnary',
                     'grpc.method.kind': 'unary',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client',
                     'component': 'grpc'
                   })
@@ -586,6 +623,7 @@ describe('Plugin', () => {
                     'grpc.method.path': '/test.TestService/getUnary',
                     'grpc.method.kind': 'unary',
                     'grpc.request.metadata.foo': 'bar',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client'
                   })
                 })
@@ -613,6 +651,7 @@ describe('Plugin', () => {
                     'grpc.method.path': '/test.TestService/getUnary',
                     'grpc.method.kind': 'unary',
                     'grpc.response.metadata.foo': 'bar',
+                    'rpc.service': 'test.TestService',
                     'span.kind': 'client'
                   })
 

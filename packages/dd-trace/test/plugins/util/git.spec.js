@@ -145,15 +145,15 @@ describe('getCommitsToUpload', () => {
     const { getCommitsToUpload } = proxyquire('../../../src/plugins/util/git',
       {
         'child_process': {
-          'execSync': (_, ...rest) =>
-            execSync(`head -c ${Math.floor(GIT_REV_LIST_MAX_BUFFER * 0.9)} /dev/zero`, ...rest)
+          'execFileSync': (command, flags, options) =>
+            execSync(`head -c ${Math.floor(GIT_REV_LIST_MAX_BUFFER * 0.9)} /dev/zero`, options)
         },
         '../../log': {
           error: logErrorSpy
         }
       }
     )
-    getCommitsToUpload([])
+    getCommitsToUpload([], [])
     expect(logErrorSpy).not.to.have.been.called
   })
 
@@ -163,14 +163,15 @@ describe('getCommitsToUpload', () => {
     const { getCommitsToUpload } = proxyquire('../../../src/plugins/util/git',
       {
         'child_process': {
-          'execFileSync': (_, ...rest) => execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, ...rest)
+          'execFileSync': (command, flags, options) =>
+            execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options)
         },
         '../../log': {
           error: logErrorSpy
         }
       }
     )
-    const commitsToUpload = getCommitsToUpload([])
+    const commitsToUpload = getCommitsToUpload([], [])
     expect(logErrorSpy).to.have.been.called
     expect(commitsToUpload.length).to.equal(0)
   })

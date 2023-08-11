@@ -4,6 +4,7 @@ const { expect } = require('chai')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let couchbase
@@ -40,6 +41,11 @@ describe('Plugin', () => {
           return agent.close({ ritmReset: false })
         })
 
+        withNamingSchema(
+          done => cluster.query(N1qlQuery.fromString('SELECT 1+1'), err => err && done(err)),
+          rawExpectedSchema.query
+        )
+
         it('should run the Query callback in the parent context', done => {
           const query = 'SELECT 1+1'
           const span = tracer.startSpan('test.query.cb')
@@ -71,8 +77,8 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', 'couchbase.query')
-                expect(span).to.have.property('service', 'test-couchbase')
+                expect(span).to.have.property('name', expectedSchema.query.opName)
+                expect(span).to.have.property('service', expectedSchema.query.serviceName)
                 expect(span).to.have.property('resource', query)
                 expect(span).to.have.property('type', 'sql')
                 expect(span.meta).to.have.property('span.kind', 'client')
@@ -100,8 +106,8 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', 'couchbase.upsert')
-                expect(span).to.have.property('service', 'test-couchbase')
+                expect(span).to.have.property('name', expectedSchema.upsert.opName)
+                expect(span).to.have.property('service', expectedSchema.upsert.serviceName)
                 expect(span).to.have.property('resource', 'couchbase.upsert')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
@@ -132,8 +138,8 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', 'couchbase.query')
-                expect(span).to.have.property('service', 'test-couchbase')
+                expect(span).to.have.property('name', expectedSchema.query.opName)
+                expect(span).to.have.property('service', expectedSchema.query.serviceName)
                 expect(span).to.have.property('resource', query)
                 expect(span).to.have.property('type', 'sql')
                 expect(span.meta).to.have.property('span.kind', 'client')
@@ -180,6 +186,11 @@ describe('Plugin', () => {
           return agent.close({ ritmReset: false })
         })
 
+        withNamingSchema(
+          done => cluster.query('SELECT 1+1').catch(done),
+          rawExpectedSchema.query
+        )
+
         it('should run the Query callback in the parent context', done => {
           const query = 'SELECT 1+1'
           const span = tracer.startSpan('test.query.cb')
@@ -208,8 +219,8 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', 'couchbase.query')
-                expect(span).to.have.property('service', 'test-couchbase')
+                expect(span).to.have.property('name', expectedSchema.query.opName)
+                expect(span).to.have.property('service', expectedSchema.query.serviceName)
                 expect(span).to.have.property('resource', query)
                 expect(span).to.have.property('type', 'sql')
                 expect(span.meta).to.have.property('span.kind', 'client')
@@ -225,8 +236,8 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', 'couchbase.upsert')
-                expect(span).to.have.property('service', 'test-couchbase')
+                expect(span).to.have.property('name', expectedSchema.upsert.opName)
+                expect(span).to.have.property('service', expectedSchema.upsert.serviceName)
                 expect(span).to.have.property('resource', 'couchbase.upsert')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('couchbase.bucket.name', 'datadog-test')
@@ -263,8 +274,8 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', 'couchbase.query')
-                expect(span).to.have.property('service', 'test-couchbase')
+                expect(span).to.have.property('name', expectedSchema.query.opName)
+                expect(span).to.have.property('service', expectedSchema.query.serviceName)
                 expect(span).to.have.property('resource', query)
                 expect(span).to.have.property('type', 'sql')
                 expect(span.meta).to.have.property('span.kind', 'client')

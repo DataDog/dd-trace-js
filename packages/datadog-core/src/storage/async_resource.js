@@ -5,6 +5,7 @@ const { channel } = require('../../../diagnostics_channel')
 
 const beforeCh = channel('dd-trace:storage:before')
 const afterCh = channel('dd-trace:storage:after')
+const enterCh = channel('dd-trace:storage:enter')
 
 let PrivateSymbol = Symbol
 function makePrivateSymbol () {
@@ -52,6 +53,7 @@ class AsyncResourceStorage {
     const resource = this._executionAsyncResource()
 
     resource[this._ddResourceStore] = store
+    enterCh.publish()
   }
 
   run (store, callback, ...args) {
@@ -61,11 +63,13 @@ class AsyncResourceStorage {
     const oldStore = resource[this._ddResourceStore]
 
     resource[this._ddResourceStore] = store
+    enterCh.publish()
 
     try {
       return callback(...args)
     } finally {
       resource[this._ddResourceStore] = oldStore
+      enterCh.publish()
     }
   }
 

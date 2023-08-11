@@ -28,7 +28,9 @@ suiteDescribe('metrics', () => {
     }
 
     metrics = proxyquire('../src/metrics', {
-      './dogstatsd': Client
+      './dogstatsd': {
+        DogStatsDClient: Client
+      }
     })
 
     config = {

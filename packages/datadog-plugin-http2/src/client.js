@@ -8,7 +8,6 @@ const log = require('../../dd-trace/src/log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
@@ -25,32 +24,11 @@ const HTTP2_HEADER_STATUS = ':status'
 const HTTP2_METHOD_GET = 'GET'
 
 class Http2ClientPlugin extends ClientPlugin {
-  static get id () {
-    return 'http2'
-  }
+  static get id () { return 'http2' }
+  static get prefix () { return `apm:http2:client:request` }
 
-  constructor (...args) {
-    super(...args)
-
-    this.addSub('apm:http2:client:response', (headers) => {
-      const span = storage.getStore().span
-      const status = headers && headers[HTTP2_HEADER_STATUS]
-
-      span.setTag(HTTP_STATUS_CODE, status)
-
-      if (!this.config.validateStatus(status)) {
-        this.addError()
-      }
-
-      addHeaderTags(span, headers, HTTP_RESPONSE_HEADERS, this.config)
-    })
-  }
-
-  addTraceSub (eventName, handler) {
-    this.addSub(`apm:${this.constructor.id}:client:${this.operation}:${eventName}`, handler)
-  }
-
-  start ({ authority, options, headers = {} }) {
+  bindStart (message) {
+    const { authority, options, headers = {} } = message
     const sessionDetails = extractSessionDetails(authority, options)
     const path = headers[HTTP2_HEADER_PATH] || '/'
     const pathname = path.split(/[?#]/)[0]
@@ -60,12 +38,12 @@ class Http2ClientPlugin extends ClientPlugin {
 
     const store = storage.getStore()
     const childOf = store && allowed ? store.span : null
-    const span = this.startSpan('http.request', {
+    const span = this.startSpan(this.operationName(), {
       childOf,
       meta: {
         [COMPONENT]: this.constructor.id,
         [SPAN_KIND]: CLIENT,
-        'service.name': getServiceName(this.tracer, this.config, sessionDetails),
+        'service.name': this.serviceName({ pluginConfig: this.config, sessionDetails }),
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
@@ -75,7 +53,7 @@ class Http2ClientPlugin extends ClientPlugin {
       metrics: {
         [CLIENT_PORT_KEY]: parseInt(sessionDetails.port)
       }
-    })
+    }, false)
 
     // TODO: Figure out a better way to do this for any span.
     if (!allowed) {
@@ -88,13 +66,52 @@ class Http2ClientPlugin extends ClientPlugin {
       this.tracer.inject(span, HTTP_HEADERS, headers)
     }
 
-    analyticsSampler.sample(span, this.config.measured)
+    message.parentStore = store
+    message.currentStore = { ...store, span }
 
-    this.enter(span, store)
+    return message.currentStore
+  }
+
+  bindAsyncStart ({ eventName, eventData, currentStore, parentStore }) {
+    switch (eventName) {
+      case 'response':
+        this._onResponse(currentStore, eventData)
+        return parentStore
+      case 'error':
+        this._onError(currentStore, eventData)
+        return parentStore
+      case 'close':
+        this._onClose(currentStore, eventData)
+        return parentStore
+    }
+
+    return storage.getStore()
   }
 
   configure (config) {
     return super.configure(normalizeConfig(config))
+  }
+
+  _onResponse (store, headers) {
+    const status = headers && headers[HTTP2_HEADER_STATUS]
+
+    store.span.setTag(HTTP_STATUS_CODE, status)
+
+    if (!this.config.validateStatus(status)) {
+      storage.run(store, () => this.addError())
+    }
+
+    addHeaderTags(store.span, headers, HTTP_RESPONSE_HEADERS, this.config)
+  }
+
+  _onError ({ span }, error) {
+    span.setTag('error', error)
+    span.finish()
+  }
+
+  _onClose ({ span }) {
+    this.tagPeerService(span)
+    span.finish()
   }
 }
 
@@ -114,20 +131,6 @@ function extractSessionDetails (authority, options) {
   }
 
   return { protocol, port, host }
-}
-
-function getFormattedHostString (host, port) {
-  return [host, port].filter(val => val).join(':')
-}
-
-function getServiceName (tracer, config, sessionDetails) {
-  if (config.splitByDomain) {
-    return getFormattedHostString(sessionDetails.host, sessionDetails.port)
-  } else if (config.service) {
-    return config.service
-  }
-
-  return tracer._service
 }
 
 function hasAmazonSignature (headers, path) {

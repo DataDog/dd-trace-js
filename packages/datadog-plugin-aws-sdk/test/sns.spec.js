@@ -4,6 +4,7 @@
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
+const { rawExpectedSchema } = require('./sns-naming')
 
 describe('Sns', () => {
   setup()
@@ -18,6 +19,7 @@ describe('Sns', () => {
     let QueueUrl
     let parentId
     let spanId
+    let tracer
 
     const snsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sns' : 'aws-sdk'
     const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
@@ -36,6 +38,10 @@ describe('Sns', () => {
         expect(parentId).to.equal(spanId)
       }).then(done, done)
     }
+
+    beforeEach(() => {
+      tracer = require('../../dd-trace')
+    })
 
     before(() => {
       parentId = '0'
@@ -95,6 +101,35 @@ describe('Sns', () => {
     after(() => {
       return agent.close({ ritmReset: false })
     })
+
+    withPeerService(
+      () => tracer,
+      (done) => sns.publish({
+        TopicArn,
+        Message: 'message 1'
+      }, (err) => err && done()),
+      'TestTopic', 'topicname')
+
+    withNamingSchema(
+      (done) => sns.publish({
+        TopicArn,
+        Message: 'message 1'
+      }, (err) => err && done()),
+      rawExpectedSchema.producer,
+      {
+        desc: 'producer'
+      }
+    )
+
+    withNamingSchema(
+      (done) => sns.getTopicAttributes({
+        TopicArn
+      }, (err) => err && done(err)),
+      rawExpectedSchema.client,
+      {
+        desc: 'client'
+      }
+    )
 
     it('injects trace context to SNS publish', done => {
       assertPropagation(done)

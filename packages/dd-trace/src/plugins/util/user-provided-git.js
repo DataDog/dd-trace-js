@@ -13,6 +13,7 @@ const {
 } = require('./tags')
 
 const { normalizeRef } = require('./ci')
+const { URL } = require('url')
 
 function removeEmptyValues (tags) {
   return Object.keys(tags).reduce((filteredTags, tag) => {
@@ -37,6 +38,18 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
   } catch (e) {
     return repositoryUrl
   }
+}
+
+// The regex is extracted from
+// https://github.com/jonschlinkert/is-git-url/blob/396965ffabf2f46656c8af4c47bef1d69f09292e/index.js#L9C15-L9C87
+function validateGitRepositoryUrl (repoUrl) {
+  return /(?:git|ssh|https?|git@[-\w.]+):(\/\/)?(.*?)(\.git)(\/?|#[-\d\w._]+?)$/.test(repoUrl)
+}
+
+function validateGitCommitSha (gitCommitSha) {
+  const isValidSha1 = /^[0-9a-f]{40}$/.test(gitCommitSha)
+  const isValidSha256 = /^[0-9a-f]{64}$/.test(gitCommitSha)
+  return isValidSha1 || isValidSha256
 }
 
 function getUserProviderGitMetadata () {
@@ -77,4 +90,4 @@ function getUserProviderGitMetadata () {
   })
 }
 
-module.exports = { getUserProviderGitMetadata }
+module.exports = { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha }

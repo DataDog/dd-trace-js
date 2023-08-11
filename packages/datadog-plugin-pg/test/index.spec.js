@@ -5,7 +5,7 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const net = require('net')
-const namingSchema = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 const EventEmitter = require('events')
 
 const clients = {
@@ -53,10 +53,20 @@ describe('Plugin', () => {
             client.connect(err => done(err))
           })
 
+          withPeerService(
+            () => tracer,
+            (done) => client.query('SELECT 1', (err, result) => {
+              if (err) {
+                done()
+              }
+            }),
+            'postgres', 'db.name'
+          )
+
           it('should do automatic instrumentation when using callbacks', done => {
             agent.use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
               expect(traces[0][0]).to.have.property('type', 'sql')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
@@ -101,8 +111,8 @@ describe('Plugin', () => {
           if (semver.intersects(version, '>=5.1')) { // initial promise support
             it('should do automatic instrumentation when using promises', done => {
               agent.use(traces => {
-                expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-                expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+                expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+                expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
                 expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
                 expect(traces[0][0]).to.have.property('type', 'sql')
                 expect(traces[0][0].meta).to.have.property('span.kind', 'client')
@@ -201,15 +211,14 @@ describe('Plugin', () => {
             done => client.query('SELECT $1::text as message', ['Hello world!'])
               .then(() => client.end())
               .catch(done),
-            () => namingSchema.outbound.opName,
-            () => namingSchema.outbound.serviceName
+            rawExpectedSchema.outbound
           )
         })
       })
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load('pg', { service: 'custom' })
+          return agent.load('pg', { service: 'custom', truncate: 12 })
         })
 
         after(() => {
@@ -231,8 +240,9 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent.use(traces => {
-            expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', 'custom')
+            expect(traces[0][0]).to.have.property('resource', 'SELECT $1...')
           })
             .then(done)
             .catch(done)
@@ -250,8 +260,16 @@ describe('Plugin', () => {
           done => client.query('SELECT $1::text as message', ['Hello world!'])
             .then(() => client.end())
             .catch(done),
-          () => namingSchema.outbound.opName,
-          () => 'custom'
+          {
+            v0: {
+              opName: 'pg.query',
+              serviceName: 'custom'
+            },
+            v1: {
+              opName: 'postgresql.query',
+              serviceName: 'custom'
+            }
+          }
         )
       })
 
@@ -279,7 +297,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct service', done => {
           agent.use(traces => {
-            expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
             expect(traces[0][0]).to.have.property('service', '127.0.0.1-postgres')
           })
             .then(done)
@@ -298,8 +316,16 @@ describe('Plugin', () => {
           done => client.query('SELECT $1::text as message', ['Hello world!'])
             .then(() => client.end())
             .catch(done),
-          () => namingSchema.outbound.opName,
-          () => '127.0.0.1-postgres'
+          {
+            v0: {
+              opName: 'pg.query',
+              serviceName: '127.0.0.1-postgres'
+            },
+            v1: {
+              opName: 'postgresql.query',
+              serviceName: '127.0.0.1-postgres'
+            }
+          }
         )
       })
 
@@ -488,7 +514,7 @@ describe('Plugin', () => {
 
         it('service should default to tracer service name', done => {
           agent.use(traces => {
-            expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
             done()
           })
 

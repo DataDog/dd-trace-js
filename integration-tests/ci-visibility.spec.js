@@ -18,7 +18,12 @@ const {
   TEST_CODE_COVERAGE_ENABLED,
   TEST_ITR_SKIPPING_ENABLED,
   TEST_ITR_TESTS_SKIPPED,
-  TEST_CODE_COVERAGE_LINES_PCT
+  TEST_CODE_COVERAGE_LINES_PCT,
+  TEST_SUITE,
+  TEST_STATUS,
+  TEST_SKIPPED_BY_ITR,
+  TEST_ITR_SKIPPING_TYPE,
+  TEST_ITR_SKIPPING_COUNT
 } = require('../packages/dd-trace/src/plugins/util/test')
 
 // TODO: remove when 2.x support is removed.
@@ -125,6 +130,87 @@ testFrameworks.forEach(({
     }
 
     if (name === 'jest') {
+      it('works when sharding', (done) => {
+        receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(events => {
+          const testSuiteEvents = events.payload.events.filter(event => event.type === 'test_suite_end')
+          assert.equal(testSuiteEvents.length, 3)
+          const testSuites = testSuiteEvents.map(span => span.content.meta[TEST_SUITE])
+
+          assert.includeMembers(testSuites,
+            [
+              'ci-visibility/sharding-test/sharding-test-5.js',
+              'ci-visibility/sharding-test/sharding-test-4.js',
+              'ci-visibility/sharding-test/sharding-test-1.js'
+            ]
+          )
+
+          const testSession = events.payload.events.find(event => event.type === 'test_session_end').content
+          assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+
+          // We run the second shard
+          receiver.setSuitesToSkip([
+            {
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/sharding-test/sharding-test-2.js'
+              }
+            },
+            {
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/sharding-test/sharding-test-3.js'
+              }
+            }
+          ])
+          childProcess = exec(
+            runTestsWithCoverageCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_REGEX: 'sharding-test/sharding-test',
+                TEST_SHARD: '2/2'
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(secondShardEvents => {
+            const testSuiteEvents = secondShardEvents.payload.events.filter(event => event.type === 'test_suite_end')
+
+            // The suites for this shard are to be skipped
+            assert.equal(testSuiteEvents.length, 2)
+
+            testSuiteEvents.forEach(testSuite => {
+              assert.propertyVal(testSuite.content.meta, TEST_STATUS, 'skip')
+              assert.propertyVal(testSuite.content.meta, TEST_SKIPPED_BY_ITR, 'true')
+            })
+
+            const testSession = secondShardEvents
+              .payload
+              .events
+              .find(event => event.type === 'test_session_end').content
+
+            assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
+            assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_TYPE, 'suite')
+            assert.propertyVal(testSession.metrics, TEST_ITR_SKIPPING_COUNT, 2)
+
+            done()
+          })
+        })
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_REGEX: 'sharding-test/sharding-test',
+              TEST_SHARD: '1/2'
+            },
+            stdio: 'inherit'
+          }
+        )
+      })
       it('does not crash when jest is badly initialized', (done) => {
         childProcess = fork('ci-visibility/run-jest-bad-init.js', {
           cwd,
@@ -228,6 +314,28 @@ testFrameworks.forEach(({
               assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
               done()
             }).catch(done)
+        })
+      })
+      it('reports timeout error message', (done) => {
+        childProcess = fork('ci-visibility/run-jest.js', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '-r dd-trace/ci/init',
+            RUN_IN_PARALLEL: true,
+            TEST_REGEX: 'timeout-test/timeout-test.js'
+          },
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('message', () => {
+          assert.include(testOutput, 'Exceeded timeout of 100 ms for a test')
+          done()
         })
       })
     }
@@ -507,23 +615,29 @@ testFrameworks.forEach(({
 
           assert.propertyVal(eventsRequest.headers, 'dd-api-key', '1')
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
-          const skippedTest = eventsRequest.payload.events.find(event =>
-            event.content.resource === 'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests'
-          )
-          assert.notExists(skippedTest)
+          const skippedSuite = eventsRequest.payload.events.find(event =>
+            event.content.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
+          ).content
+          assert.propertyVal(skippedSuite.meta, TEST_STATUS, 'skip')
+          assert.propertyVal(skippedSuite.meta, TEST_SKIPPED_BY_ITR, 'true')
+
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
           const numSuites = eventTypes.reduce(
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
-          assert.equal(numSuites, 1)
+          assert.equal(numSuites, 2)
           const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
           assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
           assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
           assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_TYPE, 'suite')
+          assert.propertyVal(testSession.metrics, TEST_ITR_SKIPPING_COUNT, 1)
           const testModule = eventsRequest.payload.events.find(event => event.type === 'test_module_end').content
           assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'true')
           assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
           assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_TYPE, 'suite')
+          assert.propertyVal(testModule.metrics, TEST_ITR_SKIPPING_COUNT, 1)
           done()
         }).catch(done)
 
@@ -616,6 +730,40 @@ testFrameworks.forEach(({
             stdio: 'inherit'
           }
         )
+      })
+      it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test/not-existing-test.js'
+          }
+        }])
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+            assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+            assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+            const testModule = events.find(event => event.type === 'test_module_end').content
+            assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+            assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+            assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          }, 25000)
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
       })
     })
 
@@ -825,15 +973,17 @@ testFrameworks.forEach(({
           assert.notProperty(eventsRequest.headers, 'dd-api-key')
           assert.propertyVal(eventsRequest.headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
-          const skippedTest = eventsRequest.payload.events.find(event =>
-            event.content.resource === 'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests'
-          )
-          assert.notExists(skippedTest)
+          const skippedSuite = eventsRequest.payload.events.find(event =>
+            event.content.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
+          ).content
+          assert.propertyVal(skippedSuite.meta, TEST_STATUS, 'skip')
+          assert.propertyVal(skippedSuite.meta, TEST_SKIPPED_BY_ITR, 'true')
+
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
           const numSuites = eventTypes.reduce(
             (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
           )
-          assert.equal(numSuites, 1)
+          assert.equal(numSuites, 2)
           done()
         }).catch(done)
 
@@ -920,6 +1070,40 @@ testFrameworks.forEach(({
             stdio: 'inherit'
           }
         )
+      })
+      it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test/not-existing-test.js'
+          }
+        }])
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+            assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+            assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+            const testModule = events.find(event => event.type === 'test_module_end').content
+            assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
+            assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
+            assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
+          }, 25000)
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getCiVisEvpProxyConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
       })
     })
   })

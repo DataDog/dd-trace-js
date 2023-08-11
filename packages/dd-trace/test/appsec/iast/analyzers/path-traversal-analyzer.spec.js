@@ -103,7 +103,8 @@ describe('path-traversal-analyzer', () => {
 
   it('Should report 1st argument', () => {
     const proxyPathAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/path-traversal-analyzer',
-      { './injection-analyzer': InjectionAnalyzer,
+      {
+        './injection-analyzer': InjectionAnalyzer,
         '../iast-context': { getIastContext: () => iastContext }
       })
 
