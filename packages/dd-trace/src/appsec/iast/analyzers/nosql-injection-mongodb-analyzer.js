@@ -1,7 +1,5 @@
 'use strict'
 
-const crypto = require('crypto')
-
 const InjectionAnalyzer = require('./injection-analyzer')
 const { NOSQL_MONGODB_INJECTION } = require('../vulnerabilities')
 const { getRanges, addSecureMark } = require('../taint-tracking/operations')
@@ -12,8 +10,6 @@ const { getIastContext } = require('../iast-context')
 
 const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose')
 const MONGODB_NOSQL_SECURE_MARK = getNextSecureMark()
-
-const STRINGIFY_RANGE_KEY = 'DD_' + crypto.randomBytes(20).toString('hex')
 
 function iterateObjectStrings (target, fn, levelKeys = [], depth = 50) {
   if (target && typeof target === 'object') {
