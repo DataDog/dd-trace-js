@@ -47,7 +47,6 @@ function getFirstNonDDPathAndLineFromCallsites (callsites, externallyExcludedPat
         return {
           path: path.relative(process.cwd(), filepath),
           line: callsite.getLineNumber(),
-          column: callsite.getColumnNumber(),
           isInternal: !path.isAbsolute(filepath)
         }
       }
