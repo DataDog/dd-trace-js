@@ -2,7 +2,7 @@
 
 require('../setup/tap')
 
-const proxyquire = require('proxyquire').noPreserveCache()
+const proxyquire = require('proxyquire')
 const path = require('path')
 const dc = require('../../../diagnostics_channel')
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
@@ -12,7 +12,7 @@ describe('dependencies', () => {
     it('should subscribe', () => {
       const subscribe = sinon.stub()
       const dc = { channel () { return { subscribe } } }
-      const dependencies = proxyquire.load('../../src/telemetry/dependencies', {
+      const dependencies = proxyquire('../../src/telemetry/dependencies', {
         '../../../diagnostics_channel': dc
       })
       dependencies.start()
@@ -49,7 +49,6 @@ describe('dependencies', () => {
       dependencies.stop()
       sendData.reset()
       global.setImmediate = originalSetImmediate
-      // require.cache = originalRequireCache
     })
 
     it('should not fail with invalid data', () => {
