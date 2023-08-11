@@ -8,8 +8,8 @@ const isWindows = os.platform() === 'win32'
 
 const suiteDescribe = isWindows ? describe.skip : describe
 
-suiteDescribe('metrics', () => {
-  let metrics
+suiteDescribe('runtimeMetrics', () => {
+  let runtimeMetrics
   let config
   let clock
   let client
@@ -27,7 +27,7 @@ suiteDescribe('metrics', () => {
       flush: sinon.spy()
     }
 
-    metrics = proxyquire('../src/metrics', {
+    runtimeMetrics = proxyquire('../src/runtime_metrics', {
       './dogstatsd': {
         DogStatsDClient: Client
       }
@@ -49,18 +49,18 @@ suiteDescribe('metrics', () => {
 
     clock = sinon.useFakeTimers()
 
-    metrics.start(config)
+    runtimeMetrics.start(config)
   })
 
   afterEach(() => {
     clock.restore()
-    metrics.stop()
+    runtimeMetrics.stop()
   })
 
   describe('start', () => {
     it('it should initialize the Dogstatsd client with the correct options', function () {
-      metrics.stop()
-      metrics.start(config)
+      runtimeMetrics.stop()
+      runtimeMetrics.start(config)
 
       expect(Client).to.have.been.calledWithMatch({
         metricsProxyUrl: new URL('http://localhost:8126'),
@@ -75,8 +75,8 @@ suiteDescribe('metrics', () => {
     it('it should initialize the Dogstatsd client with an IPv6 URL', function () {
       config.hostname = '::1'
 
-      metrics.stop()
-      metrics.start(config)
+      runtimeMetrics.stop()
+      runtimeMetrics.start(config)
 
       expect(Client).to.have.been.calledWithMatch({
         metricsProxyUrl: new URL('http://[::1]:8126'),
@@ -88,9 +88,9 @@ suiteDescribe('metrics', () => {
       })
     })
 
-    it('should start collecting metrics every 10 seconds', () => {
-      metrics.stop()
-      metrics.start(config)
+    it('should start collecting runtimeMetrics every 10 seconds', () => {
+      runtimeMetrics.stop()
+      runtimeMetrics.start(config)
 
       global.gc()
 
@@ -158,8 +158,8 @@ suiteDescribe('metrics', () => {
 
   describe('when started', () => {
     describe('stop', () => {
-      it('should stop collecting metrics every 10 seconds', () => {
-        metrics.stop()
+      it('should stop collecting runtimeMetrics every 10 seconds', () => {
+        runtimeMetrics.stop()
 
         clock.tick(10000)
 
@@ -169,9 +169,9 @@ suiteDescribe('metrics', () => {
 
     describe('histogram', () => {
       it('should add a record to a histogram', () => {
-        metrics.histogram('test', 1)
-        metrics.histogram('test', 2)
-        metrics.histogram('test', 3)
+        runtimeMetrics.histogram('test', 1)
+        runtimeMetrics.histogram('test', 2)
+        runtimeMetrics.histogram('test', 3)
 
         clock.tick(10000)
 
@@ -188,7 +188,7 @@ suiteDescribe('metrics', () => {
 
     describe('increment', () => {
       it('should increment a gauge', () => {
-        metrics.increment('test')
+        runtimeMetrics.increment('test')
 
         clock.tick(10000)
 
@@ -196,7 +196,7 @@ suiteDescribe('metrics', () => {
       })
 
       it('should increment a gauge with a tag', () => {
-        metrics.increment('test', 'foo:bar')
+        runtimeMetrics.increment('test', 'foo:bar')
 
         clock.tick(10000)
 
@@ -204,7 +204,7 @@ suiteDescribe('metrics', () => {
       })
 
       it('should increment a monotonic counter', () => {
-        metrics.increment('test', true)
+        runtimeMetrics.increment('test', true)
 
         clock.tick(10000)
 
@@ -218,7 +218,7 @@ suiteDescribe('metrics', () => {
       })
 
       it('should increment a monotonic counter with a tag', () => {
-        metrics.increment('test', 'foo:bar', true)
+        runtimeMetrics.increment('test', 'foo:bar', true)
 
         clock.tick(10000)
 
@@ -234,7 +234,7 @@ suiteDescribe('metrics', () => {
 
     describe('decrement', () => {
       it('should increment a gauge', () => {
-        metrics.decrement('test')
+        runtimeMetrics.decrement('test')
 
         clock.tick(10000)
 
@@ -242,7 +242,7 @@ suiteDescribe('metrics', () => {
       })
 
       it('should decrement a gauge with a tag', () => {
-        metrics.decrement('test', 'foo:bar')
+        runtimeMetrics.decrement('test', 'foo:bar')
 
         clock.tick(10000)
 
@@ -252,7 +252,7 @@ suiteDescribe('metrics', () => {
 
     describe('gauge', () => {
       it('should set a gauge', () => {
-        metrics.gauge('test', 10)
+        runtimeMetrics.gauge('test', 10)
 
         clock.tick(10000)
 
@@ -260,7 +260,7 @@ suiteDescribe('metrics', () => {
       })
 
       it('should set a gauge with a tag', () => {
-        metrics.gauge('test', 10, 'foo:bar')
+        runtimeMetrics.gauge('test', 10, 'foo:bar')
 
         clock.tick(10000)
 
@@ -270,7 +270,7 @@ suiteDescribe('metrics', () => {
 
     describe('boolean', () => {
       it('should set a gauge', () => {
-        metrics.boolean('test', true)
+        runtimeMetrics.boolean('test', true)
 
         clock.tick(10000)
 
@@ -278,7 +278,7 @@ suiteDescribe('metrics', () => {
       })
 
       it('should set a gauge with a tag', () => {
-        metrics.boolean('test', true, 'foo:bar')
+        runtimeMetrics.boolean('test', true, 'foo:bar')
 
         clock.tick(10000)
 
@@ -286,15 +286,15 @@ suiteDescribe('metrics', () => {
       })
     })
 
-    describe('without native metrics', () => {
+    describe('without native runtimeMetrics', () => {
       beforeEach(() => {
-        metrics = proxyquire('../src/metrics', {
+        runtimeMetrics = proxyquire('../src/runtime_metrics', {
           './dogstatsd': Client,
           'node-gyp-build': sinon.stub().returns(null)
         })
       })
 
-      it('should fallback to only metrics available to JavaScript code', () => {
+      it('should fallback to only runtimeMetrics available to JavaScript code', () => {
         clock.tick(10000)
 
         expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
