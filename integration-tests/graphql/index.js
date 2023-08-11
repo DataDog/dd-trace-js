@@ -98,7 +98,7 @@ async function main () {
   })
 
   const port = process.env.APP_PORT
-  const { url } = await startStandaloneServer(server, { listen: { port } })
+  await startStandaloneServer(server, { listen: { port } })
   process.send({ port })
 }
 
