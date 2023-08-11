@@ -34,6 +34,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     super(NOSQL_MONGODB_INJECTION)
     this.sanitizedObjects = new WeakSet()
   }
+
   onConfigure () {
     this.configureSanitizers()
 
@@ -121,62 +122,42 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
         return false
       }
 
-      const allRanges = {}
-      let counter = 0
-      let filterString = JSON.stringify(value.filter, function (key, val) {
-        if (typeof val === 'string') {
-          const ranges = getRanges(iastContext, val)
-          if (ranges && ranges.length) {
-            const filteredRanges = []
-            for (let i = 0; i < ranges.length; i++) {
-              const range = ranges[i]
+      const rangesByKey = {}
+      const allRanges = []
 
-              if ((range.secureMarks & MONGODB_NOSQL_SECURE_MARK) !== MONGODB_NOSQL_SECURE_MARK) {
-                isVulnerable = true
-                filteredRanges.push(range)
-              }
+      iterateObjectStrings(value.filter, function (val, nextLevelKeys) {
+        const ranges = getRanges(iastContext, val)
+        if (ranges && ranges.length) {
+          const filteredRanges = []
+
+          for (let i = 0; i < ranges.length; i++) {
+            const range = ranges[i]
+
+            if ((range.secureMarks & MONGODB_NOSQL_SECURE_MARK) !== MONGODB_NOSQL_SECURE_MARK) {
+              isVulnerable = true
+              filteredRanges.push(range)
             }
 
             if (filteredRanges.length > 0) {
-              const current = counter++
-              const id = `${STRINGIFY_RANGE_KEY}_${current}_`
-              allRanges[id] = filteredRanges
-              return `${id}${val}`
+              rangesByKey[nextLevelKeys.join('.')] = filteredRanges
+              allRanges.push(...filteredRanges)
             }
           }
         }
-        return val
-      }, 2)
+      })
 
       if (isVulnerable) {
-        const keysRegex = new RegExp(`"(${STRINGIFY_RANGE_KEY}_\\d+_)`, 'gm')
-        const ranges = []
-        let regexRes = keysRegex.exec(filterString)
-        while (regexRes) {
-          const offset = regexRes.index + 1 // +1 to increase the " char
-          const rangesId = regexRes[1]
-          filterString = filterString.replace(rangesId, '')
-          const updatedRanges = allRanges[rangesId].map(range => {
-            return {
-              ...range,
-              start: range.start + offset,
-              end: range.end + offset
-            }
-          })
-          ranges.push(...updatedRanges)
-          keysRegex.lastIndex = 0
-          regexRes = keysRegex.exec(filterString)
-        }
-        value.filterString = filterString
-        value.ranges = ranges
+        value.rangesToApply = rangesByKey
+        value.ranges = allRanges
       }
+
       return isVulnerable
     }
     return false
   }
 
   _getEvidence (value, iastContext) {
-    return { value: value.filterString, ranges: value.ranges }
+    return { value: value.filter, rangesToApply: value.rangesToApply, ranges: value.ranges }
   }
 
   _getExcludedPaths () {
