@@ -72,7 +72,7 @@ describe('TracerProxy', () => {
     }
 
     {
-      let dogstatsdIncrements = []
+      const dogstatsdIncrements = []
       let dogstatsdConfig
 
       class FauxDogStatsDClient {
