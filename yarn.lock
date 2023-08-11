@@ -392,10 +392,10 @@
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-iast-rewriter@2.0.1":
-  version "2.0.1"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-2.0.1.tgz#dc4a23796870f2d840053ae879c61547eda6bb89"
-  integrity sha512-Mm+FG3XxEbPrAfJQPOMHts7iZZXRvg9gnGeeFRGkyirmRcQcOpZO4wFe/8K61DUVa5pXpgAJQ2ZkBGYF1O9STg==
+"@datadog/native-iast-rewriter@2.0.2":
+  version "2.0.2"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-2.0.2.tgz#9efe346afd43bc75de50a049cce827870de3e689"
+  integrity sha512-r64G1a/TC+Q8WO4Gsb2GfylTFr95Y7gXu720GD2QqHMZSpNnED3La+A+3zZuGV+/VjxYeapWcp7whWFd85iXBQ==
   dependencies:
     node-gyp-build "^4.5.0"
 
