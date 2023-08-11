@@ -11,7 +11,7 @@ const {
   spawnProc
 } = require('./helpers')
 
-describe(`apoollo-server`, () => {
+describe('graphql', () => {
   let sandbox, cwd, agent, webFile, proc, appPort
 
   before(async function () {
