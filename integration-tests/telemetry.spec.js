@@ -2,6 +2,7 @@
 
 const { createSandbox, FakeAgent, spawnProc } = require('./helpers')
 const path = require('path')
+
 describe('telemetry', () => {
   describe('dependencies', () => {
     let sandbox
