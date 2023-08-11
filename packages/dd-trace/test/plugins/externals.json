@@ -65,28 +65,12 @@
   ],
   "graphql": [
     {
-      "name": "graphql",
-      "versions": ["16.7.1"]
-    },
-    {
       "name": "apollo-server-core",
       "versions": ["1.3.6"]
     },
     {
-      "name": "@apollo/server",
-      "versions": ["4.7.5"]
-    },
-    {
       "name": "graphql-tools",
       "versions": ["3.1.1"]
-    },
-    {
-      "name": "express",
-      "versions": [">=4.16.2"]
-    },
-    {
-      "name": "express-graphql",
-      "versions": ["0.12.0"]
     }
   ],
   "grpc": [
