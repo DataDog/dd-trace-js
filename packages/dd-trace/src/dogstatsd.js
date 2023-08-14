@@ -35,12 +35,12 @@ class DogStatsDClient {
     this._udp6 = this._socket('udp6')
   }
 
-  gauge (stat, value, tags) {
-    this._add(stat, value, TYPE_GAUGE, tags)
-  }
-
   increment (stat, value, tags) {
     this._add(stat, value, TYPE_COUNTER, tags)
+  }
+
+  gauge (stat, value, tags) {
+    this._add(stat, value, TYPE_GAUGE, tags)
   }
 
   distribution (stat, value, tags) {
@@ -153,7 +153,67 @@ class NoopDogStatsDClient {
   flush () { }
 }
 
+// This is a simplified user-facing proxy to the underlying DogStatsDClient instance
+class CustomMetrics {
+  constructor (options) {
+    this.dogstatsd = new DogStatsDClient(options)
+  }
+
+  increment (stat, value = 1, tags) {
+    return this.dogstatsd.increment(
+      stat,
+      value,
+      CustomMetrics.tagTranslator(tags)
+    )
+  }
+
+  decrement (stat, value = 1, tags) {
+    return this.dogstatsd.increment(
+      stat,
+      value * -1,
+      CustomMetrics.tagTranslator(tags)
+    )
+  }
+
+  gauge (stat, value, tags) {
+    return this.dogstatsd.gauge(
+      stat,
+      value,
+      CustomMetrics.tagTranslator(tags)
+    )
+  }
+
+  distribution (stat, value, tags) {
+    return this.dogstatsd.distribution(
+      stat,
+      value,
+      CustomMetrics.tagTranslator(tags)
+    )
+  }
+
+  flush () {
+    return this.dogstatsd.flush()
+  }
+
+  /**
+   * Exposing { tagName: 'tagValue' } to the end user
+   * These are translated into [ 'tagName:tagValue' ] for internal use
+   */
+  static tagTranslator (objTags) {
+    const arrTags = []
+
+    if (!objTags) return arrTags
+
+    for (const [key, value] of Object.entries(objTags)) {
+      arrTags.push(`${key}:${value}`)
+    }
+
+    return arrTags
+  }
+}
+
 module.exports = {
   DogStatsDClient,
-  NoopDogStatsDClient
+  NoopDogStatsDClient,
+  CustomMetrics
 }
