@@ -11,7 +11,7 @@ const Writer = proxyquire('../packages/dd-trace/src/exporters/agent/writer', {
   './request': () => Promise.resolve(),
   '../../encode/0.4': {
     AgentEncoder: function () {
-      return { 
+      return {
         encode () {},
         count () {}
       }
