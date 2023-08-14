@@ -60,7 +60,7 @@ class NextPlugin extends ServerPlugin {
       'http.status_code': res.statusCode
     })
 
-    web.setRoute(req, page)
+    if (page) web.setRoute(req, page)
 
     this.config.hooks.request(span, req, res)
 

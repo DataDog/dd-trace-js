@@ -230,6 +230,22 @@ describe('Plugin', function () {
               .get(`http://localhost:${port}/api/invalid/%ff`)
               .catch(() => {})
           })
+
+          it('should pass resource path to parent span', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[0]).to.have.property('name', 'web.request')
+                expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/api/hello/world`)
+              .catch(done)
+          })
         })
 
         describe('for pages', () => {
@@ -305,13 +321,13 @@ describe('Plugin', function () {
                 const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'web.request')
-                expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
+                expect(spans[0]).to.have.property('resource', 'GET /hello/[name]')
               })
               .then(done)
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/api/hello/world`)
+              .get(`http://localhost:${port}/hello/world`)
               .catch(done)
           })
         })
