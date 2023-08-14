@@ -12,6 +12,7 @@ const errorChannel = channel('apm:next:request:error')
 const pageLoadChannel = channel('apm:next:page:load')
 
 const requests = new WeakSet()
+const requestToNextjsPagePath = new WeakMap()
 
 function wrapHandleRequest (handleRequest) {
   return function (req, res, pathname, query) {
@@ -135,10 +136,34 @@ function instrument (req, res, handler) {
 function wrapSetupServerWorker (setupServerWorker) {
   return function (requestHandler) {
     arguments[0] = shimmer.wrap(requestHandler, function (req, res) {
-      // page load?
-      return instrument(req, res, () => requestHandler.apply(this, arguments))
+      return instrument(req, res, async () => {
+        const result = await requestHandler.apply(this, arguments) // apply here first to get page path association
+
+        const page = requestToNextjsPagePath.get(req)
+        if (page && pageLoadChannel.hasSubscribers) pageLoadChannel.publish({ page })
+
+        return result
+      })
     })
     return setupServerWorker.apply(this, arguments)
+  }
+}
+
+function wrapGetResolveRoutes (getResolveRoutes) {
+  return function () {
+    const result = getResolveRoutes.apply(this, arguments)
+    return shimmer.wrap(result, wrapResolveRoutes(result))
+  }
+}
+
+function wrapResolveRoutes (resolveRoutes) {
+  return async function (req) {
+    const result = await resolveRoutes.apply(this, arguments)
+    if (result && result.matchedOutput) {
+      const path = result.matchedOutput.itemPath
+      requestToNextjsPagePath.set(req, path)
+    }
+    return result
   }
 }
 
@@ -159,7 +184,20 @@ function finish (ctx, result, err) {
 
 addHook({
   name: 'next',
-  versions: ['>=13.4.13'], // versions below have this as well, but it is called within `next-server`
+  versions: ['>=13.4.13'],
+  file: 'dist/server/lib/router-utils/resolve-routes.js'
+}, resolveRoutesModule => {
+  const exported = Object.getOwnPropertyDescriptors(resolveRoutesModule)
+  const original = exported.getResolveRoutes.get()
+  return Object.defineProperty(exported, 'getResolveRoutes', {
+    enumerable: true,
+    get: function () { return wrapGetResolveRoutes(original) }
+  })
+})
+
+addHook({
+  name: 'next',
+  versions: ['>=13.4.13'],
   file: 'dist/server/lib/setup-server-worker.js'
 }, setupServerWorker => {
   const exported = Object.getOwnPropertyDescriptors(setupServerWorker)
@@ -173,11 +211,19 @@ addHook({
 addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
-  shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
-  shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
   shimmer.wrap(Server.prototype, 'renderToResponse', wrapRenderToResponse)
   shimmer.wrap(Server.prototype, 'renderErrorToResponse', wrapRenderErrorToResponse)
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
+
+  return nextServer
+})
+
+addHook({ name: 'next', versions: ['>=13.2 <13.4.13'], file: 'dist/server/next-server.js' }, nextServer => {
+  const Server = nextServer.default
+
+  // only wrap here, as this logic gets layerd on top of in newer versions
+  shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
+  shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
 
   return nextServer
 })
