@@ -280,7 +280,7 @@ describe('request', function () {
 
   it('should parse unix domain sockets properly', (done) => {
     const sock = '/tmp/unix_socket'
-  
+
     request(
       Buffer.from(''), {
         url: 'unix:' + sock,
@@ -294,7 +294,7 @@ describe('request', function () {
 
   it('should parse windows named pipes properly', (done) => {
     const pipe = '//./pipe/datadogtrace'
-  
+
     request(
       Buffer.from(''), {
         url: 'unix:' + pipe,
