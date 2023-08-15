@@ -8,7 +8,8 @@ const os = require('os')
 
 describe('dogstatsd', () => {
   let client
-  let Client
+  let DogStatsDClient
+  let CustomMetrics
   let dgram
   let udp4
   let udp6
@@ -61,10 +62,12 @@ describe('dogstatsd', () => {
       callback(null, hostname, 6)
     })
 
-    Client = proxyquire('../src/dogstatsd', {
+    const dogstatsd = proxyquire('../src/dogstatsd', {
       'dgram': dgram,
       'dns': dns
-    }).DogStatsDClient
+    })
+    DogStatsDClient = dogstatsd.DogStatsDClient
+    CustomMetrics = dogstatsd.CustomMetrics
 
     httpData = []
     statusCode = 200
@@ -109,7 +112,7 @@ describe('dogstatsd', () => {
   })
 
   it('should send gauges', () => {
-    client = new Client()
+    client = new DogStatsDClient()
 
     client.gauge('test.avg', 10)
     client.flush()
@@ -123,7 +126,7 @@ describe('dogstatsd', () => {
   })
 
   it('should send counters', () => {
-    client = new Client()
+    client = new DogStatsDClient()
 
     client.increment('test.count', 10)
     client.flush()
@@ -134,7 +137,7 @@ describe('dogstatsd', () => {
   })
 
   it('should send multiple metrics', () => {
-    client = new Client()
+    client = new DogStatsDClient()
 
     client.gauge('test.avg', 10)
     client.increment('test.count', 10)
@@ -146,7 +149,7 @@ describe('dogstatsd', () => {
   })
 
   it('should support tags', () => {
-    client = new Client()
+    client = new DogStatsDClient()
 
     client.gauge('test.avg', 10, ['foo:bar', 'baz:qux'])
     client.flush()
@@ -160,7 +163,7 @@ describe('dogstatsd', () => {
     const value = new Array(1000).map(() => 'a').join()
     const tags = [`foo:${value}`]
 
-    client = new Client()
+    client = new DogStatsDClient()
 
     client.gauge('test.avg', 1, tags)
     client.gauge('test.avg', 1, tags)
@@ -170,7 +173,7 @@ describe('dogstatsd', () => {
   })
 
   it('should not flush if the queue is empty', () => {
-    client = new Client()
+    client = new DogStatsDClient()
 
     client.flush()
 
@@ -180,7 +183,7 @@ describe('dogstatsd', () => {
   })
 
   it('should not flush if the dns lookup fails', () => {
-    client = new Client({
+    client = new DogStatsDClient({
       host: 'invalid'
     })
 
@@ -193,7 +196,7 @@ describe('dogstatsd', () => {
   })
 
   it('should not call DNS if the host is an IPv4 address', () => {
-    client = new Client({
+    client = new DogStatsDClient({
       host: '127.0.0.1'
     })
 
@@ -205,7 +208,7 @@ describe('dogstatsd', () => {
   })
 
   it('should not call DNS if the host is an IPv6 address', () => {
-    client = new Client({
+    client = new DogStatsDClient({
       host: '2001:db8:3333:4444:5555:6666:7777:8888'
     })
 
@@ -217,7 +220,7 @@ describe('dogstatsd', () => {
   })
 
   it('should support configuration', () => {
-    client = new Client({
+    client = new DogStatsDClient({
       host: '::1',
       port: 7777,
       prefix: 'prefix.',
@@ -246,7 +249,7 @@ describe('dogstatsd', () => {
       }
     }
 
-    client = new Client({
+    client = new DogStatsDClient({
       metricsProxyUrl: `unix://${udsPath}`
     })
 
@@ -265,7 +268,7 @@ describe('dogstatsd', () => {
       }
     }
 
-    client = new Client({
+    client = new DogStatsDClient({
       metricsProxyUrl: `http://localhost:${httpPort}`
     })
 
@@ -284,7 +287,7 @@ describe('dogstatsd', () => {
       }
     }
 
-    client = new Client({
+    client = new DogStatsDClient({
       metricsProxyUrl: new URL(`http://localhost:${httpPort}`)
     })
 
@@ -309,12 +312,74 @@ describe('dogstatsd', () => {
 
     statusCode = 404
 
-    client = new Client({
+    client = new DogStatsDClient({
       metricsProxyUrl: `http://localhost:${httpPort}`
     })
 
     client.increment('test.count', 10)
 
     client.flush()
+  })
+
+  describe('CustomMetrics', () => {
+    it('.gauge()', () => {
+      client = new CustomMetrics()
+
+      client.gauge('test.avg', 10, { foo: 'bar' })
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar\n')
+    })
+
+    it('.increment()', () => {
+      client = new CustomMetrics()
+
+      client.increment('test.count', 10)
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:10|c\n')
+    })
+
+    it('.increment() with default', () => {
+      client = new CustomMetrics()
+
+      client.increment('test.count')
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:1|c\n')
+    })
+
+    it('.decrement()', () => {
+      client = new CustomMetrics()
+
+      client.decrement('test.count', 10)
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-10|c\n')
+    })
+
+    it('.decrement() with default', () => {
+      client = new CustomMetrics()
+
+      client.decrement('test.count')
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-1|c\n')
+    })
+
+    it('.distribution()', () => {
+      client = new CustomMetrics()
+
+      client.distribution('test.dist', 10)
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.dist:10|d\n')
+    })
   })
 })
