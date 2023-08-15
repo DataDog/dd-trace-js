@@ -236,7 +236,7 @@ describe('Plugin', function () {
               .use(traces => {
                 const spans = traces[0]
 
-                expect(spans[0]).to.have.property('name', 'web.request')
+                expect(spans[0]).to.have.property('name', 'http.request')
                 expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
               })
               .then(done)
@@ -320,7 +320,7 @@ describe('Plugin', function () {
               .use(traces => {
                 const spans = traces[0]
 
-                expect(spans[0]).to.have.property('name', 'web.request')
+                expect(spans[0]).to.have.property('name', 'http.request')
                 expect(spans[0]).to.have.property('resource', 'GET /hello/[name]')
               })
               .then(done)
