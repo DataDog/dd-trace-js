@@ -11,7 +11,7 @@ const LogPropagator = require('./propagation/log')
 const formats = require('../../../../ext/formats')
 
 const log = require('../log')
-const metrics = require('../metrics')
+const runtimeMetrics = require('../runtime_metrics')
 const getExporter = require('../exporter')
 const SpanContext = require('./span_context')
 
@@ -82,7 +82,7 @@ class DatadogTracer {
       this._propagators[format].inject(spanContext, carrier)
     } catch (e) {
       log.error(e)
-      metrics.increment('datadog.tracer.node.inject.errors', true)
+      runtimeMetrics.increment('datadog.tracer.node.inject.errors', true)
     }
   }
 
@@ -91,7 +91,7 @@ class DatadogTracer {
       return this._propagators[format].extract(carrier)
     } catch (e) {
       log.error(e)
-      metrics.increment('datadog.tracer.node.extract.errors', true)
+      runtimeMetrics.increment('datadog.tracer.node.extract.errors', true)
       return null
     }
   }

@@ -8,7 +8,7 @@ const semver = require('semver')
 const SpanContext = require('./span_context')
 const id = require('../id')
 const tagger = require('../tagger')
-const metrics = require('../metrics')
+const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
@@ -79,11 +79,11 @@ class DatadogSpan {
     this._startTime = fields.startTime || this._getTime()
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
-      metrics.increment('runtime.node.spans.unfinished')
-      metrics.increment('runtime.node.spans.unfinished.by.name', `span_name:${operationName}`)
+      runtimeMetrics.increment('runtime.node.spans.unfinished')
+      runtimeMetrics.increment('runtime.node.spans.unfinished.by.name', `span_name:${operationName}`)
 
-      metrics.increment('runtime.node.spans.open') // unfinished for real
-      metrics.increment('runtime.node.spans.open.by.name', `span_name:${operationName}`)
+      runtimeMetrics.increment('runtime.node.spans.open') // unfinished for real
+      runtimeMetrics.increment('runtime.node.spans.open.by.name', `span_name:${operationName}`)
 
       unfinishedRegistry.register(this, operationName, this)
     }
@@ -159,13 +159,13 @@ class DatadogSpan {
     getIntegrationCounter('span_finished', this._integrationName).inc()
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
-      metrics.decrement('runtime.node.spans.unfinished')
-      metrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
-      metrics.increment('runtime.node.spans.finished')
-      metrics.increment('runtime.node.spans.finished.by.name', `span_name:${this._name}`)
+      runtimeMetrics.decrement('runtime.node.spans.unfinished')
+      runtimeMetrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
+      runtimeMetrics.increment('runtime.node.spans.finished')
+      runtimeMetrics.increment('runtime.node.spans.finished.by.name', `span_name:${this._name}`)
 
-      metrics.decrement('runtime.node.spans.open') // unfinished for real
-      metrics.decrement('runtime.node.spans.open.by.name', `span_name:${this._name}`)
+      runtimeMetrics.decrement('runtime.node.spans.open') // unfinished for real
+      runtimeMetrics.decrement('runtime.node.spans.open.by.name', `span_name:${this._name}`)
 
       unfinishedRegistry.unregister(this)
       finishedRegistry.register(this, this._name)
@@ -243,8 +243,8 @@ function createRegistry (type) {
   if (!semver.satisfies(process.version, '>=14.6')) return
 
   return new global.FinalizationRegistry(name => {
-    metrics.decrement(`runtime.node.spans.${type}`)
-    metrics.decrement(`runtime.node.spans.${type}.by.name`, [`span_name:${name}`])
+    runtimeMetrics.decrement(`runtime.node.spans.${type}`)
+    runtimeMetrics.decrement(`runtime.node.spans.${type}.by.name`, [`span_name:${name}`])
   })
 }
 

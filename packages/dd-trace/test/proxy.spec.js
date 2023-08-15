@@ -18,7 +18,7 @@ describe('TracerProxy', () => {
   let noopAppsecSdk
   let Config
   let config
-  let metrics
+  let runtimeMetrics
   let log
   let profiler
   let appsec
@@ -28,6 +28,7 @@ describe('TracerProxy', () => {
   let pluginManager
   let remoteConfig
   let rc
+  let noopDogStatsD
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
@@ -70,6 +71,31 @@ describe('TracerProxy', () => {
       trackCustomEvent: sinon.stub()
     }
 
+    {
+      const dogstatsdIncrements = []
+      let dogstatsdConfig
+      let dogstatsdFlushes = 0
+
+      class FauxDogStatsDClient {
+        constructor (cfg) {
+          dogstatsdConfig = cfg
+        }
+        increment () {
+          dogstatsdIncrements.push(arguments)
+        }
+        flush () {
+          dogstatsdFlushes++
+        }
+      }
+
+      noopDogStatsD = {
+        CustomMetrics: FauxDogStatsDClient,
+        _increments: () => dogstatsdIncrements,
+        _config: () => dogstatsdConfig,
+        _flushes: () => dogstatsdFlushes
+      }
+    }
+
     log = {
       error: sinon.spy()
     }
@@ -95,7 +121,7 @@ describe('TracerProxy', () => {
     }
     Config = sinon.stub().returns(config)
 
-    metrics = {
+    runtimeMetrics = {
       start: sinon.spy()
     }
 
@@ -125,7 +151,8 @@ describe('TracerProxy', () => {
 
     NoopProxy = proxyquire('../src/noop/proxy', {
       './tracer': NoopTracer,
-      '../appsec/sdk/noop': NoopAppsecSdk
+      '../appsec/sdk/noop': NoopAppsecSdk,
+      './dogstatsd': noopDogStatsD
     })
 
     Proxy = proxyquire('../src/proxy', {
@@ -133,14 +160,15 @@ describe('TracerProxy', () => {
       './noop/proxy': NoopProxy,
       './config': Config,
       './plugin_manager': PluginManager,
-      './metrics': metrics,
+      './runtime_metrics': runtimeMetrics,
       './log': log,
       './profiler': profiler,
       './appsec': appsec,
       './appsec/iast': iast,
       './telemetry': telemetry,
       './appsec/remote_config': remoteConfig,
-      './appsec/sdk': AppsecSdk
+      './appsec/sdk': AppsecSdk,
+      './dogstatsd': noopDogStatsD
     })
 
     proxy = new Proxy()
@@ -187,10 +215,10 @@ describe('TracerProxy', () => {
         expect(DatadogTracer).to.not.have.been.called
       })
 
-      it('should not capture metrics by default', () => {
+      it('should not capture runtimeMetrics by default', () => {
         proxy.init()
 
-        expect(metrics.start).to.not.have.been.called
+        expect(runtimeMetrics.start).to.not.have.been.called
       })
 
       it('should support applying remote config', () => {
@@ -205,12 +233,69 @@ describe('TracerProxy', () => {
         expect(pluginManager.configure).to.have.been.calledWith(config)
       })
 
-      it('should start capturing metrics when configured', () => {
+      it('should start capturing runtimeMetrics when configured', () => {
         config.runtimeMetrics = true
 
         proxy.init()
 
-        expect(metrics.start).to.have.been.called
+        expect(runtimeMetrics.start).to.have.been.called
+      })
+
+      it('should expose noop metrics methods prior to initialization', () => {
+        proxy.dogstatsd.increment('foo')
+      })
+
+      it('should expose noop metrics methods after init when unconfigured', () => {
+        config.dogstatsd = null
+
+        proxy.init()
+
+        proxy.dogstatsd.increment('foo')
+      })
+
+      it('should call custom metrics flush via interval', () => {
+        const clock = sinon.useFakeTimers()
+
+        config.dogstatsd = {
+          hostname: 'localhost',
+          port: 9876
+        }
+        config.tags = {
+          service: 'photos',
+          env: 'prod',
+          version: '1.2.3'
+        }
+
+        proxy.init()
+
+        expect(noopDogStatsD._flushes()).to.equal(0)
+
+        clock.tick(10000)
+
+        expect(noopDogStatsD._flushes()).to.equal(1)
+      })
+
+      it('should expose real metrics methods after init when configured', () => {
+        config.dogstatsd = {
+          hostname: 'localhost',
+          port: 9876
+        }
+        config.tags = {
+          service: 'photos',
+          env: 'prod',
+          version: '1.2.3'
+        }
+
+        proxy.init()
+
+        expect(noopDogStatsD._config().host).to.equal('localhost')
+
+        proxy.dogstatsd.increment('foo', 10, { alpha: 'bravo' })
+        const incs = noopDogStatsD._increments()
+        expect(incs.length).to.equal(1)
+        expect(incs[0][0]).to.equal('foo')
+        expect(incs[0][1]).to.equal(10)
+        expect(incs[0][2]).to.deep.equal({ alpha: 'bravo' })
       })
 
       it('should enable appsec when explicitly configured to true', () => {
@@ -276,7 +361,7 @@ describe('TracerProxy', () => {
           './tracer': DatadogTracer,
           './noop/tracer': NoopTracer,
           './config': Config,
-          './metrics': metrics,
+          './runtime_metrics': runtimeMetrics,
           './log': log,
           './profiler': null, // this will cause the import failure error
           './appsec': appsec,
