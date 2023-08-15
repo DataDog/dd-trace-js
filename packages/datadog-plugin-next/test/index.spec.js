@@ -125,7 +125,8 @@ describe('Plugin', function () {
           hooks: (schemaVersion, defaultToGlobalService) => startServer({
             withConfig: false,
             standalone: false
-          }, schemaVersion, defaultToGlobalService)
+          }, schemaVersion, defaultToGlobalService),
+          selectSpan: traces => traces[0][1]
         }
       )
 
@@ -138,14 +139,14 @@ describe('Plugin', function () {
               .use(traces => {
                 const spans = traces[0]
 
-                expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
-                expect(spans[0].meta).to.have.property('component', 'next')
+                expect(spans[1]).to.have.property('name', 'next.request')
+                expect(spans[1]).to.have.property('service', 'test')
+                expect(spans[1]).to.have.property('type', 'web')
+                expect(spans[1]).to.have.property('resource', 'GET /api/hello/[name]')
+                expect(spans[1].meta).to.have.property('span.kind', 'server')
+                expect(spans[1].meta).to.have.property('http.method', 'GET')
+                expect(spans[1].meta).to.have.property('http.status_code', '200')
+                expect(spans[1].meta).to.have.property('component', 'next')
               })
               .then(done)
               .catch(done)
@@ -166,7 +167,7 @@ describe('Plugin', function () {
                 .use(traces => {
                   const spans = traces[0]
 
-                  expect(spans[0]).to.have.property('resource', `GET ${expectedPath}`)
+                  expect(spans[1]).to.have.property('resource', `GET ${expectedPath}`)
                 })
                 .then(done)
                 .catch(done)
@@ -192,13 +193,13 @@ describe('Plugin', function () {
               .use(traces => {
                 const spans = traces[0]
 
-                expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '404')
-                expect(spans[0].meta).to.have.property('component', 'next')
+                expect(spans[1]).to.have.property('name', 'next.request')
+                expect(spans[1]).to.have.property('service', 'test')
+                expect(spans[1]).to.have.property('type', 'web')
+                expect(spans[1].meta).to.have.property('span.kind', 'server')
+                expect(spans[1].meta).to.have.property('http.method', 'GET')
+                expect(spans[1].meta).to.have.property('http.status_code', '404')
+                expect(spans[1].meta).to.have.property('component', 'next')
               })
               .then(done)
               .catch(done)
@@ -213,14 +214,14 @@ describe('Plugin', function () {
               .use(traces => {
                 const spans = traces[0]
 
-                expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET /_error')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '400')
-                expect(spans[0].meta).to.have.property('component', 'next')
+                expect(spans[1]).to.have.property('name', 'next.request')
+                expect(spans[1]).to.have.property('service', 'test')
+                expect(spans[1]).to.have.property('type', 'web')
+                expect(spans[1]).to.have.property('resource', 'GET /_error')
+                expect(spans[1].meta).to.have.property('span.kind', 'server')
+                expect(spans[1].meta).to.have.property('http.method', 'GET')
+                expect(spans[1].meta).to.have.property('http.status_code', '400')
+                expect(spans[1].meta).to.have.property('component', 'next')
               })
               .then(done)
               .catch(done)
@@ -228,6 +229,22 @@ describe('Plugin', function () {
             axios
               .get(`http://localhost:${port}/api/invalid/%ff`)
               .catch(() => {})
+          })
+
+          it('should pass resource path to parent span', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[0]).to.have.property('name', 'web.request')
+                expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/api/hello/world`)
+              .catch(done)
           })
         })
 
@@ -237,14 +254,14 @@ describe('Plugin', function () {
               .use(traces => {
                 const spans = traces[0]
 
-                expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET /hello/[name]')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
-                expect(spans[0].meta).to.have.property('component', 'next')
+                expect(spans[1]).to.have.property('name', 'next.request')
+                expect(spans[1]).to.have.property('service', 'test')
+                expect(spans[1]).to.have.property('type', 'web')
+                expect(spans[1]).to.have.property('resource', 'GET /hello/[name]')
+                expect(spans[1].meta).to.have.property('span.kind', 'server')
+                expect(spans[1].meta).to.have.property('http.method', 'GET')
+                expect(spans[1].meta).to.have.property('http.status_code', '200')
+                expect(spans[1].meta).to.have.property('component', 'next')
               })
               .then(done)
               .catch(done)
@@ -267,8 +284,8 @@ describe('Plugin', function () {
                 .use(traces => {
                   const spans = traces[0]
 
-                  expect(spans[0]).to.have.property('resource', `GET ${expectedPath}`)
-                  expect(spans[0].meta).to.have.property('http.status_code', `${statusCode || 200}`)
+                  expect(spans[1]).to.have.property('resource', `GET ${expectedPath}`)
+                  expect(spans[1].meta).to.have.property('http.status_code', `${statusCode || 200}`)
                 })
                 .then(done)
                 .catch(done)
@@ -282,13 +299,13 @@ describe('Plugin', function () {
               .use(traces => {
                 const spans = traces[0]
 
-                expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '404')
-                expect(spans[0].meta).to.have.property('component', 'next')
+                expect(spans[1]).to.have.property('name', 'next.request')
+                expect(spans[1]).to.have.property('service', 'test')
+                expect(spans[1]).to.have.property('type', 'web')
+                expect(spans[1].meta).to.have.property('span.kind', 'server')
+                expect(spans[1].meta).to.have.property('http.method', 'GET')
+                expect(spans[1].meta).to.have.property('http.status_code', '404')
+                expect(spans[1].meta).to.have.property('component', 'next')
               })
               .then(done)
               .catch(done)
@@ -296,6 +313,22 @@ describe('Plugin', function () {
             axios
               .get(`http://localhost:${port}/missing`)
               .catch(() => {})
+          })
+
+          it('should pass resource path to parent span', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[0]).to.have.property('name', 'web.request')
+                expect(spans[0]).to.have.property('resource', 'GET /hello/[name]')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/hello/world`)
+              .catch(done)
           })
         })
 
@@ -305,14 +338,14 @@ describe('Plugin', function () {
               .use(traces => {
                 const spans = traces[0]
 
-                expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource', 'GET')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
-                expect(spans[0].meta).to.have.property('component', 'next')
+                expect(spans[1]).to.have.property('name', 'next.request')
+                expect(spans[1]).to.have.property('service', 'test')
+                expect(spans[1]).to.have.property('type', 'web')
+                expect(spans[1]).to.have.property('resource', 'GET')
+                expect(spans[1].meta).to.have.property('span.kind', 'server')
+                expect(spans[1].meta).to.have.property('http.method', 'GET')
+                expect(spans[1].meta).to.have.property('http.status_code', '200')
+                expect(spans[1].meta).to.have.property('component', 'next')
               })
               .then(done)
               .catch(done)
@@ -347,17 +380,17 @@ describe('Plugin', function () {
             .use(traces => {
               const spans = traces[0]
 
-              expect(spans[0]).to.have.property('name', 'next.request')
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET /api/hello/[name]')
-              expect(spans[0]).to.have.property('error', 1)
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-              expect(spans[0].meta).to.have.property('foo', 'bar')
-              expect(spans[0].meta).to.have.property('req', 'IncomingMessage')
-              expect(spans[0].meta).to.have.property('component', 'next')
+              expect(spans[1]).to.have.property('name', 'next.request')
+              expect(spans[1]).to.have.property('service', 'test')
+              expect(spans[1]).to.have.property('type', 'web')
+              expect(spans[1]).to.have.property('resource', 'GET /api/hello/[name]')
+              expect(spans[1]).to.have.property('error', 1)
+              expect(spans[1].meta).to.have.property('span.kind', 'server')
+              expect(spans[1].meta).to.have.property('http.method', 'GET')
+              expect(spans[1].meta).to.have.property('http.status_code', '200')
+              expect(spans[1].meta).to.have.property('foo', 'bar')
+              expect(spans[1].meta).to.have.property('req', 'IncomingMessage')
+              expect(spans[1].meta).to.have.property('component', 'next')
             })
             .then(done)
             .catch(done)
@@ -385,14 +418,14 @@ describe('Plugin', function () {
                 .use(traces => {
                   const spans = traces[0]
 
-                  expect(spans[0]).to.have.property('name', 'next.request')
-                  expect(spans[0]).to.have.property('service', 'test')
-                  expect(spans[0]).to.have.property('type', 'web')
-                  expect(spans[0]).to.have.property('resource', expectedResource)
-                  expect(spans[0].meta).to.have.property('span.kind', 'server')
-                  expect(spans[0].meta).to.have.property('http.method', 'GET')
-                  expect(spans[0].meta).to.have.property('http.status_code', '200')
-                  expect(spans[0].meta).to.have.property('component', 'next')
+                  expect(spans[1]).to.have.property('name', 'next.request')
+                  expect(spans[1]).to.have.property('service', 'test')
+                  expect(spans[1]).to.have.property('type', 'web')
+                  expect(spans[1]).to.have.property('resource', expectedResource)
+                  expect(spans[1].meta).to.have.property('span.kind', 'server')
+                  expect(spans[1].meta).to.have.property('http.method', 'GET')
+                  expect(spans[1].meta).to.have.property('http.status_code', '200')
+                  expect(spans[1].meta).to.have.property('component', 'next')
                 })
                 .then(done)
                 .catch(done)
