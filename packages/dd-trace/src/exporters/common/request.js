@@ -48,7 +48,7 @@ function fromUrlString (urlString) {
     : urlParse(urlString)
 
   // Add the 'hostname' back if we're using named pipes
-  if (url.protocol === 'unix:' && url.host == '.') {
+  if (url.protocol === 'unix:' && url.host === '.') {
     const udsPath = urlString.replace(/^unix:/, '')
     url.path = udsPath
     url.pathname = udsPath
