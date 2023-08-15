@@ -44,11 +44,11 @@ function urlToOptions (url) {
 
 function fromUrlString (urlString) {
   const url = typeof urlToHttpOptions === 'function'
-  ? urlToOptions(new URL(urlString))
-  : urlParse(urlString)
+    ? urlToOptions(new URL(urlString))
+    : urlParse(urlString)
 
-  // Add the 'hostname' back if we're using UDS
-  if (url.protocol === 'unix:') {
+  // Add the 'hostname' back if we're using named pipes
+  if (url.protocol === 'unix:' && url.host == '.') {
     const udsPath = urlString.replace(/^unix:/, '')
     url.path = udsPath
     url.pathname = udsPath
