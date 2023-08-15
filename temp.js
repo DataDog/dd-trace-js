@@ -34,7 +34,7 @@ const isOldNode = semver.satisfies(process.version, '<=12')
 
 const testFrameworks = [
   {
-    name: 'mocha',
+    name: 'mocha commonJS',
     dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc'],
     testFile: 'ci-visibility/run-mocha.js',
     expectedStdout: '2 passing',
@@ -46,29 +46,26 @@ const testFrameworks = [
       'ci-visibility/test/ci-visibility-test-2.js'
     ],
     runTestsWithCoverageCommand: './node_modules/nyc/bin/nyc.js -r=text-summary node ./ci-visibility/run-mocha.js',
-    coverageMessage: 'Lines        : 80%',
-    type: 'commonJS'
+    coverageMessage: 'Lines        : 80%'
   },
   {
-    name: 'mocha',
+    name: 'mocha esm',
     dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc'],
     testFile: 'ci-visibility/run-mocha.mjs',
     expectedStdout: '2 passing',
     extraStdout: 'end event: can add event listeners to mocha',
     expectedCoverageFiles: [
-      'ci-visibility/run-mocha.mjs',
+      'ci-visibility/run-mocha.js',
       'ci-visibility/test/sum.js',
       'ci-visibility/test/ci-visibility-test.js',
       'ci-visibility/test/ci-visibility-test-2.js'
     ],
-    runTestsWithCoverageCommand:
-      `./node_modules/nyc/bin/nyc.js -r=text-summary node --loader=@istanbuljs/esm-loader-hook ` +
-      `--loader=${hookFile} ./ci-visibility/run-mocha.mjs`,
-    coverageMessage: 'Lines        : 78.57%',
-    type: 'esm'
+    // eslint-disable-next-line max-len
+    runTestsWithCoverageCommand: `./node_modules/nyc/bin/nyc.js -r=text-summary node --loader=${hookFile} ./ci-visibility/run-mocha.mjs`,
+    coverageMessage: 'Lines        : 80%'
   },
   {
-    name: 'jest',
+    name: 'jest commonJS',
     dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai', isOldNode ? 'jest-jasmine2@28' : 'jest-jasmine2'],
     testFile: 'ci-visibility/run-jest.js',
     expectedStdout: 'Test Suites: 2 passed',
@@ -77,11 +74,10 @@ const testFrameworks = [
       'ci-visibility/test/ci-visibility-test.js',
       'ci-visibility/test/ci-visibility-test-2.js'
     ],
-    runTestsWithCoverageCommand: 'node ./ci-visibility/run-jest.js',
-    type: 'commonJS'
+    runTestsWithCoverageCommand: 'node ./ci-visibility/run-jest.js'
   },
   {
-    name: 'jest',
+    name: 'jest esm',
     dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai', isOldNode ? 'jest-jasmine2@28' : 'jest-jasmine2'],
     testFile: 'ci-visibility/run-jest.mjs',
     expectedStdout: 'Test Suites: 2 passed',
@@ -90,8 +86,7 @@ const testFrameworks = [
       'ci-visibility/test/ci-visibility-test.js',
       'ci-visibility/test/ci-visibility-test-2.js'
     ],
-    runTestsWithCoverageCommand: `node --loader=${hookFile} ./ci-visibility/run-jest.mjs`,
-    type: 'esm'
+    runTestsWithCoverageCommand: `node --loader=${hookFile} ./ci-visibility/run-jest.mjs`
   }
 ]
 
@@ -103,10 +98,9 @@ testFrameworks.forEach(({
   extraStdout,
   expectedCoverageFiles,
   runTestsWithCoverageCommand,
-  coverageMessage,
-  type
+  coverageMessage
 }) => {
-  describe(`${name} ${type}`, () => {
+  describe(name, () => {
     let receiver
     let childProcess
     let sandbox
@@ -388,16 +382,12 @@ testFrameworks.forEach(({
             'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
           ]
         )
-
         const areAllTestSpans = testSpans.every(span => span.name === `${name}.test`)
         assert.isTrue(areAllTestSpans)
-
         assert.include(testOutput, expectedStdout)
-
         if (extraStdout) {
           assert.include(testOutput, extraStdout)
         }
-
         done()
       })
 
@@ -405,17 +395,15 @@ testFrameworks.forEach(({
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: receiver.port,
-          NODE_OPTIONS: type === 'esm' ? `-r dd-trace/ci/init --loader=${hookFile}` : '-r dd-trace/ci/init'
+          NODE_OPTIONS: '-r dd-trace/ci/init'
         },
         stdio: 'pipe'
       })
       childProcess.stdout.on('data', (chunk) => {
         testOutput += chunk.toString()
-        // console.log(testOutput)
       })
       childProcess.stderr.on('data', (chunk) => {
         testOutput += chunk.toString()
-        // console.log(testOutput)
       })
     })
     const envVarSettings = ['DD_TRACING_ENABLED', 'DD_TRACE_ENABLED']

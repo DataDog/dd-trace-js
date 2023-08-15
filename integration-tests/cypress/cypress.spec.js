@@ -33,9 +33,11 @@ function getCypressVersion () {
   const version = process.env.CYPRESS_VERSION
   // TODO: remove when 2.x support is removed.
   // This is done because from cypress@>11.2.0 node 12 is not supported
+  console.log(12321, version)
   if (version === 'latest' && NODE_MAJOR <= 12) {
     return '11.2.0'
   }
+  return '6.7.0'
   return version
 }
 
@@ -170,6 +172,7 @@ describe(`cypress@${version}`, function () {
         )
         assert.exists(testModuleEventContent.meta[TEST_FRAMEWORK_VERSION])
 
+        console.log(testSuiteEvents)
         assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
           'test_suite.cypress/e2e/other.cy.js',
           'test_suite.cypress/e2e/spec.cy.js'
@@ -255,6 +258,8 @@ describe(`cypress@${version}`, function () {
 
     const receiverPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcov', payloads => {
       const [{ payload: coveragePayloads }] = payloads
+
+      console.log(coveragePayloads)
       const coverages = coveragePayloads.map(coverage => coverage.content)
         .flatMap(content => content.coverages)
 
@@ -272,6 +277,7 @@ describe(`cypress@${version}`, function () {
       assert.includeMembers(fileNames, Object.keys(coverageFixture))
     }, 20000)
 
+    console.log(4444, commandSuffix)
     childProcess = exec(
       `./node_modules/.bin/cypress run --quiet ${commandSuffix}`,
       {
