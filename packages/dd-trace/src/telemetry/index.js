@@ -110,6 +110,13 @@ function getTelemetryData () {
   return { config, application, host, heartbeatInterval }
 }
 
+function heartbeat () {
+  return setTimeout(() => {
+    sendData(config, application, host, 'app-heartbeat')
+    heartbeat()
+  }, heartbeatInterval)
+}
+
 function start (aConfig, thePluginManager) {
   if (!aConfig.telemetry.enabled) {
     return
@@ -122,9 +129,9 @@ function start (aConfig, thePluginManager) {
 
   dependencies.start(config, application, host)
   sendData(config, application, host, 'app-started', appStarted())
+  heartbeat()
   interval = setInterval(() => {
     metricsManager.send(config, application, host)
-    sendData(config, application, host, 'app-heartbeat')
   }, heartbeatInterval)
   interval.unref()
   process.on('beforeExit', onBeforeExit)
