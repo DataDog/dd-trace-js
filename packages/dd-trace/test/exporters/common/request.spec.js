@@ -278,6 +278,34 @@ describe('request', function () {
       })
   })
 
+  it('should parse unix domain sockets properly', (done) => {
+    const sock = '/tmp/unix_socket'
+
+    request(
+      Buffer.from(''), {
+        url: 'unix:' + sock,
+        method: 'PUT'
+      },
+      (err, _) => {
+        expect(err.address).to.equal(sock)
+        done()
+      })
+  })
+
+  it('should parse windows named pipes properly', (done) => {
+    const pipe = '//./pipe/datadogtrace'
+
+    request(
+      Buffer.from(''), {
+        url: 'unix:' + pipe,
+        method: 'PUT'
+      },
+      (err, _) => {
+        expect(err.address).to.equal(pipe)
+        done()
+      })
+  })
+
   describe('when intercepting http', () => {
     const sandbox = sinon.createSandbox()
 
