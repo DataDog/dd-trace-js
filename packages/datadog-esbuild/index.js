@@ -2,6 +2,7 @@
 
 /* eslint-disable no-console */
 
+const path = require('path')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
 
@@ -57,9 +58,11 @@ module.exports.setup = function (build) {
       return
     }
 
+    const isTypeScript = ['ts', 'tsx'].includes(path.extname(args.importer))
+
     let fullPathToModule
     try {
-      fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
+      fullPathToModule = agnosticResolver(args.path, args.resolveDir, isTypeScript)
     } catch (err) {
       console.warn(`MISSING: Unable to find "${args.path}". Is the package dead code?`)
       return
@@ -165,15 +168,44 @@ function warnIfUnsupported () {
   }
 }
 
-// @see https://github.com/nodejs/node/issues/47000
-function dotFriendlyResolve (path, directory) {
-  if (path === '.') {
-    path = './'
-  } else if (path === '..') {
-    path = '../'
+// This is basically a replacement for require.resolve()
+// However it will find files regardless of if they're .ts or .js files
+function agnosticResolver (loaderPath, directory, isTypeScript = false) {
+  // @see https://github.com/nodejs/node/issues/47000
+  if (loaderPath === '.') {
+    loaderPath = './'
+  } else if (loaderPath === '..') {
+    loaderPath = '../'
   }
 
-  return require.resolve(path, { paths: [ directory ] })
+  try {
+    return require.resolve(loaderPath, { paths: [ directory ] })
+  } catch (err) {
+    if (isTypeScript) {
+      // If we've been unable to resolve a path to the file on disk,
+      // and it turns out we're a TypeScript document,
+      // then make a few attempts to look for a .ts file to open.
+
+      if (DEBUG) console.log(`TS RESOLVE: ${directory} : ${loaderPath}`)
+
+      try {
+        // /foo/bar/bam.ts import('./bif') => /foo/bar/bif.ts
+        return agnosticResolver(loaderPath + '.ts', directory)
+      } catch (_err) {
+        // /foo/bar/bam.ts import('./bif') => /foo/bar/bif/index.ts
+        try {
+          return agnosticResolver('index.ts', path.join(directory, loaderPath))
+        } catch (_err) {
+          // At this point we're not sure what could be happening.
+          // But, the previous two recursive agnosticResolver() errors are useless.
+          // Only the original error matters.
+          throw err
+        }
+      }
+    }
+
+    throw err
+  }
 }
 
 /**
@@ -205,3 +237,4 @@ function extractPackageAndModulePath (fullPath) {
     path: subPath.substring(firstSlash + 1)
   }
 }
+
