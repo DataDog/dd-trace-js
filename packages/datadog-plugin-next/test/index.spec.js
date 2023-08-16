@@ -30,13 +30,13 @@ describe('Plugin', function () {
         })
 
         before(function (done) {
-          this.timeout(3000)
           const cwd = standalone
             ? `${__dirname}/.next/standalone`
             : __dirname
 
           // always start server via node options due to Next using workers in different
-          const serverStartCmd = ['--require', `${__dirname}/datadog.js`, 'server']
+          const serverStartCmd = ['server']
+          // const serverStartCmd = ['--require', `${__dirname}/datadog.js`, 'server']
 
           server = spawn('node', serverStartCmd, {
             cwd,
@@ -47,7 +47,8 @@ describe('Plugin', function () {
               DD_TRACE_AGENT_PORT: agent.server.address().port,
               WITH_CONFIG: withConfig,
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
-              DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService
+              DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
+              NODE_OPTIONS: `--require ${__dirname}/datadog.js`
             }
           })
 
