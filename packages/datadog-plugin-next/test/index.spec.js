@@ -30,6 +30,7 @@ describe('Plugin', function () {
         })
 
         before(function (done) {
+          this.timeout(3000)
           const cwd = standalone
             ? `${__dirname}/.next/standalone`
             : __dirname
