@@ -246,7 +246,7 @@ addHook({
 addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
-  shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
+  // shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
   shimmer.wrap(Server.prototype, 'renderToResponse', wrapRenderToResponse)
   shimmer.wrap(Server.prototype, 'renderErrorToResponse', wrapRenderErrorToResponse)
@@ -255,19 +255,19 @@ addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js'
   return nextServer
 })
 
-// addHook({
-//   name: 'next',
-//   versions: ['>=13.2 <13.4.13', '>=13.4.15'],
-//   file: 'dist/server/next-server.js'
-// }, nextServer => {
-//   const Server = nextServer.default
+addHook({
+  name: 'next',
+  versions: ['>=13.2 <13.4.13', '>=13.4.15'],
+  file: 'dist/server/next-server.js'
+}, nextServer => {
+  const Server = nextServer.default
 
-//   // only wrap here, as this logic gets layerd on top of in newer versions
-//   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
-//   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
+  // only wrap here, as this logic gets layerd on top of in newer versions
+  shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
+  // shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
 
-//   return nextServer
-// })
+  return nextServer
+})
 
 addHook({ name: 'next', versions: ['>=11.1 <13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default

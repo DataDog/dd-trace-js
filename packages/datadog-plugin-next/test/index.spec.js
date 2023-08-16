@@ -30,6 +30,7 @@ describe('Plugin', function () {
         })
 
         before(function (done) {
+          this.timeout(30000)
           const cwd = standalone
             ? `${__dirname}/.next/standalone`
             : __dirname
@@ -400,7 +401,10 @@ describe('Plugin', function () {
 
           axios
             .get(`http://localhost:${port}/api/hello/world`)
-            .catch(done)
+            .catch(e => {
+              console.log(e.toJSON())
+              done(e)
+            })
         })
       })
 
