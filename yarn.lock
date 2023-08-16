@@ -392,9 +392,9 @@
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-iast-rewriter@./datadog-native-iast-rewriter-2.0.1-rt.4.tgz":
-  version "2.0.1-rt.4"
-  resolved "./datadog-native-iast-rewriter-2.0.1-rt.4.tgz#be58a89588742f2b5b030b6bc5b4457ae65f3ba9"
+"@datadog/native-iast-rewriter@./datadog-native-iast-rewriter-2.0.1-rt.5.tgz":
+  version "2.0.1-rt.5"
+  resolved "./datadog-native-iast-rewriter-2.0.1-rt.5.tgz#737285718bbdba2dc5f4d0dfa01d369e1ba163e2"
   dependencies:
     node-gyp-build "^4.5.0"
 
