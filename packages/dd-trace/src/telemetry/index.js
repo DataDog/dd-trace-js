@@ -72,7 +72,7 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
 
 function appStarted (config) {
   const app = {
-    products: getProducts(),
+    products: getProducts(config),
     configuration: flatten(config),
     additional_payload: []
   }
@@ -180,7 +180,7 @@ function start (aConfig, thePluginManager) {
   dependencies.start(config, application, host)
 
   sendData(config, application, host, 'app-started', appStarted(config))
-  sendData(config, application, host, 'app-integrations', { integrations })
+  sendData(config, application, host, 'app-integrations-change', { integrations })
 
   heartbeat()
 

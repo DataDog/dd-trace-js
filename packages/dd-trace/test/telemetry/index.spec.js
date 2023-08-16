@@ -9,6 +9,8 @@ const { once } = require('events')
 const { storage } = require('../../../datadog-core')
 const os = require('os')
 
+const DEFAULT_HEARTBEAT_INTERVAL = 60000
+
 let traceAgent
 
 describe('telemetry', () => {
@@ -20,7 +22,7 @@ describe('telemetry', () => {
     origSetInterval = setInterval
 
     global.setInterval = (fn, interval) => {
-      expect(interval).to.equal(60000)
+      expect(interval).to.equal(1000 * 60 * 60 * 24)
       // we only want one of these
       return setTimeout(fn, 100)
     }
@@ -64,7 +66,7 @@ describe('telemetry', () => {
     circularObject.child.parent = circularObject
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: 60000 },
+      telemetry: { enabled: true, heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL },
       hostname: 'localhost',
       port: traceAgent.address().port,
       service: 'test service',
@@ -73,7 +75,9 @@ describe('telemetry', () => {
       tags: {
         'runtime-id': '1a2b3c'
       },
-      circularObject
+      circularObject,
+      appsec: { enabled: true },
+      profiling: { enabled: true }
     }, {
       _pluginsByName: pluginsByName
     })
@@ -87,33 +91,57 @@ describe('telemetry', () => {
 
   it('should send app-started', () => {
     return testSeq(1, 'app-started', payload => {
-      expect(payload).to.deep.include({
-        dependencies: []
-      }).and.to.have.property('configuration').that.include.members([
+      expect(payload).to.have.property('products').that.deep.equal({
+        appsec: { enabled: true },
+        profiler: { version: '5.0.0-pre', enabled: true }
+      })
+      expect(payload).to.have.property('configuration').that.deep.equal([
         { name: 'telemetry.enabled', value: true },
+        { name: 'telemetry.heartbeatInterval', value: DEFAULT_HEARTBEAT_INTERVAL },
         { name: 'hostname', value: 'localhost' },
         { name: 'port', value: traceAgent.address().port },
         { name: 'service', value: 'test service' },
         { name: 'version', value: '1.2.3-beta4' },
         { name: 'env', value: 'preprod' },
         { name: 'tags.runtime-id', value: '1a2b3c' },
+        { name: 'circularObject.child.field', value: 'child_value' },
         { name: 'circularObject.field', value: 'parent_value' },
-        { name: 'circularObject.child.field', value: 'child_value' }
+        { name: 'appsec.enabled', value: true },
+        { name: 'profiling.enabled', value: true }
       ])
+      expect(payload).to.have.property('additional_payload').that.deep.equal([])
     })
   })
 
-  it('should send app-heartbeat', () => {
-    return testSeq(2, 'app-heartbeat', payload => {
-      expect(payload).to.deep.equal({})
+  it('should send app-integrations', () => {
+    return testSeq(2, 'app-integrations-change', payload => {
+      expect(payload).to.deep.equal({
+        integrations: [
+          { name: 'foo2', enabled: true, auto_enabled: true },
+          { name: 'bar2', enabled: false, auto_enabled: true }
+        ]
+      })
     })
+  })
+
+  it('should detect app-heartbeat after heartbeat interval', () => {
+    return setTimeout(() => {
+      const heartbeats = []
+      for (const req in traceAgent.reqs) {
+        // console.log(req.body.tracer_time)
+        // console.log(req.headers['dd-telemetry-request-type'])
+        if (req.headers['dd-telemetry-request-type'] === 'app-heartbeat') {
+          heartbeats.push(req)
+        }
+      }
+    }, DEFAULT_HEARTBEAT_INTERVAL * 2)
   })
 
   it('should send app-integrations-change', () => {
     pluginsByName.baz2 = { _enabled: true }
     telemetry.updateIntegrations()
 
-    return testSeq(3, 'app-integrations-change', payload => {
+    return testSeq(4, 'app-integrations-change', payload => {
       expect(payload).to.deep.equal({
         integrations: [
           { name: 'foo2', enabled: true, auto_enabled: true },
@@ -128,7 +156,7 @@ describe('telemetry', () => {
     pluginsByName.boo2 = { _enabled: true }
     telemetry.updateIntegrations()
 
-    return testSeq(4, 'app-integrations-change', payload => {
+    return testSeq(5, 'app-integrations-change', payload => {
       expect(payload).to.deep.equal({
         integrations: [
           { name: 'boo2', enabled: true, auto_enabled: true }
@@ -140,7 +168,7 @@ describe('telemetry', () => {
   // TODO: make this work regardless of the test runner
   it.skip('should send app-closing', () => {
     process.emit('beforeExit')
-    return testSeq(5, 'app-closing', payload => {
+    return testSeq(6, 'app-closing', payload => {
       expect(payload).to.deep.equal({})
     })
   })
@@ -211,6 +239,8 @@ async function testSeq (seqId, reqType, validatePayload) {
     await once(traceAgent, 'handled-req')
   }
   const req = traceAgent.reqs[seqId - 1]
+  // console.log('SEQ ID', seqId)
+  // console.log(req.body.tracer_time)
   expect(req.method).to.equal('POST')
   expect(req.url).to.equal(`/telemetry/proxy/api/v2/apmtelemetry`)
   expect(req.headers).to.include({
