@@ -149,6 +149,8 @@ function wrapSetupServerWorker (setupServerWorker) {
   }
 }
 
+// these two functions make sure we get path groups for routes in standalone,
+// as it doesn't route through `next-server`/`base-server`
 function wrapGetResolveRoutes (getResolveRoutes) {
   return function () {
     const result = getResolveRoutes.apply(this, arguments)
@@ -162,6 +164,26 @@ function wrapResolveRoutes (resolveRoutes) {
     if (result && result.matchedOutput) {
       const path = result.matchedOutput.itemPath
       requestToNextjsPagePath.set(req, path)
+    }
+    return result
+  }
+}
+
+function wrapInitialize (initialize) {
+  return async function () {
+    const result = await initialize.apply(this, arguments)
+    if (result && Array.isArray(result)) {
+      const requestHandler = result[0]
+      result[0] = shimmer.wrap(requestHandler, function (req, res) {
+        return instrument(req, res, async () => {
+          const result = await requestHandler.apply(this, arguments) // apply here first to get page path association
+
+          const page = requestToNextjsPagePath.get(req)
+          if (page && pageLoadChannel.hasSubscribers) pageLoadChannel.publish({ page })
+
+          return result
+        })
+      })
     }
     return result
   }
@@ -197,7 +219,7 @@ addHook({
 
 addHook({
   name: 'next',
-  versions: ['>=13.4.13'],
+  versions: ['13.4.13'],
   file: 'dist/server/lib/setup-server-worker.js'
 }, setupServerWorker => {
   const exported = Object.getOwnPropertyDescriptors(setupServerWorker)
@@ -208,9 +230,24 @@ addHook({
   })
 })
 
+addHook({
+  name: 'next',
+  versions: ['>=13.4.15'],
+  file: 'dist/server/lib/router-server.js'
+}, routerServer => {
+  const exported = Object.getOwnPropertyDescriptors(routerServer)
+  const original = exported.initialize.get()
+  return Object.defineProperty(exported, 'initialize', {
+    enumerable: true,
+    get: function () { return wrapInitialize(original) }
+  })
+})
+
 addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
+  shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
+  shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
   shimmer.wrap(Server.prototype, 'renderToResponse', wrapRenderToResponse)
   shimmer.wrap(Server.prototype, 'renderErrorToResponse', wrapRenderErrorToResponse)
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
@@ -218,15 +255,19 @@ addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js'
   return nextServer
 })
 
-addHook({ name: 'next', versions: ['>=13.2 <13.4.13'], file: 'dist/server/next-server.js' }, nextServer => {
-  const Server = nextServer.default
+// addHook({
+//   name: 'next',
+//   versions: ['>=13.2 <13.4.13', '>=13.4.15'],
+//   file: 'dist/server/next-server.js'
+// }, nextServer => {
+//   const Server = nextServer.default
 
-  // only wrap here, as this logic gets layerd on top of in newer versions
-  shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
-  shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
+//   // only wrap here, as this logic gets layerd on top of in newer versions
+//   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
+//   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
 
-  return nextServer
-})
+//   return nextServer
+// })
 
 addHook({ name: 'next', versions: ['>=11.1 <13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default

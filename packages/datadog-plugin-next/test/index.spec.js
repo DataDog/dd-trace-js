@@ -337,16 +337,16 @@ describe('Plugin', function () {
             agent
               .use(traces => {
                 const spans = traces[0]
-                
-                expect(spans[0]).to.have.property('name', 'next.request')
-                expect(spans[0]).to.have.property('service', 'test')
-                expect(spans[0]).to.have.property('type', 'web')
-                expect(spans[0]).to.have.property('resource',
+
+                expect(spans[1]).to.have.property('name', 'next.request')
+                expect(spans[1]).to.have.property('service', 'test')
+                expect(spans[1]).to.have.property('type', 'web')
+                expect(spans[1]).to.have.property('resource',
                   satisfies(pkg.version, '>=13.4.13') ? 'GET /test.txt' : 'GET')
-                expect(spans[0].meta).to.have.property('span.kind', 'server')
-                expect(spans[0].meta).to.have.property('http.method', 'GET')
-                expect(spans[0].meta).to.have.property('http.status_code', '200')
-                expect(spans[0].meta).to.have.property('component', 'next')
+                expect(spans[1].meta).to.have.property('span.kind', 'server')
+                expect(spans[1].meta).to.have.property('http.method', 'GET')
+                expect(spans[1].meta).to.have.property('http.status_code', '200')
+                expect(spans[1].meta).to.have.property('component', 'next')
               })
               .then(done)
               .catch(done)
