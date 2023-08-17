@@ -135,17 +135,32 @@ function instrument (req, res, handler) {
 
 function wrapSetupServerWorker (setupServerWorker) {
   return function (requestHandler) {
-    arguments[0] = shimmer.wrap(requestHandler, function (req, res) {
-      return instrument(req, res, async () => {
-        const result = await requestHandler.apply(this, arguments) // apply here first to get page path association
-
-        const page = requestToNextjsPagePath.get(req)
-        if (page && pageLoadChannel.hasSubscribers) pageLoadChannel.publish({ page })
-
-        return result
-      })
-    })
+    arguments[0] = shimmer.wrap(requestHandler, wrapRequestHandler(requestHandler))
     return setupServerWorker.apply(this, arguments)
+  }
+}
+
+function wrapInitialize (initialize) {
+  return async function () {
+    const result = await initialize.apply(this, arguments)
+    if (result && Array.isArray(result)) {
+      const requestHandler = result[0]
+      result[0] = shimmer.wrap(requestHandler, wrapRequestHandler(requestHandler))
+    }
+    return result
+  }
+}
+
+function wrapRequestHandler (requestHandler) {
+  return function (req, res) {
+    return instrument(req, res, async () => {
+      const result = await requestHandler.apply(this, arguments) // apply here first to get page path association
+
+      const page = requestToNextjsPagePath.get(req)
+      if (page && pageLoadChannel.hasSubscribers) pageLoadChannel.publish({ page })
+
+      return result
+    })
   }
 }
 
@@ -169,26 +184,6 @@ function wrapResolveRoutes (resolveRoutes) {
   }
 }
 
-function wrapInitialize (initialize) {
-  return async function () {
-    const result = await initialize.apply(this, arguments)
-    if (result && Array.isArray(result)) {
-      const requestHandler = result[0]
-      result[0] = shimmer.wrap(requestHandler, function (req, res) {
-        return instrument(req, res, async () => {
-          const result = await requestHandler.apply(this, arguments) // apply here first to get page path association
-
-          const page = requestToNextjsPagePath.get(req)
-          if (page && pageLoadChannel.hasSubscribers) pageLoadChannel.publish({ page })
-
-          return result
-        })
-      })
-    }
-    return result
-  }
-}
-
 function finish (ctx, result, err) {
   if (err) {
     ctx.error = err
@@ -204,44 +199,34 @@ function finish (ctx, result, err) {
   return result
 }
 
+// transpiled functions in newer next.js versions can't be shimmed
+// because they're read-only, so we re-define the property needed here
+function wrapObjectProperty (module, func, wrapper) {
+  const exported = Object.getOwnPropertyDescriptors(module)
+  const original = exported[func].get()
+  return Object.defineProperty(exported, func, {
+    enumerable: true,
+    get: function () { return wrapper(original) }
+  })
+}
+
 addHook({
   name: 'next',
   versions: ['>=13.4.13'],
   file: 'dist/server/lib/router-utils/resolve-routes.js'
-}, resolveRoutesModule => {
-  const exported = Object.getOwnPropertyDescriptors(resolveRoutesModule)
-  const original = exported.getResolveRoutes.get()
-  return Object.defineProperty(exported, 'getResolveRoutes', {
-    enumerable: true,
-    get: function () { return wrapGetResolveRoutes(original) }
-  })
-})
+}, resolveRoutesModule => wrapObjectProperty(resolveRoutesModule, 'getResolveRoutes', wrapGetResolveRoutes))
 
 addHook({
   name: 'next',
   versions: ['13.4.13'],
   file: 'dist/server/lib/setup-server-worker.js'
-}, setupServerWorker => {
-  const exported = Object.getOwnPropertyDescriptors(setupServerWorker)
-  const original = exported.initializeServerWorker.get()
-  return Object.defineProperty(exported, 'initializeServerWorker', {
-    enumerable: true,
-    get: function () { return wrapSetupServerWorker(original) }
-  })
-})
+}, setupServerWorker => wrapObjectProperty(setupServerWorker, 'initializeServerWorker', wrapSetupServerWorker))
 
 addHook({
   name: 'next',
   versions: ['>=13.4.15'],
   file: 'dist/server/lib/router-server.js'
-}, routerServer => {
-  const exported = Object.getOwnPropertyDescriptors(routerServer)
-  const original = exported.initialize.get()
-  return Object.defineProperty(exported, 'initialize', {
-    enumerable: true,
-    get: function () { return wrapInitialize(original) }
-  })
-})
+}, routerServer => wrapObjectProperty(routerServer, 'initialize', wrapInitialize))
 
 addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default

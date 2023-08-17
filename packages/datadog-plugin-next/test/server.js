@@ -2,8 +2,6 @@
 
 const { PORT, HOSTNAME } = process.env
 
-// require('./datadog')
-
 const { createServer } = require('http')
 const { parse } = require('url')
 const next = require('next') // eslint-disable-line import/no-extraneous-dependencies
