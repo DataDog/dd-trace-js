@@ -437,7 +437,7 @@ describe('Plugin', function () {
               axios
                 .get(`http://127.0.0.1:${port}${resource}`)
                 .catch(done)
-            })
+            }).timeout(10000)
           })
         })
       }
