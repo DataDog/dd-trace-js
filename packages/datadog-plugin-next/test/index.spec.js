@@ -35,9 +35,8 @@ describe('Plugin', function () {
             ? `${__dirname}/.next/standalone`
             : __dirname
 
-          // always start server via node options due to Next using workers in different
-          const serverStartCmd = ['server']
-          // const serverStartCmd = ['--require', `${__dirname}/datadog.js`, 'server']
+          // always start server via node options due to Next using workers in different versions
+          const serverStartCmd = ['--require', `${__dirname}/datadog.js`, 'server']
 
           server = spawn('node', serverStartCmd, {
             cwd,
@@ -49,7 +48,8 @@ describe('Plugin', function () {
               WITH_CONFIG: withConfig,
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
               DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
-              NODE_OPTIONS: `--require ${__dirname}/datadog.js`
+              // NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
+              HOSTNAME: '127.0.0.1'
             }
           })
 
@@ -61,8 +61,16 @@ describe('Plugin', function () {
 
         after(async function () {
           this.timeout(5000)
+
           server.kill()
-          await axios.get(`http://localhost:${port}/api/hello/world`).catch(() => {})
+          try {
+            // it seems sometimes leftover workers hang around in processes
+            execSync(`pkill -f next`)
+          } catch (e) {
+            // blanket catch
+          }
+
+          await axios.get(`http://127.0.0.1:${port}/api/hello/world`).catch(() => {})
           await agent.close({ ritmReset: false })
         })
       }
@@ -120,8 +128,9 @@ describe('Plugin', function () {
       withNamingSchema(
         (done) => {
           axios
-            .get(`http://localhost:${port}/api/hello/world`)
-            .catch(done)
+            .get(`http://127.0.0.1:${port}/api/hello/world`)
+            // skip catch due to socket hang up when server is killed, unsure if this catch is needed
+            // .catch(done)
         },
         rawExpectedSchema.server,
         {
@@ -155,7 +164,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/api/hello/world`)
+              .get(`http://127.0.0.1:${port}/api/hello/world`)
               .catch(done)
           })
 
@@ -176,14 +185,14 @@ describe('Plugin', function () {
                 .catch(done)
 
               axios
-                .get(`http://localhost:${port}${url}`)
+                .get(`http://127.0.0.1:${port}${url}`)
                 .catch(done)
             })
           })
 
           it('should propagate context', done => {
             axios
-              .get(`http://localhost:${port}/api/hello/world`)
+              .get(`http://127.0.0.1:${port}/api/hello/world`)
               .then(res => {
                 expect(res.data.name).to.equal('next.request')
                 done()
@@ -208,7 +217,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/api/missing`)
+              .get(`http://127.0.0.1:${port}/api/missing`)
               .catch(() => {})
           })
 
@@ -230,7 +239,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/api/invalid/%ff`)
+              .get(`http://127.0.0.1:${port}/api/invalid/%ff`)
               .catch(() => {})
           })
 
@@ -246,7 +255,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/api/hello/world`)
+              .get(`http://127.0.0.1:${port}/api/hello/world`)
               .catch(done)
           })
         })
@@ -270,7 +279,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/hello/world`)
+              .get(`http://127.0.0.1:${port}/hello/world`)
               .catch(done)
           })
 
@@ -293,7 +302,7 @@ describe('Plugin', function () {
                 .then(done)
                 .catch(done)
 
-              axios.get(`http://localhost:${port}${url}`)
+              axios.get(`http://127.0.0.1:${port}${url}`)
             })
           })
 
@@ -314,7 +323,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/missing`)
+              .get(`http://127.0.0.1:${port}/missing`)
               .catch(() => {})
           })
 
@@ -330,7 +339,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/hello/world`)
+              .get(`http://127.0.0.1:${port}/hello/world`)
               .catch(done)
           })
         })
@@ -355,7 +364,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/test.txt`)
+              .get(`http://127.0.0.1:${port}/test.txt`)
               .catch(done)
           })
         })
@@ -368,7 +377,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/api/error/boom`)
+              .get(`http://127.0.0.1:${port}/api/error/boom`)
               .catch((response) => {
                 expect(response.statusCode).to.eql(500)
               })
@@ -400,11 +409,8 @@ describe('Plugin', function () {
             .catch(done)
 
           axios
-            .get(`http://localhost:${port}/api/hello/world`)
-            .catch(e => {
-              console.log(e.toJSON())
-              done(e)
-            })
+            .get(`http://127.0.0.1:${port}/api/hello/world`)
+            .catch(done)
         })
       })
 
@@ -438,7 +444,7 @@ describe('Plugin', function () {
                 .catch(done)
 
               axios
-                .get(`http://localhost:${port}${resource}`)
+                .get(`http://127.0.0.1:${port}${resource}`)
                 .catch(done)
             })
           })

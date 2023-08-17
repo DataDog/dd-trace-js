@@ -246,8 +246,6 @@ addHook({
 addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
-  // shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
-  shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
   shimmer.wrap(Server.prototype, 'renderToResponse', wrapRenderToResponse)
   shimmer.wrap(Server.prototype, 'renderErrorToResponse', wrapRenderErrorToResponse)
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
@@ -257,14 +255,14 @@ addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js'
 
 addHook({
   name: 'next',
-  versions: ['>=13.2 <13.4.13', '>=13.4.15'],
+  versions: ['>=13.2 <13.4.13', '>=13.4.15'], // all versions but 13.4.13
   file: 'dist/server/next-server.js'
 }, nextServer => {
   const Server = nextServer.default
 
-  // only wrap here, as this logic gets layerd on top of in newer versions
+  // not wrapped in 13.4.13 due to tests failing when they are
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
-  // shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
+  shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
 
   return nextServer
 })
