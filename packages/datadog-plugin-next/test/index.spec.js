@@ -35,10 +35,7 @@ describe('Plugin', function () {
             ? `${__dirname}/.next/standalone`
             : __dirname
 
-          // always start server via node options due to Next using workers in different versions
-          const serverStartCmd = ['--require', `${__dirname}/datadog.js`, 'server']
-
-          server = spawn('node', serverStartCmd, {
+          server = spawn('node', ['server'], {
             cwd,
             env: {
               ...process.env,
@@ -48,7 +45,7 @@ describe('Plugin', function () {
               WITH_CONFIG: withConfig,
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
               DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
-              // NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
+              NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
               HOSTNAME: '127.0.0.1'
             }
           })
@@ -63,12 +60,6 @@ describe('Plugin', function () {
           this.timeout(5000)
 
           server.kill()
-          try {
-            // it seems sometimes leftover workers hang around in processes
-            execSync(`pkill -f next`)
-          } catch (e) {
-            // blanket catch
-          }
 
           await axios.get(`http://127.0.0.1:${port}/api/hello/world`).catch(() => {})
           await agent.close({ ritmReset: false })
