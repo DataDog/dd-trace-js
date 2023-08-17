@@ -3,14 +3,11 @@
 const {
   FakeAgent,
   createSandbox,
+  curlAndAssertMessage,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
-const { NODE_MAJOR } = require('../../../../version')
-
-// TODO: update this to skip based on package version and tracer version
-const describe = NODE_MAJOR < 16 ? globalThis.describe.skip : globalThis.describe
 
 describe('esm', () => {
   let agent
@@ -19,8 +16,8 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['mysql2'], false, [
-      `./packages/datadog-plugin-mysql2/test/integration-test/*`])
+    sandbox = await createSandbox(['@hapi/hapi'], false, [
+      `./packages/datadog-plugin-hapi/test/integration-test/*`])
   })
 
   after(async () => {
@@ -36,17 +33,15 @@ describe('esm', () => {
     await agent.stop()
   })
 
-  context('mysql2', () => {
+  context('hapi', () => {
     it('is instrumented', async () => {
-      const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'mysql.query'), true)
-      })
-
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
-      await res
+      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+        assert.isArray(payload)
+        assert.strictEqual(checkSpansForServiceName(payload, 'hapi.request'), true)
+      })
     }).timeout(20000)
   })
 })

@@ -10,4 +10,4 @@ module.exports = require('../../..').init({
       span.setTag('foo', 'bar')
     }
   }
-} : true)
+} : true).use('http', { client: false })
