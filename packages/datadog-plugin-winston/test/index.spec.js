@@ -22,7 +22,7 @@ function createLogServer () {
       })
     })
     server.log = meta => {
-      getLogResolve(meta ? meta.dd || (meta.params && meta.params.meta && meta.params.meta.dd) : undefined)
+      getLogResolve(meta ? meta.dd || meta?.params?.meta?.dd : undefined)
     }
 
     server.logPromise = new Promise(resolve => {
