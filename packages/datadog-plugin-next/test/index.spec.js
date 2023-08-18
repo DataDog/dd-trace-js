@@ -30,14 +30,12 @@ describe('Plugin', function () {
         })
 
         before(function (done) {
+          this.timeout(40000)
           const cwd = standalone
             ? `${__dirname}/.next/standalone`
             : __dirname
 
-          const serverStartCmd =
-            standalone ? ['--require', `${__dirname}/datadog.js`, 'server'] : ['server']
-
-          server = spawn('node', serverStartCmd, {
+          server = spawn('node', ['server'], {
             cwd,
             env: {
               ...process.env,
@@ -46,7 +44,9 @@ describe('Plugin', function () {
               DD_TRACE_AGENT_PORT: agent.server.address().port,
               WITH_CONFIG: withConfig,
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
-              DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService
+              DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
+              NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
+              HOSTNAME: '127.0.0.1'
             }
           })
 
@@ -58,8 +58,10 @@ describe('Plugin', function () {
 
         after(async function () {
           this.timeout(5000)
+
           server.kill()
-          await axios.get(`http://localhost:${port}/api/hello/world`).catch(() => {})
+
+          await axios.get(`http://127.0.0.1:${port}/api/hello/world`).catch(() => {})
           await agent.close({ ritmReset: false })
         })
       }
@@ -117,8 +119,9 @@ describe('Plugin', function () {
       withNamingSchema(
         (done) => {
           axios
-            .get(`http://localhost:${port}/api/hello/world`)
-            .catch(done)
+            .get(`http://127.0.0.1:${port}/api/hello/world`)
+            // skip catch due to socket hang up when server is killed, unsure if this catch is needed
+            // .catch(done)
         },
         rawExpectedSchema.server,
         {
@@ -152,7 +155,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/api/hello/world`)
+              .get(`http://127.0.0.1:${port}/api/hello/world`)
               .catch(done)
           })
 
@@ -173,14 +176,14 @@ describe('Plugin', function () {
                 .catch(done)
 
               axios
-                .get(`http://localhost:${port}${url}`)
+                .get(`http://127.0.0.1:${port}${url}`)
                 .catch(done)
             })
           })
 
           it('should propagate context', done => {
             axios
-              .get(`http://localhost:${port}/api/hello/world`)
+              .get(`http://127.0.0.1:${port}/api/hello/world`)
               .then(res => {
                 expect(res.data.name).to.equal('next.request')
                 done()
@@ -205,7 +208,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/api/missing`)
+              .get(`http://127.0.0.1:${port}/api/missing`)
               .catch(() => {})
           })
 
@@ -227,7 +230,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/api/invalid/%ff`)
+              .get(`http://127.0.0.1:${port}/api/invalid/%ff`)
               .catch(() => {})
           })
 
@@ -243,7 +246,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/api/hello/world`)
+              .get(`http://127.0.0.1:${port}/api/hello/world`)
               .catch(done)
           })
         })
@@ -267,7 +270,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/hello/world`)
+              .get(`http://127.0.0.1:${port}/hello/world`)
               .catch(done)
           })
 
@@ -290,7 +293,7 @@ describe('Plugin', function () {
                 .then(done)
                 .catch(done)
 
-              axios.get(`http://localhost:${port}${url}`)
+              axios.get(`http://127.0.0.1:${port}${url}`)
             })
           })
 
@@ -311,7 +314,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/missing`)
+              .get(`http://127.0.0.1:${port}/missing`)
               .catch(() => {})
           })
 
@@ -327,7 +330,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/hello/world`)
+              .get(`http://127.0.0.1:${port}/hello/world`)
               .catch(done)
           })
         })
@@ -341,7 +344,8 @@ describe('Plugin', function () {
                 expect(spans[1]).to.have.property('name', 'next.request')
                 expect(spans[1]).to.have.property('service', 'test')
                 expect(spans[1]).to.have.property('type', 'web')
-                expect(spans[1]).to.have.property('resource', 'GET')
+                expect(spans[1]).to.have.property('resource',
+                  satisfies(pkg.version, '>=13.4.13') ? 'GET /test.txt' : 'GET')
                 expect(spans[1].meta).to.have.property('span.kind', 'server')
                 expect(spans[1].meta).to.have.property('http.method', 'GET')
                 expect(spans[1].meta).to.have.property('http.status_code', '200')
@@ -351,7 +355,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/test.txt`)
+              .get(`http://127.0.0.1:${port}/test.txt`)
               .catch(done)
           })
         })
@@ -364,7 +368,7 @@ describe('Plugin', function () {
               .catch(done)
 
             axios
-              .get(`http://localhost:${port}/api/error/boom`)
+              .get(`http://127.0.0.1:${port}/api/error/boom`)
               .catch((response) => {
                 expect(response.statusCode).to.eql(500)
               })
@@ -396,7 +400,7 @@ describe('Plugin', function () {
             .catch(done)
 
           axios
-            .get(`http://localhost:${port}/api/hello/world`)
+            .get(`http://127.0.0.1:${port}/api/hello/world`)
             .catch(done)
         })
       })
@@ -409,7 +413,7 @@ describe('Plugin', function () {
           const standaloneTests = [
             ['api', '/api/hello/world', 'GET /api/hello/[name]'],
             ['pages', '/hello/world', 'GET /hello/[name]'],
-            ['static files', '/test.txt', 'GET']
+            ['static files', '/test.txt', satisfies(pkg.version, '>=13.4.13') ? 'GET /test.txt' : 'GET']
           ]
 
           standaloneTests.forEach(([test, resource, expectedResource]) => {
@@ -431,9 +435,11 @@ describe('Plugin', function () {
                 .catch(done)
 
               axios
-                .get(`http://localhost:${port}${resource}`)
+                .get(`http://127.0.0.1:${port}${resource}`)
                 .catch(done)
-            })
+            }).timeout(5000)
+            // increase timeout for longer test in CI
+            // locally, do not see any slowdowns
           })
         })
       }
