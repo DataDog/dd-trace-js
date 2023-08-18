@@ -238,14 +238,16 @@ addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js'
   return nextServer
 })
 
+// these functions wrapped in all versions above 13.2 except:
+// 13.4.13 due to tests failing when these functions are wrapped
+// 13.4.14 due to it not being in the NPM registry/officially released
 addHook({
   name: 'next',
-  versions: ['>=13.2 <13.4.13', '>=13.4.15'], // all versions but 13.4.13
+  versions: ['>=13.2 <13.4.13', '>=13.4.15'],
   file: 'dist/server/next-server.js'
 }, nextServer => {
   const Server = nextServer.default
 
-  // not wrapped in 13.4.13 due to tests failing when they are
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
 
