@@ -143,7 +143,7 @@ function wrapSetupServerWorker (setupServerWorker) {
 function wrapInitialize (initialize) {
   return async function () {
     const result = await initialize.apply(this, arguments)
-    if (result && Array.isArray(result)) {
+    if (Array.isArray(result)) {
       const requestHandler = result[0]
       result[0] = shimmer.wrap(requestHandler, wrapRequestHandler(requestHandler))
     }
