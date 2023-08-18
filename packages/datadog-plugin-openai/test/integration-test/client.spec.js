@@ -15,7 +15,7 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['openai', 'nock'], false, [
+    sandbox = await createSandbox(['openai@3', 'nock'], false, [
       `./packages/datadog-plugin-openai/test/integration-test/*`])
   })
 
