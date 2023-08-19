@@ -53,7 +53,22 @@ module.exports.setup = function (build) {
   const externalModules = new Set(build.initialOptions.external || [])
   build.onResolve({ filter: /.*/ }, args => {
     if (externalModules.has(args.path)) {
+      // Internal Node.js packages will still be instrumented via require()
       if (DEBUG) console.log(`EXTERNAL: ${args.path}`)
+      return
+    }
+
+    // TODO: Should this also check for namespace === 'file'?
+    if (args.path.startsWith('.') && !args.importer.includes('node_modules/')) {
+      // This is local application code, not an instrumented package
+      if (DEBUG) console.log(`LOCAL: ${args.path}`)
+      return
+    }
+
+    // TODO: Should this also check for namespace === 'file'?
+    if (args.path.startsWith('@') && !args.importer.includes('node_modules/')) {
+      // This is the Next.js convention for loading local files
+      if (DEBUG) console.log(`@LOCAL: ${args.path}`)
       return
     }
 
@@ -65,12 +80,11 @@ module.exports.setup = function (build) {
       return
     }
     const extracted = extractPackageAndModulePath(fullPathToModule)
-    const packageName = args.path
 
     const internal = builtins.has(args.path)
 
     if (args.namespace === 'file' && (
-      modulesOfInterest.has(packageName) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
+      modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
     ) {
       // The file namespace is used when requiring files from disk in userland
 
@@ -90,7 +104,7 @@ module.exports.setup = function (build) {
 
       const packageJson = require(pathToPackageJson)
 
-      if (DEBUG) console.log(`RESOLVE: ${packageName}@${packageJson.version}`)
+      if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
 
       // https://esbuild.github.io/plugins/#on-resolve-arguments
       return {
@@ -101,17 +115,17 @@ module.exports.setup = function (build) {
           pkg: extracted.pkg,
           path: extracted.path,
           full: fullPathToModule,
-          raw: packageName,
+          raw: args.path,
           internal
         }
       }
     } else if (args.namespace === NAMESPACE) {
       // The datadog namespace is used when requiring files that are injected during the onLoad stage
 
-      if (builtins.has(packageName)) return
+      if (builtins.has(args.path)) return
 
       return {
-        path: require.resolve(packageName, { paths: [ args.resolveDir ] }),
+        path: require.resolve(args.path, { paths: [ args.resolveDir ] }),
         namespace: 'file'
       }
     }
