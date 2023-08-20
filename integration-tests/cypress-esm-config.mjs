@@ -1,16 +1,21 @@
+// eslint-disable-next-line import/no-extraneous-dependencies
 import cypress from 'cypress'
 
-await cypress.run({
-  config: {
-    defaultCommandTimeout: 100,
-    e2e: {
-      setupNodeEvents (on, config) {
-        import('../ci/cypress/plugin.js').then(module => {
-          module.default(on, config)
-        })
-      }
+async function runCypress () {
+  await cypress.run({
+    config: {
+      defaultCommandTimeout: 100,
+      e2e: {
+        setupNodeEvents (on, config) {
+          import('../ci/cypress/plugin.js').then(module => {
+            module.default(on, config)
+          })
+        }
+      },
+      video: false
     },
-    video: false
-  },
-  quiet: true
-})
+    quiet: true
+  })
+}
+
+runCypress()
