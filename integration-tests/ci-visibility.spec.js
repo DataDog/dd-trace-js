@@ -411,11 +411,9 @@ testFrameworks.forEach(({
       })
       childProcess.stdout.on('data', (chunk) => {
         testOutput += chunk.toString()
-        // console.log(testOutput)
       })
       childProcess.stderr.on('data', (chunk) => {
         testOutput += chunk.toString()
-        // console.log(testOutput)
       })
     })
     const envVarSettings = ['DD_TRACING_ENABLED', 'DD_TRACE_ENABLED']
