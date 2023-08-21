@@ -202,12 +202,21 @@ function finish (ctx, result, err) {
 // transpiled functions in newer next.js versions can't be shimmed
 // because they're read-only, so we re-define the property needed here
 function wrapObjectProperty (module, func, wrapper) {
-  const exported = Object.getOwnPropertyDescriptors(module)
-  const original = exported[func].get()
-  return Object.defineProperty(exported, func, {
-    enumerable: true,
-    get: function () { return wrapper(original) }
-  })
+  // create new copy of module with everything but 'func' in order to write over it
+  const entriesWithoutFunc = Object
+    .entries(module)
+    .filter(([key]) => key !== func)
+    .map(([key, value]) => [key, { value }])
+  const newModule = Object.defineProperties({}, Object.fromEntries(entriesWithoutFunc))
+
+  // create new descriptor for func that wraps the original
+  const origDescriptor = Object.getOwnPropertyDescriptor(module, func)
+  const newDescriptor = { ...origDescriptor }
+  newDescriptor.get = function () {
+    return wrapper(origDescriptor.get.call(this))
+  }
+
+  return Object.defineProperty(newModule, func, newDescriptor)
 }
 
 addHook({
