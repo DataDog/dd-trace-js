@@ -178,12 +178,12 @@ function spawnProc (filename, options = {}, stdioHandler) {
         stdioHandler(data)
       }
       // eslint-disable-next-line no-console
-      console.log(data)
+      console.log(data.toString())
     })
 
     proc.stderr.on('data', data => {
       // eslint-disable-next-line no-console
-      console.log(data)
+      console.log(data.toString())
     })
   })
 }
