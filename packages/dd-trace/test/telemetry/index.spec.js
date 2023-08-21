@@ -138,6 +138,7 @@ describe('telemetry', () => {
   })
 
   it('should send app-heartbeat at uniform intervals', () => {
+    // TODO: switch to clock.tick
     setTimeout(() => {
       const heartbeats = []
       const reqCount = traceAgent.reqs.length
