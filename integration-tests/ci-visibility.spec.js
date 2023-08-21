@@ -32,13 +32,27 @@ const hookFile = 'dd-trace/loader-hook.mjs'
 // This is done because newest versions of mocha and jest do not support node@12
 const isOldNode = semver.satisfies(process.version, '<=12')
 
+const mochaCommonOptions = {
+  dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc'],
+  expectedStdout: '2 passing',
+  extraStdout: 'end event: can add event listeners to mocha'
+}
+
+const jestCommonOptions = {
+  dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai', isOldNode ? 'jest-jasmine2@28' : 'jest-jasmine2'],
+  expectedStdout: 'Test Suites: 2 passed',
+  expectedCoverageFiles: [
+    'ci-visibility/test/sum.js',
+    'ci-visibility/test/ci-visibility-test.js',
+    'ci-visibility/test/ci-visibility-test-2.js'
+  ]
+}
+
 const testFrameworks = [
   {
+    ...mochaCommonOptions,
     name: 'mocha',
-    dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc'],
     testFile: 'ci-visibility/run-mocha.js',
-    expectedStdout: '2 passing',
-    extraStdout: 'end event: can add event listeners to mocha',
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.js',
       'ci-visibility/test/sum.js',
@@ -50,11 +64,9 @@ const testFrameworks = [
     type: 'commonJS'
   },
   {
+    ...mochaCommonOptions,
     name: 'mocha',
-    dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc'],
     testFile: 'ci-visibility/run-mocha.mjs',
-    expectedStdout: '2 passing',
-    extraStdout: 'end event: can add event listeners to mocha',
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.mjs',
       'ci-visibility/test/sum.js',
@@ -68,28 +80,16 @@ const testFrameworks = [
     type: 'esm'
   },
   {
+    ...jestCommonOptions,
     name: 'jest',
-    dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai', isOldNode ? 'jest-jasmine2@28' : 'jest-jasmine2'],
     testFile: 'ci-visibility/run-jest.js',
-    expectedStdout: 'Test Suites: 2 passed',
-    expectedCoverageFiles: [
-      'ci-visibility/test/sum.js',
-      'ci-visibility/test/ci-visibility-test.js',
-      'ci-visibility/test/ci-visibility-test-2.js'
-    ],
     runTestsWithCoverageCommand: 'node ./ci-visibility/run-jest.js',
     type: 'commonJS'
   },
   {
+    ...jestCommonOptions,
     name: 'jest',
-    dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai', isOldNode ? 'jest-jasmine2@28' : 'jest-jasmine2'],
     testFile: 'ci-visibility/run-jest.mjs',
-    expectedStdout: 'Test Suites: 2 passed',
-    expectedCoverageFiles: [
-      'ci-visibility/test/sum.js',
-      'ci-visibility/test/ci-visibility-test.js',
-      'ci-visibility/test/ci-visibility-test-2.js'
-    ],
     runTestsWithCoverageCommand: `node --loader=${hookFile} ./ci-visibility/run-jest.mjs`,
     type: 'esm'
   }

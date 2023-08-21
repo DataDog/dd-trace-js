@@ -37,7 +37,6 @@ const moduleType = [
     runTestsWithCoverageCommand:
       './node_modules/nyc/bin/nyc.js -r=text-summary ' +
       'node ./node_modules/.bin/cucumber-js ci-visibility/features/*.feature',
-    runTestsWithCoverageCommandOutput: 'Lines        : 100% ( 18/18 )',
     parallelModeCommand: `./node_modules/.bin/cucumber-js ` +
     `ci-visibility/features/farewell.feature --parallel 2 --publish-quiet`,
     featuresPath: 'ci-visibility/features/',
@@ -49,7 +48,6 @@ const moduleType = [
     runTestsWithCoverageCommand:
       `./node_modules/nyc/bin/nyc.js -r=text-summary node --loader=@istanbuljs/esm-loader-hook ` +
       `--loader=${hookFile} ./node_modules/.bin/cucumber-js ci-visibility/features-esm/*.feature`,
-    runTestsWithCoverageCommandOutput: 'Lines        : 100% ( 16/16 )',
     parallelModeCommand:
       `node --loader=${hookFile} ./node_modules/.bin/cucumber-js ` +
       `ci-visibility/features-esm/farewell.feature --parallel 2 --publish-quiet`,
@@ -69,11 +67,11 @@ versions.forEach(version => {
     fileExtension
   }) => {
     // esm support by cucumber was only added on >= 8.0.0
-    if (type === 'esm' && version < '8.0.0') {
+    if (type === 'esm' && semver.satisfies(version, '<8.0.0')) {
       return
     }
 
-    describe(`${type} cucumber@${version}`, () => {
+    describe(`cucumber@${version} ${type}`, () => {
       let sandbox, cwd, receiver, childProcess
       before(async () => {
         sandbox = await createSandbox([`@cucumber/cucumber@${version}`, 'assert', 'nyc'], true)
@@ -350,7 +348,7 @@ versions.forEach(version => {
               })
               childProcess.on('exit', () => {
                 // check that reported coverage is still the same
-                assert.include(testOutput, runTestsWithCoverageCommandOutput)
+                assert.include(testOutput, 'Lines        : 100%')
                 done()
               })
             })

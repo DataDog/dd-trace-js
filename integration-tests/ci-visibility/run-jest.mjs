@@ -1,8 +1,6 @@
-import path from 'path' // Import the 'path' module
-
+import path from 'path'
 import jest from 'jest'
 
-// Get the directory path using import.meta.url
 const __dirname = path.dirname(new URL(import.meta.url).pathname)
 
 const options = {
