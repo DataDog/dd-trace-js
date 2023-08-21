@@ -392,10 +392,11 @@
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-iast-rewriter@./datadog-native-iast-rewriter-2.0.1-rt.12.tgz":
-  version "2.0.1-rt.12"
-  resolved "./datadog-native-iast-rewriter-2.0.1-rt.12.tgz#1204a8a32aa587d5b61983ad8f7477446283c88c"
+"@datadog/native-iast-rewriter@./datadog-native-iast-rewriter-2.1.2.tgz":
+  version "2.1.2"
+  resolved "./datadog-native-iast-rewriter-2.1.2.tgz#cb63e963cc4cdf7c362f7154ca70be129ed98a50"
   dependencies:
+    lru-cache "^7.14.0"
     node-gyp-build "^4.5.0"
 
 "@datadog/native-iast-taint-tracking@1.5.0":
