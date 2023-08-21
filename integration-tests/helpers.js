@@ -172,11 +172,19 @@ function spawnProc (filename, options = {}, stdioHandler) {
         }
         resolve()
       })
-    if (stdioHandler) {
-      proc.stdout.on('data', (data) => {
+
+    proc.stdout.on('data', data => {
+      if (stdioHandler) {
         stdioHandler(data)
-      })
-    }
+      }
+      // eslint-disable-next-line no-console
+      console.log(data.toString())
+    })
+
+    proc.stderr.on('data', data => {
+      // eslint-disable-next-line no-console
+      console.error(data.toString())
+    })
   })
 }
 
@@ -277,7 +285,7 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
     env,
-    stdio: stdioHandler ? 'pipe' : 'inherit'
+    stdio: 'pipe'
   }, stdioHandler)
 }
 
