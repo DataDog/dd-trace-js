@@ -10,7 +10,7 @@ const startCh = channel('apm:openai:request:start')
 const finishCh = channel('apm:openai:request:finish')
 const errorCh = channel('apm:openai:request:error')
 
-addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0'] }, exports => {
+addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, exports => {
   const methodNames = Object.getOwnPropertyNames(exports.OpenAIApi.prototype)
   methodNames.shift() // remove leading 'constructor' method
 
